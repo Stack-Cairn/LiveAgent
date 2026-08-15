@@ -1,4 +1,4 @@
-import { Cable, Loader2, X } from "@liveagent/ui/components/IconSet";
+import { Cable, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useRef, useState } from "react";
 import type {
@@ -10,7 +10,17 @@ import {
   validateSshLocalForwardTarget,
 } from "../../lib/terminal/sshLocalForwardTypes";
 import { Button } from "../ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 
 export type SshPortForwardDialogProps = {
   sessionId: string;
@@ -116,8 +126,13 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={t("projectTools.sshLocalForwardCancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
               <Cable className="h-5 w-5" />
@@ -131,22 +146,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
               </DialogDescription>
             </div>
           </div>
-
-          <DialogClose
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-                title={t("projectTools.sshLocalForwardCancel")}
-                aria-label={t("projectTools.sshLocalForwardCancel")}
-              />
-            }
-          >
-            <X className="h-4 w-4" />
-          </DialogClose>
-        </div>
+        </DialogHeader>
 
         <form
           onSubmit={(event) => {
@@ -154,8 +154,8 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
             handleSubmit();
           }}
         >
-          <div className="space-y-3 px-5 py-4">
-            <div className="grid grid-cols-2 gap-3">
+          <DialogBody className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label
                   htmlFor="ssh-forward-local-port"
@@ -241,19 +241,19 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                 {error}
               </div>
             ) : null}
-          </div>
+          </DialogBody>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <DialogClose
-              render={<Button type="button" variant="outline" className="w-full sm:w-auto" />}
-            >
-              {t("projectTools.sshLocalForwardCancel")}
-            </DialogClose>
-            <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
-              {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-              {t("projectTools.sshLocalForwardSubmit")}
-            </Button>
-          </div>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                {t("projectTools.sshLocalForwardCancel")}
+              </DialogClose>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {t("projectTools.sshLocalForwardSubmit")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

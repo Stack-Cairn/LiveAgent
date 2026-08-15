@@ -1,10 +1,13 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
-import { AlertTriangle, Pencil, Plug, Plus, X } from "@liveagent/ui/components/IconSet";
+import { AlertTriangle, Pencil, Plug, Plus } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -232,9 +235,13 @@ export function McpServerEditModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="settings-modal-header flex items-center gap-3 border-b border-border/70 px-6 py-4">
+          <DialogHeader className="flex-row items-center gap-3 px-6">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
               <Plug className="h-5 w-5" />
             </div>
@@ -244,18 +251,9 @@ export function McpServerEditModal(props: {
                 {subtitleRaw}
               </DialogDescription>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              title={t("settings.cancel")}
-              aria-label={t("settings.cancel")}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          </DialogHeader>
 
-          <div className="settings-modal-body flex-1 overflow-y-auto px-6 py-5">
+          <DialogBody className="px-6 py-5">
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-1">
@@ -444,9 +442,9 @@ export function McpServerEditModal(props: {
                 </div>
               ) : null}
             </div>
-          </div>
+          </DialogBody>
 
-          <div className="settings-modal-footer settings-modal-footer-row flex items-center justify-end gap-2 border-t border-border/70 px-6 py-4">
+          <DialogFooter className="flex-row flex-wrap px-6">
             <Button type="button" variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
@@ -458,7 +456,7 @@ export function McpServerEditModal(props: {
               )}
               {submitLabel}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

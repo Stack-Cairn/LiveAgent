@@ -1,8 +1,12 @@
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -27,7 +31,7 @@ function BrowserPathPromptDialog(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onResolve(null)}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent className="max-w-md p-0" closeLabel="取消" showCloseButton>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -35,11 +39,11 @@ function BrowserPathPromptDialog(props: {
             if (path) onResolve(path);
           }}
         >
-          <div className="border-b border-border/60 px-5 py-4">
+          <DialogHeader>
             <DialogTitle>{options.title}</DialogTitle>
             <DialogDescription className="mt-1 text-xs">{options.description}</DialogDescription>
-          </div>
-          <div className="space-y-2 px-5 py-5">
+          </DialogHeader>
+          <DialogBody className="space-y-2 py-5">
             <Label htmlFor={options.inputId}>{options.label}</Label>
             <Input
               id={options.inputId}
@@ -49,15 +53,17 @@ function BrowserPathPromptDialog(props: {
               value={value}
               onChange={(event) => setValue(event.currentTarget.value)}
             />
-          </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onResolve(null)}>
-              取消
-            </Button>
-            <Button type="submit" disabled={!value.trim()}>
-              确认
-            </Button>
-          </div>
+          </DialogBody>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" onClick={() => onResolve(null)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!value.trim()}>
+                确认
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

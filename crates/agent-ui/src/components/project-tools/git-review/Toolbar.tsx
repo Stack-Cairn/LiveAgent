@@ -35,12 +35,24 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "../../../lib/shared/utils";
 import {
   AlertDialog,
+  AlertDialogActions,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
 } from "../../ui/alert-dialog";
 import { Button } from "../../ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,22 +111,27 @@ export function GitRemoteSetupModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("chat.cancel")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             onSubmit();
           }}
         >
-          <div className="border-b border-border/60 px-5 py-4">
+          <DialogHeader>
             <DialogTitle className="text-sm leading-normal">
               {t("projectTools.gitReview.remoteSetupTitle")}
             </DialogTitle>
             <DialogDescription className="mt-1 text-xs leading-5">
               {t(remoteSetupDescriptionKey(action))}
             </DialogDescription>
-          </div>
-          <div className="space-y-4 px-5 py-4">
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
               <div
                 className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2"
@@ -148,22 +165,24 @@ export function GitRemoteSetupModal(props: {
                 {error}
               </div>
             ) : null}
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-              {t("chat.cancel")}
-            </Button>
-            <Button type="submit" size="sm" disabled={loading || !remoteUrl.trim()}>
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : action === "push" ? (
-                <Upload className="h-3.5 w-3.5" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              {t(remoteSetupSubmitKey(action))}
-            </Button>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+                {t("chat.cancel")}
+              </Button>
+              <Button type="submit" size="sm" disabled={loading || !remoteUrl.trim()}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : action === "push" ? (
+                  <Upload className="h-3.5 w-3.5" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {t(remoteSetupSubmitKey(action))}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -195,8 +214,8 @@ export function GitDiscardConfirmModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <AlertDialogContent className="max-w-md">
-        <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+      <AlertDialogContent className="max-w-md p-0">
+        <AlertDialogHeader className="flex-row items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </div>
@@ -206,28 +225,30 @@ export function GitDiscardConfirmModal(props: {
               {description}
             </AlertDialogDescription>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : isAll ? (
-              <Trash2 className="h-3.5 w-3.5" />
-            ) : (
-              <BrushCleaning className="h-3.5 w-3.5" />
-            )}
-            {title}
-          </Button>
-        </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogActions>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+              {t("chat.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isAll ? (
+                <Trash2 className="h-3.5 w-3.5" />
+              ) : (
+                <BrushCleaning className="h-3.5 w-3.5" />
+              )}
+              {title}
+            </Button>
+          </AlertDialogActions>
+        </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
@@ -255,14 +276,19 @@ export function GitBranchFromCommitModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("chat.cancel")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             onSubmit();
           }}
         >
-          <div className="border-b border-border/60 px-5 py-4">
+          <DialogHeader>
             <DialogTitle className="text-sm leading-normal">
               {t("projectTools.gitReview.createBranchFromCommitTitle")}
             </DialogTitle>
@@ -271,8 +297,8 @@ export function GitBranchFromCommitModal(props: {
                 .replace("{sha}", target.shortSha)
                 .replace("{subject}", target.subject || target.shortSha)}
             </DialogDescription>
-          </div>
-          <div className="space-y-4 px-5 py-4">
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs">
               <div className="font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                 {target.shortSha}
@@ -300,20 +326,22 @@ export function GitBranchFromCommitModal(props: {
                 {error}
               </div>
             ) : null}
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-              {t("chat.cancel")}
-            </Button>
-            <Button type="submit" size="sm" disabled={loading || !branchName.trim()}>
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <GitBranch className="h-3.5 w-3.5" />
-              )}
-              {t("projectTools.gitReview.createBranch")}
-            </Button>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+                {t("chat.cancel")}
+              </Button>
+              <Button type="submit" size="sm" disabled={loading || !branchName.trim()}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <GitBranch className="h-3.5 w-3.5" />
+                )}
+                {t("projectTools.gitReview.createBranch")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -402,8 +430,8 @@ export function GitBranchSwitchConflictModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <AlertDialogContent className="max-w-md">
-        <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+      <AlertDialogContent className="max-w-md p-0">
+        <AlertDialogHeader className="flex-row items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </div>
@@ -418,20 +446,22 @@ export function GitBranchSwitchConflictModal(props: {
               )}
             </AlertDialogDescription>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button type="button" size="sm" onClick={onConfirm} disabled={loading}>
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {t("projectTools.gitReview.stashAndSwitch")}
-          </Button>
-        </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogActions>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+              {t("chat.cancel")}
+            </Button>
+            <Button type="button" size="sm" onClick={onConfirm} disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {t("projectTools.gitReview.stashAndSwitch")}
+            </Button>
+          </AlertDialogActions>
+        </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );

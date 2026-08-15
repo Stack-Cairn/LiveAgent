@@ -13,9 +13,13 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -80,14 +84,19 @@ export function GitInitModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("window.close")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             onSubmit();
           }}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+          <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
                 <GitBranch className="h-5 w-5" />
@@ -101,20 +110,8 @@ export function GitInitModal(props: {
                 </DialogDescription>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              disabled={loading}
-              className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              title={t("window.close")}
-              aria-label={t("window.close")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-4 px-5 py-4">
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
                 {t("git.branchSelector.targetDirectory")}
@@ -171,20 +168,22 @@ export function GitInitModal(props: {
                 {error}
               </div>
             ) : null}
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-              {t("chat.cancel")}
-            </Button>
-            <Button type="submit" size="sm" disabled={loading || !branch.trim()}>
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <GitBranch className="h-3.5 w-3.5" />
-              )}
-              {t("git.branchSelector.initRepository")}
-            </Button>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+                {t("chat.cancel")}
+              </Button>
+              <Button type="submit" size="sm" disabled={loading || !branch.trim()}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <GitBranch className="h-3.5 w-3.5" />
+                )}
+                {t("git.branchSelector.initRepository")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -252,14 +251,19 @@ export function WorktreeCreateModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("window.close")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             onSubmit();
           }}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+          <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
                 <FolderTree className="h-5 w-5" />
@@ -273,23 +277,8 @@ export function WorktreeCreateModal(props: {
                 </DialogDescription>
               </div>
             </div>
-            <DialogClose
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={loading}
-                  className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-                  title={t("window.close")}
-                  aria-label={t("window.close")}
-                />
-              }
-            >
-              <X className="h-4 w-4" />
-            </DialogClose>
-          </div>
-          <div className="space-y-4 px-5 py-4">
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
                 {t("git.branchSelector.repositoryLabel")}
@@ -407,26 +396,28 @@ export function WorktreeCreateModal(props: {
                 {error}
               </div>
             ) : null}
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-            <DialogClose
-              render={<Button type="button" variant="ghost" size="sm" disabled={loading} />}
-            >
-              {t("chat.cancel")}
-            </DialogClose>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={loading || !branch.trim() || !directoryName.trim()}
-            >
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <FolderTree className="h-3.5 w-3.5" />
-              )}
-              {t("git.branchSelector.createWorktree")}
-            </Button>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <DialogClose
+                render={<Button type="button" variant="ghost" size="sm" disabled={loading} />}
+              >
+                {t("chat.cancel")}
+              </DialogClose>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={loading || !branch.trim() || !directoryName.trim()}
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FolderTree className="h-3.5 w-3.5" />
+                )}
+                {t("git.branchSelector.createWorktree")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
         {/* Web 端目录选择器是嵌套 Dialog；置于父 Popup 内交给 Base UI 管理层级与焦点。 */}
         {directoryPickerElement}
@@ -497,14 +488,19 @@ export function BranchActionsModal(props: {
         if (!nextOpen && !busy) onClose();
       }}
     >
-      <DialogContent className="max-w-sm p-0">
+      <DialogContent
+        className="max-w-sm p-0"
+        closeDisabled={busy}
+        closeLabel={t("window.close")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             if (isForm) onSubmit();
           }}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+          <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
                 <GitBranch className="h-5 w-5" />
@@ -518,21 +514,9 @@ export function BranchActionsModal(props: {
                 </DialogDescription>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              disabled={busy}
-              className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              title={t("window.close")}
-              aria-label={t("window.close")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          </DialogHeader>
           {mode === "menu" ? (
-            <div className="space-y-1 px-3 py-3">
+            <DialogBody className="space-y-1 px-3 py-3">
               {canWrite ? (
                 <button
                   type="button"
@@ -608,9 +592,9 @@ export function BranchActionsModal(props: {
                   {error}
                 </div>
               ) : null}
-            </div>
+            </DialogBody>
           ) : (
-            <div className="space-y-4 px-5 py-4">
+            <DialogBody className="space-y-4">
               {mode === "createFrom" ? (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">
@@ -657,26 +641,28 @@ export function BranchActionsModal(props: {
                   {error}
                 </div>
               ) : null}
-            </div>
+            </DialogBody>
           )}
           {isForm ? (
-            <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-              <Button type="button" variant="ghost" size="sm" onClick={onBack} disabled={busy}>
-                {t("chat.cancel")}
-              </Button>
-              <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
-                {busy ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : mode === "rename" ? (
-                  <Pencil className="h-3.5 w-3.5" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5" />
-                )}
-                {mode === "rename"
-                  ? t("git.branchSelector.renameBranch")
-                  : t("git.branchSelector.create")}
-              </Button>
-            </div>
+            <DialogFooter>
+              <DialogActions>
+                <Button type="button" variant="ghost" size="sm" onClick={onBack} disabled={busy}>
+                  {t("chat.cancel")}
+                </Button>
+                <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : mode === "rename" ? (
+                    <Pencil className="h-3.5 w-3.5" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  {mode === "rename"
+                    ? t("git.branchSelector.renameBranch")
+                    : t("git.branchSelector.create")}
+                </Button>
+              </DialogActions>
+            </DialogFooter>
           ) : null}
         </form>
       </DialogContent>

@@ -27,7 +27,15 @@ import {
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@liveagent/ui/components/ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -187,8 +195,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
         if (!open) onClose();
       }}
     >
-      <DialogContent className="flex h-[600px] max-w-[860px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0">
-        <div className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
+      <DialogContent
+        className="flex h-[min(600px,calc(100dvh-2rem))] max-w-[860px] flex-col p-0"
+        closeLabel={t("settings.close")}
+        layout="fullscreen-mobile"
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center text-xl text-foreground">
               <ProviderBrandIcon type={providerType} />
@@ -202,18 +215,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               </span>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={requestClose}
-            title={t("settings.close")}
-            aria-label={t("settings.close")}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
         <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
           <nav
@@ -276,9 +278,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             </button>
           </nav>
 
-          <div
+          <DialogBody
             ref={modelScrollContainerRef}
-            className="settings-modal-body min-w-0 flex-1 overflow-y-auto [overflow-anchor:none] px-6 py-5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-[720px]:pt-3.5"
+            className="min-w-0 [overflow-anchor:none] px-6 py-5"
             onScroll={() => setHeaderSuggest(null)}
           >
             {activePanel === "general" ? (
@@ -1789,7 +1791,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 ) : null}
               </section>
             )}
-          </div>
+          </DialogBody>
         </div>
 
         {modelBulkMode && activePanel === "general" ? (
@@ -1842,22 +1844,24 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
           </div>
         ) : null}
 
-        <div className="settings-modal-footer flex shrink-0 items-center justify-end gap-2 border-t bg-muted/20 px-5 py-3.5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[720px]:pt-3">
-          <Button
-            variant="outline"
-            onClick={requestClose}
-            className="max-[720px]:h-10 max-[720px]:flex-1"
-          >
-            {t("settings.cancel")}
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!name.trim() || !dialogOpen}
-            className="max-[720px]:h-10 max-[720px]:flex-1"
-          >
-            {t("settings.save")}
-          </Button>
-        </div>
+        <DialogFooter className="bg-muted/20 py-3.5">
+          <DialogActions>
+            <Button
+              variant="outline"
+              onClick={requestClose}
+              className="max-[720px]:h-10 max-[720px]:flex-1"
+            >
+              {t("settings.cancel")}
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!name.trim() || !dialogOpen}
+              className="max-[720px]:h-10 max-[720px]:flex-1"
+            >
+              {t("settings.save")}
+            </Button>
+          </DialogActions>
+        </DialogFooter>
         {usageQueryConfirmDialog}
       </DialogContent>
     </Dialog>

@@ -1,5 +1,5 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
-import { ChevronDown, ChevronUp, Copy, ExternalLink, X } from "@liveagent/ui/components/IconSet";
+import { ChevronDown, ChevronUp, Copy, ExternalLink } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
@@ -39,7 +39,15 @@ import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
 import { Button } from "./ui/button";
 import { CopyButton } from "./ui/copy-button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 const CHAT_FILE_NODE_DATA_KEY = "liveagentChatFileLink";
 const LIVEAGENT_FILE_PROTOCOL = "liveagent-file:";
@@ -214,7 +222,9 @@ function createSanitizedRehypePlugins(options: {
       ...(options.preserveRelativeUrls ? [] : [defaultRehypePlugins.harden]),
     ] as StreamdownRehypePlugins;
   }
-  const schema = (sanitize[1] ?? {}) as { protocols?: Record<string, unknown[]> };
+  const schema = (sanitize[1] ?? {}) as {
+    protocols?: Record<string, unknown[]>;
+  };
   const srcProtocols = schema.protocols?.src;
   const hrefProtocols = schema.protocols?.href;
   const protocols = {
@@ -561,9 +571,11 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="external-link-modal-panel max-w-[28rem] border-border/60 p-0 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.45)]"
+        className="max-w-md p-0"
+        closeLabel={streamdownTranslations.close}
+        showCloseButton
       >
-        <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
+        <DialogHeader className="border-b-0 pb-3">
           <div className="min-w-0 space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <ExternalLink className="size-4 text-muted-foreground" />
@@ -575,16 +587,8 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
               {streamdownTranslations.externalLinkWarning}
             </DialogDescription>
           </div>
-          <button
-            type="button"
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            onClick={onClose}
-            aria-label={streamdownTranslations.close}
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-        <div className="px-5 pb-5">
+        </DialogHeader>
+        <DialogBody className="overflow-visible pb-5 pt-0">
           <div className="flex min-h-10 items-center gap-2 rounded-xl bg-muted/55 px-3 py-2.5 text-muted-foreground">
             <ExternalLink className="size-3.5 shrink-0" />
             <p
@@ -594,7 +598,7 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
               {url}
             </p>
           </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
+          <DialogActions className="mt-4">
             <Button
               type="button"
               variant="ghost"
@@ -613,8 +617,8 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
               <ExternalLink className="size-3.5" />
               <span>{streamdownTranslations.openLink}</span>
             </Button>
-          </div>
-        </div>
+          </DialogActions>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -713,7 +717,12 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
         shikiTheme={["github-light", "github-dark"] as const}
         controls={{
           code: false,
-          mermaid: { copy: !readOnly, download: false, fullscreen: !readOnly, panZoom: !readOnly },
+          mermaid: {
+            copy: !readOnly,
+            download: false,
+            fullscreen: !readOnly,
+            panZoom: !readOnly,
+          },
           table: false,
         }}
         translations={streamdownTranslations}

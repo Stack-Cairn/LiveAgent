@@ -17,8 +17,12 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -45,7 +49,10 @@ const STATUS_FILTERS = [
   { value: "all", labelKey: "settings.devicesFilterAll" },
   { value: "online", labelKey: "settings.devicesFilterOnline" },
   { value: "offline", labelKey: "settings.devicesFilterOffline" },
-] as const satisfies ReadonlyArray<{ value: AdminAgentStatus; labelKey: string }>;
+] as const satisfies ReadonlyArray<{
+  value: AdminAgentStatus;
+  labelKey: string;
+}>;
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() ? error.message : fallback;
@@ -78,7 +85,10 @@ export function DevicesSection({
   const [newAgentId, setNewAgentId] = useState("");
   const [newName, setNewName] = useState("");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [issuedToken, setIssuedToken] = useState<{ agentId: string; token: string } | null>(null);
+  const [issuedToken, setIssuedToken] = useState<{
+    agentId: string;
+    token: string;
+  } | null>(null);
 
   const load = useCallback(
     async (
@@ -394,14 +404,19 @@ function AddClientDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !loading && onClose()}>
-      <DialogContent className="max-w-lg p-0">
+      <DialogContent
+        className="max-w-lg p-0"
+        closeDisabled={loading}
+        closeLabel={t("settings.close")}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             if (!loading) onSubmit();
           }}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+          <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400">
                 <Plus className="h-5 w-5" />
@@ -413,21 +428,9 @@ function AddClientDialog({
                 </DialogDescription>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              disabled={loading}
-              className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              title={t("settings.close")}
-              aria-label={t("settings.close")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          </DialogHeader>
 
-          <div className="space-y-4 px-5 py-5">
+          <DialogBody className="space-y-4 py-5">
             {error ? (
               <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -460,21 +463,23 @@ function AddClientDialog({
                 onChange={(event) => onAgentIdChange(event.currentTarget.value)}
               />
             </div>
-          </div>
+          </DialogBody>
 
-          <div className="flex justify-end gap-2 border-t border-border/60 bg-muted/20 px-5 py-4">
-            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-              {t("settings.close")}
-            </Button>
-            <Button type="submit" className="gap-1.5" disabled={loading}>
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Key className="h-3.5 w-3.5" />
-              )}
-              {t("settings.devicesIssueShort")}
-            </Button>
-          </div>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+                {t("settings.close")}
+              </Button>
+              <Button type="submit" className="gap-1.5" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Key className="h-3.5 w-3.5" />
+                )}
+                {t("settings.devicesIssueShort")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -500,8 +505,8 @@ function IssuedTokenDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0">
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+      <DialogContent className="max-w-lg p-0" closeLabel={t("settings.close")} showCloseButton>
+        <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <Key className="h-5 w-5" />
@@ -513,20 +518,9 @@ function IssuedTokenDialog({
               </DialogDescription>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            title={t("settings.close")}
-            aria-label={t("settings.close")}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
-        <div className="space-y-3 px-5 py-5">
+        <DialogBody className="space-y-3 py-5">
           <p className="text-xs leading-5 text-muted-foreground">
             {t("settings.devicesTokenOnce")}
           </p>
@@ -551,13 +545,15 @@ function IssuedTokenDialog({
               )}
             </button>
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="flex justify-end border-t border-border/60 bg-muted/20 px-5 py-4">
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t("settings.close")}
-          </Button>
-        </div>
+        <DialogFooter className="bg-muted/20">
+          <DialogActions>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("settings.close")}
+            </Button>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

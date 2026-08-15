@@ -7,13 +7,13 @@ import {
   Link2,
   Loader2,
   Share2,
-  X,
 } from "@liveagent/ui/components/IconSet";
-import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
@@ -189,8 +189,8 @@ export function HistoryShareModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0">
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+      <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
+        <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
               <Share2 className="h-5 w-5" />
@@ -205,20 +205,9 @@ export function HistoryShareModal({
               </DialogDescription>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            title="关闭"
-            aria-label="关闭"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
-        <div className="space-y-4 px-5 py-5">
+        <DialogBody className="space-y-4 py-5">
           <div className="rounded-2xl border border-border/60 bg-muted/25 px-4 py-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
@@ -356,7 +345,7 @@ export function HistoryShareModal({
               开启分享后会在这里生成公开访问链接。
             </div>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

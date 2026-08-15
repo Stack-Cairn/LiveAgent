@@ -5,7 +5,6 @@ import {
   Globe,
   Plus,
   Terminal,
-  X,
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -17,7 +16,17 @@ import {
 } from "@liveagent/ui/lib/automation/index";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogSectionHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
@@ -103,8 +112,13 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
   return (
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
-      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeDisabled={isSaving}
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Zap className="h-5 w-5" />
           </div>
@@ -121,18 +135,9 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               </span>
             </DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        <div className="settings-modal-body flex-1 overflow-y-auto">
+        <DialogBody className="p-0 max-[820px]:p-0">
           <div className="border-b border-border/30 px-6 py-5">
             <div className="mb-4 flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
@@ -270,7 +275,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
           </div>
 
           <div className="px-6 py-5">
-            <div className="settings-modal-step-row mb-4 flex items-center justify-between">
+            <DialogSectionHeader>
               <div className="flex items-center gap-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
                   3
@@ -312,7 +317,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   </Button>
                 </div>
               )}
-            </div>
+            </DialogSectionHeader>
 
             {type === "command" ? (
               <div className="space-y-3">
@@ -370,9 +375,9 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               />
             )}
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="settings-modal-footer flex items-center justify-between border-t border-border/40 px-6 py-4">
+        <DialogFooter className="px-6 min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
               <div className="flex items-center gap-1.5 text-xs text-destructive">
@@ -386,15 +391,15 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               </div>
             ) : null}
           </div>
-          <div className="settings-modal-actions flex items-center gap-2">
+          <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={isSaving}>
               {t("settings.cancel")}
             </Button>
             <Button onClick={() => void handleSave()} disabled={!name.trim() || isSaving}>
               {t("settings.save")}
             </Button>
-          </div>
-        </div>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

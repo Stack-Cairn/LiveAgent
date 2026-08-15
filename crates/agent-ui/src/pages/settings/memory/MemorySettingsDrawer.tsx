@@ -16,8 +16,11 @@ import {
 import { AlertTriangle, History, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
 import {
   AlertDialog,
+  AlertDialogActions,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -207,7 +210,10 @@ export function MemorySettingsDrawer(props: {
         !prev.memory.organizerEnabled || prev.memory.organizerSchedule.frequency === "none";
       const organizerSchedule =
         enabled && prev.memory.organizerSchedule.frequency === "none"
-          ? { ...prev.memory.organizerSchedule, frequency: "daily" as MemoryOrganizerFrequency }
+          ? {
+              ...prev.memory.organizerSchedule,
+              frequency: "daily" as MemoryOrganizerFrequency,
+            }
           : prev.memory.organizerSchedule;
       return updateMemorySettings(prev, {
         organizerEnabled: enabled,
@@ -559,8 +565,8 @@ export function MemorySettingsDrawer(props: {
       ) : null}
       {drawerWipeConfirmOpen ? (
         <AlertDialog open onOpenChange={setDrawerWipeConfirmOpen}>
-          <AlertDialogContent className="max-w-md rounded-xl p-0">
-            <div className="flex items-start gap-3 border-b px-5 py-4">
+          <AlertDialogContent className="max-w-md p-0">
+            <AlertDialogHeader className="flex-row items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
@@ -572,28 +578,30 @@ export function MemorySettingsDrawer(props: {
                   {t("settings.memoryWipeConfirmDescription")}
                 </AlertDialogDescription>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDrawerWipeConfirmOpen(false)}
-                disabled={saving}
-              >
-                {t("settings.memoryCancel")}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setDrawerWipeConfirmOpen(false);
-                  void onRequestWipe();
-                }}
-                disabled={saving}
-              >
-                {t("settings.memoryWipeAll")}
-              </Button>
-            </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDrawerWipeConfirmOpen(false)}
+                  disabled={saving}
+                >
+                  {t("settings.memoryCancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setDrawerWipeConfirmOpen(false);
+                    void onRequestWipe();
+                  }}
+                  disabled={saving}
+                >
+                  {t("settings.memoryWipeAll")}
+                </Button>
+              </AlertDialogActions>
+            </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       ) : null}

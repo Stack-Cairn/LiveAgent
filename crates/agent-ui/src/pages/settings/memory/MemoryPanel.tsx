@@ -22,8 +22,11 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   AlertDialog,
+  AlertDialogActions,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -122,7 +125,12 @@ export function MemoryPanel(props: {
   const projectGroups = useMemo(() => {
     const groups = new Map<
       string,
-      { key: string; label: string; latestUpdatedAt: number; entries: MemoryMeta[] }
+      {
+        key: string;
+        label: string;
+        latestUpdatedAt: number;
+        entries: MemoryMeta[];
+      }
     >();
     for (const entry of entries) {
       if (entry.scope !== "project" || entry.memoryType === "daily") continue;
@@ -413,7 +421,10 @@ export function MemoryPanel(props: {
                   <Input
                     value={draft.slug}
                     onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, slug: event.target.value }))
+                      setDraft((prev) => ({
+                        ...prev,
+                        slug: event.target.value,
+                      }))
                     }
                     placeholder={t("settings.memorySlugPlaceholder")}
                   />
@@ -449,7 +460,10 @@ export function MemoryPanel(props: {
                   <Input
                     value={draft.description}
                     onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, description: event.target.value }))
+                      setDraft((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
                     }
                     placeholder={t("settings.memoryDescriptionPlaceholder")}
                   />
@@ -535,7 +549,10 @@ export function MemoryPanel(props: {
                       <textarea
                         value={editDraft.appendBody}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, appendBody: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            appendBody: event.target.value,
+                          }))
                         }
                         className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
                         placeholder={t("settings.memoryAppendBlockPlaceholder")}
@@ -551,14 +568,20 @@ export function MemoryPanel(props: {
                       <Input
                         value={editDraft.description}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, description: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            description: event.target.value,
+                          }))
                         }
                         placeholder={t("settings.memoryDescriptionPlaceholder")}
                       />
                       <textarea
                         value={editDraft.body}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, body: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            body: event.target.value,
+                          }))
                         }
                         className="min-h-[360px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed"
                       />
@@ -612,8 +635,8 @@ export function MemoryPanel(props: {
 
       {wipeConfirmOpen ? (
         <AlertDialog open onOpenChange={setWipeConfirmOpen}>
-          <AlertDialogContent className="max-w-md rounded-xl p-0">
-            <div className="flex items-start gap-3 border-b px-5 py-4">
+          <AlertDialogContent className="max-w-md p-0">
+            <AlertDialogHeader className="flex-row items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
@@ -625,15 +648,17 @@ export function MemoryPanel(props: {
                   {t("settings.memoryWipeConfirmDescription")}
                 </AlertDialogDescription>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-4">
-              <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
-                {t("settings.memoryCancel")}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
-                {t("settings.memoryWipeAll")}
-              </Button>
-            </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogActions>
+                <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
+                  {t("settings.memoryCancel")}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
+                  {t("settings.memoryWipeAll")}
+                </Button>
+              </AlertDialogActions>
+            </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       ) : null}

@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Square,
   Trash2,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -29,7 +28,15 @@ import {
 import type { ManagedProcessLog, ManagedProcessRecord } from "../../lib/managed-process/types";
 import { cn } from "../../lib/shared/utils";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogSubheader,
+  DialogTitle,
+} from "../ui/dialog";
 
 type BackgroundTasksPanelProps = {
   // Visibility contract from the right dock: gates the per-second uptime
@@ -169,8 +176,13 @@ function BackgroundTaskLogDialog(props: {
         else onClose();
       }}
     >
-      <DialogContent className="bottom-0 top-auto flex h-[85dvh] w-full max-w-none -translate-y-0 flex-col rounded-b-none rounded-t-2xl p-0 sm:bottom-auto sm:top-1/2 sm:h-[min(80dvh,36rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-y-1/2 sm:rounded-2xl">
-        <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-3">
+      <DialogContent
+        layout="bottom-sheet-mobile"
+        className="flex h-[85dvh] flex-col p-0 sm:h-[min(80dvh,36rem)]"
+        closeLabel={t("projectTools.close")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-2 px-4 py-3">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm">{processDisplayName(process)}</DialogTitle>
             <DialogDescription
@@ -196,32 +208,21 @@ function BackgroundTaskLogDialog(props: {
             )}
             {t("projectTools.bgTaskRefreshLog")}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
-            title={t("projectTools.close")}
-            aria-label={t("projectTools.close")}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
         {error ? (
-          <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          <DialogSubheader className="border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
             {error}
-          </div>
+          </DialogSubheader>
         ) : null}
 
         {/* select-text overrides the desktop app's global user-select:none;
             right-click opens the custom copy menu below. Line numbers are
             counter pseudo-content, so selections copy without them. */}
-        <div
+        <DialogBody
           ref={logRef}
           role="log"
-          className="min-h-0 flex-1 select-text overflow-auto overscroll-contain px-3 py-3 font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground [counter-reset:log-line]"
+          className="select-text px-3 py-3 font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground [counter-reset:log-line]"
           onContextMenu={handleLogContextMenu}
         >
           {lines.length === 0 ? (
@@ -244,7 +245,7 @@ function BackgroundTaskLogDialog(props: {
               </div>
             ))
           )}
-        </div>
+        </DialogBody>
         {contextMenu ? (
           <div className="layer-popover fixed inset-0">
             <button

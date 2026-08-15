@@ -12,7 +12,6 @@ import {
   ScrollText,
   Terminal,
   Timer,
-  X,
   XCircle,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -30,7 +29,7 @@ import {
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
 import { useEffect, useRef, useState } from "react";
-import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ConfirmActionPopover } from "./shared";
 
 type CronTaskViewModalProps = {
@@ -115,7 +114,6 @@ function LeftPanel({
   isRunningNow,
   runNowError,
   onRunNow,
-  onClose,
 }: {
   task: CronTask;
   t: (key: string) => string;
@@ -123,7 +121,6 @@ function LeftPanel({
   isRunningNow: boolean;
   runNowError: string | null;
   onRunNow: () => void;
-  onClose: () => void;
 }) {
   const TypeIcon = cfg.icon;
   const script = task.script?.trim() ?? "";
@@ -136,7 +133,7 @@ function LeftPanel({
         <div className={`absolute inset-0 ${cfg.accentBg} opacity-40`} />
         <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-white/10 to-transparent blur-2xl" />
 
-        <div className="relative px-5 pb-4 pt-5">
+        <div className="relative px-5 pb-4 pt-5 max-[820px]:pr-14">
           {/* Type badge + run-now button on the hero's top row, kept out of
               the meta/content area so pill wrapping never moves the button */}
           <div className="flex items-center justify-between gap-2">
@@ -164,20 +161,6 @@ function LeftPanel({
                 ) : (
                   <Play className="h-3.5 w-3.5" />
                 )}
-              </button>
-              {/* Desktop keeps the close button in the logs header (the modal's
-                  top-right corner there). On the stacked mobile layout the
-                  gateway CSS shows this hero copy right of run-now instead and
-                  hides the logs-header one (settings-cron-view-hero-close /
-                  settings-cron-logs-close). */}
-              <button
-                type="button"
-                onClick={onClose}
-                title={t("settings.cronViewClose")}
-                aria-label={t("settings.cronViewClose")}
-                className="settings-cron-view-hero-close hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              >
-                <X size={14} />
               </button>
             </div>
           </div>
@@ -401,15 +384,7 @@ function LeftPanel({
 
 /* ─────────────────────── Right panel ─────────────────────── */
 
-function RightPanel({
-  task,
-  t,
-  onClose,
-}: {
-  task: CronTask;
-  t: (key: string) => string;
-  onClose: () => void;
-}) {
+function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string }) {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [logs, setLogs] = useState<CronRunRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -478,7 +453,7 @@ function RightPanel({
   return (
     <>
       {/* ── Fixed header ── */}
-      <div className="settings-cron-logs-header flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3.5 pr-14 max-sm:flex-wrap">
         <ScrollText className="h-4 w-4 text-muted-foreground/50" />
         <span className="text-sm font-semibold text-foreground">{t("settings.cronViewLogs")}</span>
         <div className="ml-auto flex items-center gap-2">
@@ -532,16 +507,6 @@ function RightPanel({
             </span>
           ) : null}
         </div>
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={onClose}
-          title={t("settings.cronViewClose")}
-          aria-label={t("settings.cronViewClose")}
-          className="settings-cron-logs-close flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-        >
-          <X size={14} />
-        </button>
       </div>
 
       {/* ── Scrollable log list ── */}
@@ -783,28 +748,32 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      {/* Use explicit h-[80vh] so children can compute flex/overflow correctly */}
-      <DialogContent className="settings-cron-view-panel flex h-[80vh] max-w-4xl p-0">
+      <DialogContent
+        className="flex h-[80dvh] max-w-4xl p-0 max-[820px]:h-full max-[820px]:flex-col"
+        closeLabel={t("settings.cronViewClose")}
+        showCloseButton
+      >
         <DialogTitle className="sr-only">{task.name}</DialogTitle>
         {/* ── Left: task detail ── */}
-        <div className="settings-cron-view-left flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background">
-          <LeftPanel
-            task={task}
-            t={t}
-            cfg={cfg}
-            isRunningNow={isRunningNow}
-            runNowError={runNowError}
-            onRunNow={() => {
-              void handleRunNow(task.id);
-            }}
-            onClose={onClose}
-          />
-        </div>
+        <DialogBody className="flex overflow-hidden p-0 max-[820px]:flex-col">
+          <div className="flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background max-[820px]:max-h-[42%] max-[820px]:w-full max-[820px]:border-b max-[820px]:border-r-0">
+            <LeftPanel
+              task={task}
+              t={t}
+              cfg={cfg}
+              isRunningNow={isRunningNow}
+              runNowError={runNowError}
+              onRunNow={() => {
+                void handleRunNow(task.id);
+              }}
+            />
+          </div>
 
-        {/* ── Right: logs ── */}
-        <div className="settings-cron-view-right flex min-w-0 flex-1 flex-col bg-muted/5">
-          <RightPanel task={task} t={t} onClose={onClose} />
-        </div>
+          {/* ── Right: logs ── */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/5">
+            <RightPanel task={task} t={t} />
+          </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

@@ -29,10 +29,15 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { Input } from "@liveagent/ui/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -473,7 +478,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
 
   const handleStopForward = useCallback((forwardId: string, sessionId: string) => {
     setStoppingForwardIds((current) => new Set(current).add(forwardId));
-    setForwardErrorsBySessionId((current) => ({ ...current, [sessionId]: "" }));
+    setForwardErrorsBySessionId((current) => ({
+      ...current,
+      [sessionId]: "",
+    }));
     void sshLocalForwardClient
       .stop({ forwardId, sessionId })
       .then((response) => {
@@ -585,7 +593,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         if (result.prompt) {
           const pending = pendingCreateRef.current;
           if (pending && pending.hostId === selectedCreateHost.id) {
-            pendingCreateRef.current = { ...pending, promptId: result.prompt.id };
+            pendingCreateRef.current = {
+              ...pending,
+              promptId: result.prompt.id,
+            };
             setPrompt(result.prompt);
             setPromptAnswer("");
             setView("list");
@@ -634,7 +645,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         if (result.prompt) {
           const pending = pendingCreateRef.current;
           if (pending) {
-            pendingCreateRef.current = { ...pending, promptId: result.prompt.id };
+            pendingCreateRef.current = {
+              ...pending,
+              promptId: result.prompt.id,
+            };
           }
           setPrompt(result.prompt);
           setPromptAnswer("");
@@ -727,7 +741,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         if (result.prompt) {
           const pending = pendingCreateRef.current;
           if (pending && pending.hostId === hostId) {
-            pendingCreateRef.current = { ...pending, promptId: result.prompt.id };
+            pendingCreateRef.current = {
+              ...pending,
+              promptId: result.prompt.id,
+            };
             setPrompt(result.prompt);
             setPromptAnswer("");
             setView("list");
@@ -1561,15 +1578,21 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
           if (!open) handleCancelPrompt();
         }}
       >
-        <DialogContent className="max-w-md rounded-lg p-4">
+        <DialogContent
+          className="max-w-md p-0"
+          closeDisabled={answeringPrompt}
+          closeLabel={t("projectTools.sshTunnelPromptCancel")}
+          showCloseButton
+        >
           {prompt ? (
             <form
+              className="contents"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleSubmitPrompt();
               }}
             >
-              <div className="flex items-start gap-3">
+              <DialogHeader className="flex-row items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
                   <Shield className="h-4.5 w-4.5" />
                 </div>
@@ -1583,72 +1606,78 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                     {prompt.message}
                   </DialogDescription>
                 </div>
-              </div>
-              <div className="mt-3 space-y-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
-                <div className="flex gap-2">
-                  <span className="shrink-0 text-muted-foreground">
-                    {t("projectTools.sshTunnelHost")}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-foreground">
-                    {prompt.host}:{prompt.port}
-                  </span>
-                </div>
-                {prompt.keyType ? (
+              </DialogHeader>
+              <DialogBody>
+                <div className="space-y-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
                   <div className="flex gap-2">
                     <span className="shrink-0 text-muted-foreground">
-                      {t("projectTools.sshTunnelKeyType")}
+                      {t("projectTools.sshTunnelHost")}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-mono text-foreground">
-                      {prompt.keyType}
+                      {prompt.host}:{prompt.port}
                     </span>
                   </div>
+                  {prompt.keyType ? (
+                    <div className="flex gap-2">
+                      <span className="shrink-0 text-muted-foreground">
+                        {t("projectTools.sshTunnelKeyType")}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-mono text-foreground">
+                        {prompt.keyType}
+                      </span>
+                    </div>
+                  ) : null}
+                  {prompt.fingerprintSha256 ? (
+                    <div className="flex gap-2">
+                      <span className="shrink-0 text-muted-foreground">
+                        {t("projectTools.sshTunnelFingerprint")}
+                      </span>
+                      <span className="min-w-0 flex-1 break-all font-mono text-foreground">
+                        {prompt.fingerprintSha256}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                {!hostKeyPrompt ? (
+                  <Input
+                    value={promptAnswer}
+                    onChange={(event) => setPromptAnswer(event.currentTarget.value)}
+                    className="mt-3 h-10 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
+                    type={prompt.answerEcho ? "text" : "password"}
+                    aria-label={t("projectTools.sshTunnelAuthPromptTitle")}
+                    autoFocus
+                  />
                 ) : null}
-                {prompt.fingerprintSha256 ? (
-                  <div className="flex gap-2">
-                    <span className="shrink-0 text-muted-foreground">
-                      {t("projectTools.sshTunnelFingerprint")}
-                    </span>
-                    <span className="min-w-0 flex-1 break-all font-mono text-foreground">
-                      {prompt.fingerprintSha256}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-              {!hostKeyPrompt ? (
-                <input
-                  value={promptAnswer}
-                  onChange={(event) => setPromptAnswer(event.currentTarget.value)}
-                  className="mt-3 h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[calc(11px*var(--zone-font-scale,1))] text-foreground outline-none transition-colors placeholder:text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
-                  type={prompt.answerEcho ? "text" : "password"}
-                  aria-label={t("projectTools.sshTunnelAuthPromptTitle")}
-                  autoFocus
-                />
-              ) : null}
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 rounded-lg px-3 text-xs"
-                  onClick={handleCancelPrompt}
-                  disabled={answeringPrompt}
-                >
-                  {hostKeyPrompt
-                    ? t("projectTools.sshTunnelRejectHost")
-                    : t("projectTools.sshTunnelPromptCancel")}
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="h-8 rounded-lg px-3 text-xs"
-                  disabled={promptSubmitDisabled}
-                >
-                  {answeringPrompt ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                  {hostKeyPrompt
-                    ? t("projectTools.sshTunnelTrustHost")
-                    : t("projectTools.sshTunnelPromptSubmit")}
-                </Button>
-              </div>
+              </DialogBody>
+              <DialogFooter>
+                <DialogActions>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={handleCancelPrompt}
+                    disabled={answeringPrompt}
+                  >
+                    {hostKeyPrompt
+                      ? t("projectTools.sshTunnelRejectHost")
+                      : t("projectTools.sshTunnelPromptCancel")}
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    disabled={promptSubmitDisabled}
+                  >
+                    {answeringPrompt ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    {hostKeyPrompt
+                      ? t("projectTools.sshTunnelTrustHost")
+                      : t("projectTools.sshTunnelPromptSubmit")}
+                  </Button>
+                </DialogActions>
+              </DialogFooter>
             </form>
           ) : null}
         </DialogContent>

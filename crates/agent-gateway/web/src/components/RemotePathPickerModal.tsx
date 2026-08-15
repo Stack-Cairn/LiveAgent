@@ -7,15 +7,18 @@ import {
   Home,
   Loader2,
   Plus,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogSubheader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -527,8 +530,12 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
         if (!nextOpen) onClose();
       }}
     >
-      <DialogContent className="remote-path-picker-panel flex h-[min(650px,calc(100dvh-1rem))] max-w-4xl flex-col border-border/60 p-0">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
+      <DialogContent
+        className="flex h-[650px] max-h-full max-w-4xl flex-col p-0"
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {mode === "file" ? <File className="h-5 w-5" /> : <FolderOpen className="h-5 w-5" />}
           </div>
@@ -536,32 +543,18 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
             <DialogTitle>{modalTitle}</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">{modalDescription}</DialogDescription>
           </div>
-          <DialogClose
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                title={t("settings.cancel")}
-                aria-label={t("settings.cancel")}
-              />
-            }
-          >
-            <X className="h-4 w-4" />
-          </DialogClose>
-        </div>
+        </DialogHeader>
 
-        <div className="settings-modal-subheader border-b border-border/30 px-6 py-4">
+        <DialogSubheader className="px-6">
           <div className="settings-field-row flex items-center gap-3">
             <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
               {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
             </div>
             <Input value={headerPath} readOnly className="font-mono text-[13px]" />
           </div>
-        </div>
+        </DialogSubheader>
 
-        <div className="settings-modal-body flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
+        <DialogBody className="flex flex-col gap-3 px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Home className="h-3.5 w-3.5" />
@@ -684,23 +677,25 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
               <span className="min-w-0 flex-1">{statusLine.text}</span>
             </div>
           ) : null}
-        </div>
+        </DialogBody>
 
-        <DialogFooter className="settings-modal-footer border-t border-border/40 px-6 py-4">
-          <DialogClose render={<Button variant="outline" />}>{t("settings.cancel")}</DialogClose>
-          <DialogClose
-            render={
-              <Button
-                disabled={!canConfirm}
-                onClick={() => {
-                  if (!canConfirm || !selectedPath) return;
-                  onSelect(selectedPath);
-                }}
-              />
-            }
-          >
-            {t("settings.select")}
-          </DialogClose>
+        <DialogFooter className="px-6">
+          <DialogActions>
+            <DialogClose render={<Button variant="outline" />}>{t("settings.cancel")}</DialogClose>
+            <DialogClose
+              render={
+                <Button
+                  disabled={!canConfirm}
+                  onClick={() => {
+                    if (!canConfirm || !selectedPath) return;
+                    onSelect(selectedPath);
+                  }}
+                />
+              }
+            >
+              {t("settings.select")}
+            </DialogClose>
+          </DialogActions>
         </DialogFooter>
       </DialogContent>
     </Dialog>

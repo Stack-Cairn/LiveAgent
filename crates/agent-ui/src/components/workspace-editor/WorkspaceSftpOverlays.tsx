@@ -1,10 +1,16 @@
 import { CheckCircle2, Download, Loader2, Upload } from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { Input } from "@liveagent/ui/components/ui/input";
 import type { SftpEntry, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
@@ -46,7 +52,12 @@ export function CreateFolderDialog(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={cancelLabel}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -55,48 +66,41 @@ export function CreateFolderDialog(props: {
             }
           }}
         >
-          <div className="border-b border-border/60 px-5 py-4">
+          <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             {path ? (
               <DialogDescription className="mt-1 truncate font-mono text-[11px]">
                 {path}
               </DialogDescription>
             ) : null}
-          </div>
-          <div className="space-y-2 px-5 py-5">
+          </DialogHeader>
+          <DialogBody className="space-y-2 py-5">
             <label
               className="block text-xs font-medium text-muted-foreground"
               htmlFor="workspace-sftp-new-folder-name"
             >
               {prompt}
             </label>
-            <input
+            <Input
               id="workspace-sftp-new-folder-name"
               value={value}
               autoFocus
               disabled={submitting}
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 text-xs"
               onChange={(event) => onChange(event.currentTarget.value)}
             />
-          </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={submitting}
-              onClick={onCancel}
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={!canSubmit}
-            >
-              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-              {confirmLabel}
-            </button>
-          </div>
+          </DialogBody>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                {confirmLabel}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -114,12 +118,12 @@ export function CopyPathDialog(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md p-0">
-        <div className="border-b border-border/60 px-5 py-4">
+      <DialogContent className="max-w-md p-0" closeLabel={closeLabel} showCloseButton>
+        <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="mt-1 text-xs">{prompt}</DialogDescription>
-        </div>
-        <div className="px-5 py-5">
+        </DialogHeader>
+        <DialogBody className="py-5">
           <textarea
             value={text}
             readOnly
@@ -127,16 +131,14 @@ export function CopyPathDialog(props: {
             className="min-h-28 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
             onFocus={(event) => event.currentTarget.select()}
           />
-        </div>
-        <div className="flex justify-end border-t border-border/60 bg-muted/20 px-5 py-4">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            onClick={onClose}
-          >
-            {closeLabel}
-          </button>
-        </div>
+        </DialogBody>
+        <DialogFooter className="bg-muted/20">
+          <DialogActions>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {closeLabel}
+            </Button>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -184,7 +186,12 @@ export function RenameEntryDialog(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={cancelLabel}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -193,48 +200,41 @@ export function RenameEntryDialog(props: {
             }
           }}
         >
-          <div className="border-b border-border/60 px-5 py-4">
+          <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             {path ? (
               <DialogDescription className="mt-1 truncate font-mono text-[11px]">
                 {path}
               </DialogDescription>
             ) : null}
-          </div>
-          <div className="space-y-2 px-5 py-5">
+          </DialogHeader>
+          <DialogBody className="space-y-2 py-5">
             <label
               className="block text-xs font-medium text-muted-foreground"
               htmlFor="workspace-sftp-rename-entry-name"
             >
               {prompt}
             </label>
-            <input
+            <Input
               id="workspace-sftp-rename-entry-name"
               value={value}
               autoFocus
               disabled={submitting}
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 text-xs"
               onChange={(event) => onChange(event.currentTarget.value)}
             />
-          </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={submitting}
-              onClick={onCancel}
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={!canSubmit}
-            >
-              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-              {confirmLabel}
-            </button>
-          </div>
+          </DialogBody>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                {confirmLabel}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

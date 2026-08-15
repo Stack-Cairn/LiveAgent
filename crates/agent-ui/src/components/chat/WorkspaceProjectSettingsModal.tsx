@@ -16,9 +16,18 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useEffect, useMemo, useState } from "react";
 import type { StoreCategoryValue } from "../../pages/skills-hub/SkillCategoryControls";
-import { Blend, FolderTree, Loader2, Settings, X } from "../IconSet";
+import { Blend, FolderTree, Loader2, Settings } from "../IconSet";
 import { Button } from "../ui/button";
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "../ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { WorkspaceDirectorySettingsPanel } from "./workspace-project-settings/WorkspaceDirectorySettingsPanel";
 import { WorkspaceGeneralSettingsPanel } from "./workspace-project-settings/WorkspaceGeneralSettingsPanel";
 import {
@@ -271,13 +280,21 @@ export function WorkspaceProjectSettingsModal(props: {
     `chat.workspaceSettingsKind${project.kind[0].toUpperCase()}${project.kind.slice(1)}`,
   );
   const navigation = [
-    { id: "general" as const, icon: Settings, label: t("chat.workspaceSettingsGeneral") },
+    {
+      id: "general" as const,
+      icon: Settings,
+      label: t("chat.workspaceSettingsGeneral"),
+    },
     {
       id: "directories" as const,
       icon: FolderTree,
       label: t("chat.workspaceSettingsDirectories"),
     },
-    { id: "resources" as const, icon: Blend, label: t("chat.workspaceSettingsResources") },
+    {
+      id: "resources" as const,
+      icon: Blend,
+      label: t("chat.workspaceSettingsResources"),
+    },
   ];
 
   if (directoryPickerActive) {
@@ -294,8 +311,14 @@ export function WorkspaceProjectSettingsModal(props: {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="flex h-[650px] max-w-[940px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0">
-        <header className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
+      <DialogContent
+        className="flex h-[min(650px,calc(100dvh-2rem))] max-w-[940px] flex-col p-0"
+        closeDisabled={saving}
+        closeLabel={t("window.close")}
+        layout="fullscreen-mobile"
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/35 text-foreground">
               <FolderTree className="h-4.5 w-4.5" />
@@ -320,24 +343,9 @@ export function WorkspaceProjectSettingsModal(props: {
               </div>
             </div>
           </div>
-          <DialogClose
-            disabled={saving}
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-                title={t("window.close")}
-                aria-label={t("window.close")}
-              />
-            }
-          >
-            <X className="h-4 w-4" />
-          </DialogClose>
-        </header>
+        </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
+        <DialogBody className="flex overflow-hidden p-0 max-[720px]:flex-col">
           <nav
             className="flex w-[188px] shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
             aria-label={t("chat.workspaceSettingsNavigation")}
@@ -430,9 +438,9 @@ export function WorkspaceProjectSettingsModal(props: {
               />
             ) : null}
           </main>
-        </div>
+        </DialogBody>
 
-        <footer className="settings-modal-footer flex shrink-0 items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3.5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[720px]:pt-3">
+        <DialogFooter className="bg-muted/20 py-3.5 min-[821px]:justify-between">
           <div
             className={cn(
               "min-w-0 truncate text-xs text-muted-foreground max-[520px]:hidden",
@@ -447,7 +455,7 @@ export function WorkspaceProjectSettingsModal(props: {
                     .replace("{mcp}", String(mcpServerIds.size))
                 : null}
           </div>
-          <div className="ml-auto flex gap-2 max-[520px]:w-full">
+          <DialogActions className="ml-auto max-[520px]:w-full">
             <DialogClose
               disabled={saving}
               render={<Button type="button" variant="outline" className="max-[520px]:flex-1" />}
@@ -461,8 +469,8 @@ export function WorkspaceProjectSettingsModal(props: {
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t("workspaceEditor.save")}
             </Button>
-          </div>
-        </footer>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
       {directoryPickerElement}
     </Dialog>

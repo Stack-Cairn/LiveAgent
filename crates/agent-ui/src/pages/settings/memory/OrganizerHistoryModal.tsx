@@ -5,24 +5,23 @@
 //
 // Shared implementation owned by @liveagent/ui.
 
-import {
-  AlertTriangle,
-  BrushCleaning,
-  Check,
-  RefreshCw,
-  X,
-} from "@liveagent/ui/components/IconSet";
+import { AlertTriangle, BrushCleaning, Check, RefreshCw } from "@liveagent/ui/components/IconSet";
 import {
   AlertDialog,
+  AlertDialogActions,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { useEffect, useState } from "react";
@@ -117,7 +116,10 @@ export function OrganizerHistoryModal(props: {
     setSelectedDecisionKeys(
       new Set(
         safeDecisions
-          .map((decision, index) => ({ decision, key: organizerDecisionKey(decision, index) }))
+          .map((decision, index) => ({
+            decision,
+            key: organizerDecisionKey(decision, index),
+          }))
           .filter(({ decision }) => isDefaultSelectedDecision(decision))
           .map(({ key }) => key),
       ),
@@ -139,7 +141,10 @@ export function OrganizerHistoryModal(props: {
   async function applyManualPreview() {
     if (!selectedRun || !v4Report) return;
     const selectedWithKeys = parsedSafeDecisions
-      .map((decision, index) => ({ decision, key: organizerDecisionKey(decision, index) }))
+      .map((decision, index) => ({
+        decision,
+        key: organizerDecisionKey(decision, index),
+      }))
       .filter((item) => selectedDecisionKeys.has(item.key));
     if (selectedWithKeys.length === 0) {
       setError(t("settings.memoryOrganizerSelectAtLeastOne"));
@@ -234,26 +239,19 @@ export function OrganizerHistoryModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[min(760px,calc(100vh-2rem))] max-w-6xl flex-col rounded-xl p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-4">
-          <div className="min-w-0">
-            <DialogTitle className="text-sm">{t("settings.memoryOrganizerHistory")}</DialogTitle>
-            <DialogDescription className="mt-1 text-xs">
-              {t("settings.memoryOrganizerHistoryDescription")}
-            </DialogDescription>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-            title={t("settings.memorySettingsClose")}
-            aria-label={t("settings.memorySettingsClose")}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <DialogContent
+        className="flex h-[min(760px,calc(100dvh-2rem))] max-w-6xl flex-col p-0"
+        closeLabel={t("settings.memorySettingsClose")}
+        showCloseButton
+      >
+        <DialogHeader>
+          <DialogTitle className="text-sm">{t("settings.memoryOrganizerHistory")}</DialogTitle>
+          <DialogDescription className="text-xs">
+            {t("settings.memoryOrganizerHistoryDescription")}
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)]">
+        <DialogBody className="grid grid-cols-[280px_minmax(0,1fr)] overflow-hidden p-0">
           <aside className="flex min-h-0 flex-col border-r border-border/50">
             <div className="space-y-2 border-b border-border/40 p-3">
               <div className="flex items-center gap-2">
@@ -265,11 +263,26 @@ export function OrganizerHistoryModal(props: {
                     }
                     ariaLabel={t("settings.memoryOrganizerHistoryAll")}
                     options={[
-                      { value: "all", label: t("settings.memoryOrganizerHistoryAll") },
-                      { value: "succeeded", label: t("settings.memoryOrganizerStatusSucceeded") },
-                      { value: "failed", label: t("settings.memoryOrganizerStatusFailed") },
-                      { value: "skipped", label: t("settings.memoryOrganizerStatusSkipped") },
-                      { value: "running", label: t("settings.memoryOrganizerStatusRunning") },
+                      {
+                        value: "all",
+                        label: t("settings.memoryOrganizerHistoryAll"),
+                      },
+                      {
+                        value: "succeeded",
+                        label: t("settings.memoryOrganizerStatusSucceeded"),
+                      },
+                      {
+                        value: "failed",
+                        label: t("settings.memoryOrganizerStatusFailed"),
+                      },
+                      {
+                        value: "skipped",
+                        label: t("settings.memoryOrganizerStatusSkipped"),
+                      },
+                      {
+                        value: "running",
+                        label: t("settings.memoryOrganizerStatusRunning"),
+                      },
                     ]}
                   />
                 </div>
@@ -622,12 +635,12 @@ export function OrganizerHistoryModal(props: {
               </div>
             )}
           </section>
-        </div>
+        </DialogBody>
       </DialogContent>
       {clearConfirmOpen ? (
         <AlertDialog open onOpenChange={setClearConfirmOpen}>
-          <AlertDialogContent className="max-w-md rounded-xl p-0">
-            <div className="flex items-start gap-3 border-b px-5 py-4">
+          <AlertDialogContent className="max-w-md p-0">
+            <AlertDialogHeader className="flex-row items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
@@ -639,26 +652,28 @@ export function OrganizerHistoryModal(props: {
                   {t("settings.memoryOrganizerClearHistoryConfirmDescription")}
                 </AlertDialogDescription>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setClearConfirmOpen(false)}
-                disabled={clearingHistory}
-              >
-                {t("settings.memoryCancel")}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={clearHistory}
-                disabled={clearingHistory}
-              >
-                <BrushCleaning className="h-3.5 w-3.5" />
-                {t("settings.memoryOrganizerClearHistory")}
-              </Button>
-            </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setClearConfirmOpen(false)}
+                  disabled={clearingHistory}
+                >
+                  {t("settings.memoryCancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={clearHistory}
+                  disabled={clearingHistory}
+                >
+                  <BrushCleaning className="h-3.5 w-3.5" />
+                  {t("settings.memoryOrganizerClearHistory")}
+                </Button>
+              </AlertDialogActions>
+            </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       ) : null}

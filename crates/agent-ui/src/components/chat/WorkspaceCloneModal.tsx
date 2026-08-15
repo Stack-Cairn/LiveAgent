@@ -1,10 +1,13 @@
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
-import { FolderOpen, GitBranch, Loader2, X } from "@liveagent/ui/components/IconSet";
+import { FolderOpen, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
+  DialogActions,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -151,9 +154,14 @@ export function WorkspaceCloneModal({
         if (!open && !cloning) onClose();
       }}
     >
-      <DialogContent className="max-w-xl p-0">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.08]">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-foreground/70 shadow-sm dark:border-white/10 dark:bg-white/[0.07] dark:text-foreground/80">
+      <DialogContent
+        className="flex max-h-[90dvh] max-w-xl flex-col p-0"
+        closeDisabled={cloning}
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6 py-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
             <GitBranch className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -164,12 +172,9 @@ export function WorkspaceCloneModal({
               {t("chat.workspaceCreateDescription")}
             </DialogDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("settings.cancel")}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
-        <div className="space-y-5 px-6 py-5">
+        <DialogBody className="space-y-5 px-6 py-5">
           <Button
             type="button"
             variant="outline"
@@ -292,7 +297,7 @@ export function WorkspaceCloneModal({
               <p className="mt-3 text-xs text-muted-foreground">{cloneDisabledMessage}</p>
             ) : null}
             {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
-            <div className="mt-4 flex justify-end gap-2">
+            <DialogActions className="mt-4">
               <Button variant="outline" onClick={onClose} disabled={cloning}>
                 {t("settings.cancel")}
               </Button>
@@ -304,9 +309,9 @@ export function WorkspaceCloneModal({
                 )}
                 {cloning ? t("chat.workspaceCloning") : t("chat.workspaceCloneSubmit")}
               </Button>
-            </div>
+            </DialogActions>
           </section>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

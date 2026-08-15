@@ -28,7 +28,16 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
@@ -291,8 +300,12 @@ function SshHostModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
-        <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Key className="h-5 w-5" />
           </div>
@@ -302,10 +315,10 @@ function SshHostModal(props: {
             </DialogTitle>
             <DialogDescription className="text-xs">{t("settings.sshDesc")}</DialogDescription>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div className="settings-modal-body flex-1 overflow-y-auto px-6 py-5">
-          <div className="grid grid-cols-2 gap-4">
+        <DialogBody className="px-6 py-5">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ssh-name" className="text-xs font-medium text-muted-foreground">
                 {t("settings.sshName")}
@@ -647,18 +660,18 @@ function SshHostModal(props: {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="settings-modal-footer flex items-center justify-end border-t px-6 py-4">
-          <div className="flex items-center gap-2">
+        <DialogFooter className="px-6">
+          <DialogActions>
             <Button variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
             <Button onClick={handleSave} disabled={!name.trim() || !host.trim()}>
               {t("settings.save")}
             </Button>
-          </div>
-        </div>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -710,8 +723,12 @@ function SshImportModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col p-0">
-        <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
+      <DialogContent
+        className="flex max-h-[90dvh] max-w-3xl flex-col p-0"
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Upload className="h-5 w-5" />
           </div>
@@ -719,9 +736,9 @@ function SshImportModal(props: {
             <DialogTitle className="text-sm">{t("settings.sshImport")}</DialogTitle>
             <DialogDescription className="text-xs">{t("settings.sshImportDesc")}</DialogDescription>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div className="settings-modal-body flex-1 overflow-y-auto px-6 py-5">
+        <DialogBody className="px-6 py-5">
           {!result && !error ? (
             <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/20 text-sm text-muted-foreground">
               {t("settings.sshImportScanning")}
@@ -801,13 +818,13 @@ function SshImportModal(props: {
               )}
             </div>
           ) : null}
-        </div>
+        </DialogBody>
 
-        <div className="settings-modal-footer flex items-center justify-between border-t px-6 py-4">
+        <DialogFooter className="px-6 min-[821px]:justify-between">
           <div className="text-xs text-muted-foreground">
             {t("settings.sshImportSelected").replace("{count}", String(selected.length))}
           </div>
-          <div className="flex items-center gap-2">
+          <DialogActions>
             <Button variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
@@ -820,8 +837,8 @@ function SshImportModal(props: {
             >
               {t("settings.sshImport")}
             </Button>
-          </div>
-        </div>
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -969,7 +986,11 @@ function SshViewModeToggle(props: { value: SshViewMode; onChange: (value: SshVie
   const groupLabel = `${t("settings.sshViewList")} / ${t("settings.sshViewGrid")}`;
   const options = [
     { value: "list" as const, label: t("settings.sshViewList"), icon: List },
-    { value: "grid" as const, label: t("settings.sshViewGrid"), icon: LayoutGrid },
+    {
+      value: "grid" as const,
+      label: t("settings.sshViewGrid"),
+      icon: LayoutGrid,
+    },
   ];
 
   return (
@@ -1162,7 +1183,10 @@ export function SshSection(props: SettingsSectionProps) {
     }
     await runSshReconnectBatch(
       host.id,
-      sessions.map((session) => ({ id: session.id, projectPathKey: session.projectPathKey })),
+      sessions.map((session) => ({
+        id: session.id,
+        projectPathKey: session.projectPathKey,
+      })),
     );
   }
 
