@@ -55,13 +55,13 @@ import {
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import { memoryTurnInjection } from "../lib/chat/memory/injectionController";
-import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
   createPendingHistoryItem,
   getFirstUserMessageText,
 } from "../lib/chat/page/chatPageHelpers";
+import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import {
