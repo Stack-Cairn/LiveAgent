@@ -295,12 +295,20 @@ export type SelectedModel = {
 
 export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";
 
+/**
+ * 限额来源：catalog（目录命中）> provider（供应商接口自带声明值）
+ * > fallback（兜底猜测）；user 是用户手改，任何时候都不被自动覆盖。
+ * 缺失时（旧存档）按 normalizeProviderModelConfig 的迁移推断规则一次性补齐。
+ */
+export type ModelLimitsSource = "catalog" | "provider" | "fallback" | "user";
+
 export type ProviderModelConfig = {
   id: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
   ownedBy?: string;
   contextWindow: number;
   maxOutputToken: number;
+  limitsSource?: ModelLimitsSource;
   /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
   promptCacheHintMode?: PromptCacheHintMode;
 };

@@ -531,6 +531,54 @@ test("mergeFetchedModels immediately normalizes a stale 1000K context to 1M", ()
   assert.equal(providerUtils.formatTokenCount(model.contextWindow), "1M");
 });
 
+test("mergeFetchedModels adopts fresh provider-declared limits over a stale stored value", () => {
+  const [model] = providerUtils.mergeFetchedModels(
+    [
+      {
+        id: "relay-model",
+        contextWindow: 300_000,
+        maxOutputToken: 50_000,
+        limitsSource: "provider",
+      },
+    ],
+    [
+      {
+        id: "relay-model",
+        contextWindow: 200_000,
+        maxOutputToken: 32_000,
+        limitsSource: "catalog",
+      },
+    ],
+  );
+  assert.equal(model.contextWindow, 300_000);
+  assert.equal(model.maxOutputToken, 50_000);
+  assert.equal(model.limitsSource, "provider");
+});
+
+test("mergeFetchedModels never overwrites a user-edited stored value with a fresh fetch", () => {
+  const [model] = providerUtils.mergeFetchedModels(
+    [
+      {
+        id: "relay-model",
+        contextWindow: 300_000,
+        maxOutputToken: 50_000,
+        limitsSource: "provider",
+      },
+    ],
+    [
+      {
+        id: "relay-model",
+        contextWindow: 999_000,
+        maxOutputToken: 1_000,
+        limitsSource: "user",
+      },
+    ],
+  );
+  assert.equal(model.contextWindow, 999_000);
+  assert.equal(model.maxOutputToken, 1_000);
+  assert.equal(model.limitsSource, "user");
+});
+
 test("model bulk helpers count and apply only selected active states", () => {
   const activeModels = new Set(["enabled-model", "untouched-model"]);
   const selectedModels = new Set(["enabled-model", "disabled-model"]);

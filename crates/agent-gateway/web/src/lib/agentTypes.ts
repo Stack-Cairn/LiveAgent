@@ -25,6 +25,7 @@ export type ToolCall = {
   name: string;
   arguments: Record<string, unknown>;
   thoughtSignature?: string;
+  namespace?: string;
 };
 
 export type HostedSearchContent = {
@@ -48,10 +49,29 @@ export type Usage = {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  cacheWrite1h?: number;
+  reasoning?: number;
   totalTokens: number;
 };
 
-export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
+export type StopReason =
+  | "pending"
+  | "stop"
+  | "length"
+  | "toolUse"
+  | "error"
+  | "aborted"
+  | "deferred";
+
+export type DeferredHandle = {
+  provider: string;
+  modelId: string;
+  api: string;
+  id: string;
+  expiresAt?: number;
+  pollAfterMs?: number;
+  data?: unknown;
+};
 
 export type UserMessage = {
   role: "user";
@@ -66,10 +86,15 @@ export type AssistantMessage = {
   api: string;
   provider: string;
   model: string;
+  responseModel?: string;
   responseId?: string;
+  diagnostics?: unknown[];
   usage: Usage;
   stopReason: StopReason;
+  deferred?: DeferredHandle;
   errorMessage?: string;
+  rawStopReason?: string;
+  endTurn?: boolean;
   timestamp: number;
 };
 
@@ -79,6 +104,8 @@ export type ToolResultMessage<TDetails = unknown> = {
   toolName: string;
   content: (TextContent | ImageContent)[];
   details?: TDetails;
+  usage?: Usage;
+  addedToolNames?: string[];
   isError: boolean;
   timestamp: number;
 };
@@ -89,6 +116,10 @@ export type Tool<TParameters extends TSchema = TSchema> = {
   name: string;
   description: string;
   parameters: TParameters;
+  constrainedSampling?:
+    | false
+    | { type: "json_schema"; strict: "prefer" | "require" }
+    | { type: "grammar"; variants: Partial<Record<"openai_lark" | "openai_regex", string>> };
 };
 
 export type Context = {

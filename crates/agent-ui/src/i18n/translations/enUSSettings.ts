@@ -568,6 +568,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelSettings": "Model settings",
   "settings.modelName": "Model name",
   "settings.newModelBadge": "NEW",
+  "settings.estimatedLimitsBadge": "Estimated",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
   "settings.positiveIntegerRequired": "Please enter a positive integer",

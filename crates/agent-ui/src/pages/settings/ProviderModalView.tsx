@@ -630,6 +630,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               <div className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
                                 {formatTokenCount(model.contextWindow)} ctx ·{" "}
                                 {formatTokenCount(model.maxOutputToken)} out
+                                {model.limitsSource === "fallback" ? (
+                                  <span className="ml-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                                    {t("settings.estimatedLimitsBadge")}
+                                  </span>
+                                ) : null}
                               </div>
                               <Button
                                 type="button"

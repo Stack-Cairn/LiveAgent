@@ -247,6 +247,7 @@ function resolveCodexOpenAICompletionsOverrides(params: {
   const compat: OpenAICompletionsCompat = {
     supportsStore: false,
     supportsDeveloperRole: false,
+    supportsFinishReason: false,
   };
 
   if (isXai || isZai) {

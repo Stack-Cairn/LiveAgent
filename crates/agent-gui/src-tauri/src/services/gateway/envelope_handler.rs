@@ -987,6 +987,21 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::ImportDirectory(request)) => {
+                match gateway_bridge::handle_import_directory(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::ImportDirectoryResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::UploadedImagePreview(request)) => {
                 self.spawn_uploaded_image_preview_response(request_id, request)
             }
