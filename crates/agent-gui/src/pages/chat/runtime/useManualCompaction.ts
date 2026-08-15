@@ -348,6 +348,9 @@ export function useManualCompaction(params: {
               createdAt: runtimeEntry.createdAt,
               titlePromise: null,
             }),
+          // 压缩把携带 memory 增量块的 user 消息移出 active segment;丢弃注入
+          // 状态后,下一轮发送的 getSystemText 回退到现读快照并重新冻结。
+          onCompacted: () => memoryTurnInjection.invalidate(conversationId),
         };
 
         const compactionController = getCompactionController(conversationId);

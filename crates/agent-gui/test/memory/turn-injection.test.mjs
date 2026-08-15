@@ -136,7 +136,7 @@ test("首轮就读取失败时不建立基线,留给下一轮重来", () => {
   assert.equal(plan.baseline, null);
 });
 
-test("增量数量封顶后只推进指纹,不再追加消息", () => {
+test("增量数量封顶后转重冻结:fresh 快照进 system 段,增量额度归零", () => {
   let baseline = baselineFrom(OVERVIEW_A);
   for (let round = 0; round < MEMORY_TURN_UPDATE_LIMIT; round += 1) {
     const plan = planMemoryTurnInjection({
@@ -149,9 +149,103 @@ test("增量数量封顶后只推进指纹,不再追加消息", () => {
   assert.equal(baseline.updateCount, MEMORY_TURN_UPDATE_LIMIT);
 
   const capped = planMemoryTurnInjection({ baseline, overview: OVERVIEW_B });
+  assert.equal(capped.refrozen, true);
   assert.equal(capped.turnUpdate, "");
-  assert.equal(capped.systemText, baseline.systemText);
+  // 变化不再静默丢失:fresh 快照整份进 system 段。
+  assert.equal(capped.systemText, OVERVIEW_B);
   assert.equal(capped.baseline.lastSeenText, OVERVIEW_B);
+  assert.equal(capped.baseline.updateCount, 0);
+
+  // 重冻结后增量额度重新可用:下一次变化继续走增量。
+  const next = planMemoryTurnInjection({ baseline: capped.baseline, overview: OVERVIEW_A });
+  assert.equal(next.refrozen, false);
+  assert.ok(next.turnUpdate.startsWith("<memory-update>"));
+});
+
+test("变更条目数超过单块上限时转重冻结,不再发截断块", () => {
+  const wide = (suffix) =>
+    overviewText(
+      Array.from({ length: 13 }, (_, index) =>
+        entry({ slug: `user-${index}`, description: `事实 ${index}${suffix}` }),
+      ),
+    );
+  const baseline = baselineFrom(wide(""));
+  const plan = planMemoryTurnInjection({ baseline, overview: wide(" 改") });
+
+  assert.equal(plan.refrozen, true);
+  assert.equal(plan.turnUpdate, "");
+  assert.equal(plan.systemText, wide(" 改"));
+  assert.equal(plan.baseline.updateCount, 0);
+});
+
+test("变更条目数恰好在上限内仍走增量,不触发重冻结", () => {
+  const wide = (suffix) =>
+    overviewText(
+      Array.from({ length: 12 }, (_, index) =>
+        entry({ slug: `user-${index}`, description: `事实 ${index}${suffix}` }),
+      ),
+    );
+  const baseline = baselineFrom(wide(""));
+  const plan = planMemoryTurnInjection({ baseline, overview: wide(" 改") });
+
+  assert.equal(plan.refrozen, false);
+  assert.ok(plan.turnUpdate.startsWith("<memory-update>"));
+  assert.ok(!plan.turnUpdate.includes("omitted"));
+  assert.equal(plan.systemText, baseline.systemText);
+});
+
+test("workdir 切换触发重冻结;任一侧缺 workdir 时不凭空触发", () => {
+  const first = planMemoryTurnInjection({ baseline: null, overview: OVERVIEW_A, workdir: "/proj/a" });
+  assert.equal(first.baseline.workdir, "/proj/a");
+
+  const switched = planMemoryTurnInjection({
+    baseline: first.baseline,
+    overview: OVERVIEW_B,
+    workdir: "/proj/b",
+  });
+  assert.equal(switched.refrozen, true);
+  assert.equal(switched.systemText, OVERVIEW_B);
+  assert.equal(switched.baseline.workdir, "/proj/b");
+
+  // 旧基线没记 workdir:照常走增量,不因为这轮开始带 workdir 就重冻结。
+  const legacy = planMemoryTurnInjection({
+    baseline: baselineFrom(OVERVIEW_A),
+    overview: OVERVIEW_B,
+    workdir: "/proj/a",
+  });
+  assert.equal(legacy.refrozen, false);
+  assert.notEqual(legacy.turnUpdate, "");
+});
+
+test("空索引冻结后首次出现记忆:整份快照重冻结进 system 段", () => {
+  const empty = planMemoryTurnInjection({ baseline: null, overview: "" });
+  assert.equal(empty.baseline.systemText, "");
+
+  const appeared = planMemoryTurnInjection({ baseline: empty.baseline, overview: OVERVIEW_A });
+  assert.equal(appeared.refrozen, true);
+  assert.equal(appeared.systemText, OVERVIEW_A);
+  assert.equal(appeared.turnUpdate, "");
+  // 反向(非空→空)走普通增量即可,索引规则文本已在 system 段里。
+  const cleared = planMemoryTurnInjection({ baseline: appeared.baseline, overview: "" });
+  assert.equal(cleared.refrozen, false);
+});
+
+test("索引被展示截断时抑制 retired 列表,并注明截断", () => {
+  const wide = Array.from({ length: 31 }, (_, index) =>
+    entry({ slug: `user-${index}`, description: `事实 ${index}` }),
+  );
+  const truncated = overviewText(wide);
+  assert.ok(truncated.includes("more entries hidden"));
+
+  // 移除 user-0 后不再触发桶截断:原本隐藏的 user-30 现身,user-0 貌似 retire。
+  const narrowed = overviewText(wide.slice(1));
+  const update = formatMemoryTurnUpdate(truncated, narrowed);
+
+  assert.ok(update.includes("[user-30|u|d0]"));
+  // user-0 的「消失」可能只是截断造成的,不得报成 retired。
+  assert.ok(!update.includes("No longer in the index"));
+  assert.ok(!update.includes("- [user-0]"));
+  assert.ok(update.includes("display-truncated"));
 });
 
 test("规划器是纯函数:重复调用结果一致,且不改动入参", async () => {
@@ -387,6 +481,58 @@ test("会话删除后状态清空", () => {
 
   memoryTurnInjection.dispose(conversationId);
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId), undefined);
+});
+
+test("压缩后 invalidate:下一轮把 fresh 快照重冻结进 system 段,旧增量清空", (t) => {
+  const conversationId = "conv-compaction-invalidate";
+  t.after(() => memoryTurnInjection.dispose(conversationId));
+
+  memoryTurnInjection.planTurn({ conversationId, messageId: "u1", overview: OVERVIEW_A });
+  memoryTurnInjection.planTurn({ conversationId, messageId: "u2", overview: OVERVIEW_B });
+  assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 1);
+
+  // 压缩完成:携带增量块的 u2 已被移出 active segment。
+  memoryTurnInjection.invalidate(conversationId);
+  assert.equal(memoryTurnInjection.getMessageUpdates(conversationId), undefined);
+
+  const next = memoryTurnInjection.planTurn({
+    conversationId,
+    messageId: "u3",
+    overview: OVERVIEW_B,
+  });
+  assert.equal(next.systemText, OVERVIEW_B);
+  assert.equal(next.turnUpdate, "");
+});
+
+test("controller 在重冻结时清空已挂出的增量块", (t) => {
+  const conversationId = "conv-refreeze-clears";
+  t.after(() => memoryTurnInjection.dispose(conversationId));
+
+  memoryTurnInjection.planTurn({
+    conversationId,
+    messageId: "u1",
+    overview: OVERVIEW_A,
+    workdir: "/proj/a",
+  });
+  memoryTurnInjection.planTurn({
+    conversationId,
+    messageId: "u2",
+    overview: OVERVIEW_B,
+    workdir: "/proj/a",
+  });
+  assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 1);
+
+  // workdir 切换触发重冻结:旧增量描述旧快照的差异,必须一并清掉。
+  const refrozen = memoryTurnInjection.planTurn({
+    conversationId,
+    messageId: "u3",
+    overview: OVERVIEW_A,
+    workdir: "/proj/b",
+  });
+  assert.equal(refrozen.systemText, OVERVIEW_A);
+  assert.equal(refrozen.turnUpdate, "");
+  assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 0);
+  assert.equal(memoryTurnInjection.getSystemText(conversationId), OVERVIEW_A);
 });
 
 // ---------------------------------------------------------------------------

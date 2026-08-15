@@ -42,6 +42,11 @@ export const MEMORY_OVERVIEW_FINAL_LINE =
 export const MEMORY_PROMPT_TRUNCATION_SUFFIX =
   '... (truncated; use MemoryManager(action="search") for older entries)';
 
+// 桶截断行的稳定标记片段。turnInjection 用它判断「overview 是被展示截断了,不是
+// 条目真的没了」;生成处(appendSection)直接用该片段拼行,标记与文本天然同源,
+// 不存在两处抄写漂移的可能。
+export const MEMORY_INDEX_HIDDEN_LINE_MARKER = "more entries hidden; call MemoryManager(";
+
 export function buildMemoryToolsSuffixSection() {
   return [
     "## Memory",
@@ -153,7 +158,7 @@ function appendSection(lines: string[], title: string, entries: MemoryOverviewEn
   lines.push("", title, ...displayed.map((entry) => lineFor(entry, nowMs)));
   if (hidden > 0) {
     lines.push(
-      `- ... (${hidden} more entries hidden; call MemoryManager(action="list") or action="search" to retrieve)`,
+      `- ... (${hidden} ${MEMORY_INDEX_HIDDEN_LINE_MARKER}action="list") or action="search" to retrieve)`,
     );
   }
 }

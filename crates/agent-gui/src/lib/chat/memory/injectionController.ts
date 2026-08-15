@@ -43,12 +43,14 @@ export type MemoryTurnInjectionResult = {
 export const memoryTurnInjection = {
   /**
    * 请求边界调用一次:决定这轮 memory 走 system 段还是走 user 消息增量。
-   * overview 传 null 表示读取失败,此时保持基线不动。
+   * overview 传 null 表示读取失败,此时保持基线不动。plan 判定 refrozen 时同步
+   * 清空已挂出的增量块 —— 它们描述旧快照的差异,与重冻结后的 system 段自相矛盾。
    */
   planTurn(params: {
     conversationId: string;
     messageId?: string;
     overview: string | null;
+    workdir?: string;
   }): MemoryTurnInjectionResult {
     const key = params.conversationId.trim();
     if (!key) {
@@ -60,6 +62,7 @@ export const memoryTurnInjection = {
     const plan = planMemoryTurnInjection({
       baseline: existing?.baseline ?? null,
       overview: params.overview,
+      workdir: params.workdir,
     });
     if (!plan.baseline) {
       return { systemText: plan.systemText, turnUpdate: "" };
@@ -78,6 +81,9 @@ export const memoryTurnInjection = {
     };
     state.baseline = plan.baseline;
     state.lastTouchedAt = Date.now();
+    if (plan.refrozen) {
+      state.updates.clear();
+    }
     if (plan.turnUpdate) {
       state.updates.set(messageId, plan.turnUpdate);
     }
@@ -101,6 +107,16 @@ export const memoryTurnInjection = {
    */
   getSystemText(conversationId: string): string | undefined {
     return states.get(conversationId.trim())?.baseline.systemText;
+  },
+
+  /**
+   * 压缩完成后调用:压缩把携带增量块的 user 消息移出 active segment,那些增量
+   * 对模型永久不可见,基线的指纹却已越过它们 —— 继续增量会静默丢失这些变化。
+   * 丢弃整个会话状态,下一次 planTurn 走首轮分支把 fresh 快照重冻结进 system 段;
+   * 压缩本来就要重建前缀,这次重冻结是免费的。
+   */
+  invalidate(conversationId: string) {
+    states.delete(conversationId.trim());
   },
 
   /** 会话删除/被裁掉:连基线一起丢弃。 */

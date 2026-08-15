@@ -1293,6 +1293,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             titlePromise,
           });
         },
+        // 压缩把携带 memory 增量块的 user 消息移出 active segment,增量对模型
+        // 永久不可见;丢弃注入状态,下一轮把 fresh 快照重冻结进 system 段 ——
+        // 压缩本来就要重建前缀,这次重冻结免费。
+        onCompacted: () => memoryTurnInjection.invalidate(conversationId),
       },
     });
     compactionBound = true;
@@ -1390,6 +1394,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       conversationId,
       messageId: pendingUserMessage.id,
       overview: memoryOverview,
+      // project 段随 workdir 换血,增量 diff 无法保真表达;基线记录冻结时的
+      // workdir,切换时由 planTurn 触发重冻结。
+      workdir: effectiveWorkdir,
     }).systemText;
     // 同样放在停止检查之后:这一轮被停掉时消息根本没发出去,提前记账只会给一个
     // 永远对不上的消息 id 留下垃圾块。空块不会创建任何状态。
