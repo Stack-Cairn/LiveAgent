@@ -156,7 +156,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   }
 
   return (
-    <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
+    <section className="py-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -187,7 +187,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         />
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-5 space-y-2">
         <Label className="text-[12px] font-medium text-foreground/80">
           {t("settings.failoverQueueTitle")}
         </Label>
@@ -275,7 +275,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         ) : null}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 border-t border-foreground/[0.08] pt-5">
         <FailoverNumberField
           label={t("settings.failoverMaxSwitches")}
           hint={t("settings.failoverMaxSwitchesHint")}
@@ -301,7 +301,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
           onCommit={(value) => patchFailover({ cooldownSeconds: value })}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -330,7 +330,7 @@ function CustomSettingsModelField(props: {
       : modelOptions;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 py-4">
       <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
       <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
       <ModelPicker
@@ -368,6 +368,7 @@ function CustomSettingsDrawer(
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
+        variant="inset"
         className="max-w-none border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60"
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
@@ -403,44 +404,37 @@ function CustomSettingsDrawer(
           className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         />
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <section className="space-y-3">
-            <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
-              <CustomSettingsModelField
-                label={t("settings.conversationTitleModel")}
-                hint={t("settings.conversationTitleModelHint")}
-                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
-                selected={settings.customSettings.conversationTitleModel}
-                modelOptions={modelOptions}
-                onChange={(value) => handleModelSettingChange("conversationTitleModel", value)}
-              />
-              <div
-                aria-hidden="true"
-                className="my-4 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
-              />
-              <CustomSettingsModelField
-                label={t("settings.commitMessageModel")}
-                hint={t("settings.commitMessageModelHint")}
-                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
-                selected={settings.customSettings.commitMessageModel}
-                modelOptions={modelOptions}
-                onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
-              />
-              {modelOptions.length === 0 ? (
-                <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="divide-y divide-foreground/[0.08]">
+            <CustomSettingsModelField
+              label={t("settings.conversationTitleModel")}
+              hint={t("settings.conversationTitleModelHint")}
+              followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+              selected={settings.customSettings.conversationTitleModel}
+              modelOptions={modelOptions}
+              onChange={(value) => handleModelSettingChange("conversationTitleModel", value)}
+            />
+            <CustomSettingsModelField
+              label={t("settings.commitMessageModel")}
+              hint={t("settings.commitMessageModelHint")}
+              followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+              selected={settings.customSettings.commitMessageModel}
+              modelOptions={modelOptions}
+              onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
+            />
+            {modelOptions.length === 0 ? (
+              <div className="py-4">
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                   {t("settings.customSettingsModelEmpty")}
                 </div>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="mt-4 space-y-3">
+              </div>
+            ) : null}
             <FailoverSettingsCard
               settings={settings}
               setSettings={setSettings}
               providerType={providerType}
             />
-          </section>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
