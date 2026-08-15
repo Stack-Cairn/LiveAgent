@@ -419,7 +419,7 @@ test("external link safety modal uses the shared dialog primitives", () => {
     assert.equal(dialog.type, "Dialog");
     assert.equal(dialog.props.open, true);
     assert.equal(dialog.props.children.type, "DialogContent");
-    assert.match(dialog.props.children.props.className, /external-link-modal-panel/);
+    assert.match(dialog.props.children.props.className, /max-w-md p-0/);
   } finally {
     if (typeof previousDocument === "undefined") {
       delete globalThis.document;

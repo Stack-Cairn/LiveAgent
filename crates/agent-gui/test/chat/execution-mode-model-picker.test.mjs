@@ -11,9 +11,12 @@ const headerSources = [
 
 test("model pickers use popover semantics instead of menu semantics", () => {
   for (const source of headerSources) {
-    assert.match(source, /import \{ Popover \} from "@base-ui\/react"/);
-    assert.match(source, /<Popover\.Root open=\{isModelPickerOpen\}/);
-    assert.match(source, /<Popover\.Popup/);
+    assert.match(
+      source,
+      /import \{ Popover, PopoverContent, PopoverTrigger \} from "@liveagent\/ui\/components\/ui\/popover"/,
+    );
+    assert.match(source, /<Popover open=\{isModelPickerOpen\}/);
+    assert.match(source, /<PopoverContent/);
     assert.match(source, /aria-label=\{t\("chat\.selectModel"\)\}/);
     assert.doesNotMatch(source, /DropdownMenu/);
   }

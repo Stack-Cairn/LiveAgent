@@ -164,7 +164,8 @@ export function extractProviderDeclaredLimits(
   obj: Record<string, unknown>,
 ): ModelLimits | undefined {
   const asPositiveInt = (value: unknown): number | undefined => {
-    const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+    const numeric =
+      typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
     return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : undefined;
   };
   const topProvider =

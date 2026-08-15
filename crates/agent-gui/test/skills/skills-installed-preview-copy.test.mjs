@@ -38,8 +38,12 @@ for (const { label, source } of pageSources) {
 }
 
 test("shared copy control explains its action and confirms success in a visible tooltip", () => {
-  assert.match(copyButtonSource, /<Tooltip\.Root/);
-  assert.match(copyButtonSource, /<Tooltip\.Popup/);
+  assert.match(
+    copyButtonSource,
+    /import \{ Tooltip, TooltipContent, TooltipTrigger \} from "\.\/tooltip"/,
+  );
+  assert.match(copyButtonSource, /<Tooltip\b/);
+  assert.match(copyButtonSource, /<TooltipContent>/);
   assert.match(copyButtonSource, /setTooltipOpen\(true\)/);
   assert.match(copyButtonSource, /role="status"/);
 });

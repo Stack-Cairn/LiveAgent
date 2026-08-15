@@ -158,7 +158,7 @@ export function SkillsImportView(props: {
           {importToast ? (
             <div
               role="status"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background/95 px-3 py-2.5 text-sm shadow-xl backdrop-blur"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
@@ -175,7 +175,7 @@ export function SkillsImportView(props: {
           ) : importErrors.length > 0 ? (
             <div
               role="alert"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background/95 px-3 py-2.5 text-sm shadow-xl backdrop-blur"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="min-w-0 flex-1">
@@ -201,7 +201,7 @@ export function SkillsImportView(props: {
           ) : (
             <div
               role="status"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background/95 px-3 py-2.5 text-sm shadow-xl backdrop-blur"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">
@@ -222,7 +222,7 @@ export function SkillsImportView(props: {
       ) : null}
       <div
         className={cn(
-          "h-full min-h-0 overflow-y-auto px-1.5 pb-4",
+          "h-full min-h-0 overflow-y-auto px-1.5 pb-4 pt-1.5",
           bulkMode ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-20" : null,
         )}
       >
@@ -429,7 +429,7 @@ export function SkillsImportView(props: {
                             event.currentTarget.click();
                           }}
                           className={cn(
-                            "group flex min-h-48 w-full flex-col rounded-xl border border-foreground/15 bg-card px-5 pb-3 pt-5 text-left shadow-sm transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            "group flex min-h-48 w-full flex-col rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                             alreadyInstalled
                               ? "border-emerald-600/25"
                               : checked

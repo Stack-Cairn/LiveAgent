@@ -531,7 +531,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       }}
     >
       <DialogContent
-        className="flex h-[650px] max-h-full max-w-4xl flex-col p-0"
+        className="flex h-[min(650px,92vh)] max-h-[92vh] max-w-4xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >

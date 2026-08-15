@@ -74,8 +74,8 @@ test("resource switches isolate pointer, mouse, click, and keyboard events when 
 test("confirmation popovers isolate cancel and confirm actions from parent cards", () => {
   const source = readUiSource("components/ui/confirm-action-popover.tsx");
 
-  assert.match(source, /<Popover\.Popup[\s\S]*onPointerDown=.*stopPropagation/);
-  assert.match(source, /<Popover\.Popup[\s\S]*onClick=.*stopPropagation/);
+  assert.match(source, /<PopoverContent[\s\S]*onPointerDown=.*stopPropagation/);
+  assert.match(source, /<PopoverContent[\s\S]*onClick=.*stopPropagation/);
   assert.match(
     source,
     /variant="outline"[\s\S]*onClick=\{\(event\) => event\.stopPropagation\(\)\}/,

@@ -19,18 +19,18 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@liveagent/ui/components/ui/sheet";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   createUniqueMcpServerId,

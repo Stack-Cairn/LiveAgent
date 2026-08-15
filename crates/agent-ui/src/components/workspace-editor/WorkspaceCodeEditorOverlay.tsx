@@ -23,7 +23,6 @@ import {
   Undo2,
   X,
 } from "@liveagent/ui/components/IconSet";
-import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -34,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type CodeMentionReference,
