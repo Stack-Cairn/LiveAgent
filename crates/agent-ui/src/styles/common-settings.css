@@ -123,20 +123,24 @@
     transform: translateY(12px) scale(0.985);
   }
 
-  /* settings-modal-* 基线为 opacity:0 且靠 data-state 显形；Base UI 驱动的
-     同款外观（复用其响应式布局规则）必须中和该基线，否则弹层恒隐藏。 */
+  /* settings-modal-* 基线为 opacity:0 且靠旧版父级 data-state 显形；Base UI
+     Dialog 会把 Backdrop 与 Viewport 渲染为兄弟节点，因此共享 Popup 需要按
+     data-slot 自行中和该基线，否则只显示遮罩、面板会永久透明。 */
   .settings-modal-overlay.modal-dialog-viewport {
     opacity: 1;
     transition: none;
   }
 
-  .settings-modal-panel.modal-dialog-popup {
+  .settings-modal-panel.modal-dialog-popup,
+  .settings-modal-panel[data-slot="dialog-content"] {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
 
   .settings-modal-panel.modal-dialog-popup[data-starting-style],
-  .settings-modal-panel.modal-dialog-popup[data-ending-style] {
+  .settings-modal-panel.modal-dialog-popup[data-ending-style],
+  .settings-modal-panel[data-slot="dialog-content"][data-starting-style],
+  .settings-modal-panel[data-slot="dialog-content"][data-ending-style] {
     opacity: 0;
     transform: translateY(12px) scale(0.985);
   }
