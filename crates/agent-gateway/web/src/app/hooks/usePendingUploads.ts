@@ -412,7 +412,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             return handleImportReadableFiles(payload.files);
           })
           .catch((error) => {
-            addNotify("error", asErrorMessage(error, translate("chat.workspaceDropFailed", locale)));
+            addNotify(
+              "error",
+              asErrorMessage(error, translate("chat.workspaceDropFailed", locale)),
+            );
           });
         return;
       }
