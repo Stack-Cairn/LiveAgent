@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   type NativeFileDropTarget,
   nativeDropPositionScaleFactor,
+  resolveFinalNativeFileDropTarget,
   resolveNativeFileDropTarget,
 } from "./nativeFileDropRouting";
 
@@ -23,7 +24,6 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
   const { importUploadZonePaths, importWorkspaceFolderPaths } = params;
   const [activeDropTarget, setActiveDropTarget] = useState<NativeFileDropTarget>(null);
   const activeDropTargetRef = useRef<NativeFileDropTarget>(null);
-  const hasTrackedDragPositionRef = useRef(false);
 
   useEffect(() => {
     // The Vite page can also be opened directly in a browser during
@@ -42,7 +42,6 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             window.devicePixelRatio,
           );
           const nextTarget = resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
-          hasTrackedDragPositionRef.current = true;
           activeDropTargetRef.current = nextTarget;
           setActiveDropTarget(nextTarget);
           return;
@@ -53,12 +52,13 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             window.navigator.userAgent,
             window.devicePixelRatio,
           );
-          const dropTarget = hasTrackedDragPositionRef.current
-            ? activeDropTargetRef.current
-            : resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
+          const dropTarget = resolveFinalNativeFileDropTarget(
+            activeDropTargetRef.current,
+            event.payload.position,
+            { scaleFactor },
+          );
           setActiveDropTarget(null);
           activeDropTargetRef.current = null;
-          hasTrackedDragPositionRef.current = false;
           if (dropTarget === "workspace") {
             void importWorkspaceFolderPaths(event.payload.paths);
             return;
@@ -70,7 +70,6 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
 
         setActiveDropTarget(null);
         activeDropTargetRef.current = null;
-        hasTrackedDragPositionRef.current = false;
       })
       .then((nextUnlisten) => {
         if (cancelled) {

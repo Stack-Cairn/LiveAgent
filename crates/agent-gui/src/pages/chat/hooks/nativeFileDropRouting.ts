@@ -109,6 +109,21 @@ export function resolveNativeFileDropTarget(
   return null;
 }
 
+/**
+ * Drop routing is authoritative at release time: the cached hover target is
+ * only visual state and must never override the drop event's final position.
+ */
+export function resolveFinalNativeFileDropTarget(
+  _hoverTarget: NativeFileDropTarget,
+  dropPosition: DropPosition,
+  options?: {
+    scaleFactor?: number;
+    document?: DropTargetDocument;
+  },
+) {
+  return resolveNativeFileDropTarget(dropPosition, options);
+}
+
 export function isWorkspaceFolderDropTarget(
   position: DropPosition,
   options?: {

@@ -102,6 +102,46 @@ test("native drop routing accepts uploads only inside the marked chat zone", () 
   );
 });
 
+test("drop routing uses the final drop coordinate instead of the cached hover target", () => {
+  const fakeDocument = {
+    querySelectorAll(selector) {
+      if (selector === routing.WORKSPACE_FOLDER_DROP_ZONE_SELECTOR) {
+        return [
+          {
+            getBoundingClientRect() {
+              return { left: 0, top: 0, right: 280, bottom: 700 };
+            },
+          },
+        ];
+      }
+      return [
+        {
+          getBoundingClientRect() {
+            return { left: 300, top: 0, right: 900, bottom: 700 };
+          },
+        },
+      ];
+    },
+  };
+
+  assert.equal(
+    routing.resolveFinalNativeFileDropTarget(
+      "workspace",
+      { x: 500, y: 200 },
+      { scaleFactor: 1, document: fakeDocument },
+    ),
+    "upload",
+  );
+  assert.equal(
+    routing.resolveFinalNativeFileDropTarget(
+      "upload",
+      { x: 100, y: 200 },
+      { scaleFactor: 1, document: fakeDocument },
+    ),
+    "workspace",
+  );
+});
+
 test("workspace drop routing falls back to stable zone rectangles", () => {
   const fakeDocument = {
     querySelectorAll(selector) {
