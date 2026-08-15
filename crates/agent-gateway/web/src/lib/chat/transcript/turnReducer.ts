@@ -352,6 +352,7 @@ function applyTokenEvent(turn: Turn, event: Extract<ChatEvent, { type: "token" }
     usage: event.usage,
     contextUsageTokens: event.contextUsageTokens,
     contextRelevant: event.contextRelevant,
+    pluginContext: event.pluginContext,
   });
 
   if (text === "" && !meta) {

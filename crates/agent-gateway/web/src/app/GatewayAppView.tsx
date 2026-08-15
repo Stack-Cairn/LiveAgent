@@ -24,8 +24,9 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useMemo } from "react";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import { createGatewayPluginClient } from "@/lib/plugins/client";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
@@ -159,6 +160,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
     handleSidebarOpenMcpHub,
+    handleSidebarOpenPluginHub,
     handleSidebarOpenSkillsHub,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
@@ -295,6 +297,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const pluginClient = useMemo(() => createGatewayPluginClient(api), [api]);
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
@@ -360,6 +363,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onOpenSettings={() => openSettings()}
               onOpenSkillsHub={handleSidebarOpenSkillsHub}
               onOpenMcpHub={handleSidebarOpenMcpHub}
+              onOpenPluginHub={handleSidebarOpenPluginHub}
             />
 
             {shareConversation ? (
@@ -430,6 +434,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 onOpenSidebar={() => setSidebarOpen(true)}
                 initialSkills={availableSkills}
                 initialSkillsRootDir={skillsRootDir}
+                pluginClient={pluginClient}
+                pluginWorkspace={displayedConversationWorkdir || activeWorkspaceProjectPath}
                 className="contents"
                 chat={{
                   containerProps: {

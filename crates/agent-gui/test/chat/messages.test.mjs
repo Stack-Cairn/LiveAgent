@@ -13,6 +13,37 @@ const chatHelpers = loader.loadModule("src/lib/chat/page/chatPageHelpers.ts");
 const gatewayToolPreview = loader.loadModule("src/pages/chat/turns/gatewayToolPreview.ts");
 const toolPreview = loader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
 
+const pluginContext = {
+  snapshotRevision: "snapshot-009",
+  promptSections: [
+    {
+      pluginId: "com.liveagent.conversation.commit-style",
+      pluginVersion: "1.0.1",
+      packageHash: "a".repeat(64),
+      generation: 4,
+      contributionId: "instructions",
+      truncated: false,
+    },
+  ],
+};
+
+test("assistant rounds retain persisted plugin prompt provenance", () => {
+  const [message] = uiMessages.buildUiMessages([
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "refactor(server): use native http" }],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: "deepseek-v4-flash",
+      stopReason: "stop",
+      timestamp: 1,
+      liveAgentPluginContext: pluginContext,
+    },
+  ]);
+
+  assert.deepEqual(message.rounds[0].meta.pluginContext, pluginContext);
+});
+
 const fileA = {
   relativePath: "src/App.tsx",
   absolutePath: "/workspace/src/App.tsx",

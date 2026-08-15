@@ -41,6 +41,20 @@ function ref(messageId, messageIndex = 0) {
   };
 }
 
+const pluginContext = {
+  snapshotRevision: "snapshot-009",
+  promptSections: [
+    {
+      pluginId: "com.liveagent.conversation.commit-style",
+      pluginVersion: "1.0.1",
+      packageHash: "a".repeat(64),
+      generation: 4,
+      contributionId: "instructions",
+      truncated: false,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Row builder
 
@@ -371,6 +385,24 @@ test("persisted assistant messages retain the desktop context usage snapshot", (
 
   assert.equal(rows[0].kind, "assistant");
   assert.equal(rows[0].rounds[0].meta.contextUsageTokens, 150_000);
+});
+
+test("persisted assistant messages retain plugin prompt provenance", () => {
+  const entries = parseHistoryMessagesJson(
+    JSON.stringify([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        provider: "anthropic",
+        model: "deepseek-v4-flash",
+        liveAgentPluginContext: pluginContext,
+        timestamp: 1,
+      },
+    ]),
+  );
+  const rows = buildRowsFromEntries(entries, "history");
+
+  assert.deepEqual(rows[0].rounds[0].meta.pluginContext, pluginContext);
 });
 
 test("thinking-first persisted replies emit a meta carrier that rows suppress", () => {

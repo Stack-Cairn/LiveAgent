@@ -48,6 +48,34 @@ function newTurn() {
   return createTurn({ key: "req:test", runId: "run-test" });
 }
 
+const pluginContext = {
+  snapshotRevision: "snapshot-009",
+  promptSections: [
+    {
+      pluginId: "com.liveagent.conversation.commit-style",
+      pluginVersion: "1.0.1",
+      packageHash: "a".repeat(64),
+      generation: 4,
+      contributionId: "instructions",
+      truncated: false,
+    },
+  ],
+};
+
+test("live token metadata preserves plugin prompt provenance", () => {
+  let turn = newTurn();
+  turn = applyEventToTurn(turn, {
+    type: "token",
+    text: "",
+    round: 1,
+    pluginContext,
+  });
+  turn = applyEventToTurn(turn, { type: "token", text: "answer", round: 1 });
+  const rows = buildRowsFromEntries(turn.entries, "stream");
+
+  assert.deepEqual(rows[0].rounds[0].meta.pluginContext, pluginContext);
+});
+
 function withMockObjectUrl(run) {
   const createDescriptor = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
   const revokeDescriptor = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");

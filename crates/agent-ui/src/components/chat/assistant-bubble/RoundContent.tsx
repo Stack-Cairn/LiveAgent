@@ -4,6 +4,7 @@ import {
   VibingText,
 } from "@liveagent/ui/components/chat/AssistantStatus";
 import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
+import { PluginContextBadge } from "@liveagent/ui/components/chat/PluginContextBadge";
 import { ThinkingActivity } from "@liveagent/ui/components/chat/ThinkingActivity";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { Markdown } from "@liveagent/ui/components/Markdown";
@@ -185,6 +186,10 @@ export const RoundContent = memo(function RoundContent(props: {
 
   return (
     <div className="space-y-2">
+      {!redactToolContent && round.meta?.pluginContext ? (
+        <PluginContextBadge context={round.meta.pluginContext} />
+      ) : null}
+
       {isActive &&
       isLive &&
       normalizedToolStatus &&

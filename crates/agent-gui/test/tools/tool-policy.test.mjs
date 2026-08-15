@@ -20,17 +20,39 @@ const meta = (over = {}) => ({
 test("显式策略优先于任何缺省推断", () => {
   const policies = { Bash: "deny", plugin_a_x: "allow", Read: "ask" };
   assert.equal(resolveToolPolicy("Bash", meta({ groupId: "shell" }), policies), "deny");
-  assert.equal(resolveToolPolicy("plugin_a_x", meta({ groupId: "plugin" }), policies), "allow");
+  assert.equal(
+    resolveToolPolicy(
+      "plugin_a_x",
+      meta({ groupId: "plugin:com.example.a", pluginId: "com.example.a" }),
+      policies,
+    ),
+    "allow",
+  );
   // 显式 ask 覆盖只读工具的恒 allow 缺省
   assert.equal(resolveToolPolicy("Read", meta({ isReadOnly: true }), policies), "ask");
 });
 
-test("缺省:只读工具恒 allow", () => {
+test("缺省:内置只读工具 allow,插件工具始终 ask", () => {
   assert.equal(resolveToolPolicy("Grep", meta({ isReadOnly: true, groupId: "fs" }), undefined), "allow");
-  // 即便是插件的只读工具,缺省也不拦(读操作无副作用)
   assert.equal(
-    resolveToolPolicy("plugin_a_read", meta({ isReadOnly: true, groupId: "plugin" }), undefined),
-    "allow",
+    resolveToolPolicy(
+      "plugin_a_read",
+      meta({
+        isReadOnly: true,
+        groupId: "plugin:com.example.a",
+        pluginId: "com.example.a",
+      }),
+      undefined,
+    ),
+    "ask",
+  );
+  assert.equal(
+    resolveToolPolicy(
+      "PluginCreate",
+      meta({ groupId: "plugin-manager", kind: "manage_plugin" }),
+      undefined,
+    ),
+    "ask",
   );
 });
 

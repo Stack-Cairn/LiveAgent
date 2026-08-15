@@ -32,9 +32,12 @@ export function toolServerPolicyKey(serverId: string): string {
  * 1. 该工具名的显式覆盖(toolPolicies[toolName])—— 最细,最高优先级。
  * 2. MCP 按 server 的策略(server:<serverId>,仅对带 serverId 的 MCP 工具)。
  * 3. 工具组级默认(group:<groupId>,如把"所有 MCP 工具"设为 ask/deny)。
- *    2、3 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
- * 4. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
- * 5. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
+ *    2、3 都是用户对更大范围的明确表态,应盖过下面的缺省。
+ * 4. PluginCreate(kind=manage_plugin)与插件贡献的工具(带 pluginId)缺省 ask:
+ *    前者会向 Inventory 写入长期生效的 Prompt,后者是第三方代码,都要过一次人审;
+ *    插件工具即便声明 readOnly 也不放行——readOnly 由插件自己填,不构成宿主保证。
+ * 5. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
+ * 6. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
  */
 export function resolveToolPolicy(
   toolName: string,
@@ -50,6 +53,7 @@ export function resolveToolPolicy(
   const groupId = metadata?.groupId;
   const groupPolicy = groupId ? policies?.[toolGroupPolicyKey(groupId)] : undefined;
   if (groupPolicy) return groupPolicy;
+  if (metadata?.kind === "manage_plugin" || metadata?.pluginId) return "ask";
   if (metadata?.isReadOnly) return "allow";
   return "allow";
 }

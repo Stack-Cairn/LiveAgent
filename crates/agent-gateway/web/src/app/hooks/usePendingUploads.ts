@@ -24,7 +24,7 @@ type UsePendingUploadsParams = {
   historyShareToken: string | null;
   settingsSyncReady: boolean;
   settingsOpen: boolean;
-  activeView: "chat" | "skills-hub" | "mcp-hub";
+  activeView: "chat" | "skills-hub" | "mcp-hub" | "plugin-hub";
   locale: AppSettings["locale"];
   executionMode: AppSettings["system"]["executionMode"];
   conversationId: string;

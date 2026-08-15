@@ -27,6 +27,7 @@ import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
+import { createPluginManagerTools } from "./pluginManagerTools";
 import { createMemoryTools } from "./memoryTools";
 import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
@@ -50,7 +51,9 @@ export type BuiltinToolRegistry = {
 // 第三方来源(MCP server / 插件)的工具名不受我们控制,可能撞车。撞车时不能像
 // 内置工具那样 throw 打断整轮——那等于让一个坏插件废掉整个对话。改为:先到先
 // 得、跳过后来者并告警;仅当两侧都是可信内置组时才 throw(那是编译期的开发 bug)。
-const UNTRUSTED_TOOL_GROUPS: ReadonlySet<BuiltinToolBundle["groupId"]> = new Set(["mcp"]);
+function isUntrustedToolGroup(groupId: BuiltinToolBundle["groupId"] | undefined) {
+  return groupId === "mcp" || groupId?.startsWith("plugin:") === true;
+}
 
 function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolRegistry {
   const tools: BuiltinToolBundle["tools"] = [];
@@ -81,9 +84,9 @@ function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolReg
       if (executorsByName.has(tool.name)) {
         const existingGroup = groupIdByToolName.get(tool.name);
         const bothTrusted =
-          !UNTRUSTED_TOOL_GROUPS.has(bundle.groupId) &&
+          !isUntrustedToolGroup(bundle.groupId) &&
           existingGroup !== undefined &&
-          !UNTRUSTED_TOOL_GROUPS.has(existingGroup);
+          !isUntrustedToolGroup(existingGroup);
         if (bothTrusted) {
           // 两个内置工具同名:编译期就该修的开发 bug,继续保持强失败。
           throw new Error(`Duplicate builtin tool name detected: ${tool.name}`);
@@ -177,6 +180,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void | Promise<void>;
   onTunnelsChanged?: (change: TunnelManagerChange) => void | Promise<void>;
+  additionalToolBundles?: BuiltinToolBundle[];
 };
 
 const resolveHomeDir = () => homeDir();
@@ -253,6 +257,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
           }),
         ]
       : []),
+    ...(params.additionalToolBundles ?? []),
   ];
 
   const enabledServers = selectEnabledMcpServers(params.getMcpSettings());
@@ -286,7 +291,9 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...taskBundles, ...askUserQuestionBundles];
+  const pluginManagerBundles =
+    params.runtimeScope === "chat" ? [createPluginManagerTools({ workdir: params.workdir })] : [];
+  const chatBundles = [...taskBundles, ...askUserQuestionBundles, ...pluginManagerBundles];
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {
@@ -345,6 +352,7 @@ export async function buildBuiltinToolRegistry(
             applyMcpOps: undefined,
             mcpLoadFailureMode: "continue",
             memoryToolMode: "ro",
+            additionalToolBundles: [],
           }),
         ),
     }),

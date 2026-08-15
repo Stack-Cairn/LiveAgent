@@ -66,6 +66,7 @@ import {
   HistoryWorkdirsRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  PluginManageRequestSchema,
   ProviderListRequestSchema,
   ProviderModelsRequestSchema,
   ProviderUsageRequestSchema,
@@ -380,6 +381,15 @@ function buildAgentRequest(type: string, body: J): GatewayEnvelope {
 }
 
 function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] {
+  if (type.startsWith("plugins.")) {
+    return {
+      case: "pluginManage",
+      value: create(PluginManageRequestSchema, {
+        action: type.slice("plugins.".length),
+        payloadJson: JSON.stringify(body),
+      }),
+    };
+  }
   if (type.startsWith("git.")) {
     return {
       case: "gitRequest",
@@ -1283,6 +1293,8 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       return { tunnel_id: payload.value.tunnelId };
     case "managedProcessResponse":
       return managedProcessResponsePayload(payload.value, options.agentOnline);
+    case "pluginManageResp":
+      return unmarshalJsonPayload(payload.value.resultJson);
     default:
       frameError("unexpected agent response");
   }

@@ -10,6 +10,7 @@ import {
   FolderClosed,
   ListChecks,
   Loader2,
+  Package,
   PanelLeftClose,
   Plus,
   Settings,
@@ -224,6 +225,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onOpenSettings,
     onOpenSkillsHub,
     onOpenMcpHub,
+    onOpenPluginHub,
     headerTop,
     brand,
     hideCloseButton = false,
@@ -1258,6 +1260,26 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 )}
               />
               <span className="truncate">MCP</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenPluginHub?.()}
+              className={cn(
+                "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                activeView === "plugin-hub"
+                  ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
+                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+              )}
+              title={t("pluginHub.title")}
+            >
+              <Package
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  activeView === "plugin-hub" ? "text-sky-500" : "text-foreground/85",
+                )}
+              />
+              <span className="truncate">{t("pluginHub.sidebarLabel")}</span>
             </Button>
           </div>
         </div>

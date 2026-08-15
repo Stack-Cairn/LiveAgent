@@ -118,6 +118,13 @@ import type {
 } from "./gatewayTypes";
 
 export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
+  async pluginManage<T = unknown>(
+    action: "list" | "set_enabled" | "set_grants" | "update_config" | "uninstall",
+    payload: Record<string, unknown>,
+  ): Promise<T> {
+    return this.requestWithRecovery<T>(`plugins.${action}`, payload);
+  }
+
   subscribeChatQueue(listener: ChatQueueListener): () => void {
     this.chatQueueListeners.add(listener);
     return () => {

@@ -1,5 +1,6 @@
 import type { SharedChatEntry } from "@liveagent/ui/contracts/chatEntry";
 import { positiveTokenCount } from "@liveagent/ui/lib/chat/contextUsage";
+import { normalizeAppliedPluginPromptContext } from "@liveagent/ui/lib/plugins/provenance";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 export { hashText } from "@liveagent/ui/lib/shared/hash";
@@ -70,6 +71,7 @@ type StoredMessage = {
   summaryMeta?: unknown;
   liveAgentHistoryRef?: unknown;
   liveAgentContextUsage?: unknown;
+  liveAgentPluginContext?: unknown;
 };
 
 function readMessageTimestamp(value: unknown): number | undefined {
@@ -363,6 +365,7 @@ export function buildAssistantMeta(params: {
   usage?: unknown;
   contextUsageTokens?: unknown;
   contextRelevant?: unknown;
+  pluginContext?: unknown;
 }) {
   const usage =
     params.usage && typeof params.usage === "object" ? (params.usage as Usage) : undefined;
@@ -387,6 +390,8 @@ export function buildAssistantMeta(params: {
   if (typeof params.contextRelevant === "boolean") {
     meta.contextRelevant = params.contextRelevant;
   }
+  const pluginContext = normalizeAppliedPluginPromptContext(params.pluginContext);
+  if (pluginContext !== undefined) meta.pluginContext = pluginContext;
 
   return Object.keys(meta).length > 0 ? meta : undefined;
 }
@@ -761,6 +766,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
         stopReason: message.stopReason,
         usage: message.usage,
         contextUsageTokens: asRecord(message.liveAgentContextUsage).totalTokens,
+        pluginContext: message.liveAgentPluginContext,
       });
       let textBuffer = "";
       let metaEmitted = false;

@@ -101,7 +101,10 @@ function createRegistryHarness() {
   return { loader, runnerCalls, listedServerIds, listedServerCommands };
 }
 
-async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
+async function buildRegistry(
+  harness,
+  { withSubagentRuntime, storeIpc, runtimeScope = "chat" } = {},
+) {
   const { loader } = harness;
   const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
   const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
@@ -111,7 +114,7 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
     providerId: "codex",
     fileState: createFileToolState(),
     skillsEnabled: true,
-    runtimeScope: "chat",
+    runtimeScope,
     getMcpSettings: () => mcpSettingsHolder.value,
   };
   if (!withSubagentRuntime) {
@@ -153,6 +156,8 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   const names = registry.tools.map((tool) => tool.name);
   assert.ok(!names.includes("Agent"));
   assert.ok(!names.includes("SendMessage"));
+  assert.ok(names.includes("PluginCreate"));
+  assert.equal(registry.metadataByName.get("PluginCreate").groupId, "plugin-manager");
   // Sanity: the base surface is otherwise intact.
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("mcp_docs_search"));
@@ -164,10 +169,21 @@ test("registry with a subagent runtime exposes Agent and the parent SendMessage"
   const names = registry.tools.map((tool) => tool.name);
   assert.ok(names.includes("Agent"));
   assert.ok(names.includes("SendMessage"));
+  assert.ok(names.includes("PluginCreate"));
   assert.equal(registry.metadataByName.get("Agent").groupId, "subagent");
   assert.equal(registry.metadataByName.get("Agent").isReadOnly, false);
   assert.equal(registry.metadataByName.get("SendMessage").isReadOnly, true);
   assert.ok(registry.hasTool("agent"));
+});
+
+test("cron registries do not expose PluginCreate", async () => {
+  const harness = createRegistryHarness();
+  const { registry } = await buildRegistry(harness, {
+    withSubagentRuntime: false,
+    runtimeScope: "cron_auto_prompt",
+  });
+  const names = registry.tools.map((tool) => tool.name);
+  assert.ok(!names.includes("PluginCreate"));
 });
 
 test("Agent tool description embeds the hydrated roster and enabled templates", async () => {
@@ -246,6 +262,7 @@ test("worktree children get fs/shell/ro-memory/MCP tools but no skills, system, 
   assert.ok(!names.includes("SkillsManager"));
   assert.ok(!names.includes("McpManager"));
   assert.ok(!names.includes("CronTaskManager"));
+  assert.ok(!names.includes("PluginCreate"));
   assert.ok(!names.includes("ReadTerminal"));
 
   // The child executed inside the isolated worktree workdir.
@@ -296,6 +313,7 @@ test("read-only children inherit MCP business tools but no write, shell, or mana
   assert.ok(!names.includes("Bash"));
   assert.ok(!names.includes("Agent"));
   assert.ok(!names.includes("McpManager"));
+  assert.ok(!names.includes("PluginCreate"));
   // Parent memory is read-write, so readonly children do not receive it.
   assert.ok(!names.includes("MemoryManager"));
 });

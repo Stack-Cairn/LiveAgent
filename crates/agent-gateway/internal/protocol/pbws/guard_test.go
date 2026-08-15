@@ -135,3 +135,27 @@ func TestVetAgentRequestRejectsMalformedWorkspaceRootGrants(t *testing.T) {
 		}
 	}
 }
+
+func TestVetPluginManageAllowsOnlyRemoteManagementActions(t *testing.T) {
+	for _, action := range []string{"list", "set_enabled", "set_grants", "update_config", "uninstall"} {
+		request := &gatewayv2.PluginManageRequest{Action: action, PayloadJson: `{}`}
+		if err := vetPluginManage(request); err != nil {
+			t.Fatalf("vetPluginManage(%q) error = %v", action, err)
+		}
+	}
+}
+
+func TestVetPluginManageRejectsExecutionInstallAndOversizedPayloads(t *testing.T) {
+	requests := []*gatewayv2.PluginManageRequest{
+		nil,
+		{Action: "install", PayloadJson: `{}`},
+		{Action: "invoke", PayloadJson: `{}`},
+		{Action: "dispatch_hook", PayloadJson: `{}`},
+		{Action: "list", PayloadJson: string(make([]byte, maxPluginManagePayload+1))},
+	}
+	for _, request := range requests {
+		if err := vetPluginManage(request); err == nil {
+			t.Fatalf("vetPluginManage(%+v) unexpectedly succeeded", request)
+		}
+	}
+}

@@ -30,6 +30,7 @@ pub use history_commands::subagent_store;
 pub use integration_commands::gateway;
 pub use integration_commands::mcp;
 pub use integration_commands::memory;
+pub use integration_commands::plugins;
 
 pub use runtime_commands::process;
 pub use runtime_commands::sftp;

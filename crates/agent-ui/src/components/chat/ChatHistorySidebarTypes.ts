@@ -43,7 +43,7 @@ export type ChatHistorySidebarProps = {
   renameDraft: string;
   isOpen: boolean;
   fontScale?: number;
-  activeView?: "chat" | "skills-hub" | "mcp-hub";
+  activeView?: "chat" | "skills-hub" | "mcp-hub" | "plugin-hub";
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
   projects?: WorkspaceProject[];
@@ -101,6 +101,7 @@ export type ChatHistorySidebarProps = {
   onOpenSettings: () => void;
   onOpenSkillsHub?: () => void;
   onOpenMcpHub?: () => void;
+  onOpenPluginHub?: () => void;
   headerTop?: ReactNode;
   brand?: ReactNode;
   hideCloseButton?: boolean;
@@ -166,7 +167,12 @@ export type ChatHistorySidebarContainerSource = Required<
     | "onCloseSidebar"
     | "onOpenSettings"
   > &
-  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenSkillsHub" | "onOpenMcpHub">> & {
+  Required<
+    Pick<
+      ChatHistorySidebarProps,
+      "activeView" | "onOpenSkillsHub" | "onOpenMcpHub" | "onOpenPluginHub"
+    >
+  > & {
     projects: WorkspaceProject[];
   };
 
@@ -182,6 +188,7 @@ type ChatHistorySidebarConversationSource = Pick<
   | "onOpenSettings"
   | "onOpenSkillsHub"
   | "onOpenMcpHub"
+  | "onOpenPluginHub"
 >;
 
 type ChatHistorySidebarConversationHandlers = Pick<
@@ -264,6 +271,7 @@ export function buildChatHistorySidebarConversationProps(
     onOpenSettings: source.onOpenSettings,
     onOpenSkillsHub: source.onOpenSkillsHub,
     onOpenMcpHub: source.onOpenMcpHub,
+    onOpenPluginHub: source.onOpenPluginHub,
   };
 }
 

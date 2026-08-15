@@ -66,6 +66,53 @@ test("provider model requests carry the stored provider identity to the desktop"
   );
 });
 
+test("plugin management requests and responses stay agent-scoped", () => {
+  const encoded = encodeRequestFrame(
+    "plugins-config-1",
+    "plugins.update_config",
+    {
+      pluginId: "com.example.demo",
+      workspace: "/workspace",
+      expectedRevision: 3,
+      config: { enabled: true },
+    },
+    "agent-1",
+  );
+  const frame = decodeClientFrame(encoded);
+  assert.equal(frame.agentId, "agent-1");
+  assert.equal(frame.payload.value.payload.case, "pluginManage");
+  assert.equal(frame.payload.value.payload.value.action, "update_config");
+  assert.deepEqual(JSON.parse(frame.payload.value.payload.value.payloadJson), {
+    pluginId: "com.example.demo",
+    workspace: "/workspace",
+    expectedRevision: 3,
+    config: { enabled: true },
+  });
+
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "plugins-config-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "plugins-config-1",
+          plugin_manage_resp: {
+            action: "update_config",
+            result_json: "4",
+          },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.deepEqual(decoded, {
+    kind: "response",
+    requestId: "plugins-config-1",
+    agentId: "agent-1",
+    payload: 4,
+  });
+});
+
 test("chat file open requests remain agent-scoped and preserve source locations", () => {
   const encoded = encodeRequestFrame(
     "file-open-1",

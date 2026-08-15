@@ -12,7 +12,9 @@ export type BuiltinToolGroupId =
   | "system"
   | "mcp"
   | "subagent"
-  | "memory";
+  | "memory"
+  | "plugin-manager"
+  | `plugin:${string}`;
 
 export type BuiltinToolDisplayCategory =
   | "file"
@@ -28,6 +30,7 @@ export type BuiltinToolMetadata = {
   isReadOnly: boolean;
   displayCategory: BuiltinToolDisplayCategory;
   serverId?: string;
+  pluginId?: string;
 };
 
 export function createBuiltinMetadataMap(

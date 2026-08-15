@@ -115,6 +115,10 @@ export class GatewayWebSocketClient extends GatewayWebSocketRpcClient {}
 
 export type GatewayWebSocketClientLike = {
   terminalStream: TerminalStreamClient;
+  pluginManage<T = unknown>(
+    action: "list" | "set_enabled" | "set_grants" | "update_config" | "uninstall",
+    payload: Record<string, unknown>,
+  ): Promise<T>;
   getStatus(): Promise<AgentStatus>;
   prepareChatRuntime(reason?: string): Promise<AgentStatus>;
   // 多 Agent 寻址：活跃 Agent 选择、目录查询与目录订阅。

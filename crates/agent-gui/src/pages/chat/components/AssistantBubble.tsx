@@ -1,6 +1,7 @@
 import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { RoundBlockContent } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
+import { PluginContextBadge } from "@liveagent/ui/components/chat/PluginContextBadge";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
@@ -60,6 +61,10 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
         }`}
       >
         {status ? <div className="min-w-0 max-w-full overflow-hidden py-1.5">{status}</div> : null}
+
+        {unit.kind === "block" && unit.isRoundHead && unit.roundMeta?.pluginContext ? (
+          <PluginContextBadge context={unit.roundMeta.pluginContext} />
+        ) : null}
 
         {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
           <RetryDetailsBlock attempts={retryAttempts} />

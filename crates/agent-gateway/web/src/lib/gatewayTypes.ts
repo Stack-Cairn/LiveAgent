@@ -1,4 +1,5 @@
 import type { ChatQueueItemDetail, ChatQueueSnapshot } from "@liveagent/ui/contracts/chatQueue";
+import type { AppliedPluginPromptContext } from "@liveagent/ui/lib/plugins/provenance";
 import type {
   ChatRuntimeControls,
   CodexRequestFormat,
@@ -104,6 +105,7 @@ export type ChatEvent = (
       usage?: unknown;
       contextUsageTokens?: number;
       contextRelevant?: boolean;
+      pluginContext?: AppliedPluginPromptContext;
       checkpoint?: ChatCheckpointPayload;
       conversation_id?: string;
     }

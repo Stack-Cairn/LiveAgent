@@ -63,6 +63,7 @@ message GatewayEnvelope {
     ChatFileOpenRequest chat_file_open = 94;
     HistorySetCwdRequest history_set_cwd = 95;
     WorkspaceRootGrantsRequest workspace_root_grants = 96;
+    PluginManageRequest plugin_manage = 97;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -139,6 +140,7 @@ message AgentEnvelope {
     ErrorResponse error = 99;
     HistorySetCwdResponse history_set_cwd_resp = 100;
     WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
+    PluginManageResponse plugin_manage_resp = 102;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1343,4 +1345,15 @@ message WorkspaceRootGrantsRequest {
 
 message WorkspaceRootGrantsResponse {
   repeated WorkspaceRootGrant grants = 1;
+}
+
+// WebUI 仅通过此受限管理面读取和配置桌面端插件；插件安装与代码执行不经 Gateway。
+message PluginManageRequest {
+  string action = 1;
+  string payload_json = 2;
+}
+
+message PluginManageResponse {
+  string action = 1;
+  string result_json = 2;
 }

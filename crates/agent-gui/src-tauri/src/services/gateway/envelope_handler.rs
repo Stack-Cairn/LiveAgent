@@ -1129,6 +1129,21 @@ impl GatewayController {
                 });
                 Ok(())
             }
+            Some(proto::gateway_envelope::Payload::PluginManage(request)) => {
+                match handle_plugin_manage(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::PluginManageResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
+                }
+            }
             None => Ok(()),
         }
     }

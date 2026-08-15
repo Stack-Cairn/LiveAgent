@@ -27,6 +27,10 @@ import {
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import {
+  type AppliedPluginPromptContext,
+  readAppliedPluginPromptContext,
+} from "@liveagent/ui/lib/plugins/provenance";
+import {
   buildSubagentCardToolCallId,
   isSubagentCardArguments,
   type SubagentBatchDetails,
@@ -75,6 +79,7 @@ export type UiRound = {
     usageTotalTokens?: number;
     contextUsageTokens?: number;
     contextRelevant?: boolean;
+    pluginContext?: AppliedPluginPromptContext;
   };
 };
 
@@ -1477,6 +1482,7 @@ export function buildUiMessages(messages: Message[]): UiMessage[] {
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage as Usage | undefined,
             usageTotalTokens: assistant.usage?.totalTokens,
+            pluginContext: readAppliedPluginPromptContext(assistant),
           },
         });
       } else {

@@ -7,6 +7,8 @@ import type {
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import { writeAppliedPluginPromptContext } from "@liveagent/ui/lib/plugins/provenance";
+import type { PluginTurnSnapshot } from "@liveagent/ui/lib/plugins/types";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -74,6 +76,12 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import {
+  buildPluginPromptWithProvenance,
+  createPluginToolBundles,
+  dispatchPluginHook,
+  preparePluginTurn,
+} from "../../../lib/tools/pluginTools";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
@@ -382,6 +390,39 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       identityCount: subagentStore?.listIdentities().length ?? 0,
     },
   );
+  let pluginSnapshot: PluginTurnSnapshot;
+  try {
+    pluginSnapshot = await preparePluginTurn(effectiveWorkdir);
+  } catch (error) {
+    console.warn("Failed to prepare LiveAgent plugins for this turn", error);
+    pluginSnapshot = {
+      revision: "unavailable",
+      workspace: effectiveWorkdir,
+      tools: [],
+      promptSections: [],
+      hooks: [],
+    };
+  }
+  const builtPluginPrompt = buildPluginPromptWithProvenance(pluginSnapshot);
+  const pluginPrompt = builtPluginPrompt.prompt;
+  const pluginContext = builtPluginPrompt.pluginContext;
+  const pluginToolBundles = createPluginToolBundles(effectiveWorkdir, pluginSnapshot);
+  let pluginHookQueue = Promise.resolve();
+  const emitPluginHook = (
+    event: Parameters<typeof dispatchPluginHook>[1]["event"],
+    payload: unknown,
+  ) => {
+    pluginHookQueue = pluginHookQueue
+      .then(() =>
+        dispatchPluginHook(pluginSnapshot, { event, workspace: effectiveWorkdir, payload }),
+      )
+      .then(
+        () => undefined,
+        (error) => {
+          console.warn(`[plugins] ${event} hook failed`, error);
+        },
+      );
+  };
   const refreshParentMessageBusSnapshot = async () => {
     parentMessageBusSnapshot = await loadParentBusSnapshot();
     return parentMessageBusSnapshot;
@@ -393,6 +434,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     }
     if (parentMessageBusSnapshot) {
       systemPrompt = appendSystemPrompt(systemPrompt, parentMessageBusSnapshot);
+    }
+    if (pluginPrompt) {
+      systemPrompt = appendSystemPrompt(systemPrompt, pluginPrompt);
     }
     // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
     // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
@@ -438,6 +482,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
     onTunnelsChanged,
+    additionalToolBundles: pluginToolBundles,
     onMcpLoadError: (message) => {
       const warning = `MCP 工具加载失败，已跳过并继续对话：${message || "未知错误"}`;
       console.warn(warning);
@@ -562,10 +607,21 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   };
 
   hookLifecycle.startAgent();
+  emitPluginHook("agent_start", {
+    conversationId,
+    sessionId,
+    pluginSnapshotRevision: pluginSnapshot.revision,
+  });
   let result: Awaited<ReturnType<typeof runAssistantWithTools>> | null = null;
   let latestAgentEmittedMessages: Message[] = [];
   let suppressedToolTrace: SuppressedToolTraceSnapshot[] = [];
   let activeAgentRound = 0;
+  let lastPluginTurnEnded = 0;
+  const emitPluginTurnEnd = (round: number) => {
+    if (round <= 0 || round <= lastPluginTurnEnded) return;
+    lastPluginTurnEnded = round;
+    emitPluginHook("turn_end", { conversationId, sessionId, round });
+  };
   let pendingAgentContext: Context | null = null;
   const pendingTerminalAssistantMetaRef: {
     current: {
@@ -624,6 +680,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     const contextUsageTokens = contextRelevant
       ? compaction.observeContextMessages([assistant])
       : undefined;
+    const roundPluginContext = round === 1 ? pluginContext : undefined;
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -633,6 +690,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       usage: assistant.usage,
       ...(contextUsageTokens ? { contextUsageTokens } : {}),
       ...(contextRelevant ? {} : { contextRelevant: false }),
+      ...(roundPluginContext ? { pluginContext: roundPluginContext } : {}),
     });
     batchLiveRoundsUpdate(
       (prev) =>
@@ -647,6 +705,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             usageTotalTokens: assistant.usage?.totalTokens,
             contextUsageTokens,
             contextRelevant,
+            pluginContext: roundPluginContext,
           },
         })),
       transcriptStore,
@@ -789,10 +848,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           protectionCheckChars = 0;
           sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
+          emitPluginHook("turn_start", { conversationId, sessionId, round });
+          emitPluginHook("message_start", { conversationId, sessionId, round });
           const contextUsageTokens = compaction.contextUsageTokens;
+          const roundPluginContext = round === 1 ? pluginContext : undefined;
           gatewayBridgeEvents.queueToken("", {
             round,
             ...(contextUsageTokens ? { contextUsageTokens } : {}),
+            ...(roundPluginContext ? { pluginContext: roundPluginContext } : {}),
           });
           batchLiveRoundsUpdate(
             (prev) => [
@@ -801,7 +864,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
                 key: `r${round}`,
                 round,
                 blocks: [],
-                meta: contextUsageTokens ? { contextUsageTokens } : undefined,
+                meta:
+                  contextUsageTokens || roundPluginContext
+                    ? {
+                        ...(contextUsageTokens ? { contextUsageTokens } : {}),
+                        ...(roundPluginContext ? { pluginContext: roundPluginContext } : {}),
+                      }
+                    : undefined,
                 runningToolCallIds: [],
                 thinkingOpen: false,
               },
@@ -893,6 +962,15 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           if (!isSubagentCardToolCall(toolCall)) {
             hookLifecycle.toolExecutionStarted();
           }
+          // observe-only Hook 只拿生命周期事实，不拿工具参数原文:参数里可能有 shell
+          // 命令、待写入文件内容或用户粘贴的凭据,而且体积无上限——一次大 Write 就会
+          // 撑爆调用协议的 2 MiB 上限,把插件误判成 failed。与 tool_execution_end 同形。
+          emitPluginHook("tool_execution_start", {
+            conversationId,
+            sessionId,
+            round,
+            toolCall: { id: toolCall.id, name: toolCall.name },
+          });
           if (!shouldShowToolEvent(toolCall)) return;
           gatewayBridgeEvents.queueEvent({
             type: "tool_call",
@@ -918,6 +996,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           if (!isSubagentCardToolCall(toolCall)) {
             hookLifecycle.toolResultReceived(round);
           }
+          emitPluginHook("tool_execution_end", {
+            conversationId,
+            sessionId,
+            round,
+            toolCall: { id: toolCall.id, name: toolCall.name },
+            isError: toolResult.isError ?? false,
+          });
           if (!shouldShowToolEvent(toolCall, toolResult)) return;
           gatewayBridgeEvents.queueEvent({
             type: "tool_result",
@@ -948,11 +1033,21 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onAssistantMessage: (assistant, round) => {
           if (assistant.role !== "assistant") return;
+          if (round === 1 && pluginContext) {
+            writeAppliedPluginPromptContext(assistant, pluginContext);
+          }
           hookLifecycle.ensureMessageEnded();
           const toolCallCount = assistant.content.filter(
             (block) => block.type === "toolCall",
           ).length;
           hookLifecycle.assistantMessageCompleted(round, toolCallCount);
+          emitPluginHook("message_end", {
+            conversationId,
+            sessionId,
+            round,
+            stopReason: assistant.stopReason,
+            toolCallCount,
+          });
           if (toolCallCount === 0 && assistant.stopReason !== "toolUse") {
             pendingTerminalAssistantMetaRef.current = { assistant, round };
             return;
@@ -968,6 +1063,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
+          emitPluginTurnEnd(round);
           latestAgentEmittedMessages = emittedMessages.slice();
           await refreshParentMessageBusSnapshot();
           const tempState = appendMessagesToConversation(
@@ -1021,6 +1117,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       hookLifecycle.ensureMessageEnded();
       if (activeAgentRound > 0) {
         hookLifecycle.endTurn(activeAgentRound);
+        emitPluginTurnEnd(activeAgentRound);
       }
       resetLiveTranscript(transcriptStore);
 
@@ -1137,6 +1234,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     );
   }
   hookLifecycle.endAgent();
+  emitPluginTurnEnd(activeAgentRound);
+  emitPluginHook("agent_end", {
+    conversationId,
+    sessionId,
+    rounds: activeAgentRound,
+  });
 
   applyConversationState(finalState);
   freezeGatewayFinalProjection(finalState, true);

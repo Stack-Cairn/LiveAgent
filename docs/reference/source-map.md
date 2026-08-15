@@ -1,5 +1,7 @@
 # 源码索引
 
+插件系统的分层源码地图与开发协议见 `docs/features/plugins.md`，机器可读 Manifest 规范见 `docs/reference/plugin-manifest.schema.json`。
+
 ## 根目录
 
 | 路径 | 说明 |

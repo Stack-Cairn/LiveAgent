@@ -113,6 +113,13 @@ let memoryExtractionRequestScenario = async () => ({
   writtenSlugs: [],
   emittedMessages: [],
 });
+let pluginTurnSnapshotScenario = {
+  revision: "empty",
+  workspace: "C:/workspace",
+  tools: [],
+  promptSections: [],
+  hooks: [],
+};
 
 const loader = createTsModuleLoader({
   mocks: {
@@ -155,6 +162,12 @@ const loader = createTsModuleLoader({
     [taskToolsPath]: {
       formatTaskListRuntimeContext() {
         return "";
+      },
+    },
+    "@tauri-apps/api/core": {
+      async invoke(command) {
+        if (command === "plugin_prepare_turn") return pluginTurnSnapshotScenario;
+        throw new Error(`Unexpected invoke: ${command}`);
       },
     },
   },
@@ -255,6 +268,95 @@ function createCompletedAgentDevTurnParams({
     persistConversationWithHistorySync,
   };
 }
+
+test("agent turn injects and persists applied plugin prompt provenance", async () => {
+  const finalAssistant = {
+    ...abortedAssistant,
+    content: [{ type: "text", text: "refactor(server): use native http" }],
+    stopReason: "stop",
+  };
+  const gatewayTokens = [];
+  const persistedStates = [];
+  let requestSystemPrompt = "";
+  pluginTurnSnapshotScenario = {
+    revision: "snapshot-009",
+    workspace: "C:/workspace",
+    tools: [],
+    promptSections: [
+      {
+        pluginId: "com.liveagent.conversation.commit-style",
+        pluginVersion: "1.0.1",
+        packageHash: "a".repeat(64),
+        generation: 4,
+        id: "instructions",
+        content: "Use English Conventional Commits with a 72 character title limit.",
+        maxTokens: 1_200,
+      },
+    ],
+    hooks: [],
+  };
+  runAssistantWithToolsScenario = async (params) => {
+    requestSystemPrompt = params.context.systemPrompt;
+    params.onTurnStart?.(1);
+    params.onAssistantMessage?.(finalAssistant, 1);
+    return {
+      assistant: finalAssistant,
+      messages: [finalAssistant],
+      emittedMessages: [finalAssistant],
+    };
+  };
+
+  try {
+    const state = conversationState.createConversationStateFromContext({
+      systemPrompt: "core prompt",
+      messages: [],
+    });
+    await runAgentConversationTurn(
+      createCompletedAgentDevTurnParams({
+        state,
+        gatewayTokens,
+        async persistConversationWithHistorySync(params) {
+          persistedStates.push(params.state);
+          return true;
+        },
+      }),
+    );
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+    pluginTurnSnapshotScenario = {
+      revision: "empty",
+      workspace: "C:/workspace",
+      tools: [],
+      promptSections: [],
+      hooks: [],
+    };
+  }
+
+  assert.match(requestSystemPrompt, /liveagent-plugin-context/);
+  assert.match(requestSystemPrompt, /Use English Conventional Commits/);
+  const expectedContext = {
+    snapshotRevision: "snapshot-009",
+    promptSections: [
+      {
+        pluginId: "com.liveagent.conversation.commit-style",
+        pluginVersion: "1.0.1",
+        packageHash: "a".repeat(64),
+        generation: 4,
+        contributionId: "instructions",
+        truncated: false,
+      },
+    ],
+  };
+  assert.deepEqual(finalAssistant.liveAgentPluginContext, expectedContext);
+  assert.deepEqual(
+    gatewayTokens.find((event) => event.meta?.pluginContext)?.meta.pluginContext,
+    expectedContext,
+  );
+  assert.deepEqual(
+    persistedStates[0].transcript.items.at(-1).rounds[0].meta.pluginContext,
+    expectedContext,
+  );
+});
 
 test("agent dev skips memory extraction when final history persistence fails", async () => {
   const finalAssistant = {

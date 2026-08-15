@@ -47,6 +47,7 @@ export type AssistantBlockRenderUnit = {
   runningToolCallIds: string[];
   thinkingOpen: boolean;
   isLatestThinking: boolean;
+  isRoundHead: boolean;
   isRoundTail: boolean;
   hasRunningToolCall: boolean;
 };
@@ -261,6 +262,7 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
     sameStringArray(previous.unit.runningToolCallIds, next.unit.runningToolCallIds) &&
     previous.unit.thinkingOpen === next.unit.thinkingOpen &&
     previous.unit.isLatestThinking === next.unit.isLatestThinking &&
+    previous.unit.isRoundHead === next.unit.isRoundHead &&
     previous.unit.isRoundTail === next.unit.isRoundTail &&
     previous.unit.hasRunningToolCall === next.unit.hasRunningToolCall
   );
@@ -335,8 +337,12 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
     }
 
     groupedBlocks.forEach((block, blockIndex) => {
+      const isRoundHead = blockIndex === 0;
       const isRoundTail = blockIndex === groupedBlocks.length - 1;
       const measurement = measureBlockUnit(block, Boolean(isRoundTail && round.meta?.usage));
+      if (isRoundHead && round.meta?.pluginContext) {
+        measurement.estimate += 28;
+      }
       rows.push({
         kind: "assistant-unit",
         key: `${replyKey}:round:${round.key}:block:${block.key}`,
@@ -357,6 +363,7 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
           runningToolCallIds,
           thinkingOpen: "thinkingOpen" in round ? round.thinkingOpen : false,
           isLatestThinking: block.kind === "thinking" && block.key === latestThinkingKey,
+          isRoundHead,
           isRoundTail,
           hasRunningToolCall: roundHasRunningToolCall,
         },

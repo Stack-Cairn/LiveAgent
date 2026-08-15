@@ -62,6 +62,7 @@ import {
 } from "../lib/chat/page/chatPageHelpers";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
+import { desktopPluginClient } from "../lib/plugins/client";
 import {
   isAgentDevMode,
   isAgentExecutionMode,
@@ -1696,6 +1697,11 @@ export function ChatPage(props: ChatPageProps) {
             setRightDockOpen(false);
             setActiveView("mcp-hub");
           }}
+          onOpenPluginHub={() => {
+            cacheActiveComposerDraft();
+            setRightDockOpen(false);
+            setActiveView("plugin-hub");
+          }}
         />
 
         {workspaceCreateModalOpen ? (
@@ -1757,6 +1763,8 @@ export function ChatPage(props: ChatPageProps) {
           onOpenSidebar={handleOpenSidebar}
           initialSkills={availableSkills}
           initialSkillsRootDir={skillsRootDir}
+          pluginClient={desktopPluginClient}
+          pluginWorkspace={activeWorkspaceProjectPath || workdir}
           className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
           chatClassName="zone-font-scale"
           chatStyle={

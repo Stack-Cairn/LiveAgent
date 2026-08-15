@@ -17,6 +17,7 @@ const (
 	defaultHistoryListPage     = 1
 	defaultHistoryListPageSize = 80
 	maxWorkspaceRootGrants     = 64
+	maxPluginManagePayload     = 1024 * 1024
 )
 
 // vetAgentRequest 校验并（必要时）原地修正一条直通请求；返回错误则拒绝转发，错误信息面向客户端。
@@ -70,6 +71,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		return vetChatFileOpen(payload.ChatFileOpen)
 	case *gatewayv2.GatewayEnvelope_WorkspaceRootGrants:
 		return vetWorkspaceRootGrants(payload.WorkspaceRootGrants)
+	case *gatewayv2.GatewayEnvelope_PluginManage:
+		return vetPluginManage(payload.PluginManage)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -108,6 +111,21 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		// 含 chat_command（须走网关编排）、ping（探活由网关发起）、upload_readable_files
 		// （走 HTTP 上传）、history_share_resolve（公共分享端点专用）及网关内部推送臂。
 		return errors.New("unsupported agent_request payload")
+	}
+}
+
+func vetPluginManage(req *gatewayv2.PluginManageRequest) error {
+	if req == nil {
+		return errors.New("plugin manage request is required")
+	}
+	if len(req.GetPayloadJson()) > maxPluginManagePayload {
+		return errors.New("plugin manage payload is too large")
+	}
+	switch strings.TrimSpace(req.GetAction()) {
+	case "list", "set_enabled", "set_grants", "update_config", "uninstall":
+		return nil
+	default:
+		return errors.New("plugin manage action is invalid")
 	}
 }
 

@@ -145,6 +145,7 @@ export function useGatewayChatPresentation({
     if (!token.trim()) return DEFAULT_BROWSER_TITLE;
     if (activeView === "skills-hub") return SKILLS_HUB_BROWSER_TITLE;
     if (activeView === "mcp-hub") return MCP_HUB_BROWSER_TITLE;
+    if (activeView === "plugin-hub") return "LiveAgent Plugins";
     return displayedConversationTitle || DEFAULT_BROWSER_TITLE;
   }, [activeView, displayedConversationTitle, historyShareToken, token]);
   useEffect(() => {

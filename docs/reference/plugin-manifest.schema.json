@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liveagent.dev/schemas/plugin-manifest-v1.json",
+  "title": "LiveAgent Plugin Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "version", "publisher", "engines", "runtime"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]{1,126}[a-z0-9])$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "publisher": { "$ref": "#/$defs/publisher" },
+    "engines": { "$ref": "#/$defs/engines" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "permissions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/permission" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "requires": { "$ref": "#/$defs/dependencies" },
+    "provides": { "$ref": "#/$defs/provides" },
+    "contributes": { "$ref": "#/$defs/contributions" }
+  },
+  "$defs": {
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "keyId": false
+      }
+    },
+    "engines": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "liveagent": { "type": "string" },
+        "pluginApi": { "type": "string" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["wasi-command", "process", "declarative"] },
+        "entry": { "$ref": "#/$defs/packagePath" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "scope": {
+          "enum": ["application", "workspace"],
+          "default": "workspace",
+          "description": "Controls activation and configuration scope; runtimes are still invoked per contribution call."
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 600000, "default": 30000 },
+        "fuel": { "type": "integer", "minimum": 1, "maximum": 1000000000, "default": 50000000 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "wasi-command" } } },
+          "then": { "required": ["entry"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "process" } } },
+          "then": { "required": ["command"] }
+        }
+      ]
+    },
+    "packagePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "enum": ["agent.tools.register", "agent.promptSections.contribute", "agent.hooks.observe", "process.fullTrust"]
+        },
+        "paths": { "type": "array", "maxItems": 0, "default": [], "description": "Reserved for a future Plugin API." },
+        "origins": { "type": "array", "maxItems": 0, "default": [], "description": "Reserved for a future Plugin API." },
+        "keys": { "type": "array", "maxItems": 0, "default": [], "description": "Reserved for a future Plugin API." }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plugins": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9](?:[a-z0-9.-]{1,126}[a-z0-9])$" },
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "default": {}
+        },
+        "capabilities": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9](?:[a-z0-9.-]{1,126}[a-z0-9])$" },
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "default": {}
+        }
+      },
+      "default": {}
+    },
+    "provides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9](?:[a-z0-9.-]{1,126}[a-z0-9])$" },
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "default": {}
+        }
+      },
+      "default": {}
+    },
+    "contributionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "modelName", "description", "inputSchema", "handler"],
+      "properties": {
+        "id": { "$ref": "#/$defs/contributionId" },
+        "modelName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,127}$" },
+        "title": { "type": "string" },
+        "description": { "type": "string", "minLength": 1 },
+        "inputSchema": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } }
+        },
+        "outputSchema": { "type": "object" },
+        "handler": { "type": "string", "minLength": 1 },
+        "readOnly": { "type": "boolean", "default": false }
+      }
+    },
+    "promptSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/contributionId" },
+        "content": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/packagePath" },
+        "position": {
+          "type": "string",
+          "enum": ["system-leading", "workspace-context", "agent-context", "system-trailing"],
+          "default": "agent-context"
+        },
+        "maxTokens": { "type": "integer", "minimum": 1, "maximum": 16000 }
+      },
+      "oneOf": [
+        { "required": ["content"], "not": { "required": ["source"] } },
+        { "required": ["source"], "not": { "required": ["content"] } }
+      ]
+    },
+    "hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "event", "handler"],
+      "properties": {
+        "id": { "$ref": "#/$defs/contributionId" },
+        "event": {
+          "enum": ["agent_start", "turn_start", "message_start", "message_end", "tool_execution_start", "tool_execution_end", "turn_end", "agent_end"]
+        },
+        "observeOnly": { "const": true, "default": true },
+        "handler": { "type": "string", "minLength": 1 },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 600000 }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "schema"],
+      "properties": {
+        "id": { "$ref": "#/$defs/contributionId" },
+        "schema": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } },
+          "description": "Draft 2020-12 object schema. Secret markers such as writeOnly, password format, and x-liveagent-secret are not supported in Plugin API v1."
+        }
+      }
+    },
+    "contributions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": { "type": "array", "items": { "$ref": "#/$defs/tool" }, "default": [] },
+        "promptSections": { "type": "array", "items": { "$ref": "#/$defs/promptSection" }, "default": [] },
+        "hooks": { "type": "array", "items": { "$ref": "#/$defs/hook" }, "default": [] },
+        "settings": { "type": "array", "items": { "$ref": "#/$defs/settings" }, "default": [] }
+      },
+      "default": {}
+    }
+  }
+}

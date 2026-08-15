@@ -1,12 +1,14 @@
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { ChatHeader, type ChatHeaderProps } from "../components/chat/ChatHeader";
+import type { PluginClient } from "../lib/plugins/types";
 import { cn } from "../lib/shared/utils";
 import type { SkillSummary } from "../lib/skills/index";
 import { McpHubPage } from "../pages/mcp-hub/McpHubPage";
+import { PluginHubPage } from "../pages/plugin-hub/PluginHubPage";
 import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 
-export type ApplicationViewId = "chat" | "skills-hub" | "mcp-hub";
+export type ApplicationViewId = "chat" | "skills-hub" | "mcp-hub" | "plugin-hub";
 
 type ApplicationChatViewProps = Omit<ChatHeaderProps, "settings"> & {
   containerProps?: Omit<HTMLAttributes<HTMLDivElement>, "children">;
@@ -24,6 +26,8 @@ type ApplicationViewProps = {
   onOpenSidebar: () => void;
   initialSkills?: SkillSummary[];
   initialSkillsRootDir?: string;
+  pluginClient: PluginClient;
+  pluginWorkspace?: string;
   className?: string;
   chatClassName?: string;
   chatStyle?: CSSProperties;
@@ -41,6 +45,8 @@ export function ApplicationView(props: ApplicationViewProps) {
     onOpenSidebar,
     initialSkills,
     initialSkillsRootDir,
+    pluginClient,
+    pluginWorkspace,
     className,
     chatClassName,
     chatStyle,
@@ -67,6 +73,15 @@ export function ApplicationView(props: ApplicationViewProps) {
         settings={settings}
         setSettings={setSettings}
         isAgentMode={isAgentMode}
+        sidebarOpen={sidebarOpen}
+        onOpenSidebar={onOpenSidebar}
+      />
+    );
+  } else if (activeView === "plugin-hub") {
+    content = (
+      <PluginHubPage
+        client={pluginClient}
+        workspace={pluginWorkspace}
         sidebarOpen={sidebarOpen}
         onOpenSidebar={onOpenSidebar}
       />

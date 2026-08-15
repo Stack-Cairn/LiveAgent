@@ -101,6 +101,18 @@ macro_rules! app_invoke_handler {
             commands::mcp::mcp_stop_server,
             commands::mcp::mcp_test_server,
             commands::mcp::mcp_restart_server,
+            // Plugins
+            commands::plugins::plugin_list,
+            commands::plugins::plugin_install,
+            commands::plugins::plugin_create_prompt,
+            commands::plugins::plugin_set_enabled,
+            commands::plugins::plugin_set_grants,
+            commands::plugins::plugin_uninstall,
+            commands::plugins::plugin_update_config,
+            commands::plugins::plugin_prepare_turn,
+            commands::plugins::plugin_invoke_tool,
+            commands::plugins::plugin_dispatch_hook,
+            commands::plugins::plugin_api_version,
             // Memory
             commands::memory::memory_list,
             commands::memory::memory_read,

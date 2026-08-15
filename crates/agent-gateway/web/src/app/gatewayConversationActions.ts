@@ -178,7 +178,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
       });
     }
   };
-  const openHub = (view: "skills-hub" | "mcp-hub") => {
+  const openHub = (view: "skills-hub" | "mcp-hub" | "plugin-hub") => {
     options.setRightDockOpen(false);
     if (isMobileSidebarLayout()) options.setSidebarOpen(false);
     options.cacheVisibleComposerDraft();
@@ -252,6 +252,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
     handleSidebarOpenMcpHub: () => openHub("mcp-hub"),
+    handleSidebarOpenPluginHub: () => openHub("plugin-hub"),
     handleSidebarOpenSkillsHub: () => openHub("skills-hub"),
     handleSidebarSelectConversation,
     startNewConversation,

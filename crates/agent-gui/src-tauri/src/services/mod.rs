@@ -3,6 +3,7 @@ pub mod chat_run_ledger;
 pub mod gateway;
 pub mod gateway_bridge;
 pub mod memory;
+pub mod plugins;
 pub mod power_activity;
 pub mod provider_models;
 pub mod provider_usage;

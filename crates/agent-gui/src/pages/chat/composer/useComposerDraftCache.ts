@@ -7,7 +7,7 @@ import { type MutableRefObject, useEffect, useRef } from "react";
 type UseComposerDraftCacheParams = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   currentConversationIdRef: MutableRefObject<string>;
-  activeView: "chat" | "skills-hub" | "mcp-hub";
+  activeView: "chat" | "skills-hub" | "mcp-hub" | "plugin-hub";
   currentConversationId: string;
 };
 
