@@ -192,16 +192,35 @@ message ImportDirectoryFile {
   bytes content = 2;
 }
 
+enum ImportDirectoryOperation {
+  IMPORT_DIRECTORY_OPERATION_UNSPECIFIED = 0;
+  IMPORT_DIRECTORY_OPERATION_START = 1;
+  IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK = 2;
+  IMPORT_DIRECTORY_OPERATION_COMMIT = 3;
+  IMPORT_DIRECTORY_OPERATION_ABORT = 4;
+}
+
 message ImportDirectoryRequest {
-  string name = 1;    // 拖入的文件夹名（单个路径组件）
-  string target = 2;  // "workspace" | "project-root"
-  repeated ImportDirectoryFile files = 3;
+  string name = 1;    // START：拖入的文件夹名（单个路径组件）
+  string target = 2;  // START："workspace" | "project-root"
+  // 旧版整目录信封，仅保留兼容；新客户端必须使用下面的分块字段。
+  repeated ImportDirectoryFile files = 3 [deprecated = true];
+  string transfer_id = 4;
+  ImportDirectoryOperation operation = 5;
+  uint32 total_files = 6;  // START：目录文件总数
+  uint64 total_bytes = 7;  // START：目录内容总字节数（不含协议开销）
+  string relative_path = 8;  // WRITE_CHUNK：目录内相对路径
+  uint64 offset = 9;  // WRITE_CHUNK：当前文件内的连续字节偏移
+  bytes chunk = 10;  // WRITE_CHUNK：单块最多 1 MiB
+  bool file_complete = 11;  // WRITE_CHUNK：当前块是该文件最后一块
 }
 
 message ImportDirectoryResponse {
   string root_path = 1;  // Agent 宿主机上创建的目录绝对路径
   int32 file_count = 2;
   repeated string skipped = 3;
+  string transfer_id = 4;
+  uint64 received_bytes = 5;
 }
 
 message UploadedImagePreviewRequest {

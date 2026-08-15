@@ -6,6 +6,7 @@ import { type DragEvent, useCallback, useRef, useState } from "react";
 import {
   collectDroppedPayload,
   type DroppedDirectory,
+  MAX_DIRECTORY_UPLOAD_BYTES,
   MAX_DIRECTORY_UPLOAD_FILES,
   snapshotDroppedEntries,
 } from "@/lib/directoryDrop";
@@ -35,6 +36,11 @@ function directoryErrorMessage(error: unknown, locale: AppSettings["locale"], fa
   if (message.startsWith("TOO_MANY_FILES:")) {
     return formatTranslation(translate("chat.workspaceDropTooManyFiles", locale), {
       max: MAX_DIRECTORY_UPLOAD_FILES,
+    });
+  }
+  if (message.startsWith("TOO_LARGE:")) {
+    return formatTranslation(translate("chat.workspaceDropTooLarge", locale), {
+      max: Math.floor(MAX_DIRECTORY_UPLOAD_BYTES / 1024 / 1024),
     });
   }
   return asErrorMessage(error, fallback);

@@ -19,7 +19,9 @@ use crate::commands::{
     },
     settings::{load_providers, open_db},
     system::{
-        system_create_project_folder_sync, system_import_directory_sync,
+        system_create_project_folder_sync, system_import_directory_abort_sync,
+        system_import_directory_chunk_sync, system_import_directory_commit_sync,
+        system_import_directory_start_sync, system_import_directory_sync,
         system_import_uploaded_readable_files_sync, system_list_skill_files_sync,
         system_read_skill_metadata_sync, system_read_skill_text_sync,
         system_read_uploaded_image_preview_sync, SystemImportDirectoryInputFile,
@@ -925,25 +927,59 @@ pub async fn handle_upload_readable_files(
 pub async fn handle_import_directory(
     request: proto::ImportDirectoryRequest,
 ) -> Result<proto::ImportDirectoryResponse, String> {
-    let name = request.name;
-    let target = request.target;
-    let files = request
-        .files
-        .into_iter()
-        .map(|file| SystemImportDirectoryInputFile {
-            relative_path: file.relative_path,
-            content: file.content,
-        })
-        .collect();
+    let transfer_id = request.transfer_id.clone();
+    let operation = proto::ImportDirectoryOperation::try_from(request.operation)
+        .map_err(|_| format!("不支持的目录导入操作：{}", request.operation))?;
+    let outcome = tauri::async_runtime::spawn_blocking(move || match operation {
+        proto::ImportDirectoryOperation::Start => system_import_directory_start_sync(
+            request.transfer_id,
+            request.name,
+            request.target,
+            request.total_files,
+            request.total_bytes,
+        ),
+        proto::ImportDirectoryOperation::WriteChunk => system_import_directory_chunk_sync(
+            request.transfer_id,
+            request.relative_path,
+            request.offset,
+            request.chunk,
+            request.file_complete,
+        ),
+        proto::ImportDirectoryOperation::Commit => {
+            system_import_directory_commit_sync(request.transfer_id)
+        }
+        proto::ImportDirectoryOperation::Abort => {
+            system_import_directory_abort_sync(request.transfer_id)?;
+            Ok(crate::commands::system::SystemImportDirectoryOutcome {
+                root_path: String::new(),
+                file_count: 0,
+                skipped: Vec::new(),
+                received_bytes: 0,
+            })
+        }
+        proto::ImportDirectoryOperation::Unspecified => {
+            #[allow(deprecated)]
+            let files = request
+                .files
+                .into_iter()
+                .map(|file| SystemImportDirectoryInputFile {
+                    relative_path: file.relative_path,
+                    content: file.content,
+                })
+                .collect();
+            system_import_directory_sync(request.name, request.target, files)
+        }
+    })
+    .await
+    .map_err(|e| format!("gateway import directory join failed: {e}"))??;
 
-    tauri::async_runtime::spawn_blocking(move || system_import_directory_sync(name, target, files))
-        .await
-        .map_err(|e| format!("gateway import directory join failed: {e}"))?
-        .map(|outcome| proto::ImportDirectoryResponse {
-            root_path: outcome.root_path,
-            file_count: i32::try_from(outcome.file_count).unwrap_or(i32::MAX),
-            skipped: outcome.skipped,
-        })
+    Ok(proto::ImportDirectoryResponse {
+        root_path: outcome.root_path,
+        file_count: i32::try_from(outcome.file_count).unwrap_or(i32::MAX),
+        skipped: outcome.skipped,
+        transfer_id,
+        received_bytes: outcome.received_bytes,
+    })
 }
 
 pub async fn handle_uploaded_image_preview(

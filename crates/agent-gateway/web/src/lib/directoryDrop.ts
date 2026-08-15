@@ -16,6 +16,7 @@ export type CollectedDropPayload = {
 
 /** 与桌面端网关侧的 2000 上限对齐；超限直接失败而非静默截断。 */
 export const MAX_DIRECTORY_UPLOAD_FILES = 2000;
+export const MAX_DIRECTORY_UPLOAD_BYTES = 200 * 1024 * 1024;
 
 /** 拖入整个项目时这些目录既大又无导入价值，收集阶段直接剪枝。 */
 const EXCLUDED_DIRECTORY_NAMES = new Set([".git", "node_modules", "__pycache__"]);
@@ -77,6 +78,7 @@ async function collectDirectoryFiles(
   directory: FileSystemDirectoryEntry,
   prefix: string,
   sink: DroppedDirectoryFile[],
+  totalBytes: { value: number },
 ) {
   const children = await readAllDirectoryEntries(directory);
   for (const child of children) {
@@ -86,6 +88,7 @@ async function collectDirectoryFiles(
         child as FileSystemDirectoryEntry,
         `${prefix}${child.name}/`,
         sink,
+        totalBytes,
       );
       continue;
     }
@@ -93,9 +96,14 @@ async function collectDirectoryFiles(
     if (sink.length >= MAX_DIRECTORY_UPLOAD_FILES) {
       throw new Error(`TOO_MANY_FILES:${MAX_DIRECTORY_UPLOAD_FILES}`);
     }
+    const file = await entryFile(child as FileSystemFileEntry);
+    totalBytes.value += file.size;
+    if (totalBytes.value > MAX_DIRECTORY_UPLOAD_BYTES) {
+      throw new Error(`TOO_LARGE:${MAX_DIRECTORY_UPLOAD_BYTES}`);
+    }
     sink.push({
       relativePath: `${prefix}${child.name}`,
-      file: await entryFile(child as FileSystemFileEntry),
+      file,
     });
   }
 }
@@ -112,7 +120,7 @@ export async function collectDroppedPayload(
   for (const entry of entries) {
     if (entry.isDirectory) {
       const collected: DroppedDirectoryFile[] = [];
-      await collectDirectoryFiles(entry as FileSystemDirectoryEntry, "", collected);
+      await collectDirectoryFiles(entry as FileSystemDirectoryEntry, "", collected, { value: 0 });
       directories.push({ name: entry.name, files: collected });
       continue;
     }

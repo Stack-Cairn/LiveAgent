@@ -14,6 +14,7 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"google.golang.org/protobuf/proto"
 )
 
 func newDirectoryImportServer(t *testing.T) (*session.Manager, *session.AgentSession, http.Handler) {
@@ -47,7 +48,8 @@ func TestImportDirectoryForwardsRelativePathsToAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create file part: %v", err)
 	}
-	if _, err := io.WriteString(part, "fn main() {}"); err != nil {
+	largeContent := bytes.Repeat([]byte("a"), (1<<20)+17)
+	if _, err := part.Write(largeContent); err != nil {
 		t.Fatalf("write file part: %v", err)
 	}
 	if err := writer.WriteField("paths", "src/main.rs"); err != nil {
@@ -78,46 +80,82 @@ func TestImportDirectoryForwardsRelativePathsToAgent(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 	}()
 
-	var outbound *gatewayv2.GatewayEnvelope
-	select {
-	case delivered := <-agentSession.Outbound():
-		delivered.Ack(nil)
-		outbound = delivered.GatewayEnvelope
-	case <-time.After(time.Second):
-		t.Fatalf("timed out waiting for directory import to reach agent")
-	}
+	var transferID string
+	reconstructed := map[string][]byte{}
+	chunkCount := 0
+	for {
+		var outbound *gatewayv2.GatewayEnvelope
+		select {
+		case delivered := <-agentSession.Outbound():
+			delivered.Ack(nil)
+			outbound = delivered.GatewayEnvelope
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for directory import to reach agent")
+		}
 
-	importReq := outbound.GetImportDirectory()
-	if importReq == nil {
-		t.Fatalf("outbound payload = %T, want ImportDirectoryRequest", outbound.GetPayload())
-	}
-	if importReq.GetName() != "demo" {
-		t.Fatalf("name = %q, want trimmed name", importReq.GetName())
-	}
-	if importReq.GetTarget() != "workspace" {
-		t.Fatalf("target = %q, want workspace", importReq.GetTarget())
-	}
-	if len(importReq.GetFiles()) != 2 {
-		t.Fatalf("files len = %d, want 2", len(importReq.GetFiles()))
-	}
-	if importReq.GetFiles()[0].GetRelativePath() != "src/main.rs" {
-		t.Fatalf("relative path = %q, want src/main.rs", importReq.GetFiles()[0].GetRelativePath())
-	}
-	if string(importReq.GetFiles()[0].GetContent()) != "fn main() {}" {
-		t.Fatalf("content = %q", string(importReq.GetFiles()[0].GetContent()))
-	}
+		importReq := outbound.GetImportDirectory()
+		if importReq == nil {
+			t.Fatalf("outbound payload = %T, want ImportDirectoryRequest", outbound.GetPayload())
+		}
+		if encodedSize := proto.Size(outbound); encodedSize > 2<<20 {
+			t.Fatalf("encoded gateway envelope = %d bytes, want <= 2 MiB", encodedSize)
+		}
+		response := &gatewayv2.ImportDirectoryResponse{TransferId: importReq.GetTransferId()}
+		switch importReq.GetOperation() {
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_START:
+			if importReq.GetName() != "demo" || importReq.GetTarget() != "workspace" {
+				t.Fatalf("start request = %#v", importReq)
+			}
+			if importReq.GetTotalFiles() != 2 {
+				t.Fatalf("total files = %d, want 2", importReq.GetTotalFiles())
+			}
+			if importReq.GetTotalBytes() != uint64(len(largeContent)+len("# demo")) {
+				t.Fatalf("total bytes = %d", importReq.GetTotalBytes())
+			}
+			transferID = importReq.GetTransferId()
+			if transferID == "" {
+				t.Fatal("transfer id is empty")
+			}
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK:
+			if importReq.GetTransferId() != transferID {
+				t.Fatalf("chunk transfer id = %q, want %q", importReq.GetTransferId(), transferID)
+			}
+			if len(importReq.GetChunk()) > 1<<20 {
+				t.Fatalf("chunk size = %d, want <= 1 MiB", len(importReq.GetChunk()))
+			}
+			path := importReq.GetRelativePath()
+			if importReq.GetOffset() != uint64(len(reconstructed[path])) {
+				t.Fatalf("chunk offset = %d, want %d", importReq.GetOffset(), len(reconstructed[path]))
+			}
+			reconstructed[path] = append(reconstructed[path], importReq.GetChunk()...)
+			chunkCount++
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT:
+			response.RootPath = "/home/user/.liveagent/imports/workspaces/demo"
+			response.FileCount = 2
+		default:
+			t.Fatalf("unexpected import operation: %v", importReq.GetOperation())
+		}
 
-	sm.DispatchFromAgentForSession(agentSession, &gatewayv2.AgentEnvelope{
-		RequestId: outbound.GetRequestId(),
-		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv2.AgentEnvelope_ImportDirectoryResp{
-			ImportDirectoryResp: &gatewayv2.ImportDirectoryResponse{
-				RootPath:  "/home/user/.liveagent/imports/workspaces/demo",
-				FileCount: 2,
-				Skipped:   nil,
+		sm.DispatchFromAgentForSession(agentSession, &gatewayv2.AgentEnvelope{
+			RequestId: outbound.GetRequestId(),
+			Timestamp: time.Now().Unix(),
+			Payload: &gatewayv2.AgentEnvelope_ImportDirectoryResp{
+				ImportDirectoryResp: response,
 			},
-		},
-	})
+		})
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT {
+			break
+		}
+	}
+	if chunkCount != 3 {
+		t.Fatalf("chunk count = %d, want 3", chunkCount)
+	}
+	if !bytes.Equal(reconstructed["src/main.rs"], largeContent) {
+		t.Fatal("large file was not reconstructed from chunks")
+	}
+	if string(reconstructed["README.md"]) != "# demo" {
+		t.Fatalf("README content = %q", reconstructed["README.md"])
+	}
 
 	<-done
 

@@ -2,11 +2,11 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
-use std::fs;
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::runtime::platform::expand_tilde_path;
@@ -498,6 +498,27 @@ fn sanitize_uploaded_file_name(input: &str) -> String {
         trimmed.to_string()
     };
     avoid_windows_reserved_file_name(candidate)
+}
+
+/// 目录导入需要保留 `.env`、`.gitignore`、`.github` 等合法前导点；只清理
+/// 跨平台非法字符与 Windows 不允许的尾随空格/点。精确的 `.`/`..` 由调用方拒绝。
+fn sanitize_import_path_component(input: &str) -> Option<String> {
+    if input == "." || input == ".." {
+        return None;
+    }
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*') {
+            out.push('_');
+        } else {
+            out.push(ch);
+        }
+    }
+    let trimmed = out.trim_end_matches(|ch: char| ch == '.' || ch.is_whitespace());
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        return None;
+    }
+    Some(avoid_windows_reserved_file_name(trimmed.to_string()))
 }
 
 fn is_windows_reserved_file_name(input: &str) -> bool {
@@ -1377,13 +1398,41 @@ pub(crate) struct SystemImportDirectoryInputFile {
     pub content: Vec<u8>,
 }
 
+#[derive(Debug)]
 pub(crate) struct SystemImportDirectoryOutcome {
     pub root_path: String,
     pub file_count: u32,
     pub skipped: Vec<String>,
+    pub received_bytes: u64,
 }
 
 const DIRECTORY_IMPORT_MAX_FILES: usize = 2000;
+const DIRECTORY_IMPORT_MAX_BYTES: u64 = 200 * 1024 * 1024;
+pub(crate) const DIRECTORY_IMPORT_CHUNK_BYTES: usize = 1024 * 1024;
+
+struct DirectoryImportFileState {
+    destination: Option<PathBuf>,
+    next_offset: u64,
+    complete: bool,
+}
+
+struct DirectoryImportTransferState {
+    base: PathBuf,
+    folder_name: String,
+    staging_root: PathBuf,
+    expected_files: usize,
+    expected_bytes: u64,
+    received_bytes: u64,
+    files: HashMap<String, DirectoryImportFileState>,
+    skipped: Vec<String>,
+}
+
+static DIRECTORY_IMPORT_TRANSFERS: OnceLock<Mutex<HashMap<String, DirectoryImportTransferState>>> =
+    OnceLock::new();
+
+fn directory_import_transfers() -> &'static Mutex<HashMap<String, DirectoryImportTransferState>> {
+    DIRECTORY_IMPORT_TRANSFERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 /// 目录导入落在 `~/.liveagent/imports/` 下而非 uploads 暂存区：导入结果会
 /// 成为工作空间或附属目录授权的根路径，必须躲开暂存区的 30 天 GC。
@@ -1415,14 +1464,17 @@ fn create_unique_import_root(base: &Path, name: &str) -> Result<PathBuf, String>
                 }
             }
             Err(error) => {
-                return Err(format!("无法创建导入目录（{}）：{error}", candidate.display()))
+                return Err(format!(
+                    "无法创建导入目录（{}）：{error}",
+                    candidate.display()
+                ))
             }
         }
     }
 }
 
-/// 相对路径必须逐段清洗：拒绝 `.`/`..` 防穿越，其余组件复用附件文件名的
-/// 清洗规则（Windows 保留名、控制字符等）。
+/// 相对路径必须逐段清洗：拒绝 `.`/`..` 防穿越，同时保留 `.env`、
+/// `.gitignore`、`.github` 等合法前导点。
 fn sanitized_relative_components(relative_path: &str) -> Option<Vec<String>> {
     let normalized = relative_path.replace('\\', "/");
     let mut components = Vec::new();
@@ -1433,7 +1485,7 @@ fn sanitized_relative_components(relative_path: &str) -> Option<Vec<String>> {
         if part == "." || part == ".." {
             return None;
         }
-        components.push(sanitize_uploaded_file_name(part));
+        components.push(sanitize_import_path_component(part)?);
     }
     if components.is_empty() {
         None
@@ -1455,7 +1507,18 @@ pub(crate) fn system_import_directory_sync(
             "目录内文件过多（超过 {DIRECTORY_IMPORT_MAX_FILES} 个），请精简后重试"
         ));
     }
-    let folder_name = sanitize_uploaded_file_name(name.trim());
+    let total_bytes = files.iter().try_fold(0u64, |total, file| {
+        total.checked_add(u64::try_from(file.content.len()).unwrap_or(u64::MAX))
+    });
+    let total_bytes = total_bytes.ok_or_else(|| "目录内容字节数溢出".to_string())?;
+    if total_bytes > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err(format!(
+            "目录内容超过 {} MiB 上限",
+            DIRECTORY_IMPORT_MAX_BYTES / 1024 / 1024
+        ));
+    }
+    let folder_name =
+        sanitize_import_path_component(name.trim()).ok_or_else(|| "目录名称无效".to_string())?;
     let base = directory_import_base(target.trim())?;
     let root = create_unique_import_root(&base, &folder_name)?;
 
@@ -1471,15 +1534,13 @@ pub(crate) fn system_import_directory_sync(
             destination.push(component);
         }
         if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!("无法创建导入子目录（{}）：{error}", parent.display())
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("无法创建导入子目录（{}）：{error}", parent.display()))?;
         }
         // 清洗后的组件可能与同目录下其他文件撞名（如非法字符都归一成 `_`）。
         let destination = unique_path_for_copy(destination);
-        fs::write(&destination, &file.content).map_err(|error| {
-            format!("写入导入文件失败（{}）：{error}", destination.display())
-        })?;
+        fs::write(&destination, &file.content)
+            .map_err(|error| format!("写入导入文件失败（{}）：{error}", destination.display()))?;
         file_count += 1;
     }
 
@@ -1492,7 +1553,308 @@ pub(crate) fn system_import_directory_sync(
         root_path: project_folder_display_path(&root),
         file_count,
         skipped,
+        received_bytes: total_bytes,
     })
+}
+
+fn validate_directory_transfer_id(transfer_id: &str) -> Result<&str, String> {
+    let transfer_id = transfer_id.trim();
+    if transfer_id.is_empty()
+        || transfer_id.len() > 128
+        || !transfer_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err("目录导入 transfer id 无效".to_string());
+    }
+    Ok(transfer_id)
+}
+
+pub(crate) fn system_import_directory_start_sync(
+    transfer_id: String,
+    name: String,
+    target: String,
+    total_files: u32,
+    total_bytes: u64,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let expected_files = usize::try_from(total_files).unwrap_or(usize::MAX);
+    if expected_files == 0 || expected_files > DIRECTORY_IMPORT_MAX_FILES {
+        return Err(format!(
+            "目录内文件数量必须在 1 到 {DIRECTORY_IMPORT_MAX_FILES} 之间"
+        ));
+    }
+    if total_bytes > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err(format!(
+            "目录内容超过 {} MiB 上限",
+            DIRECTORY_IMPORT_MAX_BYTES / 1024 / 1024
+        ));
+    }
+
+    let folder_name =
+        sanitize_import_path_component(name.trim()).ok_or_else(|| "目录名称无效".to_string())?;
+    let base = directory_import_base(target.trim())?;
+    let staging_base = base.join(".staging");
+    fs::create_dir_all(&staging_base).map_err(|error| {
+        format!(
+            "无法创建目录导入暂存区（{}）：{error}",
+            staging_base.display()
+        )
+    })?;
+    let staging_root = staging_base.join(&transfer_id);
+
+    let mut transfers = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
+    if transfers.contains_key(&transfer_id) || staging_root.exists() {
+        return Err("目录导入 transfer id 已存在".to_string());
+    }
+    fs::create_dir(&staging_root).map_err(|error| {
+        format!(
+            "无法创建目录导入暂存目录（{}）：{error}",
+            staging_root.display()
+        )
+    })?;
+    transfers.insert(
+        transfer_id,
+        DirectoryImportTransferState {
+            base,
+            folder_name,
+            staging_root,
+            expected_files,
+            expected_bytes: total_bytes,
+            received_bytes: 0,
+            files: HashMap::new(),
+            skipped: Vec::new(),
+        },
+    );
+
+    Ok(SystemImportDirectoryOutcome {
+        root_path: String::new(),
+        file_count: 0,
+        skipped: Vec::new(),
+        received_bytes: 0,
+    })
+}
+
+pub(crate) fn system_import_directory_chunk_sync(
+    transfer_id: String,
+    relative_path: String,
+    offset: u64,
+    chunk: Vec<u8>,
+    file_complete: bool,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    if chunk.len() > DIRECTORY_IMPORT_CHUNK_BYTES {
+        return Err(format!(
+            "目录导入分块超过 {} 字节上限",
+            DIRECTORY_IMPORT_CHUNK_BYTES
+        ));
+    }
+    if chunk.is_empty() && !file_complete {
+        return Err("目录导入分块为空且未结束文件".to_string());
+    }
+    let normalized_path = relative_path.replace('\\', "/");
+    if normalized_path.trim().is_empty() {
+        return Err("目录导入相对路径为空".to_string());
+    }
+
+    let mut transfers = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
+    let transfer = transfers
+        .get_mut(&transfer_id)
+        .ok_or_else(|| "目录导入 transfer id 不存在".to_string())?;
+
+    if !transfer.files.contains_key(&normalized_path) {
+        if offset != 0 {
+            return Err("目录导入文件的首块偏移必须为 0".to_string());
+        }
+        if transfer.files.len() >= transfer.expected_files {
+            return Err("目录导入文件数量超过声明值".to_string());
+        }
+        let destination = if let Some(components) = sanitized_relative_components(&normalized_path)
+        {
+            let mut destination = transfer.staging_root.clone();
+            for component in components {
+                destination.push(component);
+            }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    format!("无法创建导入子目录（{}）：{error}", parent.display())
+                })?;
+            }
+            Some(unique_path_for_copy(destination))
+        } else {
+            transfer.skipped.push(normalized_path.clone());
+            None
+        };
+        transfer.files.insert(
+            normalized_path.clone(),
+            DirectoryImportFileState {
+                destination,
+                next_offset: 0,
+                complete: false,
+            },
+        );
+    }
+
+    let file = transfer
+        .files
+        .get_mut(&normalized_path)
+        .expect("directory import file state inserted above");
+    if file.complete {
+        return Err("目录导入文件已经完成".to_string());
+    }
+    if offset != file.next_offset {
+        return Err(format!(
+            "目录导入分块偏移不连续：期望 {}，收到 {offset}",
+            file.next_offset
+        ));
+    }
+    let chunk_bytes = u64::try_from(chunk.len()).unwrap_or(u64::MAX);
+    let next_received = transfer
+        .received_bytes
+        .checked_add(chunk_bytes)
+        .ok_or_else(|| "目录导入字节数溢出".to_string())?;
+    if next_received > transfer.expected_bytes || next_received > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err("目录导入内容超过声明的总字节数".to_string());
+    }
+
+    if let Some(destination) = &file.destination {
+        let mut output = if offset == 0 {
+            OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(destination)
+        } else {
+            OpenOptions::new().append(true).open(destination)
+        }
+        .map_err(|error| format!("无法打开导入文件（{}）：{error}", destination.display()))?;
+        output
+            .write_all(&chunk)
+            .map_err(|error| format!("写入导入文件失败（{}）：{error}", destination.display()))?;
+    }
+    file.next_offset = file
+        .next_offset
+        .checked_add(chunk_bytes)
+        .ok_or_else(|| "目录导入文件偏移溢出".to_string())?;
+    file.complete = file_complete;
+    transfer.received_bytes = next_received;
+
+    let file_count = transfer
+        .files
+        .values()
+        .filter(|state| state.complete && state.destination.is_some())
+        .count();
+    Ok(SystemImportDirectoryOutcome {
+        root_path: String::new(),
+        file_count: u32::try_from(file_count).unwrap_or(u32::MAX),
+        skipped: transfer.skipped.clone(),
+        received_bytes: transfer.received_bytes,
+    })
+}
+
+fn move_staging_to_unique_import_root(
+    staging_root: &Path,
+    base: &Path,
+    name: &str,
+) -> Result<PathBuf, String> {
+    for suffix in 1usize..=1000 {
+        let destination = if suffix == 1 {
+            base.join(name)
+        } else {
+            base.join(format!("{name}-{suffix}"))
+        };
+        // On Unix, rename can replace an existing empty directory. Never let an
+        // import commit overwrite a user-created directory, even when it is empty.
+        if destination.exists() {
+            continue;
+        }
+        match fs::rename(staging_root, &destination) {
+            Ok(()) => return Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "无法提交目录导入（{} → {}）：{error}",
+                    staging_root.display(),
+                    destination.display()
+                ))
+            }
+        }
+    }
+    Err(format!("目录名冲突过多，无法提交导入目录：{name}"))
+}
+
+pub(crate) fn system_import_directory_commit_sync(
+    transfer_id: String,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let transfer = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?
+        .remove(&transfer_id)
+        .ok_or_else(|| "目录导入 transfer id 不存在".to_string())?;
+
+    let complete_files = transfer
+        .files
+        .values()
+        .filter(|state| state.complete)
+        .count();
+    if complete_files != transfer.expected_files
+        || transfer.files.len() != transfer.expected_files
+        || transfer.received_bytes != transfer.expected_bytes
+    {
+        let _ = fs::remove_dir_all(&transfer.staging_root);
+        return Err(format!(
+            "目录导入不完整：文件 {complete_files}/{}, 字节 {}/{}",
+            transfer.expected_files, transfer.received_bytes, transfer.expected_bytes
+        ));
+    }
+    let written_files = transfer
+        .files
+        .values()
+        .filter(|state| state.destination.is_some())
+        .count();
+    if written_files == 0 {
+        let _ = fs::remove_dir_all(&transfer.staging_root);
+        return Err("上传的目录内容均无法导入".to_string());
+    }
+
+    let root = match move_staging_to_unique_import_root(
+        &transfer.staging_root,
+        &transfer.base,
+        &transfer.folder_name,
+    ) {
+        Ok(root) => root,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&transfer.staging_root);
+            return Err(error);
+        }
+    };
+    Ok(SystemImportDirectoryOutcome {
+        root_path: project_folder_display_path(&root),
+        file_count: u32::try_from(written_files).unwrap_or(u32::MAX),
+        skipped: transfer.skipped,
+        received_bytes: transfer.received_bytes,
+    })
+}
+
+pub(crate) fn system_import_directory_abort_sync(transfer_id: String) -> Result<(), String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let transfer = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?
+        .remove(&transfer_id);
+    if let Some(transfer) = transfer {
+        fs::remove_dir_all(&transfer.staging_root).map_err(|error| {
+            format!(
+                "无法清理目录导入暂存目录（{}）：{error}",
+                transfer.staging_root.display()
+            )
+        })?;
+    }
+    Ok(())
 }
 
 pub(crate) fn system_create_project_folder_sync(
@@ -1909,6 +2271,28 @@ mod tests {
     }
 
     #[test]
+    fn directory_import_components_preserve_leading_dots() {
+        assert_eq!(
+            sanitized_relative_components(".env"),
+            Some(vec![".env".to_string()])
+        );
+        assert_eq!(
+            sanitized_relative_components(".github/workflows/ci.yml"),
+            Some(vec![
+                ".github".to_string(),
+                "workflows".to_string(),
+                "ci.yml".to_string(),
+            ])
+        );
+        assert_eq!(
+            sanitized_relative_components(".gitignore"),
+            Some(vec![".gitignore".to_string()])
+        );
+        assert_eq!(sanitized_relative_components("../.env"), None);
+        assert_eq!(sanitized_relative_components("./.env"), None);
+    }
+
+    #[test]
     fn upload_import_root_stays_outside_the_workspace() {
         let root = upload_import_root().expect("create upload root");
 
@@ -2109,9 +2493,8 @@ mod tests {
         fs::create_dir(&project).expect("create project dir");
         let raw = project.to_string_lossy().into_owned();
 
-        let classified =
-            system_classify_dropped_paths_sync(vec![raw.clone(), format!("{raw}/./")])
-                .expect("classify dropped paths");
+        let classified = system_classify_dropped_paths_sync(vec![raw.clone(), format!("{raw}/./")])
+            .expect("classify dropped paths");
 
         assert!(classified.files.is_empty());
         assert_eq!(classified.dirs.len(), 1);
@@ -2170,6 +2553,134 @@ mod tests {
             fs::read(root.join("src/main.rs")).expect("read nested file"),
             b"fn main() {}"
         );
+    }
+
+    #[test]
+    fn chunked_directory_import_preserves_dot_paths_and_commits_atomically() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_root = base.join(".staging").join("test-dotfiles");
+        fs::create_dir_all(&staging_root).expect("create staging root");
+        let env_content = b"TOKEN=secret";
+        let workflow_content = b"name: CI";
+        let expected_bytes = u64::try_from(env_content.len() + workflow_content.len()).unwrap();
+        directory_import_transfers()
+            .lock()
+            .expect("lock transfers")
+            .insert(
+                "test-dotfiles".to_string(),
+                DirectoryImportTransferState {
+                    base: base.clone(),
+                    folder_name: ".demo".to_string(),
+                    staging_root,
+                    expected_files: 2,
+                    expected_bytes,
+                    received_bytes: 0,
+                    files: HashMap::new(),
+                    skipped: Vec::new(),
+                },
+            );
+
+        system_import_directory_chunk_sync(
+            "test-dotfiles".to_string(),
+            ".env".to_string(),
+            0,
+            env_content.to_vec(),
+            true,
+        )
+        .expect("write env chunk");
+        system_import_directory_chunk_sync(
+            "test-dotfiles".to_string(),
+            ".github/workflows/ci.yml".to_string(),
+            0,
+            workflow_content.to_vec(),
+            true,
+        )
+        .expect("write workflow chunk");
+        let outcome = system_import_directory_commit_sync("test-dotfiles".to_string())
+            .expect("commit directory import");
+
+        let root = PathBuf::from(&outcome.root_path);
+        assert!(root.ends_with(".demo"));
+        assert_eq!(fs::read(root.join(".env")).unwrap(), env_content);
+        assert_eq!(
+            fs::read(root.join(".github/workflows/ci.yml")).unwrap(),
+            workflow_content
+        );
+        assert_eq!(outcome.file_count, 2);
+        assert_eq!(outcome.received_bytes, expected_bytes);
+    }
+
+    #[test]
+    fn chunked_directory_import_rejects_oversized_or_non_contiguous_chunks() {
+        let too_large = vec![0; DIRECTORY_IMPORT_CHUNK_BYTES + 1];
+        let error = system_import_directory_chunk_sync(
+            "missing-transfer".to_string(),
+            "large.bin".to_string(),
+            0,
+            too_large,
+            true,
+        )
+        .expect_err("oversized chunks must fail before transfer lookup");
+        assert!(error.contains("分块超过"));
+
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_root = base.join(".staging").join("test-offsets");
+        fs::create_dir_all(&staging_root).expect("create staging root");
+        directory_import_transfers()
+            .lock()
+            .expect("lock transfers")
+            .insert(
+                "test-offsets".to_string(),
+                DirectoryImportTransferState {
+                    base,
+                    folder_name: "offsets".to_string(),
+                    staging_root,
+                    expected_files: 1,
+                    expected_bytes: 4,
+                    received_bytes: 0,
+                    files: HashMap::new(),
+                    skipped: Vec::new(),
+                },
+            );
+        system_import_directory_chunk_sync(
+            "test-offsets".to_string(),
+            "data.bin".to_string(),
+            0,
+            vec![1, 2],
+            false,
+        )
+        .expect("write first chunk");
+        let error = system_import_directory_chunk_sync(
+            "test-offsets".to_string(),
+            "data.bin".to_string(),
+            3,
+            vec![3, 4],
+            true,
+        )
+        .expect_err("non-contiguous offsets must fail");
+        assert!(error.contains("偏移不连续"));
+        system_import_directory_abort_sync("test-offsets".to_string())
+            .expect("abort offset test transfer");
+    }
+
+    #[test]
+    fn chunked_directory_commit_does_not_replace_existing_empty_directory() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let existing = base.join("demo");
+        let staging = base.join(".staging").join("test-no-replace");
+        fs::create_dir_all(&existing).expect("create existing directory");
+        fs::create_dir_all(&staging).expect("create staging directory");
+        fs::write(staging.join("file.txt"), b"content").expect("write staged file");
+
+        let destination = move_staging_to_unique_import_root(&staging, &base, "demo")
+            .expect("commit without replacing existing directory");
+
+        assert!(existing.is_dir());
+        assert_eq!(destination, base.join("demo-2"));
+        assert_eq!(fs::read(destination.join("file.txt")).unwrap(), b"content");
     }
 
     #[test]

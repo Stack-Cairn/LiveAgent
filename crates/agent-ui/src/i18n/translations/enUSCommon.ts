@@ -26,6 +26,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceDropFailed": "Failed to import the dropped folders",
   "chat.workspaceDropTooManyFiles":
     "The folder holds too many files (over {max}); trim it and retry",
+  "chat.workspaceDropTooLarge": "The folder is larger than {max} MiB; trim it and retry",
   "chat.workspaceMountDropNoProject":
     "Select a workspace before dropping folders to mount them as project directories",
   "chat.workspaceMountDropSuccess":

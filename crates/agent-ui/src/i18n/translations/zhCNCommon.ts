@@ -24,6 +24,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceDropCreated": "已创建工作空间「{name}」",
   "chat.workspaceDropFailed": "导入拖入的文件夹失败",
   "chat.workspaceDropTooManyFiles": "文件夹内文件过多（超过 {max} 个），请精简后重试",
+  "chat.workspaceDropTooLarge": "文件夹内容超过 {max} MiB，请精简后重试",
   "chat.workspaceMountDropNoProject": "请先选择一个工作空间，再拖入文件夹作为附属目录",
   "chat.workspaceMountDropSuccess":
     "已将 {count} 个文件夹挂载为附属目录（只读，可在项目设置中调整）",

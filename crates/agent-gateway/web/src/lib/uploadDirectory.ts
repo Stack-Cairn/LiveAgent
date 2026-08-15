@@ -1,4 +1,4 @@
-import type { DroppedDirectoryFile } from "./directoryDrop";
+import { type DroppedDirectoryFile, MAX_DIRECTORY_UPLOAD_BYTES } from "./directoryDrop";
 import { readFetchError } from "./uploadReadableFiles";
 
 export type ImportDirectoryTarget = "workspace" | "project-root";
@@ -38,6 +38,10 @@ export async function importDirectory(
   }
   if (params.files.length === 0) {
     throw new Error("文件夹为空，无法导入。");
+  }
+  const totalBytes = params.files.reduce((sum, entry) => sum + entry.file.size, 0);
+  if (totalBytes > MAX_DIRECTORY_UPLOAD_BYTES) {
+    throw new Error(`TOO_LARGE:${MAX_DIRECTORY_UPLOAD_BYTES}`);
   }
 
   const formData = new FormData();
