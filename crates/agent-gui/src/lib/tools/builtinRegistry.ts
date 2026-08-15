@@ -51,19 +51,14 @@ export type BuiltinToolRegistry = {
 // 内置工具那样 throw 打断整轮——那等于让一个坏插件废掉整个对话。改为:先到先
 // 得、跳过后来者并告警;仅当两侧都是可信内置组时才 throw(那是编译期的开发 bug)。
 const UNTRUSTED_TOOL_GROUPS: ReadonlySet<BuiltinToolBundle["groupId"]> = new Set(["mcp"]);
-// 内置工具的 schema 由我们自己维护,让供应商开启 JSON-schema 约束采样(OpenAI
-// strict / Gemini VALIDATED)能直接消灭一整类"参数名写错、必填漏传"的坏调用。
-//
-// 必须是 "prefer" 而不是 "require":pi-ai 的 makeStrictJsonSchema 只接受严格子集,
-// 我们有工具(CronTaskManager / McpManager 的 propertyNames、MemoryManager 的
-// 对象联合)天然落在子集之外。"prefer" 下这些工具静默退回普通函数工具;"require"
-// 会让 pi-ai 直接 throw,一个工具的 schema 形状就能打死整轮请求。
-//
-// MCP/插件工具的 schema 不受我们控制,不代它们做这个声明。
-const PREFERRED_JSON_SCHEMA_SAMPLING = {
-  type: "json_schema",
-  strict: "prefer",
-} as const;
+// 不再给内置工具声明 JSON-schema 约束采样(strict)。曾经声明过 "prefer"
+// (pi 0.84.2 升级时引入),但部分 OpenAI 兼容 provider(如 Moonshot/Kimi)在
+// strict 模式下按白名单校验 schema 关键字,内置工具常用的 minimum / maxItems
+// 等一律 400,一个工具的 schema 就打死整轮请求;而 pi-ai 的本地预检
+// (makeStrictJsonSchema)只拦结构性问题,拦不住这类关键字白名单差异,
+// "prefer" 的降级判定在这里完全失效。v1.2.4 及之前不声明 strict,各家都能用
+// ——回到那个行为。约束采样能消灭的"参数名写错、必填漏传"坏调用,由工具
+// 实现自身的参数校验兜底。
 
 function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolRegistry {
   const tools: BuiltinToolBundle["tools"] = [];
@@ -108,13 +103,7 @@ function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolReg
         );
         continue;
       }
-      const registeredTool = UNTRUSTED_TOOL_GROUPS.has(bundle.groupId)
-        ? tool
-        : {
-            ...tool,
-            constrainedSampling: tool.constrainedSampling ?? PREFERRED_JSON_SCHEMA_SAMPLING,
-          };
-      tools.push(registeredTool);
+      tools.push(tool);
       executorsByName.set(tool.name, bundle.executeToolCall);
       groupIdByToolName.set(tool.name, bundle.groupId);
       registerCanonicalToolName(tool.name);
