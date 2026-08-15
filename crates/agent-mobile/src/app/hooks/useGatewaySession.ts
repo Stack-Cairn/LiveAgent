@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { normalizeGatewayAccessToken, verifyGatewayAccessToken } from "@/lib/gatewayAuth";
-import { clearGatewayOrigin, setGatewayOrigin } from "@/lib/gatewayOrigin";
+import { clearGatewayOrigin, DEFAULT_GATEWAY_URL, setGatewayOrigin } from "@/lib/gatewayOrigin";
 import { resetGatewayWebSocketClient } from "@/lib/gatewaySocket";
 import { clearToken, loadGatewayUrl, loadToken, saveToken } from "@/lib/storage";
 
@@ -13,7 +13,9 @@ export function useGatewaySession(historyShareToken: string | null) {
   const [token, setToken] = useState("");
   const [loginToken, setLoginToken] = useState(initialStoredTokenRef.current);
   const [gatewayUrl, setGatewayUrl] = useState("");
-  const [loginGatewayUrl, setLoginGatewayUrl] = useState(initialStoredGatewayUrlRef.current);
+  const [loginGatewayUrl, setLoginGatewayUrl] = useState(
+    initialStoredGatewayUrlRef.current || (historyShareToken ? "" : DEFAULT_GATEWAY_URL),
+  );
   const [authSubmitting, setAuthSubmitting] = useState(
     () =>
       normalizeGatewayAccessToken(initialStoredTokenRef.current) !== "" &&
@@ -120,7 +122,7 @@ export function useGatewaySession(historyShareToken: string | null) {
     setAuthError(null);
     setLoginToken("");
     setToken("");
-    setLoginGatewayUrl("");
+    setLoginGatewayUrl(DEFAULT_GATEWAY_URL);
     setGatewayUrl("");
   }, []);
 

@@ -1,3 +1,4 @@
+import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
 import { AlertCircle, Loader2, MessageSquareText } from "@liveagent/ui/components/IconSet";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { useEffect, useMemo, useState } from "react";
@@ -64,7 +65,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
           <header className="history-share-header">
             <div className="flex min-w-0 items-center gap-3">
               <img
-                src="/icon-simple.png"
+                src={getAssistantAvatarUrl()}
                 alt=""
                 aria-hidden="true"
                 draggable={false}

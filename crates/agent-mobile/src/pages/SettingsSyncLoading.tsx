@@ -1,3 +1,4 @@
+import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
 import { type Locale, t as translate } from "@liveagent/ui/i18n/index";
 
 type SettingsSyncLoadingProps = {
@@ -13,7 +14,7 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
       <div className="sync-loading-stage">
         <div className="sync-loading-icon">
           <img
-            src="/icon-simple.png"
+            src={getAssistantAvatarUrl()}
             alt=""
             width={60}
             height={60}

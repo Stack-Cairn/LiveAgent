@@ -2975,7 +2975,7 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollabl
 
   .gateway-chat-frame > header {
     gap: 6px;
-    padding: 8px 10px;
+    padding: max(8px, env(safe-area-inset-top)) 10px 8px;
   }
 
   .gateway-banner-error {

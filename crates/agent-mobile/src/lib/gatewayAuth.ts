@@ -1,4 +1,5 @@
 import { getGatewayOrigin } from "@/lib/gatewayOrigin";
+import { nativeFetch as fetch } from "@/lib/nativeNet";
 
 function readUnauthorizedErrorMessage(errorText: string) {
   return errorText === "unauthorized" ? "Access Token 错误，请检查后重试。" : errorText;

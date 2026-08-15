@@ -1,5 +1,8 @@
 import { clearGatewayUrl, loadGatewayUrl, saveGatewayUrl } from "./storage";
 
+// 官方 Gateway，登录页输入框在未配置时的默认值。
+export const DEFAULT_GATEWAY_URL = "https://agent.cnweb.org";
+
 // agent-mobile is a Tauri shell: window.location.origin is the app's internal
 // asset origin (e.g. tauri://localhost), never the remote Gateway. The
 // configured origin below is the single source of truth for every Gateway

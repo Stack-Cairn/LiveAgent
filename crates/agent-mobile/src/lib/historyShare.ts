@@ -1,5 +1,6 @@
 import { getGatewayOrigin } from "./gatewayOrigin";
 import type { SharedHistoryDetail } from "./gatewayTypes";
+import { nativeFetch as fetch } from "./nativeNet";
 
 const SHARE_PATH_PREFIX = "/share/";
 

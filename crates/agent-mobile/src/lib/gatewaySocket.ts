@@ -117,6 +117,7 @@ import type {
   MemoryManagePayload,
   RunningConversationSummary,
 } from "./gatewayTypes";
+import { NativeWebSocket as WebSocket } from "./nativeNet";
 
 type StatusListener = (status: AgentStatus | null, error: string | null) => void;
 type HistoryListener = (event: GatewayHistoryEvent) => void;
@@ -640,7 +641,10 @@ const FOREGROUND_WAKEUP_RECENCY_MS = 15_000;
 const SOCKET_CONNECT_TIMEOUT_MS = 10_000;
 const SOCKET_AUTH_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const CHAT_PREPARE_REQUEST_TIMEOUT_MS = 2_500;
+// 网关侧 chat.prepare 的探活超时默认 2s（PrepareTimeout），移动端经公网到远程
+// Gateway 的往返时延波动更大，2.5s 的本地等待会先于网关应答到期，被误判为
+// "transport stalled"。放宽到 10s 覆盖网关探活 + 网络抖动，避免误报并触发整链重连。
+const CHAT_PREPARE_REQUEST_TIMEOUT_MS = 10_000;
 const CHAT_COMMAND_ACK_TIMEOUT_MS = 4_000;
 // Fallback only: agent online/offline transitions arrive as pushed
 // status.event frames, so the poll exists to reconcile missed pushes and

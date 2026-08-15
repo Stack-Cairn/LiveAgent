@@ -1,5 +1,6 @@
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { getGatewayOrigin } from "@/lib/gatewayOrigin";
+import { nativeFetch as fetch } from "@/lib/nativeNet";
 
 type ImportReadableFilesResponse = {
   files: PendingUploadedFile[];

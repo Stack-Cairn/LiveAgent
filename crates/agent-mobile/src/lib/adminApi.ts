@@ -3,6 +3,7 @@
 // 参照 uploadReadableFiles.ts / gatewayAuth.ts 的既有范式。
 import { normalizeGatewayAccessToken } from "@/lib/gatewayAuth";
 import { getGatewayOrigin } from "@/lib/gatewayOrigin";
+import { nativeFetch as fetch } from "@/lib/nativeNet";
 
 // AdminAgentEntry 是目录条目（对应 Go agentDirectoryEntry 的 JSON 形状）。
 export type AdminAgentEntry = {

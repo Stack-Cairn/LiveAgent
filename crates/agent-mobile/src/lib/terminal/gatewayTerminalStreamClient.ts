@@ -14,6 +14,7 @@ import {
   encodeTerminalStreamFrame,
   GATEWAY_V2_SUBPROTOCOL,
 } from "@/lib/gatewaySocketV2/adapters";
+import { NativeWebSocket as WebSocket } from "@/lib/nativeNet";
 
 const INPUT_RETRY_MS = 25;
 const ATTACH_RETRY_MS = 250;
