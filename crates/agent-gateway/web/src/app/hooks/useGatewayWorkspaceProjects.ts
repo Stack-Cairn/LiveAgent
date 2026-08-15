@@ -32,7 +32,7 @@ import { isMobileSidebarLayout } from "../historyUtils";
 type StartNewConversation = (options?: {
   workdir?: string;
   preserveCurrentComposerDraft?: boolean;
-}) => void;
+}) => string;
 
 type UseGatewayWorkspaceProjectsOptions = {
   api: GatewayWebSocketClientLike | null;

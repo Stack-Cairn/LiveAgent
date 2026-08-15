@@ -23,7 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx-preview": "^0.4.0",
-    "monaco-editor": "^0.55.1",
+    "monaco-editor": "^0.56.0",
     "remark-breaks": "^4.0.0",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",

@@ -438,7 +438,9 @@
     .lazy-collapse-reveal,
     .ask-question-enter-forward,
     .ask-question-enter-backward,
-    .ask-custom-input-enter {
+    .ask-custom-input-enter,
+    .notify-toast-enter,
+    .notify-toast-exit {
       animation: none !important;
     }
   }

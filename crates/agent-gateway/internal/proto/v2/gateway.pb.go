@@ -21,6 +21,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ImportDirectoryOperation int32
+
+const (
+	ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_UNSPECIFIED ImportDirectoryOperation = 0
+	ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_START       ImportDirectoryOperation = 1
+	ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK ImportDirectoryOperation = 2
+	ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT      ImportDirectoryOperation = 3
+	ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_ABORT       ImportDirectoryOperation = 4
+)
+
+// Enum value maps for ImportDirectoryOperation.
+var (
+	ImportDirectoryOperation_name = map[int32]string{
+		0: "IMPORT_DIRECTORY_OPERATION_UNSPECIFIED",
+		1: "IMPORT_DIRECTORY_OPERATION_START",
+		2: "IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK",
+		3: "IMPORT_DIRECTORY_OPERATION_COMMIT",
+		4: "IMPORT_DIRECTORY_OPERATION_ABORT",
+	}
+	ImportDirectoryOperation_value = map[string]int32{
+		"IMPORT_DIRECTORY_OPERATION_UNSPECIFIED": 0,
+		"IMPORT_DIRECTORY_OPERATION_START":       1,
+		"IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK": 2,
+		"IMPORT_DIRECTORY_OPERATION_COMMIT":      3,
+		"IMPORT_DIRECTORY_OPERATION_ABORT":       4,
+	}
+)
+
+func (x ImportDirectoryOperation) Enum() *ImportDirectoryOperation {
+	p := new(ImportDirectoryOperation)
+	*p = x
+	return p
+}
+
+func (x ImportDirectoryOperation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ImportDirectoryOperation) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_v2_gateway_proto_enumTypes[0].Descriptor()
+}
+
+func (ImportDirectoryOperation) Type() protoreflect.EnumType {
+	return &file_proto_v2_gateway_proto_enumTypes[0]
+}
+
+func (x ImportDirectoryOperation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ImportDirectoryOperation.Descriptor instead.
+func (ImportDirectoryOperation) EnumDescriptor() ([]byte, []int) {
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{0}
+}
+
 type TunnelFrameKind int32
 
 const (
@@ -93,11 +148,11 @@ func (x TunnelFrameKind) String() string {
 }
 
 func (TunnelFrameKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_v2_gateway_proto_enumTypes[0].Descriptor()
+	return file_proto_v2_gateway_proto_enumTypes[1].Descriptor()
 }
 
 func (TunnelFrameKind) Type() protoreflect.EnumType {
-	return &file_proto_v2_gateway_proto_enumTypes[0]
+	return &file_proto_v2_gateway_proto_enumTypes[1]
 }
 
 func (x TunnelFrameKind) Number() protoreflect.EnumNumber {
@@ -106,7 +161,7 @@ func (x TunnelFrameKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TunnelFrameKind.Descriptor instead.
 func (TunnelFrameKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{0}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{1}
 }
 
 type TunnelWsMessageType int32
@@ -142,11 +197,11 @@ func (x TunnelWsMessageType) String() string {
 }
 
 func (TunnelWsMessageType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_v2_gateway_proto_enumTypes[1].Descriptor()
+	return file_proto_v2_gateway_proto_enumTypes[2].Descriptor()
 }
 
 func (TunnelWsMessageType) Type() protoreflect.EnumType {
-	return &file_proto_v2_gateway_proto_enumTypes[1]
+	return &file_proto_v2_gateway_proto_enumTypes[2]
 }
 
 func (x TunnelWsMessageType) Number() protoreflect.EnumNumber {
@@ -155,7 +210,7 @@ func (x TunnelWsMessageType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TunnelWsMessageType.Descriptor instead.
 func (TunnelWsMessageType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{1}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{2}
 }
 
 type ChatEvent_ChatEventType int32
@@ -209,11 +264,11 @@ func (x ChatEvent_ChatEventType) String() string {
 }
 
 func (ChatEvent_ChatEventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_v2_gateway_proto_enumTypes[2].Descriptor()
+	return file_proto_v2_gateway_proto_enumTypes[3].Descriptor()
 }
 
 func (ChatEvent_ChatEventType) Type() protoreflect.EnumType {
-	return &file_proto_v2_gateway_proto_enumTypes[2]
+	return &file_proto_v2_gateway_proto_enumTypes[3]
 }
 
 func (x ChatEvent_ChatEventType) Number() protoreflect.EnumNumber {
@@ -222,7 +277,7 @@ func (x ChatEvent_ChatEventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChatEvent_ChatEventType.Descriptor instead.
 func (ChatEvent_ChatEventType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{56, 0}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{59, 0}
 }
 
 type ChatIngressAck_Action int32
@@ -264,11 +319,11 @@ func (x ChatIngressAck_Action) String() string {
 }
 
 func (ChatIngressAck_Action) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_v2_gateway_proto_enumTypes[3].Descriptor()
+	return file_proto_v2_gateway_proto_enumTypes[4].Descriptor()
 }
 
 func (ChatIngressAck_Action) Type() protoreflect.EnumType {
-	return &file_proto_v2_gateway_proto_enumTypes[3]
+	return &file_proto_v2_gateway_proto_enumTypes[4]
 }
 
 func (x ChatIngressAck_Action) Number() protoreflect.EnumNumber {
@@ -277,7 +332,7 @@ func (x ChatIngressAck_Action) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChatIngressAck_Action.Descriptor instead.
 func (ChatIngressAck_Action) EnumDescriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{150, 0}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{153, 0}
 }
 
 type GatewayEnvelope struct {
@@ -337,6 +392,7 @@ type GatewayEnvelope struct {
 	//	*GatewayEnvelope_ChatFileOpen
 	//	*GatewayEnvelope_HistorySetCwd
 	//	*GatewayEnvelope_WorkspaceRootGrants
+	//	*GatewayEnvelope_ImportDirectory
 	Payload       isGatewayEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -852,6 +908,15 @@ func (x *GatewayEnvelope) GetWorkspaceRootGrants() *WorkspaceRootGrantsRequest {
 	return nil
 }
 
+func (x *GatewayEnvelope) GetImportDirectory() *ImportDirectoryRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*GatewayEnvelope_ImportDirectory); ok {
+			return x.ImportDirectory
+		}
+	}
+	return nil
+}
+
 type isGatewayEnvelope_Payload interface {
 	isGatewayEnvelope_Payload()
 }
@@ -1060,6 +1125,10 @@ type GatewayEnvelope_WorkspaceRootGrants struct {
 	WorkspaceRootGrants *WorkspaceRootGrantsRequest `protobuf:"bytes,96,opt,name=workspace_root_grants,json=workspaceRootGrants,proto3,oneof"`
 }
 
+type GatewayEnvelope_ImportDirectory struct {
+	ImportDirectory *ImportDirectoryRequest `protobuf:"bytes,97,opt,name=import_directory,json=importDirectory,proto3,oneof"`
+}
+
 func (*GatewayEnvelope_ChatCommand) isGatewayEnvelope_Payload() {}
 
 func (*GatewayEnvelope_CronManage) isGatewayEnvelope_Payload() {}
@@ -1162,6 +1231,8 @@ func (*GatewayEnvelope_HistorySetCwd) isGatewayEnvelope_Payload() {}
 
 func (*GatewayEnvelope_WorkspaceRootGrants) isGatewayEnvelope_Payload() {}
 
+func (*GatewayEnvelope_ImportDirectory) isGatewayEnvelope_Payload() {}
+
 type AgentEnvelope struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -1232,6 +1303,7 @@ type AgentEnvelope struct {
 	//	*AgentEnvelope_Error
 	//	*AgentEnvelope_HistorySetCwdResp
 	//	*AgentEnvelope_WorkspaceRootGrantsResp
+	//	*AgentEnvelope_ImportDirectoryResp
 	Payload       isAgentEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1864,6 +1936,15 @@ func (x *AgentEnvelope) GetWorkspaceRootGrantsResp() *WorkspaceRootGrantsRespons
 	return nil
 }
 
+func (x *AgentEnvelope) GetImportDirectoryResp() *ImportDirectoryResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentEnvelope_ImportDirectoryResp); ok {
+			return x.ImportDirectoryResp
+		}
+	}
+	return nil
+}
+
 type isAgentEnvelope_Payload interface {
 	isAgentEnvelope_Payload()
 }
@@ -2124,6 +2205,10 @@ type AgentEnvelope_WorkspaceRootGrantsResp struct {
 	WorkspaceRootGrantsResp *WorkspaceRootGrantsResponse `protobuf:"bytes,101,opt,name=workspace_root_grants_resp,json=workspaceRootGrantsResp,proto3,oneof"`
 }
 
+type AgentEnvelope_ImportDirectoryResp struct {
+	ImportDirectoryResp *ImportDirectoryResponse `protobuf:"bytes,102,opt,name=import_directory_resp,json=importDirectoryResp,proto3,oneof"`
+}
+
 func (*AgentEnvelope_ChatEvent) isAgentEnvelope_Payload() {}
 
 func (*AgentEnvelope_CronManageResp) isAgentEnvelope_Payload() {}
@@ -2251,6 +2336,8 @@ func (*AgentEnvelope_Error) isAgentEnvelope_Payload() {}
 func (*AgentEnvelope_HistorySetCwdResp) isAgentEnvelope_Payload() {}
 
 func (*AgentEnvelope_WorkspaceRootGrantsResp) isAgentEnvelope_Payload() {}
+
+func (*AgentEnvelope_ImportDirectoryResp) isAgentEnvelope_Payload() {}
 
 type ChatSelectedModel struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -2612,6 +2699,265 @@ func (x *UploadReadableFilesResponse) GetSkipped() []string {
 	return nil
 }
 
+// 浏览器拖入的整个文件夹经 HTTP 上传后由网关转发到 Agent 宿主机落盘。
+// target 决定落盘基目录："workspace" 创建为新工作空间目录，
+// "project-root" 创建为待挂载的附属目录。
+type ImportDirectoryFile struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RelativePath  string                 `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"` // 文件夹内的相对路径，正斜杠分隔
+	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDirectoryFile) Reset() {
+	*x = ImportDirectoryFile{}
+	mi := &file_proto_v2_gateway_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDirectoryFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDirectoryFile) ProtoMessage() {}
+
+func (x *ImportDirectoryFile) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v2_gateway_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDirectoryFile.ProtoReflect.Descriptor instead.
+func (*ImportDirectoryFile) Descriptor() ([]byte, []int) {
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ImportDirectoryFile) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *ImportDirectoryFile) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+type ImportDirectoryRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // START：拖入的文件夹名（单个路径组件）
+	Target string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // START："workspace" | "project-root"
+	// 旧版整目录信封，仅保留兼容；新客户端必须使用下面的分块字段。
+	//
+	// Deprecated: Marked as deprecated in proto/v2/gateway.proto.
+	Files         []*ImportDirectoryFile   `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty"`
+	TransferId    string                   `protobuf:"bytes,4,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	Operation     ImportDirectoryOperation `protobuf:"varint,5,opt,name=operation,proto3,enum=liveagent.gateway.v2.ImportDirectoryOperation" json:"operation,omitempty"`
+	TotalFiles    uint32                   `protobuf:"varint,6,opt,name=total_files,json=totalFiles,proto3" json:"total_files,omitempty"`        // START：目录文件总数
+	TotalBytes    uint64                   `protobuf:"varint,7,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`        // START：目录内容总字节数（不含协议开销）
+	RelativePath  string                   `protobuf:"bytes,8,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`   // WRITE_CHUNK：目录内相对路径
+	Offset        uint64                   `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`                                  // WRITE_CHUNK：当前文件内的连续字节偏移
+	Chunk         []byte                   `protobuf:"bytes,10,opt,name=chunk,proto3" json:"chunk,omitempty"`                                    // WRITE_CHUNK：单块最多 1 MiB
+	FileComplete  bool                     `protobuf:"varint,11,opt,name=file_complete,json=fileComplete,proto3" json:"file_complete,omitempty"` // WRITE_CHUNK：当前块是该文件最后一块
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDirectoryRequest) Reset() {
+	*x = ImportDirectoryRequest{}
+	mi := &file_proto_v2_gateway_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDirectoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDirectoryRequest) ProtoMessage() {}
+
+func (x *ImportDirectoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v2_gateway_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDirectoryRequest.ProtoReflect.Descriptor instead.
+func (*ImportDirectoryRequest) Descriptor() ([]byte, []int) {
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ImportDirectoryRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ImportDirectoryRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in proto/v2/gateway.proto.
+func (x *ImportDirectoryRequest) GetFiles() []*ImportDirectoryFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *ImportDirectoryRequest) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *ImportDirectoryRequest) GetOperation() ImportDirectoryOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_UNSPECIFIED
+}
+
+func (x *ImportDirectoryRequest) GetTotalFiles() uint32 {
+	if x != nil {
+		return x.TotalFiles
+	}
+	return 0
+}
+
+func (x *ImportDirectoryRequest) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *ImportDirectoryRequest) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *ImportDirectoryRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ImportDirectoryRequest) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
+func (x *ImportDirectoryRequest) GetFileComplete() bool {
+	if x != nil {
+		return x.FileComplete
+	}
+	return false
+}
+
+type ImportDirectoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootPath      string                 `protobuf:"bytes,1,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"` // Agent 宿主机上创建的目录绝对路径
+	FileCount     int32                  `protobuf:"varint,2,opt,name=file_count,json=fileCount,proto3" json:"file_count,omitempty"`
+	Skipped       []string               `protobuf:"bytes,3,rep,name=skipped,proto3" json:"skipped,omitempty"`
+	TransferId    string                 `protobuf:"bytes,4,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	ReceivedBytes uint64                 `protobuf:"varint,5,opt,name=received_bytes,json=receivedBytes,proto3" json:"received_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDirectoryResponse) Reset() {
+	*x = ImportDirectoryResponse{}
+	mi := &file_proto_v2_gateway_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDirectoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDirectoryResponse) ProtoMessage() {}
+
+func (x *ImportDirectoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v2_gateway_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDirectoryResponse.ProtoReflect.Descriptor instead.
+func (*ImportDirectoryResponse) Descriptor() ([]byte, []int) {
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ImportDirectoryResponse) GetRootPath() string {
+	if x != nil {
+		return x.RootPath
+	}
+	return ""
+}
+
+func (x *ImportDirectoryResponse) GetFileCount() int32 {
+	if x != nil {
+		return x.FileCount
+	}
+	return 0
+}
+
+func (x *ImportDirectoryResponse) GetSkipped() []string {
+	if x != nil {
+		return x.Skipped
+	}
+	return nil
+}
+
+func (x *ImportDirectoryResponse) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *ImportDirectoryResponse) GetReceivedBytes() uint64 {
+	if x != nil {
+		return x.ReceivedBytes
+	}
+	return 0
+}
+
 type UploadedImagePreviewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Workdir       string                 `protobuf:"bytes,1,opt,name=workdir,proto3" json:"workdir,omitempty"`
@@ -2622,7 +2968,7 @@ type UploadedImagePreviewRequest struct {
 
 func (x *UploadedImagePreviewRequest) Reset() {
 	*x = UploadedImagePreviewRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[8]
+	mi := &file_proto_v2_gateway_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2634,7 +2980,7 @@ func (x *UploadedImagePreviewRequest) String() string {
 func (*UploadedImagePreviewRequest) ProtoMessage() {}
 
 func (x *UploadedImagePreviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[8]
+	mi := &file_proto_v2_gateway_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2647,7 +2993,7 @@ func (x *UploadedImagePreviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadedImagePreviewRequest.ProtoReflect.Descriptor instead.
 func (*UploadedImagePreviewRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{8}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UploadedImagePreviewRequest) GetWorkdir() string {
@@ -2674,7 +3020,7 @@ type UploadedImagePreviewResponse struct {
 
 func (x *UploadedImagePreviewResponse) Reset() {
 	*x = UploadedImagePreviewResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[9]
+	mi := &file_proto_v2_gateway_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2686,7 +3032,7 @@ func (x *UploadedImagePreviewResponse) String() string {
 func (*UploadedImagePreviewResponse) ProtoMessage() {}
 
 func (x *UploadedImagePreviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[9]
+	mi := &file_proto_v2_gateway_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2699,7 +3045,7 @@ func (x *UploadedImagePreviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadedImagePreviewResponse.ProtoReflect.Descriptor instead.
 func (*UploadedImagePreviewResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{9}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UploadedImagePreviewResponse) GetMimeType() string {
@@ -2730,7 +3076,7 @@ type TunnelSpec struct {
 
 func (x *TunnelSpec) Reset() {
 	*x = TunnelSpec{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[10]
+	mi := &file_proto_v2_gateway_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2742,7 +3088,7 @@ func (x *TunnelSpec) String() string {
 func (*TunnelSpec) ProtoMessage() {}
 
 func (x *TunnelSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[10]
+	mi := &file_proto_v2_gateway_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2755,7 +3101,7 @@ func (x *TunnelSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelSpec.ProtoReflect.Descriptor instead.
 func (*TunnelSpec) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{10}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TunnelSpec) GetId() string {
@@ -2810,7 +3156,7 @@ type TunnelDesiredState struct {
 
 func (x *TunnelDesiredState) Reset() {
 	*x = TunnelDesiredState{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[11]
+	mi := &file_proto_v2_gateway_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2822,7 +3168,7 @@ func (x *TunnelDesiredState) String() string {
 func (*TunnelDesiredState) ProtoMessage() {}
 
 func (x *TunnelDesiredState) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[11]
+	mi := &file_proto_v2_gateway_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2835,7 +3181,7 @@ func (x *TunnelDesiredState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelDesiredState.ProtoReflect.Descriptor instead.
 func (*TunnelDesiredState) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{11}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TunnelDesiredState) GetTunnels() []*TunnelSpec {
@@ -2865,7 +3211,7 @@ type TunnelHealth struct {
 
 func (x *TunnelHealth) Reset() {
 	*x = TunnelHealth{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[12]
+	mi := &file_proto_v2_gateway_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2877,7 +3223,7 @@ func (x *TunnelHealth) String() string {
 func (*TunnelHealth) ProtoMessage() {}
 
 func (x *TunnelHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[12]
+	mi := &file_proto_v2_gateway_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2890,7 +3236,7 @@ func (x *TunnelHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelHealth.ProtoReflect.Descriptor instead.
 func (*TunnelHealth) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{12}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TunnelHealth) GetStatus() string {
@@ -2946,7 +3292,7 @@ type TunnelStatus struct {
 
 func (x *TunnelStatus) Reset() {
 	*x = TunnelStatus{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[13]
+	mi := &file_proto_v2_gateway_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2958,7 +3304,7 @@ func (x *TunnelStatus) String() string {
 func (*TunnelStatus) ProtoMessage() {}
 
 func (x *TunnelStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[13]
+	mi := &file_proto_v2_gateway_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2971,7 +3317,7 @@ func (x *TunnelStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelStatus.ProtoReflect.Descriptor instead.
 func (*TunnelStatus) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{13}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TunnelStatus) GetId() string {
@@ -3056,7 +3402,7 @@ type TunnelStateSnapshot struct {
 
 func (x *TunnelStateSnapshot) Reset() {
 	*x = TunnelStateSnapshot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[14]
+	mi := &file_proto_v2_gateway_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3068,7 +3414,7 @@ func (x *TunnelStateSnapshot) String() string {
 func (*TunnelStateSnapshot) ProtoMessage() {}
 
 func (x *TunnelStateSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[14]
+	mi := &file_proto_v2_gateway_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3081,7 +3427,7 @@ func (x *TunnelStateSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelStateSnapshot.ProtoReflect.Descriptor instead.
 func (*TunnelStateSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{14}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TunnelStateSnapshot) GetTunnels() []*TunnelStatus {
@@ -3126,7 +3472,7 @@ type TunnelMutation struct {
 
 func (x *TunnelMutation) Reset() {
 	*x = TunnelMutation{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[15]
+	mi := &file_proto_v2_gateway_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3138,7 +3484,7 @@ func (x *TunnelMutation) String() string {
 func (*TunnelMutation) ProtoMessage() {}
 
 func (x *TunnelMutation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[15]
+	mi := &file_proto_v2_gateway_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3151,7 +3497,7 @@ func (x *TunnelMutation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelMutation.ProtoReflect.Descriptor instead.
 func (*TunnelMutation) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{15}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TunnelMutation) GetAction() string {
@@ -3207,7 +3553,7 @@ type TunnelMutationResult struct {
 
 func (x *TunnelMutationResult) Reset() {
 	*x = TunnelMutationResult{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[16]
+	mi := &file_proto_v2_gateway_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3219,7 +3565,7 @@ func (x *TunnelMutationResult) String() string {
 func (*TunnelMutationResult) ProtoMessage() {}
 
 func (x *TunnelMutationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[16]
+	mi := &file_proto_v2_gateway_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3232,7 +3578,7 @@ func (x *TunnelMutationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelMutationResult.ProtoReflect.Descriptor instead.
 func (*TunnelMutationResult) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{16}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *TunnelMutationResult) GetTunnelId() string {
@@ -3266,7 +3612,7 @@ type TunnelProbeResult struct {
 
 func (x *TunnelProbeResult) Reset() {
 	*x = TunnelProbeResult{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[17]
+	mi := &file_proto_v2_gateway_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3278,7 +3624,7 @@ func (x *TunnelProbeResult) String() string {
 func (*TunnelProbeResult) ProtoMessage() {}
 
 func (x *TunnelProbeResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[17]
+	mi := &file_proto_v2_gateway_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3291,7 +3637,7 @@ func (x *TunnelProbeResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelProbeResult.ProtoReflect.Descriptor instead.
 func (*TunnelProbeResult) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{17}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TunnelProbeResult) GetTunnelId() string {
@@ -3317,7 +3663,7 @@ type TunnelProbeReport struct {
 
 func (x *TunnelProbeReport) Reset() {
 	*x = TunnelProbeReport{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[18]
+	mi := &file_proto_v2_gateway_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3329,7 +3675,7 @@ func (x *TunnelProbeReport) String() string {
 func (*TunnelProbeReport) ProtoMessage() {}
 
 func (x *TunnelProbeReport) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[18]
+	mi := &file_proto_v2_gateway_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3342,7 +3688,7 @@ func (x *TunnelProbeReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelProbeReport.ProtoReflect.Descriptor instead.
 func (*TunnelProbeReport) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{18}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TunnelProbeReport) GetResults() []*TunnelProbeResult {
@@ -3362,7 +3708,7 @@ type TunnelHeader struct {
 
 func (x *TunnelHeader) Reset() {
 	*x = TunnelHeader{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[19]
+	mi := &file_proto_v2_gateway_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3374,7 +3720,7 @@ func (x *TunnelHeader) String() string {
 func (*TunnelHeader) ProtoMessage() {}
 
 func (x *TunnelHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[19]
+	mi := &file_proto_v2_gateway_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3387,7 +3733,7 @@ func (x *TunnelHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelHeader.ProtoReflect.Descriptor instead.
 func (*TunnelHeader) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{19}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *TunnelHeader) GetName() string {
@@ -3425,7 +3771,7 @@ type TunnelFrame struct {
 
 func (x *TunnelFrame) Reset() {
 	*x = TunnelFrame{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[20]
+	mi := &file_proto_v2_gateway_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3437,7 +3783,7 @@ func (x *TunnelFrame) String() string {
 func (*TunnelFrame) ProtoMessage() {}
 
 func (x *TunnelFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[20]
+	mi := &file_proto_v2_gateway_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3450,7 +3796,7 @@ func (x *TunnelFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelFrame.ProtoReflect.Descriptor instead.
 func (*TunnelFrame) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{20}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TunnelFrame) GetStreamId() string {
@@ -3553,7 +3899,7 @@ type WorkspaceWatchRequest struct {
 
 func (x *WorkspaceWatchRequest) Reset() {
 	*x = WorkspaceWatchRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[21]
+	mi := &file_proto_v2_gateway_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3565,7 +3911,7 @@ func (x *WorkspaceWatchRequest) String() string {
 func (*WorkspaceWatchRequest) ProtoMessage() {}
 
 func (x *WorkspaceWatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[21]
+	mi := &file_proto_v2_gateway_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3578,7 +3924,7 @@ func (x *WorkspaceWatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceWatchRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceWatchRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{21}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *WorkspaceWatchRequest) GetWorkdirs() []string {
@@ -3602,7 +3948,7 @@ type WorkspaceActivityEvent struct {
 
 func (x *WorkspaceActivityEvent) Reset() {
 	*x = WorkspaceActivityEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[22]
+	mi := &file_proto_v2_gateway_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3614,7 +3960,7 @@ func (x *WorkspaceActivityEvent) String() string {
 func (*WorkspaceActivityEvent) ProtoMessage() {}
 
 func (x *WorkspaceActivityEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[22]
+	mi := &file_proto_v2_gateway_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3627,7 +3973,7 @@ func (x *WorkspaceActivityEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceActivityEvent.ProtoReflect.Descriptor instead.
 func (*WorkspaceActivityEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{22}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *WorkspaceActivityEvent) GetWorkdir() string {
@@ -3693,7 +4039,7 @@ type ManagedProcessRecord struct {
 
 func (x *ManagedProcessRecord) Reset() {
 	*x = ManagedProcessRecord{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[23]
+	mi := &file_proto_v2_gateway_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3705,7 +4051,7 @@ func (x *ManagedProcessRecord) String() string {
 func (*ManagedProcessRecord) ProtoMessage() {}
 
 func (x *ManagedProcessRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[23]
+	mi := &file_proto_v2_gateway_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3718,7 +4064,7 @@ func (x *ManagedProcessRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedProcessRecord.ProtoReflect.Descriptor instead.
 func (*ManagedProcessRecord) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{23}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ManagedProcessRecord) GetId() string {
@@ -3822,7 +4168,7 @@ type ManagedProcessSnapshot struct {
 
 func (x *ManagedProcessSnapshot) Reset() {
 	*x = ManagedProcessSnapshot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[24]
+	mi := &file_proto_v2_gateway_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3834,7 +4180,7 @@ func (x *ManagedProcessSnapshot) String() string {
 func (*ManagedProcessSnapshot) ProtoMessage() {}
 
 func (x *ManagedProcessSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[24]
+	mi := &file_proto_v2_gateway_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3847,7 +4193,7 @@ func (x *ManagedProcessSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedProcessSnapshot.ProtoReflect.Descriptor instead.
 func (*ManagedProcessSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{24}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ManagedProcessSnapshot) GetProcesses() []*ManagedProcessRecord {
@@ -3875,7 +4221,7 @@ type ManagedProcessRequest struct {
 
 func (x *ManagedProcessRequest) Reset() {
 	*x = ManagedProcessRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[25]
+	mi := &file_proto_v2_gateway_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3887,7 +4233,7 @@ func (x *ManagedProcessRequest) String() string {
 func (*ManagedProcessRequest) ProtoMessage() {}
 
 func (x *ManagedProcessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[25]
+	mi := &file_proto_v2_gateway_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3900,7 +4246,7 @@ func (x *ManagedProcessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedProcessRequest.ProtoReflect.Descriptor instead.
 func (*ManagedProcessRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{25}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ManagedProcessRequest) GetAction() string {
@@ -3938,7 +4284,7 @@ type ManagedProcessResponse struct {
 
 func (x *ManagedProcessResponse) Reset() {
 	*x = ManagedProcessResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[26]
+	mi := &file_proto_v2_gateway_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3950,7 +4296,7 @@ func (x *ManagedProcessResponse) String() string {
 func (*ManagedProcessResponse) ProtoMessage() {}
 
 func (x *ManagedProcessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[26]
+	mi := &file_proto_v2_gateway_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3963,7 +4309,7 @@ func (x *ManagedProcessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedProcessResponse.ProtoReflect.Descriptor instead.
 func (*ManagedProcessResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{26}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ManagedProcessResponse) GetAction() string {
@@ -4018,7 +4364,7 @@ type MemoryManageRequest struct {
 
 func (x *MemoryManageRequest) Reset() {
 	*x = MemoryManageRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[27]
+	mi := &file_proto_v2_gateway_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4030,7 +4376,7 @@ func (x *MemoryManageRequest) String() string {
 func (*MemoryManageRequest) ProtoMessage() {}
 
 func (x *MemoryManageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[27]
+	mi := &file_proto_v2_gateway_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4043,7 +4389,7 @@ func (x *MemoryManageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryManageRequest.ProtoReflect.Descriptor instead.
 func (*MemoryManageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{27}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *MemoryManageRequest) GetCommand() string {
@@ -4069,7 +4415,7 @@ type MemoryManageResponse struct {
 
 func (x *MemoryManageResponse) Reset() {
 	*x = MemoryManageResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[28]
+	mi := &file_proto_v2_gateway_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4081,7 +4427,7 @@ func (x *MemoryManageResponse) String() string {
 func (*MemoryManageResponse) ProtoMessage() {}
 
 func (x *MemoryManageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[28]
+	mi := &file_proto_v2_gateway_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4094,7 +4440,7 @@ func (x *MemoryManageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryManageResponse.ProtoReflect.Descriptor instead.
 func (*MemoryManageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{28}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *MemoryManageResponse) GetResultJson() string {
@@ -4133,7 +4479,7 @@ type TerminalRequest struct {
 
 func (x *TerminalRequest) Reset() {
 	*x = TerminalRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[29]
+	mi := &file_proto_v2_gateway_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4145,7 +4491,7 @@ func (x *TerminalRequest) String() string {
 func (*TerminalRequest) ProtoMessage() {}
 
 func (x *TerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[29]
+	mi := &file_proto_v2_gateway_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4158,7 +4504,7 @@ func (x *TerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalRequest.ProtoReflect.Descriptor instead.
 func (*TerminalRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{29}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TerminalRequest) GetAction() string {
@@ -4331,7 +4677,7 @@ type TerminalSession struct {
 
 func (x *TerminalSession) Reset() {
 	*x = TerminalSession{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[30]
+	mi := &file_proto_v2_gateway_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4343,7 +4689,7 @@ func (x *TerminalSession) String() string {
 func (*TerminalSession) ProtoMessage() {}
 
 func (x *TerminalSession) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[30]
+	mi := &file_proto_v2_gateway_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4356,7 +4702,7 @@ func (x *TerminalSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSession.ProtoReflect.Descriptor instead.
 func (*TerminalSession) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{30}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TerminalSession) GetId() string {
@@ -4482,7 +4828,7 @@ type TerminalSshMetadata struct {
 
 func (x *TerminalSshMetadata) Reset() {
 	*x = TerminalSshMetadata{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[31]
+	mi := &file_proto_v2_gateway_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4494,7 +4840,7 @@ func (x *TerminalSshMetadata) String() string {
 func (*TerminalSshMetadata) ProtoMessage() {}
 
 func (x *TerminalSshMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[31]
+	mi := &file_proto_v2_gateway_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4507,7 +4853,7 @@ func (x *TerminalSshMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshMetadata.ProtoReflect.Descriptor instead.
 func (*TerminalSshMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{31}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TerminalSshMetadata) GetHostId() string {
@@ -4609,7 +4955,7 @@ type SftpRequest struct {
 
 func (x *SftpRequest) Reset() {
 	*x = SftpRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[32]
+	mi := &file_proto_v2_gateway_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4621,7 +4967,7 @@ func (x *SftpRequest) String() string {
 func (*SftpRequest) ProtoMessage() {}
 
 func (x *SftpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[32]
+	mi := &file_proto_v2_gateway_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4634,7 +4980,7 @@ func (x *SftpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SftpRequest.ProtoReflect.Descriptor instead.
 func (*SftpRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{32}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SftpRequest) GetAction() string {
@@ -4783,7 +5129,7 @@ type SftpEntry struct {
 
 func (x *SftpEntry) Reset() {
 	*x = SftpEntry{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[33]
+	mi := &file_proto_v2_gateway_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4795,7 +5141,7 @@ func (x *SftpEntry) String() string {
 func (*SftpEntry) ProtoMessage() {}
 
 func (x *SftpEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[33]
+	mi := &file_proto_v2_gateway_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4808,7 +5154,7 @@ func (x *SftpEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SftpEntry.ProtoReflect.Descriptor instead.
 func (*SftpEntry) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{33}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SftpEntry) GetPath() string {
@@ -4866,7 +5212,7 @@ type SftpTransfer struct {
 
 func (x *SftpTransfer) Reset() {
 	*x = SftpTransfer{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[34]
+	mi := &file_proto_v2_gateway_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4878,7 +5224,7 @@ func (x *SftpTransfer) String() string {
 func (*SftpTransfer) ProtoMessage() {}
 
 func (x *SftpTransfer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[34]
+	mi := &file_proto_v2_gateway_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4891,7 +5237,7 @@ func (x *SftpTransfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SftpTransfer.ProtoReflect.Descriptor instead.
 func (*SftpTransfer) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{34}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SftpTransfer) GetId() string {
@@ -4997,7 +5343,7 @@ type SftpResponse struct {
 
 func (x *SftpResponse) Reset() {
 	*x = SftpResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[35]
+	mi := &file_proto_v2_gateway_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5009,7 +5355,7 @@ func (x *SftpResponse) String() string {
 func (*SftpResponse) ProtoMessage() {}
 
 func (x *SftpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[35]
+	mi := &file_proto_v2_gateway_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5022,7 +5368,7 @@ func (x *SftpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SftpResponse.ProtoReflect.Descriptor instead.
 func (*SftpResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{35}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SftpResponse) GetAction() string {
@@ -5112,7 +5458,7 @@ type SftpEvent struct {
 
 func (x *SftpEvent) Reset() {
 	*x = SftpEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[36]
+	mi := &file_proto_v2_gateway_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5124,7 +5470,7 @@ func (x *SftpEvent) String() string {
 func (*SftpEvent) ProtoMessage() {}
 
 func (x *SftpEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[36]
+	mi := &file_proto_v2_gateway_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5137,7 +5483,7 @@ func (x *SftpEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SftpEvent.ProtoReflect.Descriptor instead.
 func (*SftpEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{36}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SftpEvent) GetKind() string {
@@ -5172,7 +5518,7 @@ type TerminalSshPrompt struct {
 
 func (x *TerminalSshPrompt) Reset() {
 	*x = TerminalSshPrompt{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[37]
+	mi := &file_proto_v2_gateway_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5184,7 +5530,7 @@ func (x *TerminalSshPrompt) String() string {
 func (*TerminalSshPrompt) ProtoMessage() {}
 
 func (x *TerminalSshPrompt) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[37]
+	mi := &file_proto_v2_gateway_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5197,7 +5543,7 @@ func (x *TerminalSshPrompt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshPrompt.ProtoReflect.Descriptor instead.
 func (*TerminalSshPrompt) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{37}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TerminalSshPrompt) GetId() string {
@@ -5281,7 +5627,7 @@ type TerminalShellOption struct {
 
 func (x *TerminalShellOption) Reset() {
 	*x = TerminalShellOption{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[38]
+	mi := &file_proto_v2_gateway_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5293,7 +5639,7 @@ func (x *TerminalShellOption) String() string {
 func (*TerminalShellOption) ProtoMessage() {}
 
 func (x *TerminalShellOption) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[38]
+	mi := &file_proto_v2_gateway_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5306,7 +5652,7 @@ func (x *TerminalShellOption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalShellOption.ProtoReflect.Descriptor instead.
 func (*TerminalShellOption) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{38}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *TerminalShellOption) GetId() string {
@@ -5344,7 +5690,7 @@ type TerminalSshTab struct {
 
 func (x *TerminalSshTab) Reset() {
 	*x = TerminalSshTab{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[39]
+	mi := &file_proto_v2_gateway_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5356,7 +5702,7 @@ func (x *TerminalSshTab) String() string {
 func (*TerminalSshTab) ProtoMessage() {}
 
 func (x *TerminalSshTab) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[39]
+	mi := &file_proto_v2_gateway_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5369,7 +5715,7 @@ func (x *TerminalSshTab) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshTab.ProtoReflect.Descriptor instead.
 func (*TerminalSshTab) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{39}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *TerminalSshTab) GetId() string {
@@ -5425,7 +5771,7 @@ type TerminalSshTabsSnapshot struct {
 
 func (x *TerminalSshTabsSnapshot) Reset() {
 	*x = TerminalSshTabsSnapshot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[40]
+	mi := &file_proto_v2_gateway_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5437,7 +5783,7 @@ func (x *TerminalSshTabsSnapshot) String() string {
 func (*TerminalSshTabsSnapshot) ProtoMessage() {}
 
 func (x *TerminalSshTabsSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[40]
+	mi := &file_proto_v2_gateway_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5450,7 +5796,7 @@ func (x *TerminalSshTabsSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshTabsSnapshot.ProtoReflect.Descriptor instead.
 func (*TerminalSshTabsSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{40}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *TerminalSshTabsSnapshot) GetProjectPathKey() string {
@@ -5494,7 +5840,7 @@ type TerminalSshLocalForward struct {
 
 func (x *TerminalSshLocalForward) Reset() {
 	*x = TerminalSshLocalForward{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[41]
+	mi := &file_proto_v2_gateway_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5506,7 +5852,7 @@ func (x *TerminalSshLocalForward) String() string {
 func (*TerminalSshLocalForward) ProtoMessage() {}
 
 func (x *TerminalSshLocalForward) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[41]
+	mi := &file_proto_v2_gateway_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5519,7 +5865,7 @@ func (x *TerminalSshLocalForward) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshLocalForward.ProtoReflect.Descriptor instead.
 func (*TerminalSshLocalForward) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{41}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *TerminalSshLocalForward) GetId() string {
@@ -5616,7 +5962,7 @@ type TerminalSshLocalForwardsSnapshot struct {
 
 func (x *TerminalSshLocalForwardsSnapshot) Reset() {
 	*x = TerminalSshLocalForwardsSnapshot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[42]
+	mi := &file_proto_v2_gateway_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5628,7 +5974,7 @@ func (x *TerminalSshLocalForwardsSnapshot) String() string {
 func (*TerminalSshLocalForwardsSnapshot) ProtoMessage() {}
 
 func (x *TerminalSshLocalForwardsSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[42]
+	mi := &file_proto_v2_gateway_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5641,7 +5987,7 @@ func (x *TerminalSshLocalForwardsSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshLocalForwardsSnapshot.ProtoReflect.Descriptor instead.
 func (*TerminalSshLocalForwardsSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{42}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *TerminalSshLocalForwardsSnapshot) GetForwards() []*TerminalSshLocalForward {
@@ -5670,7 +6016,7 @@ type TerminalSshLocalForwardAction struct {
 
 func (x *TerminalSshLocalForwardAction) Reset() {
 	*x = TerminalSshLocalForwardAction{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[43]
+	mi := &file_proto_v2_gateway_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5682,7 +6028,7 @@ func (x *TerminalSshLocalForwardAction) String() string {
 func (*TerminalSshLocalForwardAction) ProtoMessage() {}
 
 func (x *TerminalSshLocalForwardAction) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[43]
+	mi := &file_proto_v2_gateway_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5695,7 +6041,7 @@ func (x *TerminalSshLocalForwardAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSshLocalForwardAction.ProtoReflect.Descriptor instead.
 func (*TerminalSshLocalForwardAction) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{43}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *TerminalSshLocalForwardAction) GetForward() *TerminalSshLocalForward {
@@ -5742,7 +6088,7 @@ type TerminalResponse struct {
 
 func (x *TerminalResponse) Reset() {
 	*x = TerminalResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[44]
+	mi := &file_proto_v2_gateway_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5754,7 +6100,7 @@ func (x *TerminalResponse) String() string {
 func (*TerminalResponse) ProtoMessage() {}
 
 func (x *TerminalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[44]
+	mi := &file_proto_v2_gateway_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5767,7 +6113,7 @@ func (x *TerminalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalResponse.ProtoReflect.Descriptor instead.
 func (*TerminalResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{44}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *TerminalResponse) GetAction() string {
@@ -5892,7 +6238,7 @@ type TerminalEvent struct {
 
 func (x *TerminalEvent) Reset() {
 	*x = TerminalEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[45]
+	mi := &file_proto_v2_gateway_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5904,7 +6250,7 @@ func (x *TerminalEvent) String() string {
 func (*TerminalEvent) ProtoMessage() {}
 
 func (x *TerminalEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[45]
+	mi := &file_proto_v2_gateway_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5917,7 +6263,7 @@ func (x *TerminalEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalEvent.ProtoReflect.Descriptor instead.
 func (*TerminalEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{45}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *TerminalEvent) GetKind() string {
@@ -6005,7 +6351,7 @@ type TerminalStreamFrame struct {
 
 func (x *TerminalStreamFrame) Reset() {
 	*x = TerminalStreamFrame{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[46]
+	mi := &file_proto_v2_gateway_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6017,7 +6363,7 @@ func (x *TerminalStreamFrame) String() string {
 func (*TerminalStreamFrame) ProtoMessage() {}
 
 func (x *TerminalStreamFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[46]
+	mi := &file_proto_v2_gateway_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6030,7 +6376,7 @@ func (x *TerminalStreamFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalStreamFrame.ProtoReflect.Descriptor instead.
 func (*TerminalStreamFrame) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{46}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *TerminalStreamFrame) GetKind() string {
@@ -6142,7 +6488,7 @@ type GitRequest struct {
 
 func (x *GitRequest) Reset() {
 	*x = GitRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[47]
+	mi := &file_proto_v2_gateway_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6154,7 +6500,7 @@ func (x *GitRequest) String() string {
 func (*GitRequest) ProtoMessage() {}
 
 func (x *GitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[47]
+	mi := &file_proto_v2_gateway_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6167,7 +6513,7 @@ func (x *GitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitRequest.ProtoReflect.Descriptor instead.
 func (*GitRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{47}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GitRequest) GetAction() string {
@@ -6201,7 +6547,7 @@ type GitResponse struct {
 
 func (x *GitResponse) Reset() {
 	*x = GitResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[48]
+	mi := &file_proto_v2_gateway_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6213,7 +6559,7 @@ func (x *GitResponse) String() string {
 func (*GitResponse) ProtoMessage() {}
 
 func (x *GitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[48]
+	mi := &file_proto_v2_gateway_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6226,7 +6572,7 @@ func (x *GitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitResponse.ProtoReflect.Descriptor instead.
 func (*GitResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{48}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GitResponse) GetAction() string {
@@ -6260,7 +6606,7 @@ type ChatRequest struct {
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[49]
+	mi := &file_proto_v2_gateway_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6272,7 +6618,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[49]
+	mi := &file_proto_v2_gateway_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6285,7 +6631,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{49}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ChatRequest) GetConversationId() string {
@@ -6365,7 +6711,7 @@ type ChatMessageRef struct {
 
 func (x *ChatMessageRef) Reset() {
 	*x = ChatMessageRef{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[50]
+	mi := &file_proto_v2_gateway_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6377,7 +6723,7 @@ func (x *ChatMessageRef) String() string {
 func (*ChatMessageRef) ProtoMessage() {}
 
 func (x *ChatMessageRef) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[50]
+	mi := &file_proto_v2_gateway_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6390,7 +6736,7 @@ func (x *ChatMessageRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatMessageRef.ProtoReflect.Descriptor instead.
 func (*ChatMessageRef) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{50}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ChatMessageRef) GetSegmentIndex() int32 {
@@ -6446,7 +6792,7 @@ type CancelChatRequest struct {
 
 func (x *CancelChatRequest) Reset() {
 	*x = CancelChatRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[51]
+	mi := &file_proto_v2_gateway_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6458,7 +6804,7 @@ func (x *CancelChatRequest) String() string {
 func (*CancelChatRequest) ProtoMessage() {}
 
 func (x *CancelChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[51]
+	mi := &file_proto_v2_gateway_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6471,7 +6817,7 @@ func (x *CancelChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelChatRequest.ProtoReflect.Descriptor instead.
 func (*CancelChatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{51}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CancelChatRequest) GetConversationId() string {
@@ -6500,7 +6846,7 @@ type ChatCommandRequest struct {
 
 func (x *ChatCommandRequest) Reset() {
 	*x = ChatCommandRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[52]
+	mi := &file_proto_v2_gateway_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6512,7 +6858,7 @@ func (x *ChatCommandRequest) String() string {
 func (*ChatCommandRequest) ProtoMessage() {}
 
 func (x *ChatCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[52]
+	mi := &file_proto_v2_gateway_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6525,7 +6871,7 @@ func (x *ChatCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatCommandRequest.ProtoReflect.Descriptor instead.
 func (*ChatCommandRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{52}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ChatCommandRequest) GetType() string {
@@ -6572,7 +6918,7 @@ type ChatQueueRequest struct {
 
 func (x *ChatQueueRequest) Reset() {
 	*x = ChatQueueRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[53]
+	mi := &file_proto_v2_gateway_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6584,7 +6930,7 @@ func (x *ChatQueueRequest) String() string {
 func (*ChatQueueRequest) ProtoMessage() {}
 
 func (x *ChatQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[53]
+	mi := &file_proto_v2_gateway_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6597,7 +6943,7 @@ func (x *ChatQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatQueueRequest.ProtoReflect.Descriptor instead.
 func (*ChatQueueRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{53}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ChatQueueRequest) GetAction() string {
@@ -6670,7 +7016,7 @@ type ChatQueueResponse struct {
 
 func (x *ChatQueueResponse) Reset() {
 	*x = ChatQueueResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[54]
+	mi := &file_proto_v2_gateway_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6682,7 +7028,7 @@ func (x *ChatQueueResponse) String() string {
 func (*ChatQueueResponse) ProtoMessage() {}
 
 func (x *ChatQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[54]
+	mi := &file_proto_v2_gateway_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6695,7 +7041,7 @@ func (x *ChatQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatQueueResponse.ProtoReflect.Descriptor instead.
 func (*ChatQueueResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{54}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ChatQueueResponse) GetAccepted() bool {
@@ -6751,7 +7097,7 @@ type ChatQueueEvent struct {
 
 func (x *ChatQueueEvent) Reset() {
 	*x = ChatQueueEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[55]
+	mi := &file_proto_v2_gateway_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6763,7 +7109,7 @@ func (x *ChatQueueEvent) String() string {
 func (*ChatQueueEvent) ProtoMessage() {}
 
 func (x *ChatQueueEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[55]
+	mi := &file_proto_v2_gateway_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6776,7 +7122,7 @@ func (x *ChatQueueEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatQueueEvent.ProtoReflect.Descriptor instead.
 func (*ChatQueueEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{55}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ChatQueueEvent) GetConversationId() string {
@@ -6811,7 +7157,7 @@ type ChatEvent struct {
 
 func (x *ChatEvent) Reset() {
 	*x = ChatEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[56]
+	mi := &file_proto_v2_gateway_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6823,7 +7169,7 @@ func (x *ChatEvent) String() string {
 func (*ChatEvent) ProtoMessage() {}
 
 func (x *ChatEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[56]
+	mi := &file_proto_v2_gateway_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6836,7 +7182,7 @@ func (x *ChatEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatEvent.ProtoReflect.Descriptor instead.
 func (*ChatEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{56}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ChatEvent) GetType() ChatEvent_ChatEventType {
@@ -6877,7 +7223,7 @@ type ChatControlEvent struct {
 
 func (x *ChatControlEvent) Reset() {
 	*x = ChatControlEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[57]
+	mi := &file_proto_v2_gateway_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6889,7 +7235,7 @@ func (x *ChatControlEvent) String() string {
 func (*ChatControlEvent) ProtoMessage() {}
 
 func (x *ChatControlEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[57]
+	mi := &file_proto_v2_gateway_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6902,7 +7248,7 @@ func (x *ChatControlEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatControlEvent.ProtoReflect.Descriptor instead.
 func (*ChatControlEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{57}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ChatControlEvent) GetRequestId() string {
@@ -6987,7 +7333,7 @@ type ChatRuntimeSnapshot struct {
 
 func (x *ChatRuntimeSnapshot) Reset() {
 	*x = ChatRuntimeSnapshot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[58]
+	mi := &file_proto_v2_gateway_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6999,7 +7345,7 @@ func (x *ChatRuntimeSnapshot) String() string {
 func (*ChatRuntimeSnapshot) ProtoMessage() {}
 
 func (x *ChatRuntimeSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[58]
+	mi := &file_proto_v2_gateway_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7012,7 +7358,7 @@ func (x *ChatRuntimeSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRuntimeSnapshot.ProtoReflect.Descriptor instead.
 func (*ChatRuntimeSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{58}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ChatRuntimeSnapshot) GetConversationId() string {
@@ -7107,7 +7453,7 @@ type RuntimeStatusEvent struct {
 
 func (x *RuntimeStatusEvent) Reset() {
 	*x = RuntimeStatusEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[59]
+	mi := &file_proto_v2_gateway_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7119,7 +7465,7 @@ func (x *RuntimeStatusEvent) String() string {
 func (*RuntimeStatusEvent) ProtoMessage() {}
 
 func (x *RuntimeStatusEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[59]
+	mi := &file_proto_v2_gateway_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7132,7 +7478,7 @@ func (x *RuntimeStatusEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeStatusEvent.ProtoReflect.Descriptor instead.
 func (*RuntimeStatusEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{59}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *RuntimeStatusEvent) GetWorkerId() string {
@@ -7198,7 +7544,7 @@ type ChatRunReport struct {
 
 func (x *ChatRunReport) Reset() {
 	*x = ChatRunReport{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[60]
+	mi := &file_proto_v2_gateway_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7210,7 +7556,7 @@ func (x *ChatRunReport) String() string {
 func (*ChatRunReport) ProtoMessage() {}
 
 func (x *ChatRunReport) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[60]
+	mi := &file_proto_v2_gateway_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7223,7 +7569,7 @@ func (x *ChatRunReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRunReport.ProtoReflect.Descriptor instead.
 func (*ChatRunReport) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{60}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ChatRunReport) GetRunId() string {
@@ -7279,7 +7625,7 @@ type CronManageRequest struct {
 
 func (x *CronManageRequest) Reset() {
 	*x = CronManageRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[61]
+	mi := &file_proto_v2_gateway_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7291,7 +7637,7 @@ func (x *CronManageRequest) String() string {
 func (*CronManageRequest) ProtoMessage() {}
 
 func (x *CronManageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[61]
+	mi := &file_proto_v2_gateway_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7304,7 +7650,7 @@ func (x *CronManageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronManageRequest.ProtoReflect.Descriptor instead.
 func (*CronManageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{61}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *CronManageRequest) GetAction() string {
@@ -7338,7 +7684,7 @@ type CronManageResponse struct {
 
 func (x *CronManageResponse) Reset() {
 	*x = CronManageResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[62]
+	mi := &file_proto_v2_gateway_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7350,7 +7696,7 @@ func (x *CronManageResponse) String() string {
 func (*CronManageResponse) ProtoMessage() {}
 
 func (x *CronManageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[62]
+	mi := &file_proto_v2_gateway_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7363,7 +7709,7 @@ func (x *CronManageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronManageResponse.ProtoReflect.Descriptor instead.
 func (*CronManageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{62}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *CronManageResponse) GetAction() string {
@@ -7392,7 +7738,7 @@ type HistoryListRequest struct {
 
 func (x *HistoryListRequest) Reset() {
 	*x = HistoryListRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[63]
+	mi := &file_proto_v2_gateway_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7404,7 +7750,7 @@ func (x *HistoryListRequest) String() string {
 func (*HistoryListRequest) ProtoMessage() {}
 
 func (x *HistoryListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[63]
+	mi := &file_proto_v2_gateway_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7417,7 +7763,7 @@ func (x *HistoryListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryListRequest.ProtoReflect.Descriptor instead.
 func (*HistoryListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{63}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *HistoryListRequest) GetPage() int32 {
@@ -7458,7 +7804,7 @@ type HistoryListResponse struct {
 
 func (x *HistoryListResponse) Reset() {
 	*x = HistoryListResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[64]
+	mi := &file_proto_v2_gateway_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7470,7 +7816,7 @@ func (x *HistoryListResponse) String() string {
 func (*HistoryListResponse) ProtoMessage() {}
 
 func (x *HistoryListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[64]
+	mi := &file_proto_v2_gateway_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7483,7 +7829,7 @@ func (x *HistoryListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryListResponse.ProtoReflect.Descriptor instead.
 func (*HistoryListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{64}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *HistoryListResponse) GetConversations() []*ConversationSummary {
@@ -7521,7 +7867,7 @@ type ConversationSummary struct {
 
 func (x *ConversationSummary) Reset() {
 	*x = ConversationSummary{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[65]
+	mi := &file_proto_v2_gateway_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7533,7 +7879,7 @@ func (x *ConversationSummary) String() string {
 func (*ConversationSummary) ProtoMessage() {}
 
 func (x *ConversationSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[65]
+	mi := &file_proto_v2_gateway_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7546,7 +7892,7 @@ func (x *ConversationSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSummary.ProtoReflect.Descriptor instead.
 func (*ConversationSummary) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{65}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ConversationSummary) GetId() string {
@@ -7650,7 +7996,7 @@ type HistoryGetRequest struct {
 
 func (x *HistoryGetRequest) Reset() {
 	*x = HistoryGetRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[66]
+	mi := &file_proto_v2_gateway_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7662,7 +8008,7 @@ func (x *HistoryGetRequest) String() string {
 func (*HistoryGetRequest) ProtoMessage() {}
 
 func (x *HistoryGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[66]
+	mi := &file_proto_v2_gateway_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7675,7 +8021,7 @@ func (x *HistoryGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryGetRequest.ProtoReflect.Descriptor instead.
 func (*HistoryGetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{66}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *HistoryGetRequest) GetConversationId() string {
@@ -7706,7 +8052,7 @@ type HistoryGetResponse struct {
 
 func (x *HistoryGetResponse) Reset() {
 	*x = HistoryGetResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[67]
+	mi := &file_proto_v2_gateway_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7718,7 +8064,7 @@ func (x *HistoryGetResponse) String() string {
 func (*HistoryGetResponse) ProtoMessage() {}
 
 func (x *HistoryGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[67]
+	mi := &file_proto_v2_gateway_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7731,7 +8077,7 @@ func (x *HistoryGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryGetResponse.ProtoReflect.Descriptor instead.
 func (*HistoryGetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{67}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *HistoryGetResponse) GetConversationId() string {
@@ -7787,7 +8133,7 @@ type HistoryPrefixRequest struct {
 
 func (x *HistoryPrefixRequest) Reset() {
 	*x = HistoryPrefixRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[68]
+	mi := &file_proto_v2_gateway_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7799,7 +8145,7 @@ func (x *HistoryPrefixRequest) String() string {
 func (*HistoryPrefixRequest) ProtoMessage() {}
 
 func (x *HistoryPrefixRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[68]
+	mi := &file_proto_v2_gateway_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7812,7 +8158,7 @@ func (x *HistoryPrefixRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryPrefixRequest.ProtoReflect.Descriptor instead.
 func (*HistoryPrefixRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{68}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *HistoryPrefixRequest) GetConversationId() string {
@@ -7850,7 +8196,7 @@ type HistoryPrefixResponse struct {
 
 func (x *HistoryPrefixResponse) Reset() {
 	*x = HistoryPrefixResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[69]
+	mi := &file_proto_v2_gateway_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7862,7 +8208,7 @@ func (x *HistoryPrefixResponse) String() string {
 func (*HistoryPrefixResponse) ProtoMessage() {}
 
 func (x *HistoryPrefixResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[69]
+	mi := &file_proto_v2_gateway_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7875,7 +8221,7 @@ func (x *HistoryPrefixResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryPrefixResponse.ProtoReflect.Descriptor instead.
 func (*HistoryPrefixResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{69}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *HistoryPrefixResponse) GetConversationId() string {
@@ -7930,7 +8276,7 @@ type HistoryRenameRequest struct {
 
 func (x *HistoryRenameRequest) Reset() {
 	*x = HistoryRenameRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[70]
+	mi := &file_proto_v2_gateway_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7942,7 +8288,7 @@ func (x *HistoryRenameRequest) String() string {
 func (*HistoryRenameRequest) ProtoMessage() {}
 
 func (x *HistoryRenameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[70]
+	mi := &file_proto_v2_gateway_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7955,7 +8301,7 @@ func (x *HistoryRenameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryRenameRequest.ProtoReflect.Descriptor instead.
 func (*HistoryRenameRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{70}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *HistoryRenameRequest) GetConversationId() string {
@@ -7981,7 +8327,7 @@ type HistoryRenameResponse struct {
 
 func (x *HistoryRenameResponse) Reset() {
 	*x = HistoryRenameResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[71]
+	mi := &file_proto_v2_gateway_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7993,7 +8339,7 @@ func (x *HistoryRenameResponse) String() string {
 func (*HistoryRenameResponse) ProtoMessage() {}
 
 func (x *HistoryRenameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[71]
+	mi := &file_proto_v2_gateway_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8006,7 +8352,7 @@ func (x *HistoryRenameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryRenameResponse.ProtoReflect.Descriptor instead.
 func (*HistoryRenameResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{71}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *HistoryRenameResponse) GetConversation() *ConversationSummary {
@@ -8029,7 +8375,7 @@ type HistoryBranchRequest struct {
 
 func (x *HistoryBranchRequest) Reset() {
 	*x = HistoryBranchRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[72]
+	mi := &file_proto_v2_gateway_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8041,7 +8387,7 @@ func (x *HistoryBranchRequest) String() string {
 func (*HistoryBranchRequest) ProtoMessage() {}
 
 func (x *HistoryBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[72]
+	mi := &file_proto_v2_gateway_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8054,7 +8400,7 @@ func (x *HistoryBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryBranchRequest.ProtoReflect.Descriptor instead.
 func (*HistoryBranchRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{72}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *HistoryBranchRequest) GetConversationId() string {
@@ -8080,7 +8426,7 @@ type HistoryBranchResponse struct {
 
 func (x *HistoryBranchResponse) Reset() {
 	*x = HistoryBranchResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[73]
+	mi := &file_proto_v2_gateway_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8092,7 +8438,7 @@ func (x *HistoryBranchResponse) String() string {
 func (*HistoryBranchResponse) ProtoMessage() {}
 
 func (x *HistoryBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[73]
+	mi := &file_proto_v2_gateway_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8105,7 +8451,7 @@ func (x *HistoryBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryBranchResponse.ProtoReflect.Descriptor instead.
 func (*HistoryBranchResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{73}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *HistoryBranchResponse) GetConversation() *ConversationSummary {
@@ -8125,7 +8471,7 @@ type HistoryPinRequest struct {
 
 func (x *HistoryPinRequest) Reset() {
 	*x = HistoryPinRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[74]
+	mi := &file_proto_v2_gateway_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8137,7 +8483,7 @@ func (x *HistoryPinRequest) String() string {
 func (*HistoryPinRequest) ProtoMessage() {}
 
 func (x *HistoryPinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[74]
+	mi := &file_proto_v2_gateway_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8150,7 +8496,7 @@ func (x *HistoryPinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryPinRequest.ProtoReflect.Descriptor instead.
 func (*HistoryPinRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{74}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *HistoryPinRequest) GetConversationId() string {
@@ -8176,7 +8522,7 @@ type HistoryPinResponse struct {
 
 func (x *HistoryPinResponse) Reset() {
 	*x = HistoryPinResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[75]
+	mi := &file_proto_v2_gateway_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8188,7 +8534,7 @@ func (x *HistoryPinResponse) String() string {
 func (*HistoryPinResponse) ProtoMessage() {}
 
 func (x *HistoryPinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[75]
+	mi := &file_proto_v2_gateway_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8201,7 +8547,7 @@ func (x *HistoryPinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryPinResponse.ProtoReflect.Descriptor instead.
 func (*HistoryPinResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{75}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *HistoryPinResponse) GetConversation() *ConversationSummary {
@@ -8225,7 +8571,7 @@ type HistoryShareStatus struct {
 
 func (x *HistoryShareStatus) Reset() {
 	*x = HistoryShareStatus{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[76]
+	mi := &file_proto_v2_gateway_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8237,7 +8583,7 @@ func (x *HistoryShareStatus) String() string {
 func (*HistoryShareStatus) ProtoMessage() {}
 
 func (x *HistoryShareStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[76]
+	mi := &file_proto_v2_gateway_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8250,7 +8596,7 @@ func (x *HistoryShareStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareStatus.ProtoReflect.Descriptor instead.
 func (*HistoryShareStatus) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{76}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *HistoryShareStatus) GetConversationId() string {
@@ -8304,7 +8650,7 @@ type HistoryShareGetRequest struct {
 
 func (x *HistoryShareGetRequest) Reset() {
 	*x = HistoryShareGetRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[77]
+	mi := &file_proto_v2_gateway_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8316,7 +8662,7 @@ func (x *HistoryShareGetRequest) String() string {
 func (*HistoryShareGetRequest) ProtoMessage() {}
 
 func (x *HistoryShareGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[77]
+	mi := &file_proto_v2_gateway_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8329,7 +8675,7 @@ func (x *HistoryShareGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareGetRequest.ProtoReflect.Descriptor instead.
 func (*HistoryShareGetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{77}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *HistoryShareGetRequest) GetConversationId() string {
@@ -8348,7 +8694,7 @@ type HistoryShareGetResponse struct {
 
 func (x *HistoryShareGetResponse) Reset() {
 	*x = HistoryShareGetResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[78]
+	mi := &file_proto_v2_gateway_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8360,7 +8706,7 @@ func (x *HistoryShareGetResponse) String() string {
 func (*HistoryShareGetResponse) ProtoMessage() {}
 
 func (x *HistoryShareGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[78]
+	mi := &file_proto_v2_gateway_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8373,7 +8719,7 @@ func (x *HistoryShareGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareGetResponse.ProtoReflect.Descriptor instead.
 func (*HistoryShareGetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{78}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *HistoryShareGetResponse) GetShare() *HistoryShareStatus {
@@ -8394,7 +8740,7 @@ type HistoryShareSetRequest struct {
 
 func (x *HistoryShareSetRequest) Reset() {
 	*x = HistoryShareSetRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[79]
+	mi := &file_proto_v2_gateway_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8406,7 +8752,7 @@ func (x *HistoryShareSetRequest) String() string {
 func (*HistoryShareSetRequest) ProtoMessage() {}
 
 func (x *HistoryShareSetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[79]
+	mi := &file_proto_v2_gateway_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8419,7 +8765,7 @@ func (x *HistoryShareSetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareSetRequest.ProtoReflect.Descriptor instead.
 func (*HistoryShareSetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{79}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *HistoryShareSetRequest) GetConversationId() string {
@@ -8452,7 +8798,7 @@ type HistoryShareSetResponse struct {
 
 func (x *HistoryShareSetResponse) Reset() {
 	*x = HistoryShareSetResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[80]
+	mi := &file_proto_v2_gateway_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8464,7 +8810,7 @@ func (x *HistoryShareSetResponse) String() string {
 func (*HistoryShareSetResponse) ProtoMessage() {}
 
 func (x *HistoryShareSetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[80]
+	mi := &file_proto_v2_gateway_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8477,7 +8823,7 @@ func (x *HistoryShareSetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareSetResponse.ProtoReflect.Descriptor instead.
 func (*HistoryShareSetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{80}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *HistoryShareSetResponse) GetShare() *HistoryShareStatus {
@@ -8496,7 +8842,7 @@ type HistoryShareResolveRequest struct {
 
 func (x *HistoryShareResolveRequest) Reset() {
 	*x = HistoryShareResolveRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[81]
+	mi := &file_proto_v2_gateway_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8508,7 +8854,7 @@ func (x *HistoryShareResolveRequest) String() string {
 func (*HistoryShareResolveRequest) ProtoMessage() {}
 
 func (x *HistoryShareResolveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[81]
+	mi := &file_proto_v2_gateway_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8521,7 +8867,7 @@ func (x *HistoryShareResolveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareResolveRequest.ProtoReflect.Descriptor instead.
 func (*HistoryShareResolveRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{81}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *HistoryShareResolveRequest) GetToken() string {
@@ -8544,7 +8890,7 @@ type HistoryShareResolveResponse struct {
 
 func (x *HistoryShareResolveResponse) Reset() {
 	*x = HistoryShareResolveResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[82]
+	mi := &file_proto_v2_gateway_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8556,7 +8902,7 @@ func (x *HistoryShareResolveResponse) String() string {
 func (*HistoryShareResolveResponse) ProtoMessage() {}
 
 func (x *HistoryShareResolveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[82]
+	mi := &file_proto_v2_gateway_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8569,7 +8915,7 @@ func (x *HistoryShareResolveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryShareResolveResponse.ProtoReflect.Descriptor instead.
 func (*HistoryShareResolveResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{82}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *HistoryShareResolveResponse) GetConversationId() string {
@@ -8615,7 +8961,7 @@ type HistoryWorkdirsRequest struct {
 
 func (x *HistoryWorkdirsRequest) Reset() {
 	*x = HistoryWorkdirsRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[83]
+	mi := &file_proto_v2_gateway_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8627,7 +8973,7 @@ func (x *HistoryWorkdirsRequest) String() string {
 func (*HistoryWorkdirsRequest) ProtoMessage() {}
 
 func (x *HistoryWorkdirsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[83]
+	mi := &file_proto_v2_gateway_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8640,7 +8986,7 @@ func (x *HistoryWorkdirsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryWorkdirsRequest.ProtoReflect.Descriptor instead.
 func (*HistoryWorkdirsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{83}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{86}
 }
 
 type HistoryWorkdirSummary struct {
@@ -8654,7 +9000,7 @@ type HistoryWorkdirSummary struct {
 
 func (x *HistoryWorkdirSummary) Reset() {
 	*x = HistoryWorkdirSummary{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[84]
+	mi := &file_proto_v2_gateway_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8666,7 +9012,7 @@ func (x *HistoryWorkdirSummary) String() string {
 func (*HistoryWorkdirSummary) ProtoMessage() {}
 
 func (x *HistoryWorkdirSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[84]
+	mi := &file_proto_v2_gateway_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8679,7 +9025,7 @@ func (x *HistoryWorkdirSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryWorkdirSummary.ProtoReflect.Descriptor instead.
 func (*HistoryWorkdirSummary) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{84}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *HistoryWorkdirSummary) GetPath() string {
@@ -8712,7 +9058,7 @@ type HistoryWorkdirsResponse struct {
 
 func (x *HistoryWorkdirsResponse) Reset() {
 	*x = HistoryWorkdirsResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[85]
+	mi := &file_proto_v2_gateway_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8724,7 +9070,7 @@ func (x *HistoryWorkdirsResponse) String() string {
 func (*HistoryWorkdirsResponse) ProtoMessage() {}
 
 func (x *HistoryWorkdirsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[85]
+	mi := &file_proto_v2_gateway_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8737,7 +9083,7 @@ func (x *HistoryWorkdirsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryWorkdirsResponse.ProtoReflect.Descriptor instead.
 func (*HistoryWorkdirsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{85}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *HistoryWorkdirsResponse) GetWorkdirs() []*HistoryWorkdirSummary {
@@ -8756,7 +9102,7 @@ type HistoryDeleteRequest struct {
 
 func (x *HistoryDeleteRequest) Reset() {
 	*x = HistoryDeleteRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[86]
+	mi := &file_proto_v2_gateway_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8768,7 +9114,7 @@ func (x *HistoryDeleteRequest) String() string {
 func (*HistoryDeleteRequest) ProtoMessage() {}
 
 func (x *HistoryDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[86]
+	mi := &file_proto_v2_gateway_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8781,7 +9127,7 @@ func (x *HistoryDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryDeleteRequest.ProtoReflect.Descriptor instead.
 func (*HistoryDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{86}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *HistoryDeleteRequest) GetConversationId() string {
@@ -8799,7 +9145,7 @@ type HistoryDeleteResponse struct {
 
 func (x *HistoryDeleteResponse) Reset() {
 	*x = HistoryDeleteResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[87]
+	mi := &file_proto_v2_gateway_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8811,7 +9157,7 @@ func (x *HistoryDeleteResponse) String() string {
 func (*HistoryDeleteResponse) ProtoMessage() {}
 
 func (x *HistoryDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[87]
+	mi := &file_proto_v2_gateway_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8824,7 +9170,7 @@ func (x *HistoryDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryDeleteResponse.ProtoReflect.Descriptor instead.
 func (*HistoryDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{87}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{90}
 }
 
 type HistorySyncEvent struct {
@@ -8838,7 +9184,7 @@ type HistorySyncEvent struct {
 
 func (x *HistorySyncEvent) Reset() {
 	*x = HistorySyncEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[88]
+	mi := &file_proto_v2_gateway_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8850,7 +9196,7 @@ func (x *HistorySyncEvent) String() string {
 func (*HistorySyncEvent) ProtoMessage() {}
 
 func (x *HistorySyncEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[88]
+	mi := &file_proto_v2_gateway_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8863,7 +9209,7 @@ func (x *HistorySyncEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistorySyncEvent.ProtoReflect.Descriptor instead.
 func (*HistorySyncEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{88}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *HistorySyncEvent) GetKind() string {
@@ -8895,7 +9241,7 @@ type ProviderListRequest struct {
 
 func (x *ProviderListRequest) Reset() {
 	*x = ProviderListRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[89]
+	mi := &file_proto_v2_gateway_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8907,7 +9253,7 @@ func (x *ProviderListRequest) String() string {
 func (*ProviderListRequest) ProtoMessage() {}
 
 func (x *ProviderListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[89]
+	mi := &file_proto_v2_gateway_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8920,7 +9266,7 @@ func (x *ProviderListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderListRequest.ProtoReflect.Descriptor instead.
 func (*ProviderListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{89}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{92}
 }
 
 type ProviderListResponse struct {
@@ -8932,7 +9278,7 @@ type ProviderListResponse struct {
 
 func (x *ProviderListResponse) Reset() {
 	*x = ProviderListResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[90]
+	mi := &file_proto_v2_gateway_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8944,7 +9290,7 @@ func (x *ProviderListResponse) String() string {
 func (*ProviderListResponse) ProtoMessage() {}
 
 func (x *ProviderListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[90]
+	mi := &file_proto_v2_gateway_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8957,7 +9303,7 @@ func (x *ProviderListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderListResponse.ProtoReflect.Descriptor instead.
 func (*ProviderListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{90}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ProviderListResponse) GetProvidersJson() string {
@@ -8975,7 +9321,7 @@ type SettingsGetRequest struct {
 
 func (x *SettingsGetRequest) Reset() {
 	*x = SettingsGetRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[91]
+	mi := &file_proto_v2_gateway_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8987,7 +9333,7 @@ func (x *SettingsGetRequest) String() string {
 func (*SettingsGetRequest) ProtoMessage() {}
 
 func (x *SettingsGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[91]
+	mi := &file_proto_v2_gateway_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9000,7 +9346,7 @@ func (x *SettingsGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsGetRequest.ProtoReflect.Descriptor instead.
 func (*SettingsGetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{91}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{94}
 }
 
 type SettingsGetResponse struct {
@@ -9012,7 +9358,7 @@ type SettingsGetResponse struct {
 
 func (x *SettingsGetResponse) Reset() {
 	*x = SettingsGetResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[92]
+	mi := &file_proto_v2_gateway_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9024,7 +9370,7 @@ func (x *SettingsGetResponse) String() string {
 func (*SettingsGetResponse) ProtoMessage() {}
 
 func (x *SettingsGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[92]
+	mi := &file_proto_v2_gateway_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9037,7 +9383,7 @@ func (x *SettingsGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsGetResponse.ProtoReflect.Descriptor instead.
 func (*SettingsGetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{92}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *SettingsGetResponse) GetSettingsJson() string {
@@ -9056,7 +9402,7 @@ type SettingsUpdateRequest struct {
 
 func (x *SettingsUpdateRequest) Reset() {
 	*x = SettingsUpdateRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[93]
+	mi := &file_proto_v2_gateway_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9068,7 +9414,7 @@ func (x *SettingsUpdateRequest) String() string {
 func (*SettingsUpdateRequest) ProtoMessage() {}
 
 func (x *SettingsUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[93]
+	mi := &file_proto_v2_gateway_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9081,7 +9427,7 @@ func (x *SettingsUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsUpdateRequest.ProtoReflect.Descriptor instead.
 func (*SettingsUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{93}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *SettingsUpdateRequest) GetSettingsJson() string {
@@ -9101,7 +9447,7 @@ type SettingsUpdateResponse struct {
 
 func (x *SettingsUpdateResponse) Reset() {
 	*x = SettingsUpdateResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[94]
+	mi := &file_proto_v2_gateway_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9113,7 +9459,7 @@ func (x *SettingsUpdateResponse) String() string {
 func (*SettingsUpdateResponse) ProtoMessage() {}
 
 func (x *SettingsUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[94]
+	mi := &file_proto_v2_gateway_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9126,7 +9472,7 @@ func (x *SettingsUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsUpdateResponse.ProtoReflect.Descriptor instead.
 func (*SettingsUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{94}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *SettingsUpdateResponse) GetAccepted() bool {
@@ -9153,7 +9499,7 @@ type SettingsResetSshKnownHostRequest struct {
 
 func (x *SettingsResetSshKnownHostRequest) Reset() {
 	*x = SettingsResetSshKnownHostRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[95]
+	mi := &file_proto_v2_gateway_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9165,7 +9511,7 @@ func (x *SettingsResetSshKnownHostRequest) String() string {
 func (*SettingsResetSshKnownHostRequest) ProtoMessage() {}
 
 func (x *SettingsResetSshKnownHostRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[95]
+	mi := &file_proto_v2_gateway_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9178,7 +9524,7 @@ func (x *SettingsResetSshKnownHostRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsResetSshKnownHostRequest.ProtoReflect.Descriptor instead.
 func (*SettingsResetSshKnownHostRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{95}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *SettingsResetSshKnownHostRequest) GetHost() string {
@@ -9204,7 +9550,7 @@ type SettingsResetSshKnownHostResponse struct {
 
 func (x *SettingsResetSshKnownHostResponse) Reset() {
 	*x = SettingsResetSshKnownHostResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[96]
+	mi := &file_proto_v2_gateway_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9216,7 +9562,7 @@ func (x *SettingsResetSshKnownHostResponse) String() string {
 func (*SettingsResetSshKnownHostResponse) ProtoMessage() {}
 
 func (x *SettingsResetSshKnownHostResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[96]
+	mi := &file_proto_v2_gateway_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9229,7 +9575,7 @@ func (x *SettingsResetSshKnownHostResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SettingsResetSshKnownHostResponse.ProtoReflect.Descriptor instead.
 func (*SettingsResetSshKnownHostResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{96}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *SettingsResetSshKnownHostResponse) GetDeleted() uint32 {
@@ -9248,7 +9594,7 @@ type SettingsSyncEvent struct {
 
 func (x *SettingsSyncEvent) Reset() {
 	*x = SettingsSyncEvent{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[97]
+	mi := &file_proto_v2_gateway_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9260,7 +9606,7 @@ func (x *SettingsSyncEvent) String() string {
 func (*SettingsSyncEvent) ProtoMessage() {}
 
 func (x *SettingsSyncEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[97]
+	mi := &file_proto_v2_gateway_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9273,7 +9619,7 @@ func (x *SettingsSyncEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsSyncEvent.ProtoReflect.Descriptor instead.
 func (*SettingsSyncEvent) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{97}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *SettingsSyncEvent) GetSettingsJson() string {
@@ -9291,7 +9637,7 @@ type SkillFilesListRequest struct {
 
 func (x *SkillFilesListRequest) Reset() {
 	*x = SkillFilesListRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[98]
+	mi := &file_proto_v2_gateway_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9303,7 +9649,7 @@ func (x *SkillFilesListRequest) String() string {
 func (*SkillFilesListRequest) ProtoMessage() {}
 
 func (x *SkillFilesListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[98]
+	mi := &file_proto_v2_gateway_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9316,7 +9662,7 @@ func (x *SkillFilesListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillFilesListRequest.ProtoReflect.Descriptor instead.
 func (*SkillFilesListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{98}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{101}
 }
 
 type SkillFilesListResponse struct {
@@ -9330,7 +9676,7 @@ type SkillFilesListResponse struct {
 
 func (x *SkillFilesListResponse) Reset() {
 	*x = SkillFilesListResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[99]
+	mi := &file_proto_v2_gateway_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9342,7 +9688,7 @@ func (x *SkillFilesListResponse) String() string {
 func (*SkillFilesListResponse) ProtoMessage() {}
 
 func (x *SkillFilesListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[99]
+	mi := &file_proto_v2_gateway_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9355,7 +9701,7 @@ func (x *SkillFilesListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillFilesListResponse.ProtoReflect.Descriptor instead.
 func (*SkillFilesListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{99}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *SkillFilesListResponse) GetRootDir() string {
@@ -9388,7 +9734,7 @@ type SkillMetadataReadRequest struct {
 
 func (x *SkillMetadataReadRequest) Reset() {
 	*x = SkillMetadataReadRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[100]
+	mi := &file_proto_v2_gateway_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9400,7 +9746,7 @@ func (x *SkillMetadataReadRequest) String() string {
 func (*SkillMetadataReadRequest) ProtoMessage() {}
 
 func (x *SkillMetadataReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[100]
+	mi := &file_proto_v2_gateway_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9413,7 +9759,7 @@ func (x *SkillMetadataReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillMetadataReadRequest.ProtoReflect.Descriptor instead.
 func (*SkillMetadataReadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{100}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *SkillMetadataReadRequest) GetPath() string {
@@ -9433,7 +9779,7 @@ type SkillMetadataReadResponse struct {
 
 func (x *SkillMetadataReadResponse) Reset() {
 	*x = SkillMetadataReadResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[101]
+	mi := &file_proto_v2_gateway_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9445,7 +9791,7 @@ func (x *SkillMetadataReadResponse) String() string {
 func (*SkillMetadataReadResponse) ProtoMessage() {}
 
 func (x *SkillMetadataReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[101]
+	mi := &file_proto_v2_gateway_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9458,7 +9804,7 @@ func (x *SkillMetadataReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillMetadataReadResponse.ProtoReflect.Descriptor instead.
 func (*SkillMetadataReadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{101}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *SkillMetadataReadResponse) GetName() string {
@@ -9486,7 +9832,7 @@ type SkillTextReadRequest struct {
 
 func (x *SkillTextReadRequest) Reset() {
 	*x = SkillTextReadRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[102]
+	mi := &file_proto_v2_gateway_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9498,7 +9844,7 @@ func (x *SkillTextReadRequest) String() string {
 func (*SkillTextReadRequest) ProtoMessage() {}
 
 func (x *SkillTextReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[102]
+	mi := &file_proto_v2_gateway_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9511,7 +9857,7 @@ func (x *SkillTextReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillTextReadRequest.ProtoReflect.Descriptor instead.
 func (*SkillTextReadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{102}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *SkillTextReadRequest) GetPath() string {
@@ -9545,7 +9891,7 @@ type SkillTextReadResponse struct {
 
 func (x *SkillTextReadResponse) Reset() {
 	*x = SkillTextReadResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[103]
+	mi := &file_proto_v2_gateway_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9557,7 +9903,7 @@ func (x *SkillTextReadResponse) String() string {
 func (*SkillTextReadResponse) ProtoMessage() {}
 
 func (x *SkillTextReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[103]
+	mi := &file_proto_v2_gateway_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9570,7 +9916,7 @@ func (x *SkillTextReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillTextReadResponse.ProtoReflect.Descriptor instead.
 func (*SkillTextReadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{103}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *SkillTextReadResponse) GetContent() string {
@@ -9596,7 +9942,7 @@ type SkillManageRequest struct {
 
 func (x *SkillManageRequest) Reset() {
 	*x = SkillManageRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[104]
+	mi := &file_proto_v2_gateway_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9608,7 +9954,7 @@ func (x *SkillManageRequest) String() string {
 func (*SkillManageRequest) ProtoMessage() {}
 
 func (x *SkillManageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[104]
+	mi := &file_proto_v2_gateway_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9621,7 +9967,7 @@ func (x *SkillManageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillManageRequest.ProtoReflect.Descriptor instead.
 func (*SkillManageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{104}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *SkillManageRequest) GetPayloadJson() string {
@@ -9640,7 +9986,7 @@ type SkillManageResponse struct {
 
 func (x *SkillManageResponse) Reset() {
 	*x = SkillManageResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[105]
+	mi := &file_proto_v2_gateway_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9652,7 +9998,7 @@ func (x *SkillManageResponse) String() string {
 func (*SkillManageResponse) ProtoMessage() {}
 
 func (x *SkillManageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[105]
+	mi := &file_proto_v2_gateway_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9665,7 +10011,7 @@ func (x *SkillManageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillManageResponse.ProtoReflect.Descriptor instead.
 func (*SkillManageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{105}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *SkillManageResponse) GetResultJson() string {
@@ -9687,7 +10033,7 @@ type FileMentionListRequest struct {
 
 func (x *FileMentionListRequest) Reset() {
 	*x = FileMentionListRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[106]
+	mi := &file_proto_v2_gateway_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9699,7 +10045,7 @@ func (x *FileMentionListRequest) String() string {
 func (*FileMentionListRequest) ProtoMessage() {}
 
 func (x *FileMentionListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[106]
+	mi := &file_proto_v2_gateway_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9712,7 +10058,7 @@ func (x *FileMentionListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileMentionListRequest.ProtoReflect.Descriptor instead.
 func (*FileMentionListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{106}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *FileMentionListRequest) GetWorkdir() string {
@@ -9754,7 +10100,7 @@ type FileMentionEntry struct {
 
 func (x *FileMentionEntry) Reset() {
 	*x = FileMentionEntry{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[107]
+	mi := &file_proto_v2_gateway_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9766,7 +10112,7 @@ func (x *FileMentionEntry) String() string {
 func (*FileMentionEntry) ProtoMessage() {}
 
 func (x *FileMentionEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[107]
+	mi := &file_proto_v2_gateway_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9779,7 +10125,7 @@ func (x *FileMentionEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileMentionEntry.ProtoReflect.Descriptor instead.
 func (*FileMentionEntry) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{107}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *FileMentionEntry) GetPath() string {
@@ -9813,7 +10159,7 @@ type FileMentionListResponse struct {
 
 func (x *FileMentionListResponse) Reset() {
 	*x = FileMentionListResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[108]
+	mi := &file_proto_v2_gateway_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9825,7 +10171,7 @@ func (x *FileMentionListResponse) String() string {
 func (*FileMentionListResponse) ProtoMessage() {}
 
 func (x *FileMentionListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[108]
+	mi := &file_proto_v2_gateway_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9838,7 +10184,7 @@ func (x *FileMentionListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileMentionListResponse.ProtoReflect.Descriptor instead.
 func (*FileMentionListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{108}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *FileMentionListResponse) GetEntries() []*FileMentionEntry {
@@ -9867,7 +10213,7 @@ type FsRoot struct {
 
 func (x *FsRoot) Reset() {
 	*x = FsRoot{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[109]
+	mi := &file_proto_v2_gateway_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9879,7 +10225,7 @@ func (x *FsRoot) String() string {
 func (*FsRoot) ProtoMessage() {}
 
 func (x *FsRoot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[109]
+	mi := &file_proto_v2_gateway_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9892,7 +10238,7 @@ func (x *FsRoot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRoot.ProtoReflect.Descriptor instead.
 func (*FsRoot) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{109}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *FsRoot) GetId() string {
@@ -9931,7 +10277,7 @@ type FsRootsRequest struct {
 
 func (x *FsRootsRequest) Reset() {
 	*x = FsRootsRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[110]
+	mi := &file_proto_v2_gateway_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9943,7 +10289,7 @@ func (x *FsRootsRequest) String() string {
 func (*FsRootsRequest) ProtoMessage() {}
 
 func (x *FsRootsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[110]
+	mi := &file_proto_v2_gateway_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9956,7 +10302,7 @@ func (x *FsRootsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRootsRequest.ProtoReflect.Descriptor instead.
 func (*FsRootsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{110}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{113}
 }
 
 type FsRootsResponse struct {
@@ -9968,7 +10314,7 @@ type FsRootsResponse struct {
 
 func (x *FsRootsResponse) Reset() {
 	*x = FsRootsResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[111]
+	mi := &file_proto_v2_gateway_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9980,7 +10326,7 @@ func (x *FsRootsResponse) String() string {
 func (*FsRootsResponse) ProtoMessage() {}
 
 func (x *FsRootsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[111]
+	mi := &file_proto_v2_gateway_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9993,7 +10339,7 @@ func (x *FsRootsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRootsResponse.ProtoReflect.Descriptor instead.
 func (*FsRootsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{111}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *FsRootsResponse) GetRoots() []*FsRoot {
@@ -10013,7 +10359,7 @@ type FsListDirsRequest struct {
 
 func (x *FsListDirsRequest) Reset() {
 	*x = FsListDirsRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[112]
+	mi := &file_proto_v2_gateway_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10025,7 +10371,7 @@ func (x *FsListDirsRequest) String() string {
 func (*FsListDirsRequest) ProtoMessage() {}
 
 func (x *FsListDirsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[112]
+	mi := &file_proto_v2_gateway_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10038,7 +10384,7 @@ func (x *FsListDirsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsListDirsRequest.ProtoReflect.Descriptor instead.
 func (*FsListDirsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{112}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *FsListDirsRequest) GetPath() string {
@@ -10065,7 +10411,7 @@ type FsDirEntry struct {
 
 func (x *FsDirEntry) Reset() {
 	*x = FsDirEntry{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[113]
+	mi := &file_proto_v2_gateway_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10077,7 +10423,7 @@ func (x *FsDirEntry) String() string {
 func (*FsDirEntry) ProtoMessage() {}
 
 func (x *FsDirEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[113]
+	mi := &file_proto_v2_gateway_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10090,7 +10436,7 @@ func (x *FsDirEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsDirEntry.ProtoReflect.Descriptor instead.
 func (*FsDirEntry) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{113}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *FsDirEntry) GetPath() string {
@@ -10118,7 +10464,7 @@ type FsListDirsResponse struct {
 
 func (x *FsListDirsResponse) Reset() {
 	*x = FsListDirsResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[114]
+	mi := &file_proto_v2_gateway_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10130,7 +10476,7 @@ func (x *FsListDirsResponse) String() string {
 func (*FsListDirsResponse) ProtoMessage() {}
 
 func (x *FsListDirsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[114]
+	mi := &file_proto_v2_gateway_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10143,7 +10489,7 @@ func (x *FsListDirsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsListDirsResponse.ProtoReflect.Descriptor instead.
 func (*FsListDirsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{114}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *FsListDirsResponse) GetPath() string {
@@ -10177,7 +10523,7 @@ type FsCreateProjectFolderRequest struct {
 
 func (x *FsCreateProjectFolderRequest) Reset() {
 	*x = FsCreateProjectFolderRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[115]
+	mi := &file_proto_v2_gateway_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10189,7 +10535,7 @@ func (x *FsCreateProjectFolderRequest) String() string {
 func (*FsCreateProjectFolderRequest) ProtoMessage() {}
 
 func (x *FsCreateProjectFolderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[115]
+	mi := &file_proto_v2_gateway_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10202,7 +10548,7 @@ func (x *FsCreateProjectFolderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateProjectFolderRequest.ProtoReflect.Descriptor instead.
 func (*FsCreateProjectFolderRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{115}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *FsCreateProjectFolderRequest) GetParent() string {
@@ -10228,7 +10574,7 @@ type FsCreateProjectFolderResponse struct {
 
 func (x *FsCreateProjectFolderResponse) Reset() {
 	*x = FsCreateProjectFolderResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[116]
+	mi := &file_proto_v2_gateway_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10240,7 +10586,7 @@ func (x *FsCreateProjectFolderResponse) String() string {
 func (*FsCreateProjectFolderResponse) ProtoMessage() {}
 
 func (x *FsCreateProjectFolderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[116]
+	mi := &file_proto_v2_gateway_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10253,7 +10599,7 @@ func (x *FsCreateProjectFolderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateProjectFolderResponse.ProtoReflect.Descriptor instead.
 func (*FsCreateProjectFolderResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{116}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *FsCreateProjectFolderResponse) GetPath() string {
@@ -10277,7 +10623,7 @@ type FsListRequest struct {
 
 func (x *FsListRequest) Reset() {
 	*x = FsListRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[117]
+	mi := &file_proto_v2_gateway_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10289,7 +10635,7 @@ func (x *FsListRequest) String() string {
 func (*FsListRequest) ProtoMessage() {}
 
 func (x *FsListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[117]
+	mi := &file_proto_v2_gateway_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10302,7 +10648,7 @@ func (x *FsListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsListRequest.ProtoReflect.Descriptor instead.
 func (*FsListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{117}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *FsListRequest) GetWorkdir() string {
@@ -10358,7 +10704,7 @@ type FsListEntry struct {
 
 func (x *FsListEntry) Reset() {
 	*x = FsListEntry{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[118]
+	mi := &file_proto_v2_gateway_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10370,7 +10716,7 @@ func (x *FsListEntry) String() string {
 func (*FsListEntry) ProtoMessage() {}
 
 func (x *FsListEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[118]
+	mi := &file_proto_v2_gateway_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10383,7 +10729,7 @@ func (x *FsListEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsListEntry.ProtoReflect.Descriptor instead.
 func (*FsListEntry) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{118}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *FsListEntry) GetPath() string {
@@ -10423,7 +10769,7 @@ type FsListResponse struct {
 
 func (x *FsListResponse) Reset() {
 	*x = FsListResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[119]
+	mi := &file_proto_v2_gateway_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10435,7 +10781,7 @@ func (x *FsListResponse) String() string {
 func (*FsListResponse) ProtoMessage() {}
 
 func (x *FsListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[119]
+	mi := &file_proto_v2_gateway_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10448,7 +10794,7 @@ func (x *FsListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsListResponse.ProtoReflect.Descriptor instead.
 func (*FsListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{119}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *FsListResponse) GetPath() string {
@@ -10517,7 +10863,7 @@ type FsReadEditableTextRequest struct {
 
 func (x *FsReadEditableTextRequest) Reset() {
 	*x = FsReadEditableTextRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[120]
+	mi := &file_proto_v2_gateway_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10529,7 +10875,7 @@ func (x *FsReadEditableTextRequest) String() string {
 func (*FsReadEditableTextRequest) ProtoMessage() {}
 
 func (x *FsReadEditableTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[120]
+	mi := &file_proto_v2_gateway_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10542,7 +10888,7 @@ func (x *FsReadEditableTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsReadEditableTextRequest.ProtoReflect.Descriptor instead.
 func (*FsReadEditableTextRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{120}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *FsReadEditableTextRequest) GetWorkdir() string {
@@ -10573,7 +10919,7 @@ type FsReadEditableTextResponse struct {
 
 func (x *FsReadEditableTextResponse) Reset() {
 	*x = FsReadEditableTextResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[121]
+	mi := &file_proto_v2_gateway_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10585,7 +10931,7 @@ func (x *FsReadEditableTextResponse) String() string {
 func (*FsReadEditableTextResponse) ProtoMessage() {}
 
 func (x *FsReadEditableTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[121]
+	mi := &file_proto_v2_gateway_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10598,7 +10944,7 @@ func (x *FsReadEditableTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsReadEditableTextResponse.ProtoReflect.Descriptor instead.
 func (*FsReadEditableTextResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{121}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *FsReadEditableTextResponse) GetPath() string {
@@ -10653,7 +10999,7 @@ type FsReadWorkspaceImageRequest struct {
 
 func (x *FsReadWorkspaceImageRequest) Reset() {
 	*x = FsReadWorkspaceImageRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[122]
+	mi := &file_proto_v2_gateway_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10665,7 +11011,7 @@ func (x *FsReadWorkspaceImageRequest) String() string {
 func (*FsReadWorkspaceImageRequest) ProtoMessage() {}
 
 func (x *FsReadWorkspaceImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[122]
+	mi := &file_proto_v2_gateway_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10678,7 +11024,7 @@ func (x *FsReadWorkspaceImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsReadWorkspaceImageRequest.ProtoReflect.Descriptor instead.
 func (*FsReadWorkspaceImageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{122}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *FsReadWorkspaceImageRequest) GetWorkdir() string {
@@ -10709,7 +11055,7 @@ type FsReadWorkspaceImageResponse struct {
 
 func (x *FsReadWorkspaceImageResponse) Reset() {
 	*x = FsReadWorkspaceImageResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[123]
+	mi := &file_proto_v2_gateway_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10721,7 +11067,7 @@ func (x *FsReadWorkspaceImageResponse) String() string {
 func (*FsReadWorkspaceImageResponse) ProtoMessage() {}
 
 func (x *FsReadWorkspaceImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[123]
+	mi := &file_proto_v2_gateway_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10734,7 +11080,7 @@ func (x *FsReadWorkspaceImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsReadWorkspaceImageResponse.ProtoReflect.Descriptor instead.
 func (*FsReadWorkspaceImageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{123}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *FsReadWorkspaceImageResponse) GetPath() string {
@@ -10795,7 +11141,7 @@ type ChatFileOpenRequest struct {
 
 func (x *ChatFileOpenRequest) Reset() {
 	*x = ChatFileOpenRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[124]
+	mi := &file_proto_v2_gateway_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10807,7 +11153,7 @@ func (x *ChatFileOpenRequest) String() string {
 func (*ChatFileOpenRequest) ProtoMessage() {}
 
 func (x *ChatFileOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[124]
+	mi := &file_proto_v2_gateway_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10820,7 +11166,7 @@ func (x *ChatFileOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatFileOpenRequest.ProtoReflect.Descriptor instead.
 func (*ChatFileOpenRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{124}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *ChatFileOpenRequest) GetConversationId() string {
@@ -10895,7 +11241,7 @@ type ChatFileOpenResponse struct {
 
 func (x *ChatFileOpenResponse) Reset() {
 	*x = ChatFileOpenResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[125]
+	mi := &file_proto_v2_gateway_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10907,7 +11253,7 @@ func (x *ChatFileOpenResponse) String() string {
 func (*ChatFileOpenResponse) ProtoMessage() {}
 
 func (x *ChatFileOpenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[125]
+	mi := &file_proto_v2_gateway_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10920,7 +11266,7 @@ func (x *ChatFileOpenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatFileOpenResponse.ProtoReflect.Descriptor instead.
 func (*ChatFileOpenResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{125}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *ChatFileOpenResponse) GetAction() string {
@@ -10995,7 +11341,7 @@ type FsWriteTextRequest struct {
 
 func (x *FsWriteTextRequest) Reset() {
 	*x = FsWriteTextRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[126]
+	mi := &file_proto_v2_gateway_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11007,7 +11353,7 @@ func (x *FsWriteTextRequest) String() string {
 func (*FsWriteTextRequest) ProtoMessage() {}
 
 func (x *FsWriteTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[126]
+	mi := &file_proto_v2_gateway_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11020,7 +11366,7 @@ func (x *FsWriteTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsWriteTextRequest.ProtoReflect.Descriptor instead.
 func (*FsWriteTextRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{126}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *FsWriteTextRequest) GetWorkdir() string {
@@ -11094,7 +11440,7 @@ type FsWriteTextResponse struct {
 
 func (x *FsWriteTextResponse) Reset() {
 	*x = FsWriteTextResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[127]
+	mi := &file_proto_v2_gateway_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11106,7 +11452,7 @@ func (x *FsWriteTextResponse) String() string {
 func (*FsWriteTextResponse) ProtoMessage() {}
 
 func (x *FsWriteTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[127]
+	mi := &file_proto_v2_gateway_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11119,7 +11465,7 @@ func (x *FsWriteTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsWriteTextResponse.ProtoReflect.Descriptor instead.
 func (*FsWriteTextResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{127}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *FsWriteTextResponse) GetPath() string {
@@ -11181,7 +11527,7 @@ type FsCreateDirRequest struct {
 
 func (x *FsCreateDirRequest) Reset() {
 	*x = FsCreateDirRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[128]
+	mi := &file_proto_v2_gateway_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11193,7 +11539,7 @@ func (x *FsCreateDirRequest) String() string {
 func (*FsCreateDirRequest) ProtoMessage() {}
 
 func (x *FsCreateDirRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[128]
+	mi := &file_proto_v2_gateway_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11206,7 +11552,7 @@ func (x *FsCreateDirRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateDirRequest.ProtoReflect.Descriptor instead.
 func (*FsCreateDirRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{128}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *FsCreateDirRequest) GetWorkdir() string {
@@ -11233,7 +11579,7 @@ type FsCreateDirResponse struct {
 
 func (x *FsCreateDirResponse) Reset() {
 	*x = FsCreateDirResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[129]
+	mi := &file_proto_v2_gateway_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11245,7 +11591,7 @@ func (x *FsCreateDirResponse) String() string {
 func (*FsCreateDirResponse) ProtoMessage() {}
 
 func (x *FsCreateDirResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[129]
+	mi := &file_proto_v2_gateway_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11258,7 +11604,7 @@ func (x *FsCreateDirResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateDirResponse.ProtoReflect.Descriptor instead.
 func (*FsCreateDirResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{129}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *FsCreateDirResponse) GetPath() string {
@@ -11286,7 +11632,7 @@ type FsRenameRequest struct {
 
 func (x *FsRenameRequest) Reset() {
 	*x = FsRenameRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[130]
+	mi := &file_proto_v2_gateway_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11298,7 +11644,7 @@ func (x *FsRenameRequest) String() string {
 func (*FsRenameRequest) ProtoMessage() {}
 
 func (x *FsRenameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[130]
+	mi := &file_proto_v2_gateway_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11311,7 +11657,7 @@ func (x *FsRenameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRenameRequest.ProtoReflect.Descriptor instead.
 func (*FsRenameRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{130}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *FsRenameRequest) GetWorkdir() string {
@@ -11346,7 +11692,7 @@ type FsRenameResponse struct {
 
 func (x *FsRenameResponse) Reset() {
 	*x = FsRenameResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[131]
+	mi := &file_proto_v2_gateway_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11358,7 +11704,7 @@ func (x *FsRenameResponse) String() string {
 func (*FsRenameResponse) ProtoMessage() {}
 
 func (x *FsRenameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[131]
+	mi := &file_proto_v2_gateway_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11371,7 +11717,7 @@ func (x *FsRenameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRenameResponse.ProtoReflect.Descriptor instead.
 func (*FsRenameResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{131}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *FsRenameResponse) GetFromPath() string {
@@ -11405,7 +11751,7 @@ type FsDeleteRequest struct {
 
 func (x *FsDeleteRequest) Reset() {
 	*x = FsDeleteRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[132]
+	mi := &file_proto_v2_gateway_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11417,7 +11763,7 @@ func (x *FsDeleteRequest) String() string {
 func (*FsDeleteRequest) ProtoMessage() {}
 
 func (x *FsDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[132]
+	mi := &file_proto_v2_gateway_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11430,7 +11776,7 @@ func (x *FsDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsDeleteRequest.ProtoReflect.Descriptor instead.
 func (*FsDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{132}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *FsDeleteRequest) GetWorkdir() string {
@@ -11457,7 +11803,7 @@ type FsDeleteResponse struct {
 
 func (x *FsDeleteResponse) Reset() {
 	*x = FsDeleteResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[133]
+	mi := &file_proto_v2_gateway_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11469,7 +11815,7 @@ func (x *FsDeleteResponse) String() string {
 func (*FsDeleteResponse) ProtoMessage() {}
 
 func (x *FsDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[133]
+	mi := &file_proto_v2_gateway_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11482,7 +11828,7 @@ func (x *FsDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsDeleteResponse.ProtoReflect.Descriptor instead.
 func (*FsDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{133}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *FsDeleteResponse) GetPath() string {
@@ -11508,7 +11854,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[134]
+	mi := &file_proto_v2_gateway_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11520,7 +11866,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[134]
+	mi := &file_proto_v2_gateway_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11533,7 +11879,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{134}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *PingRequest) GetTimestamp() int64 {
@@ -11552,7 +11898,7 @@ type PongResponse struct {
 
 func (x *PongResponse) Reset() {
 	*x = PongResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[135]
+	mi := &file_proto_v2_gateway_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11564,7 +11910,7 @@ func (x *PongResponse) String() string {
 func (*PongResponse) ProtoMessage() {}
 
 func (x *PongResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[135]
+	mi := &file_proto_v2_gateway_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11577,7 +11923,7 @@ func (x *PongResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PongResponse.ProtoReflect.Descriptor instead.
 func (*PongResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{135}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *PongResponse) GetTimestamp() int64 {
@@ -11597,7 +11943,7 @@ type ErrorResponse struct {
 
 func (x *ErrorResponse) Reset() {
 	*x = ErrorResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[136]
+	mi := &file_proto_v2_gateway_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11609,7 +11955,7 @@ func (x *ErrorResponse) String() string {
 func (*ErrorResponse) ProtoMessage() {}
 
 func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[136]
+	mi := &file_proto_v2_gateway_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11622,7 +11968,7 @@ func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
 func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{136}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *ErrorResponse) GetCode() int32 {
@@ -11657,7 +12003,7 @@ type ProviderModelsRequest struct {
 
 func (x *ProviderModelsRequest) Reset() {
 	*x = ProviderModelsRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[137]
+	mi := &file_proto_v2_gateway_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11669,7 +12015,7 @@ func (x *ProviderModelsRequest) String() string {
 func (*ProviderModelsRequest) ProtoMessage() {}
 
 func (x *ProviderModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[137]
+	mi := &file_proto_v2_gateway_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11682,7 +12028,7 @@ func (x *ProviderModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderModelsRequest.ProtoReflect.Descriptor instead.
 func (*ProviderModelsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{137}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *ProviderModelsRequest) GetProviderType() string {
@@ -11743,7 +12089,7 @@ type ProviderModelsResponse struct {
 
 func (x *ProviderModelsResponse) Reset() {
 	*x = ProviderModelsResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[138]
+	mi := &file_proto_v2_gateway_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11755,7 +12101,7 @@ func (x *ProviderModelsResponse) String() string {
 func (*ProviderModelsResponse) ProtoMessage() {}
 
 func (x *ProviderModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[138]
+	mi := &file_proto_v2_gateway_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11768,7 +12114,7 @@ func (x *ProviderModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderModelsResponse.ProtoReflect.Descriptor instead.
 func (*ProviderModelsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{138}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *ProviderModelsResponse) GetModelsJson() string {
@@ -11791,7 +12137,7 @@ type ProviderUsageRequest struct {
 
 func (x *ProviderUsageRequest) Reset() {
 	*x = ProviderUsageRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[139]
+	mi := &file_proto_v2_gateway_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11803,7 +12149,7 @@ func (x *ProviderUsageRequest) String() string {
 func (*ProviderUsageRequest) ProtoMessage() {}
 
 func (x *ProviderUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[139]
+	mi := &file_proto_v2_gateway_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11816,7 +12162,7 @@ func (x *ProviderUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderUsageRequest.ProtoReflect.Descriptor instead.
 func (*ProviderUsageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{139}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *ProviderUsageRequest) GetProviderId() string {
@@ -11849,7 +12195,7 @@ type ProviderUsageResponse struct {
 
 func (x *ProviderUsageResponse) Reset() {
 	*x = ProviderUsageResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[140]
+	mi := &file_proto_v2_gateway_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11861,7 +12207,7 @@ func (x *ProviderUsageResponse) String() string {
 func (*ProviderUsageResponse) ProtoMessage() {}
 
 func (x *ProviderUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[140]
+	mi := &file_proto_v2_gateway_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11874,7 +12220,7 @@ func (x *ProviderUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderUsageResponse.ProtoReflect.Descriptor instead.
 func (*ProviderUsageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{140}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *ProviderUsageResponse) GetResultJson() string {
@@ -11898,7 +12244,7 @@ type ChatIngressBatch struct {
 
 func (x *ChatIngressBatch) Reset() {
 	*x = ChatIngressBatch{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[141]
+	mi := &file_proto_v2_gateway_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11910,7 +12256,7 @@ func (x *ChatIngressBatch) String() string {
 func (*ChatIngressBatch) ProtoMessage() {}
 
 func (x *ChatIngressBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[141]
+	mi := &file_proto_v2_gateway_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11923,7 +12269,7 @@ func (x *ChatIngressBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressBatch.ProtoReflect.Descriptor instead.
 func (*ChatIngressBatch) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{141}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *ChatIngressBatch) GetRunId() string {
@@ -11969,7 +12315,7 @@ type ChatIngressRecord struct {
 
 func (x *ChatIngressRecord) Reset() {
 	*x = ChatIngressRecord{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[142]
+	mi := &file_proto_v2_gateway_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11981,7 +12327,7 @@ func (x *ChatIngressRecord) String() string {
 func (*ChatIngressRecord) ProtoMessage() {}
 
 func (x *ChatIngressRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[142]
+	mi := &file_proto_v2_gateway_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11994,7 +12340,7 @@ func (x *ChatIngressRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressRecord.ProtoReflect.Descriptor instead.
 func (*ChatIngressRecord) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{142}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ChatIngressRecord) GetPayload() isChatIngressRecord_Payload {
@@ -12078,7 +12424,7 @@ type ChatIngressDelta struct {
 
 func (x *ChatIngressDelta) Reset() {
 	*x = ChatIngressDelta{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[143]
+	mi := &file_proto_v2_gateway_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12090,7 +12436,7 @@ func (x *ChatIngressDelta) String() string {
 func (*ChatIngressDelta) ProtoMessage() {}
 
 func (x *ChatIngressDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[143]
+	mi := &file_proto_v2_gateway_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12103,7 +12449,7 @@ func (x *ChatIngressDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressDelta.ProtoReflect.Descriptor instead.
 func (*ChatIngressDelta) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{143}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *ChatIngressDelta) GetEventJson() string {
@@ -12130,7 +12476,7 @@ type ChatIngressHeartbeat struct {
 
 func (x *ChatIngressHeartbeat) Reset() {
 	*x = ChatIngressHeartbeat{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[144]
+	mi := &file_proto_v2_gateway_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12142,7 +12488,7 @@ func (x *ChatIngressHeartbeat) String() string {
 func (*ChatIngressHeartbeat) ProtoMessage() {}
 
 func (x *ChatIngressHeartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[144]
+	mi := &file_proto_v2_gateway_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12155,7 +12501,7 @@ func (x *ChatIngressHeartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressHeartbeat.ProtoReflect.Descriptor instead.
 func (*ChatIngressHeartbeat) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{144}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *ChatIngressHeartbeat) GetUpdatedAt() int64 {
@@ -12180,7 +12526,7 @@ type ChatIngressCheckpoint struct {
 
 func (x *ChatIngressCheckpoint) Reset() {
 	*x = ChatIngressCheckpoint{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[145]
+	mi := &file_proto_v2_gateway_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12192,7 +12538,7 @@ func (x *ChatIngressCheckpoint) String() string {
 func (*ChatIngressCheckpoint) ProtoMessage() {}
 
 func (x *ChatIngressCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[145]
+	mi := &file_proto_v2_gateway_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12205,7 +12551,7 @@ func (x *ChatIngressCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressCheckpoint.ProtoReflect.Descriptor instead.
 func (*ChatIngressCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{145}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *ChatIngressCheckpoint) GetCoversThroughSeq() uint64 {
@@ -12275,7 +12621,7 @@ type ChatIngressTerminal struct {
 
 func (x *ChatIngressTerminal) Reset() {
 	*x = ChatIngressTerminal{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[146]
+	mi := &file_proto_v2_gateway_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12287,7 +12633,7 @@ func (x *ChatIngressTerminal) String() string {
 func (*ChatIngressTerminal) ProtoMessage() {}
 
 func (x *ChatIngressTerminal) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[146]
+	mi := &file_proto_v2_gateway_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12300,7 +12646,7 @@ func (x *ChatIngressTerminal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressTerminal.ProtoReflect.Descriptor instead.
 func (*ChatIngressTerminal) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{146}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *ChatIngressTerminal) GetCoversThroughSeq() uint64 {
@@ -12384,7 +12730,7 @@ type ChatIngressResume struct {
 
 func (x *ChatIngressResume) Reset() {
 	*x = ChatIngressResume{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[147]
+	mi := &file_proto_v2_gateway_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12396,7 +12742,7 @@ func (x *ChatIngressResume) String() string {
 func (*ChatIngressResume) ProtoMessage() {}
 
 func (x *ChatIngressResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[147]
+	mi := &file_proto_v2_gateway_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12409,7 +12755,7 @@ func (x *ChatIngressResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressResume.ProtoReflect.Descriptor instead.
 func (*ChatIngressResume) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{147}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *ChatIngressResume) GetRuns() []*ChatIngressRunResume {
@@ -12435,7 +12781,7 @@ type ChatIngressRunResume struct {
 
 func (x *ChatIngressRunResume) Reset() {
 	*x = ChatIngressRunResume{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[148]
+	mi := &file_proto_v2_gateway_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12447,7 +12793,7 @@ func (x *ChatIngressRunResume) String() string {
 func (*ChatIngressRunResume) ProtoMessage() {}
 
 func (x *ChatIngressRunResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[148]
+	mi := &file_proto_v2_gateway_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12460,7 +12806,7 @@ func (x *ChatIngressRunResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressRunResume.ProtoReflect.Descriptor instead.
 func (*ChatIngressRunResume) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{148}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *ChatIngressRunResume) GetRunId() string {
@@ -12538,7 +12884,7 @@ type ChatIngressFragment struct {
 
 func (x *ChatIngressFragment) Reset() {
 	*x = ChatIngressFragment{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[149]
+	mi := &file_proto_v2_gateway_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12550,7 +12896,7 @@ func (x *ChatIngressFragment) String() string {
 func (*ChatIngressFragment) ProtoMessage() {}
 
 func (x *ChatIngressFragment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[149]
+	mi := &file_proto_v2_gateway_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12563,7 +12909,7 @@ func (x *ChatIngressFragment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressFragment.ProtoReflect.Descriptor instead.
 func (*ChatIngressFragment) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{149}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ChatIngressFragment) GetRunId() string {
@@ -12638,7 +12984,7 @@ type ChatIngressAck struct {
 
 func (x *ChatIngressAck) Reset() {
 	*x = ChatIngressAck{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[150]
+	mi := &file_proto_v2_gateway_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12650,7 +12996,7 @@ func (x *ChatIngressAck) String() string {
 func (*ChatIngressAck) ProtoMessage() {}
 
 func (x *ChatIngressAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[150]
+	mi := &file_proto_v2_gateway_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12663,7 +13009,7 @@ func (x *ChatIngressAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatIngressAck.ProtoReflect.Descriptor instead.
 func (*ChatIngressAck) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{150}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *ChatIngressAck) GetRunId() string {
@@ -12732,7 +13078,7 @@ type HistorySetCwdRequest struct {
 
 func (x *HistorySetCwdRequest) Reset() {
 	*x = HistorySetCwdRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[151]
+	mi := &file_proto_v2_gateway_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12744,7 +13090,7 @@ func (x *HistorySetCwdRequest) String() string {
 func (*HistorySetCwdRequest) ProtoMessage() {}
 
 func (x *HistorySetCwdRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[151]
+	mi := &file_proto_v2_gateway_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12757,7 +13103,7 @@ func (x *HistorySetCwdRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistorySetCwdRequest.ProtoReflect.Descriptor instead.
 func (*HistorySetCwdRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{151}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *HistorySetCwdRequest) GetConversationId() string {
@@ -12783,7 +13129,7 @@ type HistorySetCwdResponse struct {
 
 func (x *HistorySetCwdResponse) Reset() {
 	*x = HistorySetCwdResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[152]
+	mi := &file_proto_v2_gateway_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12795,7 +13141,7 @@ func (x *HistorySetCwdResponse) String() string {
 func (*HistorySetCwdResponse) ProtoMessage() {}
 
 func (x *HistorySetCwdResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[152]
+	mi := &file_proto_v2_gateway_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12808,7 +13154,7 @@ func (x *HistorySetCwdResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistorySetCwdResponse.ProtoReflect.Descriptor instead.
 func (*HistorySetCwdResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{152}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *HistorySetCwdResponse) GetConversation() *ConversationSummary {
@@ -12830,7 +13176,7 @@ type WorkspaceRootGrantDraft struct {
 
 func (x *WorkspaceRootGrantDraft) Reset() {
 	*x = WorkspaceRootGrantDraft{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[153]
+	mi := &file_proto_v2_gateway_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12842,7 +13188,7 @@ func (x *WorkspaceRootGrantDraft) String() string {
 func (*WorkspaceRootGrantDraft) ProtoMessage() {}
 
 func (x *WorkspaceRootGrantDraft) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[153]
+	mi := &file_proto_v2_gateway_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12855,7 +13201,7 @@ func (x *WorkspaceRootGrantDraft) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRootGrantDraft.ProtoReflect.Descriptor instead.
 func (*WorkspaceRootGrantDraft) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{153}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *WorkspaceRootGrantDraft) GetId() string {
@@ -12904,7 +13250,7 @@ type WorkspaceRootGrant struct {
 
 func (x *WorkspaceRootGrant) Reset() {
 	*x = WorkspaceRootGrant{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[154]
+	mi := &file_proto_v2_gateway_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12916,7 +13262,7 @@ func (x *WorkspaceRootGrant) String() string {
 func (*WorkspaceRootGrant) ProtoMessage() {}
 
 func (x *WorkspaceRootGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[154]
+	mi := &file_proto_v2_gateway_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12929,7 +13275,7 @@ func (x *WorkspaceRootGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRootGrant.ProtoReflect.Descriptor instead.
 func (*WorkspaceRootGrant) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{154}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *WorkspaceRootGrant) GetId() string {
@@ -13014,7 +13360,7 @@ type WorkspaceRootGrantsRequest struct {
 
 func (x *WorkspaceRootGrantsRequest) Reset() {
 	*x = WorkspaceRootGrantsRequest{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[155]
+	mi := &file_proto_v2_gateway_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13026,7 +13372,7 @@ func (x *WorkspaceRootGrantsRequest) String() string {
 func (*WorkspaceRootGrantsRequest) ProtoMessage() {}
 
 func (x *WorkspaceRootGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[155]
+	mi := &file_proto_v2_gateway_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13039,7 +13385,7 @@ func (x *WorkspaceRootGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRootGrantsRequest.ProtoReflect.Descriptor instead.
 func (*WorkspaceRootGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{155}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *WorkspaceRootGrantsRequest) GetAction() string {
@@ -13079,7 +13425,7 @@ type WorkspaceRootGrantsResponse struct {
 
 func (x *WorkspaceRootGrantsResponse) Reset() {
 	*x = WorkspaceRootGrantsResponse{}
-	mi := &file_proto_v2_gateway_proto_msgTypes[156]
+	mi := &file_proto_v2_gateway_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13091,7 +13437,7 @@ func (x *WorkspaceRootGrantsResponse) String() string {
 func (*WorkspaceRootGrantsResponse) ProtoMessage() {}
 
 func (x *WorkspaceRootGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v2_gateway_proto_msgTypes[156]
+	mi := &file_proto_v2_gateway_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13104,7 +13450,7 @@ func (x *WorkspaceRootGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceRootGrantsResponse.ProtoReflect.Descriptor instead.
 func (*WorkspaceRootGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{156}
+	return file_proto_v2_gateway_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *WorkspaceRootGrantsResponse) GetGrants() []*WorkspaceRootGrant {
@@ -13118,7 +13464,7 @@ var File_proto_v2_gateway_proto protoreflect.FileDescriptor
 
 const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/v2/gateway.proto\x12\x14liveagent.gateway.v2\"\xf0\"\n" +
+	"\x16proto/v2/gateway.proto\x12\x14liveagent.gateway.v2\"\xcb#\n" +
 	"\x0fGatewayEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -13180,8 +13526,9 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x0eprovider_usage\x18] \x01(\v2*.liveagent.gateway.v2.ProviderUsageRequestH\x00R\rproviderUsage\x12Q\n" +
 	"\x0echat_file_open\x18^ \x01(\v2).liveagent.gateway.v2.ChatFileOpenRequestH\x00R\fchatFileOpen\x12T\n" +
 	"\x0fhistory_set_cwd\x18_ \x01(\v2*.liveagent.gateway.v2.HistorySetCwdRequestH\x00R\rhistorySetCwd\x12f\n" +
-	"\x15workspace_root_grants\x18` \x01(\v20.liveagent.gateway.v2.WorkspaceRootGrantsRequestH\x00R\x13workspaceRootGrantsB\t\n" +
-	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bJ\x10K\"\xe0.\n" +
+	"\x15workspace_root_grants\x18` \x01(\v20.liveagent.gateway.v2.WorkspaceRootGrantsRequestH\x00R\x13workspaceRootGrants\x12Y\n" +
+	"\x10import_directory\x18a \x01(\v2,.liveagent.gateway.v2.ImportDirectoryRequestH\x00R\x0fimportDirectoryB\t\n" +
+	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bJ\x10K\"\xc5/\n" +
 	"\rAgentEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -13253,7 +13600,8 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x13chat_file_open_resp\x18b \x01(\v2*.liveagent.gateway.v2.ChatFileOpenResponseH\x00R\x10chatFileOpenResp\x12;\n" +
 	"\x05error\x18c \x01(\v2#.liveagent.gateway.v2.ErrorResponseH\x00R\x05error\x12^\n" +
 	"\x14history_set_cwd_resp\x18d \x01(\v2+.liveagent.gateway.v2.HistorySetCwdResponseH\x00R\x11historySetCwdResp\x12p\n" +
-	"\x1aworkspace_root_grants_resp\x18e \x01(\v21.liveagent.gateway.v2.WorkspaceRootGrantsResponseH\x00R\x17workspaceRootGrantsRespB\t\n" +
+	"\x1aworkspace_root_grants_resp\x18e \x01(\v21.liveagent.gateway.v2.WorkspaceRootGrantsResponseH\x00R\x17workspaceRootGrantsResp\x12c\n" +
+	"\x15import_directory_resp\x18f \x01(\v2-.liveagent.gateway.v2.ImportDirectoryResponseH\x00R\x13importDirectoryRespB\t\n" +
 	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bN\x10O\"|\n" +
 	"\x11ChatSelectedModel\x12,\n" +
 	"\x12custom_provider_id\x18\x01 \x01(\tR\x10customProviderId\x12\x14\n" +
@@ -13279,7 +13627,34 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x05files\x18\x02 \x03(\v2(.liveagent.gateway.v2.UploadReadableFileR\x05files\"u\n" +
 	"\x1bUploadReadableFilesResponse\x12<\n" +
 	"\x05files\x18\x01 \x03(\v2&.liveagent.gateway.v2.ChatUploadedFileR\x05files\x12\x18\n" +
-	"\askipped\x18\x02 \x03(\tR\askipped\"\\\n" +
+	"\askipped\x18\x02 \x03(\tR\askipped\"T\n" +
+	"\x13ImportDirectoryFile\x12#\n" +
+	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\xb2\x03\n" +
+	"\x16ImportDirectoryRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12C\n" +
+	"\x05files\x18\x03 \x03(\v2).liveagent.gateway.v2.ImportDirectoryFileB\x02\x18\x01R\x05files\x12\x1f\n" +
+	"\vtransfer_id\x18\x04 \x01(\tR\n" +
+	"transferId\x12L\n" +
+	"\toperation\x18\x05 \x01(\x0e2..liveagent.gateway.v2.ImportDirectoryOperationR\toperation\x12\x1f\n" +
+	"\vtotal_files\x18\x06 \x01(\rR\n" +
+	"totalFiles\x12\x1f\n" +
+	"\vtotal_bytes\x18\a \x01(\x04R\n" +
+	"totalBytes\x12#\n" +
+	"\rrelative_path\x18\b \x01(\tR\frelativePath\x12\x16\n" +
+	"\x06offset\x18\t \x01(\x04R\x06offset\x12\x14\n" +
+	"\x05chunk\x18\n" +
+	" \x01(\fR\x05chunk\x12#\n" +
+	"\rfile_complete\x18\v \x01(\bR\ffileComplete\"\xb7\x01\n" +
+	"\x17ImportDirectoryResponse\x12\x1b\n" +
+	"\troot_path\x18\x01 \x01(\tR\brootPath\x12\x1d\n" +
+	"\n" +
+	"file_count\x18\x02 \x01(\x05R\tfileCount\x12\x18\n" +
+	"\askipped\x18\x03 \x03(\tR\askipped\x12\x1f\n" +
+	"\vtransfer_id\x18\x04 \x01(\tR\n" +
+	"transferId\x12%\n" +
+	"\x0ereceived_bytes\x18\x05 \x01(\x04R\rreceivedBytes\"\\\n" +
 	"\x1bUploadedImagePreviewRequest\x12\x18\n" +
 	"\aworkdir\x18\x01 \x01(\tR\aworkdir\x12#\n" +
 	"\rabsolute_path\x18\x02 \x01(\tR\fabsolutePath\"O\n" +
@@ -14220,7 +14595,13 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\fproject_path\x18\x03 \x01(\tR\vprojectPath\x12E\n" +
 	"\x06grants\x18\x04 \x03(\v2-.liveagent.gateway.v2.WorkspaceRootGrantDraftR\x06grants\"_\n" +
 	"\x1bWorkspaceRootGrantsResponse\x12@\n" +
-	"\x06grants\x18\x01 \x03(\v2(.liveagent.gateway.v2.WorkspaceRootGrantR\x06grants*\xc6\x04\n" +
+	"\x06grants\x18\x01 \x03(\v2(.liveagent.gateway.v2.WorkspaceRootGrantR\x06grants*\xe5\x01\n" +
+	"\x18ImportDirectoryOperation\x12*\n" +
+	"&IMPORT_DIRECTORY_OPERATION_UNSPECIFIED\x10\x00\x12$\n" +
+	" IMPORT_DIRECTORY_OPERATION_START\x10\x01\x12*\n" +
+	"&IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK\x10\x02\x12%\n" +
+	"!IMPORT_DIRECTORY_OPERATION_COMMIT\x10\x03\x12$\n" +
+	" IMPORT_DIRECTORY_OPERATION_ABORT\x10\x04*\xc6\x04\n" +
 	"\x0fTunnelFrameKind\x12!\n" +
 	"\x1dTUNNEL_FRAME_KIND_UNSPECIFIED\x10\x00\x12(\n" +
 	"$TUNNEL_FRAME_KIND_HTTP_REQUEST_START\x10\x01\x12'\n" +
@@ -14256,360 +14637,368 @@ func file_proto_v2_gateway_proto_rawDescGZIP() []byte {
 	return file_proto_v2_gateway_proto_rawDescData
 }
 
-var file_proto_v2_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_proto_v2_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 157)
+var file_proto_v2_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_proto_v2_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 160)
 var file_proto_v2_gateway_proto_goTypes = []any{
-	(TunnelFrameKind)(0),                      // 0: liveagent.gateway.v2.TunnelFrameKind
-	(TunnelWsMessageType)(0),                  // 1: liveagent.gateway.v2.TunnelWsMessageType
-	(ChatEvent_ChatEventType)(0),              // 2: liveagent.gateway.v2.ChatEvent.ChatEventType
-	(ChatIngressAck_Action)(0),                // 3: liveagent.gateway.v2.ChatIngressAck.Action
-	(*GatewayEnvelope)(nil),                   // 4: liveagent.gateway.v2.GatewayEnvelope
-	(*AgentEnvelope)(nil),                     // 5: liveagent.gateway.v2.AgentEnvelope
-	(*ChatSelectedModel)(nil),                 // 6: liveagent.gateway.v2.ChatSelectedModel
-	(*ChatRuntimeControls)(nil),               // 7: liveagent.gateway.v2.ChatRuntimeControls
-	(*ChatUploadedFile)(nil),                  // 8: liveagent.gateway.v2.ChatUploadedFile
-	(*UploadReadableFile)(nil),                // 9: liveagent.gateway.v2.UploadReadableFile
-	(*UploadReadableFilesRequest)(nil),        // 10: liveagent.gateway.v2.UploadReadableFilesRequest
-	(*UploadReadableFilesResponse)(nil),       // 11: liveagent.gateway.v2.UploadReadableFilesResponse
-	(*UploadedImagePreviewRequest)(nil),       // 12: liveagent.gateway.v2.UploadedImagePreviewRequest
-	(*UploadedImagePreviewResponse)(nil),      // 13: liveagent.gateway.v2.UploadedImagePreviewResponse
-	(*TunnelSpec)(nil),                        // 14: liveagent.gateway.v2.TunnelSpec
-	(*TunnelDesiredState)(nil),                // 15: liveagent.gateway.v2.TunnelDesiredState
-	(*TunnelHealth)(nil),                      // 16: liveagent.gateway.v2.TunnelHealth
-	(*TunnelStatus)(nil),                      // 17: liveagent.gateway.v2.TunnelStatus
-	(*TunnelStateSnapshot)(nil),               // 18: liveagent.gateway.v2.TunnelStateSnapshot
-	(*TunnelMutation)(nil),                    // 19: liveagent.gateway.v2.TunnelMutation
-	(*TunnelMutationResult)(nil),              // 20: liveagent.gateway.v2.TunnelMutationResult
-	(*TunnelProbeResult)(nil),                 // 21: liveagent.gateway.v2.TunnelProbeResult
-	(*TunnelProbeReport)(nil),                 // 22: liveagent.gateway.v2.TunnelProbeReport
-	(*TunnelHeader)(nil),                      // 23: liveagent.gateway.v2.TunnelHeader
-	(*TunnelFrame)(nil),                       // 24: liveagent.gateway.v2.TunnelFrame
-	(*WorkspaceWatchRequest)(nil),             // 25: liveagent.gateway.v2.WorkspaceWatchRequest
-	(*WorkspaceActivityEvent)(nil),            // 26: liveagent.gateway.v2.WorkspaceActivityEvent
-	(*ManagedProcessRecord)(nil),              // 27: liveagent.gateway.v2.ManagedProcessRecord
-	(*ManagedProcessSnapshot)(nil),            // 28: liveagent.gateway.v2.ManagedProcessSnapshot
-	(*ManagedProcessRequest)(nil),             // 29: liveagent.gateway.v2.ManagedProcessRequest
-	(*ManagedProcessResponse)(nil),            // 30: liveagent.gateway.v2.ManagedProcessResponse
-	(*MemoryManageRequest)(nil),               // 31: liveagent.gateway.v2.MemoryManageRequest
-	(*MemoryManageResponse)(nil),              // 32: liveagent.gateway.v2.MemoryManageResponse
-	(*TerminalRequest)(nil),                   // 33: liveagent.gateway.v2.TerminalRequest
-	(*TerminalSession)(nil),                   // 34: liveagent.gateway.v2.TerminalSession
-	(*TerminalSshMetadata)(nil),               // 35: liveagent.gateway.v2.TerminalSshMetadata
-	(*SftpRequest)(nil),                       // 36: liveagent.gateway.v2.SftpRequest
-	(*SftpEntry)(nil),                         // 37: liveagent.gateway.v2.SftpEntry
-	(*SftpTransfer)(nil),                      // 38: liveagent.gateway.v2.SftpTransfer
-	(*SftpResponse)(nil),                      // 39: liveagent.gateway.v2.SftpResponse
-	(*SftpEvent)(nil),                         // 40: liveagent.gateway.v2.SftpEvent
-	(*TerminalSshPrompt)(nil),                 // 41: liveagent.gateway.v2.TerminalSshPrompt
-	(*TerminalShellOption)(nil),               // 42: liveagent.gateway.v2.TerminalShellOption
-	(*TerminalSshTab)(nil),                    // 43: liveagent.gateway.v2.TerminalSshTab
-	(*TerminalSshTabsSnapshot)(nil),           // 44: liveagent.gateway.v2.TerminalSshTabsSnapshot
-	(*TerminalSshLocalForward)(nil),           // 45: liveagent.gateway.v2.TerminalSshLocalForward
-	(*TerminalSshLocalForwardsSnapshot)(nil),  // 46: liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot
-	(*TerminalSshLocalForwardAction)(nil),     // 47: liveagent.gateway.v2.TerminalSshLocalForwardAction
-	(*TerminalResponse)(nil),                  // 48: liveagent.gateway.v2.TerminalResponse
-	(*TerminalEvent)(nil),                     // 49: liveagent.gateway.v2.TerminalEvent
-	(*TerminalStreamFrame)(nil),               // 50: liveagent.gateway.v2.TerminalStreamFrame
-	(*GitRequest)(nil),                        // 51: liveagent.gateway.v2.GitRequest
-	(*GitResponse)(nil),                       // 52: liveagent.gateway.v2.GitResponse
-	(*ChatRequest)(nil),                       // 53: liveagent.gateway.v2.ChatRequest
-	(*ChatMessageRef)(nil),                    // 54: liveagent.gateway.v2.ChatMessageRef
-	(*CancelChatRequest)(nil),                 // 55: liveagent.gateway.v2.CancelChatRequest
-	(*ChatCommandRequest)(nil),                // 56: liveagent.gateway.v2.ChatCommandRequest
-	(*ChatQueueRequest)(nil),                  // 57: liveagent.gateway.v2.ChatQueueRequest
-	(*ChatQueueResponse)(nil),                 // 58: liveagent.gateway.v2.ChatQueueResponse
-	(*ChatQueueEvent)(nil),                    // 59: liveagent.gateway.v2.ChatQueueEvent
-	(*ChatEvent)(nil),                         // 60: liveagent.gateway.v2.ChatEvent
-	(*ChatControlEvent)(nil),                  // 61: liveagent.gateway.v2.ChatControlEvent
-	(*ChatRuntimeSnapshot)(nil),               // 62: liveagent.gateway.v2.ChatRuntimeSnapshot
-	(*RuntimeStatusEvent)(nil),                // 63: liveagent.gateway.v2.RuntimeStatusEvent
-	(*ChatRunReport)(nil),                     // 64: liveagent.gateway.v2.ChatRunReport
-	(*CronManageRequest)(nil),                 // 65: liveagent.gateway.v2.CronManageRequest
-	(*CronManageResponse)(nil),                // 66: liveagent.gateway.v2.CronManageResponse
-	(*HistoryListRequest)(nil),                // 67: liveagent.gateway.v2.HistoryListRequest
-	(*HistoryListResponse)(nil),               // 68: liveagent.gateway.v2.HistoryListResponse
-	(*ConversationSummary)(nil),               // 69: liveagent.gateway.v2.ConversationSummary
-	(*HistoryGetRequest)(nil),                 // 70: liveagent.gateway.v2.HistoryGetRequest
-	(*HistoryGetResponse)(nil),                // 71: liveagent.gateway.v2.HistoryGetResponse
-	(*HistoryPrefixRequest)(nil),              // 72: liveagent.gateway.v2.HistoryPrefixRequest
-	(*HistoryPrefixResponse)(nil),             // 73: liveagent.gateway.v2.HistoryPrefixResponse
-	(*HistoryRenameRequest)(nil),              // 74: liveagent.gateway.v2.HistoryRenameRequest
-	(*HistoryRenameResponse)(nil),             // 75: liveagent.gateway.v2.HistoryRenameResponse
-	(*HistoryBranchRequest)(nil),              // 76: liveagent.gateway.v2.HistoryBranchRequest
-	(*HistoryBranchResponse)(nil),             // 77: liveagent.gateway.v2.HistoryBranchResponse
-	(*HistoryPinRequest)(nil),                 // 78: liveagent.gateway.v2.HistoryPinRequest
-	(*HistoryPinResponse)(nil),                // 79: liveagent.gateway.v2.HistoryPinResponse
-	(*HistoryShareStatus)(nil),                // 80: liveagent.gateway.v2.HistoryShareStatus
-	(*HistoryShareGetRequest)(nil),            // 81: liveagent.gateway.v2.HistoryShareGetRequest
-	(*HistoryShareGetResponse)(nil),           // 82: liveagent.gateway.v2.HistoryShareGetResponse
-	(*HistoryShareSetRequest)(nil),            // 83: liveagent.gateway.v2.HistoryShareSetRequest
-	(*HistoryShareSetResponse)(nil),           // 84: liveagent.gateway.v2.HistoryShareSetResponse
-	(*HistoryShareResolveRequest)(nil),        // 85: liveagent.gateway.v2.HistoryShareResolveRequest
-	(*HistoryShareResolveResponse)(nil),       // 86: liveagent.gateway.v2.HistoryShareResolveResponse
-	(*HistoryWorkdirsRequest)(nil),            // 87: liveagent.gateway.v2.HistoryWorkdirsRequest
-	(*HistoryWorkdirSummary)(nil),             // 88: liveagent.gateway.v2.HistoryWorkdirSummary
-	(*HistoryWorkdirsResponse)(nil),           // 89: liveagent.gateway.v2.HistoryWorkdirsResponse
-	(*HistoryDeleteRequest)(nil),              // 90: liveagent.gateway.v2.HistoryDeleteRequest
-	(*HistoryDeleteResponse)(nil),             // 91: liveagent.gateway.v2.HistoryDeleteResponse
-	(*HistorySyncEvent)(nil),                  // 92: liveagent.gateway.v2.HistorySyncEvent
-	(*ProviderListRequest)(nil),               // 93: liveagent.gateway.v2.ProviderListRequest
-	(*ProviderListResponse)(nil),              // 94: liveagent.gateway.v2.ProviderListResponse
-	(*SettingsGetRequest)(nil),                // 95: liveagent.gateway.v2.SettingsGetRequest
-	(*SettingsGetResponse)(nil),               // 96: liveagent.gateway.v2.SettingsGetResponse
-	(*SettingsUpdateRequest)(nil),             // 97: liveagent.gateway.v2.SettingsUpdateRequest
-	(*SettingsUpdateResponse)(nil),            // 98: liveagent.gateway.v2.SettingsUpdateResponse
-	(*SettingsResetSshKnownHostRequest)(nil),  // 99: liveagent.gateway.v2.SettingsResetSshKnownHostRequest
-	(*SettingsResetSshKnownHostResponse)(nil), // 100: liveagent.gateway.v2.SettingsResetSshKnownHostResponse
-	(*SettingsSyncEvent)(nil),                 // 101: liveagent.gateway.v2.SettingsSyncEvent
-	(*SkillFilesListRequest)(nil),             // 102: liveagent.gateway.v2.SkillFilesListRequest
-	(*SkillFilesListResponse)(nil),            // 103: liveagent.gateway.v2.SkillFilesListResponse
-	(*SkillMetadataReadRequest)(nil),          // 104: liveagent.gateway.v2.SkillMetadataReadRequest
-	(*SkillMetadataReadResponse)(nil),         // 105: liveagent.gateway.v2.SkillMetadataReadResponse
-	(*SkillTextReadRequest)(nil),              // 106: liveagent.gateway.v2.SkillTextReadRequest
-	(*SkillTextReadResponse)(nil),             // 107: liveagent.gateway.v2.SkillTextReadResponse
-	(*SkillManageRequest)(nil),                // 108: liveagent.gateway.v2.SkillManageRequest
-	(*SkillManageResponse)(nil),               // 109: liveagent.gateway.v2.SkillManageResponse
-	(*FileMentionListRequest)(nil),            // 110: liveagent.gateway.v2.FileMentionListRequest
-	(*FileMentionEntry)(nil),                  // 111: liveagent.gateway.v2.FileMentionEntry
-	(*FileMentionListResponse)(nil),           // 112: liveagent.gateway.v2.FileMentionListResponse
-	(*FsRoot)(nil),                            // 113: liveagent.gateway.v2.FsRoot
-	(*FsRootsRequest)(nil),                    // 114: liveagent.gateway.v2.FsRootsRequest
-	(*FsRootsResponse)(nil),                   // 115: liveagent.gateway.v2.FsRootsResponse
-	(*FsListDirsRequest)(nil),                 // 116: liveagent.gateway.v2.FsListDirsRequest
-	(*FsDirEntry)(nil),                        // 117: liveagent.gateway.v2.FsDirEntry
-	(*FsListDirsResponse)(nil),                // 118: liveagent.gateway.v2.FsListDirsResponse
-	(*FsCreateProjectFolderRequest)(nil),      // 119: liveagent.gateway.v2.FsCreateProjectFolderRequest
-	(*FsCreateProjectFolderResponse)(nil),     // 120: liveagent.gateway.v2.FsCreateProjectFolderResponse
-	(*FsListRequest)(nil),                     // 121: liveagent.gateway.v2.FsListRequest
-	(*FsListEntry)(nil),                       // 122: liveagent.gateway.v2.FsListEntry
-	(*FsListResponse)(nil),                    // 123: liveagent.gateway.v2.FsListResponse
-	(*FsReadEditableTextRequest)(nil),         // 124: liveagent.gateway.v2.FsReadEditableTextRequest
-	(*FsReadEditableTextResponse)(nil),        // 125: liveagent.gateway.v2.FsReadEditableTextResponse
-	(*FsReadWorkspaceImageRequest)(nil),       // 126: liveagent.gateway.v2.FsReadWorkspaceImageRequest
-	(*FsReadWorkspaceImageResponse)(nil),      // 127: liveagent.gateway.v2.FsReadWorkspaceImageResponse
-	(*ChatFileOpenRequest)(nil),               // 128: liveagent.gateway.v2.ChatFileOpenRequest
-	(*ChatFileOpenResponse)(nil),              // 129: liveagent.gateway.v2.ChatFileOpenResponse
-	(*FsWriteTextRequest)(nil),                // 130: liveagent.gateway.v2.FsWriteTextRequest
-	(*FsWriteTextResponse)(nil),               // 131: liveagent.gateway.v2.FsWriteTextResponse
-	(*FsCreateDirRequest)(nil),                // 132: liveagent.gateway.v2.FsCreateDirRequest
-	(*FsCreateDirResponse)(nil),               // 133: liveagent.gateway.v2.FsCreateDirResponse
-	(*FsRenameRequest)(nil),                   // 134: liveagent.gateway.v2.FsRenameRequest
-	(*FsRenameResponse)(nil),                  // 135: liveagent.gateway.v2.FsRenameResponse
-	(*FsDeleteRequest)(nil),                   // 136: liveagent.gateway.v2.FsDeleteRequest
-	(*FsDeleteResponse)(nil),                  // 137: liveagent.gateway.v2.FsDeleteResponse
-	(*PingRequest)(nil),                       // 138: liveagent.gateway.v2.PingRequest
-	(*PongResponse)(nil),                      // 139: liveagent.gateway.v2.PongResponse
-	(*ErrorResponse)(nil),                     // 140: liveagent.gateway.v2.ErrorResponse
-	(*ProviderModelsRequest)(nil),             // 141: liveagent.gateway.v2.ProviderModelsRequest
-	(*ProviderModelsResponse)(nil),            // 142: liveagent.gateway.v2.ProviderModelsResponse
-	(*ProviderUsageRequest)(nil),              // 143: liveagent.gateway.v2.ProviderUsageRequest
-	(*ProviderUsageResponse)(nil),             // 144: liveagent.gateway.v2.ProviderUsageResponse
-	(*ChatIngressBatch)(nil),                  // 145: liveagent.gateway.v2.ChatIngressBatch
-	(*ChatIngressRecord)(nil),                 // 146: liveagent.gateway.v2.ChatIngressRecord
-	(*ChatIngressDelta)(nil),                  // 147: liveagent.gateway.v2.ChatIngressDelta
-	(*ChatIngressHeartbeat)(nil),              // 148: liveagent.gateway.v2.ChatIngressHeartbeat
-	(*ChatIngressCheckpoint)(nil),             // 149: liveagent.gateway.v2.ChatIngressCheckpoint
-	(*ChatIngressTerminal)(nil),               // 150: liveagent.gateway.v2.ChatIngressTerminal
-	(*ChatIngressResume)(nil),                 // 151: liveagent.gateway.v2.ChatIngressResume
-	(*ChatIngressRunResume)(nil),              // 152: liveagent.gateway.v2.ChatIngressRunResume
-	(*ChatIngressFragment)(nil),               // 153: liveagent.gateway.v2.ChatIngressFragment
-	(*ChatIngressAck)(nil),                    // 154: liveagent.gateway.v2.ChatIngressAck
-	(*HistorySetCwdRequest)(nil),              // 155: liveagent.gateway.v2.HistorySetCwdRequest
-	(*HistorySetCwdResponse)(nil),             // 156: liveagent.gateway.v2.HistorySetCwdResponse
-	(*WorkspaceRootGrantDraft)(nil),           // 157: liveagent.gateway.v2.WorkspaceRootGrantDraft
-	(*WorkspaceRootGrant)(nil),                // 158: liveagent.gateway.v2.WorkspaceRootGrant
-	(*WorkspaceRootGrantsRequest)(nil),        // 159: liveagent.gateway.v2.WorkspaceRootGrantsRequest
-	(*WorkspaceRootGrantsResponse)(nil),       // 160: liveagent.gateway.v2.WorkspaceRootGrantsResponse
+	(ImportDirectoryOperation)(0),             // 0: liveagent.gateway.v2.ImportDirectoryOperation
+	(TunnelFrameKind)(0),                      // 1: liveagent.gateway.v2.TunnelFrameKind
+	(TunnelWsMessageType)(0),                  // 2: liveagent.gateway.v2.TunnelWsMessageType
+	(ChatEvent_ChatEventType)(0),              // 3: liveagent.gateway.v2.ChatEvent.ChatEventType
+	(ChatIngressAck_Action)(0),                // 4: liveagent.gateway.v2.ChatIngressAck.Action
+	(*GatewayEnvelope)(nil),                   // 5: liveagent.gateway.v2.GatewayEnvelope
+	(*AgentEnvelope)(nil),                     // 6: liveagent.gateway.v2.AgentEnvelope
+	(*ChatSelectedModel)(nil),                 // 7: liveagent.gateway.v2.ChatSelectedModel
+	(*ChatRuntimeControls)(nil),               // 8: liveagent.gateway.v2.ChatRuntimeControls
+	(*ChatUploadedFile)(nil),                  // 9: liveagent.gateway.v2.ChatUploadedFile
+	(*UploadReadableFile)(nil),                // 10: liveagent.gateway.v2.UploadReadableFile
+	(*UploadReadableFilesRequest)(nil),        // 11: liveagent.gateway.v2.UploadReadableFilesRequest
+	(*UploadReadableFilesResponse)(nil),       // 12: liveagent.gateway.v2.UploadReadableFilesResponse
+	(*ImportDirectoryFile)(nil),               // 13: liveagent.gateway.v2.ImportDirectoryFile
+	(*ImportDirectoryRequest)(nil),            // 14: liveagent.gateway.v2.ImportDirectoryRequest
+	(*ImportDirectoryResponse)(nil),           // 15: liveagent.gateway.v2.ImportDirectoryResponse
+	(*UploadedImagePreviewRequest)(nil),       // 16: liveagent.gateway.v2.UploadedImagePreviewRequest
+	(*UploadedImagePreviewResponse)(nil),      // 17: liveagent.gateway.v2.UploadedImagePreviewResponse
+	(*TunnelSpec)(nil),                        // 18: liveagent.gateway.v2.TunnelSpec
+	(*TunnelDesiredState)(nil),                // 19: liveagent.gateway.v2.TunnelDesiredState
+	(*TunnelHealth)(nil),                      // 20: liveagent.gateway.v2.TunnelHealth
+	(*TunnelStatus)(nil),                      // 21: liveagent.gateway.v2.TunnelStatus
+	(*TunnelStateSnapshot)(nil),               // 22: liveagent.gateway.v2.TunnelStateSnapshot
+	(*TunnelMutation)(nil),                    // 23: liveagent.gateway.v2.TunnelMutation
+	(*TunnelMutationResult)(nil),              // 24: liveagent.gateway.v2.TunnelMutationResult
+	(*TunnelProbeResult)(nil),                 // 25: liveagent.gateway.v2.TunnelProbeResult
+	(*TunnelProbeReport)(nil),                 // 26: liveagent.gateway.v2.TunnelProbeReport
+	(*TunnelHeader)(nil),                      // 27: liveagent.gateway.v2.TunnelHeader
+	(*TunnelFrame)(nil),                       // 28: liveagent.gateway.v2.TunnelFrame
+	(*WorkspaceWatchRequest)(nil),             // 29: liveagent.gateway.v2.WorkspaceWatchRequest
+	(*WorkspaceActivityEvent)(nil),            // 30: liveagent.gateway.v2.WorkspaceActivityEvent
+	(*ManagedProcessRecord)(nil),              // 31: liveagent.gateway.v2.ManagedProcessRecord
+	(*ManagedProcessSnapshot)(nil),            // 32: liveagent.gateway.v2.ManagedProcessSnapshot
+	(*ManagedProcessRequest)(nil),             // 33: liveagent.gateway.v2.ManagedProcessRequest
+	(*ManagedProcessResponse)(nil),            // 34: liveagent.gateway.v2.ManagedProcessResponse
+	(*MemoryManageRequest)(nil),               // 35: liveagent.gateway.v2.MemoryManageRequest
+	(*MemoryManageResponse)(nil),              // 36: liveagent.gateway.v2.MemoryManageResponse
+	(*TerminalRequest)(nil),                   // 37: liveagent.gateway.v2.TerminalRequest
+	(*TerminalSession)(nil),                   // 38: liveagent.gateway.v2.TerminalSession
+	(*TerminalSshMetadata)(nil),               // 39: liveagent.gateway.v2.TerminalSshMetadata
+	(*SftpRequest)(nil),                       // 40: liveagent.gateway.v2.SftpRequest
+	(*SftpEntry)(nil),                         // 41: liveagent.gateway.v2.SftpEntry
+	(*SftpTransfer)(nil),                      // 42: liveagent.gateway.v2.SftpTransfer
+	(*SftpResponse)(nil),                      // 43: liveagent.gateway.v2.SftpResponse
+	(*SftpEvent)(nil),                         // 44: liveagent.gateway.v2.SftpEvent
+	(*TerminalSshPrompt)(nil),                 // 45: liveagent.gateway.v2.TerminalSshPrompt
+	(*TerminalShellOption)(nil),               // 46: liveagent.gateway.v2.TerminalShellOption
+	(*TerminalSshTab)(nil),                    // 47: liveagent.gateway.v2.TerminalSshTab
+	(*TerminalSshTabsSnapshot)(nil),           // 48: liveagent.gateway.v2.TerminalSshTabsSnapshot
+	(*TerminalSshLocalForward)(nil),           // 49: liveagent.gateway.v2.TerminalSshLocalForward
+	(*TerminalSshLocalForwardsSnapshot)(nil),  // 50: liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot
+	(*TerminalSshLocalForwardAction)(nil),     // 51: liveagent.gateway.v2.TerminalSshLocalForwardAction
+	(*TerminalResponse)(nil),                  // 52: liveagent.gateway.v2.TerminalResponse
+	(*TerminalEvent)(nil),                     // 53: liveagent.gateway.v2.TerminalEvent
+	(*TerminalStreamFrame)(nil),               // 54: liveagent.gateway.v2.TerminalStreamFrame
+	(*GitRequest)(nil),                        // 55: liveagent.gateway.v2.GitRequest
+	(*GitResponse)(nil),                       // 56: liveagent.gateway.v2.GitResponse
+	(*ChatRequest)(nil),                       // 57: liveagent.gateway.v2.ChatRequest
+	(*ChatMessageRef)(nil),                    // 58: liveagent.gateway.v2.ChatMessageRef
+	(*CancelChatRequest)(nil),                 // 59: liveagent.gateway.v2.CancelChatRequest
+	(*ChatCommandRequest)(nil),                // 60: liveagent.gateway.v2.ChatCommandRequest
+	(*ChatQueueRequest)(nil),                  // 61: liveagent.gateway.v2.ChatQueueRequest
+	(*ChatQueueResponse)(nil),                 // 62: liveagent.gateway.v2.ChatQueueResponse
+	(*ChatQueueEvent)(nil),                    // 63: liveagent.gateway.v2.ChatQueueEvent
+	(*ChatEvent)(nil),                         // 64: liveagent.gateway.v2.ChatEvent
+	(*ChatControlEvent)(nil),                  // 65: liveagent.gateway.v2.ChatControlEvent
+	(*ChatRuntimeSnapshot)(nil),               // 66: liveagent.gateway.v2.ChatRuntimeSnapshot
+	(*RuntimeStatusEvent)(nil),                // 67: liveagent.gateway.v2.RuntimeStatusEvent
+	(*ChatRunReport)(nil),                     // 68: liveagent.gateway.v2.ChatRunReport
+	(*CronManageRequest)(nil),                 // 69: liveagent.gateway.v2.CronManageRequest
+	(*CronManageResponse)(nil),                // 70: liveagent.gateway.v2.CronManageResponse
+	(*HistoryListRequest)(nil),                // 71: liveagent.gateway.v2.HistoryListRequest
+	(*HistoryListResponse)(nil),               // 72: liveagent.gateway.v2.HistoryListResponse
+	(*ConversationSummary)(nil),               // 73: liveagent.gateway.v2.ConversationSummary
+	(*HistoryGetRequest)(nil),                 // 74: liveagent.gateway.v2.HistoryGetRequest
+	(*HistoryGetResponse)(nil),                // 75: liveagent.gateway.v2.HistoryGetResponse
+	(*HistoryPrefixRequest)(nil),              // 76: liveagent.gateway.v2.HistoryPrefixRequest
+	(*HistoryPrefixResponse)(nil),             // 77: liveagent.gateway.v2.HistoryPrefixResponse
+	(*HistoryRenameRequest)(nil),              // 78: liveagent.gateway.v2.HistoryRenameRequest
+	(*HistoryRenameResponse)(nil),             // 79: liveagent.gateway.v2.HistoryRenameResponse
+	(*HistoryBranchRequest)(nil),              // 80: liveagent.gateway.v2.HistoryBranchRequest
+	(*HistoryBranchResponse)(nil),             // 81: liveagent.gateway.v2.HistoryBranchResponse
+	(*HistoryPinRequest)(nil),                 // 82: liveagent.gateway.v2.HistoryPinRequest
+	(*HistoryPinResponse)(nil),                // 83: liveagent.gateway.v2.HistoryPinResponse
+	(*HistoryShareStatus)(nil),                // 84: liveagent.gateway.v2.HistoryShareStatus
+	(*HistoryShareGetRequest)(nil),            // 85: liveagent.gateway.v2.HistoryShareGetRequest
+	(*HistoryShareGetResponse)(nil),           // 86: liveagent.gateway.v2.HistoryShareGetResponse
+	(*HistoryShareSetRequest)(nil),            // 87: liveagent.gateway.v2.HistoryShareSetRequest
+	(*HistoryShareSetResponse)(nil),           // 88: liveagent.gateway.v2.HistoryShareSetResponse
+	(*HistoryShareResolveRequest)(nil),        // 89: liveagent.gateway.v2.HistoryShareResolveRequest
+	(*HistoryShareResolveResponse)(nil),       // 90: liveagent.gateway.v2.HistoryShareResolveResponse
+	(*HistoryWorkdirsRequest)(nil),            // 91: liveagent.gateway.v2.HistoryWorkdirsRequest
+	(*HistoryWorkdirSummary)(nil),             // 92: liveagent.gateway.v2.HistoryWorkdirSummary
+	(*HistoryWorkdirsResponse)(nil),           // 93: liveagent.gateway.v2.HistoryWorkdirsResponse
+	(*HistoryDeleteRequest)(nil),              // 94: liveagent.gateway.v2.HistoryDeleteRequest
+	(*HistoryDeleteResponse)(nil),             // 95: liveagent.gateway.v2.HistoryDeleteResponse
+	(*HistorySyncEvent)(nil),                  // 96: liveagent.gateway.v2.HistorySyncEvent
+	(*ProviderListRequest)(nil),               // 97: liveagent.gateway.v2.ProviderListRequest
+	(*ProviderListResponse)(nil),              // 98: liveagent.gateway.v2.ProviderListResponse
+	(*SettingsGetRequest)(nil),                // 99: liveagent.gateway.v2.SettingsGetRequest
+	(*SettingsGetResponse)(nil),               // 100: liveagent.gateway.v2.SettingsGetResponse
+	(*SettingsUpdateRequest)(nil),             // 101: liveagent.gateway.v2.SettingsUpdateRequest
+	(*SettingsUpdateResponse)(nil),            // 102: liveagent.gateway.v2.SettingsUpdateResponse
+	(*SettingsResetSshKnownHostRequest)(nil),  // 103: liveagent.gateway.v2.SettingsResetSshKnownHostRequest
+	(*SettingsResetSshKnownHostResponse)(nil), // 104: liveagent.gateway.v2.SettingsResetSshKnownHostResponse
+	(*SettingsSyncEvent)(nil),                 // 105: liveagent.gateway.v2.SettingsSyncEvent
+	(*SkillFilesListRequest)(nil),             // 106: liveagent.gateway.v2.SkillFilesListRequest
+	(*SkillFilesListResponse)(nil),            // 107: liveagent.gateway.v2.SkillFilesListResponse
+	(*SkillMetadataReadRequest)(nil),          // 108: liveagent.gateway.v2.SkillMetadataReadRequest
+	(*SkillMetadataReadResponse)(nil),         // 109: liveagent.gateway.v2.SkillMetadataReadResponse
+	(*SkillTextReadRequest)(nil),              // 110: liveagent.gateway.v2.SkillTextReadRequest
+	(*SkillTextReadResponse)(nil),             // 111: liveagent.gateway.v2.SkillTextReadResponse
+	(*SkillManageRequest)(nil),                // 112: liveagent.gateway.v2.SkillManageRequest
+	(*SkillManageResponse)(nil),               // 113: liveagent.gateway.v2.SkillManageResponse
+	(*FileMentionListRequest)(nil),            // 114: liveagent.gateway.v2.FileMentionListRequest
+	(*FileMentionEntry)(nil),                  // 115: liveagent.gateway.v2.FileMentionEntry
+	(*FileMentionListResponse)(nil),           // 116: liveagent.gateway.v2.FileMentionListResponse
+	(*FsRoot)(nil),                            // 117: liveagent.gateway.v2.FsRoot
+	(*FsRootsRequest)(nil),                    // 118: liveagent.gateway.v2.FsRootsRequest
+	(*FsRootsResponse)(nil),                   // 119: liveagent.gateway.v2.FsRootsResponse
+	(*FsListDirsRequest)(nil),                 // 120: liveagent.gateway.v2.FsListDirsRequest
+	(*FsDirEntry)(nil),                        // 121: liveagent.gateway.v2.FsDirEntry
+	(*FsListDirsResponse)(nil),                // 122: liveagent.gateway.v2.FsListDirsResponse
+	(*FsCreateProjectFolderRequest)(nil),      // 123: liveagent.gateway.v2.FsCreateProjectFolderRequest
+	(*FsCreateProjectFolderResponse)(nil),     // 124: liveagent.gateway.v2.FsCreateProjectFolderResponse
+	(*FsListRequest)(nil),                     // 125: liveagent.gateway.v2.FsListRequest
+	(*FsListEntry)(nil),                       // 126: liveagent.gateway.v2.FsListEntry
+	(*FsListResponse)(nil),                    // 127: liveagent.gateway.v2.FsListResponse
+	(*FsReadEditableTextRequest)(nil),         // 128: liveagent.gateway.v2.FsReadEditableTextRequest
+	(*FsReadEditableTextResponse)(nil),        // 129: liveagent.gateway.v2.FsReadEditableTextResponse
+	(*FsReadWorkspaceImageRequest)(nil),       // 130: liveagent.gateway.v2.FsReadWorkspaceImageRequest
+	(*FsReadWorkspaceImageResponse)(nil),      // 131: liveagent.gateway.v2.FsReadWorkspaceImageResponse
+	(*ChatFileOpenRequest)(nil),               // 132: liveagent.gateway.v2.ChatFileOpenRequest
+	(*ChatFileOpenResponse)(nil),              // 133: liveagent.gateway.v2.ChatFileOpenResponse
+	(*FsWriteTextRequest)(nil),                // 134: liveagent.gateway.v2.FsWriteTextRequest
+	(*FsWriteTextResponse)(nil),               // 135: liveagent.gateway.v2.FsWriteTextResponse
+	(*FsCreateDirRequest)(nil),                // 136: liveagent.gateway.v2.FsCreateDirRequest
+	(*FsCreateDirResponse)(nil),               // 137: liveagent.gateway.v2.FsCreateDirResponse
+	(*FsRenameRequest)(nil),                   // 138: liveagent.gateway.v2.FsRenameRequest
+	(*FsRenameResponse)(nil),                  // 139: liveagent.gateway.v2.FsRenameResponse
+	(*FsDeleteRequest)(nil),                   // 140: liveagent.gateway.v2.FsDeleteRequest
+	(*FsDeleteResponse)(nil),                  // 141: liveagent.gateway.v2.FsDeleteResponse
+	(*PingRequest)(nil),                       // 142: liveagent.gateway.v2.PingRequest
+	(*PongResponse)(nil),                      // 143: liveagent.gateway.v2.PongResponse
+	(*ErrorResponse)(nil),                     // 144: liveagent.gateway.v2.ErrorResponse
+	(*ProviderModelsRequest)(nil),             // 145: liveagent.gateway.v2.ProviderModelsRequest
+	(*ProviderModelsResponse)(nil),            // 146: liveagent.gateway.v2.ProviderModelsResponse
+	(*ProviderUsageRequest)(nil),              // 147: liveagent.gateway.v2.ProviderUsageRequest
+	(*ProviderUsageResponse)(nil),             // 148: liveagent.gateway.v2.ProviderUsageResponse
+	(*ChatIngressBatch)(nil),                  // 149: liveagent.gateway.v2.ChatIngressBatch
+	(*ChatIngressRecord)(nil),                 // 150: liveagent.gateway.v2.ChatIngressRecord
+	(*ChatIngressDelta)(nil),                  // 151: liveagent.gateway.v2.ChatIngressDelta
+	(*ChatIngressHeartbeat)(nil),              // 152: liveagent.gateway.v2.ChatIngressHeartbeat
+	(*ChatIngressCheckpoint)(nil),             // 153: liveagent.gateway.v2.ChatIngressCheckpoint
+	(*ChatIngressTerminal)(nil),               // 154: liveagent.gateway.v2.ChatIngressTerminal
+	(*ChatIngressResume)(nil),                 // 155: liveagent.gateway.v2.ChatIngressResume
+	(*ChatIngressRunResume)(nil),              // 156: liveagent.gateway.v2.ChatIngressRunResume
+	(*ChatIngressFragment)(nil),               // 157: liveagent.gateway.v2.ChatIngressFragment
+	(*ChatIngressAck)(nil),                    // 158: liveagent.gateway.v2.ChatIngressAck
+	(*HistorySetCwdRequest)(nil),              // 159: liveagent.gateway.v2.HistorySetCwdRequest
+	(*HistorySetCwdResponse)(nil),             // 160: liveagent.gateway.v2.HistorySetCwdResponse
+	(*WorkspaceRootGrantDraft)(nil),           // 161: liveagent.gateway.v2.WorkspaceRootGrantDraft
+	(*WorkspaceRootGrant)(nil),                // 162: liveagent.gateway.v2.WorkspaceRootGrant
+	(*WorkspaceRootGrantsRequest)(nil),        // 163: liveagent.gateway.v2.WorkspaceRootGrantsRequest
+	(*WorkspaceRootGrantsResponse)(nil),       // 164: liveagent.gateway.v2.WorkspaceRootGrantsResponse
 }
 var file_proto_v2_gateway_proto_depIdxs = []int32{
-	56,  // 0: liveagent.gateway.v2.GatewayEnvelope.chat_command:type_name -> liveagent.gateway.v2.ChatCommandRequest
-	65,  // 1: liveagent.gateway.v2.GatewayEnvelope.cron_manage:type_name -> liveagent.gateway.v2.CronManageRequest
-	67,  // 2: liveagent.gateway.v2.GatewayEnvelope.history_list:type_name -> liveagent.gateway.v2.HistoryListRequest
-	70,  // 3: liveagent.gateway.v2.GatewayEnvelope.history_get:type_name -> liveagent.gateway.v2.HistoryGetRequest
-	74,  // 4: liveagent.gateway.v2.GatewayEnvelope.history_rename:type_name -> liveagent.gateway.v2.HistoryRenameRequest
-	90,  // 5: liveagent.gateway.v2.GatewayEnvelope.history_delete:type_name -> liveagent.gateway.v2.HistoryDeleteRequest
-	72,  // 6: liveagent.gateway.v2.GatewayEnvelope.history_prefix:type_name -> liveagent.gateway.v2.HistoryPrefixRequest
-	78,  // 7: liveagent.gateway.v2.GatewayEnvelope.history_pin:type_name -> liveagent.gateway.v2.HistoryPinRequest
-	81,  // 8: liveagent.gateway.v2.GatewayEnvelope.history_share_get:type_name -> liveagent.gateway.v2.HistoryShareGetRequest
-	83,  // 9: liveagent.gateway.v2.GatewayEnvelope.history_share_set:type_name -> liveagent.gateway.v2.HistoryShareSetRequest
-	85,  // 10: liveagent.gateway.v2.GatewayEnvelope.history_share_resolve:type_name -> liveagent.gateway.v2.HistoryShareResolveRequest
-	87,  // 11: liveagent.gateway.v2.GatewayEnvelope.history_workdirs:type_name -> liveagent.gateway.v2.HistoryWorkdirsRequest
-	93,  // 12: liveagent.gateway.v2.GatewayEnvelope.provider_list:type_name -> liveagent.gateway.v2.ProviderListRequest
-	95,  // 13: liveagent.gateway.v2.GatewayEnvelope.settings_get:type_name -> liveagent.gateway.v2.SettingsGetRequest
-	97,  // 14: liveagent.gateway.v2.GatewayEnvelope.settings_update:type_name -> liveagent.gateway.v2.SettingsUpdateRequest
-	102, // 15: liveagent.gateway.v2.GatewayEnvelope.skill_files_list:type_name -> liveagent.gateway.v2.SkillFilesListRequest
-	104, // 16: liveagent.gateway.v2.GatewayEnvelope.skill_metadata_read:type_name -> liveagent.gateway.v2.SkillMetadataReadRequest
-	106, // 17: liveagent.gateway.v2.GatewayEnvelope.skill_text_read:type_name -> liveagent.gateway.v2.SkillTextReadRequest
-	110, // 18: liveagent.gateway.v2.GatewayEnvelope.file_mention_list:type_name -> liveagent.gateway.v2.FileMentionListRequest
-	10,  // 19: liveagent.gateway.v2.GatewayEnvelope.upload_readable_files:type_name -> liveagent.gateway.v2.UploadReadableFilesRequest
-	114, // 20: liveagent.gateway.v2.GatewayEnvelope.fs_roots:type_name -> liveagent.gateway.v2.FsRootsRequest
-	116, // 21: liveagent.gateway.v2.GatewayEnvelope.fs_list_dirs:type_name -> liveagent.gateway.v2.FsListDirsRequest
-	138, // 22: liveagent.gateway.v2.GatewayEnvelope.ping:type_name -> liveagent.gateway.v2.PingRequest
-	12,  // 23: liveagent.gateway.v2.GatewayEnvelope.uploaded_image_preview:type_name -> liveagent.gateway.v2.UploadedImagePreviewRequest
-	31,  // 24: liveagent.gateway.v2.GatewayEnvelope.memory_manage:type_name -> liveagent.gateway.v2.MemoryManageRequest
-	108, // 25: liveagent.gateway.v2.GatewayEnvelope.skill_manage:type_name -> liveagent.gateway.v2.SkillManageRequest
-	119, // 26: liveagent.gateway.v2.GatewayEnvelope.fs_create_project_folder:type_name -> liveagent.gateway.v2.FsCreateProjectFolderRequest
-	33,  // 27: liveagent.gateway.v2.GatewayEnvelope.terminal_request:type_name -> liveagent.gateway.v2.TerminalRequest
-	121, // 28: liveagent.gateway.v2.GatewayEnvelope.fs_list:type_name -> liveagent.gateway.v2.FsListRequest
-	130, // 29: liveagent.gateway.v2.GatewayEnvelope.fs_write_text:type_name -> liveagent.gateway.v2.FsWriteTextRequest
-	132, // 30: liveagent.gateway.v2.GatewayEnvelope.fs_create_dir:type_name -> liveagent.gateway.v2.FsCreateDirRequest
-	134, // 31: liveagent.gateway.v2.GatewayEnvelope.fs_rename:type_name -> liveagent.gateway.v2.FsRenameRequest
-	136, // 32: liveagent.gateway.v2.GatewayEnvelope.fs_delete:type_name -> liveagent.gateway.v2.FsDeleteRequest
-	51,  // 33: liveagent.gateway.v2.GatewayEnvelope.git_request:type_name -> liveagent.gateway.v2.GitRequest
-	124, // 34: liveagent.gateway.v2.GatewayEnvelope.fs_read_editable_text:type_name -> liveagent.gateway.v2.FsReadEditableTextRequest
-	126, // 35: liveagent.gateway.v2.GatewayEnvelope.fs_read_workspace_image:type_name -> liveagent.gateway.v2.FsReadWorkspaceImageRequest
-	36,  // 36: liveagent.gateway.v2.GatewayEnvelope.sftp_request:type_name -> liveagent.gateway.v2.SftpRequest
-	141, // 37: liveagent.gateway.v2.GatewayEnvelope.provider_models:type_name -> liveagent.gateway.v2.ProviderModelsRequest
-	99,  // 38: liveagent.gateway.v2.GatewayEnvelope.settings_reset_ssh_known_host:type_name -> liveagent.gateway.v2.SettingsResetSshKnownHostRequest
-	57,  // 39: liveagent.gateway.v2.GatewayEnvelope.chat_queue:type_name -> liveagent.gateway.v2.ChatQueueRequest
-	154, // 40: liveagent.gateway.v2.GatewayEnvelope.chat_ingress_ack:type_name -> liveagent.gateway.v2.ChatIngressAck
-	18,  // 41: liveagent.gateway.v2.GatewayEnvelope.tunnel_state:type_name -> liveagent.gateway.v2.TunnelStateSnapshot
-	19,  // 42: liveagent.gateway.v2.GatewayEnvelope.tunnel_mutation:type_name -> liveagent.gateway.v2.TunnelMutation
-	24,  // 43: liveagent.gateway.v2.GatewayEnvelope.tunnel_frame:type_name -> liveagent.gateway.v2.TunnelFrame
-	25,  // 44: liveagent.gateway.v2.GatewayEnvelope.workspace_watch:type_name -> liveagent.gateway.v2.WorkspaceWatchRequest
-	29,  // 45: liveagent.gateway.v2.GatewayEnvelope.managed_process_request:type_name -> liveagent.gateway.v2.ManagedProcessRequest
-	76,  // 46: liveagent.gateway.v2.GatewayEnvelope.history_branch:type_name -> liveagent.gateway.v2.HistoryBranchRequest
-	143, // 47: liveagent.gateway.v2.GatewayEnvelope.provider_usage:type_name -> liveagent.gateway.v2.ProviderUsageRequest
-	128, // 48: liveagent.gateway.v2.GatewayEnvelope.chat_file_open:type_name -> liveagent.gateway.v2.ChatFileOpenRequest
-	155, // 49: liveagent.gateway.v2.GatewayEnvelope.history_set_cwd:type_name -> liveagent.gateway.v2.HistorySetCwdRequest
-	159, // 50: liveagent.gateway.v2.GatewayEnvelope.workspace_root_grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrantsRequest
-	60,  // 51: liveagent.gateway.v2.AgentEnvelope.chat_event:type_name -> liveagent.gateway.v2.ChatEvent
-	66,  // 52: liveagent.gateway.v2.AgentEnvelope.cron_manage_resp:type_name -> liveagent.gateway.v2.CronManageResponse
-	68,  // 53: liveagent.gateway.v2.AgentEnvelope.history_list_resp:type_name -> liveagent.gateway.v2.HistoryListResponse
-	71,  // 54: liveagent.gateway.v2.AgentEnvelope.history_get_resp:type_name -> liveagent.gateway.v2.HistoryGetResponse
-	75,  // 55: liveagent.gateway.v2.AgentEnvelope.history_rename_resp:type_name -> liveagent.gateway.v2.HistoryRenameResponse
-	91,  // 56: liveagent.gateway.v2.AgentEnvelope.history_delete_resp:type_name -> liveagent.gateway.v2.HistoryDeleteResponse
-	92,  // 57: liveagent.gateway.v2.AgentEnvelope.history_sync:type_name -> liveagent.gateway.v2.HistorySyncEvent
-	73,  // 58: liveagent.gateway.v2.AgentEnvelope.history_prefix_resp:type_name -> liveagent.gateway.v2.HistoryPrefixResponse
-	79,  // 59: liveagent.gateway.v2.AgentEnvelope.history_pin_resp:type_name -> liveagent.gateway.v2.HistoryPinResponse
-	82,  // 60: liveagent.gateway.v2.AgentEnvelope.history_share_get_resp:type_name -> liveagent.gateway.v2.HistoryShareGetResponse
-	84,  // 61: liveagent.gateway.v2.AgentEnvelope.history_share_set_resp:type_name -> liveagent.gateway.v2.HistoryShareSetResponse
-	86,  // 62: liveagent.gateway.v2.AgentEnvelope.history_share_resolve_resp:type_name -> liveagent.gateway.v2.HistoryShareResolveResponse
-	89,  // 63: liveagent.gateway.v2.AgentEnvelope.history_workdirs_resp:type_name -> liveagent.gateway.v2.HistoryWorkdirsResponse
-	94,  // 64: liveagent.gateway.v2.AgentEnvelope.provider_list_resp:type_name -> liveagent.gateway.v2.ProviderListResponse
-	96,  // 65: liveagent.gateway.v2.AgentEnvelope.settings_get_resp:type_name -> liveagent.gateway.v2.SettingsGetResponse
-	98,  // 66: liveagent.gateway.v2.AgentEnvelope.settings_update_resp:type_name -> liveagent.gateway.v2.SettingsUpdateResponse
-	101, // 67: liveagent.gateway.v2.AgentEnvelope.settings_sync:type_name -> liveagent.gateway.v2.SettingsSyncEvent
-	103, // 68: liveagent.gateway.v2.AgentEnvelope.skill_files_list_resp:type_name -> liveagent.gateway.v2.SkillFilesListResponse
-	105, // 69: liveagent.gateway.v2.AgentEnvelope.skill_metadata_read_resp:type_name -> liveagent.gateway.v2.SkillMetadataReadResponse
-	107, // 70: liveagent.gateway.v2.AgentEnvelope.skill_text_read_resp:type_name -> liveagent.gateway.v2.SkillTextReadResponse
-	112, // 71: liveagent.gateway.v2.AgentEnvelope.file_mention_list_resp:type_name -> liveagent.gateway.v2.FileMentionListResponse
-	11,  // 72: liveagent.gateway.v2.AgentEnvelope.upload_readable_files_resp:type_name -> liveagent.gateway.v2.UploadReadableFilesResponse
-	115, // 73: liveagent.gateway.v2.AgentEnvelope.fs_roots_resp:type_name -> liveagent.gateway.v2.FsRootsResponse
-	139, // 74: liveagent.gateway.v2.AgentEnvelope.pong:type_name -> liveagent.gateway.v2.PongResponse
-	118, // 75: liveagent.gateway.v2.AgentEnvelope.fs_list_dirs_resp:type_name -> liveagent.gateway.v2.FsListDirsResponse
-	13,  // 76: liveagent.gateway.v2.AgentEnvelope.uploaded_image_preview_resp:type_name -> liveagent.gateway.v2.UploadedImagePreviewResponse
-	32,  // 77: liveagent.gateway.v2.AgentEnvelope.memory_manage_resp:type_name -> liveagent.gateway.v2.MemoryManageResponse
-	109, // 78: liveagent.gateway.v2.AgentEnvelope.skill_manage_resp:type_name -> liveagent.gateway.v2.SkillManageResponse
-	120, // 79: liveagent.gateway.v2.AgentEnvelope.fs_create_project_folder_resp:type_name -> liveagent.gateway.v2.FsCreateProjectFolderResponse
-	48,  // 80: liveagent.gateway.v2.AgentEnvelope.terminal_response:type_name -> liveagent.gateway.v2.TerminalResponse
-	49,  // 81: liveagent.gateway.v2.AgentEnvelope.terminal_event:type_name -> liveagent.gateway.v2.TerminalEvent
-	123, // 82: liveagent.gateway.v2.AgentEnvelope.fs_list_resp:type_name -> liveagent.gateway.v2.FsListResponse
-	131, // 83: liveagent.gateway.v2.AgentEnvelope.fs_write_text_resp:type_name -> liveagent.gateway.v2.FsWriteTextResponse
-	133, // 84: liveagent.gateway.v2.AgentEnvelope.fs_create_dir_resp:type_name -> liveagent.gateway.v2.FsCreateDirResponse
-	135, // 85: liveagent.gateway.v2.AgentEnvelope.fs_rename_resp:type_name -> liveagent.gateway.v2.FsRenameResponse
-	137, // 86: liveagent.gateway.v2.AgentEnvelope.fs_delete_resp:type_name -> liveagent.gateway.v2.FsDeleteResponse
-	52,  // 87: liveagent.gateway.v2.AgentEnvelope.git_response:type_name -> liveagent.gateway.v2.GitResponse
-	125, // 88: liveagent.gateway.v2.AgentEnvelope.fs_read_editable_text_resp:type_name -> liveagent.gateway.v2.FsReadEditableTextResponse
-	127, // 89: liveagent.gateway.v2.AgentEnvelope.fs_read_workspace_image_resp:type_name -> liveagent.gateway.v2.FsReadWorkspaceImageResponse
-	39,  // 90: liveagent.gateway.v2.AgentEnvelope.sftp_response:type_name -> liveagent.gateway.v2.SftpResponse
-	40,  // 91: liveagent.gateway.v2.AgentEnvelope.sftp_event:type_name -> liveagent.gateway.v2.SftpEvent
-	58,  // 92: liveagent.gateway.v2.AgentEnvelope.chat_queue_resp:type_name -> liveagent.gateway.v2.ChatQueueResponse
-	59,  // 93: liveagent.gateway.v2.AgentEnvelope.chat_queue_event:type_name -> liveagent.gateway.v2.ChatQueueEvent
-	61,  // 94: liveagent.gateway.v2.AgentEnvelope.chat_control:type_name -> liveagent.gateway.v2.ChatControlEvent
-	63,  // 95: liveagent.gateway.v2.AgentEnvelope.runtime_status:type_name -> liveagent.gateway.v2.RuntimeStatusEvent
-	100, // 96: liveagent.gateway.v2.AgentEnvelope.settings_reset_ssh_known_host_resp:type_name -> liveagent.gateway.v2.SettingsResetSshKnownHostResponse
-	62,  // 97: liveagent.gateway.v2.AgentEnvelope.chat_runtime_snapshot:type_name -> liveagent.gateway.v2.ChatRuntimeSnapshot
-	142, // 98: liveagent.gateway.v2.AgentEnvelope.provider_models_resp:type_name -> liveagent.gateway.v2.ProviderModelsResponse
-	15,  // 99: liveagent.gateway.v2.AgentEnvelope.tunnel_desired:type_name -> liveagent.gateway.v2.TunnelDesiredState
-	20,  // 100: liveagent.gateway.v2.AgentEnvelope.tunnel_mutation_result:type_name -> liveagent.gateway.v2.TunnelMutationResult
-	24,  // 101: liveagent.gateway.v2.AgentEnvelope.tunnel_frame:type_name -> liveagent.gateway.v2.TunnelFrame
-	22,  // 102: liveagent.gateway.v2.AgentEnvelope.tunnel_probe_report:type_name -> liveagent.gateway.v2.TunnelProbeReport
-	26,  // 103: liveagent.gateway.v2.AgentEnvelope.workspace_activity:type_name -> liveagent.gateway.v2.WorkspaceActivityEvent
-	30,  // 104: liveagent.gateway.v2.AgentEnvelope.managed_process_response:type_name -> liveagent.gateway.v2.ManagedProcessResponse
-	28,  // 105: liveagent.gateway.v2.AgentEnvelope.managed_process_snapshot:type_name -> liveagent.gateway.v2.ManagedProcessSnapshot
-	77,  // 106: liveagent.gateway.v2.AgentEnvelope.history_branch_resp:type_name -> liveagent.gateway.v2.HistoryBranchResponse
-	144, // 107: liveagent.gateway.v2.AgentEnvelope.provider_usage_resp:type_name -> liveagent.gateway.v2.ProviderUsageResponse
-	145, // 108: liveagent.gateway.v2.AgentEnvelope.chat_ingress_batch:type_name -> liveagent.gateway.v2.ChatIngressBatch
-	151, // 109: liveagent.gateway.v2.AgentEnvelope.chat_ingress_resume:type_name -> liveagent.gateway.v2.ChatIngressResume
-	153, // 110: liveagent.gateway.v2.AgentEnvelope.chat_ingress_fragment:type_name -> liveagent.gateway.v2.ChatIngressFragment
-	129, // 111: liveagent.gateway.v2.AgentEnvelope.chat_file_open_resp:type_name -> liveagent.gateway.v2.ChatFileOpenResponse
-	140, // 112: liveagent.gateway.v2.AgentEnvelope.error:type_name -> liveagent.gateway.v2.ErrorResponse
-	156, // 113: liveagent.gateway.v2.AgentEnvelope.history_set_cwd_resp:type_name -> liveagent.gateway.v2.HistorySetCwdResponse
-	160, // 114: liveagent.gateway.v2.AgentEnvelope.workspace_root_grants_resp:type_name -> liveagent.gateway.v2.WorkspaceRootGrantsResponse
-	9,   // 115: liveagent.gateway.v2.UploadReadableFilesRequest.files:type_name -> liveagent.gateway.v2.UploadReadableFile
-	8,   // 116: liveagent.gateway.v2.UploadReadableFilesResponse.files:type_name -> liveagent.gateway.v2.ChatUploadedFile
-	14,  // 117: liveagent.gateway.v2.TunnelDesiredState.tunnels:type_name -> liveagent.gateway.v2.TunnelSpec
-	16,  // 118: liveagent.gateway.v2.TunnelStatus.local:type_name -> liveagent.gateway.v2.TunnelHealth
-	17,  // 119: liveagent.gateway.v2.TunnelStateSnapshot.tunnels:type_name -> liveagent.gateway.v2.TunnelStatus
-	16,  // 120: liveagent.gateway.v2.TunnelStateSnapshot.relay:type_name -> liveagent.gateway.v2.TunnelHealth
-	16,  // 121: liveagent.gateway.v2.TunnelProbeResult.local:type_name -> liveagent.gateway.v2.TunnelHealth
-	21,  // 122: liveagent.gateway.v2.TunnelProbeReport.results:type_name -> liveagent.gateway.v2.TunnelProbeResult
-	0,   // 123: liveagent.gateway.v2.TunnelFrame.kind:type_name -> liveagent.gateway.v2.TunnelFrameKind
-	23,  // 124: liveagent.gateway.v2.TunnelFrame.headers:type_name -> liveagent.gateway.v2.TunnelHeader
-	1,   // 125: liveagent.gateway.v2.TunnelFrame.ws_message_type:type_name -> liveagent.gateway.v2.TunnelWsMessageType
-	27,  // 126: liveagent.gateway.v2.ManagedProcessSnapshot.processes:type_name -> liveagent.gateway.v2.ManagedProcessRecord
-	28,  // 127: liveagent.gateway.v2.ManagedProcessResponse.snapshot:type_name -> liveagent.gateway.v2.ManagedProcessSnapshot
-	35,  // 128: liveagent.gateway.v2.TerminalSession.ssh:type_name -> liveagent.gateway.v2.TerminalSshMetadata
-	37,  // 129: liveagent.gateway.v2.SftpResponse.entries:type_name -> liveagent.gateway.v2.SftpEntry
-	37,  // 130: liveagent.gateway.v2.SftpResponse.entry:type_name -> liveagent.gateway.v2.SftpEntry
-	38,  // 131: liveagent.gateway.v2.SftpResponse.transfer:type_name -> liveagent.gateway.v2.SftpTransfer
-	38,  // 132: liveagent.gateway.v2.SftpEvent.transfer:type_name -> liveagent.gateway.v2.SftpTransfer
-	43,  // 133: liveagent.gateway.v2.TerminalSshTabsSnapshot.tabs:type_name -> liveagent.gateway.v2.TerminalSshTab
-	45,  // 134: liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot.forwards:type_name -> liveagent.gateway.v2.TerminalSshLocalForward
-	45,  // 135: liveagent.gateway.v2.TerminalSshLocalForwardAction.forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForward
-	34,  // 136: liveagent.gateway.v2.TerminalResponse.sessions:type_name -> liveagent.gateway.v2.TerminalSession
-	34,  // 137: liveagent.gateway.v2.TerminalResponse.session:type_name -> liveagent.gateway.v2.TerminalSession
-	42,  // 138: liveagent.gateway.v2.TerminalResponse.shell_options:type_name -> liveagent.gateway.v2.TerminalShellOption
-	41,  // 139: liveagent.gateway.v2.TerminalResponse.ssh_prompt:type_name -> liveagent.gateway.v2.TerminalSshPrompt
-	44,  // 140: liveagent.gateway.v2.TerminalResponse.ssh_tabs:type_name -> liveagent.gateway.v2.TerminalSshTabsSnapshot
-	46,  // 141: liveagent.gateway.v2.TerminalResponse.ssh_local_forwards:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot
-	47,  // 142: liveagent.gateway.v2.TerminalResponse.ssh_local_forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardAction
-	34,  // 143: liveagent.gateway.v2.TerminalEvent.session:type_name -> liveagent.gateway.v2.TerminalSession
-	44,  // 144: liveagent.gateway.v2.TerminalEvent.ssh_tabs:type_name -> liveagent.gateway.v2.TerminalSshTabsSnapshot
-	47,  // 145: liveagent.gateway.v2.TerminalEvent.ssh_local_forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardAction
-	34,  // 146: liveagent.gateway.v2.TerminalStreamFrame.session:type_name -> liveagent.gateway.v2.TerminalSession
-	6,   // 147: liveagent.gateway.v2.ChatRequest.selected_model:type_name -> liveagent.gateway.v2.ChatSelectedModel
-	8,   // 148: liveagent.gateway.v2.ChatRequest.uploaded_files:type_name -> liveagent.gateway.v2.ChatUploadedFile
-	7,   // 149: liveagent.gateway.v2.ChatRequest.runtime_controls:type_name -> liveagent.gateway.v2.ChatRuntimeControls
-	53,  // 150: liveagent.gateway.v2.ChatCommandRequest.request:type_name -> liveagent.gateway.v2.ChatRequest
-	54,  // 151: liveagent.gateway.v2.ChatCommandRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
-	55,  // 152: liveagent.gateway.v2.ChatCommandRequest.cancel:type_name -> liveagent.gateway.v2.CancelChatRequest
-	2,   // 153: liveagent.gateway.v2.ChatEvent.type:type_name -> liveagent.gateway.v2.ChatEvent.ChatEventType
-	64,  // 154: liveagent.gateway.v2.RuntimeStatusEvent.active_runs:type_name -> liveagent.gateway.v2.ChatRunReport
-	64,  // 155: liveagent.gateway.v2.RuntimeStatusEvent.finished_runs:type_name -> liveagent.gateway.v2.ChatRunReport
-	69,  // 156: liveagent.gateway.v2.HistoryListResponse.conversations:type_name -> liveagent.gateway.v2.ConversationSummary
-	69,  // 157: liveagent.gateway.v2.HistoryGetResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	54,  // 158: liveagent.gateway.v2.HistoryPrefixRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
-	69,  // 159: liveagent.gateway.v2.HistoryPrefixResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	69,  // 160: liveagent.gateway.v2.HistoryRenameResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	54,  // 161: liveagent.gateway.v2.HistoryBranchRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
-	69,  // 162: liveagent.gateway.v2.HistoryBranchResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	69,  // 163: liveagent.gateway.v2.HistoryPinResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	80,  // 164: liveagent.gateway.v2.HistoryShareGetResponse.share:type_name -> liveagent.gateway.v2.HistoryShareStatus
-	80,  // 165: liveagent.gateway.v2.HistoryShareSetResponse.share:type_name -> liveagent.gateway.v2.HistoryShareStatus
-	69,  // 166: liveagent.gateway.v2.HistoryShareResolveResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	88,  // 167: liveagent.gateway.v2.HistoryWorkdirsResponse.workdirs:type_name -> liveagent.gateway.v2.HistoryWorkdirSummary
-	69,  // 168: liveagent.gateway.v2.HistorySyncEvent.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	111, // 169: liveagent.gateway.v2.FileMentionListResponse.entries:type_name -> liveagent.gateway.v2.FileMentionEntry
-	113, // 170: liveagent.gateway.v2.FsRootsResponse.roots:type_name -> liveagent.gateway.v2.FsRoot
-	117, // 171: liveagent.gateway.v2.FsListDirsResponse.entries:type_name -> liveagent.gateway.v2.FsDirEntry
-	122, // 172: liveagent.gateway.v2.FsListResponse.entries:type_name -> liveagent.gateway.v2.FsListEntry
-	146, // 173: liveagent.gateway.v2.ChatIngressBatch.records:type_name -> liveagent.gateway.v2.ChatIngressRecord
-	147, // 174: liveagent.gateway.v2.ChatIngressRecord.delta:type_name -> liveagent.gateway.v2.ChatIngressDelta
-	149, // 175: liveagent.gateway.v2.ChatIngressRecord.checkpoint:type_name -> liveagent.gateway.v2.ChatIngressCheckpoint
-	150, // 176: liveagent.gateway.v2.ChatIngressRecord.terminal:type_name -> liveagent.gateway.v2.ChatIngressTerminal
-	148, // 177: liveagent.gateway.v2.ChatIngressRecord.heartbeat:type_name -> liveagent.gateway.v2.ChatIngressHeartbeat
-	152, // 178: liveagent.gateway.v2.ChatIngressResume.runs:type_name -> liveagent.gateway.v2.ChatIngressRunResume
-	3,   // 179: liveagent.gateway.v2.ChatIngressAck.action:type_name -> liveagent.gateway.v2.ChatIngressAck.Action
-	69,  // 180: liveagent.gateway.v2.HistorySetCwdResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
-	157, // 181: liveagent.gateway.v2.WorkspaceRootGrantsRequest.grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrantDraft
-	158, // 182: liveagent.gateway.v2.WorkspaceRootGrantsResponse.grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrant
-	183, // [183:183] is the sub-list for method output_type
-	183, // [183:183] is the sub-list for method input_type
-	183, // [183:183] is the sub-list for extension type_name
-	183, // [183:183] is the sub-list for extension extendee
-	0,   // [0:183] is the sub-list for field type_name
+	60,  // 0: liveagent.gateway.v2.GatewayEnvelope.chat_command:type_name -> liveagent.gateway.v2.ChatCommandRequest
+	69,  // 1: liveagent.gateway.v2.GatewayEnvelope.cron_manage:type_name -> liveagent.gateway.v2.CronManageRequest
+	71,  // 2: liveagent.gateway.v2.GatewayEnvelope.history_list:type_name -> liveagent.gateway.v2.HistoryListRequest
+	74,  // 3: liveagent.gateway.v2.GatewayEnvelope.history_get:type_name -> liveagent.gateway.v2.HistoryGetRequest
+	78,  // 4: liveagent.gateway.v2.GatewayEnvelope.history_rename:type_name -> liveagent.gateway.v2.HistoryRenameRequest
+	94,  // 5: liveagent.gateway.v2.GatewayEnvelope.history_delete:type_name -> liveagent.gateway.v2.HistoryDeleteRequest
+	76,  // 6: liveagent.gateway.v2.GatewayEnvelope.history_prefix:type_name -> liveagent.gateway.v2.HistoryPrefixRequest
+	82,  // 7: liveagent.gateway.v2.GatewayEnvelope.history_pin:type_name -> liveagent.gateway.v2.HistoryPinRequest
+	85,  // 8: liveagent.gateway.v2.GatewayEnvelope.history_share_get:type_name -> liveagent.gateway.v2.HistoryShareGetRequest
+	87,  // 9: liveagent.gateway.v2.GatewayEnvelope.history_share_set:type_name -> liveagent.gateway.v2.HistoryShareSetRequest
+	89,  // 10: liveagent.gateway.v2.GatewayEnvelope.history_share_resolve:type_name -> liveagent.gateway.v2.HistoryShareResolveRequest
+	91,  // 11: liveagent.gateway.v2.GatewayEnvelope.history_workdirs:type_name -> liveagent.gateway.v2.HistoryWorkdirsRequest
+	97,  // 12: liveagent.gateway.v2.GatewayEnvelope.provider_list:type_name -> liveagent.gateway.v2.ProviderListRequest
+	99,  // 13: liveagent.gateway.v2.GatewayEnvelope.settings_get:type_name -> liveagent.gateway.v2.SettingsGetRequest
+	101, // 14: liveagent.gateway.v2.GatewayEnvelope.settings_update:type_name -> liveagent.gateway.v2.SettingsUpdateRequest
+	106, // 15: liveagent.gateway.v2.GatewayEnvelope.skill_files_list:type_name -> liveagent.gateway.v2.SkillFilesListRequest
+	108, // 16: liveagent.gateway.v2.GatewayEnvelope.skill_metadata_read:type_name -> liveagent.gateway.v2.SkillMetadataReadRequest
+	110, // 17: liveagent.gateway.v2.GatewayEnvelope.skill_text_read:type_name -> liveagent.gateway.v2.SkillTextReadRequest
+	114, // 18: liveagent.gateway.v2.GatewayEnvelope.file_mention_list:type_name -> liveagent.gateway.v2.FileMentionListRequest
+	11,  // 19: liveagent.gateway.v2.GatewayEnvelope.upload_readable_files:type_name -> liveagent.gateway.v2.UploadReadableFilesRequest
+	118, // 20: liveagent.gateway.v2.GatewayEnvelope.fs_roots:type_name -> liveagent.gateway.v2.FsRootsRequest
+	120, // 21: liveagent.gateway.v2.GatewayEnvelope.fs_list_dirs:type_name -> liveagent.gateway.v2.FsListDirsRequest
+	142, // 22: liveagent.gateway.v2.GatewayEnvelope.ping:type_name -> liveagent.gateway.v2.PingRequest
+	16,  // 23: liveagent.gateway.v2.GatewayEnvelope.uploaded_image_preview:type_name -> liveagent.gateway.v2.UploadedImagePreviewRequest
+	35,  // 24: liveagent.gateway.v2.GatewayEnvelope.memory_manage:type_name -> liveagent.gateway.v2.MemoryManageRequest
+	112, // 25: liveagent.gateway.v2.GatewayEnvelope.skill_manage:type_name -> liveagent.gateway.v2.SkillManageRequest
+	123, // 26: liveagent.gateway.v2.GatewayEnvelope.fs_create_project_folder:type_name -> liveagent.gateway.v2.FsCreateProjectFolderRequest
+	37,  // 27: liveagent.gateway.v2.GatewayEnvelope.terminal_request:type_name -> liveagent.gateway.v2.TerminalRequest
+	125, // 28: liveagent.gateway.v2.GatewayEnvelope.fs_list:type_name -> liveagent.gateway.v2.FsListRequest
+	134, // 29: liveagent.gateway.v2.GatewayEnvelope.fs_write_text:type_name -> liveagent.gateway.v2.FsWriteTextRequest
+	136, // 30: liveagent.gateway.v2.GatewayEnvelope.fs_create_dir:type_name -> liveagent.gateway.v2.FsCreateDirRequest
+	138, // 31: liveagent.gateway.v2.GatewayEnvelope.fs_rename:type_name -> liveagent.gateway.v2.FsRenameRequest
+	140, // 32: liveagent.gateway.v2.GatewayEnvelope.fs_delete:type_name -> liveagent.gateway.v2.FsDeleteRequest
+	55,  // 33: liveagent.gateway.v2.GatewayEnvelope.git_request:type_name -> liveagent.gateway.v2.GitRequest
+	128, // 34: liveagent.gateway.v2.GatewayEnvelope.fs_read_editable_text:type_name -> liveagent.gateway.v2.FsReadEditableTextRequest
+	130, // 35: liveagent.gateway.v2.GatewayEnvelope.fs_read_workspace_image:type_name -> liveagent.gateway.v2.FsReadWorkspaceImageRequest
+	40,  // 36: liveagent.gateway.v2.GatewayEnvelope.sftp_request:type_name -> liveagent.gateway.v2.SftpRequest
+	145, // 37: liveagent.gateway.v2.GatewayEnvelope.provider_models:type_name -> liveagent.gateway.v2.ProviderModelsRequest
+	103, // 38: liveagent.gateway.v2.GatewayEnvelope.settings_reset_ssh_known_host:type_name -> liveagent.gateway.v2.SettingsResetSshKnownHostRequest
+	61,  // 39: liveagent.gateway.v2.GatewayEnvelope.chat_queue:type_name -> liveagent.gateway.v2.ChatQueueRequest
+	158, // 40: liveagent.gateway.v2.GatewayEnvelope.chat_ingress_ack:type_name -> liveagent.gateway.v2.ChatIngressAck
+	22,  // 41: liveagent.gateway.v2.GatewayEnvelope.tunnel_state:type_name -> liveagent.gateway.v2.TunnelStateSnapshot
+	23,  // 42: liveagent.gateway.v2.GatewayEnvelope.tunnel_mutation:type_name -> liveagent.gateway.v2.TunnelMutation
+	28,  // 43: liveagent.gateway.v2.GatewayEnvelope.tunnel_frame:type_name -> liveagent.gateway.v2.TunnelFrame
+	29,  // 44: liveagent.gateway.v2.GatewayEnvelope.workspace_watch:type_name -> liveagent.gateway.v2.WorkspaceWatchRequest
+	33,  // 45: liveagent.gateway.v2.GatewayEnvelope.managed_process_request:type_name -> liveagent.gateway.v2.ManagedProcessRequest
+	80,  // 46: liveagent.gateway.v2.GatewayEnvelope.history_branch:type_name -> liveagent.gateway.v2.HistoryBranchRequest
+	147, // 47: liveagent.gateway.v2.GatewayEnvelope.provider_usage:type_name -> liveagent.gateway.v2.ProviderUsageRequest
+	132, // 48: liveagent.gateway.v2.GatewayEnvelope.chat_file_open:type_name -> liveagent.gateway.v2.ChatFileOpenRequest
+	159, // 49: liveagent.gateway.v2.GatewayEnvelope.history_set_cwd:type_name -> liveagent.gateway.v2.HistorySetCwdRequest
+	163, // 50: liveagent.gateway.v2.GatewayEnvelope.workspace_root_grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrantsRequest
+	14,  // 51: liveagent.gateway.v2.GatewayEnvelope.import_directory:type_name -> liveagent.gateway.v2.ImportDirectoryRequest
+	64,  // 52: liveagent.gateway.v2.AgentEnvelope.chat_event:type_name -> liveagent.gateway.v2.ChatEvent
+	70,  // 53: liveagent.gateway.v2.AgentEnvelope.cron_manage_resp:type_name -> liveagent.gateway.v2.CronManageResponse
+	72,  // 54: liveagent.gateway.v2.AgentEnvelope.history_list_resp:type_name -> liveagent.gateway.v2.HistoryListResponse
+	75,  // 55: liveagent.gateway.v2.AgentEnvelope.history_get_resp:type_name -> liveagent.gateway.v2.HistoryGetResponse
+	79,  // 56: liveagent.gateway.v2.AgentEnvelope.history_rename_resp:type_name -> liveagent.gateway.v2.HistoryRenameResponse
+	95,  // 57: liveagent.gateway.v2.AgentEnvelope.history_delete_resp:type_name -> liveagent.gateway.v2.HistoryDeleteResponse
+	96,  // 58: liveagent.gateway.v2.AgentEnvelope.history_sync:type_name -> liveagent.gateway.v2.HistorySyncEvent
+	77,  // 59: liveagent.gateway.v2.AgentEnvelope.history_prefix_resp:type_name -> liveagent.gateway.v2.HistoryPrefixResponse
+	83,  // 60: liveagent.gateway.v2.AgentEnvelope.history_pin_resp:type_name -> liveagent.gateway.v2.HistoryPinResponse
+	86,  // 61: liveagent.gateway.v2.AgentEnvelope.history_share_get_resp:type_name -> liveagent.gateway.v2.HistoryShareGetResponse
+	88,  // 62: liveagent.gateway.v2.AgentEnvelope.history_share_set_resp:type_name -> liveagent.gateway.v2.HistoryShareSetResponse
+	90,  // 63: liveagent.gateway.v2.AgentEnvelope.history_share_resolve_resp:type_name -> liveagent.gateway.v2.HistoryShareResolveResponse
+	93,  // 64: liveagent.gateway.v2.AgentEnvelope.history_workdirs_resp:type_name -> liveagent.gateway.v2.HistoryWorkdirsResponse
+	98,  // 65: liveagent.gateway.v2.AgentEnvelope.provider_list_resp:type_name -> liveagent.gateway.v2.ProviderListResponse
+	100, // 66: liveagent.gateway.v2.AgentEnvelope.settings_get_resp:type_name -> liveagent.gateway.v2.SettingsGetResponse
+	102, // 67: liveagent.gateway.v2.AgentEnvelope.settings_update_resp:type_name -> liveagent.gateway.v2.SettingsUpdateResponse
+	105, // 68: liveagent.gateway.v2.AgentEnvelope.settings_sync:type_name -> liveagent.gateway.v2.SettingsSyncEvent
+	107, // 69: liveagent.gateway.v2.AgentEnvelope.skill_files_list_resp:type_name -> liveagent.gateway.v2.SkillFilesListResponse
+	109, // 70: liveagent.gateway.v2.AgentEnvelope.skill_metadata_read_resp:type_name -> liveagent.gateway.v2.SkillMetadataReadResponse
+	111, // 71: liveagent.gateway.v2.AgentEnvelope.skill_text_read_resp:type_name -> liveagent.gateway.v2.SkillTextReadResponse
+	116, // 72: liveagent.gateway.v2.AgentEnvelope.file_mention_list_resp:type_name -> liveagent.gateway.v2.FileMentionListResponse
+	12,  // 73: liveagent.gateway.v2.AgentEnvelope.upload_readable_files_resp:type_name -> liveagent.gateway.v2.UploadReadableFilesResponse
+	119, // 74: liveagent.gateway.v2.AgentEnvelope.fs_roots_resp:type_name -> liveagent.gateway.v2.FsRootsResponse
+	143, // 75: liveagent.gateway.v2.AgentEnvelope.pong:type_name -> liveagent.gateway.v2.PongResponse
+	122, // 76: liveagent.gateway.v2.AgentEnvelope.fs_list_dirs_resp:type_name -> liveagent.gateway.v2.FsListDirsResponse
+	17,  // 77: liveagent.gateway.v2.AgentEnvelope.uploaded_image_preview_resp:type_name -> liveagent.gateway.v2.UploadedImagePreviewResponse
+	36,  // 78: liveagent.gateway.v2.AgentEnvelope.memory_manage_resp:type_name -> liveagent.gateway.v2.MemoryManageResponse
+	113, // 79: liveagent.gateway.v2.AgentEnvelope.skill_manage_resp:type_name -> liveagent.gateway.v2.SkillManageResponse
+	124, // 80: liveagent.gateway.v2.AgentEnvelope.fs_create_project_folder_resp:type_name -> liveagent.gateway.v2.FsCreateProjectFolderResponse
+	52,  // 81: liveagent.gateway.v2.AgentEnvelope.terminal_response:type_name -> liveagent.gateway.v2.TerminalResponse
+	53,  // 82: liveagent.gateway.v2.AgentEnvelope.terminal_event:type_name -> liveagent.gateway.v2.TerminalEvent
+	127, // 83: liveagent.gateway.v2.AgentEnvelope.fs_list_resp:type_name -> liveagent.gateway.v2.FsListResponse
+	135, // 84: liveagent.gateway.v2.AgentEnvelope.fs_write_text_resp:type_name -> liveagent.gateway.v2.FsWriteTextResponse
+	137, // 85: liveagent.gateway.v2.AgentEnvelope.fs_create_dir_resp:type_name -> liveagent.gateway.v2.FsCreateDirResponse
+	139, // 86: liveagent.gateway.v2.AgentEnvelope.fs_rename_resp:type_name -> liveagent.gateway.v2.FsRenameResponse
+	141, // 87: liveagent.gateway.v2.AgentEnvelope.fs_delete_resp:type_name -> liveagent.gateway.v2.FsDeleteResponse
+	56,  // 88: liveagent.gateway.v2.AgentEnvelope.git_response:type_name -> liveagent.gateway.v2.GitResponse
+	129, // 89: liveagent.gateway.v2.AgentEnvelope.fs_read_editable_text_resp:type_name -> liveagent.gateway.v2.FsReadEditableTextResponse
+	131, // 90: liveagent.gateway.v2.AgentEnvelope.fs_read_workspace_image_resp:type_name -> liveagent.gateway.v2.FsReadWorkspaceImageResponse
+	43,  // 91: liveagent.gateway.v2.AgentEnvelope.sftp_response:type_name -> liveagent.gateway.v2.SftpResponse
+	44,  // 92: liveagent.gateway.v2.AgentEnvelope.sftp_event:type_name -> liveagent.gateway.v2.SftpEvent
+	62,  // 93: liveagent.gateway.v2.AgentEnvelope.chat_queue_resp:type_name -> liveagent.gateway.v2.ChatQueueResponse
+	63,  // 94: liveagent.gateway.v2.AgentEnvelope.chat_queue_event:type_name -> liveagent.gateway.v2.ChatQueueEvent
+	65,  // 95: liveagent.gateway.v2.AgentEnvelope.chat_control:type_name -> liveagent.gateway.v2.ChatControlEvent
+	67,  // 96: liveagent.gateway.v2.AgentEnvelope.runtime_status:type_name -> liveagent.gateway.v2.RuntimeStatusEvent
+	104, // 97: liveagent.gateway.v2.AgentEnvelope.settings_reset_ssh_known_host_resp:type_name -> liveagent.gateway.v2.SettingsResetSshKnownHostResponse
+	66,  // 98: liveagent.gateway.v2.AgentEnvelope.chat_runtime_snapshot:type_name -> liveagent.gateway.v2.ChatRuntimeSnapshot
+	146, // 99: liveagent.gateway.v2.AgentEnvelope.provider_models_resp:type_name -> liveagent.gateway.v2.ProviderModelsResponse
+	19,  // 100: liveagent.gateway.v2.AgentEnvelope.tunnel_desired:type_name -> liveagent.gateway.v2.TunnelDesiredState
+	24,  // 101: liveagent.gateway.v2.AgentEnvelope.tunnel_mutation_result:type_name -> liveagent.gateway.v2.TunnelMutationResult
+	28,  // 102: liveagent.gateway.v2.AgentEnvelope.tunnel_frame:type_name -> liveagent.gateway.v2.TunnelFrame
+	26,  // 103: liveagent.gateway.v2.AgentEnvelope.tunnel_probe_report:type_name -> liveagent.gateway.v2.TunnelProbeReport
+	30,  // 104: liveagent.gateway.v2.AgentEnvelope.workspace_activity:type_name -> liveagent.gateway.v2.WorkspaceActivityEvent
+	34,  // 105: liveagent.gateway.v2.AgentEnvelope.managed_process_response:type_name -> liveagent.gateway.v2.ManagedProcessResponse
+	32,  // 106: liveagent.gateway.v2.AgentEnvelope.managed_process_snapshot:type_name -> liveagent.gateway.v2.ManagedProcessSnapshot
+	81,  // 107: liveagent.gateway.v2.AgentEnvelope.history_branch_resp:type_name -> liveagent.gateway.v2.HistoryBranchResponse
+	148, // 108: liveagent.gateway.v2.AgentEnvelope.provider_usage_resp:type_name -> liveagent.gateway.v2.ProviderUsageResponse
+	149, // 109: liveagent.gateway.v2.AgentEnvelope.chat_ingress_batch:type_name -> liveagent.gateway.v2.ChatIngressBatch
+	155, // 110: liveagent.gateway.v2.AgentEnvelope.chat_ingress_resume:type_name -> liveagent.gateway.v2.ChatIngressResume
+	157, // 111: liveagent.gateway.v2.AgentEnvelope.chat_ingress_fragment:type_name -> liveagent.gateway.v2.ChatIngressFragment
+	133, // 112: liveagent.gateway.v2.AgentEnvelope.chat_file_open_resp:type_name -> liveagent.gateway.v2.ChatFileOpenResponse
+	144, // 113: liveagent.gateway.v2.AgentEnvelope.error:type_name -> liveagent.gateway.v2.ErrorResponse
+	160, // 114: liveagent.gateway.v2.AgentEnvelope.history_set_cwd_resp:type_name -> liveagent.gateway.v2.HistorySetCwdResponse
+	164, // 115: liveagent.gateway.v2.AgentEnvelope.workspace_root_grants_resp:type_name -> liveagent.gateway.v2.WorkspaceRootGrantsResponse
+	15,  // 116: liveagent.gateway.v2.AgentEnvelope.import_directory_resp:type_name -> liveagent.gateway.v2.ImportDirectoryResponse
+	10,  // 117: liveagent.gateway.v2.UploadReadableFilesRequest.files:type_name -> liveagent.gateway.v2.UploadReadableFile
+	9,   // 118: liveagent.gateway.v2.UploadReadableFilesResponse.files:type_name -> liveagent.gateway.v2.ChatUploadedFile
+	13,  // 119: liveagent.gateway.v2.ImportDirectoryRequest.files:type_name -> liveagent.gateway.v2.ImportDirectoryFile
+	0,   // 120: liveagent.gateway.v2.ImportDirectoryRequest.operation:type_name -> liveagent.gateway.v2.ImportDirectoryOperation
+	18,  // 121: liveagent.gateway.v2.TunnelDesiredState.tunnels:type_name -> liveagent.gateway.v2.TunnelSpec
+	20,  // 122: liveagent.gateway.v2.TunnelStatus.local:type_name -> liveagent.gateway.v2.TunnelHealth
+	21,  // 123: liveagent.gateway.v2.TunnelStateSnapshot.tunnels:type_name -> liveagent.gateway.v2.TunnelStatus
+	20,  // 124: liveagent.gateway.v2.TunnelStateSnapshot.relay:type_name -> liveagent.gateway.v2.TunnelHealth
+	20,  // 125: liveagent.gateway.v2.TunnelProbeResult.local:type_name -> liveagent.gateway.v2.TunnelHealth
+	25,  // 126: liveagent.gateway.v2.TunnelProbeReport.results:type_name -> liveagent.gateway.v2.TunnelProbeResult
+	1,   // 127: liveagent.gateway.v2.TunnelFrame.kind:type_name -> liveagent.gateway.v2.TunnelFrameKind
+	27,  // 128: liveagent.gateway.v2.TunnelFrame.headers:type_name -> liveagent.gateway.v2.TunnelHeader
+	2,   // 129: liveagent.gateway.v2.TunnelFrame.ws_message_type:type_name -> liveagent.gateway.v2.TunnelWsMessageType
+	31,  // 130: liveagent.gateway.v2.ManagedProcessSnapshot.processes:type_name -> liveagent.gateway.v2.ManagedProcessRecord
+	32,  // 131: liveagent.gateway.v2.ManagedProcessResponse.snapshot:type_name -> liveagent.gateway.v2.ManagedProcessSnapshot
+	39,  // 132: liveagent.gateway.v2.TerminalSession.ssh:type_name -> liveagent.gateway.v2.TerminalSshMetadata
+	41,  // 133: liveagent.gateway.v2.SftpResponse.entries:type_name -> liveagent.gateway.v2.SftpEntry
+	41,  // 134: liveagent.gateway.v2.SftpResponse.entry:type_name -> liveagent.gateway.v2.SftpEntry
+	42,  // 135: liveagent.gateway.v2.SftpResponse.transfer:type_name -> liveagent.gateway.v2.SftpTransfer
+	42,  // 136: liveagent.gateway.v2.SftpEvent.transfer:type_name -> liveagent.gateway.v2.SftpTransfer
+	47,  // 137: liveagent.gateway.v2.TerminalSshTabsSnapshot.tabs:type_name -> liveagent.gateway.v2.TerminalSshTab
+	49,  // 138: liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot.forwards:type_name -> liveagent.gateway.v2.TerminalSshLocalForward
+	49,  // 139: liveagent.gateway.v2.TerminalSshLocalForwardAction.forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForward
+	38,  // 140: liveagent.gateway.v2.TerminalResponse.sessions:type_name -> liveagent.gateway.v2.TerminalSession
+	38,  // 141: liveagent.gateway.v2.TerminalResponse.session:type_name -> liveagent.gateway.v2.TerminalSession
+	46,  // 142: liveagent.gateway.v2.TerminalResponse.shell_options:type_name -> liveagent.gateway.v2.TerminalShellOption
+	45,  // 143: liveagent.gateway.v2.TerminalResponse.ssh_prompt:type_name -> liveagent.gateway.v2.TerminalSshPrompt
+	48,  // 144: liveagent.gateway.v2.TerminalResponse.ssh_tabs:type_name -> liveagent.gateway.v2.TerminalSshTabsSnapshot
+	50,  // 145: liveagent.gateway.v2.TerminalResponse.ssh_local_forwards:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardsSnapshot
+	51,  // 146: liveagent.gateway.v2.TerminalResponse.ssh_local_forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardAction
+	38,  // 147: liveagent.gateway.v2.TerminalEvent.session:type_name -> liveagent.gateway.v2.TerminalSession
+	48,  // 148: liveagent.gateway.v2.TerminalEvent.ssh_tabs:type_name -> liveagent.gateway.v2.TerminalSshTabsSnapshot
+	51,  // 149: liveagent.gateway.v2.TerminalEvent.ssh_local_forward:type_name -> liveagent.gateway.v2.TerminalSshLocalForwardAction
+	38,  // 150: liveagent.gateway.v2.TerminalStreamFrame.session:type_name -> liveagent.gateway.v2.TerminalSession
+	7,   // 151: liveagent.gateway.v2.ChatRequest.selected_model:type_name -> liveagent.gateway.v2.ChatSelectedModel
+	9,   // 152: liveagent.gateway.v2.ChatRequest.uploaded_files:type_name -> liveagent.gateway.v2.ChatUploadedFile
+	8,   // 153: liveagent.gateway.v2.ChatRequest.runtime_controls:type_name -> liveagent.gateway.v2.ChatRuntimeControls
+	57,  // 154: liveagent.gateway.v2.ChatCommandRequest.request:type_name -> liveagent.gateway.v2.ChatRequest
+	58,  // 155: liveagent.gateway.v2.ChatCommandRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
+	59,  // 156: liveagent.gateway.v2.ChatCommandRequest.cancel:type_name -> liveagent.gateway.v2.CancelChatRequest
+	3,   // 157: liveagent.gateway.v2.ChatEvent.type:type_name -> liveagent.gateway.v2.ChatEvent.ChatEventType
+	68,  // 158: liveagent.gateway.v2.RuntimeStatusEvent.active_runs:type_name -> liveagent.gateway.v2.ChatRunReport
+	68,  // 159: liveagent.gateway.v2.RuntimeStatusEvent.finished_runs:type_name -> liveagent.gateway.v2.ChatRunReport
+	73,  // 160: liveagent.gateway.v2.HistoryListResponse.conversations:type_name -> liveagent.gateway.v2.ConversationSummary
+	73,  // 161: liveagent.gateway.v2.HistoryGetResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	58,  // 162: liveagent.gateway.v2.HistoryPrefixRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
+	73,  // 163: liveagent.gateway.v2.HistoryPrefixResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	73,  // 164: liveagent.gateway.v2.HistoryRenameResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	58,  // 165: liveagent.gateway.v2.HistoryBranchRequest.base_message_ref:type_name -> liveagent.gateway.v2.ChatMessageRef
+	73,  // 166: liveagent.gateway.v2.HistoryBranchResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	73,  // 167: liveagent.gateway.v2.HistoryPinResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	84,  // 168: liveagent.gateway.v2.HistoryShareGetResponse.share:type_name -> liveagent.gateway.v2.HistoryShareStatus
+	84,  // 169: liveagent.gateway.v2.HistoryShareSetResponse.share:type_name -> liveagent.gateway.v2.HistoryShareStatus
+	73,  // 170: liveagent.gateway.v2.HistoryShareResolveResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	92,  // 171: liveagent.gateway.v2.HistoryWorkdirsResponse.workdirs:type_name -> liveagent.gateway.v2.HistoryWorkdirSummary
+	73,  // 172: liveagent.gateway.v2.HistorySyncEvent.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	115, // 173: liveagent.gateway.v2.FileMentionListResponse.entries:type_name -> liveagent.gateway.v2.FileMentionEntry
+	117, // 174: liveagent.gateway.v2.FsRootsResponse.roots:type_name -> liveagent.gateway.v2.FsRoot
+	121, // 175: liveagent.gateway.v2.FsListDirsResponse.entries:type_name -> liveagent.gateway.v2.FsDirEntry
+	126, // 176: liveagent.gateway.v2.FsListResponse.entries:type_name -> liveagent.gateway.v2.FsListEntry
+	150, // 177: liveagent.gateway.v2.ChatIngressBatch.records:type_name -> liveagent.gateway.v2.ChatIngressRecord
+	151, // 178: liveagent.gateway.v2.ChatIngressRecord.delta:type_name -> liveagent.gateway.v2.ChatIngressDelta
+	153, // 179: liveagent.gateway.v2.ChatIngressRecord.checkpoint:type_name -> liveagent.gateway.v2.ChatIngressCheckpoint
+	154, // 180: liveagent.gateway.v2.ChatIngressRecord.terminal:type_name -> liveagent.gateway.v2.ChatIngressTerminal
+	152, // 181: liveagent.gateway.v2.ChatIngressRecord.heartbeat:type_name -> liveagent.gateway.v2.ChatIngressHeartbeat
+	156, // 182: liveagent.gateway.v2.ChatIngressResume.runs:type_name -> liveagent.gateway.v2.ChatIngressRunResume
+	4,   // 183: liveagent.gateway.v2.ChatIngressAck.action:type_name -> liveagent.gateway.v2.ChatIngressAck.Action
+	73,  // 184: liveagent.gateway.v2.HistorySetCwdResponse.conversation:type_name -> liveagent.gateway.v2.ConversationSummary
+	161, // 185: liveagent.gateway.v2.WorkspaceRootGrantsRequest.grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrantDraft
+	162, // 186: liveagent.gateway.v2.WorkspaceRootGrantsResponse.grants:type_name -> liveagent.gateway.v2.WorkspaceRootGrant
+	187, // [187:187] is the sub-list for method output_type
+	187, // [187:187] is the sub-list for method input_type
+	187, // [187:187] is the sub-list for extension type_name
+	187, // [187:187] is the sub-list for extension extendee
+	0,   // [0:187] is the sub-list for field type_name
 }
 
 func init() { file_proto_v2_gateway_proto_init() }
@@ -14669,6 +15058,7 @@ func file_proto_v2_gateway_proto_init() {
 		(*GatewayEnvelope_ChatFileOpen)(nil),
 		(*GatewayEnvelope_HistorySetCwd)(nil),
 		(*GatewayEnvelope_WorkspaceRootGrants)(nil),
+		(*GatewayEnvelope_ImportDirectory)(nil),
 	}
 	file_proto_v2_gateway_proto_msgTypes[1].OneofWrappers = []any{
 		(*AgentEnvelope_ChatEvent)(nil),
@@ -14735,29 +15125,30 @@ func file_proto_v2_gateway_proto_init() {
 		(*AgentEnvelope_Error)(nil),
 		(*AgentEnvelope_HistorySetCwdResp)(nil),
 		(*AgentEnvelope_WorkspaceRootGrantsResp)(nil),
+		(*AgentEnvelope_ImportDirectoryResp)(nil),
 	}
-	file_proto_v2_gateway_proto_msgTypes[15].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[23].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[79].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[106].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[117].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[124].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[125].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[137].OneofWrappers = []any{}
-	file_proto_v2_gateway_proto_msgTypes[142].OneofWrappers = []any{
+	file_proto_v2_gateway_proto_msgTypes[18].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[26].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[82].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[109].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[120].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[127].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[128].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[140].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[145].OneofWrappers = []any{
 		(*ChatIngressRecord_Delta)(nil),
 		(*ChatIngressRecord_Checkpoint)(nil),
 		(*ChatIngressRecord_Terminal)(nil),
 		(*ChatIngressRecord_Heartbeat)(nil),
 	}
-	file_proto_v2_gateway_proto_msgTypes[153].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[156].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_v2_gateway_proto_rawDesc), len(file_proto_v2_gateway_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   157,
+			NumEnums:      5,
+			NumMessages:   160,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

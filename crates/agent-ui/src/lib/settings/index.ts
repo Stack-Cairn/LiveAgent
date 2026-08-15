@@ -9,9 +9,10 @@ import {
   shouldSendAnthropicLongContextHeader,
 } from "@liveagent/ui/lib/models/anthropicContext";
 import {
+  extractProviderDeclaredLimits,
   getProviderFallbackLimits,
+  type ModelLimits,
   normalizeModelLimits,
-  repairStaleCrossProviderLimits,
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
 } from "@liveagent/ui/lib/models/modelCatalog";
@@ -73,6 +74,7 @@ import type {
   McpSettings,
   McpTransport,
   MemorySettings,
+  ModelLimitsSource,
   PromptCacheHintMode,
   ProviderFailoverSettings,
   ProviderId,
@@ -581,9 +583,9 @@ export function getProviderModelDefaults(
   providerId: ProviderId,
   modelId?: string,
   baseUrl?: string,
-): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> {
+): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> & { source: ModelLimitsSource } {
   const known = getKnownModelLimits(providerId, modelId, baseUrl);
-  if (known) return known;
+  if (known) return { ...known, source: "catalog" };
 
   if (
     providerId === "claude_code" &&
@@ -598,6 +600,7 @@ export function getProviderModelDefaults(
           ? ANTHROPIC_STANDARD_CONTEXT_WINDOW
           : ANTHROPIC_LONG_CONTEXT_WINDOW,
       maxOutputToken: getProviderFallbackLimits(providerId).maxOutputToken,
+      source: "catalog",
     };
   }
 
@@ -605,9 +608,9 @@ export function getProviderModelDefaults(
   // 跨供应商回查真实限额，避免吃错本供应商兜底值。Anthropic 的 1M/adaptive
   // 窗口策略只约束目录内的 Anthropic 模型，跨供应商命中直接透传目录值。
   const crossProvider = resolveModelLimitsAcrossProviders(modelId);
-  if (crossProvider) return crossProvider;
+  if (crossProvider) return { ...crossProvider, source: "catalog" };
 
-  return getProviderFallbackLimits(providerId);
+  return { ...getProviderFallbackLimits(providerId), source: "fallback" };
 }
 
 export function createProviderModelConfig(
@@ -620,7 +623,17 @@ export function createProviderModelConfig(
     id,
     contextWindow: defaults.contextWindow,
     maxOutputToken: defaults.maxOutputToken,
+    limitsSource: defaults.source,
   };
+}
+
+const VALID_LIMITS_SOURCES: readonly ModelLimitsSource[] = ["catalog", "provider", "fallback", "user"];
+
+function normalizeLimitsSource(value: unknown): ModelLimitsSource | undefined {
+  return typeof value === "string" &&
+    (VALID_LIMITS_SOURCES as readonly string[]).includes(value)
+    ? (value as ModelLimitsSource)
+    : undefined;
 }
 
 export function normalizeProviderModelConfig(
@@ -641,22 +654,65 @@ export function normalizeProviderModelConfig(
         : "";
   if (!id) return null;
 
-  const defaults = getProviderModelDefaults(providerId, id);
   const ownedBy =
     (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
     (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
-  const storedLimits = {
-    contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
-    maxOutputToken: normalizePositiveInteger(
-      obj.maxOutputToken ?? obj.maxTokens,
-      defaults.maxOutputToken,
-    ),
-  };
-  // 退化限额（输出吃满窗口）可能来自坏目录数据落库期或手工配置，读侧统一修复；
-  // 规则与目录生成期同源（normalizeModelLimits），对所有供应商一视同仁。
-  // 跨供应商回查上线前落库的别家模型吃过本供应商兜底值，同样读侧修复，
-  // 不需要用户删除重加（识别与替换规则见 repairStaleCrossProviderLimits）。
-  const limits = repairStaleCrossProviderLimits(providerId, id, normalizeModelLimits(storedLimits));
+
+  // 供应商 /v1/models 接口本次响应自带的真实限额（如 OpenRouter 的
+  // context_length）直接采信记 provider，不比对存量——这是唯一比落库
+  // 目录/兜底值更新鲜的数据源。
+  const providerDeclared = extractProviderDeclaredLimits(obj);
+  const catalogDefaults = getProviderModelDefaults(providerId, id);
+
+  let limits: ModelLimits;
+  let limitsSource: ModelLimitsSource;
+
+  if (providerDeclared) {
+    limits = providerDeclared;
+    limitsSource = "provider";
+  } else {
+    const storedSource = normalizeLimitsSource(obj.limitsSource);
+    // 退化限额（输出吃满窗口）可能来自坏目录数据落库期或手工配置，读侧统一
+    // 修复；规则与目录生成期同源（normalizeModelLimits），对所有来源一视同仁。
+    const storedLimits = normalizeModelLimits({
+      contextWindow: normalizePositiveInteger(obj.contextWindow, catalogDefaults.contextWindow),
+      maxOutputToken: normalizePositiveInteger(
+        obj.maxOutputToken ?? obj.maxTokens,
+        catalogDefaults.maxOutputToken,
+      ),
+    });
+    const hasStoredNumbers =
+      obj.contextWindow != null || obj.maxOutputToken != null || obj.maxTokens != null;
+    const fallbackPair = getProviderFallbackLimits(providerId);
+
+    // 存量（无 limitsSource 字段）一次性推断：落库值等于当前目录解析结果→
+    // catalog；等于当前供应商兜底常量→fallback（多为跨供应商回查上线前落
+    // 库的坏默认值，下方 catalog/fallback 分支会立即重解析修复）；其余→
+    // user（无法证明不是用户手改的，保守当作用户配置）。
+    const resolvedSource: ModelLimitsSource =
+      storedSource ??
+      (!hasStoredNumbers
+        ? catalogDefaults.source
+        : storedLimits.contextWindow === catalogDefaults.contextWindow &&
+            storedLimits.maxOutputToken === catalogDefaults.maxOutputToken
+          ? "catalog"
+          : storedLimits.contextWindow === fallbackPair.contextWindow &&
+              storedLimits.maxOutputToken === fallbackPair.maxOutputToken
+            ? "fallback"
+            : "user");
+
+    if (resolvedSource === "catalog" || resolvedSource === "fallback") {
+      // 加载时按当前目录/兜底重新解析，让目录更新自动传导。
+      limits = { contextWindow: catalogDefaults.contextWindow, maxOutputToken: catalogDefaults.maxOutputToken };
+      limitsSource = catalogDefaults.source;
+    } else {
+      // provider：供应商实时数据只在“刷新模型列表”那次抓取时存在，加载阶段
+      // 没有这份数据可用，保持落库值。user：永不自动覆盖。两者都原样保留。
+      limits = storedLimits;
+      limitsSource = resolvedSource;
+    }
+  }
+
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   return {
@@ -664,6 +720,7 @@ export function normalizeProviderModelConfig(
     ...(ownedBy ? { ownedBy } : {}),
     contextWindow: limits.contextWindow,
     maxOutputToken: limits.maxOutputToken,
+    limitsSource,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
   };
 }
@@ -698,6 +755,7 @@ export function findProviderModelConfig(
       id: normalizedId,
       contextWindow: defaults.contextWindow,
       maxOutputToken: defaults.maxOutputToken,
+      limitsSource: defaults.source,
     };
   }
   if (provider.type !== "claude_code") return matched;

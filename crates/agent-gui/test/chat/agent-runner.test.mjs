@@ -1352,6 +1352,21 @@ arguments: {"pattern": "express", "file_pattern": "**/*.js", "ignore_case": true
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
   );
+
+  // 剥离 seed 标记会**替换**整条 assistant 消息对象(而不是就地改写),而
+  // pi-agent-core 的 loop 持有 createContextSnapshot() 切出的另一个数组——
+  // 替换只落在 agent.state 上。prepareNextTurnWithContext 必须把规范化后的
+  // 消息作为 context 交还,否则下一轮仍把这段"历史工具调用"文本发回给模型,
+  // 模型会照着它再调一次工具(重复执行的根源)。
+  const followUpAssistant = observedStreamContexts
+    .at(-1)
+    .messages.find((message) => message.role === "assistant");
+  assert.ok(followUpAssistant);
+  const followUpText = followUpAssistant.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(followUpText.includes("Historical tool call"), false);
 });
 
 test("runAssistantWithTools dedupes recovered lowercase tool text against canonical structured calls", async () => {

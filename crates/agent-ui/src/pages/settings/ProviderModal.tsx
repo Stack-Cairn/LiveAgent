@@ -538,6 +538,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       ...editingModel.model,
       contextWindow: editingModelContextWindow,
       maxOutputToken: editingModelMaxOutputToken,
+      limitsSource: "user",
     };
     setModels((prev) => prev.map((item) => (item.id === nextModel.id ? nextModel : item)));
     setEditingModel(null);

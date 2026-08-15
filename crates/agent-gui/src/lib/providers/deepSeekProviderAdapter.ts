@@ -78,6 +78,7 @@ export function resolveDeepSeekOpenAICompletionsOverrides(): {
     compat: {
       supportsStore: false,
       supportsDeveloperRole: false,
+      supportsFinishReason: false,
       supportsReasoningEffort: true,
       maxTokensField: "max_tokens",
       requiresReasoningContentOnAssistantMessages: true,
