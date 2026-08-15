@@ -10,7 +10,8 @@
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",
     "test:gui": "pnpm --filter liveagent test:frontend",
-    "test:webui": "pnpm --filter @liveagent/gateway-webui test"
+    "test:webui": "pnpm --filter @liveagent/gateway-webui test",
+    "update:lockfiles": "node scripts/update-lockfiles.mjs"
   },
   "pnpm": {
     "overrides": {
