@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import "../../agent-ui/src/styles/base.css";
+@import "../../agent-ui/src/styles/transcript.css";
+@import "../../agent-ui/src/styles/common.css";
+@config "../tailwind.config.js";
+@source "../../agent-ui/src";
+
+@font-face {
+  font-family: "OpenAI Sans Semibold";
+  src: url("../../agent-ui/src/assets/font/OpenAISans-Semibold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: normal;
+  font-display: swap;
+}
+
+@layer components {
+  .sidebar-context-menu[data-state="open"] {
+    animation: sidebarMenuIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    --tw-enter-opacity: initial;
+    --tw-enter-scale: initial;
+    --tw-enter-translate-x: initial;
+  }
+
+  .sidebar-context-menu[data-state="closed"] {
+    animation: sidebarMenuOut 0.12s cubic-bezier(0.4, 0, 1, 1);
+    --tw-exit-opacity: initial;
+    --tw-exit-scale: initial;
+    --tw-exit-translate-x: initial;
+  }
+
+  @keyframes sidebarMenuIn {
+    from {
+      opacity: 0;
+      transform: translate(var(--sidebar-menu-slide-x), var(--sidebar-menu-slide-y)) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+  }
+
+  @keyframes sidebarMenuOut {
+    from {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate(
+          calc(var(--sidebar-menu-slide-x) / 2),
+          calc(var(--sidebar-menu-slide-y) / 2)
+        )
+        scale(0.98);
+    }
+  }
+
+  .mention-composer.is-empty::before {
+    left: 0;
+    right: 0;
+    padding-right: inherit;
+  }
+
+  @keyframes composerReasoningDropdownIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes composerReasoningDropdownOut {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(5px) scale(0.975);
+    }
+  }
+
+  .composer-reasoning-trigger[data-state="open"] {
+    box-shadow:
+      0 8px 18px -14px rgba(88, 28, 135, 0.55),
+      inset 0 0 0 1px rgba(167, 139, 250, 0.12);
+  }
+
+  .composer-branch-dropdown[data-state="open"] {
+    animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: var(--transform-origin, bottom left);
+  }
+
+  .composer-branch-dropdown[data-state="closed"] {
+    animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
+    transform-origin: var(--transform-origin, bottom left);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-branch-dropdown {
+      animation: none !important;
+    }
+
+    .composer-reasoning-trigger,
+    .composer-reasoning-trigger > svg:last-child {
+      transition: none !important;
+    }
+  }
+}

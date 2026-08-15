@@ -1,10 +1,10 @@
 # LiveAgent 架构文档
 
-本文档树用于从当前代码实现出发，系统梳理 LiveAgent 的桌面 GUI、Tauri 后端、Gateway 服务与浏览器 WebUI。这里的 `docs/` 定位为全局架构索引；仓库已有的 `doc/` 仍保留为历史方案、专项设计与实验文档，不在本次整理中迁移或改名。
+本文档树用于从当前代码实现出发，系统梳理 LiveAgent 的桌面 GUI、Tauri 后端、Gateway 服务、浏览器 WebUI 与移动端 Android App。这里的 `docs/` 定位为全局架构索引；仓库已有的 `doc/` 仍保留为历史方案、专项设计与实验文档，不在本次整理中迁移或改名。
 
 ## 项目一句话
 
-LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负责用户体验与本地工具执行，Tauri/Rust 负责系统能力与持久化，Go Gateway 负责远程连接与协议中继，WebUI 通过 Gateway 操作同一个本地 Agent 会话。
+LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负责用户体验与本地工具执行，Tauri/Rust 负责系统能力与持久化，Go Gateway 负责远程连接与协议中继，WebUI 与移动端 Android App 通过 Gateway 操作同一个本地 Agent 会话。
 
 ## 文档目录
 
@@ -14,6 +14,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | [architecture/gui.md](architecture/gui.md) | 桌面 GUI、Tauri commands/services/runtime、设置与本地执行 | 前端与桌面端开发 |
 | [architecture/gateway.md](architecture/gateway.md) | Go Gateway 的 HTTP/WebSocket（v2）、Session Manager、缓冲与认证 | Gateway 开发与排障 |
 | [architecture/webui.md](architecture/webui.md) | 浏览器 WebUI、socket 客户端、会话流订阅、状态与安全边界 | WebUI 开发 |
+| [architecture/mobile.md](architecture/mobile.md) | 移动端 Android App、Tauri 外壳、shims 重定向、Android 签名与构建 | Mobile 开发 |
 | [architecture/protocols.md](architecture/protocols.md) | GUI 与 Gateway、WebUI 与 Gateway 的协议合同 | 联调与协议改造 |
 | [features/chat-runtime.md](features/chat-runtime.md) | 对话运行时、模型层、流式、压缩、hooks、上传与重发 | Chat 功能开发 |
 | [features/tools.md](features/tools.md) | builtin tools、MCP 动态工具、subagent（Agent/SendMessage）、工具执行边界 | 工具系统开发 |
@@ -32,7 +33,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | 1 | 先建立整体进程和边界模型 | [architecture/overview.md](architecture/overview.md) |
 | 2 | 理解桌面端为什么是执行真相源 | [architecture/gui.md](architecture/gui.md) |
 | 3 | 理解远程访问如何转发到桌面端 | [architecture/gateway.md](architecture/gateway.md)、[architecture/protocols.md](architecture/protocols.md) |
-| 4 | 理解 WebUI 的状态机与限制 | [architecture/webui.md](architecture/webui.md) |
+| 4 | 理解 WebUI 与移动端的状态机与限制 | [architecture/webui.md](architecture/webui.md)、[architecture/mobile.md](architecture/mobile.md) |
 | 5 | 按功能域深入 Chat、Tools、Memory、Skills/MCP、History/Compaction | `features/` |
 | 6 | 需要动手时查运行命令和源码索引 | [operations/development.md](operations/development.md)、[reference/source-map.md](reference/source-map.md) |
 
@@ -43,6 +44,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | Agent 执行位置 | 桌面 GUI/Tauri 本地执行模型请求、工具调用、文件系统、Shell、MCP、Skills、Memory、Cron prompt。 |
 | Gateway 职责 | 认证、连接保持、请求路由、事件广播、有界 Chat relay window、WebUI 静态资源与公网分享页承载。 |
 | WebUI 职责 | 浏览器端操作台。它不直接执行工具，也不持有本地文件系统权限，所有高权限能力都经 Gateway 回到桌面端。 |
+| 移动端职责 | Android 客户端，作为 Gateway 客户端的薄壳。它不本地执行工具，经 shims 复用 WebUI 的数据控制器与共享 UI。 |
 | 设置同步 | GUI 是真实设置来源；WebUI 存脱敏快照，敏感 key 只允许用户显式输入新值后单向传回 GUI。 |
 | 历史同步 | GUI 写 SQLite 历史，Gateway 只转发 history request 与 sync event；WebUI 维护本地可见缓存。 |
 | 文档来源 | 本文档基于当前 checkout 的源码路径、入口文件、协议定义与运行脚本整理。 |

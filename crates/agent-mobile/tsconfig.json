@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": [],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@liveagent/app/*": ["./src/*"],
+      "@liveagent/adapters/*": ["./src/agent-ui-adapters/*"],
+      "@liveagent/ui/*": ["../agent-ui/src/*"],
+      "@tauri-apps/api/core": ["./src/shims/tauriCore.ts"],
+      "@tauri-apps/api/event": ["./src/shims/tauriEvent.ts"],
+      "@tauri-apps/plugin-opener": ["./src/shims/tauriOpener.ts"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

@@ -25,6 +25,7 @@
 | Rust workspace | `Cargo.toml` | 根工作区，包含 Tauri/Rust crate。 |
 | 共享 UI | `crates/agent-ui/package.json` | GUI/WebUI 共用的 React 应用 UI 与领域逻辑。 |
 | GUI frontend | `crates/agent-gui/package.json` | 桌面 React/Tauri 前端依赖与脚本。 |
+| Mobile frontend | `crates/agent-mobile/package.json` | 移动端 React/Tauri 前端依赖与脚本。 |
 | Gateway | `crates/agent-gateway/go.mod` | Go Gateway 依赖。 |
 | Gateway WebUI | `crates/agent-gateway/web/package.json` | 浏览器 WebUI 依赖与构建脚本。 |
 
@@ -34,10 +35,13 @@
 |---|---|
 | GUI build | `pnpm -C crates/agent-gui build` |
 | WebUI build | `pnpm -C crates/agent-gateway/web build` |
+| Mobile build | `pnpm -C crates/agent-mobile build` |
+| Mobile lint | `pnpm -C crates/agent-mobile lint` |
 | Gateway tests | `cd crates/agent-gateway && go test ./...` |
 | Gateway lint | `cd crates/agent-gateway && golangci-lint run ./...` |
 | Proto 检查 | `make proto-check`（buf lint + 对 origin/main 的 breaking 检查） |
 | Tauri/Rust tests | `cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml` |
+| Mobile Rust check | `cargo check --manifest-path crates/agent-mobile/src-tauri/Cargo.toml` |
 | 前端专项测试 | `pnpm -C crates/agent-gui test:frontend` |
 | diff 空白检查 | `git diff --check` |
 | 当前改动 | `git status --short` |

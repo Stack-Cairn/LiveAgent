@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="LiveAgent logo">
+  <defs>
+    <linearGradient id="tile" x1="160" y1="86" x2="884" y2="932" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.46" stop-color="#f8fbfd"/>
+      <stop offset="1" stop-color="#e8f0f6"/>
+    </linearGradient>
+    <radialGradient id="tileGlow" cx="342" cy="248" r="670" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="0.62" stop-color="#f2f8fb" stop-opacity="0.54"/>
+      <stop offset="1" stop-color="#d9e6ef" stop-opacity="0.32"/>
+    </radialGradient>
+    <linearGradient id="wingPrimary" x1="307" y1="193" x2="731" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b9eef8"/>
+      <stop offset="0.4" stop-color="#2f91b4"/>
+      <stop offset="1" stop-color="#06284f"/>
+    </linearGradient>
+    <linearGradient id="wingSecondary" x1="237" y1="315" x2="662" y2="658" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9eef8" stop-opacity="0.92"/>
+      <stop offset="0.56" stop-color="#83bfd7" stop-opacity="0.82"/>
+      <stop offset="1" stop-color="#0d496b" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="wingLight" x1="203" y1="380" x2="580" y2="725" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e5f5fb" stop-opacity="0.86"/>
+      <stop offset="0.62" stop-color="#9ccde1" stop-opacity="0.76"/>
+      <stop offset="1" stop-color="#276a88" stop-opacity="0.84"/>
+    </linearGradient>
+    <linearGradient id="body" x1="476" y1="544" x2="847" y2="716" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04365f"/>
+      <stop offset="0.53" stop-color="#062d55"/>
+      <stop offset="1" stop-color="#0b6d97"/>
+    </linearGradient>
+    <linearGradient id="bodyHi" x1="589" y1="477" x2="830" y2="631" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a98bf" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#06345d" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="tail" x1="267" y1="758" x2="588" y2="579" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d7eef7" stop-opacity="0.72"/>
+      <stop offset="0.56" stop-color="#6aa8c1" stop-opacity="0.82"/>
+      <stop offset="1" stop-color="#062b50" stop-opacity="0.98"/>
+    </linearGradient>
+    <linearGradient id="node" x1="152" y1="516" x2="394" y2="747" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d3e9f4"/>
+      <stop offset="1" stop-color="#2c83ab"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-12%" y="-10%" width="124%" height="130%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#1c3f5a" flood-opacity="0.16"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#ffffff" flood-opacity="0.8"/>
+    </filter>
+    <filter id="softShadow" x="-10%" y="-10%" width="125%" height="130%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#072d4e" flood-opacity="0.18"/>
+    </filter>
+    <filter id="nodeGlow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="roundTile">
+      <rect x="88" y="76" width="848" height="872" rx="192"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect x="88" y="76" width="848" height="872" rx="192" fill="url(#tile)"/>
+    <rect x="88" y="76" width="848" height="872" rx="192" fill="url(#tileGlow)"/>
+  </g>
+
+  <g clip-path="url(#roundTile)">
+    <path d="M159 769c77-197 165-291 344-318" fill="none" stroke="#bcd7e7" stroke-width="3" stroke-linecap="round" opacity="0.32"/>
+    <path d="M169 701c70-148 188-232 344-244" fill="none" stroke="#99bfd4" stroke-width="4" stroke-linecap="round" opacity="0.42"/>
+    <path d="M181 522c41 198 188 267 431 173" fill="none" stroke="#79aeca" stroke-width="5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M185 714c-34-148 32-269 172-339" fill="none" stroke="#93bad0" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <path d="M235 833c55-151 119-245 238-302" fill="none" stroke="#a8c8da" stroke-width="3" stroke-linecap="round" opacity="0.38"/>
+    <path d="M318 354c61 126 170 185 328 185" fill="none" stroke="#6da6c3" stroke-width="4" stroke-linecap="round" opacity="0.34"/>
+
+    <g filter="url(#nodeGlow)">
+      <circle cx="184" cy="539" r="12" fill="#ffffff" stroke="#9fc4d8" stroke-width="2"/>
+      <path d="M184 516l20 12v23l-20 12-20-12v-23z" fill="none" stroke="#9fc4d8" stroke-width="8" stroke-linejoin="round" opacity="0.74"/>
+      <circle cx="276" cy="617" r="12" fill="url(#node)" stroke="#ffffff" stroke-width="2"/>
+      <circle cx="365" cy="455" r="12" fill="url(#node)" stroke="#ffffff" stroke-width="2"/>
+      <circle cx="439" cy="581" r="13" fill="url(#node)" stroke="#ffffff" stroke-width="2"/>
+      <path d="M351 676l30 18v35l-30 18-31-18v-35z" fill="#edf6fb" fill-opacity="0.82" stroke="#9abed3" stroke-width="7" stroke-linejoin="round"/>
+      <circle cx="351" cy="712" r="10" fill="#4d94b8" stroke="#ffffff" stroke-width="2"/>
+    </g>
+
+    <g filter="url(#softShadow)">
+      <path d="M310 178c58 58 134 100 238 161 117 68 185 134 224 245-130-49-253-105-360-177-69-47-91-117-102-229z" fill="url(#wingPrimary)"/>
+      <path d="M397 350c116 49 219 100 324 191-118-34-241-82-338-145z" fill="#d7f3fb" opacity="0.92"/>
+      <path d="M237 288c86 78 204 123 365 220-136-28-265-73-366-157z" fill="url(#wingSecondary)" opacity="0.72"/>
+      <path d="M333 410c102 42 202 85 301 153-119-24-231-60-335-109z" fill="#e9f8fd" opacity="0.82"/>
+      <path d="M225 419c108 67 222 94 370 140-129 17-247-3-358-76z" fill="url(#wingLight)" opacity="0.73"/>
+      <path d="M364 489c89 27 178 53 270 86-105 24-196 13-281-31z" fill="#ebf7fb" opacity="0.78"/>
+      <path d="M238 830c104-91 211-174 363-271-65 102-181 200-371 307z" fill="url(#tail)" opacity="0.86"/>
+      <path d="M443 806c44-82 99-161 183-244 18 76-23 167-125 273z" fill="#d7eaf3" opacity="0.63"/>
+      <path d="M579 543c89-66 166-118 246-84 21 9 41 22 60 39-66-9-99 27-128 83-39 75-115 100-198 123-49 13-93 43-128 86 12-73 54-155 148-247z" fill="url(#body)"/>
+      <path d="M597 535c82-59 152-96 228-62 16 7 32 16 49 29-58-5-96 27-128 82-40 68-110 90-188 111 46-49 66-105 39-160z" fill="url(#bodyHi)"/>
+      <path d="M746 498c43-47 82-65 130-39 23 12 37 24 55 39-45-7-79 9-112 44-31 33-61 54-109 48 10-32 19-64 36-92z" fill="#0f739d" opacity="0.86"/>
+      <path d="M863 493c22-9 45-9 73 5-31 1-58 8-82 21z" fill="#082847" opacity="0.88"/>
+      <path d="M580 543c-70 58-124 101-215 143 82-21 177-65 272-112z" fill="#e2f4fa" opacity="0.5"/>
+    </g>
+
+    <path d="M393 370c129 54 247 110 359 201" fill="none" stroke="#bfeaf6" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+    <path d="M298 437c135 45 248 86 358 135" fill="none" stroke="#d3f2f9" stroke-width="4" stroke-linecap="round" opacity="0.58"/>
+    <path d="M262 817c120-72 226-145 338-258" fill="none" stroke="#e8f8fc" stroke-width="4" stroke-linecap="round" opacity="0.34"/>
+  </g>
+</svg>

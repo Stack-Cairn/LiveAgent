@@ -1,3 +1,4 @@
+import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
 import { type WorkspaceProject, workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertCircle,
@@ -1179,7 +1180,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             {brand ?? (
               <div className="flex min-w-0 -translate-y-0.5 items-center gap-2">
                 <img
-                  src="/icon-simple.png"
+                  src={getAssistantAvatarUrl()}
                   alt=""
                   aria-hidden="true"
                   draggable={false}
