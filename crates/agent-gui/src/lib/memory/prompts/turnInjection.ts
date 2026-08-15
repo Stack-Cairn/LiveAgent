@@ -19,10 +19,7 @@
 //
 // 本模块是纯函数:不含时间量与随机量,同一输入永远得到同一输出,便于测试直接调用。
 
-import {
-  MEMORY_INDEX_HIDDEN_LINE_MARKER,
-  MEMORY_PROMPT_TRUNCATION_SUFFIX,
-} from "./injection";
+import { MEMORY_INDEX_HIDDEN_LINE_MARKER, MEMORY_PROMPT_TRUNCATION_SUFFIX } from "./injection";
 
 /** 单个增量块最多列出的条目数,超出时整轮转重冻结(见 planMemoryTurnInjection)。 */
 export const MEMORY_TURN_UPDATE_MAX_ENTRIES = 12;
@@ -156,8 +153,7 @@ function formatMemoryTurnUpdateFromDiff(diff: MemoryEntryDiff): string {
   const shownCurrent = diff.current.slice(0, MEMORY_TURN_UPDATE_MAX_ENTRIES);
   const retiredBudget = MEMORY_TURN_UPDATE_MAX_ENTRIES - shownCurrent.length;
   const shownRetired = retiredBudget > 0 ? retired.slice(0, retiredBudget) : [];
-  const hidden =
-    diff.current.length - shownCurrent.length + (retired.length - shownRetired.length);
+  const hidden = diff.current.length - shownCurrent.length + (retired.length - shownRetired.length);
 
   const lines = [UPDATE_BLOCK_OPEN, UPDATE_HEADER];
   if (shownCurrent.length > 0) {

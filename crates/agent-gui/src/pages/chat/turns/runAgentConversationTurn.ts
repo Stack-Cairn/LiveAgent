@@ -1068,8 +1068,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           // tempContext.messages 本身。
           const tailBlockAttachable =
             Boolean(tailBlockText) &&
-            appendToolResultTailBlock(tempContext.messages, tailBlockText) !==
-              tempContext.messages;
+            appendToolResultTailBlock(tempContext.messages, tailBlockText) !== tempContext.messages;
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,

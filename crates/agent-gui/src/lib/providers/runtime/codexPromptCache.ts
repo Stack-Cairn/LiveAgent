@@ -109,9 +109,7 @@ function stripOpenAIPromptCacheFields(
  * 返回 undefined 表示头不存在;存在但值非字符串(如 null 占位)时返回空串,
  * 与「本应有键但没有值」的空串语义保持一致。
  */
-function findExistingSessionHeader(
-  headers: StreamOptionsEx["headers"],
-): string | undefined {
+function findExistingSessionHeader(headers: StreamOptionsEx["headers"]): string | undefined {
   if (!headers) return undefined;
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === "x-session-id") {
