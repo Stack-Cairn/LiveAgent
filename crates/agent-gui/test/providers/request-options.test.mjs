@@ -863,6 +863,7 @@ test("gemini model list normalization uses models array metadata", () => {
       id: "gemini-3.5-flash",
       contextWindow: 1_048_576,
       maxOutputToken: 65_536,
+      limitsSource: "provider",
     },
   ]);
 });
@@ -1488,11 +1489,10 @@ test("codex automatic cache hint resolution follows request format before endpoi
     "openrouter-session",
   );
   assert.equal(resolve("auto", "https://relay.example/v1", "openai-completions"), "none");
+  // Responses 链路对齐 Codex CLI:所有端点都发会话级 key(PR#436 的有意选择,
+  // 逃生通道是供应商级/模型级显式设 none)。
   assert.equal(resolve("auto", "https://relay.example/v1", "openai-responses"), "openai-key");
-  assert.equal(
-    resolve("auto", "https://openrouter.ai/api/v1", "openai-responses"),
-    "openai-key",
-  );
+  assert.equal(resolve("auto", "https://openrouter.ai/api/v1", "openai-responses"), "openai-key");
   assert.equal(resolve("auto", "not-a-url", "openai-completions"), "none");
   assert.equal(
     resolve("openrouter-session", "https://relay.example/v1", "openai-responses"),
@@ -1633,6 +1633,56 @@ test("codex explicit cache hints respect overrides, user values, and limits", as
     );
     assert.equal(Object.hasOwn(payload, "prompt_cache_key"), false);
   }
+
+  const explicitNoCacheModel = {
+    api: "openai-responses",
+    provider: "openai",
+    id: "gpt-5.6-sol",
+    compat: { supportsExplicitPromptCacheMode: true },
+  };
+  const explicitNoCache = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://api.openai.com/v1",
+    promptCacheHintMode: "auto",
+    model: explicitNoCacheModel,
+    options: {
+      sessionId: "conv-1234",
+      cacheRetention: "none",
+      onPayload: async (payload) => ({
+        ...payload,
+        prompt_cache_key: "library-key",
+        prompt_cache_retention: "24h",
+        prompt_cache_options: { mode: "explicit" },
+      }),
+    },
+  });
+  const explicitNoCachePayload = await explicitNoCache.onPayload(
+    { input: "hello" },
+    explicitNoCacheModel,
+  );
+  assert.equal(Object.hasOwn(explicitNoCachePayload, "prompt_cache_key"), false);
+  assert.equal(Object.hasOwn(explicitNoCachePayload, "prompt_cache_retention"), false);
+  assert.deepEqual(explicitNoCachePayload.prompt_cache_options, { mode: "explicit" });
+
+  const relayExplicitNoCache = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://relay.example/v1",
+    promptCacheHintMode: "auto",
+    model: explicitNoCacheModel,
+    options: {
+      sessionId: "conv-1234",
+      cacheRetention: "none",
+      onPayload: async (payload) => ({
+        ...payload,
+        prompt_cache_options: { mode: "explicit" },
+      }),
+    },
+  });
+  const relayExplicitNoCachePayload = await relayExplicitNoCache.onPayload(
+    { input: "hello" },
+    explicitNoCacheModel,
+  );
+  assert.equal(Object.hasOwn(relayExplicitNoCachePayload, "prompt_cache_options"), false);
 
   // mode=none 必须把 retention 一并压成 none：pi-ai 会按 retention 生成缓存
   // 提示（如 OpenRouter anthropic/* 的 cache_control 断点），剥 payload 拦不住。

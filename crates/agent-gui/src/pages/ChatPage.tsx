@@ -1,4 +1,3 @@
-import type { Context } from "@earendil-works/pi-ai";
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
@@ -7,23 +6,15 @@ import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareMod
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
-import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
-import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
-import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
+import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import type { ProjectToolTextGenerationClient } from "@liveagent/ui/lib/ai/projectToolTextGeneration";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
-import {
-  buildContextUsageScanItems,
-  deriveContextUsageTokens,
-} from "@liveagent/ui/lib/chat/contextUsage";
-import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -49,20 +40,11 @@ import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/sk
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import { listen } from "@tauri-apps/api/event";
-import {
-  type CSSProperties,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
+import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
-import type { AppUpdateController } from "../lib/appUpdates";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,
@@ -70,7 +52,6 @@ import {
   createConversationStateFromContext,
   type RenderTimelineItem,
 } from "../lib/chat/conversation/conversationState";
-import type { LiveTranscriptStore } from "../lib/chat/conversation/liveTranscriptStore";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import {
@@ -82,12 +63,6 @@ import {
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import {
-  assistantMessageToText,
-  completeAssistantMessage,
-  createProviderRuntimeConfig,
-} from "../lib/providers/llm";
-import {
-  type AppSettings,
   isAgentDevMode,
   isAgentExecutionMode,
   normalizeSelectedModelForProviders,
@@ -105,13 +80,7 @@ import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
-import {
-  answerToolApproval,
-  cancelPendingToolApprovalsForConversation,
-  getToolApprovalVersion,
-  listPendingToolApprovalsForConversation,
-  subscribeToolApprovals,
-} from "../lib/tools/toolApproval";
+import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
@@ -132,71 +101,39 @@ import {
   useLiveTranscriptController,
   usePendingUploads,
 } from "./chat";
+import type { ChatPageProps } from "./chat/chatPageTypes";
+import { CurrentTaskProgress } from "./chat/components/CurrentTaskProgress";
+import { PendingToolApprovalBar } from "./chat/components/PendingToolApprovalBar";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
+import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
+import { useContextUsageTokensSource } from "./chat/hooks/useContextUsageTokensSource";
+import { useMirroredNullableState } from "./chat/hooks/useMirroredNullableState";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
+import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
 import {
   getQueuedConversationIds,
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
-import { resolveEffectiveChatModelSelection } from "./chat/runtime/modelSelection";
-import { resolveCommitMessageModelSelection } from "./chat/runtime/providerRuntimeConfig";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
   type ManualCompactionResult,
   useManualCompaction,
 } from "./chat/runtime/useManualCompaction";
+import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
-import type { SectionId } from "./settings/types";
-
-type ChatPageProps = {
-  settings: AppSettings;
-  setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
-  /** Reads the authoritative settingsRef (not render-time state) so tools never see a stale snapshot. */
-  getMcpSettings: () => AppSettings["mcp"];
-  /** Live read of tool approval policies (same settingsRef rationale as getMcpSettings). */
-  getToolPolicies: () => AppSettings["system"]["toolPolicies"];
-  context: Context;
-  setContext: (next: Context) => void;
-  onOpenSettings: (section?: SectionId, providerId?: string) => void;
-  onToggleTheme: () => void;
-  appUpdate?: AppUpdateController;
-  onRunningConversationCountChange?: (count: number) => void;
-};
-
-function CurrentTaskProgress(props: {
-  historyItems: readonly RenderTimelineItem[];
-  liveTranscriptStore: LiveTranscriptStore;
-  isConversationRunning: boolean;
-}) {
-  const { historyItems, liveTranscriptStore, isConversationRunning } = props;
-  const getLiveRoundsSnapshot = useCallback(
-    () => liveTranscriptStore.getSnapshot().liveRounds,
-    [liveTranscriptStore],
-  );
-  const liveRounds = useSyncExternalStore(
-    liveTranscriptStore.subscribe,
-    getLiveRoundsSnapshot,
-    getLiveRoundsSnapshot,
-  );
-  const snapshot = useMemo(
-    () => selectLatestTaskProgress(historyItems, liveRounds),
-    [historyItems, liveRounds],
-  );
-  return <TaskProgressBar snapshot={snapshot} isConversationRunning={isConversationRunning} />;
-}
 
 export function ChatPage(props: ChatPageProps) {
   const {
@@ -227,10 +164,13 @@ export function ChatPage(props: ChatPageProps) {
   const isImportingPastedTextRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hookWarning, setHookWarning] = useState<string | null>(null);
-  const [hydratingConversationId, setHydratingConversationIdState] = useState<string | null>(null);
-  const [hydrationFailedConversationId, setHydrationFailedConversationIdState] = useState<
-    string | null
-  >(null);
+  const [hydratingConversationId, setHydratingConversationId, hydratingConversationIdRef] =
+    useMirroredNullableState<string>();
+  const [
+    hydrationFailedConversationId,
+    setHydrationFailedConversationId,
+    hydrationFailedConversationIdRef,
+  ] = useMirroredNullableState<string>();
   const [currentConversationId, setCurrentConversationId] = useState<string>(
     () => initialConversationRef.current.conversationId,
   );
@@ -280,8 +220,8 @@ export function ChatPage(props: ChatPageProps) {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
@@ -294,10 +234,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProjectPath,
     sidebarScope,
     historyScopeKey,
-    projectRenamingId,
-    setProjectRenamingId,
-    projectRenameDraft,
-    setProjectRenameDraft,
     activateWorkspaceProject,
     handleSelectWorkspaceProject,
     handleNewConversationForProject,
@@ -309,6 +245,7 @@ export function ChatPage(props: ChatPageProps) {
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,
     handleOpenWorkspaceFolder,
+    handleDropWorkspaceFolders,
     handleCloneWorkspaceProject,
     handleOpenClonedWorkspace,
     handleOpenWorktree,
@@ -319,9 +256,7 @@ export function ChatPage(props: ChatPageProps) {
     handleMoveWorkspaceProjectToGroup,
     handleToggleWorkspaceGroupCollapsed,
     handleLoadWorkspaceRemoteBranches,
-    handleStartRenamingWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
-    handleCancelWorkspaceProjectRename,
+    commitWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
@@ -393,19 +328,7 @@ export function ChatPage(props: ChatPageProps) {
     () => conversationState.transcript.items,
     [conversationState],
   );
-  // Sent-prompt history for the composer's ↑/↓ recall. Read lazily through a
-  // ref so the memoized composer bar never re-renders on transcript growth.
-  const transcriptItemsRef = useRef<RenderTimelineItem[]>(transcriptItems);
-  useEffect(() => {
-    transcriptItemsRef.current = transcriptItems;
-  }, [transcriptItems]);
-  const loadComposerHistoryPrompts = useCallback(() => {
-    const prompts: string[] = [];
-    for (const item of transcriptItemsRef.current) {
-      if (item.kind === "user" && item.text.trim()) prompts.push(item.text);
-    }
-    return prompts;
-  }, []);
+  const loadComposerHistoryPrompts = useComposerHistoryPrompts(transcriptItems);
   const currentRequestContext = useMemo(
     () => buildRequestContext(conversationState),
     [conversationState],
@@ -450,20 +373,6 @@ export function ChatPage(props: ChatPageProps) {
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
   const stopSendingActionRef = useRef<() => void>(() => undefined);
-  const hydratingConversationIdRef = useRef<string | null>(hydratingConversationId);
-  const hydrationFailedConversationIdRef = useRef<string | null>(hydrationFailedConversationId);
-  const setHydratingConversationId = useCallback((next: SetStateAction<string | null>) => {
-    const current = hydratingConversationIdRef.current;
-    const resolved = typeof next === "function" ? next(current) : next;
-    hydratingConversationIdRef.current = resolved;
-    setHydratingConversationIdState(resolved);
-  }, []);
-  const setHydrationFailedConversationId = useCallback((next: SetStateAction<string | null>) => {
-    const current = hydrationFailedConversationIdRef.current;
-    const resolved = typeof next === "function" ? next(current) : next;
-    hydrationFailedConversationIdRef.current = resolved;
-    setHydrationFailedConversationIdState(resolved);
-  }, []);
   const {
     liveTranscriptStore,
     getConversationLiveTranscriptStore,
@@ -492,55 +401,13 @@ export function ChatPage(props: ChatPageProps) {
   // 历史项 + 流式实时轮次（live store 每帧批量提交）联合倒扫。经订阅源
   // 直达环组件，流式读数逐帧更新而不回流 ChatPage。
   const contextUsageRingRunning = isSending || compactionStatus.phase === "running";
-  const contextUsageTokensSource = useMemo(() => {
-    let cache: {
-      rounds: unknown;
-      draft: string;
-      runtimeValue: number | undefined;
-      value: number | undefined;
-    } | null = null;
-    return {
-      subscribe: liveTranscriptStore.subscribe,
-      getContextUsageTokens: () => {
-        const live = liveTranscriptStore.getSnapshot();
-        // 与 TranscriptList 的 live tail 同一门槛：只有当前会话在跑（发送或
-        // 压缩中）才把流式尾部计入（后台会话的 live store 内容不属于本会话）。
-        const includeLive = contextUsageRingRunning && !live.isSettled;
-        const rounds = includeLive ? live.liveRounds : null;
-        const draft = includeLive ? live.draftAssistantText : "";
-        const runtimeValue = getCompactionController(currentConversationId).contextUsageTokens;
-        if (
-          cache &&
-          cache.rounds === rounds &&
-          cache.draft === draft &&
-          cache.runtimeValue === runtimeValue
-        ) {
-          return cache.value;
-        }
-        // 优先级：运行中（发送/压缩）转录尾部滞后于账本，账本读数优先；空闲时
-        // 转录含权威锚点（edit-resend 截断历史后账本仍冻结在压缩前读数），转录
-        // 扫描才准。惰性求值：命中账本优先项即跳过全量转录扫描（流式期每帧对
-        // 大工具结果 JSON.stringify 后丢弃的开销）。
-        let value: number | undefined;
-        if (contextUsageRingRunning && runtimeValue !== undefined) {
-          value = runtimeValue;
-        } else {
-          const transcriptValue = deriveContextUsageTokens(
-            buildContextUsageScanItems(transcriptItems, includeLive ? live : null),
-          );
-          value = transcriptValue ?? runtimeValue;
-        }
-        cache = { rounds, draft, runtimeValue, value };
-        return value;
-      },
-    };
-  }, [
-    contextUsageRingRunning,
-    currentConversationId,
-    getCompactionController,
-    liveTranscriptStore,
+  const contextUsageTokensSource = useContextUsageTokensSource({
+    isRunning: contextUsageRingRunning,
+    conversationId: currentConversationId,
     transcriptItems,
-  ]);
+    liveTranscriptStore,
+    getCompactionController,
+  });
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
@@ -612,67 +479,12 @@ export function ChatPage(props: ChatPageProps) {
     updateConversationRuntimeEntry,
   });
 
-  const projectToolTextGenerationClient = useMemo<ProjectToolTextGenerationClient>(() => {
-    // The only consumer today is the Git review commit composer: prefer the
-    // configured commit-message model; when unset or no longer valid, follow
-    // the current conversation model (which throws when unconfigured).
-    const resolveGenerationSelection = () =>
-      resolveCommitMessageModelSelection(settings) ??
-      resolveEffectiveChatModelSelection({
-        settings,
-        conversationSelectedModel: conversationRuntimeCacheRef.current.get(
-          currentConversationIdRef.current,
-        )?.selectedModel,
-      });
-    return {
-      status: () => {
-        try {
-          resolveGenerationSelection();
-          return "ready";
-        } catch {
-          return "unconfigured";
-        }
-      },
-      generate: async (request) => {
-        const selected = resolveGenerationSelection();
-        const runtime = {
-          ...createProviderRuntimeConfig(
-            selected.provider,
-            selected.model,
-            settings.chatRuntimeControls,
-          ),
-          reasoning: "off" as const,
-          promptCachingEnabled: false,
-          nativeWebSearchEnabled: false,
-        };
-        const assistant = await completeAssistantMessage({
-          providerId: selected.providerId,
-          model: selected.model,
-          runtime,
-          context: {
-            systemPrompt: request.systemPrompt,
-            messages: [
-              {
-                role: "user",
-                content: request.userPrompt,
-                timestamp: Date.now(),
-              },
-            ],
-          },
-          sessionId: currentConversationSessionId,
-          cacheRetention: "none",
-          signal: request.signal,
-          allowJsonOutput: request.output === "json",
-        });
-        return assistantMessageToText(assistant);
-      },
-    };
-  }, [
+  const projectToolTextGenerationClient = useProjectToolTextGenerationClient({
+    settings,
     conversationRuntimeCacheRef,
     currentConversationIdRef,
     currentConversationSessionId,
-    settings,
-  ]);
+  });
 
   function cancelConversationLoad() {
     conversationLoadSequenceRef.current += 1;
@@ -682,28 +494,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
 
-  // 当前会话的待审批工具:订阅审批服务版本,pending 表变更即重取。用于输入框上方
-  // 的集中审批栏(取代埋在每个折叠项里的分散卡片)。
-  useSyncExternalStore(subscribeToolApprovals, getToolApprovalVersion, getToolApprovalVersion);
-  const pendingToolApprovals = listPendingToolApprovalsForConversation(currentConversationId);
-  const approvalBar =
-    pendingToolApprovals.length > 0 ? (
-      <ToolApprovalBar
-        pending={pendingToolApprovals}
-        onDecide={(toolCallId, decision) =>
-          Promise.resolve(
-            answerToolApproval(toolCallId, decision, { conversationId: currentConversationId }),
-          )
-        }
-        onDecideAll={async (decision) => {
-          for (const item of pendingToolApprovals) {
-            answerToolApproval(item.toolCallId, decision, {
-              conversationId: currentConversationId,
-            });
-          }
-        }}
-      />
-    ) : null;
+  const approvalBar = <PendingToolApprovalBar conversationId={currentConversationId} />;
   const currentConversationPersistedCwd =
     historyItems.find((item) => item.id === currentConversationId)?.cwd?.trim() || "";
   const currentConversationRuntimeWorkdir =
@@ -1087,8 +878,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
     terminalProjectPathKey,
     setTerminalSessions,
     setRightDockOpen,
@@ -1354,6 +1143,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const { send } = useSendChatTurn({
     settings,
+    workspaceProjects,
     setSettings,
     getMcpSettings,
     getToolPolicies,
@@ -1808,11 +1598,18 @@ export function ChatPage(props: ChatPageProps) {
     ? t("chat.upload.dropHint")
     : t("chat.upload.dropDisabledHint");
   const fileDropLimitHint = t("chat.upload.dropLimit").replace("{max}", String(MAX_UPLOAD_FILES));
-  const { isFileDropActive } = useTauriFileDrop({
+  const { importUploadZonePaths } = useUploadZoneDrop({
     canDropUpload,
     fileDropTitle,
+    activeWorkspaceProject,
     importReadableFilePaths,
+    addNotify,
     setErrorMessage,
+    t,
+  });
+  const { isFileDropActive, isWorkspaceFolderDropActive } = useTauriFileDrop({
+    importUploadZonePaths,
+    importWorkspaceFolderPaths: handleDropWorkspaceFolders,
   });
 
   const { handleResendFromEdit } = useEditResend({
@@ -1858,9 +1655,8 @@ export function ChatPage(props: ChatPageProps) {
           workspaceProjectGroups={workspaceProjectGroups}
           activeProjectId={activeWorkspaceProject?.id}
           missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-          projectRenamingId={projectRenamingId}
-          projectRenameDraft={projectRenameDraft}
           projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+          workspaceFolderDropActive={isWorkspaceFolderDropActive}
           recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
           onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
           onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
@@ -1874,11 +1670,7 @@ export function ChatPage(props: ChatPageProps) {
           onNewConversationForProject={handleNewConversationForProject}
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
           onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-          onConfigureProjectResources={setResourceSettingsProject}
-          onStartRenamingProject={handleStartRenamingWorkspaceProject}
-          onProjectRenameDraftChange={setProjectRenameDraft}
-          onCommitProjectRename={handleCommitWorkspaceProjectRename}
-          onCancelProjectRename={handleCancelWorkspaceProjectRename}
+          onConfigureProject={setProjectSettingsProject}
           onSetProjectPinned={handleSetWorkspaceProjectPinned}
           onRemoveProject={handleRemoveWorkspaceProject}
           onArchiveProject={handleArchiveWorkspaceProject}
@@ -2005,7 +1797,10 @@ export function ChatPage(props: ChatPageProps) {
             headerClassName: "relative z-20",
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
             content: (
-              <>
+              <div
+                data-file-upload-drop-zone=""
+                className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+              >
                 <ChangedFilesActionsProvider value={changedFilesActions}>
                   <ChatTranscript
                     conversationId={currentConversationId}
@@ -2098,7 +1893,7 @@ export function ChatPage(props: ChatPageProps) {
                     limitHint={fileDropLimitHint}
                   />
                 ) : null}
-              </>
+              </div>
             ),
           }}
           workspaceOverlays={
@@ -2112,14 +1907,8 @@ export function ChatPage(props: ChatPageProps) {
               workspaceEditorCleanupPending={workspaceOverlays.workspaceEditorCleanupPending}
               onWorkspaceEditorPreviewFile={workspaceOverlays.openWorkspaceFilePreview}
               onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
-              onWorkspaceEditorHide={() => workspaceOverlays.setWorkspaceEditorOpen(false)}
-              onWorkspaceEditorClose={() => {
-                workspaceOverlays.setWorkspaceEditorOpen(false);
-                workspaceOverlays.setWorkspaceEditorMounted(false);
-                workspaceOverlays.setWorkspaceEditorCleanupPending(false);
-                workspaceOverlays.setWorkspaceEditorOpenRequest(null);
-                workspaceOverlays.setWorkspaceEditorCloseRequestId(0);
-              }}
+              onWorkspaceEditorHide={workspaceOverlays.handleWorkspaceEditorHide}
+              onWorkspaceEditorClose={workspaceOverlays.handleWorkspaceEditorClosed}
               workspaceFilePreviewMounted={workspaceOverlays.workspaceFilePreviewMounted}
               workspaceFilePreviewOpenRequest={workspaceOverlays.workspaceFilePreviewOpenRequest}
               workspaceFilePreviewOpen={workspaceOverlays.workspaceFilePreviewOpen}
@@ -2138,6 +1927,7 @@ export function ChatPage(props: ChatPageProps) {
               onWorkspaceSshTerminalHide={() =>
                 workspaceOverlays.setWorkspaceSshTerminalOpen(false)
               }
+              onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
             />
           }
         />
@@ -2180,17 +1970,20 @@ export function ChatPage(props: ChatPageProps) {
         onInsertCommitMention={handleRightDockInsertCommitMention}
         onInsertGitFileMention={handleRightDockInsertGitFileMention}
       />
-      {resourceSettingsProject ? (
-        <WorkspaceResourceSettingsDrawer
-          project={resourceSettingsProject}
+      {projectSettingsProject ? (
+        <WorkspaceProjectSettingsModal
+          project={projectSettingsProject}
           settings={settings}
           skills={availableSkills}
-          onClose={() => setResourceSettingsProject(null)}
+          rootClient={desktopWorkspaceProjectRootClient}
+          onClose={() => setProjectSettingsProject(null)}
+          onRenameProject={(name) => {
+            commitWorkspaceProjectRename(projectSettingsProject, name);
+          }}
           onSave={(draft) => {
             setSettings((prev) =>
-              updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+              updateWorkspaceResourceSettings(prev, projectSettingsProject.path, draft),
             );
-            setResourceSettingsProject(null);
           }}
         />
       ) : null}

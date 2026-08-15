@@ -1,7 +1,6 @@
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   AlertTriangle,
-  CheckCircle2,
   ChevronRight,
   Copy,
   Download,
@@ -10,27 +9,46 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  SquarePen,
   Trash2,
   Upload,
 } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient, SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  CopyPathDialog,
+  CopyPathToast,
+  CreateFolderDialog,
+  DragPreview,
+  MenuItem,
+  RenameEntryDialog,
+  TransferToast,
+} from "./WorkspaceSftpOverlays";
+import {
+  basename,
+  canEditRemoteEntry,
+  type DragPayload,
+  type DragPayloadItem,
+  dragItems,
+  entryIcon,
+  formatBytes,
+} from "./workspaceSftpModel";
+
+export type SftpOpenFileRequest = {
+  side: SftpSide;
+  path: string;
+};
 
 type WorkspaceSftpPanelProps = {
   session: TerminalSession;
   client: SftpClient;
   isActive: boolean;
   onError?: (error: string | null) => void;
+  onOpenFile?: (request: SftpOpenFileRequest) => void;
 };
 
 type PaneState = {
@@ -49,16 +67,6 @@ type ContextMenuState = {
   kind: string;
   isEntry: boolean;
   items: DragPayloadItem[];
-};
-
-type DragPayloadItem = {
-  path: string;
-  kind: string;
-};
-
-type DragPayload = DragPayloadItem & {
-  side: SftpSide;
-  items?: DragPayloadItem[];
 };
 
 type DragPreviewState = {
@@ -92,8 +100,6 @@ const INITIAL_LOCAL_PATH = "";
 const INITIAL_REMOTE_PATH = ".";
 const TERMINAL_TRANSFER_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const POINTER_DRAG_THRESHOLD_PX = 6;
-const FILE_ICON_CLASS = "h-4 w-4 shrink-0";
-const FOLDER_ICON_CLASS = "h-4 w-4 shrink-0";
 const REMOTE_PATH_SUGGESTION_LIMIT = 8;
 const REMOTE_PATH_SUGGESTION_DELAY_MS = 180;
 
@@ -116,11 +122,6 @@ function parentPath(path: string, side: SftpSide) {
     return parts.length ? `/${parts.join("/")}` : "/";
   }
   return parts.join("/") || (side === "remote" ? "." : "");
-}
-
-function basename(path: string) {
-  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
 
 function normalizePath(path: string, side: SftpSide) {
@@ -588,53 +589,12 @@ function PathNavigator(props: {
   );
 }
 
-function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  return `${size >= 10 || unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
-}
-
 function entryTypeLabel(entry: SftpEntry, t: (key: string) => string) {
   if (entry.kind === "directory") return t("workspaceSftp.entry.folder");
   const extension = basename(entry.name).split(".").pop();
   if (extension && extension !== entry.name) return extension;
   if (entry.kind === "file" || !entry.kind) return t("workspaceSftp.entry.file");
   return entry.kind;
-}
-
-function entryIcon(entry: SftpEntry, className?: string) {
-  if (entry.kind === "directory") {
-    const FolderIcon = getFileTypeIcon(entry.name || entry.path, "dir");
-    return <FolderIcon className={className ?? FOLDER_ICON_CLASS} />;
-  }
-  const FileIcon = getFileTypeIcon(entry.name || entry.path, "file");
-  return <FileIcon className={className ?? FILE_ICON_CLASS} />;
-}
-
-function transferProgress(transfer: SftpTransfer | null) {
-  if (!transfer) return 0;
-  if (transfer.status === "completed") return 100;
-  if (transfer.bytesTotal > 0) {
-    return Math.min(100, Math.max(0, Math.round((transfer.bytesDone / transfer.bytesTotal) * 100)));
-  }
-  if (transfer.filesTotal > 0) {
-    return Math.min(100, Math.max(0, Math.round((transfer.filesDone / transfer.filesTotal) * 100)));
-  }
-  return transfer.status === "running" ? 8 : 0;
-}
-
-function transferTone(transfer: SftpTransfer | null) {
-  if (!transfer) return "bg-muted-foreground";
-  if (transfer.status === "completed") return "bg-emerald-500";
-  if (transfer.status === "failed") return "bg-destructive";
-  if (transfer.status === "cancelled") return "bg-muted-foreground";
-  return "bg-sky-500";
 }
 
 function isSftpSide(value: unknown): value is SftpSide {
@@ -657,10 +617,6 @@ function isDragPayload(value: unknown): value is DragPayload {
     (payload.items === undefined ||
       (Array.isArray(payload.items) && payload.items.every(isDragPayloadItem)))
   );
-}
-
-function dragItems(payload: DragPayload): DragPayloadItem[] {
-  return payload.items?.length ? payload.items : [{ path: payload.path, kind: payload.kind }];
 }
 
 function encodeDragPayload(payload: DragPayload) {
@@ -704,7 +660,7 @@ function isMobileSftpLayout() {
 }
 
 export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
-  const { session, client, isActive, onError } = props;
+  const { session, client, isActive, onError, onOpenFile } = props;
   const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -1673,7 +1629,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 selectEntry(side, entry.path, event.ctrlKey || event.metaKey);
                               }}
                               onDoubleClick={() => {
-                                if (entry.kind === "directory") void loadPane(side, entry.path);
+                                if (entry.kind === "directory") {
+                                  void loadPane(side, entry.path);
+                                  return;
+                                }
+                                if (!onOpenFile || entry.kind !== "file") return;
+                                if (side === "remote" && !canEditRemoteEntry(entry)) return;
+                                onOpenFile({ side, path: entry.path });
                               }}
                               onDragOver={(event) => {
                                 if (entry.kind === "directory") {
@@ -1829,6 +1791,24 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
               );
             }}
           />
+          {onOpenFile &&
+          (contextMenu.side === "local" ||
+            canEditRemoteEntry({ path: contextMenu.path, kind: contextMenu.kind })) ? (
+            <MenuItem
+              icon={<SquarePen className="h-3.5 w-3.5" />}
+              label={t("workspaceSftp.edit")}
+              disabled={
+                !contextMenu.isEntry ||
+                contextMenu.items.length !== 1 ||
+                contextMenu.kind !== "file"
+              }
+              onClick={() => {
+                const request = { side: contextMenu.side, path: contextMenu.path };
+                setContextMenu(null);
+                onOpenFile(request);
+              }}
+            />
+          ) : null}
           <MenuItem
             icon={<Pencil className="h-3.5 w-3.5" />}
             label={t("workspaceSftp.rename")}
@@ -1958,387 +1938,5 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
       {copyToastVisible ? <CopyPathToast message={t("workspaceSftp.copyPathCopied")} /> : null}
       {dialog}
     </div>
-  );
-}
-
-function CreateFolderDialog(props: {
-  title: string;
-  prompt: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  path: string;
-  value: string;
-  submitting: boolean;
-  onChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  const {
-    title,
-    prompt,
-    confirmLabel,
-    cancelLabel,
-    path,
-    value,
-    submitting,
-    onChange,
-    onCancel,
-    onSubmit,
-  } = props;
-  const canSubmit = value.trim().length > 0 && !submitting;
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
-      <DialogContent className="max-w-md p-0">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canSubmit) {
-              onSubmit();
-            }
-          }}
-        >
-          <div className="border-b border-border/60 px-5 py-4">
-            <DialogTitle>{title}</DialogTitle>
-            {path ? (
-              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
-                {path}
-              </DialogDescription>
-            ) : null}
-          </div>
-          <div className="space-y-2 px-5 py-5">
-            <label
-              className="block text-xs font-medium text-muted-foreground"
-              htmlFor="workspace-sftp-new-folder-name"
-            >
-              {prompt}
-            </label>
-            <input
-              id="workspace-sftp-new-folder-name"
-              value={value}
-              autoFocus
-              disabled={submitting}
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-              onChange={(event) => onChange(event.currentTarget.value)}
-            />
-          </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={submitting}
-              onClick={onCancel}
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={!canSubmit}
-            >
-              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-              {confirmLabel}
-            </button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CopyPathDialog(props: {
-  title: string;
-  prompt: string;
-  closeLabel: string;
-  text: string;
-  onClose: () => void;
-}) {
-  const { title, prompt, closeLabel, text, onClose } = props;
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md p-0">
-        <div className="border-b border-border/60 px-5 py-4">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="mt-1 text-xs">{prompt}</DialogDescription>
-        </div>
-        <div className="px-5 py-5">
-          <textarea
-            value={text}
-            readOnly
-            autoFocus
-            className="min-h-28 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
-            onFocus={(event) => event.currentTarget.select()}
-          />
-        </div>
-        <div className="flex justify-end border-t border-border/60 bg-muted/20 px-5 py-4">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            onClick={onClose}
-          >
-            {closeLabel}
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CopyPathToast(props: { message: string }) {
-  return (
-    <div className="pointer-events-none absolute bottom-14 right-4 z-[90]">
-      <div className="notify-toast-enter flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
-        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-        <span>{props.message}</span>
-      </div>
-    </div>
-  );
-}
-
-function RenameEntryDialog(props: {
-  title: string;
-  prompt: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  path: string;
-  originalName: string;
-  value: string;
-  submitting: boolean;
-  onChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  const {
-    title,
-    prompt,
-    confirmLabel,
-    cancelLabel,
-    path,
-    originalName,
-    value,
-    submitting,
-    onChange,
-    onCancel,
-    onSubmit,
-  } = props;
-  const trimmedValue = value.trim();
-  const canSubmit = trimmedValue.length > 0 && trimmedValue !== originalName && !submitting;
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
-      <DialogContent className="max-w-md p-0">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canSubmit) {
-              onSubmit();
-            }
-          }}
-        >
-          <div className="border-b border-border/60 px-5 py-4">
-            <DialogTitle>{title}</DialogTitle>
-            {path ? (
-              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
-                {path}
-              </DialogDescription>
-            ) : null}
-          </div>
-          <div className="space-y-2 px-5 py-5">
-            <label
-              className="block text-xs font-medium text-muted-foreground"
-              htmlFor="workspace-sftp-rename-entry-name"
-            >
-              {prompt}
-            </label>
-            <input
-              id="workspace-sftp-rename-entry-name"
-              value={value}
-              autoFocus
-              disabled={submitting}
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-              onChange={(event) => onChange(event.currentTarget.value)}
-            />
-          </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={submitting}
-              onClick={onCancel}
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-              disabled={!canSubmit}
-            >
-              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-              {confirmLabel}
-            </button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TransferToast(props: {
-  transfer: SftpTransfer;
-  queueCount: number;
-  cancelLabel: string;
-  filesLabel: string;
-  statusLabel: string;
-  onCancel?: () => void;
-}) {
-  const { transfer, queueCount, cancelLabel, filesLabel, statusLabel, onCancel } = props;
-  const progress = transferProgress(transfer);
-  const TransferIcon = transfer.direction === "download" ? Download : Upload;
-  const currentPath = transfer.currentPath || transfer.sourcePath || transfer.targetPath;
-  const isRunning = transfer.status === "running" || transfer.status === "queued";
-  const isCompleted = transfer.status === "completed";
-  const isFailed = transfer.status === "failed";
-  const StatusIcon = isRunning ? Loader2 : isCompleted ? CheckCircle2 : TransferIcon;
-  const iconClass = isFailed
-    ? "text-destructive"
-    : isCompleted
-      ? "text-emerald-600 dark:text-emerald-300"
-      : "text-sky-600 dark:text-sky-300";
-
-  return (
-    <div className="pointer-events-auto relative ml-auto flex h-full w-[340px] max-w-[50%] shrink-0 items-center gap-2 pl-3 text-foreground before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-border/60">
-      <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-        <StatusIcon className={cn("h-3.5 w-3.5", iconClass, isRunning && "animate-spin")} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="shrink-0 text-[11px] font-medium leading-none text-foreground">
-            {statusLabel}
-          </span>
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] leading-none text-muted-foreground/90">
-            {currentPath}
-          </span>
-          <span className="shrink-0 font-mono text-[10px] leading-none text-muted-foreground">
-            {progress}%
-          </span>
-        </div>
-        {transfer.error ? (
-          <div className="mt-1.5 truncate text-[11px] leading-none text-destructive">
-            {transfer.error}
-          </div>
-        ) : (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <div className="h-1 min-w-16 flex-1 overflow-hidden rounded-full bg-border/60">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-300",
-                  transferTone(transfer),
-                )}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
-              {transfer.filesDone}/{transfer.filesTotal || queueCount || 1} {filesLabel}
-            </span>
-            <span className="shrink-0 font-mono text-[10px] leading-none text-muted-foreground">
-              {formatBytes(transfer.bytesDone)} / {formatBytes(transfer.bytesTotal)}
-            </span>
-          </div>
-        )}
-      </div>
-      {onCancel ? (
-        <button
-          type="button"
-          className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-destructive hover:bg-destructive/10"
-          onClick={onCancel}
-        >
-          {cancelLabel}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function DragPreview(props: {
-  entry: SftpEntry | null;
-  fallback: DragPayload;
-  x: number;
-  y: number;
-  typeLabel: (entry: SftpEntry) => string;
-}) {
-  const { entry, fallback, x, y, typeLabel } = props;
-  const previewEntry: SftpEntry = entry ?? {
-    path: fallback.path,
-    name: basename(fallback.path) || fallback.path,
-    kind: fallback.kind,
-    sizeBytes: 0,
-    mtime: 0,
-  };
-  const count = dragItems(fallback).length;
-
-  return (
-    <div
-      className="pointer-events-none fixed z-[120] flex w-[260px] max-w-[calc(100vw-32px)] items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
-      style={{
-        left: x + 18,
-        top: y + 14,
-        transform: "translateY(-50%)",
-      }}
-    >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/15 text-white">
-        {entryIcon(previewEntry, "h-4 w-4 text-white")}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium leading-4">
-          {previewEntry.name}
-          {count > 1 ? ` +${count - 1}` : ""}
-        </span>
-        <span className="block truncate text-[10px] leading-3 text-white/75">
-          {typeLabel(previewEntry)}
-          {previewEntry.kind === "directory" ? "" : ` · ${formatBytes(previewEntry.sizeBytes)}`}
-        </span>
-      </span>
-      {count > 1 ? (
-        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
-          {count}
-        </span>
-      ) : previewEntry.kind === "directory" ? null : (
-        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
-          {formatBytes(previewEntry.sizeBytes)}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function MenuItem(props: {
-  icon: React.ReactNode;
-  label: string;
-  destructive?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  const { icon, label, destructive = false, disabled = false, onClick } = props;
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
-        destructive
-          ? "text-destructive hover:bg-destructive/10"
-          : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
-        disabled && "pointer-events-none opacity-45",
-      )}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-    >
-      {icon}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-    </button>
   );
 }

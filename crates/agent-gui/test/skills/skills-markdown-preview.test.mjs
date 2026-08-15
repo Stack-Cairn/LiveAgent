@@ -26,7 +26,7 @@ const webStyles = readFileSync(
   "utf8",
 );
 const sharedStyles = readFileSync(
-  new URL("../../../agent-ui/src/styles/common.css", import.meta.url),
+  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
   "utf8",
 );
 

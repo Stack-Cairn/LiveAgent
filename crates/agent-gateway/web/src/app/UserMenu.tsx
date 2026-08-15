@@ -77,7 +77,7 @@ export function UserMenu(props: UserMenuProps) {
           className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
         >
           <LogOut className="h-3.5 w-3.5" />
-          退出登录
+          {t("common.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

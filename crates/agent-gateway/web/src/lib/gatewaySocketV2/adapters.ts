@@ -81,6 +81,8 @@ import {
   TerminalStreamFrameSchema,
   TunnelMutationSchema,
   UploadedImagePreviewRequestSchema,
+  WorkspaceRootGrantDraftSchema,
+  WorkspaceRootGrantsRequestSchema,
 } from "@/lib/proto/gen/proto/v2/gateway_pb";
 import type {
   ChatActivityEvent,
@@ -434,6 +436,13 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         targetPath: str(body.target_path),
         recursive: bool(body.recursive),
         overwrite: bool(body.overwrite),
+        content: str(body.content),
+        offset: toI64(body.offset),
+        maxBytes: toI64(body.max_bytes),
+        strictUtf8: bool(body.strict_utf8),
+        expectedMtime: toI64(body.expected_mtime),
+        expectedSizeBytes: toI64(body.expected_size_bytes),
+        createParentDirs: bool(body.create_parent_dirs),
       }),
     };
   }
@@ -585,6 +594,8 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           apiKey: trimStr(body.api_key),
           useSystemProxy: bool(body.use_system_proxy),
           modelsUrl: trimStr(body.models_url),
+          providerId: trimStr(body.provider_id),
+          isFullUrl: typeof body.is_full_url === "boolean" ? body.is_full_url : undefined,
         }),
       };
     case "provider.usage.query":
@@ -669,6 +680,43 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "fs.roots":
       return { case: "fsRoots", value: create(FsRootsRequestSchema, {}) };
+    case "workspace_root_grants.list":
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "list",
+          projectId: trimStr(body.project_id),
+          projectPath: trimStr(body.project_path),
+        }),
+      };
+    case "workspace_root_grants.apply": {
+      const drafts = Array.isArray(body.grants) ? body.grants : [];
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "apply",
+          projectId: trimStr(body.project_id),
+          projectPath: trimStr(body.project_path),
+          grants: drafts.map((value) => {
+            const grant = rec(value);
+            return create(WorkspaceRootGrantDraftSchema, {
+              id: typeof grant.id === "string" ? grant.id.trim() : undefined,
+              alias: trimStr(grant.alias),
+              displayPath: trimStr(grant.display_path),
+              access: trimStr(grant.access),
+            });
+          }),
+        }),
+      };
+    }
+    case "workspace_root_grants.revoke":
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "revoke",
+          projectId: trimStr(body.project_id),
+        }),
+      };
     case "fs.list_dirs":
       return {
         case: "fsListDirs",
@@ -1125,6 +1173,21 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           path: root.path,
           kind: root.kind,
           label: root.label,
+        })),
+      };
+    case "workspaceRootGrantsResp":
+      return {
+        grants: payload.value.grants.map((grant) => ({
+          id: grant.id,
+          projectId: grant.projectId,
+          projectPathKey: grant.projectPathKey,
+          alias: grant.alias,
+          displayPath: grant.displayPath,
+          canonicalPath: grant.canonicalPath,
+          access: grant.access,
+          state: grant.state,
+          createdAt: num(grant.createdAt),
+          updatedAt: num(grant.updatedAt),
         })),
       };
     case "fsListDirsResp":
@@ -1650,6 +1713,13 @@ function sftpResponsePayload(resp: SftpResponse): J {
     path: resp.path,
     exists: resp.exists,
     entries: resp.entries.map(sftpEntryPayload),
+    content: resp.content,
+    offset: num(resp.offset),
+    bytesRead: num(resp.bytesRead),
+    bytes_read: num(resp.bytesRead),
+    sizeBytes: num(resp.sizeBytes),
+    size_bytes: num(resp.sizeBytes),
+    truncated: resp.truncated,
   };
   if (resp.entry) payload.entry = sftpEntryPayload(resp.entry);
   if (resp.transfer) payload.transfer = sftpTransferPayload(resp.transfer);

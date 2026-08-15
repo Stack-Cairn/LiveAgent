@@ -685,11 +685,13 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         activeTurn.settlingUnits = null;
       } else {
         if (!activeTurn.settlingUnits) {
-          activeTurn.settlingUnits = activeTurn.lastLiveUnits.map((row) => ({
-            ...row,
-            live: false,
-            mutable: false,
-          }));
+          activeTurn.settlingUnits = activeTurn.lastLiveUnits
+            .filter((row) => row.unit.kind !== "status")
+            .map((row) => ({
+              ...row,
+              live: false,
+              mutable: false,
+            }));
         }
         liveUnits = activeTurn.settlingUnits;
       }

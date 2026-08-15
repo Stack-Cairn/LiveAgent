@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceCodeEditorOpenRequest } from "./WorkspaceCodeEditorOverlay";
 import type { WorkspaceFilePreviewOpenRequest } from "./WorkspaceFilePreviewOverlay";
+import type { SftpOpenFileRequest } from "./WorkspaceSftpPanel";
 import type { WorkspaceSshTerminalOpenRequest } from "./WorkspaceSshTerminalOverlay";
 import { isWorkspacePreviewPath } from "./workspaceImagePreview";
 
@@ -15,6 +16,8 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
   const { terminalProjectPath, terminalProjectPathKey, rightDockFileTreeOpen } = params;
   const previousRightDockFileTreeOpenRef = useRef(false);
   const [workspaceEditorMounted, setWorkspaceEditorMounted] = useState(false);
+  const workspaceEditorMountedRef = useRef(false);
+  workspaceEditorMountedRef.current = workspaceEditorMounted;
   const [workspaceEditorOpen, setWorkspaceEditorOpen] = useState(false);
   const [workspaceEditorCleanupPending, setWorkspaceEditorCleanupPending] = useState(false);
   const [workspaceEditorOpenRequest, setWorkspaceEditorOpenRequest] =
@@ -31,6 +34,19 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
   const [workspaceSshTerminalOpenRequest, setWorkspaceSshTerminalOpenRequest] =
     useState<WorkspaceSshTerminalOpenRequest | null>(null);
   const workspaceSshTerminalRequestIdRef = useRef(0);
+  // Editors/previews opened from the SFTP panel return to the SSH overlay on
+  // close (the overlay stays mounted while hidden, so this is just re-show).
+  const returnToSshTerminalRef = useRef(false);
+  const workspaceSshTerminalMountedRef = useRef(false);
+  workspaceSshTerminalMountedRef.current = workspaceSshTerminalMounted;
+
+  const restoreSshTerminalIfRequested = useCallback(() => {
+    if (!returnToSshTerminalRef.current) return;
+    returnToSshTerminalRef.current = false;
+    if (workspaceSshTerminalMountedRef.current) {
+      setWorkspaceSshTerminalOpen(true);
+    }
+  }, []);
 
   const hideWorkspaceSshTerminalOverlay = useCallback(() => {
     setWorkspaceSshTerminalOpen(false);
@@ -38,6 +54,7 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
 
   const openWorkspaceSshTerminalRequest = useCallback(
     (request: WorkspaceSshTerminalOpenRequest) => {
+      returnToSshTerminalRef.current = false;
       setWorkspaceFilePreviewOpen(false);
       setWorkspaceEditorOpen(false);
       setWorkspaceSshTerminalMounted(true);
@@ -53,7 +70,8 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
 
   const handleWorkspaceEditorHide = useCallback(() => {
     setWorkspaceEditorOpen(false);
-  }, []);
+    restoreSshTerminalIfRequested();
+  }, [restoreSshTerminalIfRequested]);
 
   const handleWorkspaceEditorClosed = useCallback(() => {
     setWorkspaceEditorOpen(false);
@@ -61,7 +79,8 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
     setWorkspaceEditorCleanupPending(false);
     setWorkspaceEditorOpenRequest(null);
     setWorkspaceEditorCloseRequestId(0);
-  }, []);
+    restoreSshTerminalIfRequested();
+  }, [restoreSshTerminalIfRequested]);
 
   const openWorkspaceEditorFile = useCallback(
     (request: Omit<WorkspaceCodeEditorOpenRequest, "id">) => {
@@ -97,6 +116,7 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
   const handleOpenWorkspaceFile = useCallback(
     (path: string, imagePaths?: string[]) => {
       if (!terminalProjectPath || !terminalProjectPathKey) return;
+      returnToSshTerminalRef.current = false;
       const request = {
         projectPathKey: terminalProjectPathKey,
         workdir: terminalProjectPath,
@@ -115,6 +135,29 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
       terminalProjectPath,
       terminalProjectPathKey,
     ],
+  );
+
+  // SFTP panel entry: local files reuse the workspace pipeline (the local
+  // pane root is forced to equal the SSH session's project directory by
+  // workdir_for_session on the Rust side), remote files open editor tabs
+  // backed by the session's SFTP channel.
+  const handleOpenSftpFile = useCallback(
+    (session: TerminalSession, request: SftpOpenFileRequest) => {
+      if (!terminalProjectPath || !terminalProjectPathKey) return;
+      if (request.side === "local") {
+        handleOpenWorkspaceFile(request.path);
+        returnToSshTerminalRef.current = true;
+        return;
+      }
+      openWorkspaceEditorFile({
+        projectPathKey: terminalProjectPathKey,
+        workdir: terminalProjectPath,
+        path: request.path,
+        remote: { sessionId: session.id },
+      });
+      returnToSshTerminalRef.current = true;
+    },
+    [handleOpenWorkspaceFile, openWorkspaceEditorFile, terminalProjectPath, terminalProjectPathKey],
   );
 
   const handleOpenSshTerminal = useCallback(
@@ -138,7 +181,12 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
     setWorkspaceFilePreviewOpen(false);
     setWorkspaceFilePreviewMounted(false);
     setWorkspaceFilePreviewOpenRequest(null);
-  }, []);
+    // Only restore when the editor isn't taking over (preview -> editor
+    // switch closes the preview while the editor stays in front).
+    if (!workspaceEditorMountedRef.current) {
+      restoreSshTerminalIfRequested();
+    }
+  }, [restoreSshTerminalIfRequested]);
 
   useEffect(() => {
     const previousOpen = previousRightDockFileTreeOpenRef.current;
@@ -187,6 +235,7 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
     handleWorkspaceEditorHide,
     handleWorkspaceEditorClosed,
     handleOpenWorkspaceFile,
+    handleOpenSftpFile,
     handleOpenSshTerminal,
     requestWorkspaceFilePreviewClose,
     handleWorkspaceFilePreviewClosed,

@@ -1,0 +1,352 @@
+/* Git review diff views live under app chrome that disables selection by default. */
+.git-review-diff-selectable-content,
+.git-review-diff-selectable-content pre,
+.git-review-diff-selectable-content .diff-tailwindcss-wrapper,
+.git-review-diff-selectable-content .diff-line-content,
+.git-review-diff-selectable-content .diff-line-content-item,
+.git-review-diff-selectable-content .diff-line-content-raw,
+.git-review-diff-selectable-content .diff-line-syntax-raw,
+.git-review-diff-selectable-content .diff-line-content-raw *,
+.git-review-diff-selectable-content .diff-line-syntax-raw * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.git-review-diff-selectable-content .select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Edit tool result diff, scoped away from Git Review's full-file diff UI. */
+.edit-tool-diff-view {
+  --edit-diff-add-bg: hsl(142 76% 90%);
+  --edit-diff-add-gutter-bg: hsl(142 72% 80%);
+  --edit-diff-del-bg: hsl(3 100% 91%);
+  --edit-diff-del-gutter-bg: hsl(3 100% 86%);
+  --edit-diff-plain-bg: hsl(0 0% 100% / 0.76);
+  --edit-diff-plain-gutter-bg: hsl(0 0% 98% / 0.82);
+  --edit-diff-hunk-bg: hsl(205 90% 96%);
+  color: hsl(var(--foreground) / 0.88);
+}
+
+.dark .edit-tool-diff-view {
+  --edit-diff-add-bg: hsl(149 42% 18%);
+  --edit-diff-add-gutter-bg: hsl(148 38% 23%);
+  --edit-diff-del-bg: hsl(0 42% 19%);
+  --edit-diff-del-gutter-bg: hsl(0 38% 24%);
+  --edit-diff-plain-bg: hsl(224 18% 11% / 0.9);
+  --edit-diff-plain-gutter-bg: hsl(224 16% 14% / 0.94);
+  --edit-diff-hunk-bg: hsl(215 42% 17%);
+  color: hsl(var(--foreground) / 0.9);
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper {
+  min-width: max-content;
+  background: transparent;
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper[data-theme] .diff-style-root {
+  --diff-add-content--: var(--edit-diff-add-bg);
+  --diff-add-lineNumber--: var(--edit-diff-add-gutter-bg);
+  --diff-del-content--: var(--edit-diff-del-bg);
+  --diff-del-lineNumber--: var(--edit-diff-del-gutter-bg);
+  --diff-plain-content--: var(--edit-diff-plain-bg);
+  --diff-plain-lineNumber--: var(--edit-diff-plain-gutter-bg);
+  --diff-expand-content--: var(--edit-diff-plain-bg);
+  --diff-expand-lineNumber--: var(--edit-diff-plain-gutter-bg);
+  --diff-hunk-content--: var(--edit-diff-hunk-bg);
+  --diff-hunk-lineNumber--: var(--edit-diff-hunk-bg);
+  --diff-plain-lineNumber-color--: hsl(var(--muted-foreground) / 0.82);
+  --diff-expand-lineNumber-color--: hsl(var(--muted-foreground) / 0.66);
+  --diff-add-content-highlight--: hsl(143 73% 78%);
+  --diff-del-content-highlight--: hsl(3 100% 84%);
+  --diff-hunk-content-color--: hsl(var(--muted-foreground) / 0.72);
+  background: transparent;
+}
+
+.dark .edit-tool-diff-view .diff-tailwindcss-wrapper[data-theme] .diff-style-root {
+  --diff-add-content-highlight--: hsl(148 46% 28%);
+  --diff-del-content-highlight--: hsl(0 48% 31%);
+}
+
+.edit-tool-diff-view .diff-view-wrapper,
+.edit-tool-diff-view .unified-diff-view,
+.edit-tool-diff-view .unified-diff-table-wrapper {
+  background: transparent;
+}
+
+.edit-tool-diff-view .unified-diff-table-wrapper {
+  overflow: visible;
+}
+
+.edit-tool-diff-view .unified-diff-table {
+  min-width: 100%;
+}
+
+.edit-tool-diff-view .diff-table-body {
+  line-height: 1.55;
+}
+
+.edit-tool-diff-view .diff-line-hunk {
+  display: none;
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper .diff-line-num {
+  padding-left: 0.55rem;
+  padding-right: 0.45rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper .diff-line-content {
+  min-width: 22rem;
+  padding-right: 0.75rem;
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper .diff-line-content-item {
+  min-height: 1.55em;
+  padding-left: 2.35rem;
+}
+
+.edit-tool-diff-view .diff-tailwindcss-wrapper .diff-line-content-operator {
+  width: 1.6rem;
+  margin-left: -2rem;
+  text-align: center;
+  text-indent: 0;
+  font-weight: 700;
+}
+
+.edit-tool-diff-view .diff-line-content-operator[data-operator="+"] {
+  color: hsl(150 55% 24%);
+}
+
+.edit-tool-diff-view .diff-line-content-operator[data-operator="-"] {
+  color: hsl(0 62% 35%);
+}
+
+.dark .edit-tool-diff-view .diff-line-content-operator[data-operator="+"] {
+  color: hsl(150 62% 74%);
+}
+
+.dark .edit-tool-diff-view .diff-line-content-operator[data-operator="-"] {
+  color: hsl(0 72% 78%);
+}
+
+.edit-tool-diff-view .diff-line-content-raw,
+.edit-tool-diff-view .diff-line-syntax-raw,
+.edit-tool-diff-view .diff-line-content-raw *,
+.edit-tool-diff-view .diff-line-syntax-raw * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Keep right-sidebar drag responsive when very large diff DOM is mounted. */
+[data-project-tools-resizing="true"] .git-review-diff-selectable {
+  contain: layout paint style;
+  isolation: isolate;
+  position: relative;
+}
+[data-project-tools-resizing="true"] .git-review-diff-selectable::before {
+  content: "";
+  display: block;
+  flex: 1 1 auto;
+  margin: 0.75rem;
+  min-height: 0;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      90deg,
+      hsl(var(--muted) / 0.62) 0 4.25rem,
+      hsl(var(--border) / 0.74) 4.25rem calc(4.25rem + 1px),
+      transparent calc(4.25rem + 1px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0 3.5rem,
+      hsl(142 72% 42% / 0.09) 3.5rem 5.25rem,
+      transparent 5.25rem 7rem,
+      hsl(var(--destructive) / 0.08) 7rem 8.75rem,
+      transparent 8.75rem 10.5rem,
+      hsl(38 92% 50% / 0.08) 10.5rem 12.25rem,
+      transparent 12.25rem
+    ),
+    repeating-linear-gradient(to bottom, transparent 0 27px, hsl(var(--border) / 0.42) 27px 28px),
+    hsl(var(--background));
+  box-shadow:
+    inset 0 1px 0 hsl(var(--foreground) / 0.04),
+    0 1px 2px hsl(var(--foreground) / 0.04);
+}
+[data-project-tools-resizing="true"] .git-review-diff-selectable::after {
+  content: "";
+  position: absolute;
+  inset: 1.25rem 1.5rem 1.25rem 5.8rem;
+  z-index: 1;
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      hsl(var(--muted-foreground) / 0.16) 0 7px,
+      transparent 7px 84px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 28px,
+      hsl(var(--muted-foreground) / 0.11) 28px 35px,
+      transparent 35px 84px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 56px,
+      hsl(var(--muted-foreground) / 0.13) 56px 63px,
+      transparent 63px 84px
+    );
+  background-repeat: repeat-y;
+  background-size:
+    56% 84px,
+    82% 84px,
+    42% 84px;
+  pointer-events: none;
+}
+[data-project-tools-resizing="true"] .git-review-diff-selectable > * {
+  display: none;
+}
+
+@keyframes sftpPathPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sftp-path-popover-enter {
+  animation: sftpPathPopoverIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top center;
+}
+
+.sftp-path-scroll {
+  scrollbar-width: none;
+}
+.sftp-path-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sftp-path-popover-enter {
+    animation: none;
+  }
+}
+
+@layer components {
+  .confirm-action-popover-popup {
+    --confirm-popover-slide-y: -6px;
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .confirm-action-popover-popup[data-side="top"] {
+    --confirm-popover-slide-y: 6px;
+  }
+
+  .confirm-action-popover-popup[data-starting-style],
+  .confirm-action-popover-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(var(--confirm-popover-slide-y)) scale(0.96);
+  }
+
+  .confirm-action-popover-popup[data-ending-style] {
+    transition-duration: 0.12s;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+    transform: translateY(calc(var(--confirm-popover-slide-y) / 2)) scale(0.98);
+  }
+
+  .label-tooltip-popup {
+    --label-tooltip-slide-y: -4px;
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .label-tooltip-popup[data-side="top"] {
+    --label-tooltip-slide-y: 4px;
+  }
+
+  .label-tooltip-popup[data-starting-style],
+  .label-tooltip-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(var(--label-tooltip-slide-y)) scale(0.96);
+  }
+
+  .label-tooltip-popup[data-ending-style] {
+    transition-duration: 0.1s;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+    transform: translateY(calc(var(--label-tooltip-slide-y) / 2)) scale(0.98);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .confirm-action-popover-popup,
+    .label-tooltip-popup {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+.sidebar-project-name-fade {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 1.25rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.25rem), transparent 100%);
+}
+
+/* Streamdown creates Mermaid/table fullscreen portals under document.body.
+ * Promote the portal to its own compositor layer so WebKit paints nested SVG
+ * content reliably, then drop the nested SVG layer while the diagram pans. */
+body > div:has([data-streamdown="mermaid"]):not(#root) {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+body > div:has([data-streamdown="table-fullscreen"]):not(#root) {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+body > div:not(#root) [data-streamdown="mermaid"] svg {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+body > div:not(#root) [data-streamdown="mermaid"]:has([role="application"]:active) svg,
+body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor: grabbing"]) svg,
+body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]) svg {
+  -webkit-transform: none;
+  transform: none;
+}
+
+@keyframes editorContextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.editor-context-menu {
+  animation: editorContextMenuIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top left;
+}
+
+/* Serialization restores the word boundary around composer tokens, so this
+ * spacing remains presentation-only and shared by both hosts. */
+.mention-composer .mention-chip {
+  margin-inline-end: 0.375rem;
+}

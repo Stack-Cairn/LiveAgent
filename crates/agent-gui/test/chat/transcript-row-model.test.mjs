@@ -117,8 +117,11 @@ test("persist lag: block-unit aliases still land one build later", () => {
   assert.equal(blockRows(waitingForHistory)[0].key, liveBlockKey);
   assert.equal(waitingForHistory.rows.at(-1).kind, "assistant-activity");
   assert.equal(waitingForHistory.rows.at(-1).live, false);
-  assert.equal(waitingForHistory.rows.at(-1).units.at(-1).unit.kind, "status");
-  assert.equal("active" in waitingForHistory.rows.at(-1).units.at(-1).unit, false);
+  assert.deepEqual(
+    waitingForHistory.rows.at(-1).units.map((unit) => unit.unit.kind),
+    ["block"],
+    "the settling activity must not retain an empty status row",
+  );
   const settled = model.build(
     [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])],
     idleLive,

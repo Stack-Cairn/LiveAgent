@@ -7,6 +7,7 @@ import { Type } from "typebox";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
+import type { AdditionalProjectRoot } from "../tools/additionalProjectRoots";
 import {
   type BuiltinToolBundle,
   type BuiltinToolExecutionContext,
@@ -203,6 +204,7 @@ export function createSubagentTools(params: {
   baseTools: Tool[];
   executeToolCall: (toolCall: ToolCall, signal?: AbortSignal) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
+  additionalRoots?: readonly AdditionalProjectRoot[];
   createSubagentToolRegistry?: (workdir: string) => Promise<SubagentToolRegistry>;
   worktreeIpc?: SubagentWorktreeIpc;
 }): BuiltinToolBundle {
@@ -309,6 +311,12 @@ export function createSubagentTools(params: {
       runtime: params.runtime,
       runtimePlatform: params.runtimePlatform,
       workdir: params.workdir,
+      additionalRoots: params.additionalRoots?.map((root) => ({
+        ...root,
+        // Keep this boundary defensive even when createSubagentTools is used
+        // without the higher-level builtin registry builder.
+        access: "read" as const,
+      })),
       sessionId: params.sessionId,
       messageBusEnabled,
       store,

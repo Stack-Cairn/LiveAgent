@@ -456,6 +456,8 @@ async function fetchModelsThroughGateway(
   apiKey: string,
   useSystemProxy: boolean,
   modelsUrl: string,
+  providerId: string,
+  isFullUrl: boolean,
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -471,6 +473,8 @@ async function fetchModelsThroughGateway(
     api_key: apiKey,
     use_system_proxy: useSystemProxy,
     models_url: modelsUrl,
+    provider_id: providerId,
+    is_full_url: isFullUrl,
   });
 
   const items = extractModelListItems(data);
@@ -551,11 +555,14 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
     const ownedBy =
       (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
+    const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
+    const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
     out.push({
       id,
       ...(ownedBy ? { ownedBy } : {}),
-      contextWindow: normalizePositiveInteger(obj.inputTokenLimit) ?? draft.contextWindow,
-      maxOutputToken: normalizePositiveInteger(obj.outputTokenLimit) ?? draft.maxOutputToken,
+      contextWindow: contextWindow ?? draft.contextWindow,
+      maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
+      limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
     });
   }
 
@@ -579,11 +586,24 @@ export function mergeFetchedModels(
       model.contextWindow === 1_000_000 &&
       existingModel.contextWindow < 1_000_000 &&
       Math.round(existingModel.contextWindow / 1_000) === 1_000;
+    // 供应商本次响应自带真实限额字段（provider 来源）：比落库的目录/兜底值
+    // 更新鲜，直接采信；用户手改（user）来源任何时候都不被自动覆盖。
+    const shouldAdoptFreshProviderLimits =
+      existingModel !== undefined &&
+      model.limitsSource === "provider" &&
+      existingModel.limitsSource !== "user";
     merged.push(
       existingModel
         ? {
             ...existingModel,
             ...(shouldNormalizeOneMillion ? { contextWindow: model.contextWindow } : {}),
+            ...(shouldAdoptFreshProviderLimits
+              ? {
+                  contextWindow: model.contextWindow,
+                  maxOutputToken: model.maxOutputToken,
+                  limitsSource: "provider",
+                }
+              : {}),
             ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
           }
         : model,
@@ -648,21 +668,28 @@ export async function fetchModelsFromApi(
   type: ProviderId,
   baseUrl: string,
   apiKey: string,
-  options?: { useSystemProxy?: boolean; isFullUrl?: boolean; modelsUrl?: string },
+  options?: {
+    useSystemProxy?: boolean;
+    isFullUrl?: boolean;
+    modelsUrl?: string;
+    providerId?: string;
+  },
 ): Promise<ProviderModelConfig[]> {
   const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
-  const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
   const normalizedApiKey = apiKey.trim();
   if (isGatewayWebuiRuntime()) {
     return fetchModelsThroughGateway(
       type,
-      normalizedUrl,
+      baseUrl.trim(),
       normalizedApiKey,
       options?.useSystemProxy === true,
       modelsUrlOverride,
+      options?.providerId?.trim() ?? "",
+      options?.isFullUrl === true,
     );
   }
 
+  const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
   const attempts = buildProviderModelsAttempts(type, normalizedApiKey);
   const failures: ProviderModelsFailure[] = [];
   let emptyResult: ProviderModelConfig[] | null = null;

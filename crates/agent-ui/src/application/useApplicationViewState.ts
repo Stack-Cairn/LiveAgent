@@ -3,7 +3,7 @@ import type { ApplicationViewId } from "./ApplicationView";
 
 export function useApplicationViewState<TResourceProject>() {
   const [activeView, setActiveView] = useState<ApplicationViewId>("chat");
-  const [resourceSettingsProject, setResourceSettingsProject] = useState<TResourceProject | null>(
+  const [projectSettingsProject, setProjectSettingsProject] = useState<TResourceProject | null>(
     null,
   );
   const [rightDockOpen, setRightDockOpen] = useState(false);
@@ -11,8 +11,8 @@ export function useApplicationViewState<TResourceProject>() {
   return {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   };

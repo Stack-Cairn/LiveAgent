@@ -22,6 +22,7 @@ import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector
 import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
+import { useStableCallback } from "../hooks/useStableCallback";
 
 function selectConversationIndex(snapshot: SidebarSnapshot) {
   return snapshot.byId;
@@ -52,16 +53,6 @@ function isGatewayTransportErrorDetail(detail: string | null | undefined) {
     message === "request timed out" ||
     message === "request canceled"
   );
-}
-
-// Stable identity wrapper so callback props from GatewayApp (recreated per
-// render) never churn effects or the memo'd view rows.
-function useStableCallback<Args extends unknown[], Return>(
-  handler: (...args: Args) => Return,
-): (...args: Args) => Return {
-  const handlerRef = useRef(handler);
-  handlerRef.current = handler;
-  return useCallback((...args: Args) => handlerRef.current(...args), []);
 }
 
 export type GatewaySidebarContainerProps = Omit<

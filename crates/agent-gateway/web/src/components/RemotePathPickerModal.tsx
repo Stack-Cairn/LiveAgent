@@ -153,6 +153,8 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialPathRef = useRef(false);
+  // Base UI 控制 open：先置 false 播放退场过渡，onOpenChangeComplete 再通知
+  // 调用方卸载（onSelect 已先行 resolve，onClose 的 resolve(null) 为 no-op）。
   const [open, setOpen] = useState(true);
 
   const modalTitle =
@@ -516,6 +518,8 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     }
   }
 
+  // 挂 z-[120]：需要压过新建 worktree 弹窗（z-[110]）等上层来源；作为嵌套
+  // Base UI Dialog 打开时 DOM 顺序也保证在后。
   return (
     <Dialog
       open={open}
@@ -525,7 +529,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       }}
     >
       <DialogContent
-        className="flex max-h-[92dvh] max-w-4xl flex-col border-border/60 p-0 max-sm:max-h-[calc(100dvh-1rem)] max-sm:max-w-[calc(100vw-1rem)]"
+        className="remote-path-picker-panel flex h-[min(650px,92vh)] max-h-[92vh] max-w-4xl flex-col border-border/60 p-0 max-sm:max-h-[calc(100dvh-1rem)] max-sm:max-w-[calc(100vw-1rem)]"
         overlayClassName="z-[120] bg-black/60"
         viewportClassName="z-[120] items-stretch px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(8px,env(safe-area-inset-top))] sm:items-center sm:p-4"
       >
@@ -726,10 +730,12 @@ type PendingPick = PickPathOptions & {
  */
 export function useRemotePathPicker() {
   const [pending, setPending] = useState<PendingPick | null>(null);
+  const selectedPathRef = useRef<string | null>(null);
 
   const pickPath = useCallback(
     (options: PickPathOptions) =>
       new Promise<string | null>((resolve) => {
+        selectedPathRef.current = null;
         setPending({ ...options, resolve });
       }),
     [],
@@ -742,11 +748,13 @@ export function useRemotePathPicker() {
       title={pending.title}
       description={pending.description}
       onSelect={(path) => {
-        pending.resolve(path);
+        selectedPathRef.current = path;
       }}
       onClose={() => {
-        // No-op when a selection already resolved the promise.
-        pending.resolve(null);
+        // Resolve only after the picker finishes its exit transition so a
+        // suspended parent modal cannot reopen underneath the closing picker.
+        pending.resolve(selectedPathRef.current);
+        selectedPathRef.current = null;
         setPending(null);
       }}
     />

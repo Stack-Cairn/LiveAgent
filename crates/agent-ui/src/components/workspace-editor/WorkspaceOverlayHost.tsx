@@ -5,6 +5,7 @@ import {
 import type { AppSettings, EffectiveTheme } from "@liveagent/app/lib/settings";
 import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
 import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
+import type { SftpOpenFileRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSftpPanel";
 import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import type { CodeMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -69,6 +70,7 @@ type WorkspaceOverlayHostProps = {
   sftpClient: SftpClient | null;
   terminalSessions: TerminalSession[];
   onWorkspaceSshTerminalHide: () => void;
+  onSshTerminalOpenFile?: (session: TerminalSession, request: SftpOpenFileRequest) => void;
 };
 
 function WorkspaceOverlayLoading(props: { className: string; label: string }) {
@@ -118,6 +120,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
     sftpClient,
     terminalSessions,
     onWorkspaceSshTerminalHide,
+    onSshTerminalOpenFile,
   } = props;
 
   return (
@@ -137,6 +140,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             isOpen={workspaceEditorOpen}
             finalCloseRequested={workspaceEditorCleanupPending}
             theme={theme}
+            sftpClient={sftpClient ?? undefined}
             onPreviewFile={onWorkspaceEditorPreviewFile}
             onInsertCodeMention={onWorkspaceEditorInsertCodeMention}
             onHide={onWorkspaceEditorHide}
@@ -180,6 +184,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             theme={theme}
             isOpen={workspaceSshTerminalOpen}
             onHide={onWorkspaceSshTerminalHide}
+            onOpenSftpFile={onSshTerminalOpenFile}
           />
         </Suspense>
       ) : null}

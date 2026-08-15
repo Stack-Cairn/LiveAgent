@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -90,6 +92,61 @@ pub(crate) fn merge_settings_update_into_snapshot(
     }
 
     Ok(Value::Object(merged))
+}
+
+fn workspace_project_ids(
+    payload: &Value,
+    payload_label: &str,
+) -> Result<Option<HashSet<String>>, String> {
+    let map = payload
+        .as_object()
+        .ok_or_else(|| format!("{payload_label} must be an object"))?;
+    let Some(system) = map.get("system") else {
+        return Ok(None);
+    };
+    let system = system
+        .as_object()
+        .ok_or_else(|| format!("{payload_label}.system must be an object"))?;
+    let Some(projects) = system.get("workspaceProjects") else {
+        return Ok(None);
+    };
+    let projects = projects
+        .as_array()
+        .ok_or_else(|| format!("{payload_label}.system.workspaceProjects must be an array"))?;
+
+    let mut ids = HashSet::with_capacity(projects.len());
+    for project in projects {
+        let id = project
+            .as_object()
+            .and_then(|item| item.get("id"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "{payload_label}.system.workspaceProjects entries must include a non-empty id"
+                )
+            })?;
+        ids.insert(id.to_string());
+    }
+    Ok(Some(ids))
+}
+
+pub(crate) fn removed_workspace_project_ids(
+    current_snapshot: &Value,
+    update: &Value,
+) -> Result<Vec<String>, String> {
+    let Some(updated_ids) = workspace_project_ids(update, "gateway settings update")? else {
+        return Ok(Vec::new());
+    };
+    let current_ids =
+        workspace_project_ids(current_snapshot, "current settings snapshot")?.unwrap_or_default();
+    let mut removed = current_ids
+        .difference(&updated_ids)
+        .cloned()
+        .collect::<Vec<_>>();
+    removed.sort();
+    Ok(removed)
 }
 
 pub(crate) fn build_settings_sync_envelope(payload: Value) -> Result<proto::AgentEnvelope, String> {

@@ -6,6 +6,7 @@ import type {
   Usage,
 } from "@liveagent/app/lib/agentTypes";
 import { assistantMessageToText } from "@liveagent/app/lib/providers/llm";
+import { ASK_USER_QUESTION_DEADLINE_ARG } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   enrichHostedSearchContentWithText,
   type HostedSearchBlock,
@@ -14,6 +15,11 @@ import {
   resolveHostedSearchTextBoundary,
   splitTextAroundHostedSearch,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import {
+  TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_SUMMARY_ARG,
+} from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { fileToolFieldChars, LIVE_TOOL_PREVIEW_META_KEY } from "@liveagent/ui/lib/chat/toolPreview";
 import {
   getUserMessageAttachments,
@@ -491,6 +497,125 @@ function displayFileToolScopeEntry(source: unknown) {
   return displayScope ? { scope: displayScope } : {};
 }
 
+/** 动态挂载的 MCP 业务工具(命名约定 `mcp_<server>_<tool>`,见 mcpTools)。 */
+export function isDynamicMcpToolName(name: string) {
+  return name.trim().startsWith("mcp_");
+}
+
+// 展示投影里单个字符串字段的上限。远超实际核对需要(展开区可完整查看数万字
+// 符的命令),同时防止把几兆的参数原样序列化进 DOM(#444)。
+const TOOL_ARG_DISPLAY_MAX_CHARS = 20_000;
+const TOOL_ARG_DISPLAY_MAX_TOTAL_CHARS = 50_000;
+const TOOL_ARG_DISPLAY_MAX_NODES = 2_000;
+const TOOL_ARG_DISPLAY_TRUNCATION_MARKER = "...（展示已截断，超出参数显示预算）";
+const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
+  LIVE_TOOL_PREVIEW_META_KEY,
+  TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_SUMMARY_ARG,
+  ASK_USER_QUESTION_DEADLINE_ARG,
+]);
+
+// 深度截断超大字符串:MCP 参数可能把超长内容嵌在数组/对象里(如批量写文件),
+// 只截顶层挡不住。截断必须显式标注原始长度,不允许静默丢内容。
+type DisplayBudget = {
+  remainingChars: number;
+  remainingNodes: number;
+  exhausted: boolean;
+};
+
+function createDisplayBudget(): DisplayBudget {
+  return {
+    remainingChars: TOOL_ARG_DISPLAY_MAX_TOTAL_CHARS,
+    remainingNodes: TOOL_ARG_DISPLAY_MAX_NODES,
+    exhausted: false,
+  };
+}
+
+function displayBudgetMarker(budget: DisplayBudget) {
+  budget.exhausted = true;
+  budget.remainingChars = 0;
+  return TOOL_ARG_DISPLAY_TRUNCATION_MARKER;
+}
+
+function consumeDisplayNode(budget: DisplayBudget) {
+  if (budget.exhausted || budget.remainingNodes <= 0) {
+    return false;
+  }
+  budget.remainingNodes -= 1;
+  return true;
+}
+
+function capDisplayString(value: string, budget: DisplayBudget) {
+  if (!consumeDisplayNode(budget)) return displayBudgetMarker(budget);
+
+  const fieldLimit = Math.min(value.length, TOOL_ARG_DISPLAY_MAX_CHARS);
+  if (value.length <= TOOL_ARG_DISPLAY_MAX_CHARS && value.length <= budget.remainingChars) {
+    budget.remainingChars -= value.length;
+    return value;
+  }
+
+  const suffix = `...（已截断，len=${value.length}）`;
+  const availablePrefixLength = Math.max(0, budget.remainingChars - suffix.length);
+  const prefixLength = Math.min(fieldLimit, availablePrefixLength);
+  const output = `${value.slice(0, prefixLength)}${suffix}`;
+  if (output.length > budget.remainingChars) {
+    return displayBudgetMarker(budget);
+  }
+  budget.remainingChars -= output.length;
+  return output;
+}
+
+function capDisplayScalar(value: boolean | null | number, budget: DisplayBudget) {
+  if (!consumeDisplayNode(budget)) return displayBudgetMarker(budget);
+  const text = value === null ? "null" : String(value);
+  if (text.length > budget.remainingChars) return displayBudgetMarker(budget);
+  budget.remainingChars -= text.length;
+  return value;
+}
+
+function capOversizedDisplayStrings(
+  value: unknown,
+  seen: WeakSet<object>,
+  budget: DisplayBudget,
+): unknown {
+  if (typeof value === "string") {
+    return capDisplayString(value, budget);
+  }
+  if (value === null || typeof value === "boolean" || typeof value === "number") {
+    return capDisplayScalar(value, budget);
+  }
+  if (typeof value !== "object") return value;
+  if (!consumeDisplayNode(budget)) return displayBudgetMarker(budget);
+  if (seen.has(value)) return "[circular]";
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (const item of value) {
+      if (budget.exhausted) {
+        out.push(displayBudgetMarker(budget));
+        break;
+      }
+      out.push(capOversizedDisplayStrings(item, seen, budget));
+    }
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (budget.exhausted) {
+      out["[truncated]"] = displayBudgetMarker(budget);
+      break;
+    }
+    if (key.length + 4 > budget.remainingChars) {
+      out["[truncated]"] = displayBudgetMarker(budget);
+      break;
+    }
+    budget.remainingChars -= key.length + 4;
+    out[key] = capOversizedDisplayStrings(entry, seen, budget);
+  }
+  return out;
+}
+
 export function toolCallArgsForDisplay(toolCall: ToolCall) {
   const args = toolCall.arguments || {};
   const name = toolCall.name;
@@ -543,15 +668,20 @@ export function toolCallArgsForDisplay(toolCall: ToolCall) {
       };
     default: {
       const out: Record<string, unknown> = {};
+      const seen = new WeakSet<object>();
+      const budget = createDisplayBudget();
       for (const [key, value] of Object.entries(args)) {
-        if (key === LIVE_TOOL_PREVIEW_META_KEY) continue;
-        // 合成参数(网关同步注入的截止时间/审批标记等,约定以 __ 前缀)不入展示。
-        if (key.startsWith("__")) continue;
-        if (typeof value === "string" && value.length > 800) {
-          out[key] = `${value.slice(0, 800)}...（len=${value.length}）`;
-        } else {
-          out[key] = value;
+        if (DISPLAY_SYNTHETIC_ARG_KEYS.has(key)) continue;
+        if (budget.exhausted) {
+          out["[truncated]"] = displayBudgetMarker(budget);
+          break;
         }
+        if (key.length + 4 > budget.remainingChars) {
+          out["[truncated]"] = displayBudgetMarker(budget);
+          break;
+        }
+        budget.remainingChars -= key.length + 4;
+        out[key] = capOversizedDisplayStrings(value, seen, budget);
       }
       return out;
     }
