@@ -864,7 +864,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsImportDesc":
     "扫描本机 Claude Code、Codex、CodeBuddy 与 AGENTS 的技能目录，勾选后导入到 LiveAgent。",
   "settings.skillsImportOverwriteHint": "同名技能将自动备份后覆盖。",
-  "settings.skillsImportScanning": "正在扫描本地技能...",
+  "settings.skillsImportScanning": "正在扫描",
   "settings.skillsImportRescan": "重新扫描",
   "settings.skillsImportNotDetected": "未检测到",
   "settings.skillsImportEmpty": "该目录下未发现技能",

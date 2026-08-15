@@ -904,7 +904,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
   "settings.skillsImportOverwriteHint":
     "Skills with the same name are backed up, then overwritten.",
-  "settings.skillsImportScanning": "Scanning local skills...",
+  "settings.skillsImportScanning": "Scanning",
   "settings.skillsImportRescan": "Rescan",
   "settings.skillsImportNotDetected": "Not detected",
   "settings.skillsImportEmpty": "No skills found in this directory",
