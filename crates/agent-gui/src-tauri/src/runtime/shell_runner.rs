@@ -359,16 +359,56 @@ fn windows_cmd_command(cmd: &str) -> String {
 }
 
 #[cfg(windows)]
+fn normalize_windows_dir_for_compare(p: &Path) -> String {
+    p.to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_ascii_lowercase()
+}
+
+#[cfg(windows)]
 fn is_windows_system32_dir(dir: &Path) -> bool {
     let Some(root) = std::env::var_os("SystemRoot") else {
         return false;
     };
-    let normalize = |p: &Path| {
-        p.to_string_lossy()
-            .trim_end_matches(['\\', '/'])
-            .to_ascii_lowercase()
+    normalize_windows_dir_for_compare(dir)
+        == normalize_windows_dir_for_compare(&Path::new(&root).join("System32"))
+}
+
+#[cfg(windows)]
+fn is_windows_apps_alias_dir(dir: &Path) -> bool {
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+        return false;
     };
-    normalize(dir) == normalize(&Path::new(&root).join("System32"))
+    normalize_windows_dir_for_compare(dir)
+        == normalize_windows_dir_for_compare(
+            &Path::new(&local).join("Microsoft").join("WindowsApps"),
+        )
+}
+
+/// Store 应用注册的 App-Execution-Alias 是 0 字节的 reparse point，`is_file()`
+/// 对它返回 true；真正的 Git Bash 可执行文件不可能是 0 字节。
+#[cfg(windows)]
+fn is_app_execution_alias(path: &Path) -> bool {
+    fs::metadata(path).is_ok_and(|md| md.len() == 0)
+}
+
+#[cfg(windows)]
+fn find_git_bash_on_path(path_var: &std::ffi::OsStr) -> Option<PathBuf> {
+    for dir in std::env::split_paths(path_var) {
+        // System32 下的 bash.exe 是 WSL 启动器，不是 Git Bash。
+        if is_windows_system32_dir(&dir) {
+            continue;
+        }
+        // WindowsApps 下的 bash.exe 是 Store 版 WSL 的 App-Execution-Alias。
+        if is_windows_apps_alias_dir(&dir) {
+            continue;
+        }
+        let candidate = dir.join("bash.exe");
+        if candidate.is_file() && !is_app_execution_alias(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// Git Bash 解析（对标 Claude Code）：env 覆盖 → PATH → Git for Windows 默认安装路径。
@@ -387,15 +427,8 @@ fn find_git_bash() -> Option<PathBuf> {
     }
 
     let path_var = std::env::var_os("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&path_var) {
-        // System32 下的 bash.exe 是 WSL 启动器，不是 Git Bash。
-        if is_windows_system32_dir(&dir) {
-            continue;
-        }
-        let candidate = dir.join("bash.exe");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
+    if let Some(found) = find_git_bash_on_path(&path_var) {
+        return Some(found);
     }
 
     let roots = ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"]
@@ -908,6 +941,45 @@ mod tests {
             3 => assert_eq!(profiles[..], tail),
             other => panic!("unexpected windows candidate count: {other}"),
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_path_scan_skips_zero_byte_app_execution_alias() {
+        // WindowsApps 的 WSL bash.exe 别名是 0 字节 reparse point；用 0 字节
+        // 普通文件模拟“is_file() 为 true 但不是真 bash”的形态。
+        let alias_dir = tempfile::tempdir().expect("alias dir");
+        let real_dir = tempfile::tempdir().expect("real dir");
+        fs::write(alias_dir.path().join("bash.exe"), b"").unwrap();
+        fs::write(real_dir.path().join("bash.exe"), b"MZfake-git-bash").unwrap();
+
+        // 别名目录在前：应跳过 0 字节候选，命中后面的真实文件。
+        let path_var =
+            std::env::join_paths([alias_dir.path(), real_dir.path()]).expect("join paths");
+        assert_eq!(
+            super::find_git_bash_on_path(&path_var),
+            Some(real_dir.path().join("bash.exe"))
+        );
+
+        // 只有别名时不应误选，让候选链回退到 Program Files 探测 / PowerShell。
+        let alias_only = std::env::join_paths([alias_dir.path()]).expect("join paths");
+        assert_eq!(super::find_git_bash_on_path(&alias_only), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_path_scan_skips_windows_apps_alias_dir() {
+        // 即使 WindowsApps 目录下出现非 0 字节的 bash.exe，也不应从该目录选取。
+        let local_appdata = std::env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA");
+        let windows_apps = std::path::Path::new(&local_appdata)
+            .join("Microsoft")
+            .join("WindowsApps");
+        assert!(super::is_windows_apps_alias_dir(&windows_apps));
+        // 大小写与结尾斜杠不影响判定。
+        let with_slash = format!("{}\\", windows_apps.display().to_string().to_uppercase());
+        assert!(super::is_windows_apps_alias_dir(std::path::Path::new(
+            &with_slash
+        )));
     }
 
     #[cfg(windows)]
