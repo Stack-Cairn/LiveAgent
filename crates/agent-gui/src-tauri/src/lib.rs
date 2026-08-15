@@ -727,7 +727,7 @@ pub fn run() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
                 commands::system::gc_upload_staging_on_startup();
-                commands::system::gc_directory_import_staging_on_startup();
+                commands::system::start_directory_import_staging_gc();
                 app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");

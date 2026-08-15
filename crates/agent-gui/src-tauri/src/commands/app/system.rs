@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
+use std::future::Future;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -1438,91 +1439,254 @@ fn directory_import_transfers() -> &'static Mutex<HashMap<String, DirectoryImpor
 /// 网关断连/重启后 ABORT 可能永远送不到；空闲超过该时长的传输一律视为
 /// 死亡（网关侧单次往返超时默认 2 分钟，正常传输的空闲间隔远小于它）。
 const DIRECTORY_IMPORT_IDLE_TTL: Duration = Duration::from_secs(15 * 60);
-const DIRECTORY_IMPORT_GC_INTERVAL: Duration = Duration::from_secs(60);
 
-/// 回收空闲超时的传输：内存状态与暂存目录一起删，防止反复中断持续占盘。
-/// 调用方须已持有 transfers 锁。
-fn expire_stale_directory_transfers(
+/// 主动清理周期必须显著短于空闲 TTL，确保不依赖下一次目录导入才能回收。
+const DIRECTORY_IMPORT_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// activity marker 位于 staging 目录旁而不在目录内，避免与用户上传的文件
+/// 撞名或在 COMMIT 后混入最终导入目录。跨进程 GC 通过它识别仍在推进的传输。
+const DIRECTORY_IMPORT_ACTIVITY_SUFFIX: &str = ".activity";
+
+fn directory_import_activity_path(staging_root: &Path) -> PathBuf {
+    let transfer_id = staging_root
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    staging_root.with_file_name(format!("{transfer_id}{DIRECTORY_IMPORT_ACTIVITY_SUFFIX}"))
+}
+
+fn write_directory_import_activity(staging_root: &Path) -> Result<(), String> {
+    let activity_path = directory_import_activity_path(staging_root);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string();
+    fs::write(&activity_path, timestamp).map_err(|error| {
+        format!(
+            "无法更新目录导入活动标记（{}）：{error}",
+            activity_path.display()
+        )
+    })
+}
+
+fn remove_directory_import_staging_root(staging_root: &Path) -> Result<(), String> {
+    let activity_path = directory_import_activity_path(staging_root);
+    let mut errors = Vec::new();
+    if let Err(error) = fs::remove_dir_all(staging_root) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            errors.push(format!("{}: {error}", staging_root.display()));
+        }
+    }
+    if let Err(error) = fs::remove_file(&activity_path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            errors.push(format!("{}: {error}", activity_path.display()));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("无法清理目录导入暂存数据：{}", errors.join("; ")))
+    }
+}
+
+/// 从内存表摘出空闲超时的传输并返回其暂存路径。调用方须已持有锁；磁盘
+/// 删除必须在释放锁后执行，避免慢文件系统阻塞仍在正常推进的其他传输。
+fn take_stale_directory_transfers(
     transfers: &mut HashMap<String, DirectoryImportTransferState>,
     idle_ttl: Duration,
-) {
+) -> Vec<PathBuf> {
     let stale: Vec<String> = transfers
         .iter()
         .filter(|(_, transfer)| transfer.last_activity.elapsed() > idle_ttl)
         .map(|(id, _)| id.clone())
         .collect();
-    for transfer_id in stale {
-        if let Some(transfer) = transfers.remove(&transfer_id) {
-            let _ = fs::remove_dir_all(&transfer.staging_root);
-        }
-    }
+    stale
+        .into_iter()
+        .filter_map(|transfer_id| {
+            transfers
+                .remove(&transfer_id)
+                .map(|transfer| transfer.staging_root)
+        })
+        .collect()
 }
 
-/// 清理 `<base>/.staging` 下不属于任何活跃传输的陈旧目录：进程崩溃重启后
-/// 内存状态丢失，残留数据只能按 mtime 时效回收（目录名即 transfer id）。
+/// 清理 `<base>/.staging` 下不属于当前进程活跃表的陈旧目录。优先使用跨
+/// 进程 activity marker，旧版本残留再回退到目录 mtime（目录名即 transfer id）。
 fn gc_directory_import_staging_in(
     staging_base: &Path,
-    active: &HashMap<String, DirectoryImportTransferState>,
+    active: &HashSet<String>,
     now: SystemTime,
     retention: Duration,
 ) -> usize {
-    let Ok(entries) = fs::read_dir(staging_base) else {
-        return 0;
+    let entries = match fs::read_dir(staging_base) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+        Err(error) => {
+            eprintln!(
+                "failed to read directory import staging base {}: {error}",
+                staging_base.display()
+            );
+            return 0;
+        }
     };
     let mut removed = 0usize;
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                eprintln!(
+                    "failed to read an entry under directory import staging base {}: {error}",
+                    staging_base.display()
+                );
+                continue;
+            }
+        };
         let path = entry.path();
         if !path.is_dir() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(transfer_id) = name.strip_suffix(DIRECTORY_IMPORT_ACTIVITY_SUFFIX) {
+                let staging_root = staging_base.join(transfer_id);
+                let expired = entry
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .is_some_and(|age| age > retention);
+                if !staging_root.exists() && expired {
+                    match fs::remove_file(&path) {
+                        Ok(()) => removed += 1,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => eprintln!(
+                            "failed to remove orphaned directory import activity marker {}: {error}",
+                            path.display()
+                        ),
+                    }
+                }
+            }
             continue;
         }
-        if active.contains_key(&entry.file_name().to_string_lossy().into_owned()) {
+        let transfer_id = entry.file_name().to_string_lossy().into_owned();
+        if active.contains(&transfer_id) {
             continue;
         }
-        let expired = entry
-            .metadata()
+        // 跨进程活跃传输不在当前进程的内存表中；优先读取每个 chunk 都会
+        // 刷新的 marker，旧版本残留没有 marker 时再回退到目录 mtime。
+        let activity_path = directory_import_activity_path(&path);
+        let modified = fs::metadata(&activity_path)
+            .or_else(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    entry.metadata()
+                } else {
+                    Err(error)
+                }
+            })
             .and_then(|metadata| metadata.modified())
-            .ok()
+            .map_err(|error| {
+                eprintln!(
+                    "failed to read directory import activity time for {}: {error}",
+                    path.display()
+                );
+                error
+            })
+            .ok();
+        let expired = modified
             .and_then(|modified| now.duration_since(modified).ok())
             .is_some_and(|age| age > retention);
-        if expired && fs::remove_dir_all(&path).is_ok() {
-            removed += 1;
+        if expired {
+            match remove_directory_import_staging_root(&path) {
+                Ok(()) => removed += 1,
+                Err(error) => eprintln!("{error}"),
+            }
         }
     }
     removed
 }
 
-fn gc_directory_import_staging_once() {
-    let staging_bases: Vec<PathBuf> = ["workspace", "project-root"]
+fn directory_import_staging_bases() -> Vec<PathBuf> {
+    ["workspace", "project-root"]
         .into_iter()
-        .filter_map(|target| directory_import_base(target).ok())
-        .map(|base| base.join(".staging"))
-        .collect();
-    let Ok(mut transfers) = directory_import_transfers().lock() else {
-        return;
+        .filter_map(|target| match directory_import_base(target) {
+            Ok(base) => Some(base.join(".staging")),
+            Err(error) => {
+                eprintln!("failed to resolve directory import staging base: {error}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn sweep_directory_import_staging_in(
+    transfers: &Mutex<HashMap<String, DirectoryImportTransferState>>,
+    staging_bases: &[PathBuf],
+    now: SystemTime,
+    idle_ttl: Duration,
+) {
+    let (stale_roots, active) = {
+        let mut transfers = match transfers.lock() {
+            Ok(transfers) => transfers,
+            Err(_) => {
+                eprintln!("failed to lock directory import transfer state during staging sweep");
+                return;
+            }
+        };
+        let stale_roots = take_stale_directory_transfers(&mut transfers, idle_ttl);
+        let active = transfers.keys().cloned().collect::<HashSet<_>>();
+        (stale_roots, active)
     };
-    expire_stale_directory_transfers(&mut transfers, DIRECTORY_IMPORT_IDLE_TTL);
+
+    for staging_root in stale_roots {
+        if let Err(error) = remove_directory_import_staging_root(&staging_root) {
+            eprintln!("{error}");
+        }
+    }
     for staging_base in staging_bases {
-        gc_directory_import_staging_in(
-            &staging_base,
-            &transfers,
-            SystemTime::now(),
-            DIRECTORY_IMPORT_IDLE_TTL,
-        );
+        gc_directory_import_staging_in(staging_base, &active, now, idle_ttl);
     }
 }
 
-/// 启动后立即清理目录导入暂存区，并持续回收超过空闲 TTL 的内存状态与
-/// `.staging` 数据。失败只记录，绝不阻断应用运行。
-pub fn gc_directory_import_staging_on_startup() {
+fn sweep_directory_import_staging_once() {
+    let staging_bases = directory_import_staging_bases();
+    sweep_directory_import_staging_in(
+        directory_import_transfers(),
+        &staging_bases,
+        SystemTime::now(),
+        DIRECTORY_IMPORT_IDLE_TTL,
+    );
+}
+
+async fn run_periodic_directory_import_gc<F, Fut>(period: Duration, mut sweep: F)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = ()>,
+{
+    let mut interval = tokio::time::interval(period);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // interval 的首个 tick 立即就绪；启动清理已单独执行，先消费它再进入周期。
+    interval.tick().await;
+    loop {
+        interval.tick().await;
+        sweep().await;
+    }
+}
+
+async fn run_directory_import_staging_sweep() {
+    if let Err(error) =
+        tauri::async_runtime::spawn_blocking(sweep_directory_import_staging_once).await
+    {
+        eprintln!("directory import staging sweep task failed: {error}");
+    }
+}
+
+/// 启动时立即清理一次，并在进程存活期间周期回收空闲 transfer 与陈旧
+/// `.staging`。清理失败只记录，下一轮继续重试，不阻断应用启动。
+pub fn start_directory_import_staging_gc() {
     tauri::async_runtime::spawn(async {
-        loop {
-            if let Err(error) =
-                tauri::async_runtime::spawn_blocking(gc_directory_import_staging_once).await
-            {
-                eprintln!("directory import staging gc failed: {error}");
-            }
-            tokio::time::sleep(DIRECTORY_IMPORT_GC_INTERVAL).await;
-        }
+        run_directory_import_staging_sweep().await;
+        run_periodic_directory_import_gc(DIRECTORY_IMPORT_SWEEP_INTERVAL, || {
+            run_directory_import_staging_sweep()
+        })
+        .await;
     });
 }
 
@@ -1695,18 +1859,16 @@ pub(crate) fn system_import_directory_start_sync(
     })?;
     let staging_root = staging_base.join(&transfer_id);
 
-    let mut transfers = directory_import_transfers()
-        .lock()
-        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
-    // 新传输开始是回收陈旧状态的天然时机：先清内存里空闲超时的传输，再清
-    // 本目标暂存区里无主的残留目录（如上个进程崩溃留下的）。
-    expire_stale_directory_transfers(&mut transfers, DIRECTORY_IMPORT_IDLE_TTL);
-    gc_directory_import_staging_in(
-        &staging_base,
-        &transfers,
+    // START 仍保留一次即时回收，周期任务负责没有后续导入时的主动清理。
+    sweep_directory_import_staging_in(
+        directory_import_transfers(),
+        std::slice::from_ref(&staging_base),
         SystemTime::now(),
         DIRECTORY_IMPORT_IDLE_TTL,
     );
+    let mut transfers = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
     if transfers.contains_key(&transfer_id) || staging_root.exists() {
         return Err("目录导入 transfer id 已存在".to_string());
     }
@@ -1716,6 +1878,10 @@ pub(crate) fn system_import_directory_start_sync(
             staging_root.display()
         )
     })?;
+    if let Err(error) = write_directory_import_activity(&staging_root) {
+        let _ = remove_directory_import_staging_root(&staging_root);
+        return Err(error);
+    }
     transfers.insert(
         transfer_id,
         DirectoryImportTransferState {
@@ -1844,6 +2010,7 @@ pub(crate) fn system_import_directory_chunk_sync(
     file.complete = file_complete;
     transfer.received_bytes = next_received;
     transfer.last_activity = Instant::now();
+    write_directory_import_activity(&transfer.staging_root)?;
 
     let file_count = transfer
         .files
@@ -1908,7 +2075,7 @@ pub(crate) fn system_import_directory_commit_sync(
         || transfer.files.len() != transfer.expected_files
         || transfer.received_bytes != transfer.expected_bytes
     {
-        let _ = fs::remove_dir_all(&transfer.staging_root);
+        let _ = remove_directory_import_staging_root(&transfer.staging_root);
         return Err(format!(
             "目录导入不完整：文件 {complete_files}/{}, 字节 {}/{}",
             transfer.expected_files, transfer.received_bytes, transfer.expected_bytes
@@ -1920,8 +2087,18 @@ pub(crate) fn system_import_directory_commit_sync(
         .filter(|state| state.destination.is_some())
         .count();
     if written_files == 0 {
-        let _ = fs::remove_dir_all(&transfer.staging_root);
+        let _ = remove_directory_import_staging_root(&transfer.staging_root);
         return Err("上传的目录内容均无法导入".to_string());
+    }
+
+    let activity_path = directory_import_activity_path(&transfer.staging_root);
+    if let Err(error) = fs::remove_file(&activity_path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "failed to remove committed directory import activity marker {}: {error}",
+                activity_path.display()
+            );
+        }
     }
 
     let root = match move_staging_to_unique_import_root(
@@ -1931,7 +2108,7 @@ pub(crate) fn system_import_directory_commit_sync(
     ) {
         Ok(root) => root,
         Err(error) => {
-            let _ = fs::remove_dir_all(&transfer.staging_root);
+            let _ = remove_directory_import_staging_root(&transfer.staging_root);
             return Err(error);
         }
     };
@@ -1950,12 +2127,7 @@ pub(crate) fn system_import_directory_abort_sync(transfer_id: String) -> Result<
         .map_err(|_| "目录导入状态锁已损坏".to_string())?
         .remove(&transfer_id);
     if let Some(transfer) = transfer {
-        fs::remove_dir_all(&transfer.staging_root).map_err(|error| {
-            format!(
-                "无法清理目录导入暂存目录（{}）：{error}",
-                transfer.staging_root.display()
-            )
-        })?;
+        remove_directory_import_staging_root(&transfer.staging_root)?;
     }
     Ok(())
 }
@@ -2791,32 +2963,47 @@ mod tests {
     fn stale_directory_transfers_expire_with_their_staging_dirs() {
         let temp = tempdir().expect("create temp dir");
         let base = temp.path().join("imports");
-        let stale_staging = base.join(".staging").join("stale-transfer");
-        let live_staging = base.join(".staging").join("live-transfer");
+        let staging_base = base.join(".staging");
+        let stale_staging = staging_base.join("stale-transfer");
+        let live_staging = staging_base.join("live-transfer");
         fs::create_dir_all(&stale_staging).expect("create stale staging");
         fs::create_dir_all(&live_staging).expect("create live staging");
+        write_directory_import_activity(&stale_staging).expect("write stale activity");
+        write_directory_import_activity(&live_staging).expect("write live activity");
 
-        // 局部 map 而非全局单例：全局表被并行测试共享，零 TTL 扫描会误伤。
-        let mut transfers = HashMap::new();
-        transfers.insert(
+        // 局部表避免并行测试共享全局单例；直接执行一次 sweep，验证无需下一次
+        // START 或进程重启也能同时释放内存状态、暂存目录和 activity marker。
+        let transfers = Mutex::new(HashMap::new());
+        let mut states = transfers.lock().expect("lock local transfers");
+        states.insert(
             "stale-transfer".to_string(),
-            directory_transfer_state_for_test(&base, stale_staging.clone()),
-        );
-        std::thread::sleep(Duration::from_millis(5));
-        transfers.insert(
-            "live-transfer".to_string(),
             DirectoryImportTransferState {
-                last_activity: Instant::now() + Duration::from_secs(3600),
-                ..directory_transfer_state_for_test(&base, live_staging.clone())
+                last_activity: Instant::now()
+                    .checked_sub(Duration::from_secs(10))
+                    .expect("stale instant"),
+                ..directory_transfer_state_for_test(&base, stale_staging.clone())
             },
         );
+        states.insert(
+            "live-transfer".to_string(),
+            directory_transfer_state_for_test(&base, live_staging.clone()),
+        );
+        drop(states);
 
-        expire_stale_directory_transfers(&mut transfers, Duration::ZERO);
+        sweep_directory_import_staging_in(
+            &transfers,
+            &[staging_base],
+            SystemTime::now(),
+            Duration::from_secs(5),
+        );
 
-        assert!(!transfers.contains_key("stale-transfer"));
+        let states = transfers.lock().expect("lock swept transfers");
+        assert!(!states.contains_key("stale-transfer"));
         assert!(!stale_staging.exists());
-        assert!(transfers.contains_key("live-transfer"));
+        assert!(!directory_import_activity_path(&stale_staging).exists());
+        assert!(states.contains_key("live-transfer"));
         assert!(live_staging.exists());
+        assert!(directory_import_activity_path(&live_staging).exists());
     }
 
     #[test]
@@ -2828,13 +3015,10 @@ mod tests {
         let active_staging = staging_base.join("active-transfer");
         fs::create_dir_all(&orphan).expect("create orphan staging");
         fs::write(orphan.join("partial.bin"), b"data").expect("write orphan residue");
+        write_directory_import_activity(&orphan).expect("write orphan activity");
         fs::create_dir_all(&active_staging).expect("create active staging");
 
-        let mut active = HashMap::new();
-        active.insert(
-            "active-transfer".to_string(),
-            directory_transfer_state_for_test(&base, active_staging.clone()),
-        );
+        let active = HashSet::from(["active-transfer".to_string()]);
 
         // 用推后的 now 模拟目录已陈旧，避免在测试里改 mtime。
         let aged_now = SystemTime::now() + DIRECTORY_IMPORT_IDLE_TTL + Duration::from_secs(60);
@@ -2846,11 +3030,16 @@ mod tests {
         );
         assert_eq!(removed, 1);
         assert!(!orphan.exists());
+        assert!(!directory_import_activity_path(&orphan).exists());
         assert!(active_staging.exists());
 
-        // 未超过保留期的无主目录必须保留（可能属于并行实例的活跃传输）。
-        let fresh_orphan = staging_base.join("fresh-orphan");
-        fs::create_dir_all(&fresh_orphan).expect("create fresh orphan");
+        // 当前进程内没有状态、但 activity marker 仍新鲜的目录可能属于另一个
+        // LiveAgent 实例，必须保留；没有 marker 的新鲜旧版本目录也同样保留。
+        let foreign_active = staging_base.join("foreign-active");
+        fs::create_dir_all(&foreign_active).expect("create foreign active staging");
+        write_directory_import_activity(&foreign_active).expect("write foreign activity");
+        let fresh_legacy = staging_base.join("fresh-legacy");
+        fs::create_dir_all(&fresh_legacy).expect("create fresh legacy staging");
         let removed = gc_directory_import_staging_in(
             &staging_base,
             &active,
@@ -2858,17 +3047,31 @@ mod tests {
             DIRECTORY_IMPORT_IDLE_TTL,
         );
         assert_eq!(removed, 0);
-        assert!(fresh_orphan.exists());
+        assert!(foreign_active.exists());
+        assert!(fresh_legacy.exists());
+    }
 
-        let removed = gc_directory_import_staging_in(
-            &staging_base,
-            &active,
-            SystemTime::now() + DIRECTORY_IMPORT_IDLE_TTL + DIRECTORY_IMPORT_GC_INTERVAL,
-            DIRECTORY_IMPORT_IDLE_TTL,
-        );
-        assert_eq!(removed, 1);
-        assert!(!fresh_orphan.exists());
-        assert!(active_staging.exists());
+    #[tokio::test]
+    async fn directory_import_gc_runs_periodically_without_external_events() {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let mut sender = Some(sender);
+        let task = tokio::spawn(run_periodic_directory_import_gc(
+            Duration::from_millis(10),
+            move || {
+                let sender = sender.take();
+                async move {
+                    if let Some(sender) = sender {
+                        let _ = sender.send(());
+                    }
+                }
+            },
+        ));
+
+        tokio::time::timeout(Duration::from_secs(1), receiver)
+            .await
+            .expect("periodic directory import GC did not run")
+            .expect("periodic directory import GC signal dropped");
+        task.abort();
     }
 
     #[test]
