@@ -367,6 +367,22 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     }
   }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir, setErrorMessage]);
 
+  const handleDropWorkspaceFolders = useCallback(
+    async (paths: string[]) => {
+      try {
+        const folders = await invoke<string[]>("system_resolve_dropped_workspace_folders", {
+          paths,
+        });
+        for (const path of folders) {
+          activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
+        }
+      } catch (error) {
+        setErrorMessage(asErrorMessage(error, "添加拖入的工作空间失败"));
+      }
+    },
+    [activateWorkspaceProject, setErrorMessage],
+  );
+
   const handleCloneWorkspaceProject = useCallback(
     async (remoteUrl: string, parent: string, name: string, branch: string) => {
       await startWorkspaceCloneTask({
@@ -669,6 +685,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,
     handleOpenWorkspaceFolder,
+    handleDropWorkspaceFolders,
     handleCloneWorkspaceProject,
     handleOpenClonedWorkspace,
     handleOpenWorktree,

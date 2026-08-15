@@ -17,6 +17,8 @@ workspace
 !crates/agent-gui/src-tauri/src/commands/workspace/**
 !crates/agent-gui/src/pages/chat/workspace/
 !crates/agent-gui/src/pages/chat/workspace/**
+!crates/agent-gui/test/workspace/
+!crates/agent-gui/test/workspace/**
 cert/
 node_modules
 dist

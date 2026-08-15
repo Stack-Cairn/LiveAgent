@@ -548,6 +548,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.modelSettings": "模型参数",
   "settings.modelName": "模型名称",
   "settings.newModelBadge": "新增",
+  "settings.estimatedLimitsBadge": "估计值",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
   "settings.positiveIntegerRequired": "请输入大于 0 的整数",

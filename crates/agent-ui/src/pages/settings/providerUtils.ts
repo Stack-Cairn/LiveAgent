@@ -555,11 +555,14 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
     const ownedBy =
       (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
+    const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
+    const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
     out.push({
       id,
       ...(ownedBy ? { ownedBy } : {}),
-      contextWindow: normalizePositiveInteger(obj.inputTokenLimit) ?? draft.contextWindow,
-      maxOutputToken: normalizePositiveInteger(obj.outputTokenLimit) ?? draft.maxOutputToken,
+      contextWindow: contextWindow ?? draft.contextWindow,
+      maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
+      limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
     });
   }
 
@@ -583,11 +586,24 @@ export function mergeFetchedModels(
       model.contextWindow === 1_000_000 &&
       existingModel.contextWindow < 1_000_000 &&
       Math.round(existingModel.contextWindow / 1_000) === 1_000;
+    // 供应商本次响应自带真实限额字段（provider 来源）：比落库的目录/兜底值
+    // 更新鲜，直接采信；用户手改（user）来源任何时候都不被自动覆盖。
+    const shouldAdoptFreshProviderLimits =
+      existingModel !== undefined &&
+      model.limitsSource === "provider" &&
+      existingModel.limitsSource !== "user";
     merged.push(
       existingModel
         ? {
             ...existingModel,
             ...(shouldNormalizeOneMillion ? { contextWindow: model.contextWindow } : {}),
+            ...(shouldAdoptFreshProviderLimits
+              ? {
+                  contextWindow: model.contextWindow,
+                  maxOutputToken: model.maxOutputToken,
+                  limitsSource: "provider",
+                }
+              : {}),
             ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
           }
         : model,

@@ -16,6 +16,13 @@ export type WorkspaceProjectRemoveOptions = {
   deleteBranch?: boolean;
 };
 
+export type WorkspaceFolderDropHandlers = {
+  onDragEnter: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
+};
+
 export type ChatHistorySidebarProps = {
   items: readonly SidebarConversation[];
   currentConversationId: string;
@@ -54,6 +61,12 @@ export type ChatHistorySidebarProps = {
   missingProjectPathKeys: ReadonlySet<string>;
   runningProjectPathKeys: ReadonlySet<string>;
   projectsCollapsed?: boolean;
+  workspaceFolderDropActive?: boolean;
+  /**
+   * Web 端把 DOM 拖放事件接到工作空间分区（桌面端走 Tauri 原生事件与坐标
+   * 命中，不传此项）。四个回调整体可选，由宿主决定拖入行为。
+   */
+  workspaceFolderDropHandlers?: WorkspaceFolderDropHandlers;
   recentCollapsed?: boolean;
   onProjectsCollapsedChange?: (collapsed: boolean) => void;
   onRecentCollapsedChange?: (collapsed: boolean) => void;
@@ -114,6 +127,8 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
   | "activeProjectId"
   | "missingProjectPathKeys"
   | "projectsCollapsed"
+  | "workspaceFolderDropActive"
+  | "workspaceFolderDropHandlers"
   | "recentCollapsed"
   | "onProjectsCollapsedChange"
   | "onRecentCollapsedChange"
@@ -137,6 +152,8 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
 
 type OptionalWorkspaceSourceKey =
   | "workspaceProjectGroups"
+  | "workspaceFolderDropActive"
+  | "workspaceFolderDropHandlers"
   | "onCreateWorkspaceGroup"
   | "onRenameWorkspaceGroup"
   | "onDeleteWorkspaceGroup"
@@ -280,6 +297,8 @@ export function buildChatHistorySidebarWorkspaceProps(
     missingProjectPathKeys: source.missingProjectPathKeys,
     runningProjectPathKeys,
     projectsCollapsed: source.projectsCollapsed,
+    workspaceFolderDropActive: source.workspaceFolderDropActive,
+    workspaceFolderDropHandlers: source.workspaceFolderDropHandlers,
     recentCollapsed: source.recentCollapsed,
     onProjectsCollapsedChange: source.onProjectsCollapsedChange,
     onRecentCollapsedChange: source.onRecentCollapsedChange,

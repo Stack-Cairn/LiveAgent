@@ -156,6 +156,14 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   // Sanity: the base surface is otherwise intact.
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("mcp_docs_search"));
+  assert.deepEqual(registry.tools.find((tool) => tool.name === "Read").constrainedSampling, {
+    type: "json_schema",
+    strict: "prefer",
+  });
+  assert.equal(
+    registry.tools.find((tool) => tool.name === "mcp_docs_search").constrainedSampling,
+    undefined,
+  );
 });
 
 test("registry with a subagent runtime exposes Agent and the parent SendMessage", async () => {
@@ -168,6 +176,10 @@ test("registry with a subagent runtime exposes Agent and the parent SendMessage"
   assert.equal(registry.metadataByName.get("Agent").isReadOnly, false);
   assert.equal(registry.metadataByName.get("SendMessage").isReadOnly, true);
   assert.ok(registry.hasTool("agent"));
+  assert.deepEqual(
+    registry.tools.find((tool) => tool.name === "Agent").constrainedSampling,
+    { type: "json_schema", strict: "prefer" },
+  );
 });
 
 test("Agent tool description embeds the hydrated roster and enabled templates", async () => {

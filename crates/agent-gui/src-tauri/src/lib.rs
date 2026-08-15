@@ -245,6 +245,8 @@ macro_rules! app_invoke_handler {
             commands::git::git_stash_push,
             commands::git::git_stash_pop,
             commands::system::system_pick_folder,
+            commands::system::system_resolve_dropped_workspace_folders,
+            commands::system::system_classify_dropped_paths,
             commands::system::system_pick_file,
             commands::system::system_save_preview_file,
             commands::system::system_create_project_folder,
@@ -725,6 +727,7 @@ pub fn run() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
                 commands::system::gc_upload_staging_on_startup();
+                commands::system::start_directory_import_staging_gc();
                 app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");

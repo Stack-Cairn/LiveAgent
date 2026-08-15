@@ -167,41 +167,11 @@ test("cross-provider lookup resolves models configured under a foreign provider"
   assert.equal(catalog.findCatalogModelAcrossProviders("longcat-2.0")?.id, "LongCat-2.0");
 });
 
-test("repairStaleCrossProviderLimits replaces only stale provider-fallback pairs", () => {
-  // grok-4.5 挂在 anthropic 类型下、存量恰为 claude_code 兜底对：判为跨供应商
-  // 回查上线前落库的坏默认值，替换为目录真实限额。
-  assert.deepEqual(
-    catalog.repairStaleCrossProviderLimits("claude_code", "grok-4.5", {
-      contextWindow: 200_000,
-      maxOutputToken: 32_000,
-    }),
-    { contextWindow: 500_000, maxOutputToken: 32_000 },
-  );
-  // 任一值偏离兜底对 = 用户显式配置，原样保留。
-  assert.deepEqual(
-    catalog.repairStaleCrossProviderLimits("claude_code", "grok-4.5", {
-      contextWindow: 200_000,
-      maxOutputToken: 31_000,
-    }),
-    { contextWindow: 200_000, maxOutputToken: 31_000 },
-  );
-  // 本供应商目录可命中的模型绝不跨供应商替换（claude-opus-4-1 真实限额恰为兜底对）。
-  assert.deepEqual(
-    catalog.repairStaleCrossProviderLimits("claude_code", "claude-opus-4-1", {
-      contextWindow: 200_000,
-      maxOutputToken: 32_000,
-    }),
-    { contextWindow: 200_000, maxOutputToken: 32_000 },
-  );
-  // 全目录未收录：兜底对本来就是正确默认值，保持不动。
-  assert.deepEqual(
-    catalog.repairStaleCrossProviderLimits("xai", "relay-custom-model", {
-      contextWindow: 258_000,
-      maxOutputToken: 142_000,
-    }),
-    { contextWindow: 258_000, maxOutputToken: 142_000 },
-  );
-});
+// repairStaleCrossProviderLimits（指纹匹配式的坏默认值修复）已被"方案乙"的
+// limitsSource 来源标记取代：settings/index.ts 的 normalizeProviderModelConfig
+// 按存量的 catalog/fallback/provider/user 来源判断是否重解析，不再靠数值指纹
+// 猜测。对应的来源感知测试见 crates/agent-gui/test/settings/normalization.test.mjs
+// 里的 "limitsSource" 相关用例。
 
 test("resolveModelLimits returns repaired catalog limits and undefined on miss", () => {
   // grok-4.5 是本次重构的起因：上游记 500K/500K，快照里已修复为 500K/32K。

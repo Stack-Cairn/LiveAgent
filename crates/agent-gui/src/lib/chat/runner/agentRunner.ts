@@ -1,4 +1,4 @@
-import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentContext, type AgentTool } from "@earendil-works/pi-agent-core";
 import type {
   AssistantMessage,
   Context,
@@ -824,7 +824,6 @@ export async function runAssistantWithTools(params: {
       params.additionalRoots,
     );
     let currentSystemPrompt = params.context.systemPrompt;
-    let pendingTurnOverridePromise: Promise<TurnContextOverride> | null = null;
     let emittedBaselineIndex = params.context.messages.length;
     let latestAgentEndMessages: Message[] = [];
     let agentTools: AgentTool<any>[] = [];
@@ -1017,15 +1016,10 @@ export async function runAssistantWithTools(params: {
       }
     }
 
-    async function consumePendingTurnOverride(): Promise<TurnContextOverride> {
-      const pending = pendingTurnOverridePromise;
-      if (!pending) return null;
-      pendingTurnOverridePromise = null;
-      return pending;
-    }
-
-    function applyTurnContextOverride(override: Exclude<TurnContextOverride, null>) {
-      if (!agent) return;
+    function applyTurnContextOverride(
+      override: Exclude<TurnContextOverride, null>,
+    ): AgentContext | undefined {
+      if (!agent) return undefined;
       currentSystemPrompt = override.context.systemPrompt;
       agent.state.systemPrompt = buildSystemPrompt(currentSystemPrompt, toolsSuffix);
       agent.state.messages = override.context.messages.slice();
@@ -1035,6 +1029,11 @@ export async function runAssistantWithTools(params: {
         override.context.messages.length - override.emittedMessages.length,
       );
       latestAgentEndMessages = [];
+      return {
+        systemPrompt: agent.state.systemPrompt,
+        messages: agent.state.messages.slice(),
+        tools: agentTools,
+      };
     }
 
     const visibleAgentTools: AgentTool<any>[] = llmTools.map((tool) => ({
@@ -1342,7 +1341,7 @@ export async function runAssistantWithTools(params: {
     // model would see a schema error blaming its own call. Rewrite such tool
     // results into the truthful transport-error teaching before the next turn.
     const reconcileTruncatedToolResults = () => {
-      if (incompleteToolCallArguments.size === 0) return;
+      if (incompleteToolCallArguments.size === 0) return false;
       const messages = getAgentMessages(agent);
       let changed = false;
       const next = messages.map((message) => {
@@ -1362,6 +1361,7 @@ export async function runAssistantWithTools(params: {
       if (changed && agent) {
         agent.state.messages = next;
       }
+      return changed;
     };
 
     agent = new Agent({
@@ -1439,13 +1439,55 @@ export async function runAssistantWithTools(params: {
         }
         return undefined;
       },
-      transformContext: async (_messages, _signal) => {
-        const override = await consumePendingTurnOverride();
-        if (override) {
-          applyTurnContextOverride(override);
+      // 0.84 起 pi-agent-core 用 prepareNextTurnWithContext 取代了原先靠
+      // transformContext 顺带做的 turn 间改写。二者的关键差异:transformContext
+      // 拿不到 loop 的 context,只能读回 agent.state.messages;而 loop 的
+      // currentContext.messages 是 createContextSnapshot() 切出的**另一个数组**,
+      // agent.state 上的改写不会自动回流。所以这里必须显式把改写后的消息作为
+      // context 返回,否则 message_end 里对 assistant 的规范化(工具名归一、
+      // hostedSearch 块回填、seed 工具调用去重)和截断结果重写全部只活在
+      // agent.state,下一轮请求仍按旧快照发出。
+      prepareNextTurnWithContext: async ({ message, toolResults, context }, signal) => {
+        const reconciled = reconcileTruncatedToolResults();
+        // agent.state 是 message_end 规范化后的权威副本;只要它与 loop 快照长度
+        // 一致,就以它为准(内容可能已被就地替换,长度相同不代表内容相同)。
+        const stateMessages = getAgentMessages(agent);
+        const currentContext: AgentContext =
+          agent && stateMessages.length === context.messages.length
+            ? { ...context, messages: stateMessages.slice() }
+            : reconciled
+              ? { ...context, messages: agent ? stateMessages.slice() : context.messages }
+              : context;
+        const contextChanged = currentContext !== context;
+        if (
+          !params.onBeforeNextTurn ||
+          message.stopReason !== "toolUse" ||
+          toolResults.length === 0
+        ) {
+          return contextChanged ? { context: currentContext } : undefined;
         }
-        reconcileTruncatedToolResults();
-        return getAgentMessages(agent).slice();
+
+        const runtimeMessages = currentContext.messages as Message[];
+        const override = await params.onBeforeNextTurn({
+          round: currentRound,
+          assistant: message,
+          toolResults,
+          runtimeContext: {
+            systemPrompt: currentSystemPrompt,
+            messages: runtimeMessages.slice(),
+            tools: llmTools,
+          },
+          emittedMessages:
+            emittedBaselineIndex <= 0
+              ? runtimeMessages.slice()
+              : runtimeMessages.slice(emittedBaselineIndex),
+          signal: signal ?? params.signal,
+        });
+        if (!override) {
+          return contextChanged ? { context: currentContext } : undefined;
+        }
+        const nextContext = applyTurnContextOverride(override);
+        return nextContext ? { context: nextContext } : undefined;
       },
     });
 
@@ -1611,35 +1653,6 @@ export async function runAssistantWithTools(params: {
             }
           }
           break;
-        case "turn_end": {
-          const toolResults = event.toolResults.filter(
-            (message): message is ToolResultMessage => message.role === "toolResult",
-          );
-          if (
-            params.onBeforeNextTurn &&
-            event.message.role === "assistant" &&
-            event.message.stopReason === "toolUse" &&
-            toolResults.length > 0
-          ) {
-            const runtimeMessages = getAgentMessages(agent);
-            const runtimeSnapshot: Context = {
-              systemPrompt: currentSystemPrompt,
-              messages: runtimeMessages.slice(),
-              tools: llmTools,
-            };
-            const emittedSnapshot = getMessagesSinceBaseline(agent, emittedBaselineIndex);
-            const assistant = event.message;
-            pendingTurnOverridePromise = params.onBeforeNextTurn({
-              round: currentRound,
-              assistant,
-              toolResults,
-              runtimeContext: runtimeSnapshot,
-              emittedMessages: emittedSnapshot,
-              signal: params.signal,
-            });
-          }
-          break;
-        }
         case "tool_execution_start": {
           nativeWebSearchStatusController.pause();
           const toolCall =
@@ -1697,12 +1710,6 @@ export async function runAssistantWithTools(params: {
         throwIfRunnerCancelled(params.signal);
         await agent.continue();
         throwIfRunnerCancelled(params.signal);
-
-        const override = await consumePendingTurnOverride();
-        throwIfRunnerCancelled(params.signal);
-        if (override) {
-          applyTurnContextOverride(override);
-        }
 
         const recoveredSeedTurn = pendingRecoveredSeedTurnRef.current;
         pendingRecoveredSeedTurnRef.current = null;
@@ -1762,7 +1769,7 @@ export async function runAssistantWithTools(params: {
 
         if (params.onBeforeNextTurn) {
           throwIfRunnerCancelled(params.signal);
-          pendingTurnOverridePromise = params.onBeforeNextTurn({
+          const override = await params.onBeforeNextTurn({
             round: recoveredSeedRound,
             assistant: recoveredSeedAssistant,
             toolResults: syntheticToolResults,
@@ -1774,6 +1781,10 @@ export async function runAssistantWithTools(params: {
             emittedMessages: getMessagesSinceBaseline(agent, emittedBaselineIndex),
             signal: params.signal,
           });
+          throwIfRunnerCancelled(params.signal);
+          if (override) {
+            applyTurnContextOverride(override);
+          }
         }
       }
 
