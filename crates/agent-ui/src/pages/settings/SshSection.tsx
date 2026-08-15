@@ -40,6 +40,7 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { NumberInput } from "../../components/ui/number-input";
 import { Textarea } from "../../components/ui/textarea";
 import { createUuid } from "../../lib/shared/id";
 import {
@@ -355,13 +356,16 @@ function SshHostModal(props: {
               <Label htmlFor="ssh-port" className="text-xs font-medium text-muted-foreground">
                 {t("settings.sshPort")}
               </Label>
-              <Input
+              <NumberInput
                 id="ssh-port"
-                type="number"
                 min={1}
                 max={65535}
-                value={port}
-                onChange={(event) => setPort(event.currentTarget.value)}
+                step={1}
+                snapOnStep
+                value={port.trim() ? Number(port) : null}
+                incrementLabel={`${t("settings.sshPort")} +`}
+                decrementLabel={`${t("settings.sshPort")} -`}
+                onValueChange={(value) => setPort(value === null ? "" : String(value))}
               />
             </div>
           </div>
@@ -616,13 +620,16 @@ function SshHostModal(props: {
                     >
                       {t("settings.sshProxyPort")}
                     </Label>
-                    <Input
+                    <NumberInput
                       id="ssh-proxy-port"
-                      type="number"
                       min={1}
                       max={65535}
-                      value={proxyPort}
-                      onChange={(event) => setProxyPort(event.currentTarget.value)}
+                      step={1}
+                      snapOnStep
+                      value={proxyPort.trim() ? Number(proxyPort) : null}
+                      incrementLabel={`${t("settings.sshProxyPort")} +`}
+                      decrementLabel={`${t("settings.sshProxyPort")} -`}
+                      onValueChange={(value) => setProxyPort(value === null ? "" : String(value))}
                     />
                   </div>
                   <div className="space-y-1.5">

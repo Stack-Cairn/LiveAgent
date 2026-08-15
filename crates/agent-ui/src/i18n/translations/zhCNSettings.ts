@@ -40,6 +40,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "记忆配额已满：{scope} 已用 {used}/{limit}，请立即整理或删除记忆。",
   "settings.memoryRefresh": "刷新",
+  "settings.memoryRefreshing": "正在刷新",
+  "settings.memoryRefreshComplete": "刷新完成",
+  "settings.memoryRefreshFailed": "刷新失败",
   "settings.memoryOpenSettings": "记忆设置",
   "settings.memorySettingsTitle": "记忆设置",
   "settings.memorySettingsClose": "关闭记忆设置",

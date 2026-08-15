@@ -28,8 +28,8 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
+import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
   SelectContent,
@@ -67,37 +67,32 @@ function FailoverNumberField(props: {
   onCommit: (value: number) => void;
 }) {
   const { label, hint, value, min, max, onCommit } = props;
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState<number | null>(value);
 
   useEffect(() => {
-    setDraft(String(value));
+    setDraft(value);
   }, [value]);
 
-  function commitDraft() {
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(value));
-      return;
-    }
-    const next = Math.min(max, Math.max(min, Math.round(parsed)));
-    setDraft(String(next));
+  function commitDraft(nextValue: number | null) {
+    const next = nextValue ?? value;
+    setDraft(next);
     if (next !== value) onCommit(next);
   }
 
   return (
     <div className="space-y-1.5">
       <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
-      <Input
-        type="number"
+      <NumberInput
+        aria-label={label}
+        incrementLabel={`${label} +`}
+        decrementLabel={`${label} -`}
         min={min}
         max={max}
+        step={1}
+        snapOnStep
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commitDraft}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commitDraft();
-        }}
-        className="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+        onValueChange={setDraft}
+        onValueCommitted={commitDraft}
       />
       <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
     </div>
@@ -369,19 +364,10 @@ function CustomSettingsDrawer(
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         variant="inset"
-        className="max-w-none border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60"
+        className="max-w-none border-border bg-background sm:max-w-[440px]"
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/10"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-white/5 dark:from-white/[0.02] dark:via-transparent dark:to-transparent"
-        />
-
         <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
           <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
             <SheetTitle className="text-[17px] leading-tight tracking-tight text-foreground/95">

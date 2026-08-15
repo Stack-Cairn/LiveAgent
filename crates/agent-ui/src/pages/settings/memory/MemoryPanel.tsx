@@ -19,7 +19,6 @@ import {
   Settings2,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
-import { Button } from "@liveagent/ui/components/ui/button";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -29,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
@@ -64,6 +64,9 @@ const EMPTY_CREATE_DRAFT: MemoryCreateDraft = {
   body: "",
 };
 
+const MEMORY_REFRESH_FEEDBACK_MS = 600;
+const MEMORY_REFRESH_RESULT_MS = 1_200;
+
 export function MemoryPanel(props: {
   workdir?: string;
   settings: AppSettings;
@@ -76,6 +79,9 @@ export function MemoryPanel(props: {
   const [showCreate, setShowCreate] = useState(false);
   const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "success" | "error">(
+    "idle",
+  );
   const [draft, setDraft] = useState<MemoryCreateDraft>(EMPTY_CREATE_DRAFT);
   const {
     entries,
@@ -109,6 +115,18 @@ export function MemoryPanel(props: {
       })),
     [props.settings],
   );
+
+  async function handleRefresh() {
+    if (refreshState !== "idle") return;
+    setRefreshState("refreshing");
+    const [refreshed] = await Promise.all([
+      reload(),
+      new Promise<void>((resolve) => window.setTimeout(resolve, MEMORY_REFRESH_FEEDBACK_MS)),
+    ]);
+    setRefreshState(refreshed ? "success" : "error");
+    await new Promise<void>((resolve) => window.setTimeout(resolve, MEMORY_REFRESH_RESULT_MS));
+    setRefreshState("idle");
+  }
 
   const globalEntries = useMemo(() => {
     return entries
@@ -266,9 +284,37 @@ export function MemoryPanel(props: {
               >
                 {t(quotaStatusLabelKey(quotaStatus))}
               </div>
-              <Button variant="outline" size="sm" onClick={() => reload()} disabled={loading}>
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                {t("settings.memoryRefresh")}
+              <Button
+                variant="outline"
+                size="sm"
+                className={`min-w-[112px] disabled:opacity-100 ${
+                  refreshState === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300"
+                    : refreshState === "error"
+                      ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
+                      : ""
+                }`}
+                onClick={() => void handleRefresh()}
+                disabled={loading || refreshState !== "idle"}
+              >
+                {refreshState === "success" ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : refreshState === "error" ? (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                ) : (
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${loading || refreshState === "refreshing" ? "animate-spin" : ""}`}
+                  />
+                )}
+                <span aria-live="polite">
+                  {refreshState === "success"
+                    ? t("settings.memoryRefreshComplete")
+                    : refreshState === "error"
+                      ? t("settings.memoryRefreshFailed")
+                      : loading || refreshState === "refreshing"
+                        ? t("settings.memoryRefreshing")
+                        : t("settings.memoryRefresh")}
+                </span>
               </Button>
               <Button
                 variant="outline"

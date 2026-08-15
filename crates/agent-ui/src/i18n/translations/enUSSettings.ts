@@ -43,6 +43,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "Memory quota exhausted: {scope} at {used}/{limit}. Organize or delete memories now.",
   "settings.memoryRefresh": "Refresh",
+  "settings.memoryRefreshing": "Refreshing…",
+  "settings.memoryRefreshComplete": "Refreshed",
+  "settings.memoryRefreshFailed": "Refresh failed",
   "settings.memoryOpenSettings": "Memory settings",
   "settings.memorySettingsTitle": "Memory settings",
   "settings.memorySettingsClose": "Close memory settings",

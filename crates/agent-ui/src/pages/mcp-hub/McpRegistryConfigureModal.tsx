@@ -12,6 +12,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
+import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
   SelectContent,
@@ -363,12 +364,18 @@ export function McpRegistryConfigureModal(props: {
                   >
                     {t("mcpHub.timeout")}
                   </Label>
-                  <Input
+                  <NumberInput
                     id="mcp-store-config-timeout"
-                    type="number"
-                    value={draft.timeoutMs}
+                    min={1}
+                    step={1}
+                    snapOnStep
+                    value={draft.timeoutMs.trim() ? Number(draft.timeoutMs) : null}
                     placeholder="60000"
-                    onChange={(event) => updateDraft({ timeoutMs: event.currentTarget.value })}
+                    incrementLabel={`${t("mcpHub.timeout")} +`}
+                    decrementLabel={`${t("mcpHub.timeout")} -`}
+                    onValueChange={(value) =>
+                      updateDraft({ timeoutMs: value === null ? "" : String(value) })
+                    }
                   />
                 </div>
               </div>

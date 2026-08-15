@@ -31,6 +31,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
+import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
   SelectContent,
@@ -329,9 +330,9 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
     }
   }
 
-  function commitProxyPortDraft() {
-    if (proxyPortDraft !== null) {
-      const parsed = Number.parseInt(proxyPortDraft, 10);
+  function commitProxyPortDraft(nextDraft = proxyPortDraft) {
+    if (nextDraft !== null) {
+      const parsed = Number.parseInt(nextDraft, 10);
       patchSystemProxy({ port: Number.isNaN(parsed) ? 0 : parsed });
       setProxyPortDraft(null);
     }
@@ -524,16 +525,32 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                   >
                     {t("settings.systemProxyPort")}
                   </Label>
-                  <Input
+                  <NumberInput
                     id="system-proxy-port"
                     className="rounded-lg"
-                    type="number"
                     min={1}
                     max={65535}
-                    value={proxyPortDraft ?? (systemProxy.port > 0 ? String(systemProxy.port) : "")}
+                    step={1}
+                    snapOnStep
+                    value={
+                      (
+                        proxyPortDraft ?? (systemProxy.port > 0 ? String(systemProxy.port) : "")
+                      ).trim()
+                        ? Number(
+                            proxyPortDraft ??
+                              (systemProxy.port > 0 ? String(systemProxy.port) : ""),
+                          )
+                        : null
+                    }
                     placeholder={systemProxy.type === "socks5" ? "1080" : "7890"}
-                    onChange={(event) => setProxyPortDraft(event.currentTarget.value)}
-                    onBlur={commitProxyPortDraft}
+                    incrementLabel={`${t("settings.systemProxyPort")} +`}
+                    decrementLabel={`${t("settings.systemProxyPort")} -`}
+                    onValueChange={(value) =>
+                      setProxyPortDraft(value === null ? "" : String(value))
+                    }
+                    onValueCommitted={(value) =>
+                      commitProxyPortDraft(value === null ? "" : String(value))
+                    }
                   />
                 </div>
               </div>
