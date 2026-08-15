@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import katex from "katex";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -7,6 +8,19 @@ const loader = createTsModuleLoader();
 const { normalizeLatexDelimiters } = loader.loadModule(
   "@liveagent/ui/lib/normalizeLatexDelimiters.ts",
 );
+
+test("uses the workspace-pinned KaTeX runtime and prefixed 0.18 CSS classes", () => {
+  assert.equal(katex.version, "0.18.4");
+  assert.match(katex.renderToString("x^2"), /class="katex-base"/);
+});
+
+test("renders invalid environment names as error markup when errors are non-throwing", () => {
+  let html = "";
+  assert.doesNotThrow(() => {
+    html = katex.renderToString(String.raw`\begin{\pmatrix}`, { throwOnError: false });
+  });
+  assert.match(html, /class="katex-error"/);
+});
 
 test("normalizes LaTeX display and inline delimiters for Streamdown math", () => {
   const content = String.raw`2. 拉普拉斯形式

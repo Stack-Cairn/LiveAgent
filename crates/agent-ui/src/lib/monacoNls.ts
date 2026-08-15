@@ -26,7 +26,7 @@ export async function preparePreferredMonacoNlsLocale() {
   if (localeLocked || configuredLocale === targetLocale) return;
 
   if (targetLocale === "zh-CN") {
-    zhCnMessagesPromise ??= import("monaco-editor/esm/nls.messages.zh-cn.js").then(() => undefined);
+    zhCnMessagesPromise ??= import("monaco-editor/nls/lang/zh-cn.js").then(() => undefined);
     await zhCnMessagesPromise;
     if (localeLocked) return;
     if (preferredLocale !== targetLocale) {
