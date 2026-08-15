@@ -393,7 +393,11 @@ async function runExtractionRound(params: {
     runtime: params.model.runtime,
     context,
     workdir: params.workdir,
-    sessionId: `${params.sessionId}:memory:${params.conversationId}:${Date.now()}`,
+    // 稳定 sessionId:codex 路径上它就是 prompt_cache_key(缓存分片路由)。同一
+    // 会话的多次抽取共享 system prompt / 工具定义 / 对话前缀,带时间戳会每次换
+    // 分片、全量 miss;去掉后后续抽取直接吃前一次的前缀。诊断侧的 prefixShape
+    // LRU 也不再被一次性键挤占(prompt-cache-stability.md 残留风险 #2)。
+    sessionId: `${params.sessionId}:memory:${params.conversationId}`,
     tools,
     executeToolCall,
     onTurnStart: (round) => {

@@ -25,11 +25,23 @@ import { MEMORY_INDEX_HIDDEN_LINE_MARKER, MEMORY_PROMPT_TRUNCATION_SUFFIX } from
 export const MEMORY_TURN_UPDATE_MAX_ENTRIES = 12;
 
 /**
- * 单个会话最多挂出的增量块数量。到达上限后转重冻结:fresh 快照重新进 system
- * prompt、增量额度归零。付出一次前缀重建,换「变化不静默丢失」—— 旧方案只推进
- * 指纹不发块,封顶后的所有记忆变化对模型完全不可见。
+ * 增量字节预算的下限。快照很小时若直接按快照体量给预算,一两个增量块就会触顶,
+ * 变成几乎每次变化都重冻结 —— 比不做增量还糟。下限保证小快照也能攒下十几轮
+ * 小更新再重建前缀。
  */
-export const MEMORY_TURN_UPDATE_LIMIT = 24;
+export const MEMORY_TURN_UPDATE_BYTE_BUDGET_MIN = 6144;
+
+/**
+ * 单个会话的增量字节预算:累计挂出的增量块字节超过它就转重冻结,fresh 快照重新
+ * 进 system prompt、预算归零。判定基准是快照自身体量 —— 累计 diff 一旦比快照
+ * 还大,继续背着 diff 链比重发一份 fresh 快照占用更多上下文,重建前缀反而更省。
+ * 旧方案按「块数 = 24」拍脑袋封顶,块大块小一视同仁;按字节判定后,小更新能攒
+ * 更多轮(推迟计划内 miss),大更新提早重建,封顶时机跟真实上下文成本对齐。
+ * 长度用 UTF-16 code unit 计,作为 token 体量的确定性近似即可,两边口径一致。
+ */
+export function memoryTurnUpdateByteBudget(systemText: string): number {
+  return Math.max(MEMORY_TURN_UPDATE_BYTE_BUDGET_MIN, systemText.length);
+}
 
 const UPDATE_BLOCK_OPEN = "<memory-update>";
 const UPDATE_BLOCK_CLOSE = "</memory-update>";
@@ -47,8 +59,8 @@ export type MemoryInjectionBaseline = {
   systemText: string;
   /** 最近一次已经反映进上下文的 overview,用来判断「变没变」。 */
   lastSeenText: string;
-  /** 已挂出的增量块数量,用于封顶。 */
-  updateCount: number;
+  /** 已挂出的增量块累计字节(UTF-16 code unit),用于字节预算封顶。 */
+  updateBytes: number;
   /**
    * 冻结快照时的工作目录。project 段随 workdir 变化整体换血,增量 diff 会把
    * 换血误报成大规模 retire/新增,直接重冻结才是保真表达。undefined 表示冻结时
@@ -211,7 +223,7 @@ export function planMemoryTurnInjection(params: {
       baseline: {
         systemText: overview,
         lastSeenText: overview,
-        updateCount: 0,
+        updateBytes: 0,
         workdir: params.workdir,
       },
       refrozen: false,
@@ -228,7 +240,7 @@ export function planMemoryTurnInjection(params: {
     baseline: {
       systemText: overview,
       lastSeenText: overview,
-      updateCount: 0,
+      updateBytes: 0,
       workdir: params.workdir ?? baseline.workdir,
     },
     refrozen: true,
@@ -250,10 +262,6 @@ export function planMemoryTurnInjection(params: {
     return refreeze();
   }
 
-  if (baseline.updateCount >= MEMORY_TURN_UPDATE_LIMIT) {
-    return refreeze();
-  }
-
   const diff = diffMemoryEntries(baseline.lastSeenText, overview);
   // 变更条目超出单块上限:截断块会静默丢变化,转重冻结。索引被展示截断时 retired
   // 不可信也不计数(见 formatMemoryTurnUpdateFromDiff 的抑制逻辑)。
@@ -263,14 +271,22 @@ export function planMemoryTurnInjection(params: {
   }
 
   const turnUpdate = formatMemoryTurnUpdateFromDiff(diff);
+  // 字节预算封顶:连本轮这块一起算,累计增量字节超过预算就转重冻结。放在格式化
+  // 之后是为了拿真实块字节判定 —— 单块特别大时提早重建,而不是等它挂出去。
+  if (
+    turnUpdate &&
+    baseline.updateBytes + turnUpdate.length > memoryTurnUpdateByteBudget(baseline.systemText)
+  ) {
+    return refreeze();
+  }
   return {
     systemText: baseline.systemText,
     turnUpdate,
     baseline: {
       systemText: baseline.systemText,
       lastSeenText: overview,
-      // 只有真挂出块才计数;仅折叠行之类的非条目变化不占额度。
-      updateCount: turnUpdate ? baseline.updateCount + 1 : baseline.updateCount,
+      // 只有真挂出块才累计;仅折叠行之类的非条目变化不占预算。
+      updateBytes: baseline.updateBytes + turnUpdate.length,
       workdir: baseline.workdir ?? params.workdir,
     },
     refrozen: false,

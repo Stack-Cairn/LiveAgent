@@ -5,9 +5,10 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const turnInjection = loader.loadModule("src/lib/memory/prompts/turnInjection.ts");
 const {
-  MEMORY_TURN_UPDATE_LIMIT,
+  MEMORY_TURN_UPDATE_BYTE_BUDGET_MIN,
   attachMemoryTurnUpdates,
   formatMemoryTurnUpdate,
+  memoryTurnUpdateByteBudget,
   planMemoryTurnInjection,
 } = turnInjection;
 const { memoryTurnInjection } = loader.loadModule("src/lib/chat/memory/injectionController.ts");
@@ -70,7 +71,7 @@ test("首轮走 system prompt,不额外产生增量块", () => {
   assert.equal(plan.systemText, OVERVIEW_A);
   assert.equal(plan.turnUpdate, "");
   assert.equal(plan.baseline.lastSeenText, OVERVIEW_A);
-  assert.equal(plan.baseline.updateCount, 0);
+  assert.equal(plan.baseline.updateBytes, 0);
 });
 
 test("内容未变时不产生任何额外消息", () => {
@@ -80,7 +81,7 @@ test("内容未变时不产生任何额外消息", () => {
   assert.equal(plan.turnUpdate, "");
   assert.equal(plan.systemText, baseline.systemText);
   assert.equal(plan.baseline.lastSeenText, baseline.lastSeenText);
-  assert.equal(plan.baseline.updateCount, 0);
+  assert.equal(plan.baseline.updateBytes, 0);
 });
 
 test("内容变化时产出增量,且 system 段一个字节都不动", () => {
@@ -92,7 +93,7 @@ test("内容变化时产出增量,且 system 段一个字节都不动", () => {
   assert.ok(plan.turnUpdate.includes("[user-editor|u|d0]"));
   assert.ok(plan.turnUpdate.includes("supersedes"));
   assert.equal(plan.baseline.lastSeenText, OVERVIEW_B);
-  assert.equal(plan.baseline.updateCount, 1);
+  assert.equal(plan.baseline.updateBytes, plan.turnUpdate.length);
 });
 
 test("增量只报被顶替条目的 id,不复述旧值", () => {
@@ -116,7 +117,7 @@ test("只有折叠提示之类的非条目变化时,不挂出空壳增量块", (
   assert.equal(plan.turnUpdate, "");
   // 指纹仍然推进,否则下一轮还会重复算同一个差异。
   assert.equal(plan.baseline.lastSeenText, `${OVERVIEW_A}\n\ntrailing note`);
-  assert.equal(plan.baseline.updateCount, 0);
+  assert.equal(plan.baseline.updateBytes, 0);
 });
 
 test("读取失败(overview=null)保持基线不动,也不推进指纹", () => {
@@ -136,30 +137,56 @@ test("首轮就读取失败时不建立基线,留给下一轮重来", () => {
   assert.equal(plan.baseline, null);
 });
 
-test("增量数量封顶后转重冻结:fresh 快照进 system 段,增量额度归零", () => {
+test("累计增量字节超出预算后转重冻结:fresh 快照进 system 段,预算归零", () => {
   let baseline = baselineFrom(OVERVIEW_A);
-  for (let round = 0; round < MEMORY_TURN_UPDATE_LIMIT; round += 1) {
+  const budget = memoryTurnUpdateByteBudget(baseline.systemText);
+  // 小快照吃到下限预算:小更新能攒够多轮,不会两三轮就重建前缀。
+  assert.equal(budget, MEMORY_TURN_UPDATE_BYTE_BUDGET_MIN);
+
+  // 逐轮小更新直到预算耗尽。封顶轮的判定必须把本轮块字节一起计入:
+  // 触发重冻结的那轮不挂块(turnUpdate 为空),变化直接进 fresh 快照。
+  let rounds = 0;
+  let refrozenPlan = null;
+  while (refrozenPlan === null && rounds < 500) {
+    rounds += 1;
     const plan = planMemoryTurnInjection({
       baseline,
-      overview: overviewText([entry({ description: `用户叫苏枫 ${round}` })]),
+      overview: overviewText([entry({ description: `用户叫苏枫 ${rounds}` })]),
     });
+    if (plan.refrozen) {
+      refrozenPlan = plan;
+      break;
+    }
     assert.notEqual(plan.turnUpdate, "");
+    assert.ok(plan.baseline.updateBytes <= budget);
     baseline = plan.baseline;
   }
-  assert.equal(baseline.updateCount, MEMORY_TURN_UPDATE_LIMIT);
 
-  const capped = planMemoryTurnInjection({ baseline, overview: OVERVIEW_B });
-  assert.equal(capped.refrozen, true);
-  assert.equal(capped.turnUpdate, "");
-  // 变化不再静默丢失:fresh 快照整份进 system 段。
-  assert.equal(capped.systemText, OVERVIEW_B);
-  assert.equal(capped.baseline.lastSeenText, OVERVIEW_B);
-  assert.equal(capped.baseline.updateCount, 0);
+  // 确实攒了多轮增量才封顶,而不是一上来就重冻结。
+  assert.ok(refrozenPlan, "expected refreeze to trigger within 500 rounds");
+  assert.ok(rounds > 2, `expected multiple update rounds before refreeze, got ${rounds}`);
+  assert.equal(refrozenPlan.turnUpdate, "");
+  // 变化不静默丢失:fresh 快照整份进 system 段。
+  const cappedOverview = overviewText([entry({ description: `用户叫苏枫 ${rounds}` })]);
+  assert.equal(refrozenPlan.systemText, cappedOverview);
+  assert.equal(refrozenPlan.baseline.lastSeenText, cappedOverview);
+  assert.equal(refrozenPlan.baseline.updateBytes, 0);
 
-  // 重冻结后增量额度重新可用:下一次变化继续走增量。
-  const next = planMemoryTurnInjection({ baseline: capped.baseline, overview: OVERVIEW_A });
+  // 重冻结后预算重新可用:下一次变化继续走增量。
+  const next = planMemoryTurnInjection({ baseline: refrozenPlan.baseline, overview: OVERVIEW_B });
   assert.equal(next.refrozen, false);
   assert.ok(next.turnUpdate.startsWith("<memory-update>"));
+});
+
+test("单块特别大且预算不够时,当轮直接重冻结而不是先挂块再触顶", () => {
+  // 人为压低剩余预算:先攒到接近预算线。
+  let baseline = baselineFrom(OVERVIEW_A);
+  baseline = { ...baseline, updateBytes: memoryTurnUpdateByteBudget(baseline.systemText) - 1 };
+
+  const plan = planMemoryTurnInjection({ baseline, overview: OVERVIEW_B });
+  assert.equal(plan.refrozen, true);
+  assert.equal(plan.turnUpdate, "");
+  assert.equal(plan.systemText, OVERVIEW_B);
 });
 
 test("变更条目数超过单块上限时转重冻结,不再发截断块", () => {
@@ -175,7 +202,7 @@ test("变更条目数超过单块上限时转重冻结,不再发截断块", () =
   assert.equal(plan.refrozen, true);
   assert.equal(plan.turnUpdate, "");
   assert.equal(plan.systemText, wide(" 改"));
-  assert.equal(plan.baseline.updateCount, 0);
+  assert.equal(plan.baseline.updateBytes, 0);
 });
 
 test("变更条目数恰好在上限内仍走增量,不触发重冻结", () => {
