@@ -465,19 +465,23 @@ export async function runMemoryExtraction(
 
   const workspaceMutations = deriveWorkspaceMutations(params.messages, workdir || undefined);
   const summaryBlock = buildConversationSummaryBlock(params.conversationSummary);
+  // 块序按「稳定 → 易变」排:指令 prompt(约 4KB,会话内静态)打头,对话窗口
+  // (每轮必变)垫底。前缀缓存是字节级匹配,最易变的块排前面会让同会话的多次
+  // 抽取在第一行就分叉 —— sessionId 已稳定(见 runExtractionRound),块序对了
+  // 才真能吃到前一次抽取的前缀。指令里的方位措辞(above/below)与此序同步。
   const hiddenPromptText = [
-    buildConversationWindowBlock(params.messages),
-    ...(summaryBlock ? [summaryBlock] : []),
-    buildWorkspaceMutationsBlock(workspaceMutations),
-    buildExistingCandidatesBlock(candidates),
-    buildRecentRejectionsBlock(rejections),
-    buildAlreadyWrittenBlock(params.alreadyWrittenSlugs),
-    "",
     buildExtractionInstructionPrompt({
       localDate,
       workdir: workdir || undefined,
       reviewerMode: params.reviewerMode,
     }),
+    "",
+    ...(summaryBlock ? [summaryBlock] : []),
+    buildRecentRejectionsBlock(rejections),
+    buildExistingCandidatesBlock(candidates),
+    buildAlreadyWrittenBlock(params.alreadyWrittenSlugs),
+    buildWorkspaceMutationsBlock(workspaceMutations),
+    buildConversationWindowBlock(params.messages),
   ].join("\n\n");
   const hiddenPrompt: UserMessage = {
     role: "user",
