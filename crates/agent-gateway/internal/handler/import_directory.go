@@ -152,8 +152,14 @@ func ImportDirectory(
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
-		defer cancel()
+		// 串行 chunk 往返的次数随目录尺寸增长，绝对超时会在传输仍正常推进
+		// 时整体取消；改为每次网关↔Agent 往返单独计时（空闲超时语义），
+		// 整体生命周期由客户端 HTTP 连接（r.Context()）兜底。
+		sendOp := func(request *gatewayv2.ImportDirectoryRequest) (*gatewayv2.ImportDirectoryResponse, int, string) {
+			ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+			defer cancel()
+			return sendImportDirectoryRequest(ctx, sm, agentID, request)
+		}
 
 		transferID := newRequestID()
 		committed := false
@@ -162,7 +168,7 @@ func ImportDirectory(
 				abortDirectoryImport(sm, agentID, transferID, requestTimeout)
 			}
 		}()
-		if _, status, message := sendImportDirectoryRequest(ctx, sm, agentID, &gatewayv2.ImportDirectoryRequest{
+		if _, status, message := sendOp(&gatewayv2.ImportDirectoryRequest{
 			Name:       name,
 			Target:     target,
 			TransferId: transferID,
@@ -185,7 +191,7 @@ func ImportDirectory(
 			fileSize := uint64(header.Size)
 			var offset uint64
 			if fileSize == 0 {
-				if _, status, message := sendImportDirectoryRequest(ctx, sm, agentID, &gatewayv2.ImportDirectoryRequest{
+				if _, status, message := sendOp(&gatewayv2.ImportDirectoryRequest{
 					TransferId:   transferID,
 					Operation:    gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK,
 					RelativePath: relativePath,
@@ -209,7 +215,7 @@ func ImportDirectory(
 					return
 				}
 				nextOffset := offset + uint64(n)
-				if _, status, message := sendImportDirectoryRequest(ctx, sm, agentID, &gatewayv2.ImportDirectoryRequest{
+				if _, status, message := sendOp(&gatewayv2.ImportDirectoryRequest{
 					TransferId:   transferID,
 					Operation:    gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK,
 					RelativePath: relativePath,
@@ -229,7 +235,7 @@ func ImportDirectory(
 			}
 		}
 
-		resp, status, message := sendImportDirectoryRequest(ctx, sm, agentID, &gatewayv2.ImportDirectoryRequest{
+		resp, status, message := sendOp(&gatewayv2.ImportDirectoryRequest{
 			TransferId: transferID,
 			Operation:  gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT,
 		})

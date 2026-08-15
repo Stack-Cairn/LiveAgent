@@ -379,6 +379,115 @@ func TestImportDirectoryStreamsPayloadBeyondMessageLimit(t *testing.T) {
 	}
 }
 
+// RequestTimeout 是单次往返的空闲超时而非整个传输的绝对上限：只要每个
+// chunk 都在推进，累计耗时超过 RequestTimeout 的传输也必须成功（回归保护：
+// 旧实现整个传输复用同一个 context.WithTimeout，大目录在慢链路上会被整体取消）。
+func TestImportDirectorySurvivesSlowChunkAcks(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping slow-ack import test in short mode")
+	}
+
+	const requestTimeout = time.Second
+	const ackDelay = 300 * time.Millisecond
+	sm, agentSession, handler := newDirectoryImportServer(t, requestTimeout)
+
+	// 4 个 chunk + START + COMMIT = 6 次往返；按 ackDelay 累计 1.8s，
+	// 显著超过 1s 的 RequestTimeout，逼出"绝对超时"回归。
+	const totalSize = (3 << 20) + 17
+	content := bytes.Repeat([]byte("s"), totalSize)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("name", "slowdir"); err != nil {
+		t.Fatalf("write name field: %v", err)
+	}
+	if err := writer.WriteField("target", "workspace"); err != nil {
+		t.Fatalf("write target field: %v", err)
+	}
+	part, err := writer.CreateFormFile("files", "blob.bin")
+	if err != nil {
+		t.Fatalf("create file part: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write file part: %v", err)
+	}
+	if err := writer.WriteField("paths", "blob.bin"); err != nil {
+		t.Fatalf("write path field: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import-directory?agent_id=desktop-agent", &body)
+	req.Header.Set("Authorization", "Bearer upload-token")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(rec, req)
+	}()
+
+	started := time.Now()
+	var receivedBytes uint64
+	roundTrips := 0
+	for {
+		var outbound *gatewayv2.GatewayEnvelope
+		select {
+		case delivered := <-agentSession.Outbound():
+			delivered.Ack(nil)
+			outbound = delivered.GatewayEnvelope
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for directory import to reach agent (round trips so far: %d)", roundTrips)
+		}
+		roundTrips++
+
+		importReq := outbound.GetImportDirectory()
+		if importReq == nil {
+			t.Fatalf("outbound payload = %T, want ImportDirectoryRequest", outbound.GetPayload())
+		}
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_ABORT {
+			t.Fatalf("transfer was aborted after %d round trips (%s elapsed)", roundTrips, time.Since(started))
+		}
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK {
+			receivedBytes += uint64(len(importReq.GetChunk()))
+		}
+
+		time.Sleep(ackDelay)
+
+		response := &gatewayv2.ImportDirectoryResponse{TransferId: importReq.GetTransferId()}
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT {
+			response.RootPath = "/home/user/.liveagent/imports/workspaces/slowdir"
+			response.FileCount = 1
+		}
+		sm.DispatchFromAgentForSession(agentSession, &gatewayv2.AgentEnvelope{
+			RequestId: outbound.GetRequestId(),
+			Timestamp: time.Now().Unix(),
+			Payload: &gatewayv2.AgentEnvelope_ImportDirectoryResp{
+				ImportDirectoryResp: response,
+			},
+		})
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT {
+			break
+		}
+	}
+
+	if elapsed := time.Since(started); elapsed <= requestTimeout {
+		t.Fatalf("transfer finished in %s, too fast to exercise the absolute-timeout regression", elapsed)
+	}
+	if receivedBytes != totalSize {
+		t.Fatalf("received bytes = %d, want %d", receivedBytes, totalSize)
+	}
+
+	<-done
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestImportDirectoryRequiresName(t *testing.T) {
 	t.Parallel()
 
