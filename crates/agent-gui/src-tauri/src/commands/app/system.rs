@@ -1438,6 +1438,7 @@ fn directory_import_transfers() -> &'static Mutex<HashMap<String, DirectoryImpor
 /// 网关断连/重启后 ABORT 可能永远送不到；空闲超过该时长的传输一律视为
 /// 死亡（网关侧单次往返超时默认 2 分钟，正常传输的空闲间隔远小于它）。
 const DIRECTORY_IMPORT_IDLE_TTL: Duration = Duration::from_secs(15 * 60);
+const DIRECTORY_IMPORT_GC_INTERVAL: Duration = Duration::from_secs(60);
 
 /// 回收空闲超时的传输：内存状态与暂存目录一起删，防止反复中断持续占盘。
 /// 调用方须已持有 transfers 锁。
@@ -1490,23 +1491,37 @@ fn gc_directory_import_staging_in(
     removed
 }
 
-/// 启动时清理目录导入暂存区里上个进程残留的 `.staging` 数据；失败只记录，
-/// 绝不阻断启动。保留期沿用空闲 TTL，避免误删并行实例正在写入的传输。
+fn gc_directory_import_staging_once() {
+    let staging_bases: Vec<PathBuf> = ["workspace", "project-root"]
+        .into_iter()
+        .filter_map(|target| directory_import_base(target).ok())
+        .map(|base| base.join(".staging"))
+        .collect();
+    let Ok(mut transfers) = directory_import_transfers().lock() else {
+        return;
+    };
+    expire_stale_directory_transfers(&mut transfers, DIRECTORY_IMPORT_IDLE_TTL);
+    for staging_base in staging_bases {
+        gc_directory_import_staging_in(
+            &staging_base,
+            &transfers,
+            SystemTime::now(),
+            DIRECTORY_IMPORT_IDLE_TTL,
+        );
+    }
+}
+
+/// 启动后立即清理目录导入暂存区，并持续回收超过空闲 TTL 的内存状态与
+/// `.staging` 数据。失败只记录，绝不阻断应用运行。
 pub fn gc_directory_import_staging_on_startup() {
-    tauri::async_runtime::spawn_blocking(|| {
-        for target in ["workspace", "project-root"] {
-            let Ok(base) = directory_import_base(target) else {
-                continue;
-            };
-            let Ok(transfers) = directory_import_transfers().lock() else {
-                continue;
-            };
-            gc_directory_import_staging_in(
-                &base.join(".staging"),
-                &transfers,
-                SystemTime::now(),
-                DIRECTORY_IMPORT_IDLE_TTL,
-            );
+    tauri::async_runtime::spawn(async {
+        loop {
+            if let Err(error) =
+                tauri::async_runtime::spawn_blocking(gc_directory_import_staging_once).await
+            {
+                eprintln!("directory import staging gc failed: {error}");
+            }
+            tokio::time::sleep(DIRECTORY_IMPORT_GC_INTERVAL).await;
         }
     });
 }
@@ -2844,6 +2859,16 @@ mod tests {
         );
         assert_eq!(removed, 0);
         assert!(fresh_orphan.exists());
+
+        let removed = gc_directory_import_staging_in(
+            &staging_base,
+            &active,
+            SystemTime::now() + DIRECTORY_IMPORT_IDLE_TTL + DIRECTORY_IMPORT_GC_INTERVAL,
+            DIRECTORY_IMPORT_IDLE_TTL,
+        );
+        assert_eq!(removed, 1);
+        assert!(!fresh_orphan.exists());
+        assert!(active_staging.exists());
     }
 
     #[test]
