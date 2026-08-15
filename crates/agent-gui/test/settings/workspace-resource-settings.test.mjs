@@ -140,8 +140,10 @@ test("workspace configuration uses one entry and one shared two-column modal", (
     sharedProjectSettings,
     /if \(directoryPickerActive\) \{\s*return <>\{directoryPickerElement\}<\/>;/,
   );
-  assert.match(sharedProjectSettings, /open=\{!isClosing\}/);
-  assert.doesNotMatch(sharedProjectSettings, /open=\{!isClosing && !directoryPickerActive\}/);
+  assert.match(sharedProjectSettings, /open=\{dialogOpen\}/);
+  assert.match(sharedProjectSettings, /onOpenChangeComplete=\{\(open\) =>/);
+  assert.doesNotMatch(sharedProjectSettings, /isClosing|useModalMotion/);
+  assert.doesNotMatch(sharedProjectSettings, /open=\{dialogOpen && !directoryPickerActive\}/);
   assert.match(sharedWorkspaceCloneModal, /@liveagent\/adapters\/directoryPicker/);
   assert.match(sharedWorkspaceCloneModal, /\{directoryPickerElement\}/);
   assert.match(webDirectoryPickerAdapter, /useRemotePathPicker/);

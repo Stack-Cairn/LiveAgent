@@ -12,7 +12,6 @@ import type {
   WorkspaceProjectRootGrant,
 } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useEffect, useMemo, useState } from "react";
@@ -69,7 +68,8 @@ export function WorkspaceProjectSettingsModal(props: {
   } = props;
   const { t } = useLocale();
   const { suspendsParentModal, pickDirectory, directoryPickerElement } = useDirectoryPicker();
-  const { isClosing, requestClose } = useModalMotion(onClose);
+  const [dialogOpen, setDialogOpen] = useState(true);
+  const requestClose = () => setDialogOpen(false);
   const pathKey = workspaceProjectPathKey(project.path);
   const saved = settings.system.workspaceResourceSettings[pathKey];
   const globalSkillNames = useMemo(
@@ -218,7 +218,7 @@ export function WorkspaceProjectSettingsModal(props: {
   };
 
   const handleSave = async () => {
-    if (saving || isClosing) return;
+    if (saving || !dialogOpen) return;
     if (projectNameInvalid) {
       setActivePanel("general");
       return;
@@ -286,15 +286,18 @@ export function WorkspaceProjectSettingsModal(props: {
 
   return (
     <Dialog
-      open={!isClosing}
+      open={dialogOpen}
       onOpenChange={(open) => {
         if (!open && !saving) requestClose();
       }}
+      onOpenChangeComplete={(open) => {
+        if (!open) onClose();
+      }}
     >
       <DialogContent
-        className="settings-modal-panel modal-dialog-popup flex h-[650px] max-h-[calc(100dvh-2rem)] max-w-[940px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
+        className="flex h-[650px] max-h-[calc(100dvh-2rem)] max-w-[940px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
         overlayClassName="z-[120] bg-black/60"
-        viewportClassName="settings-modal-overlay modal-dialog-viewport z-[120] max-[720px]:p-0"
+        viewportClassName="z-[120] max-[720px]:p-0"
       >
         <header className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -457,7 +460,7 @@ export function WorkspaceProjectSettingsModal(props: {
             </DialogClose>
             <Button
               onClick={() => void handleSave()}
-              disabled={saving || isClosing || projectNameInvalid}
+              disabled={saving || !dialogOpen || projectNameInvalid}
               className="min-w-20 max-[520px]:flex-1"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t("workspaceEditor.save")}

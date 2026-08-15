@@ -1373,8 +1373,7 @@ function WorkspaceImagePreviewBody(props: {
           </div>
         </div>
         {showInfo ? (
-          <div
-            role="dialog"
+          <aside
             aria-label={t("workspaceFilePreview.imageInfo")}
             className="absolute right-3 top-3 z-10 w-64 border border-border bg-popover/95 p-3 text-xs text-popover-foreground shadow-xl backdrop-blur"
           >
@@ -1404,7 +1403,7 @@ function WorkspaceImagePreviewBody(props: {
                 {preview.mimeType}
               </dd>
             </dl>
-          </div>
+          </aside>
         ) : null}
         {contextMenu
           ? createPortal(

@@ -41,7 +41,7 @@ export function AgentPromptTemplateModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="settings-modal-panel flex max-h-[90vh] max-w-4xl flex-col rounded-[28px] border-black/[0.07] bg-white/[0.93] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]"
+        className="flex max-h-[90vh] max-w-4xl flex-col rounded-[28px] border-black/[0.07] bg-white/[0.93] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]"
         overlayClassName="bg-black/25 backdrop-blur-md dark:bg-black/50"
       >
         <div className="settings-modal-header relative flex items-center gap-3.5 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.08]">

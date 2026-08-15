@@ -344,7 +344,7 @@ export function CronTaskModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
-      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
+      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
         {/* Header */}
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">

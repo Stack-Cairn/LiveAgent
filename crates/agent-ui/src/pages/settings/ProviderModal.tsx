@@ -23,7 +23,6 @@ import {
   createModelOrderSnapshot,
   findNewModelIds,
 } from "@liveagent/ui/lib/providers/modelVendor";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import {
   applyModelBulkActiveState,
   applyUsageQueryModePreset,
@@ -194,7 +193,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     rect: { left: number; top: number; width: number };
   } | null>(null);
   const [headerSuggestActive, setHeaderSuggestActive] = useState(0);
-  const { isClosing, requestClose } = useModalMotion(onClose);
+  const [dialogOpen, setDialogOpen] = useState(true);
+  const requestClose = useCallback(() => setDialogOpen(false), []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFetchKey = useRef("");
@@ -895,7 +895,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     headerSuggestItems,
     headerValidationSubmitted,
     headerValueRefs,
-    isClosing,
+    dialogOpen,
     isEditing,
     isFullUrl,
     isGatewayWebui,
@@ -913,6 +913,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     name,
     newModelName,
     newModelPhases,
+    onClose,
     openHeaderSuggest,
     openModelSettings,
     persistedUsageQueryProviderId,

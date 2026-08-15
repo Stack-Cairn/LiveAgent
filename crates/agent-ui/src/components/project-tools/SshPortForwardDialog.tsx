@@ -116,7 +116,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="ssh-forward-dialog-popup max-w-md p-0">
+      <DialogContent className="max-w-md p-0">
         <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">

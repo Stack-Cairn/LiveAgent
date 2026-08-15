@@ -539,21 +539,6 @@
     flex: 1 1 8rem;
   }
 
-  html[data-liveagent-webui="gateway"] .settings-modal-overlay {
-    align-items: stretch;
-    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-panel {
-    display: flex;
-    width: min(100%, calc(100vw - 16px)) !important;
-    max-width: calc(100vw - 16px) !important;
-    max-height: calc(100dvh - 16px) !important;
-    flex-direction: column;
-    overflow: hidden;
-    border-radius: 16px;
-  }
-
   html[data-liveagent-webui="gateway"] .settings-modal-header,
   html[data-liveagent-webui="gateway"] .settings-modal-subheader {
     flex: 0 0 auto;
@@ -1304,10 +1289,6 @@
 
   html[data-liveagent-webui="gateway"] .settings-nav-item {
     padding: 7px 9px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-panel {
-    border-radius: 14px;
   }
 
   html[data-liveagent-webui="gateway"] .model-selector-trigger {

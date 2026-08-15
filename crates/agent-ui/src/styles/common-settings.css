@@ -41,110 +41,6 @@
     overflow: hidden;
   }
 
-  .settings-modal-overlay {
-    opacity: 0;
-    transition: opacity 180ms ease;
-    will-change: opacity;
-  }
-
-  .settings-modal-overlay[data-state="open"] {
-    opacity: 1;
-  }
-
-  .settings-modal-overlay[data-state="closed"] {
-    pointer-events: none;
-  }
-
-  .settings-modal-panel {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: opacity, transform;
-  }
-
-  .settings-modal-overlay[data-state="open"] .settings-modal-panel {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  .settings-modal-overlay[data-state="closed"] .settings-modal-panel {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-
-  .ssh-forward-dialog-backdrop {
-    opacity: 1;
-    transition: opacity 180ms ease;
-  }
-
-  .ssh-forward-dialog-backdrop[data-starting-style] {
-    opacity: 0;
-  }
-
-  .ssh-forward-dialog-popup {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .ssh-forward-dialog-popup[data-starting-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
-  /* Base UI Dialog 通用进出场（WorktreeCreateModal、RemotePathPickerModal 等）。
-     与 settings-modal-* 的 useModalMotion/data-state 机制不同，Base UI 弹层由
-     data-starting-style / data-ending-style 驱动，退场过渡结束后才卸载。 */
-  .modal-dialog-backdrop {
-    opacity: 1;
-    transition: opacity 180ms ease;
-  }
-
-  .modal-dialog-backdrop[data-starting-style],
-  .modal-dialog-backdrop[data-ending-style] {
-    opacity: 0;
-  }
-
-  .modal-dialog-popup {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .modal-dialog-popup[data-starting-style],
-  .modal-dialog-popup[data-ending-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
-  /* settings-modal-* 基线为 opacity:0 且靠旧版父级 data-state 显形；Base UI
-     Dialog 会把 Backdrop 与 Viewport 渲染为兄弟节点，因此共享 Popup 需要按
-     data-slot 自行中和该基线，否则只显示遮罩、面板会永久透明。 */
-  .settings-modal-overlay.modal-dialog-viewport {
-    opacity: 1;
-    transition: none;
-  }
-
-  .settings-modal-panel.modal-dialog-popup,
-  .settings-modal-panel[data-slot="dialog-content"] {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  .settings-modal-panel.modal-dialog-popup[data-starting-style],
-  .settings-modal-panel.modal-dialog-popup[data-ending-style],
-  .settings-modal-panel[data-slot="dialog-content"][data-starting-style],
-  .settings-modal-panel[data-slot="dialog-content"][data-ending-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
   .settings-tools-view-enter {
     animation: settingsToolsViewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     will-change: transform, opacity;
@@ -409,13 +305,7 @@
     }
 
     .ssh-auth-panel,
-    .ssh-collapsible,
-    .settings-modal-overlay,
-    .settings-modal-panel,
-    .ssh-forward-dialog-backdrop,
-    .ssh-forward-dialog-popup,
-    .modal-dialog-backdrop,
-    .modal-dialog-popup {
+    .ssh-collapsible {
       transition-duration: 1ms;
     }
 

@@ -232,7 +232,7 @@ export function McpServerEditModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
+      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="settings-modal-header flex items-center gap-3 border-b border-border/70 px-6 py-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">

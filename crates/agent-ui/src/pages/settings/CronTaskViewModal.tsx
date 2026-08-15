@@ -784,7 +784,7 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       {/* Use explicit h-[80vh] so children can compute flex/overflow correctly */}
-      <DialogContent className="settings-modal-panel settings-cron-view-panel flex h-[80vh] max-w-4xl p-0">
+      <DialogContent className="settings-cron-view-panel flex h-[80vh] max-w-4xl p-0">
         <DialogTitle className="sr-only">{task.name}</DialogTitle>
         {/* ── Left: task detail ── */}
         <div className="settings-cron-view-left flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background">

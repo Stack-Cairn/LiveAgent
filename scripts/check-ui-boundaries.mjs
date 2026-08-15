@@ -23,6 +23,19 @@ function listSourceFiles(root, directory = root) {
   return files;
 }
 
+function listUiFiles(root, directory = root) {
+  const files = [];
+  for (const entry of readdirSync(directory)) {
+    const absolutePath = join(directory, entry);
+    if (statSync(absolutePath).isDirectory()) {
+      files.push(...listUiFiles(root, absolutePath));
+    } else if (/\.(?:css|ts|tsx)$/.test(entry)) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
 const checks = [
   {
     root: join(repoRoot, "crates/agent-ui/src"),
@@ -113,6 +126,49 @@ for (const check of checks) {
       if (!rule.pattern.test(source)) continue;
       failures += 1;
       console.error(`${relative(repoRoot, file)}: ${rule.reason}`);
+    }
+  }
+}
+
+const dialogPrimitiveFiles = new Set([
+  "crates/agent-ui/src/components/ui/alert-dialog.tsx",
+  "crates/agent-ui/src/components/ui/dialog.tsx",
+  "crates/agent-ui/src/components/ui/sheet.tsx",
+]);
+const retiredDialogPatterns = [
+  {
+    pattern:
+      /\b(?:settings-modal-(?:overlay|panel)|modal-dialog-(?:backdrop|popup|viewport)|ssh-forward-dialog-(?:backdrop|popup))\b/,
+    reason: "Dialog 显隐、动画和层级必须由共享 Dialog/Sheet 原语管理",
+  },
+  {
+    pattern: /\buseModalMotion\b/,
+    reason: "Dialog 退场必须使用 Base UI onOpenChangeComplete，不能恢复手写计时器",
+  },
+  {
+    pattern: /\brole=["']dialog["']/,
+    reason: "业务组件不能手写 dialog 语义，必须使用共享 Dialog/AlertDialog",
+  },
+];
+for (const root of [
+  join(repoRoot, "crates/agent-ui/src"),
+  join(repoRoot, "crates/agent-gui/src"),
+  join(repoRoot, "crates/agent-gateway/web/src"),
+]) {
+  for (const file of listUiFiles(root)) {
+    const source = readFileSync(file, "utf8");
+    const filePath = toPosixPath(relative(repoRoot, file));
+    if (
+      /from\s+["']@base-ui\/react\/(?:alert-dialog|dialog)["']/.test(source) &&
+      !dialogPrimitiveFiles.has(filePath)
+    ) {
+      failures += 1;
+      console.error(`${filePath}: Base UI Dialog 只能由 agent-ui 共享原语直接导入`);
+    }
+    for (const rule of retiredDialogPatterns) {
+      if (!rule.pattern.test(source)) continue;
+      failures += 1;
+      console.error(`${filePath}: ${rule.reason}`);
     }
   }
 }

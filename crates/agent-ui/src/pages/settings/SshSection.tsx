@@ -291,7 +291,7 @@ function SshHostModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
+      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Key className="h-5 w-5" />
@@ -710,7 +710,7 @@ function SshImportModal(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="settings-modal-panel flex max-h-[90vh] max-w-3xl flex-col p-0">
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Upload className="h-5 w-5" />

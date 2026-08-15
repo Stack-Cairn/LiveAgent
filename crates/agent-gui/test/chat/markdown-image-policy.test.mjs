@@ -61,11 +61,6 @@ const loader = createTsModuleLoader({
     "../lib/shared/utils": {
       cn: (...parts) => parts.filter(Boolean).join(" "),
     },
-    "../lib/shared/modalMotion": {
-      useModalMotion(onClose) {
-        return { modalState: "open", requestClose: onClose };
-      },
-    },
     "@earendil-works/pi-agent-core": {
       Agent: class Agent {},
     },

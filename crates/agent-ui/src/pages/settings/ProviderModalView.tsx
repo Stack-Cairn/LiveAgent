@@ -101,7 +101,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     headerSuggestItems,
     headerValidationSubmitted,
     headerValueRefs,
-    isClosing,
+    dialogOpen,
     isEditing,
     isFullUrl,
     isGatewayWebui,
@@ -119,6 +119,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     name,
     newModelName,
     newModelPhases,
+    onClose,
     openHeaderSuggest,
     openModelSettings,
     persistedUsageQueryProviderId,
@@ -178,15 +179,18 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
   } = viewModel;
   return (
     <Dialog
-      open={!isClosing}
+      open={dialogOpen}
       onOpenChange={(open) => {
         if (!open) requestClose();
       }}
+      onOpenChangeComplete={(open) => {
+        if (!open) onClose();
+      }}
     >
       <DialogContent
-        className="settings-modal-panel modal-dialog-popup flex h-[600px] max-h-[calc(100dvh-2rem)] max-w-[860px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
+        className="flex h-[600px] max-h-[calc(100dvh-2rem)] max-w-[860px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
         overlayClassName="bg-black/60"
-        viewportClassName="settings-modal-overlay modal-dialog-viewport max-[720px]:p-0"
+        viewportClassName="max-[720px]:p-0"
       >
         <div className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -1852,7 +1856,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!name.trim() || isClosing}
+            disabled={!name.trim() || !dialogOpen}
             className="max-[720px]:h-10 max-[720px]:flex-1"
           >
             {t("settings.save")}
