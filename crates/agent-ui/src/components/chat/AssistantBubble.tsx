@@ -3,6 +3,7 @@ import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { memo, useMemo } from "react";
 import { AssistantAvatar } from "./AssistantAvatar";
+import { mergeShellSessionRounds } from "./assistant-bubble/assistantBubbleUtils";
 import { RoundContent } from "./assistant-bubble/RoundContent";
 import { ChangedFilesCard } from "./ChangedFilesCard";
 
@@ -63,12 +64,13 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     () => (isStreaming || redactToolContent ? null : collectChangedFiles(rounds)),
     [isStreaming, redactToolContent, rounds],
   );
+  const displayRounds = useMemo(() => mergeShellSessionRounds(rounds), [rounds]);
 
   return (
     <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
       <AssistantAvatar className="assistant-bubble-avatar" />
       <div className="assistant-bubble-content min-w-0 flex-1 space-y-2 pt-0.5">
-        {rounds.map((round, idx) => (
+        {displayRounds.map((round, idx) => (
           <RoundContent
             key={"key" in round && round.key ? round.key : `round-${round.round}`}
             round={round}

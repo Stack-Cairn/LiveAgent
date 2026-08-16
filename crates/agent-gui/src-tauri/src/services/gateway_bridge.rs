@@ -1282,6 +1282,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "Image"
             | "List"
             | "ManagedProcess"
+            | "ProcessStop"
+            | "ProcessWait"
             | "McpManager"
             | "MemoryManager"
             | "Read"

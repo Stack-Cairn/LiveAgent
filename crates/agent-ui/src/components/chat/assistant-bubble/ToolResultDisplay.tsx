@@ -64,6 +64,17 @@ type ShellResultDetails = {
   duration_ms: number;
 };
 
+type ShellSessionResultDetails = {
+  session_id: string;
+  status: string;
+  wait_count?: number;
+  stop_count?: number;
+  exit_code?: number | null;
+  duration_ms: number;
+  output_truncated?: boolean;
+  display_truncated?: boolean;
+};
+
 function isShellResultDetails(value: unknown): value is ShellResultDetails {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
@@ -75,6 +86,16 @@ function isShellResultDetails(value: unknown): value is ShellResultDetails {
     typeof candidate.stdout_truncated === "boolean" &&
     typeof candidate.stderr_truncated === "boolean" &&
     typeof candidate.timed_out === "boolean" &&
+    typeof candidate.duration_ms === "number"
+  );
+}
+
+function isShellSessionResultDetails(value: unknown): value is ShellSessionResultDetails {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.session_id === "string" &&
+    typeof candidate.status === "string" &&
     typeof candidate.duration_ms === "number"
   );
 }
@@ -436,8 +457,38 @@ export function ToolResultDisplay({
   const text = extractResultText(result);
   const images = getToolResultImages(result);
   const shellDetails = isShellResultDetails(result.details) ? result.details : null;
+  const shellSessionDetails = isShellSessionResultDetails(result.details) ? result.details : null;
 
   if (item.toolCall.name === "Bash") {
+    if (shellSessionDetails) {
+      return (
+        <ToolSurface>
+          <MetaTags
+            tags={[
+              { label: "session", value: shellSessionDetails.session_id },
+              { label: "status", value: shellSessionDetails.status },
+              ...(typeof shellSessionDetails.exit_code === "number"
+                ? [{ label: "exit", value: String(shellSessionDetails.exit_code) }]
+                : []),
+              { label: "session duration", value: `${shellSessionDetails.duration_ms} ms` },
+              ...(typeof shellSessionDetails.wait_count === "number"
+                ? [{ label: "waits", value: String(shellSessionDetails.wait_count) }]
+                : []),
+              ...(typeof shellSessionDetails.stop_count === "number" &&
+              shellSessionDetails.stop_count > 0
+                ? [{ label: "stops", value: String(shellSessionDetails.stop_count) }]
+                : []),
+              ...(shellSessionDetails.output_truncated
+                ? [{ label: "session output", value: "truncated" }]
+                : []),
+              ...(shellSessionDetails.display_truncated
+                ? [{ label: "display", value: "last 64K chars" }]
+                : []),
+            ]}
+          />
+        </ToolSurface>
+      );
+    }
     if (!shellDetails) return null;
 
     return (

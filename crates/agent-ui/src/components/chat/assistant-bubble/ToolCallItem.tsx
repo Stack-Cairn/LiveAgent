@@ -31,6 +31,7 @@ import { ChevronRight } from "../../IconSet";
 import {
   areStableValuesEqual,
   getBuiltinResultKind,
+  getShellSessionDisplayDetails,
   getSubagentInlineSummary,
   getToolDisplayName,
   getToolDisplayTitle,
@@ -65,6 +66,14 @@ function ToolCallItem({
   const { t } = useLocale();
   const result = item.toolResult;
   const builtinResultKind = getBuiltinResultKind(result);
+  // 会话状态标签与常转 spinner 只对聚合卡（mergeShellSessionRounds 产出，
+  // 带 mergedDisplay 标记）生效：逐条渲染的原始 Bash 结果里 status 是当次
+  // 调用返回时的快照（首响应恒为 running），会话在后续卡片里才落定，若据
+  // 此常转会在桌面端历史里留下永远转圈的卡片。
+  const shellSessionDetails = getShellSessionDisplayDetails(result);
+  const mergedShellSession = shellSessionDetails?.mergedDisplay ? shellSessionDetails : null;
+  const shellSessionIsRunning = mergedShellSession?.status === "running";
+  const displayIsRunning = Boolean(isRunning || shellSessionIsRunning);
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
   const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
@@ -143,17 +152,25 @@ function ToolCallItem({
 
   const statusLabel = isApprovalPending
     ? t("chat.toolApproval.waitingStatus")
-    : isRunning
-      ? isAskUser
-        ? askQuestions.length > 0
-          ? t("chat.askUser.waiting")
-          : t("chat.askUser.preparing")
-        : t("chat.tool.running")
-      : result
-        ? result.isError
-          ? t("chat.tool.failed")
-          : t("chat.tool.success")
-        : t("chat.tool.waiting");
+    : mergedShellSession
+      ? mergedShellSession.status === "running"
+        ? t("chat.tool.running")
+        : mergedShellSession.status === "cancelled"
+          ? t("chat.tool.stopped")
+          : mergedShellSession.status === "completed"
+            ? t("chat.tool.success")
+            : t("chat.tool.failed")
+      : isRunning
+        ? isAskUser
+          ? askQuestions.length > 0
+            ? t("chat.askUser.waiting")
+            : t("chat.askUser.preparing")
+          : t("chat.tool.running")
+        : result
+          ? result.isError
+            ? t("chat.tool.failed")
+            : t("chat.tool.success")
+          : t("chat.tool.waiting");
 
   const statusTextClass = result?.isError
     ? "text-[hsl(var(--chat-error))]"
@@ -210,6 +227,11 @@ function ToolCallItem({
           ) : toolArgsSummary ? (
             <span className="ml-1.5">{toolArgsSummary}</span>
           ) : null}
+          {mergedShellSession && mergedShellSession.waitCount > 0 ? (
+            <span className="ml-1.5 text-muted-foreground/50">
+              {t("chat.tool.waitCount").replace("{count}", String(mergedShellSession.waitCount))}
+            </span>
+          ) : null}
         </div>
 
         {fileChangeStats ? (
@@ -218,7 +240,7 @@ function ToolCallItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {isRunning ? (
+        {displayIsRunning ? (
           <AssistantStatus
             className="min-h-0 gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/60"
             iconClassName="h-3 w-3"
@@ -244,7 +266,7 @@ function ToolCallItem({
   const body = (
     <LazyCollapse
       open={effectiveOpen}
-      retainWhileClosed={retainRunningToolContent && Boolean(isRunning)}
+      retainWhileClosed={retainRunningToolContent && displayIsRunning}
     >
       {() => (
         <div className="space-y-3 pb-2 pl-[22px] pt-1">

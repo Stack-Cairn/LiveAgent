@@ -112,6 +112,238 @@ test("ordinary tool activity keeps one group identity as later tools append", ()
   );
 });
 
+test("shell session display merges Bash and waits across rounds without mutating transcript", () => {
+  const result = (toolCallId, status, cursor, text) => ({
+    role: "toolResult",
+    toolCallId,
+    toolName: toolCallId === "bash-1" ? "Bash" : "ProcessWait",
+    content: [{ type: "text", text }],
+    details: {
+      status,
+      session_id: "bash-session-1",
+      cursor,
+      output: text ? [{ stream: "stdout", text }] : [],
+      output_truncated: false,
+      has_more: false,
+      exit_code: status === "completed" ? 0 : null,
+      duration_ms: cursor * 10,
+      shell: "bash",
+    },
+    isError: false,
+    timestamp: cursor,
+  });
+  const rounds = [
+    {
+      round: 1,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "bash-1",
+              name: "Bash",
+              arguments: { command: "pnpm build" },
+            },
+            toolResult: result("bash-1", "running", 6, "start\n"),
+          },
+        },
+      ],
+    },
+    {
+      round: 2,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "wait-1",
+              name: "ProcessWait",
+              arguments: { session_id: "bash-session-1", cursor: 6 },
+            },
+            toolResult: result("wait-1", "running", 12, "middle\n"),
+          },
+        },
+      ],
+    },
+    {
+      round: 3,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "wait-2",
+              name: "ProcessWait",
+              arguments: { session_id: "bash-session-1", cursor: 12 },
+            },
+            toolResult: result("wait-2", "completed", 17, "done\n"),
+          },
+        },
+      ],
+    },
+  ];
+
+  const merged = bubbleUtils.mergeShellSessionRounds(rounds);
+
+  assert.equal(rounds[1].blocks.length, 1, "source transcript remains unchanged");
+  assert.equal(merged[0].blocks.length, 1);
+  assert.equal(merged[1].blocks.length, 0);
+  assert.equal(merged[2].blocks.length, 0);
+  const card = merged[0].blocks[0].item;
+  assert.equal(card.toolCall.name, "Bash");
+  assert.equal(card.toolCall.arguments.command, "pnpm build");
+  assert.equal(card.toolResult.details.status, "completed");
+  // 聚合卡必须带 shell_session_display 标记：ToolCallItem 只对聚合卡启用
+  // 会话状态标签/常转 spinner，原始逐条结果的 running 快照不驱动 UI 状态。
+  assert.equal(card.toolResult.details.shell_session_display, true);
+  assert.equal(card.toolResult.details.wait_count, 2);
+  assert.equal(card.toolResult.details.output_truncated, false);
+  assert.equal(card.toolResult.details.display_truncated, false);
+  assert.match(card.toolResult.content[0].text, /session_duration_ms: 170/);
+  assert.doesNotMatch(card.toolResult.content[0].text, /^duration_ms:/m);
+  assert.match(card.toolResult.content[0].text, /start\nmiddle\ndone/);
+});
+
+test("shell session display distinguishes protocol truncation from display truncation", () => {
+  const largeOutput = "x".repeat(40 * 1024);
+  const makeResult = (toolCallId, status, output) => ({
+    role: "toolResult",
+    toolCallId,
+    toolName: toolCallId === "bash-large" ? "Bash" : "ProcessWait",
+    content: [{ type: "text", text: output }],
+    details: {
+      status,
+      session_id: "bash-session-large",
+      cursor: output.length,
+      output: [{ stream: "stdout", text: output }],
+      output_truncated: false,
+      has_more: false,
+      exit_code: status === "completed" ? 0 : null,
+      duration_ms: status === "completed" ? 20_000 : 10_000,
+      shell: "bash",
+    },
+    isError: false,
+  });
+  const rounds = [
+    {
+      round: 1,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "bash-large",
+              name: "Bash",
+              arguments: { command: "cargo test" },
+            },
+            toolResult: makeResult("bash-large", "running", largeOutput),
+          },
+        },
+      ],
+    },
+    {
+      round: 2,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "wait-large",
+              name: "ProcessWait",
+              arguments: { session_id: "bash-session-large", cursor: largeOutput.length },
+            },
+            toolResult: makeResult("wait-large", "completed", largeOutput),
+          },
+        },
+      ],
+    },
+  ];
+
+  const merged = bubbleUtils.mergeShellSessionRounds(rounds);
+  const card = merged[0].blocks[0].item;
+
+  assert.equal(card.toolResult.details.output_truncated, false);
+  assert.equal(card.toolResult.details.display_truncated, true);
+  assert.doesNotMatch(card.toolResult.content[0].text, /output_truncated: true/);
+  assert.match(card.toolResult.content[0].text, /display_truncated: true/);
+});
+
+test("shell session display keeps failed wait controls visible", () => {
+  const rounds = [
+    {
+      round: 1,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "bash-running",
+              name: "Bash",
+              arguments: { command: "pnpm build" },
+            },
+            toolResult: {
+              role: "toolResult",
+              toolCallId: "bash-running",
+              toolName: "Bash",
+              content: [{ type: "text", text: "building\n" }],
+              details: {
+                status: "running",
+                session_id: "bash-session-error",
+                cursor: 9,
+                output: [{ stream: "stdout", text: "building\n" }],
+                output_truncated: false,
+                has_more: false,
+                exit_code: null,
+                duration_ms: 10_000,
+                shell: "bash",
+              },
+              isError: false,
+            },
+          },
+        },
+      ],
+    },
+    {
+      round: 2,
+      blocks: [
+        {
+          kind: "tool",
+          item: {
+            toolCall: {
+              type: "toolCall",
+              id: "wait-failed",
+              name: "ProcessWait",
+              arguments: { session_id: "bash-session-error", cursor: 9 },
+            },
+            toolResult: {
+              role: "toolResult",
+              toolCallId: "wait-failed",
+              toolName: "ProcessWait",
+              content: [{ type: "text", text: "shell session not found" }],
+              details: {},
+              isError: true,
+            },
+          },
+        },
+      ],
+    },
+  ];
+
+  const merged = bubbleUtils.mergeShellSessionRounds(rounds);
+
+  assert.equal(merged[0].blocks[0].item.toolResult.details.status, "running");
+  assert.equal(merged[0].blocks[0].item.toolResult.details.wait_count, 0);
+  assert.equal(merged[1].blocks.length, 1);
+  assert.equal(merged[1].blocks[0].item.toolCall.id, "wait-failed");
+  assert.equal(merged[1].blocks[0].item.toolResult.isError, true);
+});
+
 test("special tool result updates preserve their direct activity identity", () => {
   for (const name of ["TaskCreate", "TaskUpdate", "TaskList", "AskUserQuestion", "Image", "Agent"]) {
     const pendingItem = {

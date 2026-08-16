@@ -38,6 +38,9 @@ export function buildToolsSuffix(
   if (has("Agent")) toolGroups.push("subagent delegation (Agent)");
   if (has("SendMessage")) toolGroups.push("subagent message bus (SendMessage)");
   if (has("Bash")) toolGroups.push("the command tool (Bash)");
+  if (has("ProcessWait")) {
+    toolGroups.push("resumable command waiting (ProcessWait / ProcessStop)");
+  }
   if (has("ManagedProcess")) toolGroups.push("managed local processes (ManagedProcess)");
   if (hasAny("TaskCreate", "TaskUpdate", "TaskList")) {
     toolGroups.push("durable task planning (TaskCreate / TaskUpdate / TaskList)");
@@ -204,6 +207,16 @@ export function buildToolsSuffix(
         '- To run installed Skill scripts, use cwd="skill://<enabled-skill>/scripts" plus a relative command.',
         "- Passing an absolute Skill script path inside the command is also accepted as long as the referenced Skill is enabled in this conversation.",
         "- For endpoint tests with curl, include an explicit timeout such as `--max-time 30` so a stalled local server or upstream request cannot hold the whole turn indefinitely.",
+        ...(has("ProcessWait")
+          ? [
+              "- Builds, tests, package installs, and code generation may outlive Bash's initial yield. When Bash returns status=running, continue the same session with ProcessWait using the returned session_id and latest cursor.",
+              "- Never call Bash `sleep` to wait or poll. A leading `sleep` of 2 seconds or longer is rejected; ProcessWait blocks event-first without starting another process.",
+              "- ProcessWait defaults to 30000ms. For a quiet command that is expected to take several minutes, set ProcessWait.yield_time_ms up to 300000 instead of issuing repeated short waits.",
+              "- Session responses use completed, failed, cancelled, or timed_out as terminal statuses. The reported session_duration_ms is cumulative from the original Bash start; never add values from multiple responses.",
+              "- Omit Bash.timeout_ms when the command should run until completion. Set it only when a real hard runtime limit is desired; ProcessWait does not restart or extend that limit.",
+              "- Use ProcessStop with session_id to terminate the complete process tree when the command is no longer needed.",
+            ]
+          : []),
         "- Use ManagedProcess instead of Bash for dev servers, watchers, preview servers, or anything that should keep running.",
         "- For reading, listing, or searching Skill content, always use Read/List/Glob/Grep with skill:// paths — Bash cat/ls/find/grep/rg/sed/awk against ~/.liveagent/skills is still routed back to the file tools.",
         "- Do not guess `skills/` paths inside the workspace; if a Skill is needed, enable it in the chat Skills selector first.",
