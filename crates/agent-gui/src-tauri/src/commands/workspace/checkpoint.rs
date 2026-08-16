@@ -2047,7 +2047,11 @@ mod tests {
             Ok(PreImage::Missing)
         ));
         // 符号链接不静默跳过:返回原因,由调用方写成 error 记录。
-        let err = classify_worktree_pre_image(&link).unwrap_err();
+        // 用 let-else 而非 unwrap_err():后者要求 PreImage: Debug,而 PreImage::File
+        // 里就是文件内容,不该为了一句测试断言让它可以被打印进 panic 信息。
+        let Err(err) = classify_worktree_pre_image(&link) else {
+            panic!("符号链接不能被当成可捕获的前像");
+        };
         assert!(err.contains("symlink"));
     }
 }
