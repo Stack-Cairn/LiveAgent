@@ -430,8 +430,8 @@
     }
 
     .model-selector-dropdown,
-    .model-selector-trigger,
-    .model-selector-trigger svg {
+    .composer-model-trigger,
+    .composer-model-trigger svg {
       transition: none !important;
     }
   }
