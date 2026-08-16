@@ -668,13 +668,16 @@ fn resolve_existing_file_target(workdir: &Path, rel: &Path) -> Result<PathBuf, F
     Ok(resolved)
 }
 
-fn ensure_parent_dir(workdir: &Path, target: &Path) -> Result<(), FsError> {
+/// 建好目标的父目录并返回其 canonical 形态。返回值不是锦上添花:新建文件
+/// 没有 canonicalize 入口,父目录若经由工作区内部符号链接(`link/new.txt`),
+/// 未解析的原始路径会被当作落盘目标记进检查点,而回退侧逐级拒符号链接,
+/// 这条记录就永远回退不了。调用方必须用返回的真实父目录拼接目标。
+fn ensure_parent_dir(workdir: &Path, target: &Path) -> Result<PathBuf, FsError> {
     let parent = target
         .parent()
         .ok_or_else(|| FsError::Other("Invalid target path".to_string()))?;
     fs::create_dir_all(parent)?;
-    ensure_within_workdir_existing(workdir, parent)?;
-    Ok(())
+    ensure_within_workdir_existing(workdir, parent)
 }
 
 fn split_text_lines(text: &str) -> Vec<&str> {
@@ -3089,8 +3092,14 @@ fn fs_write_text_impl(
             )
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            ensure_parent_dir(&path.root, &raw_target)?;
-            (raw_target.clone(), false)
+            // 用 canonical 父目录拼接目标:请求路径可能经由工作区内部符号
+            // 链接(`link/new.txt`),原始拼接会让检查点记下链接路径,回退侧
+            // 逐级拒符号链接后这个新建文件永远删不掉。
+            let parent = ensure_parent_dir(&path.root, &raw_target)?;
+            let file_name = raw_target
+                .file_name()
+                .ok_or_else(|| FsError::Other("Invalid target path".to_string()))?;
+            (parent.join(file_name), false)
         }
         Err(err) => return Err(FsError::Io(err)),
     };
@@ -6136,6 +6145,40 @@ mod tests {
         assert_eq!(grep.match_count, 1);
         assert_eq!(grep.matches.len(), 1);
         assert_eq!(grep.matches[0].path, "src/app.ts");
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_new_file_through_internal_symlink_resolves_real_parent() {
+        let workdir = unique_test_workdir("write-symlink-parent");
+        fs::create_dir_all(workdir.join("real")).expect("create real dir");
+        let workdir = fs::canonicalize(&workdir).expect("canonicalize workdir");
+        std::os::unix::fs::symlink(workdir.join("real"), workdir.join("link"))
+            .expect("create dir symlink");
+
+        // 经由工作区内部符号链接新建文件:落盘目标必须是解析后的真实路径,
+        // 否则检查点会记下链接路径,回退侧逐级拒符号链接后永远删不掉它。
+        let write = fs_write_text_sync(
+            workdir.display().to_string(),
+            "link/new.txt".to_string(),
+            "hello\n".to_string(),
+            "rewrite".to_string(),
+            None,
+            None,
+            None,
+        )
+        .expect("write through symlinked parent should succeed");
+        assert!(write.file_id.is_some());
+        assert!(workdir.join("real/new.txt").is_file());
+        // checkpoint_rel 拿到的必须是真实相对路径 real/new.txt。
+        let resolved = resolve_existing_file_target(&workdir, Path::new("link/new.txt"))
+            .expect("resolve through symlink");
+        assert_eq!(
+            checkpoint_rel(&workdir, &resolved, Path::new("link/new.txt")),
+            PathBuf::from("real/new.txt")
+        );
 
         let _ = fs::remove_dir_all(workdir);
     }

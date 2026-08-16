@@ -9,8 +9,8 @@
 //!   绝对路径当作恢复授权:回退时要求 root 仍属于当前授权根集合、root 自身
 //!   不是符号链接,再重新过滤相对路径并逐级拒绝链上的符号链接与(Unix)多
 //!   硬链接目标;写入前紧邻再校验一次整条链(窗口期防护),落盘走临时文件 +
-//!   原子 rename,并携带预览时的内容哈希做冲突检测(TOCTOU 防护,缺哈希
-//!   一律判冲突而非覆盖)。
+//!   原子 rename,并携带预览时的状态指纹(内容哈希 + Unix 权限位)做冲突
+//!   检测(TOCTOU 防护,缺指纹一律判冲突而非覆盖)。
 //! - 授权根集合 = 调用方给出的当前工作区根与仍 active 的额外授权根,加上
 //!   后端自行推导的两类自有根:Skills 根(skill:// 写入记在这里)与各授权根
 //!   所在的 git 仓库根(subagent worktree apply 把父工作区前像记在那里)。
@@ -642,9 +642,9 @@ pub struct CheckpointDiffEntry {
     pub key: String,
     /// "restore" | "delete" | "clean" | "skip-dir" | "missing-blob" | "unresolvable"
     pub action: String,
-    /// 预览时目标文件的内容哈希;文件不存在时为 "absent"。目标不可解析
-    /// (根未授权 / 路径链有符号链接)或目录标记时为 None。
-    /// rewind 时重新计算比对,不一致或缺失则跳过该文件并上报冲突。
+    /// 预览时目标文件的状态指纹(内容哈希 + Unix 权限位);文件不存在时为
+    /// "absent"。目标不可解析(根未授权 / 路径链有符号链接)或目录标记时
+    /// 为 None。rewind 时重新计算比对,不一致或缺失则跳过该文件并上报冲突。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_hash: Option<String>,
 }
@@ -824,15 +824,30 @@ fn reject_multi_hardlink(_md: &fs::Metadata) -> Result<(), String> {
     Ok(())
 }
 
-/// 目标当前内容的哈希;不存在(或不是普通文件)返回 "absent"。
+/// 目标当前状态的指纹:内容哈希 + (Unix)权限位;不存在(或不是普通文件)
+/// 返回哨兵。权限位必须参与 TOCTOU 比对——确认框停留期间的 chmod 和内容
+/// 改动一样是"预览后被外部修改",只比内容会让回退把它静默覆盖回捕获时的
+/// 权限。Windows 没有 POSIX 位,指纹退化为纯内容哈希。
 fn current_state_hash(target: &Path) -> String {
     match fs::symlink_metadata(target) {
         Ok(md) if md.is_file() => match fs::read(target) {
-            Ok(bytes) => sha256_hex(&bytes),
+            Ok(bytes) => match file_mode(target) {
+                Some(mode) => format!("{}@{:o}", sha256_hex(&bytes), mode),
+                None => sha256_hex(&bytes),
+            },
             Err(_) => "unreadable".to_string(),
         },
         Ok(_) => "non-file".to_string(),
         Err(_) => "absent".to_string(),
+    }
+}
+
+/// 记录的 mode 与目标现状是否不一致。mode 没记录(老记录/Windows)或现状
+/// 取不到时视为一致——没有基线就谈不上漂移,回退侧也不会去改权限。
+fn mode_differs(recorded: Option<u32>, target: &Path) -> bool {
+    match recorded {
+        Some(want) => matches!(file_mode(target), Some(have) if have != want),
+        None => false,
     }
 }
 
@@ -877,7 +892,13 @@ fn classify_entry(
             Some(blob) => match fs::read(blobs_dir(dir).join(blob)) {
                 Err(_) => "missing-blob",
                 Ok(expected) => {
-                    if sha256_hex(&expected) == hash {
+                    // 指纹的内容部分与前像比对;内容一致但权限位漂移也不是
+                    // clean——回退会把权限还原回去,必须以 restore 呈现在预览
+                    // 里,不能藏在"已一致"里静默改权限。
+                    let current_content = hash.split_once('@').map_or(hash.as_str(), |(c, _)| c);
+                    if sha256_hex(&expected) == current_content
+                        && !mode_differs(record.mode, &target)
+                    {
                         "clean"
                     } else {
                         "restore"
@@ -960,9 +981,23 @@ pub struct CheckpointRewindResult {
     pub deleted_files: usize,
     pub clean_files: usize,
     pub skipped_dirs: usize,
+    /// 目标范围内捕获阶段就失败的记录数:这些文件没有前像,回退没有碰它们,
+    /// 现场并没有真正复原。
+    pub capture_errors: usize,
     /// 预览后被并发修改的文件:跳过不覆盖,由用户重新预览决定。
     pub conflicts: Vec<String>,
     pub failed: Vec<String>,
+}
+
+/// 一次回退是否"完整":没有冲突/失败/不可恢复目录/捕获失败。只有完整回退
+/// 才允许写 turn_seq=target 的剪枝标记。捕获失败的轮次即使其余文件都恢复了
+/// 也不完整——缺前像的文件仍停在改动后的状态,按完整剪枝会把 error 记录连同
+/// "这轮没回退干净"的事实一起从时间线上藏掉。
+fn rewind_is_complete(result: &CheckpointRewindResult) -> bool {
+    result.conflicts.is_empty()
+        && result.failed.is_empty()
+        && result.skipped_dirs == 0
+        && result.capture_errors == 0
 }
 
 /// 临时文件 + 原子 rename 落盘,避免半写状态。Windows 上 rename 不覆盖
@@ -1013,8 +1048,8 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
 /// 把 turn_seq >= target 的所有被改文件恢复到各自最早的前像。
 /// 索引物理上仍然只追加,但完整成功的回退会写下 turn_seq=target 的 rewind
 /// 标记,读取侧据此把 >= target 的陈旧未来记录剪掉,菜单不再残留已撤销的
-/// 轮次;有冲突/失败时写 turn_seq=0 的标记,只审计不剪枝,以免把还没回退
-/// 成功的路径一并埋掉。
+/// 轮次;有冲突/失败/捕获缺口(error 记录)时写 turn_seq=0 的标记,只审计
+/// 不剪枝,以免把还没回退成功的路径与"这轮不完整"的证据一并埋掉。
 fn checkpoint_rewind_code_sync(
     conversation_id: String,
     turn_seq: u64,
@@ -1028,11 +1063,22 @@ fn checkpoint_rewind_code_sync(
     // 的改动一并当作"陈旧未来"埋掉,前像就再也找不回来了。锁守的是 `()`,
     // 中毒不代表数据不一致,直接取回内部值,不因此让回退失败。
     let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let result = rewind_at(&dir, turn_seq, &authorized, Some(&expected));
-    // skipped_dirs 也算没回退干净:被递归删除的目录恢复不了,这一轮的现场
-    // 并没有真正复原,不能剪掉时间线让用户以为已经撤销。
-    let complete =
-        result.conflicts.is_empty() && result.failed.is_empty() && result.skipped_dirs == 0;
+    Ok(rewind_and_mark_at(&dir, turn_seq, &authorized, Some(&expected)))
+}
+
+/// 锁内的"回退 + 写审计/剪枝标记":目录可注入,便于单测覆盖完整/部分
+/// 标记的分界。调用方必须已持有 INDEX_LOCK。
+fn rewind_and_mark_at(
+    dir: &Path,
+    turn_seq: u64,
+    authorized: &[PathBuf],
+    expected: Option<&[CheckpointExpectedEntry]>,
+) -> CheckpointRewindResult {
+    let result = rewind_at(dir, turn_seq, authorized, expected);
+    // skipped_dirs 和 capture_errors 都算没回退干净:恢复不了的目录/没有
+    // 前像的文件让这一轮的现场没有真正复原,不能剪掉时间线让用户以为已经
+    // 撤销(剪枝还会把 error 记录一起埋掉,"不完整"从此不可见)。
+    let complete = rewind_is_complete(&result);
     // 回退审计标记:turn_seq>0 时同时承担"剪掉陈旧未来轮"的语义。
     let marker = CheckpointRecord {
         schema: 2,
@@ -1047,19 +1093,20 @@ fn checkpoint_rewind_code_sync(
         mtime_ms: 0,
         captured_at: now_ms(),
         note: Some(format!(
-            "target={} restored={} deleted={} conflicts={} failed={} complete={}",
+            "target={} restored={} deleted={} conflicts={} failed={} capture_errors={} complete={}",
             turn_seq,
             result.restored_files,
             result.deleted_files,
             result.conflicts.len(),
             result.failed.len(),
+            result.capture_errors,
             complete
         )),
         mode: None,
     };
-    // 仍在上面那把锁里,直接追加即可。
-    let _ = append_record(&dir, &marker);
-    Ok(result)
+    // 调用方持锁中,直接追加即可。
+    let _ = append_record(dir, &marker);
+    result
 }
 
 /// 目录可注入的回退实现,便于单测绕过 home 解析。
@@ -1077,16 +1124,17 @@ fn rewind_at(
             .map(|e| (e.key.as_str(), e.current_hash.as_str()))
             .collect()
     });
+    let (records, capture_errors) = earliest_records_since(dir, turn_seq);
     let mut result = CheckpointRewindResult {
         turn_seq,
         restored_files: 0,
         deleted_files: 0,
         clean_files: 0,
         skipped_dirs: 0,
+        capture_errors,
         conflicts: Vec::new(),
         failed: Vec::new(),
     };
-    let (records, _errors) = earliest_records_since(dir, turn_seq);
     for record in records {
         let display = format!("{}/{}", record.root, record.rel_path);
         if record.kind == "dir" {
@@ -1162,9 +1210,13 @@ fn rewind_at(
                     reject_multi_hardlink(&md)?;
                     if let Ok(current) = fs::read(&target) {
                         if current == pre_image {
-                            // 内容一致但权限可能被改过,前像里记了就一并还原。
+                            // 内容一致,但权限位可能与前像不同。这种情况预览
+                            // 已按 restore 披露,确认期间的 chmod 也会被状态
+                            // 指纹判成冲突拦下,走到这里的权限还原都是用户
+                            // 确认过的;按是否真的改了权限计 restored/clean。
+                            let mode_changed = mode_differs(record.mode, &target);
                             restore_file_mode(&target, record.mode);
-                            return Ok(false);
+                            return Ok(mode_changed);
                         }
                     }
                 }
@@ -1483,8 +1535,8 @@ mod tests {
         let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
         fs::write(&file, "v2").unwrap();
 
-        // 预览时看到的是 v2 的哈希;确认前文件又被改成 v3 → 冲突,跳过。
-        let preview_hash = sha256_hex(b"v2");
+        // 预览时看到的是 v2 的状态指纹;确认前文件又被改成 v3 → 冲突,跳过。
+        let preview_hash = current_state_hash(&file);
         fs::write(&file, "v3").unwrap();
         let expected = vec![CheckpointExpectedEntry {
             key: record_key(&normalize_root(&root), &normalize_rel(&r)),
@@ -1495,10 +1547,10 @@ mod tests {
         assert_eq!(result.conflicts.len(), 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v3");
 
-        // 哈希吻合时正常恢复。
+        // 指纹吻合时正常恢复。
         let expected = vec![CheckpointExpectedEntry {
             key: record_key(&normalize_root(&root), &normalize_rel(&r)),
-            current_hash: sha256_hex(b"v3"),
+            current_hash: current_state_hash(&file),
         }];
         let result = rewind_at(&ckpt, seq, &roots(&root), Some(&expected));
         assert_eq!(result.restored_files, 1);
@@ -1789,8 +1841,11 @@ mod tests {
             .unwrap();
         assert_eq!(dirty_entry.action, "restore");
         assert_eq!(clean_entry.action, "clean");
-        // 预览返回当前哈希,供 rewind 做冲突比对。
-        assert_eq!(dirty_entry.current_hash.as_deref(), Some(sha256_hex(b"v2").as_str()));
+        // 预览返回当前状态指纹(内容 + 权限位),供 rewind 做冲突比对。
+        assert_eq!(
+            dirty_entry.current_hash.as_deref(),
+            Some(current_state_hash(&dirty).as_str())
+        );
     }
 
     #[test]
@@ -2053,5 +2108,118 @@ mod tests {
             panic!("符号链接不能被当成可捕获的前像");
         };
         assert!(err.contains("symlink"));
+    }
+
+    #[test]
+    fn capture_error_marks_rewind_partial_and_keeps_timeline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        // 同轮另一个文件捕获失败:只有 error 记录,没有前像可回退。
+        append_error_record(
+            &ckpt,
+            seq,
+            "turn-1",
+            &normalize_root(&root),
+            "big.bin",
+            "file too large to checkpoint",
+        );
+        fs::write(&file, "v2").unwrap();
+
+        let result = {
+            let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            rewind_and_mark_at(&ckpt, seq, &roots(&root), None)
+        };
+        // 有前像的文件照常恢复,但结果必须上报捕获缺口,且不算完整回退。
+        assert_eq!(result.restored_files, 1);
+        assert_eq!(result.capture_errors, 1);
+        assert!(!rewind_is_complete(&result));
+        // 标记必须是 turn_seq=0(只审计不剪枝):该轮连同 error 记录仍然
+        // 可见,而不是"回退成功"后把不完整的事实一起从时间线上藏掉。
+        let live = live_records(read_index(&ckpt));
+        assert!(live.iter().any(|rec| rec.kind == "error"));
+        assert!(live.iter().any(|rec| rec.kind == "file"));
+    }
+
+    #[test]
+    fn complete_rewind_marker_prunes_timeline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        fs::write(&file, "v2").unwrap();
+
+        let result = {
+            let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            rewind_and_mark_at(&ckpt, seq, &roots(&root), None)
+        };
+        assert!(rewind_is_complete(&result));
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
+        // 无缺口的完整回退才允许剪枝,菜单不再残留已撤销的轮次。
+        assert!(live_records(read_index(&ckpt)).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn chmod_between_preview_and_rewind_is_a_conflict() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        fs::write(&file, "v2").unwrap();
+
+        // 预览(带走状态指纹)之后、确认之前用户 chmod:必须判冲突跳过,
+        // 内容与权限都保持原样,不得静默把权限改回捕获时的值。
+        let expected = expected_from_diff(&ckpt, seq, &root);
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&expected));
+        assert_eq!(result.restored_files, 0);
+        assert_eq!(result.conflicts.len(), 1);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v2");
+        assert_eq!(file_mode(&file).unwrap() & 0o777, 0o755);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mode_only_drift_previews_as_restore_and_is_restored() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("run.sh");
+        let r = rel(&file, &root);
+        fs::write(&file, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        // 内容没变但权限位漂移:预览必须按 restore 披露,不能伪装成 clean
+        // 再顺手改权限。
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+
+        let (records, _) = earliest_records_since(&ckpt, seq);
+        let entry = classify_entry(&ckpt, &records[0], &roots(&root));
+        assert_eq!(entry.action, "restore");
+
+        let expected = expected_from_diff(&ckpt, seq, &root);
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&expected));
+        assert_eq!(result.restored_files, 1);
+        assert_eq!(file_mode(&file).unwrap() & 0o777, 0o755);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "#!/bin/sh\n");
     }
 }

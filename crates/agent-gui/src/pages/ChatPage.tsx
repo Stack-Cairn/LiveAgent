@@ -1751,9 +1751,14 @@ export function ChatPage(props: ChatPageProps) {
                   // 那要改写已落库的摘要才能修,不在本功能范围内。
                   const zhLocale = locale === "zh-CN";
                   const summary = zhLocale
-                    ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}`
-                    : `Code rewound: restored ${info.restoredFiles}, deleted ${info.deletedFiles}${info.conflicts > 0 ? `, ${info.conflicts} conflict(s) skipped` : ""}${info.failed > 0 ? `, ${info.failed} failed` : ""}`;
-                  addNotify(info.failed > 0 || info.conflicts > 0 ? "error" : "success", summary);
+                    ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}${info.captureErrors > 0 ? `，${info.captureErrors} 个无前像未回退` : ""}`
+                    : `Code rewound: restored ${info.restoredFiles}, deleted ${info.deletedFiles}${info.conflicts > 0 ? `, ${info.conflicts} conflict(s) skipped` : ""}${info.failed > 0 ? `, ${info.failed} failed` : ""}${info.captureErrors > 0 ? `, ${info.captureErrors} without pre-image` : ""}`;
+                  addNotify(
+                    info.failed > 0 || info.conflicts > 0 || info.captureErrors > 0
+                      ? "error"
+                      : "success",
+                    summary,
+                  );
                 }}
               />
               <ProjectToolsPanelToggle

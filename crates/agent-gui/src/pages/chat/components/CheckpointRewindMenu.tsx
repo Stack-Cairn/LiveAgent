@@ -43,6 +43,8 @@ type CheckpointRewindResult = {
   deletedFiles: number;
   cleanFiles: number;
   skippedDirs: number;
+  /** 目标范围内捕获阶段就失败的记录数:这些文件没有前像,回退没有碰它们。 */
+  captureErrors: number;
   /** 预览后被外部修改、被跳过未覆盖的文件(冲突检测)。 */
   conflicts: string[];
   failed: string[];
@@ -64,6 +66,8 @@ export function CheckpointRewindMenu(props: {
     deletedFiles: number;
     conflicts: number;
     failed: number;
+    /** 捕获阶段就失败的文件数:没有前像,回退没有碰它们。 */
+    captureErrors: number;
   }) => void;
 }) {
   const { conversationId, workspaceRoot, project, disabled, onRewound } = props;
@@ -200,14 +204,33 @@ export function CheckpointRewindMenu(props: {
         deletedFiles: result.deletedFiles,
         conflicts: result.conflicts.length,
         failed: result.failed.length,
+        captureErrors: result.captureErrors,
       });
-      if (result.failed.length > 0 || result.conflicts.length > 0) {
+      if (
+        result.failed.length > 0 ||
+        result.conflicts.length > 0 ||
+        result.captureErrors > 0 ||
+        result.skippedDirs > 0
+      ) {
         const issueLines = [
           ...result.conflicts.map((path) =>
             zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`,
           ),
           ...result.failed.map((path) => (zh ? `失败: ${path}` : `failed: ${path}`)),
         ];
+        // 捕获缺口/不可恢复目录没有具体路径列表,单独一行说明。
+        if (result.captureErrors > 0)
+          issueLines.push(
+            zh
+              ? `该轮有 ${result.captureErrors} 个文件没有前像(捕获失败),未被回退`
+              : `${result.captureErrors} file(s) had no pre-image (capture failed) and were not rewound`,
+          );
+        if (result.skippedDirs > 0)
+          issueLines.push(
+            zh
+              ? `${result.skippedDirs} 个被删除目录无法恢复`
+              : `${result.skippedDirs} deleted dir(s) could not be restored`,
+          );
         await confirm({
           title: zh ? "回退部分未完成" : "Rewind partially completed",
           description: zh
