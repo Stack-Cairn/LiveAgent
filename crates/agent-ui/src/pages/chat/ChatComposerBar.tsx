@@ -1,6 +1,7 @@
 import {
   type ChatRuntimeControls,
   type ExecutionMode,
+  isAgentExecutionMode,
   type ProviderId,
   type ReasoningLevel,
   type SelectedModel,
@@ -216,7 +217,6 @@ export type ChatComposerBarProps = {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
-  isAgentMode: boolean;
   executionMode: ExecutionMode;
   hasModels: boolean;
   currentModelLabel: string;
@@ -282,7 +282,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     inputPlaceholder,
     workdir,
     enabledSkills,
-    isAgentMode,
     executionMode,
     hasModels,
     currentModelLabel,
@@ -350,6 +349,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
+  const isAgentMode = isAgentExecutionMode(executionMode);
   const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;

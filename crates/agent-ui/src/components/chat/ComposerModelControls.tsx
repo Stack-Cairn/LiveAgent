@@ -193,7 +193,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         {selectedOption ? (
           <ProviderBrandIcon type={selectedOption.providerType} className="opacity-90" />
         ) : (
-          <Sparkle className="h-4 w-4 shrink-0 text-violet-500" />
+          <Sparkle className="h-4 w-4 shrink-0 text-violet-500 dark:text-violet-400" />
         )}
         <span className="composer-model-label min-w-0 truncate max-[480px]:hidden">
           {triggerLabel}
@@ -498,7 +498,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                     className="h-8 w-full min-w-0 gap-0.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.07] pl-2 pr-1.5 text-[11px] font-medium text-foreground shadow-none outline-hidden disabled:opacity-45 [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50"
                     aria-label={t("chat.runtime.reasoning")}
                   >
-                    <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+                    <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500 dark:text-violet-400" />
                     <SelectValue>
                       {(value) =>
                         t(REASONING_I18N_KEYS[isReasoningLevel(value) ? value : selectedReasoning])

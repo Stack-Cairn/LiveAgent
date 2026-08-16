@@ -1277,6 +1277,12 @@ export function ChatPage(props: ChatPageProps) {
   });
   manualCompactActionRef.current = handleManualCompact;
 
+  const handleSelectExecutionMode = useCallback(
+    (mode: "text" | "tools") =>
+      setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
+    [setSettings],
+  );
+
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true);
   }, []);
@@ -1842,7 +1848,6 @@ export function ChatPage(props: ChatPageProps) {
                   inputPlaceholder={composerPlaceholder}
                   workdir={displayedConversationWorkdir}
                   enabledSkills={enabledComposerSkills}
-                  isAgentMode={isAgentMode}
                   executionMode={settings.system.executionMode}
                   hasModels={hasModels}
                   currentModelLabel={currentModelLabel}
@@ -1863,9 +1868,7 @@ export function ChatPage(props: ChatPageProps) {
                   onStop={handleStopSending}
                   onComposerBusyChange={handleComposerBusyChange}
                   onSelectModel={handleSelectModel}
-                  onSelectExecutionMode={(mode) =>
-                    setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode))
-                  }
+                  onSelectExecutionMode={handleSelectExecutionMode}
                   onOpenSettings={onOpenSettings}
                   onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                   onPickReadableFiles={pickReadableFiles}

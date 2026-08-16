@@ -24,7 +24,7 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useCallback } from "react";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
   getNextTheme,
@@ -299,6 +299,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const handleSelectExecutionMode = useCallback(
+    (mode: "text" | "tools") =>
+      setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
+    [setSettings],
+  );
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
@@ -612,7 +617,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
-                          isAgentMode={isAgentMode}
                           executionMode={settings.system.executionMode}
                           hasModels={modelOptions.length > 0}
                           currentModelLabel={currentModelLabel}
@@ -632,9 +636,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           gitDisabledMessage={gitDisabledMessage}
                           workspaceActivityClient={workspaceActivityClient}
                           onSelectModel={handleSelectModel}
-                          onSelectExecutionMode={(mode) =>
-                            setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode))
-                          }
+                          onSelectExecutionMode={handleSelectExecutionMode}
                           onOpenSettings={openSettings}
                           onSend={() => {
                             if (
