@@ -988,6 +988,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "This host uses keyboard-interactive authentication and cannot reconnect in place; reconnect it from the SSH tunnel panel.",
   "workspaceSshTerminal.closeTab": "Close SSH tab",
   "workspaceSshTerminal.sftpTab": "SFTP",
+  "workspaceSshTerminal.openedInWorkbench": "This session is open in the workbench",
+  "workspaceSshTerminal.focusWorkbenchPane": "Go to pane",
   "workspaceSftp.local": "Local Project",
   "workspaceSftp.remote": "Remote Device",
   "workspaceSftp.projectRoot": "Project",
@@ -1261,6 +1263,10 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "mcpHub.storePreviewHomepage": "Homepage",
   "mcpHub.storePreviewRepository": "Repository",
   "workbench.paneRegion": "Conversation pane",
+  "workbench.paneRegionConversation": "Conversation pane: {title}",
+  "workbench.paneRegionConversationInWorkspace": "Conversation pane: {title} in {workspace}",
+  "workbench.paneRegionTerminal": "Terminal pane: {title}",
+  "workbench.paneRegionUnsupported": "Unsupported pane",
   "workbench.resizeDivider": "Resize split",
   "workbench.emptyTitle": "No conversation panes",
   "workbench.emptyDescription": "Drag a conversation from the sidebar to open it here.",
@@ -1279,6 +1285,12 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.terminalSessionMissing": "This terminal session is no longer available",
   "workbench.terminalSshPrompt":
     "SSH authentication is required — open this host from the project tools panel first",
+  "workbench.terminalKill": "End session",
+  "workbench.terminalKillConfirm": "Confirm end",
+  "workbench.sshStatusConnected": "Connected",
+  "workbench.sshStatusReconnecting": "Reconnecting",
+  "workbench.sshStatusDisconnected": "Disconnected",
+  "workbench.sshReconnect": "Reconnect",
   "workbench.unsupportedPane":
     "This layout item was created by a newer version and cannot be displayed here.",
 } as const satisfies Record<string, string>;
