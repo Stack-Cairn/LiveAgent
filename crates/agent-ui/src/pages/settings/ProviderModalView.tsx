@@ -824,7 +824,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   />
                 </div>
 
-                {providerType !== "gemini" && providerType !== "xai" ? (
+                {providerType !== "gemini" &&
+                providerType !== "xai" &&
+                providerType !== "deepseek" ? (
                   <div
                     className={cn(
                       "mt-3 rounded-xl border bg-card px-4 py-3 transition-colors",

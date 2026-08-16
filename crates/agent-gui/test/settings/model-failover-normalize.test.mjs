@@ -48,6 +48,19 @@ const PROVIDERS = [
     nativeWebSearchEnabled: false,
     useSystemProxy: false,
   },
+  {
+    id: "provider-d",
+    name: "Provider D",
+    type: "deepseek",
+    baseUrl: "https://api.deepseek.com",
+    apiKey: "key-d",
+    models: [{ id: "deepseek-chat", contextWindow: 1_000_000, maxOutputToken: 384_000 }],
+    activeModels: ["deepseek-chat"],
+    reasoning: "high",
+    promptCachingEnabled: false,
+    nativeWebSearchEnabled: false,
+    useSystemProxy: false,
+  },
 ];
 
 const DEFAULT_VENDOR_FAILOVER = {
@@ -65,6 +78,7 @@ test("model failover defaults are off with an empty queue for every vendor", () 
     codex: DEFAULT_VENDOR_FAILOVER,
     gemini: DEFAULT_VENDOR_FAILOVER,
     xai: DEFAULT_VENDOR_FAILOVER,
+    deepseek: DEFAULT_VENDOR_FAILOVER,
   });
 });
 
@@ -102,6 +116,21 @@ test("cross-vendor queue entries are always dropped", () => {
     PROVIDERS,
   );
   assert.deepEqual(normalized.codex.queue, ["provider-b"]);
+});
+
+test("DeepSeek failover queues only accept DeepSeek providers", () => {
+  const normalized = settings.normalizeModelFailoverSettings(
+    {
+      deepseek: {
+        enabled: true,
+        queue: ["provider-a", "provider-d"],
+      },
+    },
+    PROVIDERS,
+  );
+
+  assert.equal(normalized.deepseek.enabled, true);
+  assert.deepEqual(normalized.deepseek.queue, ["provider-d"]);
 });
 
 test("legacy model-entry queues collapse to deduped provider ids", () => {

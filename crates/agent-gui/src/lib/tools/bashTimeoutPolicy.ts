@@ -39,6 +39,12 @@ const BASH_TIMEOUT_POLICIES: Record<ProviderId, BashTimeoutPolicy> = {
     defaultTimeoutMs: CODEX_BASH_DEFAULT_TIMEOUT_MS,
     maxTimeoutMs: CODEX_BASH_MAX_TIMEOUT_MS,
   },
+  deepseek: {
+    providerId: "deepseek",
+    providerLabel: "DeepSeek",
+    defaultTimeoutMs: CODEX_BASH_DEFAULT_TIMEOUT_MS,
+    maxTimeoutMs: CODEX_BASH_MAX_TIMEOUT_MS,
+  },
 };
 
 export function resolveBashTimeoutPolicy(providerId: ProviderId): BashTimeoutPolicy {

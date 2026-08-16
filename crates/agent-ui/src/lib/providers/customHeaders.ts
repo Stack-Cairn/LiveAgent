@@ -93,6 +93,7 @@ const CUSTOM_HEADER_KEY_PRESETS: Record<CustomProvider["type"], readonly string[
   codex: CODEX_CUSTOM_HEADER_KEY_PRESETS,
   gemini: COMMON_CUSTOM_HEADER_KEY_PRESETS,
   xai: XAI_CUSTOM_HEADER_KEY_PRESETS,
+  deepseek: COMMON_CUSTOM_HEADER_KEY_PRESETS,
 };
 
 export function getCustomHeaderKeyPresets(providerId: CustomProvider["type"]): readonly string[] {

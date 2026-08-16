@@ -304,6 +304,22 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
     },
+    {
+      id: "builtin-deepseek",
+      name: "DeepSeek",
+      type: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      isFullUrl: false,
+      apiKey: "",
+      customHeaders: [],
+      models: [],
+      activeModels: [],
+      reasoning: "high",
+      promptCachingEnabled: false,
+      nativeWebSearchEnabled: false,
+      useSystemProxy: false,
+      usageQuery: getDefaultUsageQueryConfig(),
+    },
   ];
 }
 
@@ -346,6 +362,7 @@ const CHAT_RUNTIME_REASONING_PROVIDER_KEYS: ChatRuntimeReasoningProviderKey[] = 
   "codex_openai_completions",
   "gemini",
   "xai",
+  "deepseek",
 ];
 
 export function getChatRuntimeReasoningProviderKey(params: {
@@ -360,6 +377,9 @@ export function getChatRuntimeReasoningProviderKey(params: {
   }
   if (params.providerId === "xai") {
     return "xai";
+  }
+  if (params.providerId === "deepseek") {
+    return "deepseek";
   }
   if (params.providerId === "codex" && params.requestFormat === "openai-completions") {
     return "codex_openai_completions";
@@ -774,10 +794,33 @@ function normalizeProviderId(input: unknown): ProviderId {
     case "codex":
     case "gemini":
     case "xai":
+    case "deepseek":
       return input;
     default:
       return "claude_code";
   }
+}
+
+// 与 Rust 导入侧 is_official_deepseek_base_url 同判定：仅官方域名。中转域名
+// 无法可靠判定归属，不做改判。
+function isOfficialDeepSeekBaseUrl(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    return new URL(value.trim()).hostname.toLowerCase() === "api.deepseek.com";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 存量配置一次性改判（#420）：v1.2.4 起 codex 分组不再按模型 ID 强制
+ * chat-completions，未显式选过请求格式的存量 DeepSeek 配置被 requestFormat
+ * 兜底静默翻转到 Responses 协议，官方端点断流/502。挂在 codex 分组下、指向
+ * 官方域名的配置迁入正式 deepseek 分组（原生 chat-completions，协议固定）。
+ * claude_code 分组的 /anthropic 端点配置仍走 Anthropic 协议，不在此迁移。
+ */
+function reclassifyProviderId(type: ProviderId, baseUrl: unknown): ProviderId {
+  return type === "codex" && isOfficialDeepSeekBaseUrl(baseUrl) ? "deepseek" : type;
 }
 
 function normalizeProviderName(id: string, input: unknown): string {
@@ -901,7 +944,7 @@ function normalizeUsageQueryConfig(input: unknown): UsageQueryConfig {
 
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const type = normalizeProviderId(obj.type);
+  const type = reclassifyProviderId(normalizeProviderId(obj.type), obj.baseUrl);
   const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
@@ -945,18 +988,18 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
-    // 行为由 promptCacheHintMode 决定。Gemini / xAI 不使用这里的缓存控制。
+    // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。
     promptCachingEnabled:
       type === "codex"
         ? promptCacheHintMode !== "none"
-        : type === "gemini" || type === "xai"
+        : type === "gemini" || type === "xai" || type === "deepseek"
           ? false
           : obj.promptCachingEnabled !== false,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
     ...(type === "claude_code" && obj.promptCacheRetention === "long"
       ? { promptCacheRetention: "long" as const }
       : {}),
-    nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
+    nativeWebSearchEnabled: type === "deepseek" ? false : obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
     usageQuery: normalizeUsageQueryConfig(obj.usageQuery),
   };

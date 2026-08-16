@@ -106,7 +106,10 @@ function ccsProviderIsTransferable(item: CcsProviderImportItem) {
   );
 }
 
-function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>): CustomProvider {
+export function providerFromCcs(
+  item: CcsProviderImportItem,
+  existingIds: Set<string>,
+): CustomProvider {
   const baseId =
     `ccswitch-${item.sourceId}`
       .toLowerCase()
@@ -138,8 +141,11 @@ function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>):
           ? item.requestFormat
           : undefined,
     reasoning: "off",
-    promptCachingEnabled: item.providerType !== "gemini" && item.providerType !== "xai",
-    nativeWebSearchEnabled: true,
+    promptCachingEnabled:
+      item.providerType !== "gemini" &&
+      item.providerType !== "xai" &&
+      item.providerType !== "deepseek",
+    nativeWebSearchEnabled: item.providerType !== "deepseek",
     useSystemProxy: false,
     usageQuery: getDefaultUsageQueryConfig(),
   };
@@ -169,7 +175,7 @@ function cherryEffectiveApiKey(item: CherryProviderImportItem, existing?: Custom
   return existing?.apiKey?.trim() ? existing.apiKey : item.apiKey;
 }
 
-function providerFromCherry(
+export function providerFromCherry(
   item: CherryProviderImportItem,
   allItems: CherryProviderImportItem[],
   existing?: CustomProvider,
@@ -195,9 +201,12 @@ function providerFromCherry(
           : undefined,
     reasoning: existing?.reasoning ?? "off",
     promptCachingEnabled:
-      existing?.promptCachingEnabled ??
-      (item.providerType !== "gemini" && item.providerType !== "xai"),
-    nativeWebSearchEnabled: existing?.nativeWebSearchEnabled ?? true,
+      item.providerType === "deepseek"
+        ? false
+        : (existing?.promptCachingEnabled ??
+          (item.providerType !== "gemini" && item.providerType !== "xai")),
+    nativeWebSearchEnabled:
+      item.providerType === "deepseek" ? false : (existing?.nativeWebSearchEnabled ?? true),
     useSystemProxy: existing?.useSystemProxy ?? false,
     usageQuery: existing?.usageQuery ?? getDefaultUsageQueryConfig(),
   };

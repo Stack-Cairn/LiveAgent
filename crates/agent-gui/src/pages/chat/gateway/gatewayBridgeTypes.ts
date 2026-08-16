@@ -100,7 +100,8 @@ export function normalizeGatewayProviderType(value: string): ProviderId | null {
     normalized === "codex" ||
     normalized === "claude_code" ||
     normalized === "gemini" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "deepseek"
   ) {
     return normalized;
   }

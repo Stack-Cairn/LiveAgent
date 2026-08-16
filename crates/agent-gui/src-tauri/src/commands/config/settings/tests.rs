@@ -1680,6 +1680,49 @@ mod tests {
     }
 
     #[test]
+    fn cherry_v1_routes_official_deepseek_chat_to_deepseek_provider() {
+        let provider = json!({
+            "id": "official-deepseek",
+            "name": "DeepSeek Official",
+            "type": "openai",
+            "apiKey": "secret",
+            "apiHost": "https://api.deepseek.com/v1/chat/completions#",
+            "models": [
+                { "id": "deepseek-chat", "endpoint_type": "openai-chat-completions", "type": ["text"] }
+            ]
+        });
+        let mut imported = Vec::new();
+
+        cherry_append_v1_provider(&provider, "1.9.9", &mut imported);
+
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].provider_type, "deepseek");
+        assert_eq!(imported[0].request_format, "openai-completions");
+        assert_eq!(imported[0].base_url, "https://api.deepseek.com/v1");
+    }
+
+    #[test]
+    fn cherry_v1_keeps_third_party_deepseek_model_in_codex_provider() {
+        let provider = json!({
+            "id": "aggregate-gateway",
+            "name": "Aggregate Gateway",
+            "type": "openai",
+            "apiKey": "secret",
+            "apiHost": "https://relay.example.test/v1",
+            "models": [
+                { "id": "deepseek-chat", "endpoint_type": "openai-chat-completions", "type": ["text"] }
+            ]
+        });
+        let mut imported = Vec::new();
+
+        cherry_append_v1_provider(&provider, "1.9.9", &mut imported);
+
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].provider_type, "codex");
+        assert_eq!(imported[0].request_format, "openai-completions");
+    }
+
+    #[test]
     fn ccs_maps_grokbuild_app_type_to_xai() {
         assert_eq!(
             ccs_provider_type_from_app_type("grokbuild"),
@@ -1688,6 +1731,55 @@ mod tests {
         assert_eq!(ccs_provider_type_from_app_type("grok"), Some("xai"));
         assert_eq!(ccs_provider_type_from_app_type("xai"), Some("xai"));
         assert_eq!(ccs_provider_type_from_app_type("Grok-Build"), Some("xai"));
+    }
+
+    #[test]
+    fn ccs_imports_deepseek_app_type_and_environment_fields() {
+        let config = json!({
+            "env": {
+                "DEEPSEEK_BASE_URL": "https://api.deepseek.com/v1/",
+                "DEEPSEEK_API_KEY": "sk-deepseek",
+                "DEEPSEEK_MODEL": "deepseek-chat",
+                "DEEPSEEK_REASONER_MODEL": "deepseek-reasoner"
+            }
+        });
+        let item = ccs_provider_from_value(
+            "deepseek-official",
+            "deepseek",
+            "DeepSeek Official",
+            &config,
+        )
+        .expect("deepseek provider should import");
+
+        assert_eq!(item.provider_type, "deepseek");
+        assert_eq!(item.base_url, "https://api.deepseek.com/v1");
+        assert_eq!(item.api_key, "sk-deepseek");
+        assert_eq!(item.request_format, "openai-completions");
+        assert_eq!(item.models, vec!["deepseek-chat", "deepseek-reasoner"]);
+    }
+
+    #[test]
+    fn ccs_reclassifies_only_official_deepseek_codex_chat_configs() {
+        let official = json!({
+            "auth": { "OPENAI_API_KEY": "sk-official" },
+            "config": "model = \"deepseek-chat\"\nmodel_provider = \"deepseek\"\n\n[model_providers.deepseek]\nbase_url = \"https://api.deepseek.com/v1\"\nwire_api = \"chat\"\n"
+        });
+        let aggregate = json!({
+            "auth": { "OPENAI_API_KEY": "sk-relay" },
+            "config": "model = \"deepseek-chat\"\nmodel_provider = \"relay\"\n\n[model_providers.relay]\nbase_url = \"https://relay.example.test/v1\"\nwire_api = \"chat\"\n"
+        });
+
+        let official_item =
+            ccs_provider_from_value("official", "codex", "Official", &official)
+                .expect("official config should import");
+        let aggregate_item =
+            ccs_provider_from_value("aggregate", "codex", "Aggregate", &aggregate)
+                .expect("aggregate config should import");
+
+        assert_eq!(official_item.provider_type, "deepseek");
+        assert_eq!(official_item.request_format, "openai-completions");
+        assert_eq!(aggregate_item.provider_type, "codex");
+        assert_eq!(aggregate_item.request_format, "openai-completions");
     }
 
     #[test]

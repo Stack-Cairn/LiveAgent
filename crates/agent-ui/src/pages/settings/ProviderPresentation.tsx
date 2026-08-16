@@ -2,6 +2,7 @@ import type { UsagePlanDisplay, UsageRelativeTime } from "@liveagent/app/lib/pro
 import type { PromptCacheHintMode, ProviderId } from "@liveagent/app/lib/settings";
 import {
   ClaudeIcon,
+  DeepseekIcon,
   GeminiIcon,
   GrokIcon,
   OpenaiChatgptIcon,
@@ -93,13 +94,20 @@ export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
   );
 }
 
-export const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini", "xai"];
+export const PROVIDER_TABS: ProviderId[] = [
+  "claude_code",
+  "codex",
+  "gemini",
+  "xai",
+  "deepseek",
+];
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",
   gemini: "Gemini",
   xai: "Grok",
+  deepseek: "DeepSeek",
 };
 
 export const PROMPT_CACHE_HINT_LABEL_KEYS: Record<PromptCacheHintMode, string> = {
@@ -117,6 +125,7 @@ export function ProviderBrandIcon({ type }: { type: ProviderId }) {
   if (type === "claude_code") return <ClaudeIcon height="1em" />;
   if (type === "gemini") return <GeminiIcon height="1em" />;
   if (type === "xai") return <GrokIcon height="1em" />;
+  if (type === "deepseek") return <DeepseekIcon height="1em" />;
   return <OpenaiChatgptIcon height="1em" className="fill-current dark:text-white" />;
 }
 
