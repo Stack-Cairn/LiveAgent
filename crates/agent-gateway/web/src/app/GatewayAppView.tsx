@@ -513,7 +513,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
                       <section
                         ref={transcriptStageRef}
-                        data-file-upload-drop-zone=""
                         className="gateway-transcript-stage"
                         // Preferred (persisted) width, so a fresh mount paints at
                         // the user's width instead of the default.
@@ -762,15 +761,18 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             />
                           }
                           approvalBar={approvalBar}
+                          fileDropOverlay={
+                            isFileDropActive ? (
+                              <FileDropOverlay
+                                variant="composer"
+                                canDropUpload={canDropUpload}
+                                title={fileDropTitle}
+                                description={fileDropDescription}
+                                limitHint={fileDropLimitHint}
+                              />
+                            ) : null
+                          }
                         />
-                        {isFileDropActive ? (
-                          <FileDropOverlay
-                            canDropUpload={canDropUpload}
-                            title={fileDropTitle}
-                            description={fileDropDescription}
-                            limitHint={fileDropLimitHint}
-                          />
-                        ) : null}
                       </section>
                     </>
                   ),

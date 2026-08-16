@@ -284,6 +284,8 @@ export type ChatComposerBarProps = {
   taskProgressBar?: ReactNode;
   /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
   approvalBar?: ReactNode;
+  /** 文件拖入命中输入框时显示的局部反馈层。 */
+  fileDropOverlay?: ReactNode;
 };
 
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
@@ -330,6 +332,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onHeightChange,
     taskProgressBar,
     approvalBar,
+    fileDropOverlay,
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
@@ -861,6 +864,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
           ref={glassCardRef}
+          data-file-upload-drop-zone=""
           onKeyDown={
             isComposerExpanded
               ? (event) => {
@@ -1207,6 +1211,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </Button>
             </div>
           </div>
+          {fileDropOverlay}
         </div>
       </div>
     </div>
