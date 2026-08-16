@@ -40,11 +40,19 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("popover interactions preserve mode changes and close after model selection", () => {
+test("popover interactions preserve mode and model changes until an outside dismissal", () => {
   for (const source of pickerSources) {
     assert.match(source, /onClick=\{\(\) => toggleGroup\(group\.id\)\}/);
+    assert.match(source, /const \[expandedGroupId, setExpandedGroupId\] = useState/);
+    assert.match(source, /return activeGroupId === id \? null : id/);
+    assert.doesNotMatch(source, /expandedGroups/);
     assert.match(source, /aria-pressed=\{isSelected\}/);
-    assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
+    assert.match(
+      source,
+      /<Popover\.Root open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
+    );
+    assert.match(source, /onSelectModel\(parsed\);/);
+    assert.doesNotMatch(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
   }
 });
 
@@ -89,5 +97,7 @@ test("model and runtime controls are colocated in the composer instead of the he
     assert.match(source, /nativeWebSearchEnabled: !chatRuntimeControls\.nativeWebSearchEnabled/);
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
     assert.match(source, /onChatRuntimeControlsChange\(\{ reasoning:/);
+    assert.match(source, /reasoningOptions\.length > 0 \? "grid-cols-3" : "grid-cols-2"/);
+    assert.match(source, /className="h-8 w-full min-w-0 gap-0\.5/);
   }
 });

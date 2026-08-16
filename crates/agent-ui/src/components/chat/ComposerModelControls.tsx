@@ -106,7 +106,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const { t } = useLocale();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null | undefined>(undefined);
   const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
     readStoredProviderSortMode(),
   );
@@ -116,7 +116,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   useEffect(() => {
     if (!isModelPickerOpen) return;
     setModelSearch("");
-    setExpandedGroups({});
+    setExpandedGroupId(undefined);
   }, [isModelPickerOpen]);
 
   useEffect(() => {
@@ -163,13 +163,16 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     persistProviderSortMode(nextProviderSortMode);
     setProviderSortMode(nextProviderSortMode);
   };
-  const isGroupExpanded = (id: string) =>
-    normalizedSearch.length > 0 || (expandedGroups[id] ?? id === selectedGroupId);
+  const isGroupExpanded = (id: string) => {
+    if (normalizedSearch.length > 0) return true;
+    const activeGroupId = expandedGroupId === undefined ? selectedGroupId : expandedGroupId;
+    return activeGroupId === id;
+  };
   const toggleGroup = (id: string) =>
-    setExpandedGroups((previous) => ({
-      ...previous,
-      [id]: !(previous[id] ?? id === selectedGroupId),
-    }));
+    setExpandedGroupId((previous) => {
+      const activeGroupId = previous === undefined ? selectedGroupId : previous;
+      return activeGroupId === id ? null : id;
+    });
 
   return (
     <Popover.Root open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
@@ -383,7 +386,6 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                     const parsed = parseModelValue(option.value);
                                     if (!parsed) return;
                                     onSelectModel(parsed);
-                                    setIsModelPickerOpen(false);
                                   }}
                                   className={cn(
                                     "model-selector-item flex h-[30px] w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-md py-0 pl-6 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-none hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white",
@@ -413,10 +415,12 @@ export const ComposerModelControls = memo(function ComposerModelControls(
               </div>
             </div>
 
-            <div
-              role="group"
+            <fieldset
               aria-label={t("chat.runtime.controls")}
-              className="grid shrink-0 grid-cols-[1fr_1fr_auto] items-center gap-1 border-t border-border/50 bg-muted/20 p-2"
+              className={cn(
+                "grid shrink-0 items-center gap-1 border-t border-border/50 bg-muted/20 p-2",
+                reasoningOptions.length > 0 ? "grid-cols-3" : "grid-cols-2",
+              )}
             >
               <button
                 type="button"
@@ -491,7 +495,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                   }
                 >
                   <SelectTrigger
-                    className="h-8 w-auto min-w-[4.5rem] shrink-0 gap-0.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.07] pl-2 pr-1.5 text-[11px] font-medium text-foreground shadow-none outline-hidden disabled:opacity-45 [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50"
+                    className="h-8 w-full min-w-0 gap-0.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.07] pl-2 pr-1.5 text-[11px] font-medium text-foreground shadow-none outline-hidden disabled:opacity-45 [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50"
                     aria-label={t("chat.runtime.reasoning")}
                   >
                     <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
@@ -514,7 +518,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                   </SelectContent>
                 </Select>
               ) : null}
-            </div>
+            </fieldset>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
