@@ -73,6 +73,7 @@ export function CheckpointRewindMenu(props: {
   const [turns, setTurns] = useState<CheckpointTurnSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyTurn, setBusyTurn] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
 
   const loadTurns = async () => {
     setLoading(true);
@@ -156,6 +157,14 @@ export function CheckpointRewindMenu(props: {
       const actionable = stats.entries.filter(
         (entry) => entry.action === "restore" || entry.action === "delete",
       );
+      // 检查点只记录 agent 工具写入前的前像，编辑器/文件树里的手改既不入账、
+      // 也无法与工具写入区分。回退按前像整体覆盖，手改会被一并抹掉，先说清楚。
+      if (actionable.length > 0)
+        parts.push(
+          zh
+            ? "手动编辑（编辑器/文件树）不在检查点内，会被一并覆盖"
+            : "Manual edits (editor / file tree) are not checkpointed and will be overwritten",
+        );
       const detailPaths = actionable.map((entry) => entry.path);
       const confirmed = await confirm({
         title: zh ? "回退代码到此轮开始前" : "Rewind code to before this turn",
@@ -229,8 +238,13 @@ export function CheckpointRewindMenu(props: {
   return (
     <>
       <DropdownMenu
-        onOpenChange={(open) => {
-          if (open) void loadTurns();
+        // disabled 只挡得住 trigger。菜单展开后用户才发出新一轮消息时，
+        // isSending 翻真但列表还开着，仍能点进回退——那一轮的捕获正在写，
+        // 回退会踩在半截时间线上。所以受控开合，disabled 一真就强制收起。
+        open={open && !disabled}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) void loadTurns();
         }}
       >
         <DropdownMenuTrigger

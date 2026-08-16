@@ -48,6 +48,10 @@ const MAX_TOTAL_BLOB_BYTES: u64 = 512 * 1024 * 1024;
 /// 单会话索引记录条数上限;超过后连 error 记录也不再追加(防索引自身膨胀)。
 const MAX_RECORDS_PER_CONVERSATION: usize = 10_000;
 
+/// 条数上限里给 error 记录预留的尾部名额:普通捕获先停,失败仍能如实写进
+/// 索引,撞上限的轮次才不会在 UI 上被显示成"完整"。
+const RECORD_CAP_ERROR_RESERVE: usize = 64;
+
 /// TS 侧随 fs 变更命令附带的检查点上下文;缺省(None)表示该调用不捕获。
 /// turnId 是每轮唯一的稳定 ID(与时钟无关),序号由 Rust 侧分配。
 #[derive(Debug, Clone, Deserialize)]
@@ -80,6 +84,11 @@ pub struct CheckpointRecord {
     /// error 记录的失败原因 / rewind 记录的摘要。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Unix 权限位(仅 file 记录、仅 Unix 捕获时写入)。内容对了但 +x 丢了
+    /// 的脚本仍然是坏的,所以回退时一并还原。可选字段:v2 老记录读出来是
+    /// None,跳过还原即可,不需要升 schema。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
 }
 
 /// 捕获时携带的前像内容,避免调用方(如 Edit)已读过的字节被二次读取。
@@ -93,7 +102,12 @@ pub enum PreImage<'a> {
 }
 
 // index.jsonl 的"读检查 + 追加"必须互斥:并发 fs 命令可能同轮同文件竞争,
-// turn_seq 的分配也依赖这把锁保证单调。
+// turn_seq 的分配也依赖这把锁保证单调。回退期间也要一直持有,否则新落盘的
+// 捕获会被随后写下的剪枝标记连带埋掉。
+//
+// 守的是 `()`,没有任何被保护的不变量会因 panic 而损坏,所以各处都用
+// `into_inner()` 从中毒里恢复——一次无关的 panic 不该把整个检查点子系统
+// 变成"再也捕获不了、也再也回退不了"。
 static INDEX_LOCK: Mutex<()> = Mutex::new(());
 
 fn now_ms() -> u64 {
@@ -164,6 +178,30 @@ fn tighten_permissions(path: &Path, is_dir: bool) {
 
 #[cfg(not(unix))]
 fn tighten_permissions(_path: &Path, _is_dir: bool) {}
+
+/// 捕获前像时记下 Unix 权限位;Windows 没有 POSIX 位,恒为 None。
+#[cfg(unix)]
+fn file_mode(path: &Path) -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path).ok().map(|md| md.permissions().mode())
+}
+
+#[cfg(not(unix))]
+fn file_mode(_path: &Path) -> Option<u32> {
+    None
+}
+
+/// 回退写回内容后还原权限位。老记录没有这个字段就保持现状。
+#[cfg(unix)]
+fn restore_file_mode(path: &Path, mode: Option<u32>) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Some(mode) = mode {
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_file_mode(_path: &Path, _mode: Option<u32>) {}
 
 fn ensure_conversation_dirs(dir: &Path) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -276,6 +314,7 @@ fn append_error_record(
         mtime_ms: 0,
         captured_at: now_ms(),
         note: Some(reason.to_string()),
+        mode: None,
     };
     if let Err(e) = append_record(dir, &record) {
         eprintln!("checkpoint error-record append failed for {rel_path}: {e}");
@@ -318,13 +357,15 @@ fn capture_at_with_limits(
     let rel_str = normalize_rel(rel_path);
     let abs_path = root.join(rel_path);
 
-    let _guard = INDEX_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let existing = read_index(dir);
     let turn_seq = resolve_turn_seq(&existing, turn_id);
 
-    // 记录条数上限:超限后不再追加任何记录(含 error),防索引自身膨胀。
-    if existing.len() >= MAX_RECORDS_PER_CONVERSATION {
+    // 记录条数上限:普通捕获提前 RECORD_CAP_ERROR_RESERVE 条停住,把尾部
+    // 名额留给 error 记录。否则撞上限的那些轮次连"不完整"都写不进去,UI 上
+    // 会假装这一轮完好无损。
+    if existing.len() + RECORD_CAP_ERROR_RESERVE >= MAX_RECORDS_PER_CONVERSATION {
         return Err(format!(
             "checkpoint record cap reached ({MAX_RECORDS_PER_CONVERSATION})"
         ));
@@ -352,6 +393,7 @@ fn capture_at_with_limits(
             mtime_ms: 0,
             captured_at: now_ms(),
             note: None,
+            mode: None,
         },
         PreImage::Dir => CheckpointRecord {
             schema: 2,
@@ -366,6 +408,7 @@ fn capture_at_with_limits(
             mtime_ms: 0,
             captured_at: now_ms(),
             note: None,
+            mode: None,
         },
         PreImage::File(bytes) => {
             let owned;
@@ -417,18 +460,17 @@ fn capture_at_with_limits(
                 );
                 return Ok(turn_seq);
             }
-            let (size, mtime_ms) = match fs::symlink_metadata(&abs_path) {
-                Ok(md) => {
-                    let mtime = md
-                        .modified()
-                        .ok()
-                        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                        .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64)
-                        .unwrap_or(0);
-                    (md.len(), mtime)
-                }
-                Err(_) => (bytes.len() as u64, 0),
-            };
+            // size 就是这条记录实际占用的 blob 字节数,配额只按它求和。用
+            // metadata().len() 会在"调用方直接给 bytes"或读盘后文件又被改
+            // 的情况下与落盘量对不上,配额跟着失真。
+            let mtime_ms = fs::symlink_metadata(&abs_path)
+                .ok()
+                .and_then(|md| md.modified().ok())
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64)
+                .unwrap_or(0);
+            let size = bytes.len() as u64;
+            let mode = file_mode(&abs_path);
             let blob = write_blob(dir, &record_key(&root_str, &rel_str), bytes)?;
             CheckpointRecord {
                 schema: 2,
@@ -443,6 +485,7 @@ fn capture_at_with_limits(
                 mtime_ms,
                 captured_at: now_ms(),
                 note: None,
+                mode,
             }
         }
     };
@@ -470,11 +513,13 @@ fn record_capture_skip(ctx: &CheckpointCtx, root: &Path, rel_path: &Path, reason
     if ensure_conversation_dirs(&dir).is_err() {
         return;
     }
-    let Ok(_guard) = INDEX_LOCK.lock() else {
-        return;
-    };
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let existing = read_index(&dir);
     if existing.len() >= MAX_RECORDS_PER_CONVERSATION {
+        eprintln!(
+            "checkpoint record cap reached; dropping skip record for {}",
+            root.join(rel_path).display()
+        );
         return;
     }
     let seq = resolve_turn_seq(&existing, &ctx.turn_id);
@@ -935,15 +980,28 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     match fs::rename(&tmp, target) {
         Ok(()) => Ok(()),
+        // Windows 上目标被占用(编辑器/杀软持有句柄)时 rename 会失败。原先
+        // 的兜底是 remove 目标再 rename,但 remove 成功而 rename 仍失败时,
+        // 旧内容和新内容会同时消失——回退反而把文件弄丢了。改为先把旧文件
+        // 挪到备份名:第二次 rename 失败就把备份挪回来,任何一步失败都至少
+        // 保住一份完整内容。
         Err(_) if target.exists() => {
-            fs::remove_file(target).map_err(|e| {
+            let backup = parent.join(format!(".ckpt-bak-{}-{}", std::process::id(), now_ms()));
+            if let Err(e) = fs::rename(target, &backup) {
                 let _ = fs::remove_file(&tmp);
-                e.to_string()
-            })?;
-            fs::rename(&tmp, target).map_err(|e| {
-                let _ = fs::remove_file(&tmp);
-                e.to_string()
-            })
+                return Err(e.to_string());
+            }
+            match fs::rename(&tmp, target) {
+                Ok(()) => {
+                    let _ = fs::remove_file(&backup);
+                    Ok(())
+                }
+                Err(e) => {
+                    let _ = fs::rename(&backup, target);
+                    let _ = fs::remove_file(&tmp);
+                    Err(e.to_string())
+                }
+            }
         }
         Err(e) => {
             let _ = fs::remove_file(&tmp);
@@ -997,6 +1055,7 @@ fn checkpoint_rewind_code_sync(
             result.failed.len(),
             complete
         )),
+        mode: None,
     };
     // 仍在上面那把锁里,直接追加即可。
     let _ = append_record(&dir, &marker);
@@ -1103,6 +1162,8 @@ fn rewind_at(
                     reject_multi_hardlink(&md)?;
                     if let Ok(current) = fs::read(&target) {
                         if current == pre_image {
+                            // 内容一致但权限可能被改过,前像里记了就一并还原。
+                            restore_file_mode(&target, record.mode);
                             return Ok(false);
                         }
                     }
@@ -1115,6 +1176,9 @@ fn rewind_at(
             // 检查与写入之间的窗口:紧邻落盘再走一遍授权链。
             reverify_target(&record, &target, authorized_roots)?;
             atomic_write(&target, &pre_image)?;
+            // atomic_write 走的是新建临时文件 + rename,新文件带的是默认权限,
+            // 不还原的话可执行脚本回退完就没了 +x。
+            restore_file_mode(&target, record.mode);
             Ok(true)
         })();
         match restore {
@@ -1844,6 +1908,7 @@ mod tests {
                 mtime_ms: 0,
                 captured_at: now_ms(),
                 note: None,
+                mode: None,
             },
         )
         .unwrap();

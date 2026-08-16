@@ -1801,6 +1801,11 @@ export function ChatPage(props: ChatPageProps) {
                   onRewound={(info) => {
                     // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
                     // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+                    //
+                    // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
+                    // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
+                    // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
+                    // 那要改写已落库的摘要才能修,不在本功能范围内。
                     const zhLocale = locale === "zh-CN";
                     const summary = zhLocale
                       ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}`

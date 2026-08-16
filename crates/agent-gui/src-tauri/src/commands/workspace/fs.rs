@@ -631,6 +631,19 @@ fn logical_rel_path(rel: &Path) -> String {
     rel.to_string_lossy().replace('\\', "/")
 }
 
+/// 检查点记录用的相对路径:必须相对于 canonicalize **之后**的真实目标。
+///
+/// `resolve_target` 会解析工作区内部的符号链接,所以请求路径(`link/a.txt`)
+/// 和实际落盘路径(`real/a.txt`)可能分叉。按请求路径记有两个后果:前像挂在
+/// 一个根本没被改动的路径上;回退时逐级拒符号链接又会把它判成不可解析,于是
+/// 这条改动永远回退不了。取不到前缀(理论上不该发生)时退回请求路径。
+fn checkpoint_rel(workdir: &Path, target: &Path, requested: &Path) -> PathBuf {
+    target
+        .strip_prefix(workdir)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| requested.to_path_buf())
+}
+
 fn display_path(path: &Path) -> String {
     let normalized = path.to_string_lossy().replace('\\', "/");
     if let Some(rest) = normalized.strip_prefix("//?/UNC/") {
@@ -3094,7 +3107,7 @@ fn fs_write_text_impl(
     capture_pre_image(
         checkpoint.as_ref(),
         &path.root,
-        &path.relative_path,
+        &checkpoint_rel(&path.root, &target, &path.relative_path),
         if existed_before {
             PreImage::File(None)
         } else {
@@ -3251,7 +3264,12 @@ fn fs_edit_text_impl(
     let next = apply_edit_replacements(&text, applied);
 
     // 落盘前捕获前像:直接复用上面已读入内存的原字节。失败不阻断写入。
-    capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::File(Some(&bytes)));
+    capture_pre_image(
+        checkpoint.as_ref(),
+        wd,
+        &checkpoint_rel(wd, &target, &rel),
+        PreImage::File(Some(&bytes)),
+    );
 
     fs::write(&target, next.as_bytes())?;
     let md = fs::metadata(&target)?;
@@ -3338,18 +3356,19 @@ fn fs_delete_impl(
     let target = parent.join(file_name);
 
     let meta = fs::symlink_metadata(&target)?;
+    let ckpt_rel = checkpoint_rel(wd, &target, &rel);
     let kind = if meta.file_type().is_symlink() {
         // 符号链接不做前像捕获:链接目标不属于本文件的内容,恢复语义不明确。
         remove_symlink_path(&target)?;
         "symlink"
     } else if meta.is_file() {
         // 删除前捕获整个文件内容,回退即可原样恢复。失败不阻断删除。
-        capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::File(None));
+        capture_pre_image(checkpoint.as_ref(), wd, &ckpt_rel, PreImage::File(None));
         fs::remove_file(&target)?;
         "file"
     } else if meta.is_dir() {
         // 目录是递归删除,只能记不可恢复的标记,由 diff 统计如实呈现。
-        capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::Dir);
+        capture_pre_image(checkpoint.as_ref(), wd, &ckpt_rel, PreImage::Dir);
         fs::remove_dir_all(&target)?;
         "dir"
     } else {

@@ -782,15 +782,6 @@ fn apply_worktree_changes_blocking(
         });
     }
 
-    // 在父仓库被任何 apply 路径(git apply / 3way / 文件拷贝兜底)修改之前,
-    // 对受影响路径捕获父工作区前像。捕获记在父仓库根下,rewind 才能恢复
-    // 真实工作区,而不是已被清理的 worktree 临时目录。
-    super::checkpoint::capture_worktree_apply_pre_images(
-        checkpoint.as_ref(),
-        &parent_repo_root,
-        &apply_paths,
-    );
-
     stage_apply_paths(&worktree_root, &apply_paths)?;
     let patch = run_git_raw(
         &worktree_root,
@@ -811,6 +802,19 @@ fn apply_worktree_changes_blocking(
             conflict_files: Vec::new(),
         });
     }
+
+    // 在父仓库被任何 apply 路径(git apply / 3way / 文件拷贝兜底)修改之前,
+    // 对受影响路径捕获父工作区前像。捕获记在父仓库根下,rewind 才能恢复
+    // 真实工作区,而不是已被清理的 worktree 临时目录。
+    //
+    // 必须放在 empty_patch 提前返回之后:那条路径下父仓库一个字节都没动,
+    // 提前捕获会给未来的回退留下一批 existed_before=false 的记录,回退时
+    // 反而把父工作区里本来就存在的文件删掉。
+    super::checkpoint::capture_worktree_apply_pre_images(
+        checkpoint.as_ref(),
+        &parent_repo_root,
+        &apply_paths,
+    );
 
     let direct_apply_result = run_git_apply_with_options(&parent_repo_root, &patch, &[]);
 
