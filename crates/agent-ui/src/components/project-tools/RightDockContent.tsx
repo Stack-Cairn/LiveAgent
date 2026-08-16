@@ -22,6 +22,11 @@ type RightDockContentProps = {
   onTerminalError: (sessionId: string, message: string | null) => void;
   onInitialTerminalSnapshotConsumed: (sessionId: string) => void;
   onCreateTerminal: () => void;
+  /**
+   * 存在时"新建终端"按钮可拖出到工作台画板(拖到落点新建终端 Pane);
+   * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
+   */
+  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
 };
 
 export function RightDockContent(props: RightDockContentProps) {
@@ -37,6 +42,7 @@ export function RightDockContent(props: RightDockContentProps) {
     onTerminalError,
     onInitialTerminalSnapshotConsumed,
     onCreateTerminal,
+    onNewTerminalDragStart,
   } = props;
   const { t } = useLocale();
   const context = useRightDockToolContext();
@@ -126,7 +132,23 @@ export function RightDockContent(props: RightDockContentProps) {
               </div>
             )}
           </div>
-          <Button onClick={onCreateTerminal} disabled={!terminalReady || creating} size="sm">
+          <Button
+            onClick={onCreateTerminal}
+            disabled={!terminalReady || creating}
+            size="sm"
+            onPointerDown={
+              onNewTerminalDragStart && terminalReady && !creating
+                ? (event) => {
+                    if (event.button !== 0 || event.pointerType === "touch") return;
+                    onNewTerminalDragStart({
+                      pointerId: event.pointerId,
+                      clientX: event.clientX,
+                      clientY: event.clientY,
+                    });
+                  }
+                : undefined
+            }
+          >
             {t("projectTools.newTerminal")}
           </Button>
           {loading ? (

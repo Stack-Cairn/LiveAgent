@@ -96,6 +96,8 @@ type RightDockPanelProps = {
     session: TerminalSession,
     event: { pointerId: number; clientX: number; clientY: number },
   ) => void;
+  /** 存在时空态"新建终端"按钮可拖出到工作台画板;点击行为不变。 */
+  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
   onInsertCodeReviewSkill?: () => void;
@@ -378,6 +380,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onOpenSshSession,
     onSessionsChange,
     onTerminalTabDragStart,
+    onNewTerminalDragStart,
     onInsertFileMention,
     onOpenFile,
     onInsertCodeReviewSkill,
@@ -935,6 +938,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
+                  onNewTerminalDragStart={onNewTerminalDragStart}
                 />
               )}
             </>
