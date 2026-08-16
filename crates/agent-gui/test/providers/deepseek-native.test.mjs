@@ -609,19 +609,25 @@ test("DeepSeek native stream fails fast on non-SSE 200 responses instead of repo
   assert.equal(result.errorMessage.includes("ended without"), false);
 });
 
-test("DeepSeek native stream maps caller cancellation to aborted", async () => {
+test("DeepSeek native stream maps caller cancellation without AbortSignal.any", async () => {
   const controller = new AbortController();
   controller.abort(new Error("cancelled by user"));
+  const originalAny = AbortSignal.any;
 
-  const { events, result } = await runStream({
-    signal: controller.signal,
-    fetch: async (_url, options) => {
-      options.signal.throwIfAborted();
-      throw new Error("fetch should not continue");
-    },
-  });
+  try {
+    AbortSignal.any = undefined;
+    const { events, result } = await runStream({
+      signal: controller.signal,
+      fetch: async (_url, options) => {
+        options.signal.throwIfAborted();
+        throw new Error("fetch should not continue");
+      },
+    });
 
-  assert.equal(events.at(-1).type, "error");
-  assert.equal(result.stopReason, "aborted");
-  assert.match(result.errorMessage, /cancelled by user/);
+    assert.equal(events.at(-1).type, "error");
+    assert.equal(result.stopReason, "aborted");
+    assert.match(result.errorMessage, /cancelled by user/);
+  } finally {
+    AbortSignal.any = originalAny;
+  }
 });

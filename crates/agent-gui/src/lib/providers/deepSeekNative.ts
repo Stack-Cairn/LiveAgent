@@ -323,6 +323,16 @@ function responseHeaders(headers: Headers): Record<string, string> {
   return result;
 }
 
+function forwardAbort(source: AbortSignal, target: AbortController): () => void {
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+  const onAbort = () => target.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
+}
+
 export function streamDeepSeekNative(
   model: DeepSeekModel,
   context: Context,
@@ -333,9 +343,9 @@ export function streamDeepSeekNative(
 
   void (async () => {
     const idleController = new AbortController();
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, idleController.signal])
-      : idleController.signal;
+    const requestController = new AbortController();
+    let releaseCallerAbort = () => {};
+    let releaseIdleAbort = () => {};
     let idleTimedOut = false;
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     const armIdleTimer = () => {
@@ -347,6 +357,9 @@ export function streamDeepSeekNative(
     };
 
     try {
+      if (options.signal) releaseCallerAbort = forwardAbort(options.signal, requestController);
+      releaseIdleAbort = forwardAbort(idleController.signal, requestController);
+
       const preparedContext = await inlineDeepSeekLargePastes(context, options.workdir);
       let payload: unknown = serializeDeepSeekRequest(model, preparedContext, options);
       const replacement = await options.onPayload?.(payload, model);
@@ -357,7 +370,7 @@ export function streamDeepSeekNative(
         method: "POST",
         headers: buildHeaders(model, options),
         body: JSON.stringify(payload),
-        signal,
+        signal: requestController.signal,
       });
       armIdleTimer();
       await options.onResponse?.(
@@ -570,6 +583,9 @@ export function streamDeepSeekNative(
       stream.end(output);
     } finally {
       if (idleTimer) clearTimeout(idleTimer);
+      releaseCallerAbort();
+      releaseIdleAbort();
+      requestController.abort();
       idleController.abort();
     }
   })();
