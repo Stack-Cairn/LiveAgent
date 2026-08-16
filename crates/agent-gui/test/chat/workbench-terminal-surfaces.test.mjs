@@ -1,0 +1,393 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const loader = createTsModuleLoader();
+const workbench = loader.loadModule("@liveagent/ui/lib/workbench/index.ts");
+
+const {
+  applyWorkbenchCommand,
+  collectWorkbenchLayoutIssues,
+  createEmptyWorkbenchLayout,
+  decodeWorkbenchLayout,
+  encodeWorkbenchLayout,
+  findPaneIdByConversationId,
+  findPaneIdBySurfaceKey,
+  surfaceIdentityKey,
+  surfaceProjectRef,
+  WORKBENCH_LAYOUT_SCHEMA_VERSION,
+} = workbench;
+
+let splitCounter = 0;
+const reducerOptions = { createSplitId: () => `terminal-split-${++splitCounter}` };
+
+const project = (projectId = "project-main") => ({
+  projectId,
+  projectPathKey: `/workspace/${projectId}`,
+});
+
+function conversationPane(paneId, conversationId, projectId = "project-main") {
+  return {
+    paneId,
+    surface: { kind: "conversation", conversationId, project: project(projectId) },
+    view: {},
+  };
+}
+
+function localTerminalPane(paneId, surfaceId, overrides = {}) {
+  return {
+    paneId,
+    surface: {
+      kind: "localTerminal",
+      surfaceId,
+      project: project(),
+      launchSpec: { cwd: "/workspace/project-main", ...overrides },
+    },
+    view: {},
+  };
+}
+
+function sshTerminalPane(paneId, surfaceId, overrides = {}) {
+  return {
+    paneId,
+    surface: {
+      kind: "sshTerminal",
+      surfaceId,
+      project: project(),
+      launchSpec: { cwd: "/remote/home", sshHostId: "host-1", ...overrides },
+    },
+    view: {},
+  };
+}
+
+function apply(layout, command) {
+  return applyWorkbenchCommand(
+    layout,
+    { expectedRevision: layout.revision, ...command },
+    reducerOptions,
+  );
+}
+
+function mustApply(layout, command) {
+  const result = apply(layout, command);
+  assert.equal(result.ok, true, `command ${command.type} failed: ${JSON.stringify(result)}`);
+  return result.layout;
+}
+
+function conversationRoot() {
+  return mustApply(createEmptyWorkbenchLayout(), {
+    type: "OPEN_PANE",
+    pane: conversationPane("pane-conversation", "conversation-a"),
+    target: { kind: "canvas-empty" },
+  });
+}
+
+test("identity helpers distinguish surface kinds", () => {
+  assert.equal(
+    surfaceIdentityKey({ kind: "conversation", conversationId: " c1 ", project: project() }),
+    "conversation:c1",
+  );
+  assert.equal(surfaceIdentityKey(localTerminalPane("p", " t1 ").surface), "terminal:t1");
+  assert.equal(surfaceIdentityKey(sshTerminalPane("p", "t2").surface), "terminal:t2");
+  assert.deepEqual(surfaceProjectRef(localTerminalPane("p", "t1").surface), project());
+  assert.equal(
+    surfaceProjectRef({ kind: "unsupported", originalKind: "editor", raw: {} }),
+    null,
+  );
+});
+
+test("opens a local terminal pane beside a conversation pane", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal", "terminal-1"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  assert.equal(layout.focusedPaneId, "pane-terminal");
+  assert.equal(Object.keys(layout.panes).length, 2);
+  assert.equal(findPaneIdBySurfaceKey(layout, "terminal:terminal-1"), "pane-terminal");
+  assert.equal(findPaneIdByConversationId(layout, "conversation-a"), "pane-conversation");
+  assert.deepEqual(collectWorkbenchLayoutIssues(layout), []);
+});
+
+test("rejects a second pane for the same terminal surface id", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal", "terminal-1"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  const result = apply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal-2", "terminal-1"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "bottom" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "duplicate-surface");
+});
+
+test("distinct surface ids with identical launch specs may coexist", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal-1", "terminal-1"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal-2", "terminal-2"),
+    target: { kind: "pane-edge", paneId: "pane-terminal-1", edge: "bottom" },
+  });
+  assert.equal(Object.keys(layout.panes).length, 3);
+  assert.deepEqual(collectWorkbenchLayoutIssues(layout), []);
+});
+
+test("rejects invalid terminal records and unsupported surfaces on open", () => {
+  const layout = conversationRoot();
+  const missingCwd = apply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal", "terminal-1", { cwd: "  " }),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  assert.equal(missingCwd.ok, false);
+  assert.equal(missingCwd.error.code, "invalid-layout");
+
+  const missingSurfaceId = apply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal", "  "),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  assert.equal(missingSurfaceId.ok, false);
+  assert.equal(missingSurfaceId.error.code, "invalid-layout");
+
+  const unsupported = apply(layout, {
+    type: "OPEN_PANE",
+    pane: {
+      paneId: "pane-unknown",
+      surface: { kind: "unsupported", originalKind: "editor", raw: { kind: "editor" } },
+      view: {},
+    },
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  assert.equal(unsupported.ok, false);
+  assert.equal(unsupported.error.code, "unsupported-surface");
+});
+
+test("terminal panes move, swap focus, and close like conversations", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: sshTerminalPane("pane-ssh", "terminal-ssh"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  layout = mustApply(layout, {
+    type: "MOVE_PANE",
+    paneId: "pane-ssh",
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "top" },
+  });
+  assert.equal(layout.focusedPaneId, "pane-ssh");
+  layout = mustApply(layout, { type: "FOCUS_PANE", paneId: "pane-conversation" });
+  layout = mustApply(layout, { type: "CLOSE_PANE", paneId: "pane-ssh" });
+  assert.equal(layout.panes["pane-ssh"], undefined);
+  assert.equal(layout.focusedPaneId, "pane-conversation");
+  assert.deepEqual(collectWorkbenchLayoutIssues(layout), []);
+});
+
+test("invariants flag duplicate terminal surfaces and invalid launch specs", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal-1", "terminal-1"),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-terminal-2", "terminal-2"),
+    target: { kind: "pane-edge", paneId: "pane-terminal-1", edge: "bottom" },
+  });
+
+  const duplicated = {
+    ...layout,
+    panes: {
+      ...layout.panes,
+      "pane-terminal-2": {
+        ...layout.panes["pane-terminal-2"],
+        surface: {
+          ...layout.panes["pane-terminal-2"].surface,
+          surfaceId: "terminal-1",
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    collectWorkbenchLayoutIssues(duplicated).map((issue) => issue.code),
+    ["duplicate-surface"],
+  );
+
+  const badCwd = {
+    ...layout,
+    panes: {
+      ...layout.panes,
+      "pane-terminal-2": {
+        ...layout.panes["pane-terminal-2"],
+        surface: {
+          ...layout.panes["pane-terminal-2"].surface,
+          launchSpec: { cwd: " " },
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    collectWorkbenchLayoutIssues(badCwd).map((issue) => issue.code),
+    ["invalid-pane-record"],
+  );
+});
+
+test("codec round-trips conversation, local terminal, and ssh terminal panes", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: localTerminalPane("pane-local", "terminal-local", { shell: "zsh", title: "Build" }),
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "right" },
+  });
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: sshTerminalPane("pane-ssh", "terminal-ssh", { sftpEnabled: true, title: "Deploy" }),
+    target: { kind: "pane-edge", paneId: "pane-local", edge: "bottom" },
+  });
+
+  const decoded = decodeWorkbenchLayout(encodeWorkbenchLayout(layout));
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.repaired, false);
+  assert.deepEqual(decoded.layout.panes, layout.panes);
+  assert.deepEqual(decoded.layout.root, layout.root);
+  assert.equal(decoded.layout.focusedPaneId, layout.focusedPaneId);
+});
+
+test("codec preserves unknown surface kinds as unsupported passthrough", () => {
+  const rawSurface = {
+    kind: "editor",
+    surfaceId: "editor-1",
+    filePath: "/workspace/project-main/src/main.rs",
+  };
+  const payload = JSON.stringify({
+    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
+    revision: 7,
+    root: {
+      type: "split",
+      splitId: "split-a",
+      axis: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-a" },
+      second: { type: "leaf", paneId: "pane-b" },
+    },
+    panes: {
+      "pane-a": conversationPane("pane-a", "conversation-a"),
+      "pane-b": { paneId: "pane-b", surface: rawSurface, view: {} },
+    },
+    focusedPaneId: "pane-a",
+  });
+
+  const decoded = decodeWorkbenchLayout(payload);
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.repaired, false);
+  const pane = decoded.layout.panes["pane-b"];
+  assert.equal(pane.surface.kind, "unsupported");
+  assert.equal(pane.surface.originalKind, "editor");
+  assert.deepEqual(pane.surface.raw, rawSurface);
+
+  // Round-trip: the raw record is written back verbatim so a newer build can
+  // recover it, and decoding again still tolerates the pane.
+  const reEncoded = encodeWorkbenchLayout(decoded.layout);
+  assert.deepEqual(JSON.parse(reEncoded).panes["pane-b"].surface, rawSurface);
+  const decodedAgain = decodeWorkbenchLayout(reEncoded);
+  assert.equal(decodedAgain.ok, true);
+  assert.equal(decodedAgain.layout.panes["pane-b"].surface.kind, "unsupported");
+});
+
+test("codec drops structurally invalid terminal panes and repairs the tree", () => {
+  const payload = JSON.stringify({
+    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
+    revision: 3,
+    root: {
+      type: "split",
+      splitId: "split-a",
+      axis: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-a" },
+      second: { type: "leaf", paneId: "pane-b" },
+    },
+    panes: {
+      "pane-a": conversationPane("pane-a", "conversation-a"),
+      "pane-b": {
+        paneId: "pane-b",
+        surface: {
+          kind: "localTerminal",
+          surfaceId: "terminal-1",
+          project: project(),
+          launchSpec: {},
+        },
+        view: {},
+      },
+    },
+    focusedPaneId: "pane-b",
+  });
+
+  const decoded = decodeWorkbenchLayout(payload);
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.repaired, true);
+  assert.deepEqual(Object.keys(decoded.layout.panes), ["pane-a"]);
+  assert.deepEqual(decoded.layout.root, { type: "leaf", paneId: "pane-a" });
+  assert.equal(decoded.layout.focusedPaneId, "pane-a");
+});
+
+test("codec deduplicates panes sharing one terminal surface id", () => {
+  const payload = JSON.stringify({
+    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
+    revision: 4,
+    root: {
+      type: "split",
+      splitId: "split-a",
+      axis: "vertical",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-a" },
+      second: { type: "leaf", paneId: "pane-b" },
+    },
+    panes: {
+      "pane-a": localTerminalPane("pane-a", "terminal-1"),
+      "pane-b": localTerminalPane("pane-b", "terminal-1"),
+    },
+    focusedPaneId: "pane-a",
+  });
+
+  const decoded = decodeWorkbenchLayout(payload);
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.repaired, true);
+  assert.deepEqual(Object.keys(decoded.layout.panes), ["pane-a"]);
+});
+
+test("multiple unsupported panes may coexist without identity conflicts", () => {
+  const payload = JSON.stringify({
+    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
+    revision: 5,
+    root: {
+      type: "split",
+      splitId: "split-a",
+      axis: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-a" },
+      second: { type: "leaf", paneId: "pane-b" },
+    },
+    panes: {
+      "pane-a": { paneId: "pane-a", surface: { kind: "editor", file: "a.rs" }, view: {} },
+      "pane-b": { paneId: "pane-b", surface: { kind: "editor", file: "b.rs" }, view: {} },
+    },
+    focusedPaneId: "pane-a",
+  });
+
+  const decoded = decodeWorkbenchLayout(payload);
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.repaired, false);
+  assert.equal(Object.keys(decoded.layout.panes).length, 2);
+  assert.deepEqual(collectWorkbenchLayoutIssues(decoded.layout), []);
+});
