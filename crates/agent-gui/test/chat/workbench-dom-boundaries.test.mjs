@@ -14,6 +14,17 @@ const chromeSource = readFileSync(
   new URL("../../../agent-ui/src/application/AppWorkbenchChrome.tsx", import.meta.url),
   "utf8",
 );
+const rightDockPanelSource = readFileSync(
+  new URL("../../../agent-ui/src/components/project-tools/RightDockPanel.tsx", import.meta.url),
+  "utf8",
+);
+const rightDockWidthSource = readFileSync(
+  new URL(
+    "../../../agent-ui/src/components/project-tools/useRightDockPanelWidth.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const conversationSurfaceSource = readFileSync(
   new URL("../../src/pages/chat/surfaces/ConversationSurface.tsx", import.meta.url),
   "utf8",
@@ -32,6 +43,21 @@ test("application chrome is attached to the center column instead of the right d
   assert.match(chromeSource, /absolute inset-x-0 top-0/);
   assert.doesNotMatch(chromeSource, /left-\[272px\]|right-0/);
   assert.match(chromeSource, /autoHideActions/);
+});
+
+test("right dock width moves the center-column chrome with the panel", () => {
+  assert.match(
+    rightDockPanelSource,
+    /transition-\[width,opacity,transform\] duration-200 ease-out/,
+  );
+  assert.match(
+    rightDockWidthSource,
+    /setWidthCollapsed\(true\);\s*const timer = window\.setTimeout\(\(\) => \{\s*setShouldRenderContent\(false\);/,
+  );
+  assert.match(
+    rightDockPanelSource,
+    /\(isResizing \|\| \(collapseImmediately && !isOpen\)\) && "md:transition-none"/,
+  );
 });
 
 test("conversation transcript and composer share one stable workbench surface", () => {
