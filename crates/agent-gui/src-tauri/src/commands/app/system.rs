@@ -1333,6 +1333,11 @@ pub(crate) fn system_create_project_folder_sync(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub fn system_sandbox_capability() -> crate::runtime::sandbox::SandboxCapability {
+    crate::runtime::sandbox::capability()
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut dialog = FileDialog::new();

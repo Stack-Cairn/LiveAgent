@@ -3,6 +3,7 @@ pub mod managed_process_journal;
 pub mod platform;
 pub mod process;
 pub mod project_path;
+pub mod sandbox;
 pub mod sftp;
 pub mod shell_runner;
 pub mod task_runner;

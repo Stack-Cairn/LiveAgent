@@ -257,6 +257,21 @@ export type SystemProxyConfig = {
 /** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
 export type ToolPolicy = "allow" | "ask" | "deny";
 
+// 命令执行方式(对话框内切换,单一互斥维度):
+// - ask:每次带副作用的工具调用都请求用户批准(只读工具不拦)。
+// - auto:按工具审批策略直接执行(既有默认行为)。
+// - sandbox / sandboxOffline:Bash 与常驻进程在 OS 级沙箱内执行(macOS
+//   Seatbelt / Linux bubblewrap;Windows 暂不支持),写入限工作区+临时目录,
+//   敏感目录掩蔽;offline 变体额外断网(常驻进程除外,须监听端口)。
+export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
+
+export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
+  "ask",
+  "auto",
+  "sandbox",
+  "sandboxOffline",
+];
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -266,6 +281,7 @@ export type SystemSettings = {
    * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
    */
   toolPolicies?: Record<string, ToolPolicy>;
+  commandSafetyMode: CommandSafetyMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
   activeWorkspaceProjectId?: string;
@@ -1926,12 +1942,19 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   };
 }
 
+export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
+  return typeof input === "string" && (COMMAND_SAFETY_MODES as readonly string[]).includes(input)
+    ? (input as CommandSafetyMode)
+    : "auto";
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
+    commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     activeWorkspaceProjectId:
@@ -2593,6 +2616,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
+      commandSafetyMode: "auto",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

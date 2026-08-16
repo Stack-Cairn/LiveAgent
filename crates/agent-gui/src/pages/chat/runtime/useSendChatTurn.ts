@@ -1503,6 +1503,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
+            commandSafetyMode: settings.system.commandSafetyMode,
             applyMcpOps: (ops) => {
               const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
               setSettings((prev) =>

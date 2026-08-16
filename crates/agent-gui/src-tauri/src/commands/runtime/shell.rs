@@ -3,7 +3,10 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
-use crate::runtime::shell_runner::{run_shell_script, ShellRunRegistry, ShellRunResponse};
+use crate::runtime::sandbox::SandboxOptions;
+use crate::runtime::shell_runner::{
+    run_shell_script_with_envs, ShellRunRegistry, ShellRunResponse,
+};
 
 #[derive(Debug, Serialize)]
 pub struct ShellCancelResponse {
@@ -11,6 +14,7 @@ pub struct ShellCancelResponse {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
 pub async fn shell_run(
     registry: State<'_, Arc<ShellRunRegistry>>,
     workdir: String,
@@ -20,15 +24,20 @@ pub async fn shell_run(
     max_timeout_ms: Option<u64>,
     provider_id: Option<String>,
     run_id: Option<String>,
+    sandbox: Option<bool>,
+    sandbox_allow_network: Option<bool>,
 ) -> Result<ShellRunResponse, String> {
     let normalized_run_id = run_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let cancel_token = normalized_run_id.as_deref().map(|id| registry.register(id));
     let registered_token = cancel_token.clone();
+    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
+        allow_network: sandbox_allow_network.unwrap_or(true),
+    });
 
     let join_result = tauri::async_runtime::spawn_blocking(move || {
-        run_shell_script(
+        run_shell_script_with_envs(
             workdir,
             command,
             cwd,
@@ -36,6 +45,8 @@ pub async fn shell_run(
             max_timeout_ms,
             provider_id,
             cancel_token,
+            &[],
+            sandbox_options,
         )
     })
     .await;

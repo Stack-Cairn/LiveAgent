@@ -245,6 +245,16 @@ export type SystemProxyConfig = {
 /** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
 export type ToolPolicy = "allow" | "ask" | "deny";
 
+// 命令执行方式:与桌面端对齐,WebUI 只透传;执行与裁决都在桌面端。
+export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
+
+export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
+  "ask",
+  "auto",
+  "sandbox",
+  "sandboxOffline",
+];
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -253,6 +263,7 @@ export type SystemSettings = {
    * 回写会丢掉桌面端设置的策略。策略的裁决在桌面端 resolveToolPolicy。
    */
   toolPolicies?: Record<string, ToolPolicy>;
+  commandSafetyMode: CommandSafetyMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
   activeWorkspaceProjectId?: string;
@@ -1919,12 +1930,19 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   };
 }
 
+export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
+  return typeof input === "string" && (COMMAND_SAFETY_MODES as readonly string[]).includes(input)
+    ? (input as CommandSafetyMode)
+    : "auto";
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
+    commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     activeWorkspaceProjectId:
@@ -2576,6 +2594,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
+      commandSafetyMode: "auto",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

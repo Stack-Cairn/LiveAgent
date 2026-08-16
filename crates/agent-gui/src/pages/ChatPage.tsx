@@ -2229,6 +2229,14 @@ export function ChatPage(props: ChatPageProps) {
                   enabledSkills={enabledComposerSkills}
                   isAgentMode={isAgentMode}
                   chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                  commandSafetyMode={settings.system.commandSafetyMode}
+                  onCommandSafetyModeChange={(mode) =>
+                    setSettings((prev) =>
+                      prev.system.commandSafetyMode === mode
+                        ? prev
+                        : updateSystem(prev, { commandSafetyMode: mode }),
+                    )
+                  }
                   reasoningOptions={chatRuntimeReasoningOptions}
                   thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
                   contextUsageTokensSource={contextUsageTokensSource}

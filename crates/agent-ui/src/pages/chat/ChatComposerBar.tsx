@@ -19,9 +19,11 @@ import {
 } from "@liveagent/app/components/icons";
 import {
   type ChatRuntimeControls,
+  type CommandSafetyMode,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   type ReasoningLevel,
 } from "@liveagent/app/lib/settings";
+import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
 import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
@@ -240,6 +242,9 @@ export type ChatComposerBarProps = {
   enabledSkills: MentionComposerSkill[];
   isAgentMode: boolean;
   chatRuntimeControls: ChatRuntimeControls;
+  /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
+  commandSafetyMode?: CommandSafetyMode;
+  onCommandSafetyModeChange?: (mode: CommandSafetyMode) => void;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
   gitClient?: GitClient | null;
@@ -260,16 +265,8 @@ export type ChatComposerBarProps = {
   manualCompactBlocked?: boolean;
   workspaceActivityClient?: WorkspaceActivityClient | null;
   /** 创建 worktree 成功后，把后端返回的路径与仓库身份加入侧边栏。 */
-  onOpenWorktree?: (worktree: {
-    path: string;
-    repositoryPath: string;
-    branch: string;
-  }) => void;
-  onWorktreeRemoved?: (worktree: {
-    path: string;
-    repositoryPath: string;
-    branch: string;
-  }) => void;
+  onOpenWorktree?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
+  onWorktreeRemoved?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
   onSend: () => void;
   onStop: () => void;
   onPrepareChatRuntime?: () => void;
@@ -306,6 +303,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     enabledSkills,
     isAgentMode,
     chatRuntimeControls,
+    commandSafetyMode,
+    onCommandSafetyModeChange,
     reasoningOptions,
     thinkingAlwaysOn,
     gitClient,
@@ -1149,6 +1148,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     </SelectContent>
                   </Select>
                 </div>
+              ) : null}
+
+              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
+                <CommandSafetyModeSelector
+                  surface={surface}
+                  value={commandSafetyMode}
+                  disabled={controlsDisabled}
+                  onChange={onCommandSafetyModeChange}
+                />
               ) : null}
 
               <GitBranchSelector

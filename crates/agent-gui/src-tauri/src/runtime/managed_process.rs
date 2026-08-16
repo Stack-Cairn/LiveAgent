@@ -18,6 +18,7 @@ use crate::runtime::process::{
     signal_process_tree_by_pid, terminate_child_process_tree, terminate_process_tree_by_pid,
     ProcessProbe,
 };
+use crate::runtime::sandbox::{SandboxOptions, SandboxSpec};
 use crate::runtime::shell_runner::spawn_platform_shell_command;
 use crate::services::gateway::GatewayController;
 
@@ -249,12 +250,17 @@ fn sanitize_rel_cwd(input: Option<String>, workdir: &Path) -> Result<PathBuf, St
     Ok(canonical)
 }
 
-fn spawn_shell_command(command: &str, cwd: &Path, log: File) -> Result<(Child, String), String> {
+fn spawn_shell_command(
+    command: &str,
+    cwd: &Path,
+    log: File,
+    sandbox_spec: Option<&SandboxSpec>,
+) -> Result<(Child, String), String> {
     let stderr = log
         .try_clone()
         .map_err(|err| format!("Failed to clone process log: {err}"))?;
 
-    let spawned = spawn_platform_shell_command(command, cwd, &[], || {
+    let spawned = spawn_platform_shell_command(command, cwd, &[], sandbox_spec, || {
         Ok((
             Stdio::from(log.try_clone()?),
             Stdio::from(stderr.try_clone()?),
@@ -517,6 +523,7 @@ impl ManagedProcessRegistry {
         cwd: Option<String>,
         label: Option<String>,
         isolated: bool,
+        sandbox_options: Option<SandboxOptions>,
     ) -> Result<ManagedProcessStartResponse, String> {
         let command = command.trim().to_string();
         if command.is_empty() {
@@ -531,7 +538,11 @@ impl ManagedProcessRegistry {
             .append(true)
             .open(&log_path)
             .map_err(|err| format!("Failed to open process log: {err}"))?;
-        let (child, shell) = spawn_shell_command(&command, &cwd, log)?;
+        // 写围栏锚定工作区根;dev server 等常驻进程通常要监听端口,是否放网络
+        // 由调用方经 SandboxOptions 决定。
+        let sandbox_spec =
+            sandbox_options.map(|options| SandboxSpec::from_options(workdir.clone(), options));
+        let (child, shell) = spawn_shell_command(&command, &cwd, log, sandbox_spec.as_ref())?;
         let pid = child.id();
         let entry = ManagedProcessEntry {
             id: id.clone(),
@@ -960,6 +971,7 @@ mod tests {
                 None,
                 Some("test process".to_string()),
                 false,
+                None,
             )
             .expect("process should start");
         let process_id = started.process.id.clone();
@@ -1003,6 +1015,7 @@ mod tests {
                     None,
                     Some("drop test process".to_string()),
                     false,
+                    None,
                 )
                 .expect("process should start");
             let pid = started.process.pid;
@@ -1028,6 +1041,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("process should start");
         let pid = started.process.pid;
@@ -1061,6 +1075,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("process should start");
         let pid = started.process.pid;
@@ -1093,6 +1108,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("process should start");
         let pid = started.process.pid;
@@ -1122,6 +1138,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("plain process should start");
         let isolated = registry
@@ -1131,6 +1148,7 @@ mod tests {
                 None,
                 None,
                 true,
+                None,
             )
             .expect("isolated process should start");
 
@@ -1163,6 +1181,7 @@ mod tests {
                     None,
                     None,
                     false,
+                    None,
                 )
                 .expect("plain process should start");
             let isolated = registry
@@ -1172,6 +1191,7 @@ mod tests {
                     None,
                     Some("isolated service".to_string()),
                     true,
+                    None,
                 )
                 .expect("isolated process should start");
             let ids = (
@@ -1229,6 +1249,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("short process should start");
         let running = registry
@@ -1238,6 +1259,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .expect("long process should start");
 
