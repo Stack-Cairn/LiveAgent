@@ -120,6 +120,7 @@ test("GUI projects canonical live results without a sequencing compatibility lay
   const source = [
     "../../src/pages/ChatPage.tsx",
     "../../src/pages/chat/components/CurrentTaskProgress.tsx",
+    "../../src/pages/chat/surfaces/ConversationPaneHost.tsx",
   ]
     .map((relativePath) =>
       readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8"),
@@ -127,5 +128,5 @@ test("GUI projects canonical live results without a sequencing compatibility lay
     .join("\n");
   assert.match(source, /liveTranscriptStore\.subscribe/);
   assert.match(source, /selectLatestTaskProgress\(historyItems, liveRounds\)/);
-  assert.match(source, /key=\{currentConversationId\}/);
+  assert.match(source, /key=\{snapshot\.conversationId\}/);
 });

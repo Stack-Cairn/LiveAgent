@@ -201,11 +201,17 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
 
     const cached = conversationRuntimeCacheRef.current.get(id);
     if (cached) {
-      const isPendingHistoryItem = sidebarStore.peek(id)?.isPending === true;
+      const historyItem = sidebarStore.peek(id);
+      const isPendingHistoryItem = historyItem?.isPending === true;
+      // A conversation the sidebar store has never seen is an unpersisted
+      // draft (e.g. the workbench refocusing a draft pane): nothing exists on
+      // disk, so the cache entry is authoritative — loading would only fail.
+      const isUnpersistedDraft = historyItem === undefined;
       if (
         conversationPersistenceCursorRef.current.has(id) ||
         cached.isSending ||
-        isPendingHistoryItem
+        isPendingHistoryItem ||
+        isUnpersistedDraft
       ) {
         setHydratingConversationId(null);
         activateConversation({

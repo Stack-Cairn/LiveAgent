@@ -1,10 +1,7 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
-import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
-import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
-import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
@@ -12,6 +9,9 @@ import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/Wor
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
+import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
+import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -23,7 +23,6 @@ import {
   useComposerSkillSelection,
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
-import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
@@ -36,12 +35,35 @@ import {
   selectRunningConversationIds,
 } from "@liveagent/ui/lib/sidebar/selectors";
 import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
+import {
+  findAdjacentPaneId,
+  hitTestWorkbenchDrop,
+  type WorkbenchDropTarget,
+  type WorkbenchGeometry,
+} from "@liveagent/ui/lib/workbench/index";
+import {
+  type ConversationWorkbenchSurface,
+  type PaneRecord,
+  type ProjectRef,
+  surfaceIdentityKey,
+  surfaceProjectRef,
+} from "@liveagent/ui/lib/workbench/types";
 import { listen } from "@tauri-apps/api/event";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
@@ -65,7 +87,9 @@ import {
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
+import { toModelValue } from "../lib/providers/llm";
 import {
+  findProviderModelConfig,
   isAgentDevMode,
   isAgentExecutionMode,
   normalizeSelectedModelForProviders,
@@ -89,8 +113,6 @@ import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
 import {
-  ChatComposerBar,
-  ChatTranscript,
   createChatRuntimeHost,
   type EnsureGatewayBridgeConversationReadyOptions,
   MAX_UPLOAD_FILES,
@@ -105,16 +127,22 @@ import {
   usePendingUploads,
 } from "./chat";
 import type { ChatPageProps } from "./chat/chatPageTypes";
-import { CurrentTaskProgress } from "./chat/components/CurrentTaskProgress";
-import { PendingToolApprovalBar } from "./chat/components/PendingToolApprovalBar";
-import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
+import type {
+  ConversationControllerActions,
+  ConversationSurfaceController,
+} from "./chat/conversations/conversationControllerTypes";
+import { createConversationSurfaceController } from "./chat/conversations/createConversationSurfaceController";
+import { useConversationPaneHostBridge } from "./chat/conversations/useConversationPaneHostBridge";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
-import { useContextUsageTokensSource } from "./chat/hooks/useContextUsageTokensSource";
+import {
+  createContextUsageTokensSource,
+  useContextUsageTokensSource,
+} from "./chat/hooks/useContextUsageTokensSource";
 import { useMirroredNullableState } from "./chat/hooks/useMirroredNullableState";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
@@ -125,6 +153,7 @@ import {
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
+import { resolveActiveModelSelection } from "./chat/runtime/modelSelection";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
@@ -134,7 +163,29 @@ import {
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
-import { ConversationSurface } from "./chat/surfaces/ConversationSurface";
+import { ConversationPaneHost } from "./chat/surfaces/ConversationPaneHost";
+import {
+  type ConversationPaneBinding,
+  ConversationPaneHostEnvironmentProvider,
+  type ConversationPaneRegistration,
+  createConversationPaneHostEnvironment,
+} from "./chat/surfaces/ConversationPaneHostEnvironment";
+import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
+import { createWorkbenchLayoutPersistence } from "./chat/workbench/layoutPersistence";
+import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
+import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
+import {
+  createTerminalSurfaceId,
+  resolveLiveTerminalSurfaceIds,
+  terminalPaneBindings,
+  terminalPaneLease,
+} from "./chat/workbench/terminalPaneRuntime";
+import { useWindowWorkbench } from "./chat/workbench/useWindowWorkbench";
+import {
+  canSplitRectAtEdge,
+  useWorkbenchDragSession,
+  type WorkbenchDropCommit,
+} from "./chat/workbench/useWorkbenchDragSession";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
@@ -339,9 +390,12 @@ export function ChatPage(props: ChatPageProps) {
   );
   const chatRuntimeHost = useMemo(() => createChatRuntimeHost(), []);
 
-  const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
+  const {
+    hostRef: conversationPaneHostRef,
+    composerRef,
+    scrollFollowRef,
+  } = useConversationPaneHostBridge();
   const composerBusyRef = useRef(false);
-  const composerRef = useRef<MentionComposerHandle | null>(null);
   const conversationLoadSequenceRef = useRef(0);
   const subagentStoresRef = useRef(createSubagentStoreManager());
   const previousSubagentRuntimeConversationRef = useRef(currentConversationId);
@@ -377,6 +431,7 @@ export function ChatPage(props: ChatPageProps) {
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
   const stopSendingActionRef = useRef<() => void>(() => undefined);
+  const stopConversationActionRef = useRef<(conversationId: string) => void>(() => undefined);
   const {
     liveTranscriptStore,
     getConversationLiveTranscriptStore,
@@ -414,6 +469,7 @@ export function ChatPage(props: ChatPageProps) {
   });
   const {
     currentConversationIdRef,
+    conversationRuntimeRegistry,
     conversationRuntimeCacheRef,
     conversationPersistenceCursorRef,
     buildRuntimeEntryFromVisibleState,
@@ -498,7 +554,6 @@ export function ChatPage(props: ChatPageProps) {
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
 
-  const approvalBar = <PendingToolApprovalBar conversationId={currentConversationId} />;
   const currentConversationPersistedCwd =
     historyItems.find((item) => item.id === currentConversationId)?.cwd?.trim() || "";
   const currentConversationRuntimeWorkdir =
@@ -545,6 +600,18 @@ export function ChatPage(props: ChatPageProps) {
         : [],
     [terminalProjectPathKey, terminalSessions],
   );
+  // 被工作台 Pane 租用的会话对 Right Dock 隐藏(输出流双消费/输入双写互斥);
+  // 完整列表仍流经 onSessionsChange,租约释放后会话自动回到 dock。
+  const leasedTerminalSessionIds = useSyncExternalStore(
+    terminalPaneLease.subscribe,
+    terminalPaneLease.leasedSessionIds,
+  );
+  const hiddenDockSessionIds = useMemo(
+    () => (leasedTerminalSessionIds.length > 0 ? new Set(leasedTerminalSessionIds) : undefined),
+    [leasedTerminalSessionIds],
+  );
+  const terminalSessionsRef = useRef(terminalSessions);
+  terminalSessionsRef.current = terminalSessions;
   const {
     rightDockProjectState,
     rightDockFileTreeState,
@@ -656,12 +723,12 @@ export function ChatPage(props: ChatPageProps) {
     isAgentMode,
     workdir: displayedConversationWorkdir,
     conversationId: currentConversationId,
+    uploadStore: conversationRuntimeRegistry.uploads,
     currentConversationIdRef,
     composerRef,
     setErrorMessage,
     addNotify,
   });
-  const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
   function resetVisibleTransientState(targetConversationId = currentConversationIdRef.current) {
     if (currentConversationIdRef.current !== targetConversationId) {
       return;
@@ -673,19 +740,29 @@ export function ChatPage(props: ChatPageProps) {
     scrollFollowRef.current?.stickToBottom();
   }
 
-  const {
-    composerDraftCacheRef,
-    cacheActiveComposerDraft,
-    prepareComposerForConversationChange,
-    restoreCachedComposerDraft,
-    clearCachedComposerDraft,
-    deleteCachedComposerDraftState,
-  } = useComposerDraftCache({
-    composerRef,
-    currentConversationIdRef,
-    activeView,
-    currentConversationId,
-  });
+  const composerDraftCacheRef = useRef(conversationRuntimeRegistry.drafts);
+  const cacheActiveComposerDraft = useCallback(
+    (conversationId = currentConversationIdRef.current) => {
+      const key = conversationId.trim();
+      const draft = composerRef.current?.getDraft();
+      if (!key || !draft || draft.isEmpty || !draft.text.trim()) {
+        conversationRuntimeRegistry.drafts.delete(key);
+        return;
+      }
+      conversationRuntimeRegistry.drafts.set(key, draft);
+    },
+    [composerRef, conversationRuntimeRegistry],
+  );
+  const prepareComposerForConversationChange = useCallback(() => {
+    cacheActiveComposerDraft();
+  }, [cacheActiveComposerDraft]);
+  const clearCachedComposerDraft = useCallback(
+    (conversationId = currentConversationIdRef.current) => {
+      conversationRuntimeRegistry.drafts.delete(conversationId);
+    },
+    [conversationRuntimeRegistry],
+  );
+  const deleteCachedComposerDraftState = clearCachedComposerDraft;
 
   prepareComposerForConversationChangeActionRef.current = prepareComposerForConversationChange;
 
@@ -693,7 +770,6 @@ export function ChatPage(props: ChatPageProps) {
     queuedChatTurnsRef,
     queuedChatTurnEditSlotRef,
     setQueuedChatTurnsState,
-    queuedChatTurnsForCurrentConversation,
     publishChatQueueSnapshots,
     collectChatQueueSnapshotConversationIds,
     stopSending,
@@ -709,6 +785,7 @@ export function ChatPage(props: ChatPageProps) {
   } = useChatTurnQueue({
     settings,
     currentConversationId,
+    queueStore: conversationRuntimeRegistry.queue,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
     buildRuntimeEntryFromVisibleState,
@@ -733,6 +810,7 @@ export function ChatPage(props: ChatPageProps) {
     sendActionRef,
     manualCompactActionRef,
   });
+  stopConversationActionRef.current = stopConversation;
 
   // Queue snapshots publish on queue mutation only; after a gateway
   // reconnect (new session) the gateway's in-memory queue view is empty, so
@@ -763,7 +841,12 @@ export function ChatPage(props: ChatPageProps) {
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
     },
-    [deleteConversationArtifacts, setPendingUploadsForConversation, setQueuedChatTurnsState],
+    [
+      deleteCachedComposerDraftState,
+      deleteConversationArtifacts,
+      setPendingUploadsForConversation,
+      setQueuedChatTurnsState,
+    ],
   );
 
   const pruneIdleConversationCaches = useCallback(
@@ -1278,6 +1361,59 @@ export function ChatPage(props: ChatPageProps) {
     resolveManualCompactionPromptInputs,
   });
   manualCompactActionRef.current = handleManualCompact;
+  const conversationSurfaceProject = useMemo(
+    () => ({
+      projectId: activeWorkspaceProject?.id ?? `conversation:${currentConversationId}`,
+      projectPathKey: displayedConversationWorkdir || `conversation:${currentConversationId}`,
+    }),
+    [activeWorkspaceProject?.id, currentConversationId, displayedConversationWorkdir],
+  );
+  // Shared by the current-conversation controller and every background pane
+  // controller: all actions route by explicit conversationId through refs.
+  const conversationControllerActions = useMemo<ConversationControllerActions>(
+    () => ({
+      async hydrate({ conversationId }) {
+        await openInitialActionRef.current(conversationId);
+      },
+      async send({ conversationId, draft }) {
+        await sendActionRef.current({
+          conversationIdOverride: conversationId,
+          composerDraftOverride: draft,
+        });
+      },
+      stop({ conversationId }) {
+        stopConversationActionRef.current(conversationId);
+      },
+      async compact({ conversationId }) {
+        await manualCompactActionRef.current({ conversationId });
+      },
+      async retry({ conversationId }) {
+        await openInitialActionRef.current(conversationId);
+      },
+    }),
+    [],
+  );
+  const conversationSurfaceController = useMemo(
+    () =>
+      createConversationSurfaceController({
+        conversationId: currentConversationId,
+        project: conversationSurfaceProject,
+        registry: conversationRuntimeRegistry,
+        actions: conversationControllerActions,
+      }),
+    [
+      conversationControllerActions,
+      conversationRuntimeRegistry,
+      conversationSurfaceProject,
+      currentConversationId,
+    ],
+  );
+  useEffect(
+    () => () => {
+      conversationSurfaceController.dispose();
+    },
+    [conversationSurfaceController],
+  );
 
   const handleSelectExecutionMode = useCallback(
     (mode: "text" | "tools") =>
@@ -1303,7 +1439,12 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef.current({
       workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
     });
-  }, [activeWorkspaceProjectPath, isAgentMode, openController]);
+  }, [
+    activeWorkspaceProjectPath,
+    isAgentMode,
+    openController,
+    prepareComposerForConversationChange,
+  ]);
 
   // 动作总线（Rust `app:action`）里 ChatPage 拥有的动作在下方统一监听
   // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
@@ -1322,9 +1463,8 @@ export function ChatPage(props: ChatPageProps) {
       }
       prepareComposerForConversationChange();
       openController.open(targetConversationId);
-      restoreCachedComposerDraft(targetConversationId);
     },
-    [openController],
+    [openController, prepareComposerForConversationChange],
   );
 
   // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
@@ -1565,10 +1705,6 @@ export function ChatPage(props: ChatPageProps) {
     void sendActionRef.current();
   }, [enqueueCurrentComposerTurn, isConversationRunning]);
 
-  const handleStopSending = useCallback(() => {
-    stopSendingActionRef.current();
-  }, []);
-
   const handleComposerBusyChange = useCallback((isBusy: boolean) => {
     composerBusyRef.current = isBusy;
   }, []);
@@ -1619,9 +1755,19 @@ export function ChatPage(props: ChatPageProps) {
     setErrorMessage,
     t,
   });
+  // Late-bound: the workbench focuses the conversation pane under a native
+  // file drag so the drop lands in the hovered pane's composer. Assigned
+  // after the workbench block below.
+  const workbenchNativeDropHoverRef = useRef<(point: { x: number; y: number } | null) => void>(
+    () => undefined,
+  );
   const { isFileDropActive, isWorkspaceFolderDropActive } = useTauriFileDrop({
     importUploadZonePaths,
     importWorkspaceFolderPaths: handleDropWorkspaceFolders,
+    onDropPositionChange: useCallback(
+      (point: { x: number; y: number } | null) => workbenchNativeDropHoverRef.current(point),
+      [],
+    ),
   });
 
   const { handleResendFromEdit } = useEditResend({
@@ -1646,6 +1792,929 @@ export function ChatPage(props: ChatPageProps) {
     t,
   });
 
+  // Full-featured binding for the pane hosting the page's current
+  // conversation; it is the only pane wired to page-level composer bridging,
+  // uploads, native drop and usage telemetry.
+  const primaryPaneBinding: ConversationPaneBinding = {
+    controller: conversationSurfaceController,
+    changedFilesActions,
+    isConversationRunning: isConversationRunning(currentConversationId),
+    fileDrop: {
+      active: isFileDropActive,
+      canDropUpload,
+      title: fileDropTitle,
+      description: fileDropDescription,
+      limitHint: fileDropLimitHint,
+    },
+    transcript: {
+      workspaceRoot: currentConversationWorkspaceRoot,
+      gitClient: tauriGitClient,
+      hasModels,
+      onLoadEarlierHistory: handleLoadEarlierHistory,
+      isHistorySwitching: conversationOpenState.showOverlay,
+      isAgentMode,
+      showUsage: isAgentDevExecutionMode,
+      usageContextWindow: currentModelContextWindow,
+      liveTranscriptStore,
+      contentWidth: settings.customSettings.chatTranscript.width,
+      onContentWidthChange: handleChatTranscriptWidthChange,
+      onOpenFileLink: handleOpenChatFileLink,
+      onResendFromEdit: handleResendFromEdit,
+      onBranchConversation:
+        isConversationHydrating || isConversationHydrationFailed
+          ? undefined
+          : handleBranchConversation,
+      branchPendingMessageId,
+      onOpenSettings,
+      onSuggestionSelect: handleEmptyStateSuggestion,
+      suggestionsDisabled: isSuggestionTyping,
+    },
+    composer: {
+      surface: "desktop",
+      isUploadingFiles,
+      isInputDisabled: isComposerInputDisabled,
+      inputPlaceholder: composerPlaceholder,
+      workdir: displayedConversationWorkdir,
+      enabledSkills: enabledComposerSkills,
+      executionMode: settings.system.executionMode,
+      hasModels,
+      currentModelLabel,
+      modelOptions,
+      selectedValue,
+      chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+      reasoningOptions: chatRuntimeReasoningOptions,
+      thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+      contextUsageTokensSource,
+      contextWindow: currentModelContextWindow,
+      gitClient: tauriGitClient,
+      workspaceActivityClient: tauriWorkspaceActivityClient,
+      onOpenWorktree: handleOpenWorktree,
+      onWorktreeRemoved: handleWorktreeRemoved,
+      onSend: handleSend,
+      onComposerBusyChange: handleComposerBusyChange,
+      onSelectModel: handleSelectModel,
+      onSelectExecutionMode: handleSelectExecutionMode,
+      onOpenSettings,
+      onChatRuntimeControlsChange: handleChatRuntimeControlsChange,
+      onPickReadableFiles: pickReadableFiles,
+      onPasteFiles: importReadableFiles,
+      onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
+      loadHistoryPrompts: loadComposerHistoryPrompts,
+      onRemovePendingUpload: removePendingUpload,
+      onRunQueuedTurnNow: runQueuedTurnNow,
+      onMoveQueuedTurnUp: moveQueuedTurnUp,
+      onEditQueuedTurn: editQueuedTurn,
+      onRemoveQueuedTurn: removeQueuedTurn,
+    },
+  };
+
+  // ---- Session workbench (flag-gated) ----
+  // The window-level pane tree. Invariant: the focused pane's conversation is
+  // the page's current conversation; focusing another pane routes through the
+  // existing conversation-select pipeline, so hydration, drafts and model
+  // state keep their legacy semantics. Unfocused panes render from the
+  // per-conversation runtime cache and live transcript stores.
+  const initialWorkbenchProjectRef = useRef<ProjectRef>({
+    projectId: `conversation:${initialConversationRef.current.conversationId}`,
+    projectPathKey: `conversation:${initialConversationRef.current.conversationId}`,
+  });
+  const workbenchLayoutPersistence = useMemo(
+    () => (sessionWorkbench.enabled ? createWorkbenchLayoutPersistence() : undefined),
+    [],
+  );
+  const workbench = useWindowWorkbench({
+    enabled: sessionWorkbench.enabled,
+    initialConversationId: initialConversationRef.current.conversationId,
+    initialProject: initialWorkbenchProjectRef.current,
+    persistence: workbenchLayoutPersistence,
+  });
+  const workbenchGeometryRef = useRef<WorkbenchGeometry | null>(null);
+  const handleWorkbenchGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
+    workbenchGeometryRef.current = geometry;
+  }, []);
+
+  // A pane focus/drop selects its conversation asynchronously; until the
+  // selection lands, syncCurrentConversation must not rebind the focused pane
+  // back to the outgoing conversation.
+  const workbenchPendingSelectRef = useRef<string | null>(null);
+
+  // Right Dock follows the focused pane's project context when the pane maps
+  // to a known, non-archived, non-missing workspace project. A stale
+  // ProjectRef never falls back to a different project.
+  const activateWorkbenchPaneProject = useCallback(
+    (projectPathKey?: string) => {
+      if (
+        projectPathKey &&
+        !archivedWorkspaceProjectPathKeys.has(projectPathKey) &&
+        !missingWorkspaceProjectPathKeys.has(projectPathKey)
+      ) {
+        const project = workspaceProjects.find(
+          (item) => workspaceProjectPathKey(item.path) === projectPathKey,
+        );
+        if (project) activateWorkspaceProject(project);
+      }
+    },
+    [
+      activateWorkspaceProject,
+      archivedWorkspaceProjectPathKeys,
+      missingWorkspaceProjectPathKeys,
+      workspaceProjects,
+    ],
+  );
+
+  const selectWorkbenchConversation = useCallback(
+    (conversationId: string, projectPathKey?: string) => {
+      if (conversationId !== currentConversationIdRef.current) {
+        workbenchPendingSelectRef.current = conversationId;
+        handleSelectConversation(conversationId);
+      }
+      activateWorkbenchPaneProject(projectPathKey);
+    },
+    [activateWorkbenchPaneProject, currentConversationIdRef, handleSelectConversation],
+  );
+
+  const handleWorkbenchFocusPane = useCallback(
+    (paneId: string) => {
+      const pane = workbench.focusPane(paneId);
+      if (!pane) return;
+      // Only conversation surfaces drive the page's current conversation;
+      // terminal panes still steer the Right Dock's project context.
+      if (pane.surface.kind !== "conversation") {
+        activateWorkbenchPaneProject(surfaceProjectRef(pane.surface)?.projectPathKey);
+        return;
+      }
+      selectWorkbenchConversation(pane.surface.conversationId, pane.surface.project.projectPathKey);
+    },
+    [activateWorkbenchPaneProject, selectWorkbenchConversation, workbench],
+  );
+
+  const focusWorkbenchConversationPane = useCallback(
+    (conversationId: string) => {
+      const paneId = workbench.paneIdForConversation(conversationId);
+      if (paneId) handleWorkbenchFocusPane(paneId);
+    },
+    [handleWorkbenchFocusPane, workbench],
+  );
+
+  const handleWorkbenchClosePane = useCallback(
+    (paneId: string) => {
+      const pane = workbench.layoutRef.current.panes[paneId];
+      const result = workbench.closePane(paneId);
+      // 终端 Pane 的关闭是 Detach:进程保留,租约随宿主卸载释放,会话回到
+      // Right Dock;绑定一并回收,再次拖入走全新 surface 身份。先关 Pane 再删
+      // 绑定,同一事件批处理内宿主已卸载,不会把空绑定误判为待新建。
+      if (pane?.surface.kind === "localTerminal" || pane?.surface.kind === "sshTerminal") {
+        terminalPaneBindings.delete(pane.surface.surfaceId);
+      }
+      if (result.closedFocused && result.nextConversationId) {
+        const nextPaneId = workbench.paneIdForConversation(result.nextConversationId);
+        const nextPane = nextPaneId ? workbench.layoutRef.current.panes[nextPaneId] : null;
+        selectWorkbenchConversation(
+          result.nextConversationId,
+          nextPane ? surfaceProjectRef(nextPane.surface)?.projectPathKey : undefined,
+        );
+      }
+    },
+    [selectWorkbenchConversation, workbench],
+  );
+
+  const workbenchProjectForConversation = useCallback(
+    (item: SidebarConversation): ProjectRef => {
+      const cwd = item.cwd?.trim() || "";
+      const project = cwd
+        ? workspaceProjects.find(
+            (entry) => workspaceProjectPathKey(entry.path) === workspaceProjectPathKey(cwd),
+          )
+        : undefined;
+      return {
+        projectId: project?.id ?? `conversation:${item.id}`,
+        projectPathKey: cwd ? workspaceProjectPathKey(cwd) : `conversation:${item.id}`,
+      };
+    },
+    [workspaceProjects],
+  );
+
+  // Workspace drops create a draft conversation through the legacy pipeline;
+  // once the fresh conversation becomes current, the sync effect opens its
+  // pane at the remembered target instead of rebinding the focused pane.
+  const pendingWorkspaceOpenRef = useRef<{
+    target: Exclude<WorkbenchDropTarget, { kind: "pane-center" }>;
+    projectId: string;
+    projectPathKey: string;
+  } | null>(null);
+
+  const handleWorkbenchDropCommit = useCallback(
+    (commit: WorkbenchDropCommit) => {
+      // Stale layout revision (focus/structure changed mid-drag): cancel the
+      // transaction instead of replaying stale geometry.
+      if (commit.revision !== workbench.layoutRef.current.revision) return;
+      const { payload, target } = commit;
+      if (payload.kind === "workspace") {
+        if (target.kind === "pane-center") return;
+        const pathKey = workspaceProjectPathKey(payload.projectPath);
+        if (archivedWorkspaceProjectPathKeys.has(pathKey)) return;
+        const project = workspaceProjects.find(
+          (entry) => workspaceProjectPathKey(entry.path) === pathKey,
+        );
+        if (!project) return;
+        pendingWorkspaceOpenRef.current = {
+          target,
+          projectId: project.id,
+          projectPathKey: pathKey,
+        };
+        void handleNewConversationForProject(project);
+        return;
+      }
+      if (payload.kind === "conversation") {
+        const existingPaneId = workbench.paneIdForConversation(payload.conversationId);
+        if (target.kind === "pane-center") {
+          // Normalized by the drag session: pane-center only survives for the
+          // conversation's own pane, meaning "focus me".
+          if (existingPaneId && target.paneId === existingPaneId) {
+            handleWorkbenchFocusPane(existingPaneId);
+          }
+          return;
+        }
+        if (existingPaneId) {
+          if (target.kind === "canvas-empty") return;
+          if (workbench.movePane(existingPaneId, target)) {
+            selectWorkbenchConversation(payload.conversationId, payload.project.projectPathKey);
+          }
+          return;
+        }
+        const opened = workbench.openConversation(
+          { conversationId: payload.conversationId, project: payload.project },
+          target,
+        );
+        if (opened) {
+          selectWorkbenchConversation(payload.conversationId, payload.project.projectPathKey);
+        }
+        return;
+      }
+      if (payload.kind === "terminalSession" || payload.kind === "newTerminal") {
+        commitTerminalDrop(payload, target, {
+          layout: workbench.layoutRef.current,
+          sessions: terminalSessionsRef.current,
+          lease: terminalPaneLease,
+          bindings: terminalPaneBindings,
+          resolveProjectPath: (project) =>
+            workspaceProjects.find((entry) => entry.id === project.projectId)?.path ??
+            workspaceProjects.find(
+              (entry) => workspaceProjectPathKey(entry.path) === project.projectPathKey,
+            )?.path ??
+            null,
+          createSurfaceId: createTerminalSurfaceId,
+          openTerminalSurface: workbench.openTerminalSurface,
+          movePane: workbench.movePane,
+          focusPane: handleWorkbenchFocusPane,
+        });
+        return;
+      }
+      // Moving an existing pane by its chrome drag handle.
+      if (target.kind === "canvas-empty") return;
+      if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
+      if (workbench.movePane(payload.paneId, target)) {
+        const pane = workbench.layoutRef.current.panes[payload.paneId];
+        // Only conversation panes drive the page's current conversation.
+        if (pane?.surface.kind === "conversation") {
+          selectWorkbenchConversation(
+            pane.surface.conversationId,
+            pane.surface.project.projectPathKey,
+          );
+        }
+      }
+    },
+    [
+      archivedWorkspaceProjectPathKeys,
+      handleNewConversationForProject,
+      handleWorkbenchFocusPane,
+      selectWorkbenchConversation,
+      workbench,
+      workspaceProjects,
+    ],
+  );
+
+  const { dragState: workbenchDragState, beginDrag: beginWorkbenchDrag } = useWorkbenchDragSession({
+    enabled: sessionWorkbench.enabled,
+    layoutRef: workbench.layoutRef,
+    geometryRef: workbenchGeometryRef,
+    onCommit: handleWorkbenchDropCommit,
+  });
+
+  const handleConversationWorkbenchDragIntent = useCallback(
+    (item: SidebarConversation, event: { pointerId: number; clientX: number; clientY: number }) => {
+      beginWorkbenchDrag(
+        {
+          kind: "conversation",
+          conversationId: item.id,
+          project: workbenchProjectForConversation(item),
+          title: item.title,
+        },
+        event,
+      );
+    },
+    [beginWorkbenchDrag, workbenchProjectForConversation],
+  );
+
+  // Right Dock 终端 tab 拖出:既有会话进入画板。dock 的 tab 只列本地会话,
+  // SSH 会话的宿主是 workspace overlay,首期不提供拖出入口。
+  const handleTerminalTabWorkbenchDragIntent = useCallback(
+    (session: TerminalSession, event: { pointerId: number; clientX: number; clientY: number }) => {
+      const projectPathKey = session.projectPathKey || workspaceProjectPathKey(session.cwd);
+      const project = workspaceProjects.find(
+        (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+      );
+      beginWorkbenchDrag(
+        {
+          kind: "terminalSession",
+          sessionId: session.id,
+          project: {
+            projectId: project?.id ?? `terminal:${session.id}`,
+            projectPathKey,
+          },
+          title: session.title || session.shell || "Terminal",
+        },
+        event,
+      );
+    },
+    [beginWorkbenchDrag, workspaceProjects],
+  );
+
+  const handleProjectWorkbenchDragIntent = useCallback(
+    (project: WorkspaceProject, event: { pointerId: number; clientX: number; clientY: number }) => {
+      beginWorkbenchDrag(
+        {
+          kind: "workspace",
+          projectId: project.id,
+          projectPath: project.path,
+          title: project.name,
+        },
+        event,
+      );
+    },
+    [beginWorkbenchDrag],
+  );
+
+  // Menu alternative to dragging: dock the conversation beside the focused
+  // pane. Deterministic auto-dock with the same hard minimum-size checks as
+  // drops: right first (bottom first on narrow canvases), then the other
+  // axis, explicit rejection when no legal space remains.
+  const handleOpenConversationInSplit = useCallback(
+    (item: SidebarConversation) => {
+      const layout = workbench.layoutRef.current;
+      const existingPaneId = workbench.paneIdForConversation(item.id);
+      if (existingPaneId) {
+        handleWorkbenchFocusPane(existingPaneId);
+        return;
+      }
+      let target: Parameters<typeof workbench.openConversation>[1] | null = null;
+      if (!layout.focusedPaneId) {
+        target = { kind: "canvas-empty" };
+      } else {
+        const geometry = workbenchGeometryRef.current;
+        const focusedRect = geometry?.panes.find(
+          (pane) => pane.paneId === layout.focusedPaneId,
+        )?.rect;
+        if (geometry && focusedRect) {
+          const preferVertical = geometry.canvas.width < 680;
+          const edges = preferVertical
+            ? (["bottom", "right"] as const)
+            : (["right", "bottom"] as const);
+          for (const edge of edges) {
+            if (canSplitRectAtEdge(focusedRect, edge)) {
+              target = { kind: "pane-edge", paneId: layout.focusedPaneId, edge };
+              break;
+            }
+          }
+        }
+      }
+      if (!target) {
+        addNotify("error", t("workbench.noSpaceForSplit"));
+        return;
+      }
+      const project = workbenchProjectForConversation(item);
+      const opened = workbench.openConversation({ conversationId: item.id, project }, target);
+      if (opened) {
+        selectWorkbenchConversation(item.id, project.projectPathKey);
+      }
+    },
+    [
+      addNotify,
+      handleWorkbenchFocusPane,
+      selectWorkbenchConversation,
+      t,
+      workbench,
+      workbenchProjectForConversation,
+    ],
+  );
+
+  // Native file drag hover: focus the conversation pane under the cursor so
+  // the drop's attachments land in that pane's composer (the drop pipeline
+  // targets the focused pane's conversation).
+  const lastNativeDropHoverPaneRef = useRef<string | null>(null);
+  workbenchNativeDropHoverRef.current = (point) => {
+    if (!sessionWorkbench.enabled || !point) {
+      lastNativeDropHoverPaneRef.current = null;
+      return;
+    }
+    const geometry = workbenchGeometryRef.current;
+    const canvasElement = document.querySelector("[data-workbench-canvas]");
+    if (!geometry || !canvasElement) return;
+    const canvasRect = canvasElement.getBoundingClientRect();
+    const target = hitTestWorkbenchDrop(
+      geometry,
+      point.x - canvasRect.left,
+      point.y - canvasRect.top,
+    );
+    const paneId =
+      target && (target.kind === "pane-center" || target.kind === "pane-edge")
+        ? target.paneId
+        : null;
+    if (!paneId || paneId === lastNativeDropHoverPaneRef.current) return;
+    lastNativeDropHoverPaneRef.current = paneId;
+    if (workbench.layoutRef.current.focusedPaneId !== paneId) {
+      handleWorkbenchFocusPane(paneId);
+    }
+  };
+
+  // Keep the focused pane bound to the page's current conversation (the
+  // legacy "conversation swaps beneath the stable pane" behaviour), unless a
+  // pane-initiated selection is still in flight.
+  const lastWorkbenchSyncedConversationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionWorkbench.enabled) return;
+    const pending = workbenchPendingSelectRef.current;
+    if (
+      pending &&
+      pending !== currentConversationId &&
+      lastWorkbenchSyncedConversationRef.current === currentConversationId
+    ) {
+      return;
+    }
+    workbenchPendingSelectRef.current = null;
+    const previousSynced = lastWorkbenchSyncedConversationRef.current;
+    lastWorkbenchSyncedConversationRef.current = currentConversationId;
+
+    // Workspace drop: the fresh draft conversation opens a NEW pane at the
+    // remembered drop target instead of rebinding the focused pane. The
+    // pending intent is one-shot and verified against the draft's workdir so
+    // a failed directory check can never misplace a later conversation.
+    const pendingWorkspaceOpen = pendingWorkspaceOpenRef.current;
+    if (pendingWorkspaceOpen && previousSynced !== currentConversationId) {
+      pendingWorkspaceOpenRef.current = null;
+      const draftWorkdir =
+        conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
+      const hasNoPane = !workbench.paneIdForConversation(currentConversationId);
+      if (
+        hasNoPane &&
+        draftWorkdir &&
+        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceOpen.projectPathKey
+      ) {
+        const opened = workbench.openConversation(
+          {
+            conversationId: currentConversationId,
+            project: {
+              projectId: pendingWorkspaceOpen.projectId,
+              projectPathKey: pendingWorkspaceOpen.projectPathKey,
+            },
+          },
+          pendingWorkspaceOpen.target,
+        );
+        if (opened) return;
+      }
+    }
+    workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
+  }, [currentConversationId, conversationSurfaceProject, conversationRuntimeCacheRef, workbench]);
+
+  // Restore the persisted layout once history is available. Validation uses
+  // the unscoped conversation map so panes from other workspaces survive a
+  // restore; panes for conversations that no longer exist are dropped.
+  const workbenchRestoreRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!sessionWorkbench.enabled || workbenchRestoreRequestedRef.current) return;
+    if (sidebarConversationsById.size === 0) return;
+    workbenchRestoreRequestedRef.current = true;
+    void (async () => {
+      // 终端对账:webview reload 后 Rust 注册表仍存活,绑定命中的终端 Pane 可
+      // 恢复;list 失败按安全默认丢弃全部终端 Pane,绝不阻塞会话恢复。
+      const liveTerminalSurfaceIds = await resolveLiveTerminalSurfaceIds({
+        client: tauriTerminalClient,
+        bindings: terminalPaneBindings,
+      });
+      const restored = await workbench.attemptRestore({
+        validConversationIds: new Set(sidebarConversationsById.keys()),
+        ...(liveTerminalSurfaceIds ? { liveTerminalSurfaceIds } : {}),
+      });
+      if (restored?.focusConversationId) {
+        selectWorkbenchConversation(restored.focusConversationId);
+      }
+    })();
+  }, [selectWorkbenchConversation, sidebarConversationsById, workbench]);
+
+  // Close panes whose conversation was deleted from history (the focused
+  // pane already falls back through the legacy new-conversation path).
+  useEffect(() => {
+    if (!sessionWorkbench.enabled) return;
+    const layout = workbench.layoutRef.current;
+    for (const pane of Object.values(layout.panes)) {
+      if (pane.surface.kind !== "conversation") continue;
+      const conversationId = pane.surface.conversationId;
+      if (conversationId === currentConversationId) continue;
+      const item = sidebarConversationsById.get(conversationId);
+      if (!item && conversationPersistenceCursorRef.current.has(conversationId)) {
+        workbench.closePane(pane.paneId);
+      }
+    }
+  }, [
+    conversationPersistenceCursorRef,
+    currentConversationId,
+    sidebarConversationsById,
+    workbench,
+  ]);
+
+  // Keyboard equivalents for pane focus moves: Meta/Ctrl+Alt+Arrow.
+  useEffect(() => {
+    if (!sessionWorkbench.enabled) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
+      const direction =
+        event.key === "ArrowLeft"
+          ? ("left" as const)
+          : event.key === "ArrowRight"
+            ? ("right" as const)
+            : event.key === "ArrowUp"
+              ? ("top" as const)
+              : event.key === "ArrowDown"
+                ? ("bottom" as const)
+                : null;
+      if (!direction) return;
+      const layout = workbench.layoutRef.current;
+      const geometry = workbenchGeometryRef.current;
+      if (!layout.focusedPaneId || !geometry) return;
+      const nextPaneId = findAdjacentPaneId(geometry, layout.focusedPaneId, direction);
+      if (!nextPaneId) return;
+      event.preventDefault();
+      handleWorkbenchFocusPane(nextPaneId);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleWorkbenchFocusPane, workbench]);
+
+  // Background pane controllers (conversations visible in unfocused panes).
+  const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
+  const getBackgroundConversationController = useCallback(
+    (conversationId: string, project: ProjectRef): ConversationSurfaceController => {
+      const existing = backgroundControllersRef.current.get(conversationId);
+      if (existing) return existing;
+      const controller = createConversationSurfaceController({
+        conversationId,
+        project,
+        registry: conversationRuntimeRegistry,
+        actions: conversationControllerActions,
+      });
+      backgroundControllersRef.current.set(conversationId, controller);
+      return controller;
+    },
+    [conversationControllerActions, conversationRuntimeRegistry],
+  );
+  useEffect(() => {
+    if (!sessionWorkbench.enabled) return;
+    const keep = new Set(
+      Object.values(workbench.layout.panes).flatMap((pane) =>
+        pane.surface.kind === "conversation" ? [pane.surface.conversationId] : [],
+      ),
+    );
+    for (const [conversationId, controller] of backgroundControllersRef.current) {
+      if (!keep.has(conversationId)) {
+        controller.dispose();
+        backgroundControllersRef.current.delete(conversationId);
+      }
+    }
+  }, [workbench.layout]);
+  useEffect(
+    () => () => {
+      for (const controller of backgroundControllersRef.current.values()) {
+        controller.dispose();
+      }
+      backgroundControllersRef.current.clear();
+    },
+    [],
+  );
+
+  // Read-and-interact binding for panes not hosting the current conversation.
+  // Interactions that must route through page-level current-conversation
+  // machinery focus the pane first (pointer-down focus already switched the
+  // conversation by the time most of them fire).
+  const buildBackgroundPaneBinding = (
+    surface: ConversationWorkbenchSurface,
+  ): ConversationPaneBinding => {
+    const conversationId = surface.conversationId;
+    const controller = getBackgroundConversationController(conversationId, surface.project);
+    const runtimeEntry = conversationRuntimeRegistry.getSnapshot(conversationId);
+    const historyItem = sidebarConversationsById.get(conversationId);
+    const workspaceRoot = historyItem?.cwd?.trim() || runtimeEntry?.workdir?.trim() || undefined;
+    const paneSelectedModel = resolveActiveModelSelection(
+      settings,
+      runtimeEntry?.selectedModel ?? undefined,
+    );
+    const paneSelectedValue = paneSelectedModel
+      ? toModelValue(paneSelectedModel.customProviderId, paneSelectedModel.model)
+      : undefined;
+    const paneModelLabel = (() => {
+      if (!paneSelectedModel) return t("chat.selectModel");
+      const option = modelOptions.find((entry) => entry.value === paneSelectedValue);
+      return option ? `${option.providerName} / ${option.model}` : paneSelectedModel.model;
+    })();
+    const paneContextWindow = (() => {
+      if (!paneSelectedModel) return undefined;
+      const provider = settings.customProviders.find(
+        (entry) => entry.id === paneSelectedModel.customProviderId,
+      );
+      if (!provider) return undefined;
+      return findProviderModelConfig(provider, paneSelectedModel.model).contextWindow;
+    })();
+    const paneIsRunning = isConversationRunning(conversationId) || runtimeEntry?.isSending === true;
+    const paneContextUsageTokensSource = createContextUsageTokensSource({
+      isRunning: paneIsRunning || runtimeEntry?.compactionStatus?.phase === "running",
+      conversationId,
+      transcriptItems: runtimeEntry?.state.transcript.items ?? [],
+      liveTranscriptStore: getConversationLiveTranscriptStore(conversationId),
+      getCompactionController,
+    });
+    const focusGuard = <Args extends unknown[]>(fn: (...args: Args) => void) => {
+      return (...args: Args) => {
+        if (currentConversationIdRef.current !== conversationId) {
+          focusWorkbenchConversationPane(conversationId);
+          return;
+        }
+        fn(...args);
+      };
+    };
+    return {
+      controller,
+      changedFilesActions,
+      isConversationRunning: isConversationRunning(conversationId),
+      // Native file drop routes only to the focused pane's composer.
+      fileDrop: {
+        active: false,
+        canDropUpload: false,
+        title: "",
+        description: "",
+        limitHint: "",
+      },
+      transcript: {
+        workspaceRoot,
+        gitClient: tauriGitClient,
+        hasModels,
+        onLoadEarlierHistory: () => loadEarlierHistoryActionRef.current(conversationId),
+        isHistorySwitching: false,
+        isAgentMode,
+        showUsage: isAgentDevExecutionMode,
+        usageContextWindow: paneContextWindow,
+        liveTranscriptStore: getConversationLiveTranscriptStore(conversationId),
+        contentWidth: settings.customSettings.chatTranscript.width,
+        onContentWidthChange: handleChatTranscriptWidthChange,
+        onOpenFileLink: handleOpenChatFileLink,
+        onResendFromEdit: focusGuard(handleResendFromEdit),
+        onBranchConversation: undefined,
+        branchPendingMessageId: undefined,
+        onOpenSettings,
+        onSuggestionSelect: focusGuard(handleEmptyStateSuggestion),
+        suggestionsDisabled: isSuggestionTyping,
+      },
+      composer: {
+        surface: "desktop",
+        isUploadingFiles: false,
+        isInputDisabled: false,
+        inputPlaceholder: t("chat.inputHint"),
+        workdir: workspaceRoot ?? "",
+        enabledSkills: enabledComposerSkills,
+        executionMode: settings.system.executionMode,
+        hasModels,
+        currentModelLabel: paneModelLabel,
+        modelOptions,
+        selectedValue: paneSelectedValue,
+        chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+        reasoningOptions: chatRuntimeReasoningOptions,
+        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        contextUsageTokensSource: paneContextUsageTokensSource,
+        contextWindow: paneContextWindow,
+        gitClient: tauriGitClient,
+        workspaceActivityClient: tauriWorkspaceActivityClient,
+        onOpenWorktree: handleOpenWorktree,
+        onWorktreeRemoved: handleWorktreeRemoved,
+        onSend: focusGuard(handleSend),
+        onComposerBusyChange: () => undefined,
+        onSelectModel: focusGuard(handleSelectModel),
+        onSelectExecutionMode: handleSelectExecutionMode,
+        onOpenSettings,
+        onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
+        onPickReadableFiles: focusGuard(pickReadableFiles),
+        onPasteFiles: importReadableFiles,
+        onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
+        loadHistoryPrompts: loadComposerHistoryPrompts,
+        onRemovePendingUpload: removePendingUpload,
+        onRunQueuedTurnNow: runQueuedTurnNow,
+        onMoveQueuedTurnUp: moveQueuedTurnUp,
+        onEditQueuedTurn: focusGuard(editQueuedTurn),
+        onRemoveQueuedTurn: removeQueuedTurn,
+      },
+    };
+  };
+
+  const workbenchRegistrations: ConversationPaneRegistration[] = sessionWorkbench.enabled
+    ? Object.values(workbench.layout.panes).flatMap((pane) => {
+        // Only conversation panes register a host binding; terminal and
+        // unsupported panes render self-contained surfaces.
+        const surface = pane.surface;
+        if (surface.kind !== "conversation") return [];
+        return [
+          {
+            identity: {
+              paneId: pane.paneId,
+              conversationId: surface.conversationId,
+              project: surface.project,
+            },
+            binding:
+              surface.conversationId === currentConversationId
+                ? primaryPaneBinding
+                : buildBackgroundPaneBinding(surface),
+          },
+        ];
+      })
+    : [
+        {
+          identity: {
+            paneId: "root-conversation-pane",
+            conversationId: currentConversationId,
+            project: conversationSurfaceProject,
+          },
+          binding: primaryPaneBinding,
+        },
+      ];
+  const conversationPaneHostEnvironment =
+    createConversationPaneHostEnvironment(workbenchRegistrations);
+
+  const renderWorkbenchPaneChrome = (
+    pane: PaneRecord,
+    context: { isFocused: boolean; paneCount: number },
+  ) => {
+    if (context.paneCount < 2) return null;
+    const surface = pane.surface;
+    const title =
+      surface.kind === "conversation"
+        ? sidebarConversationsById.get(surface.conversationId)?.title?.trim() || ""
+        : surface.kind === "localTerminal"
+          ? surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal"
+          : surface.kind === "sshTerminal"
+            ? surface.launchSpec.title?.trim() || surface.launchSpec.sshHostId.trim() || "SSH"
+            : surface.originalKind;
+    return (
+      <PaneChrome
+        paneId={pane.paneId}
+        title={title}
+        isFocused={context.isFocused}
+        dragHandleLabel={t("workbench.dragPane")}
+        closeLabel={t("workbench.closePane")}
+        onClose={() => handleWorkbenchClosePane(pane.paneId)}
+        onDragHandlePointerDown={(event) => {
+          beginWorkbenchDrag(
+            { kind: "pane", paneId: pane.paneId, surfaceKey: surfaceIdentityKey(surface), title },
+            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+          );
+        }}
+      />
+    );
+  };
+
+  const chatContent = sessionWorkbench.enabled ? (
+    <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
+      <WorkbenchCanvas
+        layout={workbench.layout}
+        labels={{
+          paneRegion: () => t("workbench.paneRegion"),
+          separator: t("workbench.resizeDivider"),
+        }}
+        renderPaneContent={(pane, paneContext) => {
+          const surface = pane.surface;
+          if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
+            return (
+              <TerminalPaneHost
+                paneId={pane.paneId}
+                surface={surface}
+                isFocused={paneContext.isFocused}
+                theme={effectiveTheme}
+                sessions={terminalSessions}
+                sessionsLoaded={terminalSessionsLoaded}
+              />
+            );
+          }
+          if (surface.kind === "unsupported") {
+            return (
+              <div
+                data-workbench-surface="unsupported-placeholder"
+                className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center"
+              >
+                <p className="text-sm text-muted-foreground">{t("workbench.unsupportedPane")}</p>
+                <p className="text-xs text-muted-foreground/70">{surface.originalKind}</p>
+              </div>
+            );
+          }
+          const conversationId = surface.conversationId;
+          const isCurrent = conversationId === currentConversationId;
+          const panePathKey = surface.project.projectPathKey;
+          // Archived/missing workspaces: the conversation stays viewable but
+          // the pane is clearly marked blocked; it never rebinds elsewhere.
+          const blockedMessage = archivedWorkspaceProjectPathKeys.has(panePathKey)
+            ? t("workbench.projectArchived")
+            : missingWorkspaceProjectPathKeys.has(panePathKey)
+              ? t("workbench.projectMissing")
+              : null;
+          const blockedBanner = blockedMessage ? (
+            <div
+              data-workbench-pane-blocked=""
+              className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+            >
+              {blockedMessage}
+            </div>
+          ) : null;
+          // Restored panes without runtime state hydrate on focus; render a
+          // stale placeholder instead of an empty-looking conversation.
+          if (!isCurrent && !conversationRuntimeRegistry.getSnapshot(conversationId)) {
+            return (
+              <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {sidebarConversationsById.get(conversationId)?.title || t("chat.pendingTitle")}
+                </p>
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
+                  onClick={() => focusWorkbenchConversationPane(conversationId)}
+                >
+                  {t("workbench.loadConversation")}
+                </button>
+              </div>
+            );
+          }
+          const host = (
+            <ConversationPaneHost
+              ref={isCurrent ? conversationPaneHostRef : undefined}
+              paneId={pane.paneId}
+              conversationId={conversationId}
+              project={surface.project}
+            />
+          );
+          if (!blockedBanner) return host;
+          return (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {blockedBanner}
+              {host}
+            </div>
+          );
+        }}
+        renderPaneChrome={renderWorkbenchPaneChrome}
+        onResizeSplit={workbench.resizeSplit}
+        onEqualizeSplit={workbench.equalizeSplit}
+        onFocusPane={handleWorkbenchFocusPane}
+        onGeometryChange={handleWorkbenchGeometryChange}
+        dropPreview={
+          workbenchDragState?.previewRect
+            ? { rect: workbenchDragState.previewRect, label: workbenchDragState.payload.title }
+            : null
+        }
+        emptyState={
+          <WorkbenchEmptyState
+            title={t("workbench.emptyTitle")}
+            description={t("workbench.emptyDescription")}
+          />
+        }
+      />
+    </ConversationPaneHostEnvironmentProvider>
+  ) : (
+    <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
+      <ConversationPaneHost
+        ref={conversationPaneHostRef}
+        paneId="root-conversation-pane"
+        conversationId={currentConversationId}
+        project={conversationSurfaceProject}
+      />
+    </ConversationPaneHostEnvironmentProvider>
+  );
+
+  const workbenchDragGhost =
+    sessionWorkbench.enabled && workbenchDragState ? (
+      <div
+        data-workbench-drag-ghost=""
+        className="pointer-events-none fixed z-[120] max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        style={{
+          left: workbenchDragState.pointer.x + 14,
+          top: workbenchDragState.pointer.y + 10,
+        }}
+      >
+        {workbenchDragState.payload.title || t("chat.pendingTitle")}
+      </div>
+    ) : null;
+
   return (
     <div
       data-app-frame="three-column"
@@ -1657,6 +2726,7 @@ export function ChatPage(props: ChatPageProps) {
         onOpenSettings={() => onOpenSettings()}
         appUpdate={appUpdate}
       />
+      {workbenchDragGhost}
       {/* ---- Left column: navigation/sidebar ---- */}
       <ChatSidebarContainer
         store={sidebarStore}
@@ -1703,6 +2773,15 @@ export function ChatPage(props: ChatPageProps) {
         }}
         onConversationDeleted={handleConversationDeleted}
         onConversationCwdChanged={handleConversationCwdChanged}
+        onConversationWorkbenchDragIntent={
+          sessionWorkbench.enabled ? handleConversationWorkbenchDragIntent : undefined
+        }
+        onConversationOpenInWorkbenchSplit={
+          sessionWorkbench.enabled ? handleOpenConversationInSplit : undefined
+        }
+        onProjectWorkbenchDragIntent={
+          sessionWorkbench.enabled ? handleProjectWorkbenchDragIntent : undefined
+        }
         canShareConversations={canShareHistory}
         sharedConversationCount={sharedHistoryItems.length}
         onShareConversation={handleOpenShareModal}
@@ -1810,118 +2889,7 @@ export function ChatPage(props: ChatPageProps) {
               "--zone-font-scale": settings.customSettings.fontScale.chat,
             } as CSSProperties
           }
-          chat={{
-            content: (
-              <ConversationSurface
-                conversationId={currentConversationId}
-                transcript={
-                  <ChangedFilesActionsProvider value={changedFilesActions}>
-                    <ChatTranscript
-                      conversationId={currentConversationId}
-                      workspaceRoot={currentConversationWorkspaceRoot}
-                      gitClient={tauriGitClient}
-                      followRef={scrollFollowRef}
-                      hasModels={hasModels}
-                      historyItems={transcriptItems}
-                      hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                      onLoadEarlierHistory={handleLoadEarlierHistory}
-                      isHistorySwitching={conversationOpenState.showOverlay}
-                      isSending={isSending}
-                      isAgentMode={isAgentMode}
-                      showUsage={isAgentDevExecutionMode}
-                      usageContextWindow={currentModelContextWindow}
-                      liveTranscriptStore={liveTranscriptStore}
-                      isCompactionRunning={isCompactionRunning}
-                      bottomReservePx={composerOverlayHeight}
-                      contentWidth={settings.customSettings.chatTranscript.width}
-                      onContentWidthChange={handleChatTranscriptWidthChange}
-                      onOpenFileLink={handleOpenChatFileLink}
-                      onResendFromEdit={handleResendFromEdit}
-                      onBranchConversation={
-                        // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
-                        isConversationHydrating || isConversationHydrationFailed
-                          ? undefined
-                          : handleBranchConversation
-                      }
-                      branchPendingMessageId={branchPendingMessageId}
-                      onOpenSettings={onOpenSettings}
-                      onSuggestionSelect={handleEmptyStateSuggestion}
-                      suggestionsDisabled={isSuggestionTyping}
-                    />
-                  </ChangedFilesActionsProvider>
-                }
-                composer={
-                  <ChatComposerBar
-                    surface="desktop"
-                    composerRef={composerRef}
-                    isSending={isSending}
-                    isUploadingFiles={isUploadingFiles}
-                    isInputDisabled={isComposerInputDisabled}
-                    inputPlaceholder={composerPlaceholder}
-                    workdir={displayedConversationWorkdir}
-                    enabledSkills={enabledComposerSkills}
-                    executionMode={settings.system.executionMode}
-                    hasModels={hasModels}
-                    currentModelLabel={currentModelLabel}
-                    modelOptions={modelOptions}
-                    selectedValue={selectedValue}
-                    chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
-                    reasoningOptions={chatRuntimeReasoningOptions}
-                    thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
-                    contextUsageTokensSource={contextUsageTokensSource}
-                    contextWindow={currentModelContextWindow}
-                    onManualCompactConfirm={handleManualCompact}
-                    manualCompactBlocked={isCompactionRunning}
-                    gitClient={tauriGitClient}
-                    workspaceActivityClient={tauriWorkspaceActivityClient}
-                    onOpenWorktree={handleOpenWorktree}
-                    onWorktreeRemoved={handleWorktreeRemoved}
-                    onSend={handleSend}
-                    onStop={handleStopSending}
-                    onComposerBusyChange={handleComposerBusyChange}
-                    onSelectModel={handleSelectModel}
-                    onSelectExecutionMode={handleSelectExecutionMode}
-                    onOpenSettings={onOpenSettings}
-                    onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
-                    onPickReadableFiles={pickReadableFiles}
-                    onPasteFiles={importReadableFiles}
-                    onLoadUploadedImagePreview={loadComposerUploadedImagePreview}
-                    loadHistoryPrompts={loadComposerHistoryPrompts}
-                    pendingUploadedFiles={pendingUploadedFiles}
-                    onRemovePendingUpload={removePendingUpload}
-                    queuedTurns={queuedChatTurnsForCurrentConversation}
-                    onRunQueuedTurnNow={runQueuedTurnNow}
-                    onMoveQueuedTurnUp={moveQueuedTurnUp}
-                    onEditQueuedTurn={editQueuedTurn}
-                    onRemoveQueuedTurn={removeQueuedTurn}
-                    onHeightChange={setComposerOverlayHeight}
-                    taskProgressBar={
-                      <CurrentTaskProgress
-                        key={currentConversationId}
-                        historyItems={transcriptItems}
-                        liveTranscriptStore={liveTranscriptStore}
-                        isConversationRunning={
-                          isSending || isConversationRunning(currentConversationId)
-                        }
-                      />
-                    }
-                    approvalBar={approvalBar}
-                    fileDropOverlay={
-                      isFileDropActive ? (
-                        <FileDropOverlay
-                          variant="composer"
-                          canDropUpload={canDropUpload}
-                          title={fileDropTitle}
-                          description={fileDropDescription}
-                          limitHint={fileDropLimitHint}
-                        />
-                      ) : null
-                    }
-                  />
-                }
-              />
-            ),
-          }}
+          chat={{ content: chatContent }}
           workspaceOverlays={
             <WorkspaceOverlayHost
               locale={settings.locale}
@@ -1966,6 +2934,7 @@ export function ChatPage(props: ChatPageProps) {
         cwd={terminalProjectPath}
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
+        hiddenSessionIds={hiddenDockSessionIds}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
@@ -1988,6 +2957,9 @@ export function ChatPage(props: ChatPageProps) {
         onSshProjectHostIdsChange={handleSshProjectHostIdsChange}
         onOpenSshSession={handleOpenSshTerminal}
         onSessionsChange={handleRightDockSessionsChange}
+        onTerminalTabDragStart={
+          sessionWorkbench.enabled ? handleTerminalTabWorkbenchDragIntent : undefined
+        }
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
         gitReviewFocusRequest={gitReviewFocusRequest}

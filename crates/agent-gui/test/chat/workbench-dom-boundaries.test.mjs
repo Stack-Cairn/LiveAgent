@@ -37,6 +37,28 @@ const conversationSurfaceSource = readFileSync(
   new URL("../../src/pages/chat/surfaces/ConversationSurface.tsx", import.meta.url),
   "utf8",
 );
+const conversationPaneHostSource = readFileSync(
+  new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
+  "utf8",
+);
+const conversationPaneEnvironmentSource = readFileSync(
+  new URL(
+    "../../src/pages/chat/surfaces/ConversationPaneHostEnvironment.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const conversationPaneHarnessSource = readFileSync(
+  new URL("../../src/pages/chat/workbench/ConversationPaneHarness.tsx", import.meta.url),
+  "utf8",
+);
+const conversationPaneHarnessModelSource = readFileSync(
+  new URL(
+    "../../src/pages/chat/workbench/conversationPaneHarnessModel.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 test("application chrome is attached to the center column instead of the right dock", () => {
   assert.match(chatPageSource, /data-app-frame="three-column"/);
@@ -76,11 +98,39 @@ test("right dock width moves the center-column chrome with the panel", () => {
 });
 
 test("conversation transcript and composer share one stable workbench surface", () => {
-  assert.match(chatPageSource, /<ConversationSurface/);
+  assert.match(chatPageSource, /<ConversationPaneHost/);
+  assert.match(chatPageSource, /<ConversationPaneHostEnvironmentProvider/);
+  assert.match(chatPageSource, /conversationId=\{currentConversationId\}/);
+  assert.match(chatPageSource, /project=\{conversationSurfaceProject\}/);
+  assert.doesNotMatch(chatPageSource, /<ChatTranscript|<ChatComposerBar/);
+  assert.doesNotMatch(conversationPaneHostSource, /controller:\s*ConversationSurfaceController/);
+  assert.match(conversationPaneHostSource, /useConversationPaneBinding/);
+  assert.match(conversationPaneEnvironmentSource, /resolvePane\(identity: ConversationPaneIdentity\)/);
+  assert.match(conversationSurfaceSource, /useConversationSurfaceSnapshot\(controller\)/);
+  assert.match(conversationPaneHostSource, /const composerRef = useRef/);
+  assert.match(conversationPaneHostSource, /const scrollFollowRef = useRef/);
+  assert.match(conversationPaneHostSource, /controller\.getSnapshot\(\)\.draft/);
+  assert.match(conversationPaneHostSource, /controller\.setDraft\(nextDraft\)/);
+  assert.match(conversationPaneHostSource, /<ChatTranscript/);
+  assert.match(conversationPaneHostSource, /<ChatComposerBar/);
+  assert.match(conversationPaneHostSource, /pendingUploadedFiles=\{snapshot\.uploads\}/);
+  assert.match(conversationPaneHostSource, /approvals=\{snapshot\.approvals\}/);
+  assert.match(conversationPaneHostSource, /snapshot\.queue\.map/);
+  assert.match(conversationPaneHostSource, /<ConversationSurface/);
   assert.match(conversationSurfaceSource, /data-workbench-surface="conversation"/);
+  assert.match(conversationSurfaceSource, /snapshot\.conversationId/);
   assert.doesNotMatch(conversationSurfaceSource, /data-file-upload-drop-zone/);
   assert.match(conversationSurfaceSource, /data-workbench-surface-id=/);
   assert.match(conversationSurfaceSource, /data-conversation-transcript/);
   assert.match(conversationSurfaceSource, /data-conversation-composer/);
   assert.match(conversationSurfaceSource, /relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden/);
+});
+
+test("development harness mounts two identity-only conversation pane hosts", () => {
+  assert.match(conversationPaneHarnessSource, /data-conversation-pane-harness="two-pane"/);
+  assert.match(conversationPaneHarnessSource, /readonly \[ConversationPaneHarnessSpec, ConversationPaneHarnessSpec\]/);
+  assert.match(conversationPaneHarnessSource, /panes\.map/);
+  assert.match(conversationPaneHarnessSource, /<ConversationPaneHost/);
+  assert.match(conversationPaneHarnessModelSource, /cannot mount one editable conversation twice/);
+  assert.doesNotMatch(conversationPaneHarnessSource, /ChatTranscript|ChatComposerBar/);
 });
