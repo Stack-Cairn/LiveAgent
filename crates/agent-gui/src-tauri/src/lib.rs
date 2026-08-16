@@ -89,6 +89,7 @@ macro_rules! app_invoke_handler {
             commands::checkpoint::checkpoint_list,
             commands::checkpoint::checkpoint_diff_stats,
             commands::checkpoint::checkpoint_rewind_code,
+            commands::checkpoint::checkpoint_clear,
             commands::chat_file_links::open_chat_file_link,
             commands::root_grants::workspace_root_grants_list,
             commands::root_grants::workspace_root_grants_apply,

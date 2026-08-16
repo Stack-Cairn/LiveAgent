@@ -82,6 +82,10 @@ pub struct SubagentWorktreeStatusInput {
 pub struct SubagentWorktreeApplyInput {
     pub parent_workdir: String,
     pub worktree_root: String,
+    /// 会话检查点上下文:apply 修改父工作区前对受影响路径捕获父侧前像。
+    /// 缺省(None)不捕获。worktree 子代理自身的临时工作区不参与检查点,
+    /// 只有合并回父工作区这一步才是可回退的真实变更。
+    pub checkpoint: Option<super::checkpoint::CheckpointCtx>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -722,6 +726,7 @@ fn run_git_apply_3way(cwd: &Path, patch: &str) -> Result<(), String> {
 fn apply_worktree_changes_blocking(
     parent_workdir: String,
     worktree_root: String,
+    checkpoint: Option<super::checkpoint::CheckpointCtx>,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
     let parent_workdir = canonicalize_existing_dir(&parent_workdir, "parentWorkdir")?;
     let worktree_root = canonicalize_existing_dir(&worktree_root, "worktreeRoot")?;
@@ -776,6 +781,15 @@ fn apply_worktree_changes_blocking(
             conflict_files: Vec::new(),
         });
     }
+
+    // 在父仓库被任何 apply 路径(git apply / 3way / 文件拷贝兜底)修改之前,
+    // 对受影响路径捕获父工作区前像。捕获记在父仓库根下,rewind 才能恢复
+    // 真实工作区,而不是已被清理的 worktree 临时目录。
+    super::checkpoint::capture_worktree_apply_pre_images(
+        checkpoint.as_ref(),
+        &parent_repo_root,
+        &apply_paths,
+    );
 
     stage_apply_paths(&worktree_root, &apply_paths)?;
     let patch = run_git_raw(
@@ -1154,7 +1168,7 @@ pub async fn subagent_worktree_apply(
     input: SubagentWorktreeApplyInput,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        apply_worktree_changes_blocking(input.parent_workdir, input.worktree_root)
+        apply_worktree_changes_blocking(input.parent_workdir, input.worktree_root, input.checkpoint)
     })
     .await
     .map_err(|err| format!("subagent_worktree_apply join failed: {err}"))?
@@ -1261,7 +1275,7 @@ mod tests {
         )
         .map_err(|err| format!("failed to write worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("git_apply"));
         assert_eq!(
@@ -1292,7 +1306,7 @@ mod tests {
         fs::write(repo.join("test/agent.md"), content)
             .map_err(|err| format!("failed to write parent file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(!result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("file_copy_fallback"));
         assert_eq!(result.skipped_reason.as_deref(), Some("already_applied"));
@@ -1322,7 +1336,7 @@ mod tests {
         fs::remove_file(worktree.join("obsolete.md"))
             .map_err(|err| format!("failed to delete worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("obsolete.md").exists());
 
@@ -1347,7 +1361,7 @@ mod tests {
         fs::rename(worktree.join("docs/old.md"), worktree.join("docs/new.md"))
             .map_err(|err| format!("failed to rename worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("docs/old.md").exists());
         assert_eq!(
@@ -1380,7 +1394,7 @@ mod tests {
         git(&repo, &["add", "file.txt"])?;
         git(&repo, &["commit", "-m", "parent update"])?;
 
-        let error = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))
+        let error = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)
             .expect_err("conflicting 3-way apply should fail");
         assert!(error.contains("git apply --3way failed"));
         assert_eq!(

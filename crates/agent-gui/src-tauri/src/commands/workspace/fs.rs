@@ -3089,10 +3089,12 @@ fn fs_write_text_impl(
         ensure_expected_version_matches(&target, &logical_path, &expected)?;
     }
 
-    // 落盘前捕获前像:不存在则记删除标记,存在则拷贝原字节。失败不阻断写入。
+    // 落盘前捕获前像(root + 相对路径):不存在则记删除标记,存在则拷贝原
+    // 字节。失败不阻断写入。
     capture_pre_image(
         checkpoint.as_ref(),
-        &target,
+        &path.root,
+        &path.relative_path,
         if existed_before {
             PreImage::File(None)
         } else {
@@ -3249,7 +3251,7 @@ fn fs_edit_text_impl(
     let next = apply_edit_replacements(&text, applied);
 
     // 落盘前捕获前像:直接复用上面已读入内存的原字节。失败不阻断写入。
-    capture_pre_image(checkpoint.as_ref(), &target, PreImage::File(Some(&bytes)));
+    capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::File(Some(&bytes)));
 
     fs::write(&target, next.as_bytes())?;
     let md = fs::metadata(&target)?;
@@ -3342,12 +3344,12 @@ fn fs_delete_impl(
         "symlink"
     } else if meta.is_file() {
         // 删除前捕获整个文件内容,回退即可原样恢复。失败不阻断删除。
-        capture_pre_image(checkpoint.as_ref(), &target, PreImage::File(None));
+        capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::File(None));
         fs::remove_file(&target)?;
         "file"
     } else if meta.is_dir() {
         // 目录是递归删除,只能记不可恢复的标记,由 diff 统计如实呈现。
-        capture_pre_image(checkpoint.as_ref(), &target, PreImage::Dir);
+        capture_pre_image(checkpoint.as_ref(), wd, &rel, PreImage::Dir);
         fs::remove_dir_all(&target)?;
         "dir"
     } else {

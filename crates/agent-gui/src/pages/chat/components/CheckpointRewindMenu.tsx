@@ -14,8 +14,11 @@ import { useState } from "react";
 
 type CheckpointTurnSummary = {
   turnSeq: number;
+  turnId: string;
   fileCount: number;
   dirCount: number;
+  /** 该轮存在捕获失败记录(前像不完整),回退可能遗漏部分文件。 */
+  incomplete: boolean;
   firstCapturedAt: number;
 };
 
@@ -26,7 +29,8 @@ type CheckpointDiffStats = {
   cleanFiles: number;
   skippedDirs: number;
   missingBlobs: number;
-  entries: { path: string; action: string }[];
+  captureErrors: number;
+  entries: { path: string; key: string; action: string; currentHash?: string }[];
 };
 
 type CheckpointRewindResult = {
@@ -35,13 +39,26 @@ type CheckpointRewindResult = {
   deletedFiles: number;
   cleanFiles: number;
   skippedDirs: number;
+  /** 预览后被外部修改、被跳过未覆盖的文件(冲突检测)。 */
+  conflicts: string[];
   failed: string[];
 };
 
 // 仅覆盖 Write/Edit/Delete 三个文件工具的改动;Bash 等 shell 写入不在检查点内。
 // 桌面端专属入口:检查点数据只存在于桌面本机,WebUI 暂不提供(P2)。
-export function CheckpointRewindMenu(props: { conversationId: string; disabled?: boolean }) {
-  const { conversationId, disabled } = props;
+export function CheckpointRewindMenu(props: {
+  conversationId: string;
+  disabled?: boolean;
+  /** 回退完成后回调(通知/转录记录由宿主页面处理)。 */
+  onRewound?: (info: {
+    turnSeq: number;
+    restoredFiles: number;
+    deletedFiles: number;
+    conflicts: number;
+    failed: number;
+  }) => void;
+}) {
+  const { conversationId, disabled, onRewound } = props;
   const { locale } = useLocale();
   const zh = locale === "zh-CN";
   const { confirm, dialog } = useConfirmDialog();
@@ -63,7 +80,8 @@ export function CheckpointRewindMenu(props: { conversationId: string; disabled?:
     }
   };
 
-  const rewindTo = async (turnSeq: number) => {
+  const rewindTo = async (turn: CheckpointTurnSummary) => {
+    const turnSeq = turn.turnSeq;
     setBusyTurn(turnSeq);
     try {
       const stats = await invoke<CheckpointDiffStats>("checkpoint_diff_stats", {
@@ -91,12 +109,19 @@ export function CheckpointRewindMenu(props: { conversationId: string; disabled?:
         parts.push(
           zh ? `${stats.missingBlobs} 个前像缺失` : `${stats.missingBlobs} blob(s) missing`,
         );
-      const detailPaths = stats.entries
-        .filter((entry) => entry.action === "restore" || entry.action === "delete")
-        .map((entry) => entry.path);
+      if (stats.captureErrors > 0 || turn.incomplete)
+        parts.push(
+          zh
+            ? `⚠ 该轮有 ${Math.max(stats.captureErrors, 1)} 次前像捕获失败，回退可能不完整`
+            : `⚠ ${Math.max(stats.captureErrors, 1)} pre-image capture failure(s); rewind may be incomplete`,
+        );
+      const actionable = stats.entries.filter(
+        (entry) => entry.action === "restore" || entry.action === "delete",
+      );
+      const detailPaths = actionable.map((entry) => entry.path);
       const confirmed = await confirm({
         title: zh ? "回退代码到此轮开始前" : "Rewind code to before this turn",
-        subtitle: new Date(turnSeq).toLocaleString(),
+        subtitle: new Date(turn.firstCapturedAt).toLocaleString(),
         description:
           parts.length > 0
             ? parts.join(zh ? "，" : ", ")
@@ -109,17 +134,35 @@ export function CheckpointRewindMenu(props: { conversationId: string; disabled?:
         tone: "warning",
       });
       if (!confirmed) return;
+      // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
+      // 修改的文件会被跳过并报告为冲突,绝不覆盖(TOCTOU 防护)。
+      const expected = actionable.map((entry) => ({
+        key: entry.key,
+        currentHash: entry.currentHash ?? "absent",
+      }));
       const result = await invoke<CheckpointRewindResult>("checkpoint_rewind_code", {
         conversation_id: conversationId,
         turn_seq: turnSeq,
+        expected,
       });
-      if (result.failed.length > 0) {
+      onRewound?.({
+        turnSeq,
+        restoredFiles: result.restoredFiles,
+        deletedFiles: result.deletedFiles,
+        conflicts: result.conflicts.length,
+        failed: result.failed.length,
+      });
+      if (result.failed.length > 0 || result.conflicts.length > 0) {
+        const issueLines = [
+          ...result.conflicts.map((path) => (zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`)),
+          ...result.failed.map((path) => (zh ? `失败: ${path}` : `failed: ${path}`)),
+        ];
         await confirm({
-          title: zh ? "回退部分失败" : "Rewind partially failed",
+          title: zh ? "回退部分未完成" : "Rewind partially completed",
           description: zh
-            ? `已恢复 ${result.restoredFiles} 个、删除 ${result.deletedFiles} 个，失败 ${result.failed.length} 个`
-            : `Restored ${result.restoredFiles}, deleted ${result.deletedFiles}, failed ${result.failed.length}`,
-          detail: result.failed.join("\n"),
+            ? `已恢复 ${result.restoredFiles} 个、删除 ${result.deletedFiles} 个；冲突跳过 ${result.conflicts.length} 个、失败 ${result.failed.length} 个`
+            : `Restored ${result.restoredFiles}, deleted ${result.deletedFiles}; ${result.conflicts.length} conflict(s) skipped, ${result.failed.length} failed`,
+          detail: issueLines.join("\n"),
           confirmLabel: zh ? "知道了" : "OK",
           cancelLabel: "",
           hideCancel: true,
@@ -177,19 +220,17 @@ export function CheckpointRewindMenu(props: { conversationId: string; disabled?:
           ) : (
             turns.map((turn) => (
               <DropdownMenuItem
-                key={turn.turnSeq}
+                key={turn.turnId}
                 disabled={busyTurn !== null}
-                onClick={() => void rewindTo(turn.turnSeq)}
+                onClick={() => void rewindTo(turn)}
                 className="flex items-center justify-between gap-3"
               >
-                <span className="text-sm">{new Date(turn.turnSeq).toLocaleString()}</span>
+                <span className="text-sm">{new Date(turn.firstCapturedAt).toLocaleString()}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {busyTurn === turn.turnSeq ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : zh ? (
-                    `${turn.fileCount} 个文件`
                   ) : (
-                    `${turn.fileCount} file(s)`
+                    `${turn.fileCount}${zh ? " 个文件" : " file(s)"}${turn.incomplete ? " ⚠" : ""}`
                   )}
                 </span>
               </DropdownMenuItem>

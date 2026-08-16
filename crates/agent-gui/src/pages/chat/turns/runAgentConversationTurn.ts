@@ -497,8 +497,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     fileState,
     taskStateStore,
     askUserQuestionConversationId: conversationId,
-    // 检查点粒度=一次注册表构建(每用户轮重建),Date.now() 单调即可。
-    checkpoint: { conversationId, turnSeq: Date.now() },
+    // 检查点粒度=一次注册表构建(每用户轮重建)。turnId 用随机 UUID 保证
+    // 时钟无关的稳定标识,轮内序号由 Rust 侧按 turnId 分配。
+    checkpoint: { conversationId, turnId: crypto.randomUUID() },
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
     skillAccessPolicy,

@@ -154,7 +154,7 @@ export function ChatPage(props: ChatPageProps) {
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const initialConversationRef = useRef(createConversationIdentity());
   const initialConversationStateRef = useRef(createConversationStateFromContext(context));
 
@@ -1796,6 +1796,15 @@ export function ChatPage(props: ChatPageProps) {
                 <CheckpointRewindMenu
                   conversationId={currentConversationId}
                   disabled={!currentConversationId || isSending}
+                  onRewound={(info) => {
+                    // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
+                    // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+                    const zhLocale = locale === "zh-CN";
+                    const summary = zhLocale
+                      ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}`
+                      : `Code rewound: restored ${info.restoredFiles}, deleted ${info.deletedFiles}${info.conflicts > 0 ? `, ${info.conflicts} conflict(s) skipped` : ""}${info.failed > 0 ? `, ${info.failed} failed` : ""}`;
+                    addNotify(info.failed > 0 || info.conflicts > 0 ? "error" : "success", summary);
+                  }}
                 />
                 <ProjectToolsPanelToggle
                   isOpen={rightDockOpen}

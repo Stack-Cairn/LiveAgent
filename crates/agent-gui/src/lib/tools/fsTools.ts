@@ -291,7 +291,7 @@ export function createFsTools(params: {
   skillAccessPolicy?: SkillAccessPolicy;
   additionalRoots?: readonly AdditionalProjectRoot[];
   /** 会话检查点上下文;缺省时 Write/Edit/Delete 不做前像捕获(如 Cron 场景)。 */
-  checkpoint?: { conversationId: string; turnSeq: number };
+  checkpoint?: { conversationId: string; turnId: string };
 }): BuiltinToolBundle {
   const { workdir, fileState } = params;
   const checkpointCtx = params.checkpoint;
