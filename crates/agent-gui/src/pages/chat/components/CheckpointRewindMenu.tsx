@@ -154,7 +154,9 @@ export function CheckpointRewindMenu(props: {
       });
       if (result.failed.length > 0 || result.conflicts.length > 0) {
         const issueLines = [
-          ...result.conflicts.map((path) => (zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`)),
+          ...result.conflicts.map((path) =>
+            zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`,
+          ),
           ...result.failed.map((path) => (zh ? `失败: ${path}` : `failed: ${path}`)),
         ];
         await confirm({
