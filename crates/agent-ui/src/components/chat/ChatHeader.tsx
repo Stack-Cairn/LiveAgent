@@ -26,6 +26,8 @@ export type ChatHeaderProps = {
   onOpenSidebar: () => void;
   preThemeActions?: ReactNode;
   trailingActions?: ReactNode;
+  autoHideActions?: boolean;
+  className?: string;
 };
 
 export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
@@ -37,6 +39,8 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     onOpenSidebar,
     preThemeActions,
     trailingActions,
+    autoHideActions = false,
+    className,
   } = props;
   const { t } = useLocale();
   const nextTheme = getNextTheme(settings.theme);
@@ -54,6 +58,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
       className={cn(
         "flex items-center justify-between gap-2 py-2.5 pr-4",
         !sidebarOpen && desktopTitleBarInset ? "pl-[232px]" : "pl-4",
+        className,
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
@@ -70,7 +75,13 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 -translate-y-px items-center gap-1">
+      <div
+        data-app-workbench-actions=""
+        className={cn(
+          "flex shrink-0 -translate-y-px items-center gap-1 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none",
+          autoHideActions && "app-workbench-chrome-actions",
+        )}
+      >
         {preThemeActions}
         <Button
           variant="ghost"
