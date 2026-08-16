@@ -36,6 +36,11 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  COMPOSER_CONTROL_CHEVRON_CLASS,
+  COMPOSER_CONTROL_LABEL_CLASS,
+  COMPOSER_CONTROL_TRIGGER_CLASS,
+} from "@liveagent/ui/lib/chat/composerControlStyles";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import {
   groupModelOptionsByProvider,
@@ -185,10 +190,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
             disabled={disabled || !hasModels}
             title={currentModelLabel}
             aria-label={`${t("chat.selectModel")}: ${currentModelLabel}`}
-            className={cn(
-              "composer-model-trigger h-8 min-w-8 max-w-[10.5rem] shrink-0 justify-start gap-1.5 overflow-hidden rounded-full px-2 text-xs font-medium text-foreground shadow-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 disabled:opacity-40 max-[480px]:w-8 max-[480px]:px-0",
-              isModelPickerOpen && "bg-muted/60",
-            )}
+            className={cn(COMPOSER_CONTROL_TRIGGER_CLASS, isModelPickerOpen && "bg-muted/60")}
           />
         }
       >
@@ -197,14 +199,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         ) : (
           <Sparkle className="h-4 w-4 shrink-0 text-violet-500 dark:text-violet-400" />
         )}
-        <span className="composer-model-label min-w-0 truncate max-[480px]:hidden">
-          {triggerLabel}
-        </span>
+        <span className={COMPOSER_CONTROL_LABEL_CLASS}>{triggerLabel}</span>
         <ChevronDown
-          className={cn(
-            "h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 max-[480px]:hidden",
-            isModelPickerOpen && "rotate-180",
-          )}
+          className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, isModelPickerOpen && "rotate-180")}
         />
       </Popover.Trigger>
 

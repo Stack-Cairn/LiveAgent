@@ -16,6 +16,14 @@ const composerSource = readFileSync(
   new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
   "utf8",
 );
+const branchSelectorSource = readFileSync(
+  new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url),
+  "utf8",
+);
+const iconSetSource = readFileSync(
+  new URL("../../../agent-ui/src/components/IconSet.tsx", import.meta.url),
+  "utf8",
+);
 
 test("model pickers use popover semantics instead of menu semantics", () => {
   for (const source of pickerSources) {
@@ -100,4 +108,17 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
     assert.match(source, /reasoningOptions\.length > 0 \? "grid-cols-3" : "grid-cols-2"/);
     assert.match(source, /className="h-8 w-full min-w-0 gap-0\.5/);
   }
+});
+
+test("branch selector reuses the model trigger visual language", () => {
+  assert.match(branchSelectorSource, /COMPOSER_CONTROL_TRIGGER_CLASS/);
+  assert.match(branchSelectorSource, /COMPOSER_CONTROL_LABEL_CLASS/);
+  assert.match(branchSelectorSource, /data-\[popup-open\]:bg-muted\/60/);
+  assert.match(branchSelectorSource, /menuOpen && "rotate-180"/);
+  assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald/);
+});
+
+test("DeepSeek provider icon uses the logo-only mark", () => {
+  assert.match(iconSetSource, /~icons\/logos\/deepseek-icon/);
+  assert.doesNotMatch(iconSetSource, /~icons\/logos\/deepseek["']/);
 });
