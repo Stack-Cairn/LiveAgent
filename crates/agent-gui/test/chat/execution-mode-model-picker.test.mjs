@@ -2,15 +2,31 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const headerSources = [
+const pickerSources = [
   readFileSync(
-    new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
+    new URL("../../../agent-ui/src/components/chat/ComposerModelControls.tsx", import.meta.url),
     "utf8",
   ),
 ];
+const headerSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
+  "utf8",
+);
+const composerSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
+const branchSelectorSource = readFileSync(
+  new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url),
+  "utf8",
+);
+const iconSetSource = readFileSync(
+  new URL("../../../agent-ui/src/components/IconSet.tsx", import.meta.url),
+  "utf8",
+);
 
 test("model pickers use popover semantics instead of menu semantics", () => {
-  for (const source of headerSources) {
+  for (const source of pickerSources) {
     assert.match(source, /import \{ Popover \} from "@base-ui\/react"/);
     assert.match(source, /<Popover\.Root open=\{isModelPickerOpen\}/);
     assert.match(source, /<Popover\.Popup/);
@@ -20,7 +36,7 @@ test("model pickers use popover semantics instead of menu semantics", () => {
 });
 
 test("execution mode switchers expose a native radio group", () => {
-  for (const source of headerSources) {
+  for (const source of pickerSources) {
     assert.match(source, /role="radiogroup"/);
     assert.match(source, /aria-label=\{t\("settings\.executionMode"\)\}/);
     assert.equal((source.match(/type="radio"/g) ?? []).length, 2);
@@ -32,16 +48,24 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("popover interactions preserve mode changes and close after model selection", () => {
-  for (const source of headerSources) {
+test("popover interactions preserve mode and model changes until an outside dismissal", () => {
+  for (const source of pickerSources) {
     assert.match(source, /onClick=\{\(\) => toggleGroup\(group\.id\)\}/);
+    assert.match(source, /const \[expandedGroupId, setExpandedGroupId\] = useState/);
+    assert.match(source, /return activeGroupId === id \? null : id/);
+    assert.doesNotMatch(source, /expandedGroups/);
     assert.match(source, /aria-pressed=\{isSelected\}/);
-    assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
+    assert.match(
+      source,
+      /<Popover\.Root open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
+    );
+    assert.match(source, /onSelectModel\(parsed\);/);
+    assert.doesNotMatch(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
   }
 });
 
 test("model pickers search models and providers", () => {
-  for (const source of headerSources) {
+  for (const source of pickerSources) {
     assert.match(source, /initialFocus=\{searchInputRef\}/);
     assert.match(source, /placeholder=\{t\("chat\.searchModel"\)\}/);
     assert.match(source, /\w+\.model\.toLowerCase\(\)\.includes\(normalizedSearch\)/);
@@ -51,7 +75,7 @@ test("model pickers search models and providers", () => {
 });
 
 test("provider groups reveal the edit affordance before the count on hover", () => {
-  for (const source of headerSources) {
+  for (const source of pickerSources) {
     assert.match(source, /\bPencil\b/);
     assert.match(source, /t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{`\$\{t\("settings\.editProvider"\)/);
@@ -65,4 +89,36 @@ test("provider groups reveal the edit affordance before the count on hover", () 
       /setIsModelPickerOpen\(false\);\s+onOpenSettings\("providers", group\.id\);/,
     );
   }
+});
+
+test("upload stays leftmost before model controls in the composer toolbar", () => {
+  assert.match(composerSource, /<ComposerModelControls/);
+  assert.match(composerSource, /<RuntimeControlTooltip label=\{uploadTooltip\}>/);
+  assert.ok(
+    composerSource.indexOf("<RuntimeControlTooltip label={uploadTooltip}>") <
+      composerSource.indexOf("<ComposerModelControls"),
+  );
+  assert.doesNotMatch(headerSource, /model-selector-trigger|Popover\.Root|currentModelLabel/);
+
+  for (const source of pickerSources) {
+    assert.match(source, /aria-label=\{t\("chat\.runtime\.controls"\)\}/);
+    assert.match(source, /nativeWebSearchEnabled: !chatRuntimeControls\.nativeWebSearchEnabled/);
+    assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
+    assert.match(source, /onChatRuntimeControlsChange\(\{ reasoning:/);
+    assert.match(source, /reasoningOptions\.length > 0 \? "grid-cols-3" : "grid-cols-2"/);
+    assert.match(source, /className="h-8 w-full min-w-0 gap-0\.5/);
+  }
+});
+
+test("branch selector reuses the model trigger visual language", () => {
+  assert.match(branchSelectorSource, /COMPOSER_CONTROL_TRIGGER_CLASS/);
+  assert.match(branchSelectorSource, /COMPOSER_CONTROL_LABEL_CLASS/);
+  assert.match(branchSelectorSource, /data-\[popup-open\]:bg-muted\/60/);
+  assert.match(branchSelectorSource, /menuOpen && "rotate-180"/);
+  assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald/);
+});
+
+test("DeepSeek provider icon uses the logo-only mark", () => {
+  assert.match(iconSetSource, /~icons\/logos\/deepseek-icon/);
+  assert.doesNotMatch(iconSetSource, /~icons\/logos\/deepseek["']/);
 });

@@ -210,6 +210,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       skillsRootDir: params.skillsRootDir,
       skillAccessPolicy: params.skillAccessPolicy,
       managedProcessEnabled: params.runtimeScope === "chat",
+      resumableShellEnabled: params.runtimeScope === "chat",
       resolveHomeDir,
       sandbox: params.sandbox,
     }),

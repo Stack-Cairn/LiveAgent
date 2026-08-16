@@ -1,11 +1,15 @@
 import {
   type ChatRuntimeControls,
   type CommandSafetyMode,
-  DEFAULT_CHAT_RUNTIME_CONTROLS,
+  type ExecutionMode,
+  isAgentExecutionMode,
+  type ProviderId,
   type ReasoningLevel,
+  type SelectedModel,
 } from "@liveagent/app/lib/settings";
 import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
+import { ComposerModelControls } from "@liveagent/ui/components/chat/ComposerModelControls";
 import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
@@ -18,32 +22,21 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
-  Globe,
-  GlobeOff,
-  Lightbulb,
-  LightbulbOff,
   Loader2,
   Maximize2,
   Minimize2,
   Paperclip,
   Play,
   Send,
-  Sparkle,
   Square,
   SquarePen,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
+import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import {
@@ -65,20 +58,6 @@ import {
   type UploadedImagePreviewLoader,
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
-
-const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
-  off: "settings.reasoning.off",
-  minimal: "settings.reasoning.minimal",
-  low: "settings.reasoning.low",
-  medium: "settings.reasoning.medium",
-  high: "settings.reasoning.high",
-  xhigh: "settings.reasoning.xhigh",
-  max: "settings.reasoning.max",
-};
-
-function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return typeof value === "string" && Object.hasOwn(REASONING_I18N_KEYS, value);
-}
 
 function useComposerUploadedImagePreview(
   file: PendingUploadedFile,
@@ -154,6 +133,8 @@ function PendingComposerAttachment(props: {
 
   return (
     <ComposerAttachmentCard
+      file={file}
+      workspaceRoot={workdir}
       fileName={file.fileName}
       pathTitle={file.relativePath}
       imageSrc={imageSrc}
@@ -240,7 +221,11 @@ export type ChatComposerBarProps = {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
-  isAgentMode: boolean;
+  executionMode: ExecutionMode;
+  hasModels: boolean;
+  currentModelLabel: string;
+  modelOptions: SharedModelOption<ProviderId>[];
+  selectedValue?: string;
   chatRuntimeControls: ChatRuntimeControls;
   /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
   commandSafetyMode?: CommandSafetyMode;
@@ -271,6 +256,9 @@ export type ChatComposerBarProps = {
   onStop: () => void;
   onPrepareChatRuntime?: () => void;
   onComposerBusyChange: (isBusy: boolean) => void;
+  onSelectModel: (selection: SelectedModel) => void;
+  onSelectExecutionMode: (mode: "text" | "tools") => void;
+  onOpenSettings: (section?: "providers", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   onPasteFiles: (files: File[]) => void;
@@ -289,6 +277,8 @@ export type ChatComposerBarProps = {
   taskProgressBar?: ReactNode;
   /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
   approvalBar?: ReactNode;
+  /** 文件拖入命中输入框时显示的局部反馈层。 */
+  fileDropOverlay?: ReactNode;
 };
 
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
@@ -301,7 +291,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     inputPlaceholder,
     workdir,
     enabledSkills,
-    isAgentMode,
+    executionMode,
+    hasModels,
+    currentModelLabel,
+    modelOptions,
+    selectedValue,
     chatRuntimeControls,
     commandSafetyMode,
     onCommandSafetyModeChange,
@@ -322,6 +316,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onStop,
     onPrepareChatRuntime,
     onComposerBusyChange,
+    onSelectModel,
+    onSelectExecutionMode,
+    onOpenSettings,
     onChatRuntimeControlsChange,
     onPickReadableFiles,
     onPasteFiles,
@@ -337,6 +334,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onHeightChange,
     taskProgressBar,
     approvalBar,
+    fileDropOverlay,
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
@@ -363,12 +361,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
+  const isAgentMode = isAgentExecutionMode(executionMode);
   const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
-  // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
-  // 亮灯但开关与档位均不可操作；两者皆无才是真不支持。
-  const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
   const sendDisabled = isInputDisabled || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   const primaryActionTitle = canQueueDraftWhileSending
@@ -376,13 +372,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     : isSending
       ? t("chat.stopGeneration")
       : t("chat.sendMessage");
-  // controls 已经过 normalizeChatRuntimeControlsForProvider 钳制；这里兜底
-  // 取表内最高档，绝不给 Select 喂表外值。
-  const selectedReasoning = reasoningOptions.includes(chatRuntimeControls.reasoning)
-    ? chatRuntimeControls.reasoning
-    : reasoningOptions.includes(DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning)
-      ? DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning
-      : (reasoningOptions[reasoningOptions.length - 1] ?? DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning);
   const uploadTooltip = isUploadingFiles
     ? t("chat.upload.uploading")
     : !isAgentMode
@@ -390,10 +379,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       : !workdir
         ? t("chat.upload.requireWorkdir")
         : t("chat.upload.button");
-  const thinkingTooltip = !thinkingSupported
-    ? t("chat.runtime.thinkingUnavailable")
-    : t("chat.runtime.thinkingTooltip");
-  const webSearchTooltip = t("chat.runtime.webSearchTooltip");
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
@@ -598,29 +583,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       window.removeEventListener("resize", updateQueueScrollbar);
     };
   }, [updateQueueScrollbar]);
-
-  useEffect(() => {
-    const reasoningNeedsReset =
-      !(reasoningOptions.length > 0 && reasoningOptions.includes(chatRuntimeControls.reasoning)) &&
-      !(
-        reasoningOptions.length === 0 &&
-        chatRuntimeControls.reasoning === DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning
-      );
-    const thinkingNeedsEnable = thinkingAlwaysOn && !chatRuntimeControls.thinkingEnabled;
-    if (!reasoningNeedsReset && !thinkingNeedsEnable) {
-      return;
-    }
-    onChatRuntimeControlsChange({
-      ...(reasoningNeedsReset ? { reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning } : {}),
-      ...(thinkingNeedsEnable ? { thinkingEnabled: true } : {}),
-    });
-  }, [
-    chatRuntimeControls.reasoning,
-    chatRuntimeControls.thinkingEnabled,
-    onChatRuntimeControlsChange,
-    reasoningOptions,
-    thinkingAlwaysOn,
-  ]);
 
   useEffect(() => {
     const composerLayer = composerLayerRef.current;
@@ -868,6 +830,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
           ref={glassCardRef}
+          data-file-upload-drop-zone=""
           onKeyDown={
             isComposerExpanded
               ? (event) => {
@@ -1025,130 +988,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 </button>
               </RuntimeControlTooltip>
 
-              <RuntimeControlTooltip label={webSearchTooltip}>
-                <button
-                  type="button"
-                  disabled={controlsDisabled}
-                  onClick={() =>
-                    onChatRuntimeControlsChange({
-                      nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
-                    })
-                  }
-                  aria-label={
-                    chatRuntimeControls.nativeWebSearchEnabled
-                      ? t("chat.runtime.webSearchOn")
-                      : t("chat.runtime.webSearchOff")
-                  }
-                  className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
-                    "disabled:pointer-events-none disabled:opacity-40",
-                    chatRuntimeControls.nativeWebSearchEnabled
-                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
-                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
-                  )}
-                >
-                  {chatRuntimeControls.nativeWebSearchEnabled ? (
-                    <Globe className="h-4 w-4" />
-                  ) : (
-                    <GlobeOff className="h-4 w-4" />
-                  )}
-                </button>
-              </RuntimeControlTooltip>
-
-              <RuntimeControlTooltip label={thinkingTooltip}>
-                <button
-                  type="button"
-                  disabled={controlsDisabled || !thinkingSupported || thinkingAlwaysOn}
-                  onClick={() =>
-                    onChatRuntimeControlsChange({
-                      thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
-                    })
-                  }
-                  aria-label={
-                    !thinkingSupported
-                      ? t("chat.runtime.thinkingUnavailable")
-                      : chatRuntimeControls.thinkingEnabled
-                        ? t("chat.runtime.thinkingOn")
-                        : t("chat.runtime.thinkingOff")
-                  }
-                  className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
-                    "disabled:pointer-events-none disabled:opacity-40",
-                    chatRuntimeControls.thinkingEnabled && thinkingSupported
-                      ? "text-amber-600 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
-                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
-                  )}
-                >
-                  {chatRuntimeControls.thinkingEnabled && thinkingSupported ? (
-                    <Lightbulb className="h-4 w-4" />
-                  ) : (
-                    <LightbulbOff className="h-4 w-4" />
-                  )}
-                </button>
-              </RuntimeControlTooltip>
-
-              {reasoningOptions.length > 1 ? (
-                <div
-                  aria-hidden={!chatRuntimeControls.thinkingEnabled}
-                  className={cn(
-                    "shrink-0 overflow-hidden transition-[max-width,margin-left,opacity] duration-200 ease-out",
-                    chatRuntimeControls.thinkingEnabled
-                      ? "ml-0 max-w-40 opacity-100"
-                      : "pointer-events-none -ml-1 max-w-0 opacity-0",
-                  )}
-                >
-                  <Select
-                    value={selectedReasoning}
-                    onValueChange={(value) =>
-                      onChatRuntimeControlsChange({ reasoning: value as ReasoningLevel })
-                    }
-                    disabled={controlsDisabled || !chatRuntimeControls.thinkingEnabled}
-                  >
-                    <SelectTrigger
-                      className={cn(
-                        "composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border-0 bg-violet-50/55 pl-2 pr-1.5 text-xs font-medium text-foreground shadow-none outline-hidden transition-all duration-200 ease-out hover:bg-violet-50/80 disabled:opacity-45 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13]",
-                        surface === "desktop"
-                          ? "[&_svg:last-child]:h-3 [&_svg:last-child]:w-3 [&_svg:last-child]:opacity-50 [&_svg:last-child]:transition-transform [&_svg:last-child]:duration-200 [&[data-popup-open]_svg:last-child]:rotate-180"
-                          : "[&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50 [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 [&[data-state=open]>svg:last-child]:rotate-180",
-                      )}
-                      aria-label={t("chat.runtime.reasoning")}
-                    >
-                      <span className="flex min-w-0 items-center gap-1">
-                        <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500 transition-colors dark:text-violet-400" />
-                        <SelectValue>
-                          {(value) =>
-                            t(
-                              REASONING_I18N_KEYS[
-                                isReasoningLevel(value) ? value : selectedReasoning
-                              ],
-                            )
-                          }
-                        </SelectValue>
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent className="sidebar-context-menu min-w-40 rounded-xl border-0">
-                      {reasoningOptions.map((value) => (
-                        <SelectItem
-                          key={value}
-                          value={value}
-                          className={cn(
-                            "mb-0.5 h-[30px] rounded-md py-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 transition-none last:mb-0",
-                            surface === "desktop"
-                              ? "data-[highlighted]:bg-foreground/[0.05] data-[highlighted]:text-foreground"
-                              : "focus:bg-foreground/[0.05] focus:text-foreground",
-                            value === selectedReasoning &&
-                              (surface === "desktop"
-                                ? "bg-foreground/[0.07] data-[highlighted]:bg-foreground/[0.09]"
-                                : "bg-foreground/[0.07] focus:bg-foreground/[0.09]"),
-                          )}
-                        >
-                          {t(REASONING_I18N_KEYS[value])}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
+              <ComposerModelControls
+                executionMode={executionMode}
+                hasModels={hasModels}
+                currentModelLabel={currentModelLabel}
+                modelOptions={modelOptions}
+                selectedValue={selectedValue}
+                chatRuntimeControls={chatRuntimeControls}
+                reasoningOptions={reasoningOptions}
+                thinkingAlwaysOn={thinkingAlwaysOn}
+                disabled={controlsDisabled}
+                onSelectModel={onSelectModel}
+                onSelectExecutionMode={onSelectExecutionMode}
+                onOpenSettings={onOpenSettings}
+                onChatRuntimeControlsChange={onChatRuntimeControlsChange}
+              />
 
               {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
                 <CommandSafetyModeSelector
@@ -1223,6 +1077,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </Button>
             </div>
           </div>
+          {fileDropOverlay}
         </div>
       </div>
     </div>

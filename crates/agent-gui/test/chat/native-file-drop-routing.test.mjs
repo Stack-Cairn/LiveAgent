@@ -79,7 +79,7 @@ test("native drop routing ignores unmarked application surfaces", () => {
   );
 });
 
-test("native drop routing accepts uploads only inside the marked chat zone", () => {
+test("native drop routing accepts uploads only inside the marked composer zone", () => {
   const fakeDocument = {
     querySelectorAll(selector) {
       if (selector === routing.WORKSPACE_FOLDER_DROP_ZONE_SELECTOR) return [];
@@ -201,7 +201,7 @@ test("workspace rectangle fallback joins the header and project list into one dr
   );
 });
 
-test("upload rectangle fallback does not widen beyond the chat zone", () => {
+test("upload rectangle fallback does not widen beyond the composer zone", () => {
   const fakeDocument = {
     querySelectorAll(selector) {
       if (selector === routing.WORKSPACE_FOLDER_DROP_ZONE_SELECTOR) return [];
@@ -232,10 +232,19 @@ test("upload rectangle fallback does not widen beyond the chat zone", () => {
   );
 });
 
-test("native upload marker covers the desktop chat panel instead of only the composer", () => {
+test("native upload marker covers only the composer dialog", () => {
   const chatPage = readFileSync("src/pages/ChatPage.tsx", "utf8");
+  const conversationSurface = readFileSync(
+    "src/pages/chat/surfaces/ConversationSurface.tsx",
+    "utf8",
+  );
   const composer = readFileSync("../agent-ui/src/pages/chat/ChatComposerBar.tsx", "utf8");
 
-  assert.match(chatPage, /data-file-upload-drop-zone/);
-  assert.doesNotMatch(composer, /data-file-upload-drop-zone/);
+  assert.match(chatPage, /<ConversationSurface/);
+  assert.doesNotMatch(chatPage, /data-file-upload-drop-zone/);
+  assert.doesNotMatch(conversationSurface, /data-file-upload-drop-zone/);
+  assert.match(
+    composer,
+    /ref=\{glassCardRef\}[\s\S]*?data-file-upload-drop-zone=""/,
+  );
 });

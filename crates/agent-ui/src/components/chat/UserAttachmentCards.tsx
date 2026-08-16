@@ -8,13 +8,46 @@ import {
 import { cn } from "../../lib/shared/utils";
 import { X } from "../IconSet";
 import { getUploadedFileTypeIcon } from "./fileTypeIcons";
-import { ImagePreview, type ImagePreviewSlide } from "./ImagePreview";
+import {
+  ImagePreview,
+  ImagePreviewActionFeedback,
+  ImagePreviewContextMenu,
+  type ImagePreviewSlide,
+} from "./ImagePreview";
 
 type ImagePreviewMode = "absolutePath" | "imageKind";
+
+export function createUserAttachmentImagePreviewSlide(
+  file: PendingUploadedFile,
+  imageSrc: string | null,
+  workspaceRoot?: string,
+): ImagePreviewSlide | null {
+  if (!imageSrc) return null;
+  const workdir = workspaceRoot?.trim() ?? "";
+  const absolutePath = file.absolutePath?.trim() ?? "";
+  const relativePath = file.relativePath.trim();
+  return {
+    src: imageSrc,
+    alt: file.fileName,
+    title: file.fileName,
+    fileName: file.fileName,
+    sizeBytes: file.sizeBytes,
+    ...(workdir && absolutePath && relativePath
+      ? {
+          attachment: {
+            workdir,
+            absolutePath,
+            relativePath,
+          },
+        }
+      : {}),
+  };
+}
 
 function UserImageAttachmentCard(props: {
   file: PendingUploadedFile;
   imageSrc: string | null;
+  workspaceRoot?: string;
   isLoading: boolean;
   compact: boolean;
   onRemove?: (relativePath: string) => void;
@@ -25,6 +58,7 @@ function UserImageAttachmentCard(props: {
   const {
     file,
     imageSrc,
+    workspaceRoot,
     isLoading,
     compact,
     onRemove,
@@ -33,27 +67,30 @@ function UserImageAttachmentCard(props: {
     closePreviewLabel,
   } = props;
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [imageLoadState, setImageLoadState] = useState<{
+    src: string | null;
+    status: "loaded" | "error";
+  } | null>(null);
   const labeledPreview = `${previewLabel}: ${file.fileName}`;
   const FallbackIcon = getUploadedFileTypeIcon(file);
   const previewSlides = useMemo<ImagePreviewSlide[]>(
-    () =>
-      imageSrc
-        ? [
-            {
-              src: imageSrc,
-              alt: file.fileName,
-              title: file.fileName,
-            },
-          ]
-        : [],
-    [file.fileName, imageSrc],
+    () => {
+      const slide = createUserAttachmentImagePreviewSlide(file, imageSrc, workspaceRoot);
+      return slide ? [slide] : [];
+    },
+    [file, imageSrc, workspaceRoot],
   );
+  const previewSlide = previewSlides[0];
+  const imageLoadFailed = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error");
+  const canPreview = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded");
 
   return (
     <div
       title={file.relativePath}
       className={cn(
-        "group relative overflow-hidden rounded-xl border border-white/60 bg-white/75 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:border-white/[0.12] dark:bg-white/[0.06]",
+        "group relative overflow-hidden rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
         compact ? "min-w-0 basis-[calc(33.333%-5.33px)] grow" : "w-full max-w-[280px]",
       )}
     >
@@ -70,22 +107,47 @@ function UserImageAttachmentCard(props: {
       ) : null}
       {imageSrc ? (
         <>
-          <button
-            type="button"
-            className="block w-full cursor-zoom-in overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
-            aria-label={labeledPreview}
-            title={labeledPreview}
-            onClick={() => setPreviewOpen(true)}
-          >
-            <img
-              src={imageSrc}
-              alt={file.fileName}
+          {imageLoadFailed ? (
+            <div
               className={cn(
-                "w-full bg-black/[0.02] transition-transform hover:scale-[1.01] dark:bg-white/5",
-                compact ? "h-28 object-cover" : "max-h-56 object-contain",
+                "flex w-full items-center justify-center bg-black/[0.02] dark:bg-white/5",
+                compact ? "h-28" : "h-36",
               )}
-            />
-          </button>
+            >
+              <FallbackIcon className="h-5 w-5" />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={cn(
+                "block w-full overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45",
+                canPreview ? "cursor-zoom-in" : "cursor-default",
+              )}
+              aria-label={labeledPreview}
+              title={labeledPreview}
+              disabled={!canPreview}
+              onClick={() => setPreviewOpen(true)}
+              onContextMenu={(event) => {
+                if (!canPreview) return;
+                event.preventDefault();
+                setContextMenu({ x: event.clientX, y: event.clientY });
+              }}
+            >
+              <img
+                src={imageSrc}
+                alt={file.fileName}
+                className={cn(
+                  "block w-full bg-black/[0.02] dark:bg-white/5",
+                  compact ? "h-28 object-cover" : "max-h-56 object-contain",
+                )}
+                onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
+                onError={() => {
+                  setImageLoadState({ src: imageSrc, status: "error" });
+                  setContextMenu(null);
+                }}
+              />
+            </button>
+          )}
           {previewOpen ? (
             <ImagePreview
               open={previewOpen}
@@ -94,6 +156,19 @@ function UserImageAttachmentCard(props: {
               onClose={() => setPreviewOpen(false)}
             />
           ) : null}
+          {contextMenu && previewSlide ? (
+            <ImagePreviewContextMenu
+              slide={previewSlide}
+              position={contextMenu}
+              onOpen={() => setPreviewOpen(true)}
+              onClose={() => setContextMenu(null)}
+              onActionError={setActionError}
+            />
+          ) : null}
+          <ImagePreviewActionFeedback
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
         </>
       ) : (
         <div
@@ -213,6 +288,7 @@ function UserAttachmentCard(props: {
       <UserImageAttachmentCard
         file={file}
         imageSrc={imageSrc}
+        workspaceRoot={workspaceRoot}
         isLoading={isLoading}
         compact={compactImageLayout}
         onRemove={onRemove}

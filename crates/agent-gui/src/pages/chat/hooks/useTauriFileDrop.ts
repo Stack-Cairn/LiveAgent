@@ -15,7 +15,7 @@ type UseTauriFileDropParams = {
 
 /**
  * Tauri webview drag-drop listener: routes native paths by their visual drop
- * target. Workspace-zone drops add folders as projects, the chat-panel zone
+ * target. Workspace-zone drops add folders as projects, the composer dialog
  * hands the mixed payload to the upload-zone dispatcher (files become
  * attachments, folders become project roots), and every other application
  * surface ignores the drop.

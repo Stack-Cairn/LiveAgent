@@ -594,7 +594,7 @@ impl GatewayController {
                                             proto::agent_envelope::Payload::SettingsUpdateResp(
                                                 proto::SettingsUpdateResponse {
                                                     accepted: false,
-                                                    message: conflict,
+                                                    message: conflict.gateway_message().to_string(),
                                                 },
                                             ),
                                         ),

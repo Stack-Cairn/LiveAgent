@@ -2,13 +2,15 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::future::Future;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::power_activity::PowerActivityManager;
@@ -18,7 +20,50 @@ pub use crate::services::skills::{
 };
 
 const UPLOADED_IMAGE_PREVIEW_MAX_BYTES: usize = 5 * 1024 * 1024; // 5MB
+const IMAGE_PREVIEW_DATA_MAX_BYTES: usize = 25 * 1024 * 1024; // Keep preview actions bounded.
+const IMAGE_PREVIEW_MAX_DIMENSION: u32 = 8_192;
+const IMAGE_PREVIEW_MAX_ALLOC_BYTES: u64 = 64 * 1024 * 1024;
+const IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL: Duration = Duration::from_secs(2 * 60);
+const IMAGE_PREVIEW_SAVE_TARGET_TTL: Duration = Duration::from_secs(5 * 60);
 const UPLOADED_NATIVE_ATTACHMENT_MAX_BYTES: u64 = 25 * 1024 * 1024; // 25MB
+
+#[derive(Debug)]
+struct PendingImagePreviewSaveTarget {
+    target: PathBuf,
+    created_at: SystemTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImagePreviewFileSignature {
+    len: u64,
+    modified_at: Option<SystemTime>,
+}
+
+#[derive(Debug)]
+struct PreparedImagePreviewClipboard {
+    target: PathBuf,
+    signature: ImagePreviewFileSignature,
+    prepared_at: SystemTime,
+    width: usize,
+    height: usize,
+    rgba: Vec<u8>,
+}
+
+static PENDING_IMAGE_PREVIEW_SAVE_TARGETS: OnceLock<
+    Mutex<HashMap<String, PendingImagePreviewSaveTarget>>,
+> = OnceLock::new();
+
+static PREPARED_IMAGE_PREVIEW_CLIPBOARD: OnceLock<Mutex<Option<PreparedImagePreviewClipboard>>> =
+    OnceLock::new();
+
+fn pending_image_preview_save_targets(
+) -> &'static Mutex<HashMap<String, PendingImagePreviewSaveTarget>> {
+    PENDING_IMAGE_PREVIEW_SAVE_TARGETS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn prepared_image_preview_clipboard() -> &'static Mutex<Option<PreparedImagePreviewClipboard>> {
+    PREPARED_IMAGE_PREVIEW_CLIPBOARD.get_or_init(|| Mutex::new(None))
+}
 const UPLOADED_TEXT_TRANSCODE_MAX_BYTES: u64 = 64 * 1024 * 1024; // 64MB，超出则原样落盘不转码
 
 #[derive(Debug, Serialize, Clone)]
@@ -815,6 +860,233 @@ fn canonicalize_uploaded_attachment_path(
     Ok(target)
 }
 
+fn resolve_uploaded_image_target(
+    workdir: &str,
+    absolute_path: &str,
+) -> Result<(PathBuf, &'static str), String> {
+    let workdir = canonicalize_upload_workdir(workdir)?;
+    let target = canonicalize_uploaded_file_path(absolute_path)?;
+    if !is_allowed_attachment_target(&workdir, &target) {
+        return Err(format!(
+            "Image path is outside the current workspace and upload staging area: {}",
+            target.display()
+        ));
+    }
+    let mime_type = infer_image_upload_mime(&target)
+        .ok_or_else(|| format!("{} is not a supported image file", target.display()))?;
+    Ok((target, mime_type))
+}
+
+fn decode_image_preview_base64(data_base64: &str) -> Result<Vec<u8>, String> {
+    let encoded = data_base64.trim();
+    if encoded.is_empty() {
+        return Err("Image preview data is empty".to_string());
+    }
+
+    // Reject oversized input before decoding so a malformed request cannot
+    // force a large allocation just to discover that it is not usable.
+    if encoded.len() > IMAGE_PREVIEW_DATA_MAX_BYTES.saturating_mul(4) / 3 + 4 {
+        return Err("Image preview data is too large".to_string());
+    }
+
+    let bytes = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|error| format!("Invalid image preview data: {error}"))?;
+    if bytes.len() > IMAGE_PREVIEW_DATA_MAX_BYTES {
+        return Err("Image preview data is too large".to_string());
+    }
+    Ok(bytes)
+}
+
+fn decode_image_preview_rgba_bytes(bytes: Vec<u8>) -> Result<(usize, usize, Vec<u8>), String> {
+    let mut reader = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|error| format!("Unable to identify image preview format: {error}"))?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(IMAGE_PREVIEW_MAX_DIMENSION);
+    limits.max_image_height = Some(IMAGE_PREVIEW_MAX_DIMENSION);
+    limits.max_alloc = Some(IMAGE_PREVIEW_MAX_ALLOC_BYTES);
+    reader.limits(limits);
+    let decoded = reader
+        .decode()
+        .map_err(|error| format!("Unable to decode image preview: {error}"))?;
+    let rgba = decoded.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    Ok((width as usize, height as usize, rgba.into_raw()))
+}
+
+fn decode_image_preview_rgba(data_base64: &str) -> Result<(usize, usize, Vec<u8>), String> {
+    decode_image_preview_rgba_bytes(decode_image_preview_base64(data_base64)?)
+}
+
+fn write_image_to_clipboard_data(
+    width: usize,
+    height: usize,
+    bytes: Cow<'_, [u8]>,
+) -> Result<(), String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|error| format!("clipboard unavailable: {error}"))?;
+    clipboard
+        .set_image(arboard::ImageData {
+            width,
+            height,
+            bytes,
+        })
+        .map_err(|error| format!("clipboard image write failed: {error}"))
+}
+
+fn write_image_to_clipboard(width: usize, height: usize, bytes: Vec<u8>) -> Result<(), String> {
+    write_image_to_clipboard_data(width, height, Cow::Owned(bytes))
+}
+
+fn image_preview_file_signature(target: &Path) -> Result<ImagePreviewFileSignature, String> {
+    let metadata = fs::metadata(target).map_err(|error| {
+        format!(
+            "Unable to inspect image attachment {}: {error}",
+            target.display()
+        )
+    })?;
+    if metadata.len() > IMAGE_PREVIEW_DATA_MAX_BYTES as u64 {
+        return Err(format!(
+            "Image attachment is too large for clipboard copying: {}",
+            target.display()
+        ));
+    }
+    Ok(ImagePreviewFileSignature {
+        len: metadata.len(),
+        modified_at: metadata.modified().ok(),
+    })
+}
+
+fn prepared_image_preview_clipboard_matches(
+    prepared: &PreparedImagePreviewClipboard,
+    target: &Path,
+    signature: &ImagePreviewFileSignature,
+    now: SystemTime,
+) -> bool {
+    prepared.target == target
+        && prepared.signature == *signature
+        && now
+            .duration_since(prepared.prepared_at)
+            .map(|age| age <= IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL)
+            .unwrap_or(false)
+}
+
+fn prepare_uploaded_image_preview_clipboard_target(target: &Path) -> Result<(), String> {
+    let signature = image_preview_file_signature(target)?;
+    let now = SystemTime::now();
+    {
+        let cache = prepared_image_preview_clipboard()
+            .lock()
+            .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+        if cache.as_ref().is_some_and(|prepared| {
+            prepared_image_preview_clipboard_matches(prepared, target, &signature, now)
+        }) {
+            return Ok(());
+        }
+    }
+
+    let bytes = fs::read(target).map_err(|error| {
+        format!(
+            "Unable to read image attachment {}: {error}",
+            target.display()
+        )
+    })?;
+    let (width, height, rgba) = decode_image_preview_rgba_bytes(bytes)?;
+    let mut cache = prepared_image_preview_clipboard()
+        .lock()
+        .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+    *cache = Some(PreparedImagePreviewClipboard {
+        target: target.to_path_buf(),
+        signature,
+        prepared_at: now,
+        width,
+        height,
+        rgba,
+    });
+    Ok(())
+}
+
+fn remember_image_preview_save_target(target: PathBuf) -> Result<String, String> {
+    let save_token = Uuid::new_v4().to_string();
+    let mut targets = pending_image_preview_save_targets()
+        .lock()
+        .map_err(|_| "Unable to lock image preview save targets".to_string())?;
+    let now = SystemTime::now();
+    targets.retain(|_, pending| {
+        now.duration_since(pending.created_at)
+            .map(|age| age <= IMAGE_PREVIEW_SAVE_TARGET_TTL)
+            .unwrap_or(true)
+    });
+    targets.insert(
+        save_token.clone(),
+        PendingImagePreviewSaveTarget {
+            target,
+            created_at: now,
+        },
+    );
+    Ok(save_token)
+}
+
+fn take_image_preview_save_target(save_token: &str) -> Result<PathBuf, String> {
+    let mut targets = pending_image_preview_save_targets()
+        .lock()
+        .map_err(|_| "Unable to lock image preview save targets".to_string())?;
+    let pending = targets
+        .remove(save_token)
+        .ok_or_else(|| "Image preview save target is unavailable or has expired".to_string())?;
+    if pending
+        .created_at
+        .elapsed()
+        .map(|age| age > IMAGE_PREVIEW_SAVE_TARGET_TTL)
+        .unwrap_or(false)
+    {
+        return Err("Image preview save target has expired".to_string());
+    }
+    Ok(pending.target)
+}
+
+pub(crate) fn system_prepare_preview_file_save_sync(
+    file_name: String,
+) -> Result<Option<String>, String> {
+    let safe_file_name = sanitize_uploaded_file_name(&file_name);
+    let target = FileDialog::new().set_file_name(&safe_file_name).save_file();
+    target.map(remember_image_preview_save_target).transpose()
+}
+
+pub(crate) fn system_write_preview_file_sync(
+    save_token: String,
+    data_base64: String,
+    _mime_type: String,
+) -> Result<(), String> {
+    // Consume the user-selected target before decoding untrusted data so this
+    // capability cannot be reused by a concurrent or later frontend request.
+    let target = take_image_preview_save_target(&save_token)?;
+    let bytes = decode_image_preview_base64(&data_base64)?;
+    fs::write(&target, bytes)
+        .map_err(|error| format!("Unable to save image preview {}: {error}", target.display()))
+}
+
+pub(crate) fn system_save_preview_file_sync(
+    data_base64: String,
+    file_name: String,
+    mime_type: String,
+) -> Result<bool, String> {
+    let Some(save_token) = system_prepare_preview_file_save_sync(file_name)? else {
+        return Ok(false);
+    };
+    system_write_preview_file_sync(save_token, data_base64, mime_type)?;
+    Ok(true)
+}
+
+pub(crate) fn system_clipboard_write_image_sync(
+    data_base64: String,
+    _mime_type: String,
+) -> Result<(), String> {
+    let (width, height, bytes) = decode_image_preview_rgba(&data_base64)?;
+    write_image_to_clipboard(width, height, bytes)
+}
+
 fn infer_native_attachment_mime(path: &Path, kind: Option<&str>) -> String {
     if let Some(mime_type) = infer_image_upload_mime(path) {
         return mime_type.to_string();
@@ -1139,16 +1411,7 @@ pub(crate) fn system_read_uploaded_image_preview_sync(
     workdir: String,
     absolute_path: String,
 ) -> Result<SystemUploadedImagePreviewResponse, String> {
-    let workdir = canonicalize_upload_workdir(&workdir)?;
-    let target = canonicalize_uploaded_file_path(&absolute_path)?;
-    if !is_allowed_attachment_target(&workdir, &target) {
-        return Err(format!(
-            "图片路径超出当前工作目录与上传暂存区：{}",
-            target.display()
-        ));
-    }
-    let mime_type = infer_image_upload_mime(&target)
-        .ok_or_else(|| format!("{} 不是受支持的图片文件", target.display()))?;
+    let (target, mime_type) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
     let bytes = fs::read(&target).map_err(|e| format!("读取图片失败 {}: {e}", target.display()))?;
     if bytes.len() > UPLOADED_IMAGE_PREVIEW_MAX_BYTES {
         return Err(format!(
@@ -1161,6 +1424,50 @@ pub(crate) fn system_read_uploaded_image_preview_sync(
         mime_type: mime_type.to_string(),
         data: BASE64_STANDARD.encode(bytes),
     })
+}
+
+pub(crate) fn system_open_uploaded_image_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    crate::commands::fs::spawn_workspace_open_command(&target, "open")
+}
+
+pub(crate) fn system_prepare_uploaded_image_clipboard_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    prepare_uploaded_image_preview_clipboard_target(&target)
+}
+
+pub(crate) fn system_clipboard_write_uploaded_image_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    prepare_uploaded_image_preview_clipboard_target(&target)?;
+    let signature = image_preview_file_signature(&target)?;
+    let cache = prepared_image_preview_clipboard()
+        .lock()
+        .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+    let prepared = cache
+        .as_ref()
+        .filter(|prepared| {
+            prepared_image_preview_clipboard_matches(
+                prepared,
+                &target,
+                &signature,
+                SystemTime::now(),
+            )
+        })
+        .ok_or_else(|| "Prepared image clipboard data is unavailable".to_string())?;
+    write_image_to_clipboard_data(
+        prepared.width,
+        prepared.height,
+        Cow::Borrowed(prepared.rgba.as_slice()),
+    )
 }
 
 pub(crate) fn system_read_uploaded_native_attachment_sync(
@@ -2251,17 +2558,7 @@ pub async fn system_save_preview_file(
     data_base64: String,
 ) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = BASE64_STANDARD
-            .decode(data_base64)
-            .map_err(|error| format!("Invalid preview file data: {error}"))?;
-        // Preserve the source extension in the suggested name. A MIME type is
-        // not a usable native dialog extension filter by itself.
-        let _ = mime_type;
-        let Some(path) = FileDialog::new().set_file_name(&file_name).save_file() else {
-            return Ok(false);
-        };
-        fs::write(path, bytes).map_err(|error| format!("Failed to save preview file: {error}"))?;
-        Ok(true)
+        system_save_preview_file_sync(data_base64, file_name, mime_type.unwrap_or_default())
     })
     .await
     .map_err(|e| format!("system_save_preview_file join failed: {e}"))?
@@ -2277,23 +2574,7 @@ pub async fn system_clipboard_write_image(
         if !mime_type.to_ascii_lowercase().starts_with("image/") {
             return Err("The selected workspace preview is not an image".to_string());
         }
-        let encoded = BASE64_STANDARD
-            .decode(data_base64)
-            .map_err(|error| format!("Invalid image clipboard data: {error}"))?;
-        let image = image::load_from_memory(&encoded)
-            .map_err(|error| format!("Failed to decode image for clipboard: {error}"))?
-            .to_rgba8();
-        let width = usize::try_from(image.width()).map_err(|_| "Image width is too large")?;
-        let height = usize::try_from(image.height()).map_err(|_| "Image height is too large")?;
-        let mut clipboard =
-            arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?;
-        clipboard
-            .set_image(arboard::ImageData {
-                width,
-                height,
-                bytes: std::borrow::Cow::Owned(image.into_raw()),
-            })
-            .map_err(|error| format!("Failed to write image clipboard: {error}"))
+        system_clipboard_write_image_sync(data_base64, mime_type)
     })
     .await
     .map_err(|e| format!("system_clipboard_write_image join failed: {e}"))?
@@ -2377,6 +2658,62 @@ pub async fn system_read_uploaded_image_preview(
     })
     .await
     .map_err(|e| format!("system_read_uploaded_image_preview join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_open_uploaded_image(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_open_uploaded_image_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_open_uploaded_image join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_prepare_preview_file_save(file_name: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || system_prepare_preview_file_save_sync(file_name))
+        .await
+        .map_err(|e| format!("system_prepare_preview_file_save join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_write_preview_file(
+    save_token: String,
+    data_base64: String,
+    mime_type: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_write_preview_file_sync(save_token, data_base64, mime_type)
+    })
+    .await
+    .map_err(|e| format!("system_write_preview_file join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_prepare_uploaded_image_clipboard(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_prepare_uploaded_image_clipboard_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_prepare_uploaded_image_clipboard join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_clipboard_write_uploaded_image(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_clipboard_write_uploaded_image_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_clipboard_write_uploaded_image join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3363,6 +3700,179 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&batch);
+    }
+
+    #[test]
+    fn resolve_uploaded_image_target_allows_workspace_and_staging_images() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let workspace_image = workdir.join("diagram.png");
+        fs::write(&workspace_image, b"not-decoded-by-this-validation").expect("write image");
+
+        let (target, mime_type) = resolve_uploaded_image_target(
+            &workdir.to_string_lossy(),
+            &workspace_image.to_string_lossy(),
+        )
+        .expect("workspace image should be authorized");
+        assert_eq!(
+            target,
+            fs::canonicalize(&workspace_image).expect("canonicalize image")
+        );
+        assert_eq!(mime_type, "image/png");
+
+        let staging = upload_staging_base().expect("resolve staging base");
+        let batch = staging.join(format!("test-batch-image-open-{}", std::process::id()));
+        fs::create_dir_all(&batch).expect("create staging batch");
+        let staged_image = batch.join("generated.webp");
+        fs::write(&staged_image, b"staged-image").expect("write staged image");
+
+        let (_, staged_mime_type) = resolve_uploaded_image_target(
+            &workdir.to_string_lossy(),
+            &staged_image.to_string_lossy(),
+        )
+        .expect("staging image should be authorized");
+        assert_eq!(staged_mime_type, "image/webp");
+
+        let _ = fs::remove_dir_all(&batch);
+    }
+
+    #[test]
+    fn resolve_uploaded_image_target_rejects_directories_non_images_invalid_workdirs_and_escapes() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+
+        let directory_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &workdir.to_string_lossy())
+                .expect_err("directories must be rejected");
+        assert!(!directory_error.trim().is_empty());
+
+        let text_file = workdir.join("notes.txt");
+        fs::write(&text_file, b"notes").expect("write text file");
+        let non_image_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &text_file.to_string_lossy())
+                .expect_err("non-images must be rejected");
+        assert!(non_image_error.contains("not a supported image file"));
+
+        let outside = temp.path().join("outside.png");
+        fs::write(&outside, b"outside").expect("write outside image");
+        let outside_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &outside.to_string_lossy())
+                .expect_err("outside images must be rejected");
+        assert!(outside_error.contains("outside the current workspace"));
+
+        let invalid_workdir = temp.path().join("missing-workspace");
+        let workdir_error = resolve_uploaded_image_target(
+            &invalid_workdir.to_string_lossy(),
+            &outside.to_string_lossy(),
+        )
+        .expect_err("missing workdir must be rejected");
+        assert!(!workdir_error.trim().is_empty());
+    }
+
+    #[test]
+    fn image_preview_data_rejects_empty_invalid_and_oversized_base64() {
+        assert!(decode_image_preview_base64("").is_err());
+        assert!(decode_image_preview_base64("definitely-not-base64").is_err());
+
+        let oversized = "A".repeat(IMAGE_PREVIEW_DATA_MAX_BYTES * 4 / 3 + 8);
+        let error = decode_image_preview_base64(&oversized)
+            .expect_err("oversized preview data must be rejected before decoding");
+        assert!(error.contains("too large"));
+    }
+
+    #[test]
+    fn image_preview_rgba_decoder_converts_png() {
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        let (width, height, rgba) =
+            decode_image_preview_rgba(png).expect("valid PNG preview should decode");
+
+        assert_eq!((width, height), (1, 1));
+        assert_eq!(rgba.len(), 4);
+    }
+
+    #[test]
+    fn prepared_image_preview_clipboard_requires_matching_fresh_file_signature() {
+        let now = SystemTime::now();
+        let target = PathBuf::from("prepared-image-preview.png");
+        let signature = ImagePreviewFileSignature {
+            len: 123,
+            modified_at: Some(now),
+        };
+        let prepared = PreparedImagePreviewClipboard {
+            target: target.clone(),
+            signature: signature.clone(),
+            prepared_at: now,
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+        };
+
+        assert!(prepared_image_preview_clipboard_matches(
+            &prepared, &target, &signature, now
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &PathBuf::from("other-image-preview.png"),
+            &signature,
+            now,
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &target,
+            &ImagePreviewFileSignature {
+                len: 124,
+                modified_at: Some(now),
+            },
+            now,
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &target,
+            &signature,
+            now.checked_add(IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL + Duration::from_secs(1))
+                .expect("valid expiry timestamp"),
+        ));
+    }
+
+    #[test]
+    fn image_preview_save_target_is_one_time_and_expires() {
+        let target = PathBuf::from("image-preview-save-target.png");
+        let save_token = remember_image_preview_save_target(target.clone())
+            .expect("remember image preview save target");
+        assert_eq!(
+            take_image_preview_save_target(&save_token).expect("consume image preview save target"),
+            target
+        );
+        assert!(take_image_preview_save_target(&save_token).is_err());
+
+        let expired_token = Uuid::new_v4().to_string();
+        pending_image_preview_save_targets()
+            .lock()
+            .expect("lock image preview save targets")
+            .insert(
+                expired_token.clone(),
+                PendingImagePreviewSaveTarget {
+                    target: PathBuf::from("expired-image-preview-save-target.png"),
+                    created_at: SystemTime::now()
+                        .checked_sub(IMAGE_PREVIEW_SAVE_TARGET_TTL + Duration::from_secs(1))
+                        .expect("valid expired image preview save timestamp"),
+                },
+            );
+        assert!(take_image_preview_save_target(&expired_token).is_err());
+    }
+
+    #[test]
+    fn image_preview_save_name_is_reduced_to_a_safe_file_name() {
+        assert_eq!(
+            sanitize_uploaded_file_name("../../chart.png"),
+            "_.._chart.png"
+        );
+        assert_eq!(
+            sanitize_uploaded_file_name("C:\\temp\\chart.png"),
+            "C__temp_chart.png"
+        );
     }
 
     #[test]

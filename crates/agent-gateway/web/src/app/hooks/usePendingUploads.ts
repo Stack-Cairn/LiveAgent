@@ -343,8 +343,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     token,
   ]);
 
-  // 上传命中区与桌面端对齐：只有落在标记的聊天面板（正文 + 输入器）内的
-  // 拖放才算上传，聊天头部等其他区域忽略。
+  // 上传命中区与桌面端对齐：只有落在标记的输入框对话框内的拖放才算上传，
+  // 对话正文、聊天头部等其他区域忽略。
   const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
     return (
       event.target instanceof Element &&

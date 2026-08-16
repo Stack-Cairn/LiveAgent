@@ -168,6 +168,9 @@ macro_rules! app_invoke_handler {
             commands::cron::automation_complete_prompt_run,
             // Local command execution
             commands::shell::shell_run,
+            commands::shell::shell_session_start,
+            commands::shell::shell_session_wait,
+            commands::shell::shell_session_stop,
             commands::shell::runtime_cancel,
             commands::process::managed_process_start,
             commands::process::managed_process_status,
@@ -256,6 +259,12 @@ macro_rules! app_invoke_handler {
             commands::system::system_import_uploaded_readable_files,
             commands::system::system_pick_readable_files,
             commands::system::system_read_uploaded_image_preview,
+            commands::system::system_open_uploaded_image,
+            commands::system::system_prepare_preview_file_save,
+            commands::system::system_write_preview_file,
+            commands::system::system_clipboard_write_image,
+            commands::system::system_prepare_uploaded_image_clipboard,
+            commands::system::system_clipboard_write_uploaded_image,
             commands::system::system_read_uploaded_native_attachment,
             commands::system::system_list_skill_files,
             commands::system::system_ensure_builtin_skills,
@@ -266,7 +275,6 @@ macro_rules! app_invoke_handler {
             commands::system::system_begin_power_activity,
             commands::system::system_end_power_activity,
             commands::system::system_clipboard_read_text,
-            commands::system::system_clipboard_write_image,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
@@ -669,6 +677,8 @@ pub fn run() {
     let power_activity = Arc::new(services::power_activity::PowerActivityManager::default());
     let managed_process_registry =
         Arc::new(runtime::managed_process::ManagedProcessRegistry::open());
+    let shell_session_manager = Arc::new(runtime::shell_session::ShellSessionManager::default());
+    runtime::shell_session::ShellSessionManager::start_cleaner(&shell_session_manager);
     let terminal_registry = Arc::new(runtime::terminal::TerminalSessionRegistry::default());
     let git_clone_task_registry = Arc::new(commands::git::GitCloneTaskRegistry::default());
     let sftp_registry = Arc::new(runtime::sftp::SftpSessionRegistry::new(Arc::clone(
@@ -704,6 +714,7 @@ pub fn run() {
         .manage(Arc::clone(&provider_usage_service))
         .manage(Arc::clone(&power_activity))
         .manage(Arc::new(runtime::shell_runner::ShellRunRegistry::default()))
+        .manage(Arc::clone(&shell_session_manager))
         .manage(Arc::clone(&managed_process_registry))
         .manage(Arc::clone(&terminal_registry))
         .manage(Arc::clone(&sftp_registry))
@@ -834,6 +845,7 @@ pub fn run() {
                 // Real exit: reclaim every non-isolated managed process
                 // before the OS tears us down (Drop is not guaranteed).
                 terminal_registry.shutdown_cleanup();
+                shell_session_manager.shutdown_cleanup();
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
                 power_activity.clear_all();

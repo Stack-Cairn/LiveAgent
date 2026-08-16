@@ -117,12 +117,27 @@ function createToolArgsRenderer() {
     },
   });
 
-  const { ToolArgsDisplay } = loader.loadModule(
+  const { ToolArgsDisplay, ToolResultDisplay } = loader.loadModule(
     "@liveagent/ui/components/chat/assistant-bubble/ToolResultDisplay.tsx",
   );
 
-  return (toolCall) =>
+  const renderToolArgs = (toolCall) =>
     renderToStaticMarkup(jsxRuntime.jsx(ToolArgsDisplay, { item: { toolCall } }));
+  renderToolArgs.renderResult = (toolCall, details) =>
+    renderToStaticMarkup(
+      jsxRuntime.jsx(ToolResultDisplay, {
+        item: { toolCall },
+        result: {
+          role: "toolResult",
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          content: [],
+          details,
+          isError: false,
+        },
+      }),
+    );
+  return renderToolArgs;
 }
 
 function createToolCallItemRenderer() {
@@ -146,7 +161,7 @@ function createToolCallItemRenderer() {
       },
       "@liveagent/ui/components/chat/AssistantStatus": {
         AssistantStatus({ children }) {
-          return jsxRuntime.jsx("span", { children });
+          return jsxRuntime.jsx("span", { "data-running": "true", children });
         },
       },
       "@liveagent/ui/components/chat/FileChangeBadge": {
@@ -205,6 +220,14 @@ function createToolCallItemRenderer() {
         getBuiltinResultKind() {
           return null;
         },
+        getShellSessionDisplayDetails(result) {
+          const details = result?.details;
+          if (!details || typeof details !== "object") return null;
+          if (typeof details.session_id !== "string" || typeof details.status !== "string") {
+            return null;
+          }
+          return { sessionId: details.session_id, status: details.status };
+        },
         getSubagentInlineSummary() {
           return "";
         },
@@ -235,8 +258,13 @@ function createToolCallItemRenderer() {
     "@liveagent/ui/components/chat/assistant-bubble/ToolCallItem.tsx",
   );
 
-  return (toolCall) =>
-    renderToStaticMarkup(jsxRuntime.jsx(MemoToolCallItem, { item: { toolCall } }));
+  return (toolCall, options = {}) =>
+    renderToStaticMarkup(
+      jsxRuntime.jsx(MemoToolCallItem, {
+        item: options.result ? { toolCall, toolResult: options.result } : { toolCall },
+        isRunning: options.isRunning,
+      }),
+    );
 }
 
 test("isDynamicMcpToolName classifies dynamic MCP tool names", () => {
@@ -407,6 +435,116 @@ test("short generic arguments keep the compact grid, complete and without synthe
   assert.ok(html.includes("enabled=true"));
   assert.ok(!html.includes("secret-approval-summary"));
   assert.ok(!html.includes("…"));
+});
+
+test("ProcessWait and ProcessStop summaries expose their session cursor", () => {
+  assert.equal(
+    uiMessages.summarizeToolCall(
+      {
+        type: "toolCall",
+        id: "wait-1",
+        name: "ProcessWait",
+        arguments: { session_id: "session-1", cursor: 64, yield_time_ms: 30_000 },
+      },
+      { includeName: false },
+    ),
+    "session=session-1 cursor=64 yield_ms=30000",
+  );
+  assert.equal(
+    uiMessages.summarizeToolCall(
+      {
+        type: "toolCall",
+        id: "stop-1",
+        name: "ProcessStop",
+        arguments: { session_id: "session-1", cursor: 128 },
+      },
+      { includeName: false },
+    ),
+    "session=session-1 cursor=128",
+  );
+});
+
+test("all shell session tools render the same session result metadata", () => {
+  const renderToolDisplay = createToolArgsRenderer();
+  const details = {
+    session_id: "session-1",
+    status: "running",
+    cursor: 128,
+    has_more: true,
+    exit_code: null,
+    duration_ms: 30_000,
+    shell: "bash",
+    output_truncated: true,
+  };
+
+  for (const name of ["Bash", "ProcessWait", "ProcessStop"]) {
+    const html = renderToolDisplay.renderResult(
+      { type: "toolCall", id: `call-${name}`, name, arguments: {} },
+      details,
+    );
+    assert.match(html, /session=session-1/, name);
+    assert.match(html, /status=running/, name);
+    assert.match(html, /cursor=128/, name);
+    assert.match(html, /more=true/, name);
+    assert.match(html, /session duration=30000 ms/, name);
+    assert.match(html, /shell=bash/, name);
+    assert.match(html, /session output=truncated/, name);
+  }
+});
+
+test("shell session snapshots show status without a permanent spinner", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const running = renderToolCallItem(
+    {
+      type: "toolCall",
+      id: "wait-running",
+      name: "ProcessWait",
+      arguments: { session_id: "session-1", cursor: 64 },
+    },
+    {
+      result: {
+        role: "toolResult",
+        toolCallId: "wait-running",
+        toolName: "ProcessWait",
+        content: [],
+        details: { session_id: "session-1", status: "running", duration_ms: 30_000 },
+        isError: false,
+      },
+    },
+  );
+  const stopped = renderToolCallItem(
+    {
+      type: "toolCall",
+      id: "stop-cancelled",
+      name: "ProcessStop",
+      arguments: { session_id: "session-1", cursor: 64 },
+    },
+    {
+      result: {
+        role: "toolResult",
+        toolCallId: "stop-cancelled",
+        toolName: "ProcessStop",
+        content: [],
+        details: { session_id: "session-1", status: "cancelled", duration_ms: 31_000 },
+        isError: false,
+      },
+    },
+  );
+  const pending = renderToolCallItem(
+    {
+      type: "toolCall",
+      id: "wait-pending",
+      name: "ProcessWait",
+      arguments: { session_id: "session-1", cursor: 64 },
+    },
+    { isRunning: true },
+  );
+
+  assert.match(running, /chat\.tool\.running/);
+  assert.doesNotMatch(running, /data-running="true"/);
+  assert.match(stopped, /chat\.tool\.stopped/);
+  assert.doesNotMatch(stopped, /data-running="true"/);
+  assert.match(pending, /data-running="true"/);
 });
 
 test("Bash collapsed summary keeps the full first line in DOM and title instead of a 48-char cut", () => {

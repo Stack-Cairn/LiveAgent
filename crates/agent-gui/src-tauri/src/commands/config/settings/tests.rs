@@ -47,6 +47,14 @@ mod tests {
     }
 
     #[test]
+    fn ssh_patch_conflict_gateway_message_is_a_stable_code() {
+        assert_eq!(
+            SshPatchConflictCode::SettingsChanged.gateway_message(),
+            "settings_changed"
+        );
+    }
+
+    #[test]
     fn initialize_schema_creates_columnar_ssh_settings_table() {
         let conn = open_memory_db();
         let columns = table_columns(&conn, SSH_SETTINGS_TABLE);
@@ -772,8 +780,8 @@ mod tests {
         .expect("apply patch");
 
         assert_eq!(
-            response.conflict.as_deref(),
-            Some(SSH_SYNC_CONFLICT_MESSAGE)
+            response.conflict,
+            Some(SshPatchConflictCode::SettingsChanged)
         );
         assert_eq!(response.ssh["hosts"][0]["name"], "Prod New");
     }
@@ -857,8 +865,8 @@ mod tests {
         .expect("apply patch");
 
         assert_eq!(
-            response.conflict.as_deref(),
-            Some(SSH_SYNC_CONFLICT_MESSAGE)
+            response.conflict,
+            Some(SshPatchConflictCode::SettingsChanged)
         );
     }
 
