@@ -80,12 +80,16 @@ export function surfaceProjectRef(surface: WorkbenchSurfaceSpec): ProjectRef | n
   return surface.kind === "unsupported" ? null : surface.project;
 }
 
+/**
+ * Per-pane view state. Currently empty — the slot is kept so persisted layouts
+ * keep a stable shape and future view options have a home without a schema bump.
+ */
+export type PaneViewState = Record<string, never>;
+
 export type PaneRecord = {
   paneId: string;
   surface: WorkbenchSurfaceSpec;
-  view: {
-    compactChrome?: boolean;
-  };
+  view: PaneViewState;
 };
 
 export type PaneNode =

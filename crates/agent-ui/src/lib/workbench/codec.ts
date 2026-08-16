@@ -15,22 +15,94 @@ export type WorkbenchLayoutDecodeResult =
   | { ok: true; layout: WorkbenchLayout; repaired: boolean }
   | { ok: false; reason: "corrupted-json" | "unsupported-schema" | "unrecoverable" };
 
+/**
+ * Project a pane tree onto the node schema. Rebuilt field by field so a node
+ * that picked up extra properties in memory cannot carry them to disk.
+ */
+function writeNode(node: PaneNode): unknown {
+  if (node.type === "leaf") {
+    return { type: "leaf", paneId: node.paneId };
+  }
+  return {
+    type: "split",
+    splitId: node.splitId,
+    axis: node.axis,
+    ratio: node.ratio,
+    first: writeNode(node.first),
+    second: writeNode(node.second),
+  };
+}
+
+/**
+ * Project a surface onto its kind's schema. Unsupported surfaces persist as
+ * the original raw payload so a newer build that understands the kind gets its
+ * record back intact — that body is opaque by contract and passes through
+ * whole, which is the one place the allow-list deliberately does not apply.
+ */
+function writeSurface(surface: WorkbenchSurfaceSpec): unknown {
+  switch (surface.kind) {
+    case "conversation":
+      return {
+        kind: "conversation",
+        conversationId: surface.conversationId,
+        project: writeProjectRef(surface.project),
+      };
+    case "localTerminal":
+      return {
+        kind: "localTerminal",
+        surfaceId: surface.surfaceId,
+        project: writeProjectRef(surface.project),
+        launchSpec: {
+          cwd: surface.launchSpec.cwd,
+          shell: surface.launchSpec.shell,
+          title: surface.launchSpec.title,
+        },
+      };
+    case "sshTerminal":
+      return {
+        kind: "sshTerminal",
+        surfaceId: surface.surfaceId,
+        project: writeProjectRef(surface.project),
+        launchSpec: {
+          cwd: surface.launchSpec.cwd,
+          sshHostId: surface.launchSpec.sshHostId,
+          title: surface.launchSpec.title,
+          sftpEnabled: surface.launchSpec.sftpEnabled,
+        },
+      };
+    case "unsupported":
+      return surface.raw;
+  }
+}
+
+function writeProjectRef(project: ProjectRef): unknown {
+  return { projectId: project.projectId, projectPathKey: project.projectPathKey };
+}
+
+/**
+ * Serialize a layout for persistence.
+ *
+ * The output is an explicit allow-list projection, not a verbatim dump: the
+ * persisted payload lands in SQLite / localStorage with no redaction layer in
+ * front of it, so sanitation has to happen on save as well as on load. Any
+ * field a pane record picked up in memory is dropped here rather than living
+ * on disk until the next decode. `undefined` optional fields are omitted by
+ * JSON.stringify, matching what decode produces.
+ */
 export function encodeWorkbenchLayout(layout: WorkbenchLayout): string {
-  // Unsupported passthrough surfaces serialize as their original raw payload,
-  // so a newer build that understands the kind gets its record back intact.
-  let panes: WorkbenchLayout["panes"] = layout.panes;
-  if (Object.values(layout.panes).some((pane) => pane.surface.kind === "unsupported")) {
-    const rewritten: Record<string, unknown> = {};
-    for (const [paneId, pane] of Object.entries(layout.panes)) {
-      rewritten[paneId] =
-        pane.surface.kind === "unsupported" ? { ...pane, surface: pane.surface.raw } : pane;
-    }
-    panes = rewritten as WorkbenchLayout["panes"];
+  const panes: Record<string, unknown> = {};
+  for (const [paneId, pane] of Object.entries(layout.panes)) {
+    panes[paneId] = {
+      paneId: pane.paneId,
+      surface: writeSurface(pane.surface),
+      // PaneViewState is a reserved empty slot; it contributes no keys.
+      view: {},
+    };
   }
   return JSON.stringify({
     schemaVersion: layout.schemaVersion,
     revision: layout.revision,
-    root: layout.root,
+    root: layout.root === null ? null : writeNode(layout.root),
     panes,
     focusedPaneId: layout.focusedPaneId,
   });
@@ -117,12 +189,9 @@ function readPaneRecord(paneId: string, value: unknown): PaneRecord | null {
   if (!isRecord(value)) return null;
   const surface = readSurface(value.surface);
   if (!surface) return null;
-  const view = isRecord(value.view) ? value.view : {};
-  return {
-    paneId,
-    surface,
-    view: view.compactChrome === true ? { compactChrome: true } : {},
-  };
+  // `view` is decoded by allowlist and currently has no fields, so any keys a
+  // newer (or older) build persisted there are dropped rather than passed on.
+  return { paneId, surface, view: {} };
 }
 
 type RebuildContext = {
