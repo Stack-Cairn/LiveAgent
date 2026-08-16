@@ -1,4 +1,5 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
+import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
@@ -432,6 +433,47 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
             <main className="gateway-main-shell">
               <div className="gateway-main-backdrop" />
+              <AppWorkbenchChrome
+                settings={settings}
+                sidebarOpen={sidebarOpen}
+                onOpenSettings={openSettings}
+                onToggleTheme={() =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    theme: getNextTheme(prev.theme),
+                  }))
+                }
+                onOpenSidebar={() => setSidebarOpen(true)}
+                trailingActions={
+                  <>
+                    <ProjectToolsPanelToggle
+                      isOpen={rightDockOpen}
+                      sessionCount={projectTerminalSessions.length}
+                      disabledMessage={projectToolsDisabledMessage}
+                      className="gateway-project-tools-panel-toggle"
+                      onToggle={() => setRightDockOpen((open) => !open)}
+                    />
+                    <UserMenu
+                      open={userMenuOpen}
+                      onOpenChange={setUserMenuOpen}
+                      userMenuLabel={userMenuLabel}
+                      userAvatarLabel={userAvatarLabel}
+                      agentStatus={
+                        status === null ? "unknown" : status.online ? "online" : "offline"
+                      }
+                      agentSelector={
+                        <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
+                      }
+                      onLogout={handleLogout}
+                    />
+                  </>
+                }
+                overlay={
+                  <div className="relative z-50">
+                    <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+                  </div>
+                }
+              />
               <ApplicationView
                 activeView={activeView}
                 settings={settings}
@@ -453,45 +495,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragLeave: handleFileDragLeave,
                     onDrop: handleFileDrop,
                   },
-                  sidebarOpen,
-                  onOpenSettings: openSettings,
-                  onToggleTheme: () =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      theme: getNextTheme(prev.theme),
-                    })),
-                  onOpenSidebar: () => setSidebarOpen(true),
-                  trailingActions: (
-                    <>
-                      <ProjectToolsPanelToggle
-                        isOpen={rightDockOpen}
-                        sessionCount={projectTerminalSessions.length}
-                        disabledMessage={projectToolsDisabledMessage}
-                        className="gateway-project-tools-panel-toggle"
-                        onToggle={() => setRightDockOpen((open) => !open)}
-                      />
-                      <UserMenu
-                        open={userMenuOpen}
-                        onOpenChange={setUserMenuOpen}
-                        userMenuLabel={userMenuLabel}
-                        userAvatarLabel={userAvatarLabel}
-                        agentStatus={
-                          status === null ? "unknown" : status.online ? "online" : "offline"
-                        }
-                        agentSelector={
-                          <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
-                        }
-                        onLogout={handleLogout}
-                      />
-                    </>
-                  ),
-                  headerOverlay: (
-                    // Zero-height anchor: NotifyToast positions itself below
-                    // the header's bottom edge, mirroring the GUI placement.
-                    <div className="relative z-50">
-                      <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-                    </div>
-                  ),
                   content: (
                     <>
                       {statusError ? (

@@ -1017,7 +1017,7 @@
     --gateway-chat-composer-overlay-height: 168px;
   }
 
-  .gateway-chat-frame > header {
+  .gateway-main-shell [data-app-workbench-chrome] > header {
     gap: 6px;
     padding: 8px 10px;
   }
@@ -1320,7 +1320,7 @@
     --gateway-chat-column-gutter: 8px;
   }
 
-  .gateway-chat-frame > header {
+  .gateway-main-shell [data-app-workbench-chrome] > header {
     padding-left: 8px;
     padding-right: 8px;
   }
