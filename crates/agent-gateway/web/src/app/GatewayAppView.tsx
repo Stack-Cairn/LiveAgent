@@ -448,14 +448,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragLeave: handleFileDragLeave,
                     onDrop: handleFileDrop,
                   },
-                  onSelectExecutionMode: (mode) =>
-                    setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
-                  hasModels: modelOptions.length > 0,
-                  currentModelLabel,
-                  modelOptions,
-                  selectedValue,
                   sidebarOpen,
-                  onSelectModel: handleSelectModel,
                   onOpenSettings: openSettings,
                   onToggleTheme: () =>
                     setSettings((prev) => ({
@@ -620,6 +613,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
                           isAgentMode={isAgentMode}
+                          executionMode={settings.system.executionMode}
+                          hasModels={modelOptions.length > 0}
+                          currentModelLabel={currentModelLabel}
+                          modelOptions={modelOptions}
+                          selectedValue={selectedValue}
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
@@ -633,6 +631,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           gitWriteEnabled={settings.remote.enableWebGit}
                           gitDisabledMessage={gitDisabledMessage}
                           workspaceActivityClient={workspaceActivityClient}
+                          onSelectModel={handleSelectModel}
+                          onSelectExecutionMode={(mode) =>
+                            setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode))
+                          }
+                          onOpenSettings={openSettings}
                           onSend={() => {
                             if (
                               submitInFlightRef.current ||

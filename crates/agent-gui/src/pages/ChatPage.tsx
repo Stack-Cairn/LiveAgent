@@ -1779,14 +1779,7 @@ export function ChatPage(props: ChatPageProps) {
             } as CSSProperties
           }
           chat={{
-            onSelectExecutionMode: (mode) =>
-              setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
-            hasModels,
-            currentModelLabel,
-            modelOptions,
-            selectedValue,
             sidebarOpen,
-            onSelectModel: handleSelectModel,
             onOpenSettings,
             onToggleTheme,
             onOpenSidebar: handleOpenSidebar,
@@ -1850,6 +1843,11 @@ export function ChatPage(props: ChatPageProps) {
                   workdir={displayedConversationWorkdir}
                   enabledSkills={enabledComposerSkills}
                   isAgentMode={isAgentMode}
+                  executionMode={settings.system.executionMode}
+                  hasModels={hasModels}
+                  currentModelLabel={currentModelLabel}
+                  modelOptions={modelOptions}
+                  selectedValue={selectedValue}
                   chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                   reasoningOptions={chatRuntimeReasoningOptions}
                   thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
@@ -1864,6 +1862,11 @@ export function ChatPage(props: ChatPageProps) {
                   onSend={handleSend}
                   onStop={handleStopSending}
                   onComposerBusyChange={handleComposerBusyChange}
+                  onSelectModel={handleSelectModel}
+                  onSelectExecutionMode={(mode) =>
+                    setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode))
+                  }
+                  onOpenSettings={onOpenSettings}
                   onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                   onPickReadableFiles={pickReadableFiles}
                   onPasteFiles={importReadableFiles}
