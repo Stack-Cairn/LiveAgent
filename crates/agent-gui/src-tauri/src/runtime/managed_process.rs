@@ -539,9 +539,13 @@ impl ManagedProcessRegistry {
             .open(&log_path)
             .map_err(|err| format!("Failed to open process log: {err}"))?;
         // 写围栏锚定工作区根;dev server 等常驻进程通常要监听端口,是否放网络
-        // 由调用方经 SandboxOptions 决定。
-        let sandbox_spec =
-            sandbox_options.map(|options| SandboxSpec::from_options(workdir.clone(), options));
+        // 由调用方经 SandboxOptions 决定。isolated 常驻进程须在 LiveAgent 退出后
+        // 存活,透传给沙箱规格以省略 Linux 的 --die-with-parent 死亡耦合。
+        let sandbox_spec = sandbox_options.map(|options| {
+            let mut spec = SandboxSpec::from_options(workdir.clone(), options);
+            spec.isolated = isolated;
+            spec
+        });
         let (child, shell) = spawn_shell_command(&command, &cwd, log, sandbox_spec.as_ref())?;
         let pid = child.id();
         let entry = ManagedProcessEntry {

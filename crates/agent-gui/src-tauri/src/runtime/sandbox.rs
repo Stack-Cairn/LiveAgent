@@ -21,6 +21,11 @@ pub(crate) struct SandboxOptions {
 pub(crate) struct SandboxSpec {
     pub write_root: PathBuf,
     pub allow_network: bool,
+    /// isolated 常驻进程须在 LiveAgent 退出后继续存活(managed_process 的 isolated
+    /// 语义),因此 Linux bwrap 不能加 `--die-with-parent`。仅 bubblewrap 后端消费;
+    /// macOS/Windows 无父进程死亡耦合,不读取本字段。
+    #[cfg_attr(any(target_os = "macos", windows), allow(dead_code))]
+    pub isolated: bool,
 }
 
 impl SandboxSpec {
@@ -28,6 +33,9 @@ impl SandboxSpec {
         Self {
             write_root,
             allow_network: options.allow_network,
+            // 默认非 isolated(Bash 工具子进程随 LiveAgent 退出而终止);
+            // managed_process 的 isolated 常驻进程构造后显式置 true。
+            isolated: false,
         }
     }
 }
@@ -63,6 +71,49 @@ fn sensitive_dirs() -> Vec<PathBuf> {
         dirs_out.push(config);
     }
     dirs_out
+}
+
+fn canonical_or_self(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// fail-closed 工作区校验(P1#2):拒绝会让写围栏重新暴露敏感目录的工作区。
+///
+/// 写围栏对 write_root 有后置 re-allow(macOS)/后置 --bind(Linux),因此:
+/// - **祖先或相等**:工作区包含或等于任一敏感目录(如工作区取 home 或 /),
+///   re-allow 会把该敏感目录重新放行 → 一律拒绝。
+/// - **后代**:工作区落在敏感目录内部。凭据目录(~/.ssh/.aws/.gnupg/.config/gh)
+///   下的工作区一律拒绝;应用配置目录(~/.liveagent)豁免——默认工作区
+///   ~/.liveagent/default-project 正位于其内,拒绝它会直接打断开箱即用。
+fn validate_workspace(write_root: &Path) -> Result<(), String> {
+    let root = canonical_or_self(write_root);
+    let app_config = app_config_dir().map(|p| canonical_or_self(&p));
+
+    for dir in sensitive_dirs() {
+        let dir = canonical_or_self(&dir);
+        if dir.starts_with(&root) {
+            return Err(format!(
+                "Sandbox refuses workspace \"{}\": it encloses or equals the sensitive directory \
+\"{}\", which the workspace write fence would re-expose. Choose a workspace that does not \
+contain credential or app-config directories.",
+                root.display(),
+                dir.display()
+            ));
+        }
+        if root.starts_with(&dir) {
+            // 应用配置目录内部豁免(默认工作区在此),其余敏感目录内部一律拒绝。
+            if app_config.as_deref() == Some(dir.as_path()) {
+                continue;
+            }
+            return Err(format!(
+                "Sandbox refuses workspace \"{}\": it lives inside the sensitive directory \"{}\". \
+Choose a workspace outside credential directories.",
+                root.display(),
+                dir.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// 临时目录允许写入集合:TMPDIR(macOS 上归并到 /var/folders 的用户私有目录,
@@ -117,6 +168,7 @@ Disable sandbox mode in Settings → System, or resolve the issue and retry.",
             capability.reason.as_deref().unwrap_or("unsupported platform")
         ));
     }
+    validate_workspace(&spec.write_root)?;
     platform::wrap_command(spec, program, args)
 }
 
@@ -251,20 +303,26 @@ mod platform {
     }
 
     pub(super) fn bwrap_args(spec: &SandboxSpec) -> Vec<String> {
-        let mut args: Vec<String> = [
-            "--die-with-parent",
-            "--unshare-pid",
-            "--ro-bind",
-            "/",
-            "/",
-            "--proc",
-            "/proc",
-            "--dev",
-            "/dev",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect();
+        // isolated 常驻进程须在 LiveAgent 退出后存活,不能与父进程死亡耦合;
+        // 非 isolated(Bash 工具子进程)保持 --die-with-parent,避免遗留孤儿。
+        let mut args: Vec<String> = Vec::new();
+        if !spec.isolated {
+            args.push("--die-with-parent".to_string());
+        }
+        args.extend(
+            [
+                "--unshare-pid",
+                "--ro-bind",
+                "/",
+                "/",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+            ]
+            .into_iter()
+            .map(String::from),
+        );
 
         for tmp in writable_temp_dirs() {
             let tmp = tmp.to_string_lossy().into_owned();
@@ -333,6 +391,7 @@ mod tests {
         let spec = SandboxSpec {
             write_root: PathBuf::from("/tmp/liveagent \"quoted\" ws"),
             allow_network: false,
+            isolated: false,
         };
         let profile = platform::seatbelt_profile(&spec);
         assert!(profile.starts_with("(version 1)\n(allow default)\n(deny file-write*)\n"));
@@ -352,6 +411,7 @@ mod tests {
         let spec = SandboxSpec {
             write_root: PathBuf::from("/tmp/ws"),
             allow_network: true,
+            isolated: false,
         };
         assert!(!platform::seatbelt_profile(&spec).contains("network"));
     }
@@ -362,6 +422,7 @@ mod tests {
         let spec = SandboxSpec {
             write_root: PathBuf::from("/home/user/project"),
             allow_network: false,
+            isolated: false,
         };
         let args = platform::bwrap_args(&spec);
         assert_eq!(args.first().map(String::as_str), Some("--die-with-parent"));
@@ -374,5 +435,64 @@ mod tests {
         if let Some(mask) = args.iter().position(|a| a == "--tmpfs") {
             assert!(mask < root_bind);
         }
+    }
+
+    // P1#3:isolated 常驻进程不能与父进程死亡耦合,bwrap 须省略 --die-with-parent。
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    #[test]
+    fn bwrap_args_isolated_omits_die_with_parent() {
+        let base = PathBuf::from("/home/user/project");
+        let attached = platform::bwrap_args(&SandboxSpec {
+            write_root: base.clone(),
+            allow_network: false,
+            isolated: false,
+        });
+        assert!(attached.contains(&"--die-with-parent".to_string()));
+
+        let isolated = platform::bwrap_args(&SandboxSpec {
+            write_root: base,
+            allow_network: false,
+            isolated: true,
+        });
+        assert!(!isolated.contains(&"--die-with-parent".to_string()));
+        // 省略死亡耦合后,其余围栏(pid namespace、根只读绑定)保持不变。
+        assert_eq!(isolated.first().map(String::as_str), Some("--unshare-pid"));
+        assert_eq!(isolated.last().map(String::as_str), Some("--"));
+    }
+
+    // P1#2:工作区若包含/等于敏感目录,写围栏 re-allow 会重新暴露之 → 拒绝。
+    #[test]
+    fn validate_workspace_rejects_ancestor_of_sensitive_dir() {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+        // home 本身包含 ~/.ssh 等敏感目录。
+        assert!(validate_workspace(&home).is_err());
+    }
+
+    // P1#2:凭据目录内部的工作区一律拒绝。
+    #[test]
+    fn validate_workspace_rejects_inside_credential_dir() {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+        let inside_ssh = home.join(".ssh").join("ws");
+        assert!(validate_workspace(&inside_ssh).is_err());
+    }
+
+    // P1#2:应用配置目录内部豁免——默认工作区 ~/.liveagent/default-project 必须放行。
+    #[test]
+    fn validate_workspace_allows_default_project_under_app_config() {
+        let Some(config) = app_config_dir() else {
+            return;
+        };
+        let default_project = config.join("default-project");
+        assert!(validate_workspace(&default_project).is_ok());
+    }
+
+    // P1#2:与任何敏感目录无祖先/后代关系的普通工作区放行。
+    #[test]
+    fn validate_workspace_allows_ordinary_workspace() {
+        assert!(validate_workspace(Path::new("/tmp/liveagent-ordinary-ws")).is_ok());
     }
 }
