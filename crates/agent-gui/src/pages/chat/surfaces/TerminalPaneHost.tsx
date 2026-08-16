@@ -1,5 +1,6 @@
 import {
   LocalTerminalPaneSurface,
+  SshTerminalPaneSurface,
   type TerminalPaneSurfacePhase,
 } from "@liveagent/ui/components/workbench/index";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -22,6 +23,8 @@ export type TerminalPaneHostProps = {
   /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
   sessions: readonly TerminalSession[];
   sessionsLoaded: boolean;
+  /** 显式 kill(结束进程)后的布局收尾:由页面注入 closePane。 */
+  onSessionKilled?: () => void;
 };
 
 type TerminalPaneErrorState =
@@ -37,7 +40,7 @@ type TerminalPaneErrorState =
  * 视图租约,保证输出流单消费、输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
-  const { paneId, surface, isFocused, theme, sessions, sessionsLoaded } = props;
+  const { paneId, surface, isFocused, theme, sessions, sessionsLoaded, onSessionKilled } = props;
   const { t } = useLocale();
 
   const boundSessionId = useSyncExternalStore(terminalPaneBindings.subscribe, () =>
@@ -114,6 +117,42 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     setViewportError(message);
   }, []);
 
+  // 显式 kill:结束进程 → 回收绑定(租约随 Pane 关闭卸载释放)→ 页面收尾关 Pane。
+  // 与 Detach(Pane 关闭,进程保留回 dock)语义分离。
+  const [killPending, setKillPending] = useState(false);
+  const killSession = useCallback(() => {
+    const targetSessionId = terminalPaneBindings.get(surface.surfaceId);
+    if (!targetSessionId || killPending) return;
+    setKillPending(true);
+    void tauriTerminalClient
+      .close(targetSessionId)
+      .catch(() => {
+        // 进程可能已自行退出;绑定与 Pane 仍按 kill 语义收尾。
+      })
+      .finally(() => {
+        terminalPaneBindings.delete(surface.surfaceId);
+        setKillPending(false);
+        onSessionKilled?.();
+      });
+  }, [killPending, onSessionKilled, surface.surfaceId]);
+
+  // SSH 重连:错误按提示条展示;"already in progress" 表示自动重连循环已接管。
+  const [reconnectPending, setReconnectPending] = useState(false);
+  const reconnectSsh = useCallback(() => {
+    const targetSessionId = terminalPaneBindings.get(surface.surfaceId);
+    if (!targetSessionId || reconnectPending) return;
+    setReconnectPending(true);
+    void tauriTerminalClient
+      .sshReconnect(targetSessionId)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes("already in progress")) {
+          setViewportError(message);
+        }
+      })
+      .finally(() => setReconnectPending(false));
+  }, [reconnectPending, surface.surfaceId]);
+
   const restartFromLaunchSpec = useCallback(() => {
     const staleSessionId = terminalPaneBindings.get(surface.surfaceId);
     if (staleSessionId) {
@@ -161,17 +200,27 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     onRetry = undefined;
   }
 
-  return (
-    <LocalTerminalPaneSurface
-      paneId={paneId}
-      client={tauriTerminalClient}
-      session={renderSession}
-      phase={phase}
-      theme={theme}
-      isActive={isFocused}
-      errorMessage={errorMessage}
-      onRetry={onRetry}
-      onError={handleViewportError}
-    />
-  );
+  const killAvailable = Boolean(session && boundSessionId);
+  const commonProps = {
+    paneId,
+    client: tauriTerminalClient,
+    session: renderSession,
+    phase,
+    theme,
+    isActive: isFocused,
+    errorMessage,
+    onRetry,
+    onError: handleViewportError,
+    onKillSession: killAvailable && !killPending ? killSession : undefined,
+  };
+  if (surface.kind === "sshTerminal") {
+    return (
+      <SshTerminalPaneSurface
+        {...commonProps}
+        onReconnect={renderSession ? reconnectSsh : undefined}
+        isReconnecting={reconnectPending}
+      />
+    );
+  }
+  return <LocalTerminalPaneSurface {...commonProps} />;
 }
