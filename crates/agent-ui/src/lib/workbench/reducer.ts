@@ -1,0 +1,554 @@
+import {
+  getWorkbenchRevisionError,
+  type WorkbenchCommand,
+  type WorkbenchCommandError,
+  type WorkbenchCommandErrorCode,
+  type WorkbenchCommandResult,
+  type WorkbenchMoveTarget,
+  type WorkbenchOpenTarget,
+} from "./commands";
+import { clampSplitRatio } from "./geometry";
+import { collectWorkbenchLayoutIssues, findPaneIdBySurfaceKey } from "./invariants";
+import {
+  type PaneNode,
+  type PaneRecord,
+  surfaceIdentityKey,
+  type WorkbenchAxis,
+  type WorkbenchEdge,
+  type WorkbenchLayout,
+} from "./types";
+
+type SplitIdFactory = () => string;
+
+export type WorkbenchReducerOptions = {
+  /** Injectable id factory so tests and resume stay deterministic. */
+  createSplitId?: SplitIdFactory;
+};
+
+let splitIdCounter = 0;
+
+function defaultCreateSplitId(): string {
+  splitIdCounter += 1;
+  return `split-${Date.now().toString(36)}-${splitIdCounter.toString(36)}`;
+}
+
+function edgeAxis(edge: WorkbenchEdge): WorkbenchAxis {
+  return edge === "left" || edge === "right" ? "horizontal" : "vertical";
+}
+
+function edgeIsBefore(edge: WorkbenchEdge): boolean {
+  return edge === "left" || edge === "top";
+}
+
+function commandError(
+  code: WorkbenchCommandErrorCode,
+  message: string,
+  currentRevision: number,
+): { ok: false; error: WorkbenchCommandError } {
+  return { ok: false, error: { code, message, currentRevision } };
+}
+
+function findLeaf(node: PaneNode | null, paneId: string): boolean {
+  if (!node) return false;
+  if (node.type === "leaf") return node.paneId === paneId;
+  return findLeaf(node.first, paneId) || findLeaf(node.second, paneId);
+}
+
+function findSplit(
+  node: PaneNode | null,
+  splitId: string,
+): Extract<PaneNode, { type: "split" }> | null {
+  if (!node || node.type === "leaf") return null;
+  if (node.splitId === splitId) return node;
+  return findSplit(node.first, splitId) ?? findSplit(node.second, splitId);
+}
+
+/** Remove a leaf; the parent split collapses into its surviving sibling. */
+function removeLeaf(node: PaneNode, paneId: string): { node: PaneNode | null; found: boolean } {
+  if (node.type === "leaf") {
+    return node.paneId === paneId ? { node: null, found: true } : { node, found: false };
+  }
+  const first = removeLeaf(node.first, paneId);
+  if (first.found) {
+    return { node: first.node ? { ...node, first: first.node } : node.second, found: true };
+  }
+  const second = removeLeaf(node.second, paneId);
+  if (second.found) {
+    return { node: second.node ? { ...node, second: second.node } : node.first, found: true };
+  }
+  return { node, found: false };
+}
+
+/** Replace the leaf `targetPaneId` with a split hosting it plus `subtree`. */
+function graftAtLeaf(
+  node: PaneNode,
+  targetPaneId: string,
+  subtree: PaneNode,
+  edge: WorkbenchEdge,
+  createSplitId: SplitIdFactory,
+): PaneNode | null {
+  if (node.type === "leaf") {
+    if (node.paneId !== targetPaneId) return null;
+    const before = edgeIsBefore(edge);
+    return {
+      type: "split",
+      splitId: createSplitId(),
+      axis: edgeAxis(edge),
+      ratio: 0.5,
+      first: before ? subtree : node,
+      second: before ? node : subtree,
+    };
+  }
+  const first = graftAtLeaf(node.first, targetPaneId, subtree, edge, createSplitId);
+  if (first) return { ...node, first };
+  const second = graftAtLeaf(node.second, targetPaneId, subtree, edge, createSplitId);
+  if (second) return { ...node, second };
+  return null;
+}
+
+/** Insert `subtree` at an existing divider, between the split's children. */
+function graftAtDivider(
+  node: PaneNode,
+  splitId: string,
+  subtree: PaneNode,
+  edge: WorkbenchEdge,
+  createSplitId: SplitIdFactory,
+): PaneNode | null {
+  if (node.type === "leaf") return null;
+  if (node.splitId === splitId) {
+    const before = edgeIsBefore(edge);
+    // "before" groups the inserted pane with the first child, "after" with
+    // the second child; either way the pane lands visually at the divider.
+    if (before) {
+      return {
+        ...node,
+        first: {
+          type: "split",
+          splitId: createSplitId(),
+          axis: node.axis,
+          ratio: 0.5,
+          first: node.first,
+          second: subtree,
+        },
+      };
+    }
+    return {
+      ...node,
+      second: {
+        type: "split",
+        splitId: createSplitId(),
+        axis: node.axis,
+        ratio: 0.5,
+        first: subtree,
+        second: node.second,
+      },
+    };
+  }
+  const first = graftAtDivider(node.first, splitId, subtree, edge, createSplitId);
+  if (first) return { ...node, first };
+  const second = graftAtDivider(node.second, splitId, subtree, edge, createSplitId);
+  if (second) return { ...node, second };
+  return null;
+}
+
+/** Wrap the whole tree in a root-level split with `subtree` on `edge`. */
+function graftAtRoot(
+  root: PaneNode | null,
+  subtree: PaneNode,
+  edge: WorkbenchEdge,
+  createSplitId: SplitIdFactory,
+): PaneNode {
+  if (!root) return subtree;
+  const before = edgeIsBefore(edge);
+  return {
+    type: "split",
+    splitId: createSplitId(),
+    axis: edgeAxis(edge),
+    ratio: 0.5,
+    first: before ? subtree : root,
+    second: before ? root : subtree,
+  };
+}
+
+function graftAtTarget(
+  root: PaneNode | null,
+  subtree: PaneNode,
+  target: WorkbenchOpenTarget | Exclude<WorkbenchMoveTarget, { kind: "pane-center" }>,
+  createSplitId: SplitIdFactory,
+): PaneNode | null {
+  switch (target.kind) {
+    case "canvas-empty":
+      return root === null ? subtree : null;
+    case "canvas-edge":
+      return graftAtRoot(root, subtree, target.edge, createSplitId);
+    case "pane-edge":
+      return root ? graftAtLeaf(root, target.paneId, subtree, target.edge, createSplitId) : null;
+    case "divider":
+      return root
+        ? graftAtDivider(root, target.splitId, subtree, target.edge, createSplitId)
+        : null;
+  }
+}
+
+function swapLeaves(node: PaneNode, firstPaneId: string, secondPaneId: string): PaneNode {
+  if (node.type === "leaf") {
+    if (node.paneId === firstPaneId) return { ...node, paneId: secondPaneId };
+    if (node.paneId === secondPaneId) return { ...node, paneId: firstPaneId };
+    return node;
+  }
+  return {
+    ...node,
+    first: swapLeaves(node.first, firstPaneId, secondPaneId),
+    second: swapLeaves(node.second, firstPaneId, secondPaneId),
+  };
+}
+
+function firstLeafId(node: PaneNode | null): string | null {
+  if (!node) return null;
+  if (node.type === "leaf") return node.paneId;
+  return firstLeafId(node.first) ?? firstLeafId(node.second);
+}
+
+/**
+ * The leaf that receives focus after `paneId` closes: the nearest leaf of the
+ * collapsed split's sibling subtree, falling back to the first leaf overall.
+ */
+function focusSuccessor(root: PaneNode, paneId: string): string | null {
+  if (root.type === "leaf") return null;
+  const locate = (node: PaneNode): string | null => {
+    if (node.type === "leaf") return null;
+    if (node.first.type === "leaf" && node.first.paneId === paneId) {
+      return firstLeafId(node.second);
+    }
+    if (node.second.type === "leaf" && node.second.paneId === paneId) {
+      return firstLeafId(node.first);
+    }
+    return locate(node.first) ?? locate(node.second);
+  };
+  return locate(root);
+}
+
+function setSplitRatio(node: PaneNode, splitId: string, ratio: number): PaneNode | null {
+  if (node.type === "leaf") return null;
+  if (node.splitId === splitId) return { ...node, ratio };
+  const first = setSplitRatio(node.first, splitId, ratio);
+  if (first) return { ...node, first };
+  const second = setSplitRatio(node.second, splitId, ratio);
+  if (second) return { ...node, second };
+  return null;
+}
+
+type PaneRecordIssue = {
+  code: WorkbenchCommandErrorCode;
+  message: string;
+};
+
+function validatePaneRecord(pane: PaneRecord): PaneRecordIssue | null {
+  if (!pane.paneId.trim()) {
+    return { code: "invalid-layout", message: "Pane records require a stable pane id." };
+  }
+  const surface = pane.surface;
+  switch (surface.kind) {
+    case "conversation": {
+      if (!surface.conversationId.trim()) {
+        return { code: "invalid-layout", message: "Conversation surfaces require an id." };
+      }
+      if (!surface.project.projectId.trim() || !surface.project.projectPathKey.trim()) {
+        return {
+          code: "invalid-layout",
+          message: "Conversation surfaces require a complete project reference.",
+        };
+      }
+      return null;
+    }
+    case "localTerminal":
+    case "sshTerminal": {
+      if (!surface.surfaceId.trim()) {
+        return { code: "invalid-layout", message: "Terminal surfaces require a surface id." };
+      }
+      if (!surface.launchSpec.cwd.trim()) {
+        return {
+          code: "invalid-layout",
+          message: "Terminal surfaces require a launch working directory.",
+        };
+      }
+      if (!surface.project.projectId.trim() || !surface.project.projectPathKey.trim()) {
+        return {
+          code: "invalid-layout",
+          message: "Terminal surfaces require a complete project reference.",
+        };
+      }
+      return null;
+    }
+    case "unsupported":
+      return { code: "unsupported-surface", message: "Unsupported surface kind." };
+  }
+}
+
+function commit(layout: WorkbenchLayout, next: WorkbenchLayout): WorkbenchCommandResult {
+  const issues = collectWorkbenchLayoutIssues(next);
+  if (issues.length > 0) {
+    return commandError(
+      "invalid-layout",
+      issues.map((item) => `${item.path}: ${item.message}`).join("; "),
+      layout.revision,
+    );
+  }
+  return { ok: true, layout: next };
+}
+
+/**
+ * Pure workbench layout reducer. Never mutates the input layout; failures
+ * return the current revision and leave the layout untouched.
+ */
+export function applyWorkbenchCommand(
+  layout: WorkbenchLayout,
+  command: WorkbenchCommand,
+  options?: WorkbenchReducerOptions,
+): WorkbenchCommandResult {
+  const revisionError = getWorkbenchRevisionError(layout, command.expectedRevision);
+  if (revisionError) return { ok: false, error: revisionError };
+  const createSplitId = options?.createSplitId ?? defaultCreateSplitId;
+
+  switch (command.type) {
+    case "OPEN_PANE": {
+      const pane = command.pane;
+      const recordIssue = validatePaneRecord(pane);
+      if (recordIssue) {
+        return commandError(recordIssue.code, recordIssue.message, layout.revision);
+      }
+      if (layout.panes[pane.paneId]) {
+        return commandError(
+          "invalid-layout",
+          `Pane '${pane.paneId}' already exists.`,
+          layout.revision,
+        );
+      }
+      // validatePaneRecord already rejected unsupported surfaces, so every
+      // openable surface participates in identity uniqueness.
+      const existingPaneId = findPaneIdBySurfaceKey(layout, surfaceIdentityKey(pane.surface));
+      if (existingPaneId) {
+        if (pane.surface.kind === "conversation") {
+          return commandError(
+            "duplicate-conversation",
+            `Conversation '${pane.surface.conversationId}' is already open in pane '${existingPaneId}'.`,
+            layout.revision,
+          );
+        }
+        const surfaceId = pane.surface.kind === "unsupported" ? "" : pane.surface.surfaceId;
+        return commandError(
+          "duplicate-surface",
+          `Terminal surface '${surfaceId}' is already open in pane '${existingPaneId}'.`,
+          layout.revision,
+        );
+      }
+      const target: WorkbenchOpenTarget =
+        command.target.kind === "canvas-edge" && layout.root === null
+          ? { kind: "canvas-empty" }
+          : command.target;
+      const nextRoot = graftAtTarget(
+        layout.root,
+        { type: "leaf", paneId: pane.paneId },
+        target,
+        createSplitId,
+      );
+      if (!nextRoot) {
+        return commandError(
+          "target-not-found",
+          "Open target does not exist in the current layout.",
+          layout.revision,
+        );
+      }
+      return commit(layout, {
+        ...layout,
+        revision: layout.revision + 1,
+        root: nextRoot,
+        panes: { ...layout.panes, [pane.paneId]: pane },
+        focusedPaneId: pane.paneId,
+      });
+    }
+
+    case "MOVE_PANE": {
+      if (!layout.root || !layout.panes[command.paneId]) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.paneId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      if (command.target.kind === "pane-center") {
+        const targetPaneId = command.target.paneId;
+        if (targetPaneId === command.paneId) {
+          return commandError(
+            "target-not-found",
+            "A pane cannot swap with itself.",
+            layout.revision,
+          );
+        }
+        if (!layout.panes[targetPaneId]) {
+          return commandError(
+            "target-not-found",
+            `Swap target '${targetPaneId}' does not exist.`,
+            layout.revision,
+          );
+        }
+        return commit(layout, {
+          ...layout,
+          revision: layout.revision + 1,
+          root: swapLeaves(layout.root, command.paneId, targetPaneId),
+          focusedPaneId: command.paneId,
+        });
+      }
+      if (command.target.kind === "pane-edge" && command.target.paneId === command.paneId) {
+        return commandError("target-not-found", "A pane cannot dock onto itself.", layout.revision);
+      }
+      // Edge/divider moves detach the pane first, then graft it back. The
+      // target is re-resolved against the detached tree so a divider that
+      // collapsed with the removal is a clean rejection, not a stale replay.
+      const removal = removeLeaf(layout.root, command.paneId);
+      if (!removal.found) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.paneId}' is not mounted in the tree.`,
+          layout.revision,
+        );
+      }
+      const nextRoot = graftAtTarget(
+        removal.node,
+        { type: "leaf", paneId: command.paneId },
+        removal.node === null ? { kind: "canvas-empty" } : command.target,
+        createSplitId,
+      );
+      if (!nextRoot) {
+        return commandError(
+          "target-not-found",
+          "Move target no longer exists after detaching the pane.",
+          layout.revision,
+        );
+      }
+      return commit(layout, {
+        ...layout,
+        revision: layout.revision + 1,
+        root: nextRoot,
+        focusedPaneId: command.paneId,
+      });
+    }
+
+    case "SWAP_PANES": {
+      if (command.firstPaneId === command.secondPaneId) {
+        return commandError("target-not-found", "Cannot swap a pane with itself.", layout.revision);
+      }
+      if (!layout.root || !layout.panes[command.firstPaneId]) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.firstPaneId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      if (!layout.panes[command.secondPaneId]) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.secondPaneId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      return commit(layout, {
+        ...layout,
+        revision: layout.revision + 1,
+        root: swapLeaves(layout.root, command.firstPaneId, command.secondPaneId),
+      });
+    }
+
+    case "CLOSE_PANE": {
+      if (!layout.root || !layout.panes[command.paneId]) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.paneId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      const successor =
+        layout.focusedPaneId === command.paneId
+          ? focusSuccessor(layout.root, command.paneId)
+          : layout.focusedPaneId;
+      const removal = removeLeaf(layout.root, command.paneId);
+      if (!removal.found) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.paneId}' is not mounted in the tree.`,
+          layout.revision,
+        );
+      }
+      const nextPanes = { ...layout.panes };
+      delete nextPanes[command.paneId];
+      const nextRoot = removal.node;
+      const nextFocus = nextRoot === null ? null : (successor ?? firstLeafId(nextRoot));
+      return commit(layout, {
+        ...layout,
+        revision: layout.revision + 1,
+        root: nextRoot,
+        panes: nextRoot === null ? {} : nextPanes,
+        focusedPaneId: nextFocus,
+      });
+    }
+
+    case "RESIZE_SPLIT": {
+      if (!Number.isFinite(command.ratio)) {
+        return commandError("invalid-layout", "Split ratio must be finite.", layout.revision);
+      }
+      if (!layout.root || !findSplit(layout.root, command.splitId)) {
+        return commandError(
+          "target-not-found",
+          `Split '${command.splitId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      const nextRoot = setSplitRatio(layout.root, command.splitId, clampSplitRatio(command.ratio));
+      if (!nextRoot) {
+        return commandError(
+          "target-not-found",
+          `Split '${command.splitId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      return commit(layout, { ...layout, revision: layout.revision + 1, root: nextRoot });
+    }
+
+    case "EQUALIZE_SPLIT": {
+      if (!layout.root || !findSplit(layout.root, command.splitId)) {
+        return commandError(
+          "target-not-found",
+          `Split '${command.splitId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      const nextRoot = setSplitRatio(layout.root, command.splitId, 0.5);
+      if (!nextRoot) {
+        return commandError(
+          "target-not-found",
+          `Split '${command.splitId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      return commit(layout, { ...layout, revision: layout.revision + 1, root: nextRoot });
+    }
+
+    case "FOCUS_PANE": {
+      if (!layout.root || !layout.panes[command.paneId] || !findLeaf(layout.root, command.paneId)) {
+        return commandError(
+          "pane-not-found",
+          `Pane '${command.paneId}' does not exist.`,
+          layout.revision,
+        );
+      }
+      if (layout.focusedPaneId === command.paneId) {
+        return { ok: true, layout };
+      }
+      return commit(layout, {
+        ...layout,
+        revision: layout.revision + 1,
+        focusedPaneId: command.paneId,
+      });
+    }
+  }
+}
