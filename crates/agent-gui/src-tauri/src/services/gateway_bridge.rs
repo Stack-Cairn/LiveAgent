@@ -2092,8 +2092,14 @@ mod tests {
         assert_eq!(summary["content"][0]["text"], "历史段摘要已脱敏");
         assert_eq!(summary["details"]["kind"], "redacted_tool_content");
         let serialized = serde_json::to_string(&items[1]).expect("serialize summary");
-        assert!(!serialized.contains("SECRET-KEY-12345"), "summary tool content leaked: {serialized}");
-        assert!(!serialized.contains("/home/alice"), "summary path leaked: {serialized}");
+        assert!(
+            !serialized.contains("SECRET-KEY-12345"),
+            "summary tool content leaked: {serialized}"
+        );
+        assert!(
+            !serialized.contains("/home/alice"),
+            "summary path leaked: {serialized}"
+        );
     }
 
     #[test]

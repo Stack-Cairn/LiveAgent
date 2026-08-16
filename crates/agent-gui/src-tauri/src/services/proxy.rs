@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, TcpListener},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
@@ -127,16 +127,49 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
 async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
     // 纵深防御:非 WebView 来源的 fetch(恶意网页)直接拒绝。
     if !image_proxy_origin_allowed(&headers) {
-        return error_response(StatusCode::FORBIDDEN, "Image proxy origin is not allowed", &headers);
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "Image proxy origin is not allowed",
+            &headers,
+        );
     }
     let target_url = match validate_image_proxy_url(&query.url) {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
     };
+    // 连接前解析:主机名若解析到回环/内网/元数据段(DNS rebinding),在出网前拒绝。
+    if image_proxy_host_resolves_to_blocked(&target_url).await {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Image URL host resolves to a blocked IP range",
+            &headers,
+        );
+    }
 
-    // 图片外链与商店链路同语义：恒随应用代理出网（未启用=直连，配置异常
-    // 502 fail fast）。<img> 请求无法携带自定义头，因此不走 per-request 开关。
-    let client = match crate::services::system_proxy::cached_client() {
+    // 图片外链与商店链路同语义:恒随应用代理出网(未启用=直连,配置异常
+    // 502 fail fast)。<img> 请求无法携带自定义头,因此不走 per-request 开关。
+    // 走 async_client_builder 而非 cached_client:reqwest 0.13 的重定向策略是
+    // client 级配置,每次 30x 跳转都要重新校验目标(字面 IP + DNS 解析),
+    // 公网 URL 经重定向指向内网地址的链路在此被切断。
+    let client = match crate::services::system_proxy::async_client_builder() {
+        Ok(builder) => builder
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if validate_image_proxy_redirect_target(attempt.url()) {
+                    attempt.follow()
+                } else {
+                    attempt.stop()
+                }
+            }))
+            .build(),
+        Err(error) => {
+            return error_response(
+                StatusCode::BAD_GATEWAY,
+                &format!("App proxy unavailable: {error}"),
+                &headers,
+            );
+        }
+    };
+    let client = match client {
         Ok(client) => client,
         Err(error) => {
             return error_response(
@@ -256,17 +289,10 @@ fn validate_image_proxy_url(raw: &str) -> Result<Url, String> {
         if host_lower == "localhost" || host_lower == "localhost.localdomain" {
             return Err("Image URL host is in a blocked IP range".to_string());
         }
-        match host.parse::<std::net::IpAddr>() {
-            Ok(std::net::IpAddr::V4(ip)) => {
-                if is_blocked_image_proxy_ipv4(ip) {
-                    return Err("Image URL host is in a blocked IP range".to_string());
-                }
-            }
-            // IPv6 回环 ::1 与 127.0.0.1 同语义,拒绝。
-            Ok(std::net::IpAddr::V6(ip)) if ip.is_loopback() => {
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            if is_blocked_image_proxy_ip(ip) {
                 return Err("Image URL host is in a blocked IP range".to_string());
             }
-            _ => {}
         }
     }
     Ok(url)
@@ -295,6 +321,108 @@ fn is_blocked_image_proxy_ipv4(ip: std::net::Ipv4Addr) -> bool {
         || (a == 198 && b == 51 && c == 100)
         || (a == 203 && b == 0 && c == 113)
         || (a >= 224)
+}
+
+/// 统一入口:IPv4-mapped IPv6(::ffff:a.b.c.d)先 unmap 还原为 IPv4 再走
+/// IPv4 黑名单(与网关 Go 侧 outbound_http.go 的 Unmap() 先例一致)。
+fn is_blocked_image_proxy_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_blocked_image_proxy_ipv4(v4),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => is_blocked_image_proxy_ipv4(v4),
+            None => is_blocked_image_proxy_ipv6(v6),
+        },
+    }
+}
+
+fn ipv6_in_range(addr: Ipv6Addr, network: Ipv6Addr, prefix_len: u32) -> bool {
+    if prefix_len == 0 {
+        return true;
+    }
+    let mask = u128::MAX << (128 - prefix_len);
+    (u128::from_be_bytes(addr.octets()) & mask) == (u128::from_be_bytes(network.octets()) & mask)
+}
+
+/// IPv6 禁止段,与 Go 侧 outbound_http.go 的 blocked prefixes 逐项对齐:
+/// 未指定/回环、NAT64、Discard-only、Teredo/文档段、6to4、ULA、link-local、多播。
+fn is_blocked_image_proxy_ipv6(ip: Ipv6Addr) -> bool {
+    const BLOCKED_PREFIXES: &[(&str, u32)] = &[
+        ("::", 128),
+        ("::1", 128),
+        ("64:ff9b::", 96),
+        ("64:ff9b:1::", 48),
+        ("100::", 64),
+        ("2001::", 23),
+        ("2001::", 32),
+        ("2001:2::", 48),
+        ("2001:10::", 28),
+        ("2001:20::", 28),
+        ("2001:db8::", 32),
+        ("2002::", 16),
+        ("3fff::", 20),
+        ("5f00::", 16),
+        ("fc00::", 7),
+        ("fe80::", 10),
+        ("ff00::", 8),
+    ];
+    BLOCKED_PREFIXES.iter().any(|(network, prefix_len)| {
+        // 静态字面量在编译期已由 Go 侧同表验证格式,parse 不会失败。
+        let network = network
+            .parse::<Ipv6Addr>()
+            .expect("static blocked ipv6 prefix must parse");
+        ipv6_in_range(ip, network, *prefix_len)
+    })
+}
+
+/// 解析目标主机的全部地址,任一命中黑名单即拒绝(fail-closed:解析失败也拒绝)。
+/// 覆盖 DNS rebinding——攻击者域名可解析到回环/内网地址,字面校验挡不住。
+async fn image_proxy_host_resolves_to_blocked(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return true;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    // 字面 IP 已在 validate_image_proxy_url 中校验,这里只处理主机名。
+    if host.parse::<IpAddr>().is_ok() {
+        return false;
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    let addresses = match tokio::net::lookup_host((host, port)).await {
+        Ok(addresses) => addresses,
+        Err(_) => return true,
+    };
+    addresses
+        .into_iter()
+        .any(|address| is_blocked_image_proxy_ip(address.ip()))
+}
+
+/// 重定向目标的校验(每次跳转都重新过一遍):scheme/凭据/字面 IP/主机名解析
+/// 全部地址。主机名解析为同步阻塞调用——重定向跳数极少且受 OS DNS 超时约束,
+/// 在 reqwest 同步 redirect policy 回调内是唯一可行形态;失败一律拒绝(fail-closed)。
+fn validate_image_proxy_redirect_target(url: &Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    let host_lower = host.to_ascii_lowercase();
+    if host_lower == "localhost" || host_lower == "localhost.localdomain" {
+        return false;
+    }
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return !is_blocked_image_proxy_ip(ip);
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    match (host, port).to_socket_addrs() {
+        Ok(addresses) => !addresses
+            .into_iter()
+            .any(|address| is_blocked_image_proxy_ip(address.ip())),
+        Err(_) => false,
+    }
 }
 
 /// 本地来源校验:image-proxy 端点无 token(<img> 无法携带自定义头),以 Origin
@@ -970,6 +1098,83 @@ mod tests {
     }
 
     #[test]
+    fn rejects_ipv6_and_mapped_ssrf_targets_in_image_proxy_urls() {
+        // IPv6 禁止段:ULA / link-local / 多播 / 未指定 / NAT64 / 文档段。
+        for value in [
+            "http://[fc00::1]:80/",
+            "http://[fd00:abcd::1]:80/",
+            "http://[fe80::1]:80/",
+            "http://[ff02::1]:80/",
+            "http://[::]:80/",
+            "http://[64:ff9b::1]:80/",
+            "http://[2001:db8::1]:80/",
+            "http://[2002:7f00:1::1]:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // IPv4-mapped IPv6 先 unmap 再走 IPv4 黑名单:
+        // ::ffff:127.0.0.1 / ::ffff:169.254.169.254 不得绕过。
+        for value in [
+            "http://[::ffff:127.0.0.1]:80/",
+            "http://[::ffff:169.254.169.254]:80/latest/meta-data/",
+            "http://[::ffff:10.0.0.5]:80/",
+            "http://[::ffff:192.168.1.1]:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // 公网 IPv6 与 mapped 公网 IPv4 不受影响。
+        assert!(validate_image_proxy_url("http://[2001:4860:4860::8888]:80/").is_ok());
+        assert!(validate_image_proxy_url("http://[2606:4700:4700::1111]:80/").is_ok());
+        assert!(validate_image_proxy_url("http://[::ffff:8.8.8.8]:80/").is_ok());
+    }
+
+    #[test]
+    fn image_proxy_redirect_targets_revalidate_every_hop() {
+        // 字面 IP / 主机名 / mapped / scheme / 凭据的拒绝路径。
+        for value in [
+            "http://127.0.0.1:8080/next",
+            "http://localhost:3000/next",
+            "http://[::1]:5173/next",
+            "http://[::ffff:127.0.0.1]:80/next",
+            "http://[fe80::1]:80/next",
+            "ftp://example.com/file",
+            "https://user:pass@example.com/file",
+        ] {
+            let url = Url::parse(value).expect("redirect target url parses");
+            assert!(!validate_image_proxy_redirect_target(&url), "{value}");
+        }
+
+        // 主机名解析到回环地址同样拒绝(DNS rebinding 的跳转形态)。
+        // "localhost." 带尾点,不命中字面 localhost 拦截,但解析结果命中黑名单。
+        let trailing_dot = Url::parse("http://localhost.:8080/next").expect("trailing-dot parses");
+        assert!(
+            !validate_image_proxy_redirect_target(&trailing_dot),
+            "localhost. resolves to loopback and must be rejected"
+        );
+
+        // 公网字面 IP 放行(不依赖外部 DNS)。
+        let public = Url::parse("http://8.8.8.8:80/photo.png").expect("public ip parses");
+        assert!(validate_image_proxy_redirect_target(&public));
+    }
+
+    #[tokio::test]
+    async fn image_proxy_dns_precheck_rejects_loopback_resolution() {
+        // 主机名解析到回环地址:在出网前拒绝(fail-closed)。
+        let localhost = Url::parse("http://localhost.:8080/photo.png").expect("localhost parses");
+        assert!(image_proxy_host_resolves_to_blocked(&localhost).await);
+
+        // 字面 IP 不做 DNS 解析(已在 validate 层拦截,这里直接放行给上层)。
+        let literal = Url::parse("http://8.8.8.8:80/photo.png").expect("literal parses");
+        assert!(!image_proxy_host_resolves_to_blocked(&literal).await);
+
+        // 无法解析的域名按拒绝处理(fail-closed)。
+        let nonexistent = Url::parse("http://nonexistent.invalid/photo.png").expect("parses");
+        assert!(image_proxy_host_resolves_to_blocked(&nonexistent).await);
+    }
+
+    #[test]
     fn image_proxy_origin_check_blocks_foreign_web_pages() {
         use axum::http::HeaderMap;
 
@@ -986,11 +1191,7 @@ mod tests {
             assert!(image_proxy_origin_allowed(&headers), "{origin}");
         }
 
-        for origin in [
-            "https://evil.example",
-            "http://127.0.0.1:3000",
-            "null",
-        ] {
+        for origin in ["https://evil.example", "http://127.0.0.1:3000", "null"] {
             let mut headers = HeaderMap::new();
             headers.insert("origin", origin.parse().unwrap());
             assert!(!image_proxy_origin_allowed(&headers), "{origin}");

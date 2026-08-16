@@ -232,7 +232,11 @@ func (s *Server) writeTerminalFrame(conn *websocket.Conn, frame *gatewayv2.Termi
 // 无上限时任意长度、任意数量的 session_id 会把网关内存打爆（单帧可达 1 MiB）。
 const terminalBrowserMaxTrackedIDs = 512
 
-// terminalBrowserMaxIDLen 限制单个 session_id / stream_id 的长度上限。
+// terminalBrowserMaxRawIDLen 限制 trim 前的原始字段长度：TrimSpace 返回子切片、
+// 底层数组仍持有整帧缓冲区，必须先按原始长度拒绝再规范化。
+const terminalBrowserMaxRawIDLen = 4 * 1024
+
+// terminalBrowserMaxIDLen 限制规范化后单个 session_id / stream_id 的长度上限。
 const terminalBrowserMaxIDLen = 512
 
 type terminalBrowserConn struct {
@@ -308,7 +312,12 @@ func (c *terminalBrowserConn) handleFrame(frame *gatewayv2.TerminalStreamFrame) 
 
 	switch kind {
 	case "attach":
-		c.remember(frame.GetSessionId(), frame.GetStreamId())
+		// 拒绝的 attach 明确回错误帧且不转发给 Agent:超长原始字段、
+		// 规范化后超长或跟踪表已满都不得进入后续链路。
+		if message := c.remember(frame.GetSessionId(), frame.GetStreamId()); message != "" {
+			c.enqueueFrame(terminalErrorFrame(frame, message))
+			return
+		}
 	case "detach":
 		c.forget(frame.GetSessionId(), frame.GetStreamId())
 	case "input", "resize":
@@ -389,24 +398,48 @@ func (c *terminalBrowserConn) shouldForward(frame *gatewayv2.TerminalStreamFrame
 	return c.isAttached(frame.GetSessionId())
 }
 
-func (c *terminalBrowserConn) remember(sessionID string, streamID string) {
+// remember 登记 attach 的 session/stream id。返回错误信息表示该 attach 必须被
+// 拒绝且不得转发给 Agent(超长原始字段 / 规范化后超长 / 跟踪表已满);
+// 返回空串表示登记成功。
+func (c *terminalBrowserConn) remember(sessionID string, streamID string) string {
+	// 先按原始字段长度拒绝:TrimSpace 返回的是原字符串的子切片,底层数组仍
+	// 持有整帧缓冲区(帧上限可达 1 MiB)。若先 trim 再截长度,"接近 1 MiB 的
+	// 空白前缀 + 短且唯一的 ID" 会以合法长度进入 map,却让每个 key 保留
+	// 接近整帧的内存——这正是要在源头上切断的保留路径。
+	if len(sessionID) > terminalBrowserMaxRawIDLen || len(streamID) > terminalBrowserMaxRawIDLen {
+		return "terminal attach id is too long"
+	}
 	sessionID = strings.TrimSpace(sessionID)
 	streamID = strings.TrimSpace(streamID)
 	if sessionID == "" && streamID == "" {
-		return
+		return "terminal attach id is required"
 	}
-	// 长度上限：拒绝超长 id 进跟踪表（帧可携带任意长度字符串）。
 	if len(sessionID) > terminalBrowserMaxIDLen || len(streamID) > terminalBrowserMaxIDLen {
-		return
+		return "terminal attach id is too long"
+	}
+	// 有界拷贝:切断与整帧缓冲区的引用,map key 的底层内存只保留规范化后的
+	// 字节(≤ terminalBrowserMaxIDLen)。
+	if sessionID != "" {
+		sessionID = string([]byte(sessionID))
+	}
+	if streamID != "" {
+		streamID = string([]byte(streamID))
 	}
 	c.mu.Lock()
-	if sessionID != "" && len(c.attached) < terminalBrowserMaxTrackedIDs {
+	defer c.mu.Unlock()
+	if sessionID != "" && len(c.attached) >= terminalBrowserMaxTrackedIDs {
+		return "terminal attach tracking table is full"
+	}
+	if streamID != "" && len(c.streams) >= terminalBrowserMaxTrackedIDs {
+		return "terminal attach tracking table is full"
+	}
+	if sessionID != "" {
 		c.attached[sessionID] = struct{}{}
 	}
-	if streamID != "" && len(c.streams) < terminalBrowserMaxTrackedIDs {
+	if streamID != "" {
 		c.streams[streamID] = struct{}{}
 	}
-	c.mu.Unlock()
+	return ""
 }
 
 func (c *terminalBrowserConn) forget(sessionID string, streamID string) {
