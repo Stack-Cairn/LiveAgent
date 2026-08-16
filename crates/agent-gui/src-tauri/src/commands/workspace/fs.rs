@@ -16,6 +16,7 @@ use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use zip::ZipArchive;
 
+use super::checkpoint::{capture_pre_image, CheckpointCtx, PreImage};
 use super::edit_match::{apply_edit_replacements, find_edit_matches};
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::skills::skills_root_dir;
@@ -3028,6 +3029,7 @@ pub(crate) fn fs_write_text_sync(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsCommandError> {
     let target = resolve_scoped_fs_path(&workdir, &path)?;
     fs_write_text_impl(
@@ -3036,6 +3038,7 @@ pub(crate) fn fs_write_text_sync(
         mode,
         expected_mtime_ms,
         expected_content_hash,
+        checkpoint,
     )
     .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
@@ -3046,6 +3049,7 @@ fn fs_write_text_impl(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsError> {
     let logical_path = path.logical_path.clone();
     let raw_target = path.root.join(&path.relative_path);
@@ -3085,6 +3089,17 @@ fn fs_write_text_impl(
         ensure_expected_version_matches(&target, &logical_path, &expected)?;
     }
 
+    // 落盘前捕获前像:不存在则记删除标记,存在则拷贝原字节。失败不阻断写入。
+    capture_pre_image(
+        checkpoint.as_ref(),
+        &target,
+        if existed_before {
+            PreImage::File(None)
+        } else {
+            PreImage::Missing
+        },
+    );
+
     fs::write(&target, content.as_bytes())?;
     let canon = fs::canonicalize(&target)?;
     let md = fs::metadata(&canon)?;
@@ -3109,6 +3124,7 @@ pub async fn fs_write_text(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsCommandError> {
     run_blocking_fs("fs_write_text", move || {
         fs_write_text_sync(
@@ -3118,6 +3134,7 @@ pub async fn fs_write_text(
             mode,
             expected_mtime_ms,
             expected_content_hash,
+            checkpoint,
         )
     })
     .await
@@ -3147,6 +3164,7 @@ pub(crate) fn fs_edit_text_sync(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsCommandError> {
     let wd = canonicalize_workdir(&workdir)?;
     fs_edit_text_impl(
@@ -3158,10 +3176,12 @@ pub(crate) fn fs_edit_text_sync(
         replace_all,
         expected_mtime_ms,
         expected_content_hash,
+        checkpoint,
     )
     .map_err(|e| FsCommandError::from(e).with_workdir(&wd))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fs_edit_text_impl(
     wd: &Path,
     path: &str,
@@ -3171,6 +3191,7 @@ fn fs_edit_text_impl(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsError> {
     let rel = sanitize_rel_path(path)?;
     let logical_path = logical_rel_path(&rel);
@@ -3227,6 +3248,9 @@ fn fs_edit_text_impl(
     };
     let next = apply_edit_replacements(&text, applied);
 
+    // 落盘前捕获前像:直接复用上面已读入内存的原字节。失败不阻断写入。
+    capture_pre_image(checkpoint.as_ref(), &target, PreImage::File(Some(&bytes)));
+
     fs::write(&target, next.as_bytes())?;
     let md = fs::metadata(&target)?;
 
@@ -3243,6 +3267,7 @@ fn fs_edit_text_impl(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
 pub async fn fs_edit_text(
     workdir: String,
     path: String,
@@ -3252,6 +3277,7 @@ pub async fn fs_edit_text(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsCommandError> {
     run_blocking_fs("fs_edit_text", move || {
         fs_edit_text_sync(
@@ -3263,6 +3289,7 @@ pub async fn fs_edit_text(
             replace_all,
             expected_mtime_ms,
             expected_content_hash,
+            checkpoint,
         )
     })
     .await
@@ -3288,12 +3315,17 @@ fn remove_symlink_path(target: &Path) -> Result<(), io::Error> {
 pub(crate) fn fs_delete_sync(
     workdir: String,
     path: String,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<DeleteResponse, FsCommandError> {
     let wd = canonicalize_workdir(&workdir)?;
-    fs_delete_impl(&wd, &path).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    fs_delete_impl(&wd, &path, checkpoint).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
 }
 
-fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
+fn fs_delete_impl(
+    wd: &Path,
+    path: &str,
+    checkpoint: Option<CheckpointCtx>,
+) -> Result<DeleteResponse, FsError> {
     let rel = sanitize_rel_path(path)?;
     let logical_path = logical_rel_path(&rel);
     let file_name = rel
@@ -3305,12 +3337,17 @@ fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
 
     let meta = fs::symlink_metadata(&target)?;
     let kind = if meta.file_type().is_symlink() {
+        // 符号链接不做前像捕获:链接目标不属于本文件的内容,恢复语义不明确。
         remove_symlink_path(&target)?;
         "symlink"
     } else if meta.is_file() {
+        // 删除前捕获整个文件内容,回退即可原样恢复。失败不阻断删除。
+        capture_pre_image(checkpoint.as_ref(), &target, PreImage::File(None));
         fs::remove_file(&target)?;
         "file"
     } else if meta.is_dir() {
+        // 目录是递归删除,只能记不可恢复的标记,由 diff 统计如实呈现。
+        capture_pre_image(checkpoint.as_ref(), &target, PreImage::Dir);
         fs::remove_dir_all(&target)?;
         "dir"
     } else {
@@ -3326,8 +3363,12 @@ fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn fs_delete(workdir: String, path: String) -> Result<DeleteResponse, FsCommandError> {
-    run_blocking_fs("fs_delete", move || fs_delete_sync(workdir, path)).await
+pub async fn fs_delete(
+    workdir: String,
+    path: String,
+    checkpoint: Option<CheckpointCtx>,
+) -> Result<DeleteResponse, FsCommandError> {
+    run_blocking_fs("fs_delete", move || fs_delete_sync(workdir, path, checkpoint)).await
 }
 
 #[derive(Debug, Serialize)]
@@ -5285,6 +5326,7 @@ mod tests {
             "rewrite".to_string(),
             Some(read.mtime_ms),
             Some(read.content_hash),
+            None,
         )
         .expect("skill text should save");
         assert_eq!(write.path, "skill://demo/SKILL.md");
@@ -5572,17 +5614,17 @@ mod tests {
         fs::write(workdir.join("file.txt"), "file").expect("write file");
         fs::write(workdir.join("nested/child/file.txt"), "file").expect("write nested file");
 
-        let file_response = fs_delete_sync(workdir.display().to_string(), "file.txt".to_string())
+        let file_response = fs_delete_sync(workdir.display().to_string(), "file.txt".to_string(), None)
             .expect("delete file should succeed");
         assert_eq!(file_response.kind, "file");
         assert!(!workdir.join("file.txt").exists());
 
-        let empty_response = fs_delete_sync(workdir.display().to_string(), "empty".to_string())
+        let empty_response = fs_delete_sync(workdir.display().to_string(), "empty".to_string(), None)
             .expect("delete empty dir should succeed");
         assert_eq!(empty_response.kind, "dir");
         assert!(!workdir.join("empty").exists());
 
-        let nested_response = fs_delete_sync(workdir.display().to_string(), "nested".to_string())
+        let nested_response = fs_delete_sync(workdir.display().to_string(), "nested".to_string(), None)
             .expect("delete non-empty dir should succeed");
         assert_eq!(nested_response.kind, "dir");
         assert!(!workdir.join("nested").exists());
@@ -6089,6 +6131,7 @@ mod tests {
             "rewrite".to_string(),
             None,
             None,
+            None,
         )
         .expect("write should succeed");
         assert!(write.file_id.is_some());
@@ -6124,6 +6167,7 @@ mod tests {
             replace_all,
             Some(version.0),
             Some(version.1),
+            None,
         )
     }
 

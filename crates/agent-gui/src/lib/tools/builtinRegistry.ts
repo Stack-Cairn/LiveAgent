@@ -166,6 +166,8 @@ type BuildBuiltinBaseToolRegistryParams = {
     baseDirs: string[];
   }) => void | Promise<void>;
   runtimeScope: SystemToolRuntimeScope;
+  /** 会话检查点上下文;chat 场景传入,Cron 等自动化场景缺省(不捕获前像)。 */
+  checkpoint?: { conversationId: string; turnSeq: number };
   currentChatModel?: {
     customProviderId: string;
     model: string;
@@ -199,6 +201,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       skillsRootDir: params.skillsRootDir,
       skillAccessPolicy: params.skillAccessPolicy,
       resolveHomeDir,
+      checkpoint: params.checkpoint,
     }),
     createShellTools({
       workdir: params.workdir,

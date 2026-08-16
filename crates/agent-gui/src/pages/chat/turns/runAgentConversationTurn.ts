@@ -497,6 +497,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     fileState,
     taskStateStore,
     askUserQuestionConversationId: conversationId,
+    // 检查点粒度=一次注册表构建(每用户轮重建),Date.now() 单调即可。
+    checkpoint: { conversationId, turnSeq: Date.now() },
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
     skillAccessPolicy,

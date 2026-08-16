@@ -806,6 +806,8 @@ pub async fn handle_fs_write_text(
             request.mode,
             expected_mtime_ms,
             expected_content_hash,
+            // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
+            None,
         )
     })
     .await
@@ -854,7 +856,7 @@ pub async fn handle_fs_rename(
 pub async fn handle_fs_delete(
     request: proto::FsDeleteRequest,
 ) -> Result<proto::FsDeleteResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path))
+    tauri::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path, None))
         .await
         .map_err(|e| format!("gateway fs delete join failed: {e}"))?
         .map_err(|e| e.message)

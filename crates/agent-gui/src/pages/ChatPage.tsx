@@ -104,6 +104,7 @@ import {
   usePendingUploads,
 } from "./chat";
 import type { ChatPageProps } from "./chat/chatPageTypes";
+import { CheckpointRewindMenu } from "./chat/components/CheckpointRewindMenu";
 import { CurrentTaskProgress } from "./chat/components/CurrentTaskProgress";
 import { PendingToolApprovalBar } from "./chat/components/PendingToolApprovalBar";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
@@ -1791,12 +1792,18 @@ export function ChatPage(props: ChatPageProps) {
             onToggleTheme,
             onOpenSidebar: handleOpenSidebar,
             trailingActions: (
-              <ProjectToolsPanelToggle
-                isOpen={rightDockOpen}
-                sessionCount={projectTerminalSessions.length}
-                disabledMessage={terminalDisabledMessage}
-                onToggle={() => setRightDockOpen((open) => !open)}
-              />
+              <>
+                <CheckpointRewindMenu
+                  conversationId={currentConversationId}
+                  disabled={!currentConversationId || isSending}
+                />
+                <ProjectToolsPanelToggle
+                  isOpen={rightDockOpen}
+                  sessionCount={projectTerminalSessions.length}
+                  disabledMessage={terminalDisabledMessage}
+                  onToggle={() => setRightDockOpen((open) => !open)}
+                />
+              </>
             ),
             headerClassName: "relative z-20",
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
