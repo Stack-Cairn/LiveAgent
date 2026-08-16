@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use serde_json::json;
 
 use super::db;
+use super::scheduler::AutomationScheduler;
 use super::store::AutomationStore;
 use super::types::*;
 use super::validate::validate_cron_expression;
@@ -381,6 +384,23 @@ fn manual_run_context_allows_disabled_exhausted_task() {
         .expect("load disabled exhausted task for manual run");
     assert!(!manual_task.enabled);
     assert_eq!(manual_task.remaining_executions, Some(0));
+}
+
+#[test]
+fn run_now_rejects_disabled_task() {
+    let (store, task) = store_with_task(AutomationOp::Create {
+        item: json!({
+            "id": "disabled-run-now",
+            "name": "Disabled",
+            "cron": "0 * * * * *",
+            "enabled": false,
+            "type": "bash",
+            "script": "echo nope",
+        }),
+    });
+    let scheduler = Arc::new(AutomationScheduler::new(Arc::new(store)));
+    let error = scheduler.run_now(&task.id).expect_err("reject disabled task");
+    assert!(error.contains("disabled"), "error = {error}");
 }
 
 #[test]

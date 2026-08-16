@@ -288,6 +288,9 @@ impl AutomationScheduler {
 
     pub fn run_now(self: &Arc<Self>, task_id: &str) -> Result<CronRunNowResponse, String> {
         let (workdir, task) = self.store.cron_task_for_manual_run(task_id)?;
+        if !task.enabled {
+            return Err("Cron task is disabled.".to_string());
+        }
         let started_at = now_ms();
         if !self.start_fire(task, workdir, RunTrigger::Manual) {
             return Err("Cron task is already running.".to_string());

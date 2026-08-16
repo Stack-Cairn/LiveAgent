@@ -44,6 +44,8 @@ pub struct RemoteSettingsPayload {
     pub enable_web_git: bool,
     #[serde(default)]
     pub enable_web_tunnels: bool,
+    #[serde(default)]
+    pub enable_web_automation: bool,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeSshProxyConfig {

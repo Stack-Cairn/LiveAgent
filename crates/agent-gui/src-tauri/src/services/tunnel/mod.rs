@@ -49,8 +49,61 @@ pub(crate) fn validate_tunnel_target_url(input: &str) -> Result<TunnelTarget, St
     if host != "localhost" && host.parse::<IpAddr>().is_err() {
         return Err("targetUrl host must be localhost or an IP address".to_string());
     }
+    // 拒绝 link-local/保留/多播段：tunnel 会把目标暴露到公网，指向云元数据
+    // （169.254.169.254 等）或不可路由地址的隧道是 SSRF 扩张面。localhost、
+    // 回环与 RFC1918/ULA 私网段是 tunnel 的本职用途（暴露本地/内网服务），
+    // 保持放行；网关侧 guard.go 的 enable_web_tunnels 开关是前置授权门。
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_blocked_tunnel_target_ip(ip) {
+            return Err("targetUrl host is in a blocked IP range".to_string());
+        }
+    }
     url.set_fragment(None);
     Ok(TunnelTarget { url })
+}
+
+/// 判定隧道目标 IP 是否属于禁止暴露的段（与网关 Go 侧 outbound_http.go 的
+/// SSRF 黑名单对齐，但保留 loopback 与 RFC1918/ULA：暴露本地服务是 tunnel 本职）。
+fn is_blocked_tunnel_target_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // 0.0.0.0/8 本网络
+            if octets[0] == 0 {
+                return true;
+            }
+            // 169.254.0.0/16 link-local（含云元数据 169.254.169.254 / 169.254.170.2）
+            if octets[0] == 169 && octets[1] == 254 {
+                return true;
+            }
+            // 224.0.0.0/4 多播
+            if (224..=239).contains(&octets[0]) {
+                return true;
+            }
+            // 240.0.0.0/4 保留（含 255.255.255.255 广播）
+            if octets[0] >= 240 {
+                return true;
+            }
+            false
+        }
+        IpAddr::V6(v6) => {
+            let segments = v6.segments();
+            // ::/128 未指定地址（不可路由）。::1 回环与 127.0.0.1 同语义，是
+            // tunnel 的本职暴露目标，保持放行。
+            if segments.iter().all(|segment| *segment == 0) {
+                return true;
+            }
+            // fe80::/10 link-local
+            if (segments[0] & 0xffc0) == 0xfe80 {
+                return true;
+            }
+            // ff00::/8 多播
+            if segments[0] >> 8 == 0xff {
+                return true;
+            }
+            false
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -575,6 +628,7 @@ mod tests {
             "http://192.168.1.5:3000",
             "http://10.0.0.20:8080/app",
             "http://[fd00::1]:5173",
+            "http://8.8.8.8:8080",
         ] {
             assert!(validate_tunnel_target_url(value).is_ok(), "{value}");
         }
@@ -584,6 +638,33 @@ mod tests {
             "http://example.com",
             "http://user:pass@localhost:3000",
             "http://localhost:3000/#fragment",
+        ] {
+            assert!(validate_tunnel_target_url(value).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn validate_tunnel_target_url_rejects_link_local_metadata_and_reserved_ranges() {
+        // 云元数据与 link-local：暴露这些段的隧道是 SSRF 扩张面。
+        for value in [
+            "http://169.254.169.254:80/latest/meta-data/",
+            "http://169.254.170.2:80/",
+            "http://169.254.1.1:8080",
+            "http://[fe80::1]:8080",
+            "http://[fe80::1234]:8080",
+        ] {
+            assert!(validate_tunnel_target_url(value).is_err(), "{value}");
+        }
+
+        // 保留/多播/广播段不可路由，无合法暴露用途。
+        for value in [
+            "http://0.0.0.0:8080",
+            "http://224.0.0.1:8080",
+            "http://239.255.255.250:8080",
+            "http://240.0.0.1:8080",
+            "http://255.255.255.255:8080",
+            "http://[::]:8080",
+            "http://[ff02::1]:8080",
         ] {
             assert!(validate_tunnel_target_url(value).is_err(), "{value}");
         }

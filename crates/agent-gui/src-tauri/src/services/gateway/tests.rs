@@ -537,6 +537,7 @@ fn set_disconnected_status_resets_runtime_fields_for_new_config() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        enable_web_automation: false,
     };
     let mut status = GatewayStatusSnapshot {
         online: true,
@@ -605,6 +606,7 @@ fn gateway_connection_nudge_detects_offline_and_stale_sessions() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        enable_web_automation: false,
     };
     assert_eq!(
         gateway_connection_stale_after(&config),

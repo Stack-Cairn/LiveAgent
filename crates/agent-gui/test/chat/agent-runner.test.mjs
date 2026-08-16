@@ -2552,3 +2552,54 @@ test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错�
   assert.equal(prefixCaptures[2].prefixChanged, false);
   assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });
+
+test("runAssistantWithTools routes recovered seed tool calls through the approval gate", async () => {
+  resetFakeStreams(
+    createTextAssistant(`Before
+<seed:tool_call>
+  <function name="Read">
+    <parameter name="path">src/App.tsx</parameter>
+  </function>
+</seed:tool_call>
+After`),
+    createTextAssistant("after recovered tool"),
+  );
+  const gateCalls = [];
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async (toolCall) => {
+      gateCalls.push(toolCall);
+      return { allow: false, reason: "blocked by test gate" };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(
+    gateCalls.length,
+    1,
+    "approval gate must run for recovered seed tool calls (prompt-injected markup must not bypass ask/deny policy)",
+  );
+  assert.equal(executedToolCalls.length, 0, "denied seed tool call must not execute");
+  assert.ok(
+    JSON.stringify(result.emittedMessages).includes("blocked by test gate"),
+    "denial reason must reach the model as the tool result, same as structured-call blocks",
+  );
+});
+
+test("runAssistantWithTools executes seed tool calls allowed by the gate", async () => {
+  resetFakeStreams(
+    createTextAssistant(`<seed:tool_call>
+  <function name="Read">
+    <parameter name="path">src/App.tsx</parameter>
+  </function>
+</seed:tool_call>`),
+    createTextAssistant("done"),
+  );
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async () => ({ allow: true }),
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(executedToolCalls.length, 1, "allowed seed tool call still executes");
+});

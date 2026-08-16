@@ -48,6 +48,7 @@ pub(crate) fn load_gateway_settings_sync_snapshot(conn: &Connection) -> Result<V
             "enableWebSshTerminal": remote.enable_web_ssh_terminal,
             "enableWebGit": remote.enable_web_git,
             "enableWebTunnels": remote.enable_web_tunnels,
+            "enableWebAutomation": remote.enable_web_automation,
         }),
     );
     // UI-only fields (theme, locale, selectedModel, skills, chatRuntimeControls,

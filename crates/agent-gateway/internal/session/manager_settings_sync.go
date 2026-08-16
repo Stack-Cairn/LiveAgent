@@ -57,6 +57,12 @@ func (m *Manager) WebGitEnabled(agentID string) bool {
 	return m.settingsRemoteBool(agentID, "enableWebGit")
 }
 
+// WebAutomationEnabled 门控远程 cron/hooks 管理（cron.manage 直通臂）。
+// 与 terminal/git/tunnels 同款 fail-closed：Agent 不存在或未同步过设置时一律 false。
+func (m *Manager) WebAutomationEnabled(agentID string) bool {
+	return m.settingsRemoteBool(agentID, "enableWebAutomation")
+}
+
 func parseSettingsJSON(settingsJSON string) (map[string]any, bool) {
 	raw := strings.TrimSpace(settingsJSON)
 	if raw == "" {

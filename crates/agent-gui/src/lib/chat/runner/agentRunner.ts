@@ -1839,6 +1839,26 @@ export async function runAssistantWithTools(params: {
             params.onToolExecutionStart?.(toolCall, recoveredSeedRound);
           }
 
+          // 审批门:seed 恢复的调用与结构化调用同权——用户配置的 ask/deny 策略
+          // 必须同样拦截标记恢复路径(提示注入可诱导模型输出 <seed:tool_call>),
+          // 拒绝时 reason 作为 toolResult 交给模型,与 beforeToolCall block 同渲染。
+          const effectiveSeedToolCall = normalizeToolCallNameForExecution(toolCall);
+          if (params.resolveToolGate) {
+            const gate = await params.resolveToolGate(effectiveSeedToolCall, params.signal);
+            if (!gate.allow) {
+              syntheticToolResults.push({
+                role: "toolResult",
+                toolCallId: effectiveSeedToolCall.id,
+                toolName: effectiveSeedToolCall.name,
+                content: [{ type: "text", text: gate.reason }],
+                details: {},
+                isError: true,
+                timestamp: Date.now(),
+              });
+              continue;
+            }
+          }
+
           const result = await executeSingleToolCall(toolCall, params.signal);
           throwIfRunnerCancelled(params.signal);
           const toolResult = {

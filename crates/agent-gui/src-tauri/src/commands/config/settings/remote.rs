@@ -39,6 +39,7 @@ impl Default for RemoteSettingsPayload {
             enable_web_ssh_terminal: false,
             enable_web_git: false,
             enable_web_tunnels: false,
+            enable_web_automation: false,
         }
     }
 }
@@ -62,6 +63,7 @@ pub(crate) fn normalize_remote_settings_payload(
         enable_web_ssh_terminal: payload.enable_web_ssh_terminal,
         enable_web_git: payload.enable_web_git,
         enable_web_tunnels: payload.enable_web_tunnels,
+        enable_web_automation: payload.enable_web_automation,
     }
 }
 
@@ -179,11 +181,16 @@ fn redact_remote_settings(remote: Value) -> Result<Value, String> {
         .get("enableWebTunnels")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let enable_web_automation = remote
+        .get("enableWebAutomation")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     Ok(json!({
         "enableWebTerminal": enable_web_terminal,
         "enableWebSshTerminal": enable_web_ssh_terminal,
         "enableWebGit": enable_web_git,
         "enableWebTunnels": enable_web_tunnels,
+        "enableWebAutomation": enable_web_automation,
     }))
 }
 fn save_remote(conn: &mut Connection, payload: Value) -> Result<RemoteSettingsPayload, String> {

@@ -89,6 +89,19 @@ impl GatewayController {
                 self.handle_chat_ingress_ack(request_id, ack).await
             }
             Some(proto::gateway_envelope::Payload::CronManage(request)) => {
+                // cron/hooks 可写入并立即执行 bash 脚本，受 Remote 设置
+                // enable_web_automation 后端强制门控（与 terminal/git/tunnels
+                // 同款；网关侧 guard.go 已有同值门控，这里是纵深防御镜像）。
+                if !self.config_tx.borrow().enable_web_automation {
+                    let _ = self
+                        .send_error_response(
+                            request_id,
+                            403,
+                            "web automation is disabled in desktop Remote settings".to_string(),
+                        )
+                        .await;
+                    return Ok(());
+                }
                 // Successful apply actions broadcast their own snapshot via the
                 // AutomationStore notifier; no extra refresh is needed here.
                 match gateway_bridge::handle_cron_manage(
