@@ -288,9 +288,17 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
         data-scroll-viewport
         className="h-full w-full overflow-y-auto [overflow-anchor:none]"
       >
-        <div className="mx-auto w-full max-w-[var(--chat-transcript-content-width)] px-5 py-4 [overflow-anchor:none]">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-[var(--chat-transcript-content-width)] px-5 py-4 [overflow-anchor:none]",
+            // Empty states center against the scroll viewport (the pane), not
+            // the window: a viewport-height min-height overflows half-height
+            // panes in vertical splits and shifts the hero content.
+            (showNoModelsState || showStartChatState) && "flex min-h-full flex-col",
+          )}
+        >
           {showNoModelsState || showStartChatState ? (
-            <div className="flex min-h-[calc(100vh-220px)] flex-col items-center justify-center">
+            <div className="flex flex-1 flex-col items-center justify-center pb-24">
               {/* Keyed per conversation so the hero entrance replays when
                   switching between empty conversations, not just on mount. */}
               <ChatEmptyState
