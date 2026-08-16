@@ -13,6 +13,10 @@ import { XTermViewport } from "@liveagent/ui/components/project-tools/XTermViewp
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  sshSessionEndpointLabel,
+  sshSessionStatus,
+} from "@liveagent/ui/lib/terminal/sshSessionStatus";
 import type {
   SshTerminalTab,
   SshTerminalTabKind,
@@ -46,25 +50,32 @@ type WorkspaceSshTerminalOverlayProps = {
   isOpen: boolean;
   onHide: () => void;
   onOpenSftpFile?: (session: TerminalSession, request: SftpOpenFileRequest) => void;
+  /**
+   * 被工作台 Pane 租用的会话:shell 视口与 Pane 互斥(输出流单消费),
+   * overlay 内显示"已在画板中打开"占位。SFTP tab 不受影响——SFTP 走独立
+   * 通道,不与 XTermViewport 争夺输出流。
+   */
+  paneLeasedSessionIds?: ReadonlySet<string>;
+  /** 点击占位跳转聚焦画板中的 Pane;省略时只显示占位文案。 */
+  onFocusLeasedSession?: (sessionId: string) => void;
+  /**
+   * 存在时 shell tab 可拖出到工作台画板(SFTP tab 不可拖)。pointerdown 上报,
+   * 激活阈值与点击抑制由工作台拖拽会话统一处理,tab 点击激活不受影响。
+   */
+  onSessionTabDragStart?: (
+    session: TerminalSession,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
 };
 
 const SSH_TERMINAL_OVERLAY_ANIMATION_MS = 180;
-
-function sshSessionStatus(session: TerminalSession) {
-  const status = session.ssh?.status ?? (session.running ? "connected" : "disconnected");
-  if (status === "connected" && !session.running) return "disconnected";
-  return status;
-}
 
 function sessionTitle(session: TerminalSession, fallback: string) {
   return session.title || session.ssh?.hostName || fallback;
 }
 
 function sessionEndpointLabel(session: TerminalSession) {
-  const ssh = session.ssh;
-  if (!ssh) return session.cwd || session.projectPathKey;
-  const userPrefix = ssh.username.trim() ? `${ssh.username.trim()}@` : "";
-  return `${userPrefix}${ssh.host}:${ssh.port}`;
+  return sshSessionEndpointLabel(session);
 }
 
 function statusDotClassName(session: TerminalSession) {
@@ -89,6 +100,9 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
     isOpen,
     onHide,
     onOpenSftpFile,
+    paneLeasedSessionIds,
+    onFocusLeasedSession,
+    onSessionTabDragStart,
   } = props;
   const { t } = useLocale();
   const [isVisible, setIsVisible] = useState(isOpen);
@@ -385,6 +399,19 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
               title={sessionEndpointLabel(session)}
               aria-label={sessionEndpointLabel(session)}
               onClick={() => activateTab(tab.id)}
+              onPointerDown={
+                onSessionTabDragStart && tab.kind !== "sftp"
+                  ? (event) => {
+                      // 触控仍用于滚动 tab 条;拖出仅响应鼠标/笔主键。
+                      if (event.button !== 0 || event.pointerType === "touch") return;
+                      onSessionTabDragStart(session, {
+                        pointerId: event.pointerId,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                    }
+                  : undefined
+              }
             >
               <span
                 className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClassName(session))}
@@ -451,6 +478,22 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                       }
                     />
                   </Suspense>
+                ) : paneLeasedSessionIds?.has(session.id) ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
+                      <Terminal className="h-5 w-5" />
+                    </div>
+                    <div>{t("workspaceSshTerminal.openedInWorkbench")}</div>
+                    {onFocusLeasedSession ? (
+                      <button
+                        type="button"
+                        className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
+                        onClick={() => onFocusLeasedSession(session.id)}
+                      >
+                        {t("workspaceSshTerminal.focusWorkbenchPane")}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : (
                   <XTermViewport
                     client={client}

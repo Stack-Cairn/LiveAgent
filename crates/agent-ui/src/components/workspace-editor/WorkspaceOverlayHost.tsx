@@ -71,6 +71,13 @@ type WorkspaceOverlayHostProps = {
   terminalSessions: TerminalSession[];
   onWorkspaceSshTerminalHide: () => void;
   onSshTerminalOpenFile?: (session: TerminalSession, request: SftpOpenFileRequest) => void;
+  /** 工作台互斥/拖出(可选透传;缺省时 overlay 行为不变)。 */
+  sshTerminalPaneLeasedSessionIds?: ReadonlySet<string>;
+  onSshTerminalFocusLeasedSession?: (sessionId: string) => void;
+  onSshTerminalSessionTabDragStart?: (
+    session: TerminalSession,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
 };
 
 function WorkspaceOverlayLoading(props: { className: string; label: string }) {
@@ -121,6 +128,9 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
     terminalSessions,
     onWorkspaceSshTerminalHide,
     onSshTerminalOpenFile,
+    sshTerminalPaneLeasedSessionIds,
+    onSshTerminalFocusLeasedSession,
+    onSshTerminalSessionTabDragStart,
   } = props;
 
   return (
@@ -185,6 +195,9 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             isOpen={workspaceSshTerminalOpen}
             onHide={onWorkspaceSshTerminalHide}
             onOpenSftpFile={onSshTerminalOpenFile}
+            paneLeasedSessionIds={sshTerminalPaneLeasedSessionIds}
+            onFocusLeasedSession={onSshTerminalFocusLeasedSession}
+            onSessionTabDragStart={onSshTerminalSessionTabDragStart}
           />
         </Suspense>
       ) : null}
