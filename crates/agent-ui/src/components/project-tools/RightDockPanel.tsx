@@ -63,6 +63,8 @@ type RightDockPanelProps = {
   cwd: string;
   sessions?: TerminalSession[];
   sessionsLoaded?: boolean;
+  /** 被工作台 Pane 租用的会话:从 dock 的 tab/视口中隐藏,避免输出流双消费。 */
+  hiddenSessionIds?: ReadonlySet<string>;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -89,6 +91,11 @@ type RightDockPanelProps = {
   onSshProjectHostIdsChange?: (hostIds: string[]) => void;
   onOpenSshSession?: (session: TerminalSession, kind?: "bash" | "sftp") => void;
   onSessionsChange?: (sessions: TerminalSession[]) => void;
+  /** 存在时终端 tab 可拖出 dock(工作台宿主);默认无行为。 */
+  onTerminalTabDragStart?: (
+    session: TerminalSession,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
   onInsertCodeReviewSkill?: () => void;
@@ -345,6 +352,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     cwd,
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
+    hiddenSessionIds,
     width,
     theme,
     disabledMessage,
@@ -369,6 +377,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onSshProjectHostIdsChange,
     onOpenSshSession,
     onSessionsChange,
+    onTerminalTabDragStart,
     onInsertFileMention,
     onOpenFile,
     onInsertCodeReviewSkill,
@@ -422,6 +431,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     cwd,
     externalSessions,
     externalSessionsLoaded,
+    hiddenSessionIds,
     isOpen,
     onProjectStateChange,
     onSessionsChange,
@@ -830,6 +840,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onActivateTerminalSession={activateTerminalSession}
                       onCloseToolTab={closeToolTab}
                       onCloseTerminalRequest={handleCloseRequest}
+                      onTerminalTabDragStart={onTerminalTabDragStart}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />

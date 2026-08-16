@@ -22,6 +22,12 @@ type UseRightDockSessionsOptions = {
   cwd: string;
   externalSessions?: TerminalSession[];
   externalSessionsLoaded?: boolean;
+  /**
+   * Sessions currently displayed elsewhere (e.g. leased by a workbench pane).
+   * They are hidden from the dock's tabs/viewports so a terminal stream is
+   * never consumed twice, but they keep flowing through `onSessionsChange`.
+   */
+  hiddenSessionIds?: ReadonlySet<string>;
   isOpen: boolean;
   projectPathKey: string;
   projectState: RightDockProjectState;
@@ -42,6 +48,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     cwd,
     externalSessions,
     externalSessionsLoaded,
+    hiddenSessionIds,
     isOpen,
     onProjectStateChange,
     onSessionsChange,
@@ -70,9 +77,11 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     () =>
       sessions.filter(
         (session) =>
-          session.kind !== "ssh" && terminalSessionBelongsToProject(session, projectPathKey),
+          session.kind !== "ssh" &&
+          terminalSessionBelongsToProject(session, projectPathKey) &&
+          !hiddenSessionIds?.has(session.id),
       ),
-    [projectPathKey, sessions],
+    [hiddenSessionIds, projectPathKey, sessions],
   );
   const sshSessions = useMemo(
     () => sessions.filter((session) => session.kind === "ssh"),

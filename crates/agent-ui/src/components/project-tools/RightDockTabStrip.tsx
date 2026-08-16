@@ -27,6 +27,17 @@ type RightDockTabStripProps = {
   onActivateTerminalSession: (session: TerminalSession) => void;
   onCloseToolTab: (kind: RightDockSingletonTabKind) => void;
   onCloseTerminalRequest: (session: TerminalSession) => void;
+  /**
+   * Provided when terminal tabs can be dragged out of the dock (workbench
+   * hosts). The tab body then arms the drag-out gesture instead of tab
+   * reorder; reorder stays available from the grip handle. Click activation
+   * is unaffected — the drag session suppresses the click only after its
+   * movement threshold.
+   */
+  onTerminalTabDragStart?: (
+    session: TerminalSession,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
 };
 
 // One descriptor per tab regardless of kind, so every tab shares a single
@@ -43,6 +54,8 @@ type DockTabDescriptor = {
   closeTitle: string;
   closeIcon?: ReactNode;
   closeDisabled?: boolean;
+  /** Overrides the default reorder pointer-down on the tab body (drag-out). */
+  dragProps?: RightDockTabDragProps;
   onActivate: () => void;
   onClose: () => void;
 };
@@ -73,6 +86,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     onActivateTerminalSession,
     onCloseToolTab,
     onCloseTerminalRequest,
+    onTerminalTabDragStart,
   } = props;
   const { t } = useLocale();
 
@@ -89,7 +103,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
       )}
       title={tab.label}
       style={getTabDragStyle(tab.id)}
-      {...getTabDragProps(tab.id)}
+      {...(tab.dragProps ?? getTabDragProps(tab.id))}
     >
       <button
         type="button"
@@ -200,6 +214,19 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             : t("projectTools.closeTerminal"),
           closeIcon: isPendingClose ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />,
           closeDisabled: closingSessionIds.has(session.id),
+          dragProps: onTerminalTabDragStart
+            ? {
+                onPointerDown: (event) => {
+                  // Touch keeps panning the strip (same rule as tab reorder).
+                  if (event.button !== 0 || event.pointerType === "touch") return;
+                  onTerminalTabDragStart(session, {
+                    pointerId: event.pointerId,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                  });
+                },
+              }
+            : undefined,
           onActivate: () => onActivateTerminalSession(session),
           onClose: () => onCloseTerminalRequest(session),
         });

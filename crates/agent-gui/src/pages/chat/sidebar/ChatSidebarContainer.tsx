@@ -45,6 +45,15 @@ type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   // and replaces the current conversation when needed.
   onConversationDeleted: (id: string) => void;
   onConversationCwdChanged: (id: string, cwd: string) => void;
+  onConversationWorkbenchDragIntent?: (
+    item: SidebarConversation,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
+  onConversationOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
+  onProjectWorkbenchDragIntent?: (
+    project: WorkspaceProject,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
   appUpdate?: AppUpdateController;
 };
 
@@ -204,6 +213,9 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
         onDeleteConversations: handleDeleteConversations,
         onLoadMore: handleLoadMore,
       })}
+      onConversationWorkbenchDragIntent={props.onConversationWorkbenchDragIntent}
+      onConversationOpenInWorkbenchSplit={props.onConversationOpenInWorkbenchSplit}
+      onProjectWorkbenchDragIntent={props.onProjectWorkbenchDragIntent}
       headerTop={<DesktopSidebarTitleBar />}
       brand={<DesktopSidebarBrand />}
       hideCloseButton={hideDesktopSidebarCloseButton()}

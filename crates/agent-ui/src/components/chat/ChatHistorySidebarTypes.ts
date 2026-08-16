@@ -90,6 +90,18 @@ export type ChatHistorySidebarProps = {
   archivedProjectPathKeys?: ReadonlySet<string>;
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
+  /** Workbench drag intent from a conversation row title (desktop pointer). */
+  onConversationWorkbenchDragIntent?: (
+    item: SidebarConversation,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
+  /** Menu alternative to dragging: open a conversation in a split pane. */
+  onConversationOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
+  /** Workbench drag intent from a project row title (creates a conversation). */
+  onProjectWorkbenchDragIntent?: (
+    project: WorkspaceProject,
+    event: { pointerId: number; clientX: number; clientY: number },
+  ) => void;
   onStartRenaming: (item: SidebarConversation) => void;
   onRenameDraftChange: (value: string) => void;
   onCommitRename: () => void;
