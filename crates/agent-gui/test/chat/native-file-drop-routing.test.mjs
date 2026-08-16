@@ -234,8 +234,13 @@ test("upload rectangle fallback does not widen beyond the chat zone", () => {
 
 test("native upload marker covers the desktop chat panel instead of only the composer", () => {
   const chatPage = readFileSync("src/pages/ChatPage.tsx", "utf8");
+  const conversationSurface = readFileSync(
+    "src/pages/chat/surfaces/ConversationSurface.tsx",
+    "utf8",
+  );
   const composer = readFileSync("../agent-ui/src/pages/chat/ChatComposerBar.tsx", "utf8");
 
-  assert.match(chatPage, /data-file-upload-drop-zone/);
+  assert.match(chatPage, /<ConversationSurface/);
+  assert.match(conversationSurface, /data-file-upload-drop-zone/);
   assert.doesNotMatch(composer, /data-file-upload-drop-zone/);
 });

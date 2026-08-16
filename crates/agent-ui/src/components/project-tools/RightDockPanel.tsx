@@ -761,6 +761,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         ref={panelRef}
         aria-hidden={!isOpen}
         inert={!isOpen}
+        data-app-frame-column="right-dock"
         data-state={isOpen ? "open" : "closed"}
         data-project-tools-resizing={isResizing ? "true" : undefined}
         className={cn(

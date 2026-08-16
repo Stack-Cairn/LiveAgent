@@ -1165,6 +1165,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     <aside
       aria-hidden={!isOpen}
       inert={!isOpen}
+      data-app-frame-column="sidebar"
       data-state={isOpen ? "open" : "closed"}
       className={cn(
         "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
