@@ -704,3 +704,77 @@ describe("file tree model", () => {
     );
   });
 });
+
+test("background-tasks 开合手势:归一化上限、固定可见与 dismissal 快照", () => {
+  assert.deepEqual(
+    settings.normalizeRightDockBackgroundTasksState({
+      opened: true,
+      dismissedIds: ["p-1", "", "p-1", 42, "  p-2  ", "x".repeat(200)],
+    }),
+    { opened: true, dismissedIds: ["p-1", "p-2"] },
+  );
+
+  const base = settings.normalizeRightDockProjectState({});
+  const opened = settings.openRightDockBackgroundTasksTabState(base);
+  assert.equal(opened.activeTabId, settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID);
+  assert.ok(opened.tabOrder.includes(settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID));
+  assert.deepEqual(opened.backgroundTasks, { opened: true, dismissedIds: [] });
+
+  // 关是 hide-only:仅写 dismissal 快照,activeTabId/tabOrder 不动;重开清空快照。
+  const closed = settings.closeRightDockBackgroundTasksTabState(opened, ["p-1"]);
+  assert.deepEqual(closed, {
+    ...opened,
+    backgroundTasks: { opened: false, dismissedIds: ["p-1"] },
+  });
+  assert.deepEqual(settings.openRightDockBackgroundTasksTabState(closed).backgroundTasks, {
+    opened: true,
+    dismissedIds: [],
+  });
+});
+
+test("background-tasks 意图落盘递增版本并随 (stateVersion, writerId) 归并", () => {
+  // 仅 backgroundTasks 变更也是内容:落盘并递增 stateVersion。
+  const opened = settings.updateRightDockProjectState(
+    settings.normalizeSettings({}),
+    "/workspace/app",
+    (current) => settings.openRightDockBackgroundTasksTabState(current),
+  );
+  const state = settings.getRightDockProjectState(opened.customSettings, "/workspace/app");
+  assert.deepEqual(state.backgroundTasks, { opened: true, dismissedIds: [] });
+  assert.equal(state.stateVersion, 1);
+
+  // 仅后台意图的桶是活状态:lastUsedAt 久远时若被误判为空桶会走墓碑 TTL 被丢弃。
+  assert.ok(
+    settings.normalizeRightDockSettings({
+      projects: {
+        "/workspace/app": {
+          tools: {},
+          backgroundTasks: { opened: true, dismissedIds: [] },
+          stateVersion: 2,
+          lastUsedAt: 1,
+        },
+      },
+    }).projects["/workspace/app"],
+  );
+
+  // 更高 stateVersion 的对端意图在归并中胜出。
+  const merged = sync.applyGatewaySettingsSyncPayload(
+    opened,
+    rightDockSyncPayload({
+      "/workspace/app": {
+        activeTabId: settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
+        tabOrder: [settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID],
+        tools: {},
+        backgroundTasks: { opened: false, dismissedIds: ["p-1"] },
+        openVersion: 0,
+        stateVersion: 2,
+        writerId: "writer-remote",
+        lastUsedAt: Date.now(),
+      },
+    }),
+  );
+  assert.deepEqual(merged.customSettings.rightDock.projects["/workspace/app"].backgroundTasks, {
+    opened: false,
+    dismissedIds: ["p-1"],
+  });
+});

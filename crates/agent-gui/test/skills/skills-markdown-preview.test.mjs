@@ -25,6 +25,10 @@ const webStyles = readFileSync(
   new URL("../../../agent-gateway/web/src/index.css", import.meta.url),
   "utf8",
 );
+const sharedStyles = readFileSync(
+  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
+  "utf8",
+);
 
 test("Skill and workspace files share the document Markdown presentation", () => {
   assert.match(skillDrawerSource, /<DocumentMarkdown content=\{previewContent\}/);
@@ -34,15 +38,16 @@ test("Skill and workspace files share the document Markdown presentation", () =>
 
 test("document Markdown keeps its typography separate from chat Markdown in both hosts", () => {
   for (const source of [desktopStyles, webStyles]) {
-    assert.match(source, /\.document-markdown p/);
-    assert.match(source, /\.document-markdown \[data-streamdown="heading-2"\]/);
-    assert.match(source, /\.document-markdown \[data-streamdown="list-item"\] > p/);
-    assert.match(source, /\.document-markdown \[data-streamdown="code-block-body"\]/);
-    assert.match(
-      source,
-      /\.document-markdown \[data-streamdown="heading-1"\] \{\s*@apply[^;]*text-lg/,
-    );
+    assert.match(source, /agent-ui\/src\/styles\/common\.css/);
   }
+  assert.match(sharedStyles, /\.document-markdown p/);
+  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="heading-2"\]/);
+  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="list-item"\] > p/);
+  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="code-block-body"\]/);
+  assert.match(
+    sharedStyles,
+    /\.document-markdown \[data-streamdown="heading-1"\] \{\s*@apply[^;]*text-lg/,
+  );
 });
 
 test("Skill detail sections use whitespace instead of large divider lines", () => {

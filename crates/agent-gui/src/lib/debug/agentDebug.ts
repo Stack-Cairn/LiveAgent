@@ -2,6 +2,7 @@ import type { Context } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { CodexRequestFormat, ExecutionMode, ProviderId, ReasoningLevel } from "../settings";
+import type { PrefixCacheDiagnostics } from "./prefixCacheShape";
 
 type DebugLineType = "request" | "result" | "error";
 
@@ -205,10 +206,16 @@ export function buildStreamRequestDebugPayload(params: {
   context: Context;
   options?: unknown;
   round?: number;
+  /**
+   * 前缀哈希对账结果。与 usage 里的 cacheRead / cacheWrite 并列:那两个是结果,
+   * 这个是归因 —— miss 时能直接读出是 system 还是 tools 把前缀顶掉了。
+   */
+  prefixCache?: PrefixCacheDiagnostics;
 }) {
   return {
     round: params.round,
     runtime: buildRuntimeDebugInfo(params.runtime),
+    prefixCache: params.prefixCache,
     context: sanitizeDebugValue(params.context),
     options: sanitizeDebugValue(params.options ?? {}),
   };

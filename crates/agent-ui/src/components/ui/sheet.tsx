@@ -1,5 +1,5 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
-import { X } from "@liveagent/app/components/icons";
+import { X } from "@liveagent/ui/components/IconSet";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";

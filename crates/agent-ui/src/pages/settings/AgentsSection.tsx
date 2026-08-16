@@ -1,6 +1,6 @@
-import { BookOpen, Eye, FileText, Pencil, Plus, Trash2, X } from "@liveagent/app/components/icons";
 import { type AgentPromptTemplate, updateAgents } from "@liveagent/app/lib/settings/index";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { BookOpen, Eye, FileText, Pencil, Plus, Trash2, X } from "@liveagent/ui/components/IconSet";
 
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";

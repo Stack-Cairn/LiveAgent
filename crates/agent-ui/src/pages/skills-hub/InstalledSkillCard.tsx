@@ -39,7 +39,7 @@ import {
   Wifi,
   Wrench,
   Zap,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/ResourceActivationSwitch";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";

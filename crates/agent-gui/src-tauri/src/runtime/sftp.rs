@@ -20,7 +20,9 @@ use crate::runtime::terminal::{
 
 const TRANSFER_BUFFER_BYTES: usize = 64 * 1024;
 const SFTP_READ_TEXT_DEFAULT_BYTES: usize = 200 * 1024;
-const SFTP_READ_TEXT_MAX_BYTES: usize = 1024 * 1024;
+// Aligned with EDITABLE_TEXT_MAX_BYTES (commands/workspace/fs.rs) so the code
+// editor can open the same file sizes for remote files as for local ones.
+const SFTP_READ_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024;
 pub const SFTP_EVENT_NAME: &str = "sftp:event";
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +83,8 @@ pub struct SftpReadTextResponse {
     pub bytes_read: usize,
     pub size_bytes: u64,
     pub truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<SftpEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -260,11 +264,18 @@ impl SftpSessionRegistry {
         path: String,
         offset: Option<u64>,
         max_bytes: Option<usize>,
+        strict_utf8: Option<bool>,
     ) -> Result<SftpReadTextResponse, String> {
         self.ensure_session_allowed(&session_id, project_path_key.as_deref())?;
         let remote_path = normalize_remote_path(&path);
-        self.read_text_remote(session_id, remote_path, offset.unwrap_or(0), max_bytes)
-            .await
+        self.read_text_remote(
+            session_id,
+            remote_path,
+            offset.unwrap_or(0),
+            max_bytes,
+            strict_utf8.unwrap_or(false),
+        )
+        .await
     }
 
     pub async fn write_text(
@@ -275,12 +286,81 @@ impl SftpSessionRegistry {
         content: String,
         overwrite: bool,
         create_parent_dirs: bool,
+        expected_mtime: Option<u64>,
+        expected_size_bytes: Option<u64>,
     ) -> Result<SftpActionResponse, String> {
         self.ensure_session_allowed(&session_id, project_path_key.as_deref())?;
         let remote_path = normalize_remote_path(&path);
-        let connection = self.connection_for_session(&session_id).await?;
+        match self
+            .write_text_once(
+                &session_id,
+                remote_path.clone(),
+                &content,
+                overwrite,
+                create_parent_dirs,
+                expected_mtime,
+                expected_size_bytes,
+            )
+            .await
+        {
+            Ok(response) => Ok(response),
+            Err(error) if is_session_closed_error(&error) => {
+                self.invalidate_session_connection(&session_id);
+                self.write_text_once(
+                    &session_id,
+                    remote_path,
+                    &content,
+                    overwrite,
+                    create_parent_dirs,
+                    expected_mtime,
+                    expected_size_bytes,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn write_text_once(
+        &self,
+        session_id: &str,
+        remote_path: String,
+        content: &str,
+        overwrite: bool,
+        create_parent_dirs: bool,
+        expected_mtime: Option<u64>,
+        expected_size_bytes: Option<u64>,
+    ) -> Result<SftpActionResponse, String> {
+        let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
-        if !overwrite
+        // Conflict guard for the code editor: stat while holding the
+        // connection lock, before session.create() truncates the target. A
+        // structured "conflict" response (instead of an error) survives the
+        // gateway websocket path, which flattens errors to plain strings.
+        if expected_mtime.is_some() || expected_size_bytes.is_some() {
+            match remote_entry_from_metadata(&guard.session, &remote_path).await {
+                Ok(current) => {
+                    if is_write_conflict(expected_mtime, expected_size_bytes, &current) {
+                        return Ok(SftpActionResponse {
+                            action: "conflict".to_string(),
+                            path: remote_path,
+                            entry: Some(current),
+                            transfer: None,
+                        });
+                    }
+                }
+                Err(error) if is_not_found_error(&error) => {
+                    // The caller edited a file that has since been deleted.
+                    return Ok(SftpActionResponse {
+                        action: "conflict".to_string(),
+                        path: remote_path,
+                        entry: None,
+                        transfer: None,
+                    });
+                }
+                Err(error) => return Err(error),
+            }
+        } else if !overwrite
             && guard
                 .session
                 .try_exists(remote_path.clone())
@@ -858,15 +938,22 @@ impl SftpSessionRegistry {
         remote_path: String,
         offset: u64,
         max_bytes: Option<usize>,
+        strict_utf8: bool,
     ) -> Result<SftpReadTextResponse, String> {
         match self
-            .read_text_remote_once(&session_id, remote_path.clone(), offset, max_bytes)
+            .read_text_remote_once(
+                &session_id,
+                remote_path.clone(),
+                offset,
+                max_bytes,
+                strict_utf8,
+            )
             .await
         {
             Ok(response) => Ok(response),
             Err(error) if is_session_closed_error(&error) => {
                 self.invalidate_session_connection(&session_id);
-                self.read_text_remote_once(&session_id, remote_path, offset, max_bytes)
+                self.read_text_remote_once(&session_id, remote_path, offset, max_bytes, strict_utf8)
                     .await
             }
             Err(error) => Err(error),
@@ -879,6 +966,7 @@ impl SftpSessionRegistry {
         remote_path: String,
         offset: u64,
         max_bytes: Option<usize>,
+        strict_utf8: bool,
     ) -> Result<SftpReadTextResponse, String> {
         let limit = normalize_read_text_max_bytes(max_bytes);
         let connection = self.connection_for_session(session_id).await?;
@@ -919,13 +1007,33 @@ impl SftpSessionRegistry {
         buffer.truncate(actual_read.min(limit));
         let truncated = actual_read > limit
             || (offset as u128).saturating_add(buffer.len() as u128) < u128::from(size_bytes);
+        let bytes_read = buffer.len();
+        // Strict mode is used by the code editor: a lossy conversion would
+        // silently corrupt non-UTF-8 files when the content is written back.
+        // Truncated reads may split a multi-byte character, and the editor
+        // rejects truncated content anyway, so strictness only applies to
+        // complete reads.
+        let content = if strict_utf8 && !truncated {
+            String::from_utf8(buffer)
+                .map_err(|_| format!("remote file is not valid UTF-8: {remote_path}"))?
+        } else {
+            String::from_utf8_lossy(&buffer).to_string()
+        };
+        let entry = SftpEntry {
+            name: remote_basename(&remote_path).unwrap_or_else(|| remote_path.clone()),
+            path: remote_path.clone(),
+            kind: remote_kind(&metadata),
+            size_bytes,
+            mtime: u64::from(metadata.mtime.unwrap_or(0)) * 1000,
+        };
         Ok(SftpReadTextResponse {
             path: remote_path,
-            content: String::from_utf8_lossy(&buffer).to_string(),
+            content,
             offset,
-            bytes_read: buffer.len(),
+            bytes_read,
             size_bytes,
             truncated,
+            entry: Some(entry),
         })
     }
 
@@ -1837,6 +1945,20 @@ fn is_not_found_error(error: &str) -> bool {
     normalized.contains("no such") || normalized.contains("not found")
 }
 
+// SFTP mtimes have second granularity (stored as ms), so mtime alone can miss
+// a rewrite that lands within the same second; comparing size as well shrinks
+// that window to same-second same-size rewrites.
+fn is_write_conflict(
+    expected_mtime: Option<u64>,
+    expected_size_bytes: Option<u64>,
+    current: &SftpEntry,
+) -> bool {
+    if expected_mtime.is_some_and(|expected| expected != current.mtime) {
+        return true;
+    }
+    expected_size_bytes.is_some_and(|expected| expected != current.size_bytes)
+}
+
 fn is_session_closed_error(error: &str) -> bool {
     let normalized = error.to_ascii_lowercase();
     normalized.contains("session closed")
@@ -1918,6 +2040,42 @@ mod tests {
         assert!(sanitize_local_rel_path("src/main.rs").is_ok());
         assert!(sanitize_local_rel_path("../outside").is_err());
         assert!(sanitize_local_rel_path("/absolute").is_err());
+    }
+
+    #[test]
+    fn write_conflict_requires_matching_mtime_and_size() {
+        let entry = SftpEntry {
+            path: "/tmp/file.txt".to_string(),
+            name: "file.txt".to_string(),
+            kind: "file".to_string(),
+            size_bytes: 42,
+            mtime: 1_000_000,
+        };
+        assert!(!is_write_conflict(Some(1_000_000), Some(42), &entry));
+        assert!(is_write_conflict(Some(2_000_000), Some(42), &entry));
+        assert!(is_write_conflict(Some(1_000_000), Some(41), &entry));
+        assert!(is_write_conflict(Some(2_000_000), Some(41), &entry));
+        // Callers may pass only one of the two guards.
+        assert!(!is_write_conflict(Some(1_000_000), None, &entry));
+        assert!(is_write_conflict(None, Some(41), &entry));
+        assert!(!is_write_conflict(None, None, &entry));
+    }
+
+    #[test]
+    fn read_text_max_bytes_clamps_to_editor_limit() {
+        assert_eq!(
+            normalize_read_text_max_bytes(None),
+            SFTP_READ_TEXT_DEFAULT_BYTES
+        );
+        assert_eq!(
+            normalize_read_text_max_bytes(Some(usize::MAX)),
+            SFTP_READ_TEXT_MAX_BYTES
+        );
+        assert_eq!(
+            normalize_read_text_max_bytes(Some(3 * 1024 * 1024)),
+            3 * 1024 * 1024
+        );
+        assert_eq!(normalize_read_text_max_bytes(Some(1)), 4 * 1024);
     }
 
     #[cfg(unix)]

@@ -14,7 +14,7 @@ import {
   Wallet,
   Wrench,
   Zap,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";

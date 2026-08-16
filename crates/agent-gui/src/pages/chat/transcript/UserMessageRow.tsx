@@ -1,15 +1,17 @@
-import { memo } from "react";
-
-import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
+import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
+import {
+  type PendingUploadedFile,
+  splitUserAttachmentsForDisplay,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
 import {
   type CommitDetailsLoader,
   UserMessageContent,
-} from "../../../lib/chat/messages/userMessageContent";
-import { EditableUserMessageBubble } from "./EditableUserMessageBubble";
+} from "@liveagent/ui/lib/chat/userMessageContent";
+import { memo } from "react";
+import { loadComposerUploadedImagePreview } from "../../../agent-ui-adapters/composerImagePreview";
+import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { UserRowFooter } from "./RowActions";
 import type { UserRow } from "./rowModel";
-import { splitUserAttachmentsForDisplay } from "./transcriptUtils";
 import { UserAttachmentCards } from "./UserAttachmentCards";
 
 export type UserMessageRowProps = {
@@ -54,7 +56,9 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
         initialText={item.text}
         attachments={item.attachments}
         workspaceRoot={workspaceRoot}
-        compactedClass={compactedClass}
+        className={compactedClass}
+        preserveViewportScrollOnFocus
+        onLoadUploadedImagePreview={loadComposerUploadedImagePreview}
         onCancel={onCancelEdit}
         onSubmit={(newText, nextAttachments) => {
           onCancelEdit();

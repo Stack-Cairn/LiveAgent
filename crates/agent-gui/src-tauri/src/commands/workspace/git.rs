@@ -2913,7 +2913,8 @@ pub(crate) fn git_diff_sync(
         .iter()
         .map(|entry| entry.path.clone())
         .collect();
-    if mode == "working_tree" && !ref_exists(&state.repo_root, "HEAD") {
+    let has_head = ref_exists(&state.repo_root, "HEAD");
+    if mode == "working_tree" && !has_head {
         let mut patch = String::new();
         let mut binary_files = Vec::new();
         append_initial_worktree_file_patches(
@@ -2944,6 +2945,14 @@ pub(crate) fn git_diff_sync(
     ];
     if mode == "working_tree" {
         args.push("HEAD".to_string());
+    } else if mode == "staged" {
+        args.push("--cached".to_string());
+        base_ref = if has_head {
+            "HEAD".to_string()
+        } else {
+            "ROOT".to_string()
+        };
+        head_ref = "INDEX".to_string();
     } else {
         base_ref = resolve_review_base(&state);
         if base_ref.is_empty() {
@@ -4521,6 +4530,43 @@ mod tests {
     }
 
     #[test]
+    fn git_staged_diff_handles_unborn_head_repo() {
+        if Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("temp repo");
+        let workdir = temp.path().to_string_lossy().to_string();
+        let initialized =
+            git_init_sync(workdir.clone(), "main".to_string(), None, None).expect("init repo");
+        assert!(initialized.ok, "init failed: {}", initialized.message);
+
+        fs::write(temp.path().join("draft.txt"), "staged\n").expect("write staged draft");
+        let staged = git_stage_sync(workdir.clone(), "draft.txt".to_string()).expect("stage draft");
+        assert!(staged.ok, "stage failed: {}", staged.message);
+        fs::write(temp.path().join("draft.txt"), "staged\nunstaged\n")
+            .expect("write unstaged draft");
+
+        let diff = git_diff_sync(
+            workdir,
+            Some("staged".to_string()),
+            Some("draft.txt".to_string()),
+        )
+        .expect("staged diff in unborn repo");
+        assert_eq!(diff.base_ref, "ROOT");
+        assert_eq!(diff.head_ref, "INDEX");
+        assert!(
+            diff.patch.contains("+staged"),
+            "staged diff patch:\n{}",
+            diff.patch
+        );
+        assert!(
+            !diff.patch.contains("+unstaged"),
+            "staged diff included worktree-only content:\n{}",
+            diff.patch
+        );
+    }
+
+    #[test]
     fn git_branches_includes_unborn_current_branch() {
         if Command::new("git").arg("--version").output().is_err() {
             return;
@@ -4758,6 +4804,21 @@ mod tests {
             staged_work.message
         );
         assert_eq!(staged_work.state.dirty_counts.staged, 1);
+        fs::write(repo.path().join("work.txt"), "draft\nunstaged\n")
+            .expect("modify staged worktree file");
+        let staged_diff = git_diff_sync(
+            workdir.clone(),
+            Some("staged".to_string()),
+            Some("work.txt".to_string()),
+        )
+        .expect("staged diff");
+        assert_eq!(staged_diff.base_ref, "HEAD");
+        assert_eq!(staged_diff.head_ref, "INDEX");
+        assert!(
+            staged_diff.patch.contains("+draft") && !staged_diff.patch.contains("+unstaged"),
+            "staged diff patch:\n{}",
+            staged_diff.patch
+        );
 
         let unstaged_work = git_unstage_sync(workdir.clone(), "work.txt".to_string())
             .expect("unstage worktree file");

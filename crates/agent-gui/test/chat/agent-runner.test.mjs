@@ -282,6 +282,58 @@ const llmMock = {
   resolveProviderCacheRetention(_providerId, _enabled, override) {
     return override ?? "none";
   },
+  describeAnthropicCacheShape(providerId, baseUrl, cacheRetention) {
+    // 与真实实现同构的最小桩:只有 claude_code + 非 none 才谈得上断点策略,
+    // 官方域名走顶层自动断点,其余(代理)退回显式断点。
+    if (providerId !== "claude_code" || !cacheRetention || cacheRetention === "none") {
+      return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
+    }
+    const official = baseUrl.trim().toLowerCase().includes("api.anthropic.com");
+    return {
+      cacheRetention,
+      ttl: cacheRetention === "long" && official ? "1h" : "",
+      breakpointStrategy: official ? "anthropic-top-level" : "anthropic-explicit",
+    };
+  },
+  describeCodexCacheShape(providerId, baseUrl, configuredMode, modelApi, sessionId, cacheRetention) {
+    // 与真实实现同构的最小桩:codex 之外恒 none;codex 按「显式配置 → responses
+    // API → 官方域名」解析 hint 模式,sessionId 截断到 64 字符作 cacheKey。
+    if (providerId !== "codex" || cacheRetention === "none") {
+      return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
+    }
+    const mode =
+      configuredMode && configuredMode !== "auto"
+        ? configuredMode
+        : modelApi === "openai-responses" || baseUrl.toLowerCase().includes("api.openai.com")
+          ? "openai-key"
+          : "none";
+    return {
+      cacheRetention: cacheRetention ?? "",
+      breakpointStrategy: mode === "none" ? "none" : `codex-${mode}`,
+      cacheKey: mode === "openai-key" && sessionId ? String(sessionId).slice(0, 64) : "",
+    };
+  },
+  describeProviderCacheShape(params) {
+    // 与真实实现同构的最小桩:providers 层统一分发,codex 走 codex 描述,
+    // 其余走 anthropic 描述。runner 侧只面对这一个入口。
+    if (params.providerId === "codex") {
+      return llmMock.describeCodexCacheShape(
+        params.providerId,
+        params.baseUrl,
+        params.promptCacheHintMode,
+        params.modelApi === "openai-responses" || params.modelApi === "openai-completions"
+          ? params.modelApi
+          : undefined,
+        params.sessionId,
+        params.cacheRetention,
+      );
+    }
+    return llmMock.describeAnthropicCacheShape(
+      params.providerId,
+      params.baseUrl,
+      params.cacheRetention,
+    );
+  },
   toSimpleStreamReasoning(value) {
     return value && value !== "off" ? value : undefined;
   },
@@ -1067,6 +1119,117 @@ test("runAssistantWithTools applies turn context overrides without duplicating c
   );
 });
 
+test("runAssistantWithTools delivers wireTailText only on the wire, never into agent state", async () => {
+  const firstToolCall = createToolCall("call-read-1", "Read", { path: "a.ts" });
+  const secondToolCall = createToolCall("call-read-2", "Read", { path: "b.ts" });
+  resetFakeStreams(
+    createToolUseAssistant(firstToolCall),
+    createToolUseAssistant(secondToolCall),
+    createTextAssistant("all done"),
+  );
+  const tailTexts = ["BUS DELTA ROUND 1", "BUS DELTA ROUND 2"];
+  let round = 0;
+  const { params } = createBaseParams({
+    onBeforeNextTurn: async (snapshot) => {
+      round += 1;
+      return {
+        context: snapshot.runtimeContext,
+        emittedMessages: snapshot.emittedMessages,
+        wireTailText: tailTexts[round - 1],
+      };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(observedStreamContexts.length, 3);
+  // 第 1 次请求在任何 override 之前，不含尾部文本。
+  assert.equal(JSON.stringify(observedStreamContexts[0].messages).includes("BUS DELTA"), false);
+
+  // 第 2 次请求：尾部文本挂在最后一个工具结果上，且只存在于出站请求。
+  const secondWire = observedStreamContexts[1].messages;
+  const secondTail = secondWire[secondWire.length - 1];
+  assert.equal(secondTail.role, "toolResult");
+  assert.deepEqual(
+    secondTail.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 1"],
+  );
+
+  // 第 3 次请求：累积重挂——每轮的块留在它首次挂上的那条消息上，不随工具循环
+  // 推进搬到新消息上。搬家会让上一轮挂过块的消息字节变回去，前缀从它开始整段作废。
+  const thirdWire = observedStreamContexts[2].messages;
+  const thirdTail = thirdWire[thirdWire.length - 1];
+  assert.equal(thirdTail.role, "toolResult");
+  assert.equal(thirdTail.toolCallId, "call-read-2");
+  assert.deepEqual(
+    thirdTail.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 2"],
+    "第 2 轮的块钉在第 2 轮的工具结果上",
+  );
+
+  const thirdFirstAnchor = thirdWire.find(
+    (message) => message.role === "toolResult" && message.toolCallId === "call-read-1",
+  );
+  assert.deepEqual(
+    thirdFirstAnchor.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 1"],
+    "第 1 轮的块必须留在原锚点上",
+  );
+
+  // 该锚点消息在第 2、3 次请求之间必须逐字节稳定——这正是钉死锚点要保住的东西。
+  const secondFirstAnchor = secondWire.find(
+    (message) => message.role === "toolResult" && message.toolCallId === "call-read-1",
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(thirdFirstAnchor)),
+    JSON.parse(JSON.stringify(secondFirstAnchor)),
+    "已挂过块的锚点消息不得在后续轮次变化",
+  );
+
+  // agent 状态与产出（持久化 / UI / 记忆抽取的输入）不得含尾部文本。
+  assert.equal(JSON.stringify(result.messages).includes("BUS DELTA"), false);
+  assert.equal(JSON.stringify(result.emittedMessages).includes("BUS DELTA"), false);
+});
+
+test("runAssistantWithTools clears accumulated wireTailText when an override omits it", async () => {
+  const firstToolCall = createToolCall("call-read-1", "Read", { path: "a.ts" });
+  const secondToolCall = createToolCall("call-read-2", "Read", { path: "b.ts" });
+  resetFakeStreams(
+    createToolUseAssistant(firstToolCall),
+    createToolUseAssistant(secondToolCall),
+    createTextAssistant("all done"),
+  );
+  let round = 0;
+  const { params } = createBaseParams({
+    onBeforeNextTurn: async (snapshot) => {
+      round += 1;
+      if (round === 1) {
+        return {
+          context: snapshot.runtimeContext,
+          emittedMessages: snapshot.emittedMessages,
+          wireTailText: "STALE TAIL",
+        };
+      }
+      // 压缩/重冻结分支不带 wireTailText：旧尾部内容已并入重算后的快照，
+      // runner 必须清空累积，否则会重复投递。
+      return {
+        context: snapshot.runtimeContext,
+        emittedMessages: snapshot.emittedMessages,
+      };
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(observedStreamContexts.length, 3);
+  assert.equal(JSON.stringify(observedStreamContexts[1].messages).includes("STALE TAIL"), true);
+  assert.equal(
+    JSON.stringify(observedStreamContexts[2].messages).includes("STALE TAIL"),
+    false,
+    "不带 wireTailText 的 override 之后，累积的尾部文本不得再出现在出站请求里",
+  );
+});
+
 test("runAssistantWithTools preserves seed tool-call recovery as a next-turn path", async () => {
   resetFakeStreams(
     createTextAssistant(`Before
@@ -1104,7 +1267,7 @@ After`),
   );
 });
 
-test("runAssistantWithTools recovers flattened DeepSeek tool request text as a next-turn path", async () => {
+test("runAssistantWithTools does not infer tool calls from DeepSeek-labeled flattened text", async () => {
   resetFakeStreams(
     createTextAssistant(
       `Checking before execution.
@@ -1133,25 +1296,20 @@ This text should not be shown as a raw tool request.`,
 
   const result = await runAssistantWithTools(params);
 
-  assert.equal(executedToolCalls.length, 1);
-  assert.equal(executedToolCalls[0].id, "call_00_flattened_read");
-  assert.equal(executedToolCalls[0].name, "Read");
-  assert.deepEqual(executedToolCalls[0].arguments, { path: "src/App.tsx" });
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].assistant.stopReason, "toolUse");
-  assert.equal(beforeNextTurnSnapshots[0].toolResults.length, 1);
-  const recoveredAssistantText = result.emittedMessages[0].content
+  assert.equal(executedToolCalls.length, 0);
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  const assistantText = result.emittedMessages[0].content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("tool_call_id"), false);
+  assert.equal(assistantText.includes("tool_call_id"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools strips repeated historical tool call text without duplicate execution", async () => {
+test("runAssistantWithTools preserves flattened text while executing only the structured call", async () => {
   const grepCall = createToolCall("call_00_native_grep", "Grep", {
     pattern: "express",
     file_pattern: "**/*.js",
@@ -1206,14 +1364,25 @@ arguments: {"pattern": "express", "file_pattern": "**/*.js", "ignore_case": true
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("Historical tool call"), false);
+  assert.equal(recoveredAssistantText.includes("Historical tool call"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
   );
+
+  // DeepSeek 元数据不再触发文本重写；下一轮只依赖已经存在的结构化工具调用。
+  const followUpAssistant = observedStreamContexts
+    .at(-1)
+    .messages.find((message) => message.role === "assistant");
+  assert.ok(followUpAssistant);
+  const followUpText = followUpAssistant.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(followUpText.includes("Historical tool call"), true);
 });
 
-test("runAssistantWithTools dedupes recovered lowercase tool text against canonical structured calls", async () => {
+test("runAssistantWithTools executes a canonical structured call once despite matching prose", async () => {
   const writeCall = createToolCall("call_00_native_write", "Write", {
     path: "report.html",
     content: "<html></html>",
@@ -1581,8 +1750,8 @@ test("runAssistantWithTools rewrites schema-validation errors for truncated call
 });
 
 test("runAssistantWithTools refuses a tool call salvaged without a toolcall_end", async () => {
-  // Simulates the DSML wrapper's recoverable-stream-end salvage: the done
-  // message carries a toolCall block whose argument stream never finished.
+  // Simulates a transport that emits a final toolCall block even though its
+  // argument stream never produced toolcall_end.
   const danglingWriteCall = createToolCall("call_00_dangling_write", "Write", {
     path: "/",
     content: "",
@@ -1619,7 +1788,7 @@ test("runAssistantWithTools refuses a tool call salvaged without a toolcall_end"
   assert.match(toolResults[0].toolResult.content[0].text, /truncated in transit/);
 });
 
-test("runAssistantWithTools strips bare tool_name text without duplicate execution", async () => {
+test("runAssistantWithTools preserves bare tool_name text without duplicate execution", async () => {
   const grepCall = createToolCall("call_00_native_route_grep", "Grep", {
     pattern: "express|route|api",
     file_pattern: "*.js",
@@ -1672,15 +1841,15 @@ arguments:
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("tool_name: Grep"), false);
-  assert.equal(recoveredAssistantText.includes("arguments:"), false);
+  assert.equal(recoveredAssistantText.includes("tool_name: Grep"), true);
+  assert.equal(recoveredAssistantText.includes("arguments:"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
   );
 });
 
-test("runAssistantWithTools strips malformed historical tool text without guessing execution", async () => {
+test("runAssistantWithTools preserves malformed historical tool text without guessing execution", async () => {
   const bashCall = createToolCall("call_01_native_bash", "Bash", {
     command: "ls -la tool-test/",
     cwd: ".",
@@ -1730,8 +1899,8 @@ arguments:
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("Historical assistant tool request"), false);
-  assert.equal(recoveredAssistantText.includes("tool_name: Bash"), false);
+  assert.equal(recoveredAssistantText.includes("Historical assistant tool request"), true);
+  assert.equal(recoveredAssistantText.includes("tool_name: Bash"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
@@ -1798,20 +1967,20 @@ arguments:
   );
 });
 
-test("runAssistantWithTools recovers DSML text tool calls as a next-turn path", async () => {
+test("runAssistantWithTools preserves DSML text without recovering a tool call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Before
+  const assistantText = `Before
 <${dsml}tool_calls>
   <${dsml}invoke name="Read">
     <${dsml}parameter name="path" string="true">src/App.tsx</${dsml}parameter>
   </${dsml}invoke>
 </${dsml}tool_calls>
-After`),
-    createTextAssistant("after recovered DSML tool"),
-  );
+After`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
+  const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
+    ...toolEvents.handlers,
     onBeforeNextTurn: async (snapshot) => {
       beforeNextTurnSnapshots.push(snapshot);
       return null;
@@ -1820,34 +1989,30 @@ After`),
 
   const result = await runAssistantWithTools(params);
 
-  assert.equal(executedToolCalls.length, 1);
-  assert.equal(executedToolCalls[0].name, "Read");
-  assert.deepEqual(executedToolCalls[0].arguments, { path: "src/App.tsx" });
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].assistant.stopReason, "toolUse");
-  assert.equal(beforeNextTurnSnapshots[0].toolResults.length, 1);
-  const recoveredAssistantText = result.emittedMessages[0].content
+  assert.equal(executedToolCalls.length, 0);
+  toolEvents.assertSilent();
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("DSML"), false);
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools bridges recovered DSML provider web_search without a local executor", async () => {
+test("runAssistantWithTools does not bridge a DSML text web_search call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Searching again
+  const assistantText = `Searching again
 <${dsml}tool_calls>
   <${dsml}invoke name="web_search">
     <${dsml}parameter name="query" string="true">Deno Deploy alternatives temporary domain</${dsml}parameter>
   </${dsml}invoke>
-</${dsml}tool_calls>`),
-    createTextAssistant("final answer"),
-  );
+</${dsml}tool_calls>`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
@@ -1864,19 +2029,20 @@ test("runAssistantWithTools bridges recovered DSML provider web_search without a
   assert.equal(executedToolCalls.length, 0);
   assert.equal(observedStreamContexts[0].tools.some((tool) => tool.name === "web_search"), false);
   toolEvents.assertSilent();
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].toolResults[0].isError, false);
-  assert.match(
-    beforeNextTurnSnapshots[0].toolResults[0].content[0].text,
-    /provider-native web search request/,
-  );
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools silently bridges structured DSML web_search tool calls", async () => {
+test("runAssistantWithTools silently bridges structured compatible web_search tool calls", async () => {
   const webSearchCall = createToolCall("dsml-tool-call-structured-search", "web_search", {
     query: "LiveAgent DeepSeek structured DSML search",
   });
@@ -1887,7 +2053,7 @@ test("runAssistantWithTools silently bridges structured DSML web_search tool cal
       {
         api: "anthropic-messages",
         provider: "anthropic",
-        model: "deepseek-chat",
+        model: "claude-compatible-model",
       },
     ),
     createTextAssistant("final answer"),
@@ -1896,9 +2062,9 @@ test("runAssistantWithTools silently bridges structured DSML web_search tool cal
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
     providerId: "claude_code",
-    model: "deepseek-chat",
+    model: "claude-compatible-model",
     runtime: {
-      baseUrl: "https://api.deepseek.com/anthropic",
+      baseUrl: "https://relay.example.test/anthropic",
       apiKey: "test-key",
       requestFormat: "anthropic-messages",
       nativeWebSearchEnabled: true,
@@ -2191,7 +2357,7 @@ test("runAssistantWithTools silently bridges leaked provider-native web_fetch to
   );
 });
 
-test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls for DeepSeek", async () => {
+test("runAssistantWithTools silently bridges compatible Claude Code WebSearch tool calls", async () => {
   const webSearchCall = createToolCall("call_00_X84be89XQazCll4eRQVm9797", "WebSearch", {
     query: "weibo-like-someone github",
   });
@@ -2202,7 +2368,7 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
       {
         api: "anthropic-messages",
         provider: "anthropic",
-        model: "deepseek-v4-flash",
+        model: "claude-compatible-model",
       },
     ),
     createTextAssistant("final answer"),
@@ -2210,9 +2376,9 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
     providerId: "claude_code",
-    model: "deepseek-v4-flash",
+    model: "claude-compatible-model",
     runtime: {
-      baseUrl: "https://api.deepseek.com/anthropic",
+      baseUrl: "https://relay.example.test/anthropic",
       apiKey: "test-key",
       requestFormat: "anthropic-messages",
       nativeWebSearchEnabled: true,
@@ -2248,17 +2414,15 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
   );
 });
 
-test("runAssistantWithTools bridges recovered DSML builtin_web_search additionalContext", async () => {
+test("runAssistantWithTools does not bridge a DSML text builtin_web_search call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Searching
+  const assistantText = `Searching
 <${dsml}tool_calls>
   <${dsml}invoke name="builtin_web_search">
     <${dsml}parameter name="additionalContext" string="true">DeepSeek Anthropic DSML web search</${dsml}parameter>
   </${dsml}invoke>
-</${dsml}tool_calls>`),
-    createTextAssistant("final answer"),
-  );
+</${dsml}tool_calls>`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
@@ -2274,14 +2438,16 @@ test("runAssistantWithTools bridges recovered DSML builtin_web_search additional
 
   assert.equal(executedToolCalls.length, 0);
   toolEvents.assertSilent();
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.match(
-    beforeNextTurnSnapshots[0].toolResults[0].content[0].text,
-    /Requested query: DeepSeek Anthropic DSML web search/,
-  );
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
@@ -2334,4 +2500,55 @@ test("runAssistantWithTools ignores malformed toolUse turns that have no tool re
 
   assert.equal(beforeNextTurnCalls, 0);
   assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错不污染基线", async () => {
+  // 三次 runner 调用模拟主会话与子代理交错:A → B(system 不同)→ A(与首轮
+  // 完全一致)。旧实现的 runner 局部变量在第二次 A 调用时只能报 initial(跨
+  // 调用不存续);若改成全局单槽则会拿 B 的快照比出 system 变更。按 sessionId
+  // 键控后,A 的第二轮必须是 unchanged。
+  const prefixCaptures = [];
+  const createCapturingLogger = () => ({
+    enabled: true,
+    logRequest(payload) {
+      prefixCaptures.push(payload.prefixCache);
+    },
+    logResponse() {},
+    logResult() {},
+    logError() {},
+    async flush() {},
+  });
+
+  const runTurn = async (sessionId, systemPrompt) => {
+    resetFakeStreams(createTextAssistant("done"));
+    const { params } = createBaseParams({
+      sessionId,
+      debugLogger: createCapturingLogger(),
+      context: {
+        systemPrompt,
+        messages: [{ role: "user", content: "Start", timestamp: 1 }],
+        tools: [
+          {
+            name: "Read",
+            description: "Read a file",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      },
+    });
+    await runAssistantWithTools(params);
+  };
+
+  await runTurn("interleave-session-a", "Prompt for session A");
+  await runTurn("interleave-session-b", "Prompt for session B");
+  await runTurn("interleave-session-a", "Prompt for session A");
+
+  assert.equal(prefixCaptures.length, 3);
+  assert.equal(prefixCaptures[0].prefixChangeSummary, "initial");
+  // B 是自己的首轮,不得拿 A 的快照比出 system 变更。
+  assert.equal(prefixCaptures[1].prefixChangeSummary, "initial");
+  // A 的第二轮与首轮字节一致:基线跨 runner 调用存续,且未被 B 污染。
+  assert.equal(prefixCaptures[2].prefixChangeSummary, "unchanged");
+  assert.equal(prefixCaptures[2].prefixChanged, false);
+  assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });

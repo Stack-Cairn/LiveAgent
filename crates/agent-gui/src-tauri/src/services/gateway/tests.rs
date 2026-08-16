@@ -3,11 +3,11 @@ use super::{
     effective_agent_id, gateway_connection_needs_restart, gateway_connection_stale_after,
     gateway_reconnect_backoff, history_share_resolve_error_code, is_chat_runtime_wake_request_id,
     merge_settings_sync_snapshot, merge_settings_update_into_snapshot, proto,
-    required_terminal_project_path_key, set_disconnected_status, GatewayChatRequestEvent,
-    GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord, GATEWAY_CHAT_LEASE_MS,
-    GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_RECONNECT_MAX, GATEWAY_RECONNECT_MIN,
-    GATEWAY_RECONNECT_STABLE_AFTER, GATEWAY_RUNTIME_STATUS_REPUBLISH_MAX_AGE,
-    GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW,
+    removed_workspace_project_ids, required_terminal_project_path_key, set_disconnected_status,
+    GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
+    GATEWAY_CHAT_LEASE_MS, GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_RECONNECT_MAX,
+    GATEWAY_RECONNECT_MIN, GATEWAY_RECONNECT_STABLE_AFTER,
+    GATEWAY_RUNTIME_STATUS_REPUBLISH_MAX_AGE, GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW,
 };
 use crate::commands::settings::RemoteSettingsPayload;
 use crate::services::gateway_bridge;
@@ -413,6 +413,55 @@ fn merge_settings_update_into_snapshot_keeps_unrelated_fields() {
     assert_eq!(merged["system"], json!({ "executionMode": "agent-dev" }));
     // Remote settings are desktop-owned and must not be overwritten by clients.
     assert_eq!(merged["remote"], json!({ "enableWebTerminal": true }));
+}
+
+#[test]
+fn settings_update_reports_removed_workspace_project_ids() {
+    let current = json!({
+        "system": {
+            "workspaceProjects": [
+                { "id": "default-project", "path": "/default" },
+                { "id": "project-b", "path": "/b" },
+                { "id": "project-a", "path": "/a" }
+            ]
+        }
+    });
+    let update = json!({
+        "system": {
+            "workspaceProjects": [
+                { "id": "default-project", "path": "/default" },
+                { "id": "project-b", "path": "/b" }
+            ]
+        }
+    });
+
+    assert_eq!(
+        removed_workspace_project_ids(&current, &update).expect("removed ids"),
+        vec!["project-a"]
+    );
+    assert!(
+        removed_workspace_project_ids(&current, &json!({ "theme": "dark" }))
+            .expect("unrelated update")
+            .is_empty()
+    );
+}
+
+#[test]
+fn settings_update_rejects_malformed_workspace_project_ids() {
+    let current = json!({
+        "system": {
+            "workspaceProjects": [{ "id": "project-a", "path": "/a" }]
+        }
+    });
+    let malformed = json!({
+        "system": {
+            "workspaceProjects": [{ "path": "/a" }]
+        }
+    });
+
+    let error = removed_workspace_project_ids(&current, &malformed)
+        .expect_err("missing ids must not trigger accidental revocation");
+    assert!(error.contains("non-empty id"), "{error}");
 }
 
 #[test]

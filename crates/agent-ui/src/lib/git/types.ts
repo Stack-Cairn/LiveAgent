@@ -213,7 +213,11 @@ export type GitClient = {
   init(workdir: string, options?: GitInitOptions): Promise<GitOperationResponse>;
   switchBranch(workdir: string, branch: string, kind?: string): Promise<GitOperationResponse>;
   createBranch(workdir: string, branch: string, startPoint?: string): Promise<GitOperationResponse>;
-  diff(workdir: string, mode: "branch" | "working_tree", path?: string): Promise<GitDiffResponse>;
+  diff(
+    workdir: string,
+    mode: "branch" | "working_tree" | "staged",
+    path?: string,
+  ): Promise<GitDiffResponse>;
   log(workdir: string, options?: GitLogOptions): Promise<GitLogResponse>;
   commitDetails(workdir: string, commit: string): Promise<GitCommitDetailsResponse>;
   compareCommitWithRemote(workdir: string, commit: string): Promise<GitDiffResponse>;
@@ -233,10 +237,7 @@ export type GitClient = {
   push(workdir: string): Promise<GitOperationResponse>;
   deleteBranch(workdir: string, branch: string, force?: boolean): Promise<GitOperationResponse>;
   renameBranch(workdir: string, branch: string, newBranch: string): Promise<GitOperationResponse>;
-  createWorktree?(
-    workdir: string,
-    options: GitCreateWorktreeOptions,
-  ): Promise<GitWorktreeResponse>;
+  createWorktree?(workdir: string, options: GitCreateWorktreeOptions): Promise<GitWorktreeResponse>;
   removeWorktree?(
     workdir: string,
     worktreePath: string,

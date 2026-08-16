@@ -5,7 +5,7 @@ export {
   fromFontFamilySelectValue,
   listLocalFontFamilies,
   toFontFamilySelectValue,
-} from "../lib/fontFamily";
+} from "@liveagent/ui/lib/shared/fontFamily";
 
 export function SystemSettingsExtensions(_props: SettingsSectionProps) {
   return null;

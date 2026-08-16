@@ -10,6 +10,24 @@ const chatHelpers = loader.loadModule("@/lib/chat/chatPageHelpers.ts");
 const adminApi = loader.loadModule("@/lib/adminApi.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
+async function withNavigator(value, task) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    enumerable: true,
+    value,
+  });
+  try {
+    return await task();
+  } finally {
+    if (previous) {
+      Object.defineProperty(globalThis, "navigator", previous);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
 test("web settings normalize and preserve workspace project groups", () => {
   const normalized = settings.normalizeSettings({
     system: {
@@ -231,6 +249,21 @@ test("getWebDefaultSettings enables remote settings from the gateway token", () 
   assert.equal(settings.remote.token, "token");
 });
 
+test("web settings initialize from browser language and normalize invalid saved locales", async () => {
+  await withNavigator({ languages: [], language: "en-GB" }, () => {
+    const storage = installWindow("https://gateway.example");
+
+    assert.equal(webSettings.getWebDefaultSettings("token").locale, "en-US");
+    assert.equal(webSettings.loadWebSettings("token").locale, "en-US");
+
+    storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: null }));
+    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+
+    storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: "fr-FR" }));
+    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+  });
+});
+
 test("web settings preserve normalized MCP additional information", () => {
   const normalized = settings.normalizeMcpSettings({
     servers: [
@@ -360,6 +393,7 @@ test("web settings normalization canonicalizes project keyed maps with Windows p
         openedAt: 2,
       },
     },
+    backgroundTasks: { opened: false, dismissedIds: [] },
     openVersion: 0,
     stateVersion: 0,
     writerId: "",
@@ -381,6 +415,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 
@@ -423,9 +458,8 @@ test("web chat runtime controls default and follow model-aware reasoning support
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // 中转挂载的国产厂商模型走跨供应商回查命中真实形态：glm-4.7 纯 toggle
-  //（单 "high" 档），deepseek-reasoner 恒开不可调（无档位），deepseek-chat
-  // 非思考模型（思考控件整组隐藏）。
+  // 中转挂载的国产厂商模型走跨供应商回查命中真实形态；DeepSeek 正式供应商
+  // 直接读取自己的目录。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -436,15 +470,15 @@ test("web chat runtime controls default and follow model-aware reasoning support
   );
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "claude_code",
+      providerId: "deepseek",
       modelId: "deepseek-reasoner",
     }),
     [],
   );
-  assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "deepseek-reasoner"), true);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "codex",
+      providerId: "deepseek",
       modelId: "deepseek-chat",
     }),
     [],
@@ -517,6 +551,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_completions: "xhigh",
         gemini: "high",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -544,6 +579,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -564,6 +600,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
+        deepseek: "high",
       },
     },
   );

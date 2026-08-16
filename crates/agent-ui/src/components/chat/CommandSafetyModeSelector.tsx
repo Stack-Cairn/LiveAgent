@@ -1,6 +1,6 @@
 import { inferSandboxPlatform, useSandboxCapability } from "@liveagent/adapters/sandboxCapability";
-import { Hand, Shield, ShieldOff, Zap } from "@liveagent/app/components/icons";
 import type { CommandSafetyMode } from "@liveagent/app/lib/settings";
+import { Hand, Shield, ShieldOff, Zap } from "@liveagent/ui/components/IconSet";
 import {
   Select,
   SelectContent,

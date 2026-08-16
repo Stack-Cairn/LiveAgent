@@ -1,4 +1,20 @@
 import {
+  type ChatRuntimeControls,
+  type CommandSafetyMode,
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
+  type ReasoningLevel,
+} from "@liveagent/app/lib/settings";
+import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
+import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
+import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
+import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import {
+  MentionComposer,
+  type MentionComposerHandle,
+  type MentionComposerSkill,
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { GitBranchSelector } from "@liveagent/ui/components/git/GitBranchSelector";
+import {
   ChevronDown,
   ChevronUp,
   Clock3,
@@ -16,23 +32,7 @@ import {
   Square,
   SquarePen,
   Trash2,
-} from "@liveagent/app/components/icons";
-import {
-  type ChatRuntimeControls,
-  type CommandSafetyMode,
-  DEFAULT_CHAT_RUNTIME_CONTROLS,
-  type ReasoningLevel,
-} from "@liveagent/app/lib/settings";
-import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
-import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
-import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
-import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
-import {
-  MentionComposer,
-  type MentionComposerHandle,
-  type MentionComposerSkill,
-} from "@liveagent/ui/components/chat/MentionComposer";
-import { GitBranchSelector } from "@liveagent/ui/components/git/GitBranchSelector";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import {

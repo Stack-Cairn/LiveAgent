@@ -1,9 +1,9 @@
-import { Plug, Plus, Server } from "@liveagent/app/components/icons";
 import {
   type AppSettings,
   type McpServerConfig,
   updateSystem,
 } from "@liveagent/app/lib/settings/index";
+import { Plug, Plus, Server } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";

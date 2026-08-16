@@ -7,9 +7,9 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const uiMessagesLoader = createWebModuleLoader({ rootDir });
 const uiMessages = uiMessagesLoader.loadModule("src/lib/chat/uiMessages.ts");
-const toolPreview = uiMessagesLoader.loadModule("src/lib/chat/toolPreview.ts");
-const fileChangeStats = uiMessagesLoader.loadModule("src/lib/chat/fileChangeStats.ts");
-const hostedSearch = uiMessagesLoader.loadModule("src/lib/chat/hostedSearch.ts");
+const toolPreview = uiMessagesLoader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
+const fileChangeStats = uiMessagesLoader.loadModule("@liveagent/ui/lib/chat/fileChangeStats.ts");
+const hostedSearch = uiMessagesLoader.loadModule("@liveagent/ui/lib/chat/hostedSearch.ts");
 const uploadedImagePreview = uiMessagesLoader.loadModule(
   "@liveagent/ui/lib/chat/uploadedImagePreview.ts",
 );

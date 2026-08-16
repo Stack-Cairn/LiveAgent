@@ -14,7 +14,7 @@ const { createEntranceRegistry, ENTRANCE_ANIMATION_WINDOW_MS } = loader.loadModu
 const { extractRenderUnitRange } = loader.loadModule(
   "src/pages/chat/transcript/renderUnitRangeExtractor.ts",
 );
-const { collectChangedFiles } = loader.loadModule("src/lib/chat/messages/changedFiles.ts");
+const { collectChangedFiles } = loader.loadModule("@liveagent/ui/lib/chat/changedFiles.ts");
 const transcriptListSource = fs.readFileSync(
   new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url),
   "utf8",
@@ -117,8 +117,11 @@ test("persist lag: block-unit aliases still land one build later", () => {
   assert.equal(blockRows(waitingForHistory)[0].key, liveBlockKey);
   assert.equal(waitingForHistory.rows.at(-1).kind, "assistant-activity");
   assert.equal(waitingForHistory.rows.at(-1).live, false);
-  assert.equal(waitingForHistory.rows.at(-1).units.at(-1).unit.kind, "status");
-  assert.equal("active" in waitingForHistory.rows.at(-1).units.at(-1).unit, false);
+  assert.deepEqual(
+    waitingForHistory.rows.at(-1).units.map((unit) => unit.unit.kind),
+    ["block"],
+    "the settling activity must not retain an empty status row",
+  );
   const settled = model.build(
     [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])],
     idleLive,
@@ -704,4 +707,3 @@ test("a Task-only run's twin (all blocks filtered) is adopted by the live turn (
   assert.equal(settledActivity.replyKey, liveTurnKey);
   assert.ok(settledActivity.units.every((unit) => unit.renderMode === "streaming"));
 });
-

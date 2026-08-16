@@ -48,6 +48,32 @@ export function resolveConversationTitleModelSelection(
   };
 }
 
+// Commit-message generation model for the Git review dock. Returns null when
+// the setting is unset or points at a provider/model that is no longer active,
+// so the caller falls back to the current conversation model.
+export function resolveCommitMessageModelSelection(
+  settings: AppSettings,
+): EffectiveChatModelSelection | null {
+  const commitModel = settings.customSettings.commitMessageModel;
+  if (!commitModel) {
+    return null;
+  }
+
+  const provider = settings.customProviders.find(
+    (item) => item.id === commitModel.customProviderId,
+  );
+  if (!provider || !provider.activeModels.includes(commitModel.model)) {
+    return null;
+  }
+
+  return {
+    selectedModel: commitModel,
+    provider,
+    providerId: provider.type,
+    model: commitModel.model,
+  };
+}
+
 export function selectedModelsMatch(
   left: SelectedModel | undefined,
   right: SelectedModel | undefined,

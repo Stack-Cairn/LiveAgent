@@ -1,4 +1,4 @@
-import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentContext, type AgentTool } from "@earendil-works/pi-agent-core";
 import type {
   AssistantMessage,
   Context,
@@ -7,9 +7,16 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import {
+  appendHostedSearchBlocksToAssistant,
+  type HostedSearchBlock,
+  type HostedSearchOrderedBlock,
+  mergeHostedSearchBlocks,
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import type { PreparedProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
-import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
+import { capturePrefixShape, comparePrefixShape } from "../../debug/prefixCacheShape";
+import { readPreviousPrefixShape, recordPrefixShape } from "../../debug/prefixShapeStore";
 import {
   createHostedSearchEventAggregator,
   createHostedSearchProbeId,
@@ -20,6 +27,7 @@ import {
   buildProviderRequestMetadata,
   createModelFromConfig,
   createStreamingTextReconciler,
+  describeProviderCacheShape,
   finalizeProviderStreamOptions,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
@@ -44,30 +52,31 @@ import {
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
-import {
-  inferRuntimePlatform,
-  normalizeRuntimePlatform,
-  type RuntimePlatform,
-  runtimePlatformLabel,
-} from "../../runtimePlatform";
+import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
-import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
+import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
 import {
-  appendHostedSearchBlocksToAssistant,
-  type HostedSearchBlock,
-  type HostedSearchOrderedBlock,
-  mergeHostedSearchBlocks,
-} from "../messages/hostedSearch";
+  attachPinnedTailBlocks,
+  type PinnedTailBlock,
+  resolveTailBlockAnchorId,
+} from "../context/contextTailBlock";
+import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
   createDeferredProviderNativeWebSearchStatus,
   resolveProviderNativeWebSearchStatus,
 } from "../search/providerNativeSearchStatus";
-import { comparableToolCall } from "./flattenedToolCallText";
-import { recoverAssistantSeedToolCalls, stripSeedToolCallMarkup } from "./seedToolCalls";
+import {
+  comparableToolCall,
+  recoverAssistantSeedToolCalls,
+  stripSeedToolCallMarkup,
+} from "./seedToolCalls";
 import { wrapStreamWithToolCallArgumentGuard } from "./toolCallArgumentGuard";
+import { buildToolsSuffix } from "./toolExecutionPrompt";
+
+export { buildToolsSuffix } from "./toolExecutionPrompt";
 
 function throwIfRunnerCancelled(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -136,276 +145,6 @@ async function runWithConcurrency<T, R>(
   const runners = new Array(Math.min(limit, n)).fill(0).map(() => runLoop());
   await Promise.all(runners);
   return results;
-}
-
-export function buildToolsSuffix(
-  workdir: string,
-  availableToolNames?: readonly string[],
-  runtimePlatformInput?: RuntimePlatform,
-) {
-  const runtimePlatform = normalizeRuntimePlatform(runtimePlatformInput) ?? inferRuntimePlatform();
-  const platformLabel = runtimePlatformLabel(runtimePlatform);
-  const allowAll = availableToolNames === undefined;
-  const toolNames = new Set(availableToolNames ?? []);
-  const has = (name: string) => allowAll || toolNames.has(name);
-  const hasAny = (...names: string[]) => names.some(has);
-  const hasDynamicMcp =
-    allowAll || (availableToolNames ?? []).some((name) => name.startsWith("mcp_"));
-
-  const fileTools = ["Read", "Image", "Write", "Edit", "Delete", "List", "Grep", "Glob"].filter(
-    has,
-  );
-  const hasFileTool = fileTools.length > 0;
-  const hasReadFamily = hasAny("Read", "List", "Grep", "Glob");
-  const canWrite = hasAny("Write", "Edit", "Delete");
-
-  const toolGroups: string[] = [];
-  if (fileTools.length > 0) toolGroups.push(`file tools (${fileTools.join(" / ")})`);
-  if (has("SkillsManager")) toolGroups.push("skill tools (SkillsManager)");
-  if (has("MemoryManager")) toolGroups.push("persistent memory (MemoryManager)");
-  if (has("McpManager")) toolGroups.push("MCP configuration management (McpManager)");
-  if (has("CronTaskManager")) toolGroups.push("scheduled task management (CronTaskManager)");
-  if (has("Agent")) toolGroups.push("subagent delegation (Agent)");
-  if (has("SendMessage")) toolGroups.push("subagent message bus (SendMessage)");
-  if (has("Bash")) toolGroups.push("the command tool (Bash)");
-  if (has("ManagedProcess")) toolGroups.push("managed local processes (ManagedProcess)");
-  if (hasAny("TaskCreate", "TaskUpdate", "TaskList")) {
-    toolGroups.push("durable task planning (TaskCreate / TaskUpdate / TaskList)");
-  }
-  if (hasDynamicMcp) toolGroups.push("MCP business tools whose names are prefixed with mcp_");
-
-  const sections: string[] = [];
-
-  sections.push(
-    [
-      "# Tool-Execution Mode",
-      "",
-      "In this mode you have access to the tools listed under **Available Tools** at the end of this section. Invoke them when the task requires reading, searching, modifying, or coordinating state (files, commands, agents, MCP services). For pure Q&A, explanation, or analysis that does not depend on current state, answer directly without invoking tools.",
-      "",
-      "## Final Reply",
-      "- Your reply to the user is plain text plus Markdown.",
-      "- Never include raw tool-call JSON or raw tool arguments in your reply — describe what you did in plain words instead.",
-    ].join("\n"),
-  );
-
-  if (hasFileTool || hasAny("Bash", "ManagedProcess", "SSHManager", "McpManager", "Agent")) {
-    sections.push(
-      [
-        "## Workspace & Paths",
-        `- Workspace root (sandbox): \`${workdir}\``,
-        "- Preferred form: workspace-relative paths exactly as tools return them, e.g. `src/App.tsx`. To target the root itself, omit the optional `path` / `cwd` argument.",
-        "- Files inside an enabled Skill: use `skill://<skill>/...` exactly as returned by SkillsManager or file tools.",
-        "- Absolute paths, `~/...`, and `file://` URLs are also accepted and auto-normalized; never construct one when a returned path is available.",
-        "- Write, Edit, and Delete operate only inside the workspace or enabled Skills. Bash `cwd` may point outside the workspace when the task requires it.",
-        "- Use `/` as the separator everywhere, including Glob and Grep patterns; Windows `\\` is auto-normalized.",
-        '- On a path error, follow its guidance: reuse a "Did you mean" candidate verbatim, or locate the file with Glob/Grep first, then retry with the returned path.',
-      ].join("\n"),
-    );
-  }
-
-  if (hasFileTool) {
-    const lines: string[] = ["## File Operations"];
-    if (hasReadFamily) {
-      lines.push(
-        "- When the target path is already known, go straight to Read. When it is not, locate it first with Grep / Glob / List, then Read.",
-      );
-    }
-    if (canWrite) {
-      lines.push(
-        "- Existing files: Write and Edit check the file's current on-disk state automatically; a separate Read is only needed for very large files (>5000 lines). Stale writes are rejected — re-Read and retry if the file changed underneath you.",
-        "- New files: call Write with a file path that includes the filename and the full content; parent directories are created automatically. There is no separate create-directory step — to create a directory, Write a file inside it.",
-      );
-    }
-    if (has("Read")) {
-      lines.push(
-        [
-          "- Read pagination:",
-          "  • Text — `start_line` (1-based) + `limit`.",
-          "  • PDF — `page_start` + `page_limit`.",
-          "  • Notebook (`.ipynb`) — `cell_start` + `cell_limit`.",
-          "  • Word/Excel/archive uploads — Read returns a best-effort preview or archive entry listing.",
-          "- A re-Read of an unchanged file may return an `unchanged` stub instead of repeating content — treat it as confirmation that your prior read is still valid; do not retry to force the full body.",
-        ].join("\n"),
-      );
-    }
-    if (has("Write")) {
-      lines.push(
-        "- Write fully creates or overwrites one text file. The path must include the intended filename, not just a directory.",
-      );
-    }
-    if (has("Edit")) {
-      lines.push(
-        "- Edit performs exact-string replacement, with automatic fallbacks for line-ending (CRLF/LF), trailing-whitespace, and uniform-indentation drift — copy old_string from Read output as-is and do not pad it with guessed whitespace. If `old_string` matches multiple places, either narrow it until it is unique or pass `replace_all=true` explicitly.",
-      );
-    }
-    if (has("Delete")) {
-      lines.push(
-        "- Every intentional deletion of a file or directory inside the workspace or an enabled Skill MUST use Delete with the exact path, preferably workspace-relative or skill://. Use one Delete call per target; deleting a directory is recursive.",
-        "- NEVER perform such a deletion through Bash, ManagedProcess, a shell script, or a deletion-oriented CLI, including `rm`, `rmdir`, `unlink`, `find -delete`, `git rm`, `git clean`, PowerShell `Remove-Item`, or cmd `del` / `erase` / `rd`. Structured Delete calls are required so LiveAgent can record the path in Edited Files and the file ledger.",
-        "- If a deleted workspace path is tracked by Git and staging is required, call Delete first, then stage only that path with `git add -u -- <exact-workspace-relative-path>`.",
-      );
-    }
-    if (hasAny("Grep", "Glob", "List")) {
-      lines.push(
-        "- For search, use `Grep.output_mode=content|files|count` with `head_limit`, `offset`, and `context` instead of dumping raw matches.",
-      );
-    }
-    if (has("SkillsManager") && hasReadFamily) {
-      lines.push(
-        "- For files inside a Skill, call file tools with a path like `skill://<baseDir>/references/guide.md`.",
-      );
-    }
-    if (has("Bash")) {
-      const alts: string[] = [];
-      if (hasReadFamily) alts.push("read / list / search via `cat`, `ls`, `find`, `grep`, or `rg`");
-      if (has("Write")) {
-        alts.push(
-          "write / create files via heredocs, `tee`, `touch`, `cp`, or `mkdir` just to prepare a parent directory",
-        );
-      }
-      if (alts.length > 0) {
-        lines.push(
-          `- Do NOT use Bash to ${alts.join(" or ")} workspace or Skill files — use the corresponding file tool above.`,
-        );
-      }
-      if (hasReadFamily) {
-        lines.push(
-          "- Do not run Bash cat/ls/find/grep to read, list, or search workspace or Skill files.",
-        );
-      }
-    }
-    sections.push(lines.join("\n"));
-  }
-
-  if (has("Image")) {
-    sections.push(
-      [
-        "## Showing Images",
-        "- To display any image in the chat UI, call the Image tool.",
-        "- Do not embed images with Markdown syntax like ![alt](path), HTML <img>, file:// URLs, or local relative image paths in your final text.",
-        has("SkillsManager")
-          ? [
-              "- Local image: pass `path` exactly as seen, including workspace-relative, absolute, or skill:// paths. Remote image: pass `url` / `urls` or `source` / `sources` directly — do not download unless the user asked to save it locally.",
-              "- Do not use Bash, open, xdg-open, Markdown, or HTML to display Skill images.",
-            ].join("\n")
-          : "- Local image: pass `path` exactly as seen. Remote image: pass `url` / `urls` or `source` / `sources` directly — do not download unless the user asked to save it locally.",
-        "- For remote images, call Image with url/urls or source/sources directly instead of downloading them, unless the user explicitly asks to save the file locally.",
-        "- Whenever an image path or URL appears in the conversation (from the user, a tool result, or earlier context) and the user should see it, call Image with that path/URL before producing the final reply.",
-        "- If another tool saves, downloads, screenshots, generates, or returns an image file path or image URL and the user should see it, call Image with that path or URL before the final response.",
-        "- Your final text may caption or describe images already shown via Image; it must not try to render them itself.",
-        "- Final text may describe or caption images already displayed by Image, but must not attempt to render images directly.",
-      ].join("\n"),
-    );
-  }
-
-  if (has("Bash")) {
-    const bashPlatformLines =
-      runtimePlatform === "windows"
-        ? [
-            `- Current platform: ${platformLabel}. Bash runs through Git Bash with POSIX semantics; pwsh, Windows PowerShell, and cmd are fallbacks used only when Git Bash is not installed.`,
-            "- Write POSIX/bash-compatible commands by default: `export`, `&&`, `/dev/null`, forward-slash paths.",
-            "- Background commands using `&` must redirect stdout and stderr before detaching, for example `nohup command > /tmp/liveagent-task.log 2>&1 < /dev/null &`.",
-            "- If a Bash result header reports `shell_family: powershell` or `shell_family: cmd`, Git Bash is missing: switch to PowerShell syntax and suggest installing Git for Windows or setting `LIVEAGENT_GIT_BASH_PATH`.",
-          ]
-        : [
-            `- Current platform: ${platformLabel}. Bash runs through POSIX shells.`,
-            runtimePlatform === "macos"
-              ? "- macOS prefers zsh, then Bash, then sh. Use POSIX/zsh-compatible commands."
-              : "- Linux prefers Bash, then zsh, then sh. Use POSIX/bash-compatible commands.",
-            "- Background commands using `&` must redirect stdout and stderr before detaching, for example `nohup command > /tmp/liveagent-task.log 2>&1 < /dev/null &`.",
-          ];
-    sections.push(
-      [
-        "## Bash",
-        "- Bash.cwd follows the path rules in **Workspace & Paths**.",
-        ...bashPlatformLines,
-        '- To run installed Skill scripts, use cwd="skill://<enabled-skill>/scripts" plus a relative command.',
-        "- Passing an absolute Skill script path inside the command is also accepted as long as the referenced Skill is enabled in this conversation.",
-        "- For endpoint tests with curl, include an explicit timeout such as `--max-time 30` so a stalled local server or upstream request cannot hold the whole turn indefinitely.",
-        "- Use ManagedProcess instead of Bash for dev servers, watchers, preview servers, or anything that should keep running.",
-        "- For reading, listing, or searching Skill content, always use Read/List/Glob/Grep with skill:// paths — Bash cat/ls/find/grep/rg/sed/awk against ~/.liveagent/skills is still routed back to the file tools.",
-        "- Do not guess `skills/` paths inside the workspace; if a Skill is needed, enable it in the chat Skills selector first.",
-        "- Do not cd into ~/.liveagent/skills or workspace skills/ guesses.",
-      ].join("\n"),
-    );
-  }
-
-  if (has("Agent")) {
-    sections.push(
-      [
-        "## Agent Delegation",
-        "- Use Agent for bounded, independent jobs that benefit from a fresh context: implementation, research, review, discussion, or verification. Do not delegate trivial work you can finish yourself.",
-        "- To run multiple independent jobs in parallel, issue ONE Agent call whose `agents` array lists every job. Use sequential Agent calls only when a later job needs an earlier job's output.",
-        "- Default to mode=readonly for research, review, and discussion agents. Use mode=worktree (with apply_policy) only when the subagent is expected to produce file changes or the user explicitly asked for file output.",
-        "- To continue with an existing delegated agent or a previously formed team, call Agent again with the same stable id(s) and only the new prompt — do not impersonate those agents from this transcript and do not restate their identity fields.",
-        "- If an Agent call is rejected, no subagents were started; fix every listed issue and retry with one corrected call.",
-      ].join("\n"),
-    );
-  }
-
-  if (has("SendMessage")) {
-    sections.push(
-      [
-        "## Subagent Message Bus",
-        "- Use SendMessage to send concise Markdown messages to the parent agent, all agents (to=*), or a stable delegated-agent id from the roster. Unknown recipients are rejected.",
-        "- Messages sent to parent are private to the parent; send to=* when peer agents need to read a report or summary.",
-        "- Message delivery is deferred to the next model turn boundary; do not use workspace files as a mailbox.",
-      ].join("\n"),
-    );
-  }
-
-  if (has("ManagedProcess")) {
-    const managedProcessPreference =
-      "- Prefer ManagedProcess over Bash for `pnpm dev`, `deno run main.ts`, `vite`, file watchers, local web servers, or commands that otherwise require `nohup` and log redirection.";
-    sections.push(
-      [
-        "## ManagedProcess",
-        '- Use ManagedProcess(action="start") for dev servers, preview servers, watchers, or other long-running foreground commands that should continue while you run tests.',
-        "- Do not append `&` to ManagedProcess.command. It starts the process in the background, redirects stdout/stderr to a log file, and returns process_id/pid/log_path.",
-        '- Use ManagedProcess(action="status") to inspect running processes, action="read_log" to inspect recent output, and action="stop" to terminate the process tree.',
-        managedProcessPreference,
-      ].join("\n"),
-    );
-  }
-
-  if (hasAny("TaskCreate", "TaskUpdate", "TaskList")) {
-    sections.push(
-      [
-        "## Task Planning",
-        "- Proactively use TaskCreate for multi-step work (3+ distinct steps) or multiple user requests; skip it for one trivial action.",
-        "- Task IDs are stable and executor-assigned. Use TaskUpdate with taskId; never replace or recreate the list after context compaction.",
-        "- Exactly one task may be in_progress. Mark it in_progress before work and completed immediately after it is fully done.",
-        "- Use TaskList whenever the authoritative task state is unclear.",
-      ].join("\n"),
-    );
-  }
-
-  if (has("MemoryManager")) {
-    sections.push(buildMemoryToolsSuffixSection());
-  }
-
-  if (has("McpManager") || hasDynamicMcp) {
-    const lines: string[] = ["## MCP"];
-    if (has("McpManager")) {
-      lines.push(
-        "- **McpManager** is configuration only: manage, validate, test, diagnose, restart, stop, or list MCP servers and their tool inventory. It does NOT execute MCP domain calls.",
-      );
-    }
-    if (hasDynamicMcp) {
-      lines.push(
-        "- The dynamically loaded `mcp_*` tools are where actual MCP domain actions (database queries, API calls, integrations exposed by MCP servers) happen.",
-      );
-    }
-    sections.push(lines.join("\n"));
-  }
-
-  sections.push(
-    toolGroups.length > 0
-      ? ["## Available Tools", ...toolGroups.map((group) => `- ${group}`)].join("\n")
-      : "## Available Tools\n- none.",
-  );
-
-  return sections.join("\n\n");
 }
 
 function toolNameLookupKey(name: string) {
@@ -616,6 +355,12 @@ function toMessageToolResult(message: Message, toolCall: ToolCall): ToolResultMe
 type TurnContextOverride = {
   context: Context;
   emittedMessages: Message[];
+  /**
+   * 只随出站请求投递的尾部文本（bus 增量、roster 运行状态等易变内容）。
+   * 不写入 agent.state.messages：写进去会经 emittedMessages 泄漏到持久化、
+   * UI 与记忆抽取。runner 逐次累积并在每次出站请求上重挂。
+   */
+  wireTailText?: string;
 } | null;
 
 type ToolExecutionEventContext = {
@@ -681,6 +426,8 @@ export async function runAssistantWithTools(params: {
   runtimePlatform?: RuntimePlatform;
   context: Context;
   workdir: string;
+  /** Structured file-tool roots, also documented in the generated tool prompt. */
+  additionalRoots?: readonly AdditionalProjectRoot[];
   sessionId?: string;
   nativeWebSearch?: boolean;
   tools: Context["tools"];
@@ -708,6 +455,7 @@ export async function runAssistantWithTools(params: {
   }) => Promise<{
     context: Context;
     emittedMessages: Message[];
+    wireTailText?: string;
   } | null>;
   onToolStatus?: (status: string | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
@@ -1053,7 +801,6 @@ export async function runAssistantWithTools(params: {
         assistant.content
           .flatMap((block) => (block.type === "text" ? [block.text] : []))
           .join("\n"),
-        { recoverFlattenedText: true },
       ).trim();
 
     // Relays that execute Anthropic server tools in-band can leak the original
@@ -1091,11 +838,18 @@ export async function runAssistantWithTools(params: {
       params.workdir,
       llmTools.map((tool) => tool.name),
       params.runtimePlatform,
+      params.additionalRoots,
     );
     let currentSystemPrompt = params.context.systemPrompt;
-    let pendingTurnOverridePromise: Promise<TurnContextOverride> | null = null;
     let emittedBaselineIndex = params.context.messages.length;
     let latestAgentEndMessages: Message[] = [];
+    // 尾部投递内容的累积器：只进出站请求，永不进 agent.state.messages。
+    // 每个块连同它首次挂上的锚点 toolCallId 一起记住——锚点必须钉死，重新搜索
+    // 会让块随工具循环推进从旧消息搬到新消息，旧消息字节变回去、前缀就断了。
+    // 语义：带 wireTailText 的 override 追加（按到达顺序）；不带 wireTailText 的
+    // override 清空——不带的只有压缩/重冻结分支，此时快照已重算进 systemPrompt，
+    // 旧尾部内容已被快照覆盖，继续挂只会重复投递。
+    let accumulatedWireTailBlocks: PinnedTailBlock[] = [];
     let agentTools: AgentTool<any>[] = [];
     const pendingRecoveredSeedTurnRef: {
       current: {
@@ -1286,15 +1040,27 @@ export async function runAssistantWithTools(params: {
       }
     }
 
-    async function consumePendingTurnOverride(): Promise<TurnContextOverride> {
-      const pending = pendingTurnOverridePromise;
-      if (!pending) return null;
-      pendingTurnOverridePromise = null;
-      return pending;
-    }
-
-    function applyTurnContextOverride(override: Exclude<TurnContextOverride, null>) {
-      if (!agent) return;
+    function applyTurnContextOverride(
+      override: Exclude<TurnContextOverride, null>,
+    ): AgentContext | undefined {
+      if (!agent) return undefined;
+      if (override.wireTailText) {
+        // 锚点在这里解析一次就钉死：override.context.messages 是本轮出站请求
+        // 的消息列表，此刻的“最后一条安全工具结果”就是这个块该长期附着的位置。
+        // 解析不出锚点时丢弃本块——调用方在探锚阶段已确认过可挂，走到这里为空
+        // 只可能是压缩改写了消息列表，此时游标也不会推进，下一轮重投。
+        const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
+        if (anchorToolCallId) {
+          accumulatedWireTailBlocks = [
+            ...accumulatedWireTailBlocks,
+            { anchorToolCallId, text: override.wireTailText },
+          ];
+        }
+      } else {
+        // 见 accumulatedWireTailBlocks 声明处的语义说明：压缩/重冻结分支不带
+        // wireTailText，旧尾部内容已并入重算后的快照，累积必须清空。
+        accumulatedWireTailBlocks = [];
+      }
       currentSystemPrompt = override.context.systemPrompt;
       agent.state.systemPrompt = buildSystemPrompt(currentSystemPrompt, toolsSuffix);
       agent.state.messages = override.context.messages.slice();
@@ -1304,6 +1070,11 @@ export async function runAssistantWithTools(params: {
         override.context.messages.length - override.emittedMessages.length,
       );
       latestAgentEndMessages = [];
+      return {
+        systemPrompt: agent.state.systemPrompt,
+        messages: agent.state.messages.slice(),
+        tools: agentTools,
+      };
     }
 
     const visibleAgentTools: AgentTool<any>[] = llmTools.map((tool) => ({
@@ -1400,12 +1171,20 @@ export async function runAssistantWithTools(params: {
       params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
+      // 尾部投递内容只存在于出站请求：每次请求在此重挂到各自钉死的锚点（与记忆
+      // 增量的逐请求重建同口径），agent.state.messages 始终不含它。挂在 sanitize
+      // 之前、capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实
+      // 出站字节。
+      const outboundMessages =
+        accumulatedWireTailBlocks.length > 0
+          ? attachPinnedTailBlocks(streamContext.messages.slice(), accumulatedWireTailBlocks)
+          : streamContext.messages.slice();
       const effectiveContext = sanitizeContextForModelRequest({
         ...streamContext,
         // Keep the runtime-only tool rules out of compaction and persistence,
         // then reattach them at the provider boundary on every model round.
         systemPrompt: buildSystemPrompt(currentSystemPrompt, toolsSuffix),
-        messages: streamContext.messages.slice(),
+        messages: outboundMessages,
         tools: filterRequestTools(streamTools),
       });
 
@@ -1414,14 +1193,57 @@ export async function runAssistantWithTools(params: {
       const primaryRoundTarget: PreparedFailoverTarget =
         streamModel === model ? primaryTarget : { ...primaryTarget, model: streamModel };
 
+      // 哈希只在请求边界算一次:同一轮内的 failover / 重试复用同一份归因,
+      // 更不能进流式回调 —— 那会让开销随 token 数放大。
+      //
+      // 缓存参数按主目标口径入账:TTL 或断点策略变化会真实作废缓存,而 system 与
+      // tools 的字节可以一模一样,不单独记这一维就会在真出事时报 unchanged。
+      // 协议族分发在 providers 层的 describeProviderCacheShape 里收敛,这里只
+      // 负责把与注入侧同源的输入(含请求头,x-session-id 已有则以头值为准)递进去。
+      const roundCacheRetention =
+        options?.cacheRetention ??
+        resolveProviderCacheRetention(
+          primaryRoundTarget.providerId,
+          primaryRoundTarget.runtime.promptCachingEnabled,
+          undefined,
+          primaryRoundTarget.runtime.promptCacheRetention,
+        );
+      const roundSessionId = options?.sessionId ?? params.sessionId;
+      const prefixShape = capturePrefixShape({
+        systemPrompt: effectiveContext.systemPrompt,
+        tools: effectiveContext.tools,
+        cacheControl: describeProviderCacheShape({
+          providerId: primaryRoundTarget.providerId,
+          baseUrl: primaryRoundTarget.runtime.baseUrl,
+          promptCacheHintMode:
+            primaryRoundTarget.runtime.modelConfig?.promptCacheHintMode ??
+            primaryRoundTarget.runtime.promptCacheHintMode,
+          modelApi: primaryRoundTarget.model.api,
+          sessionId: roundSessionId,
+          cacheRetention: roundCacheRetention,
+          // 与下方 streamOptions 的 headers 合并口径一致:注入侧看到的就是这份。
+          headers: {
+            ...(options?.headers ?? {}),
+            ...primaryRoundTarget.proxyRequest.headers,
+          },
+        }),
+      });
+      const prefixCacheDiagnostics = comparePrefixShape(
+        readPreviousPrefixShape(roundSessionId),
+        prefixShape,
+      );
+      recordPrefixShape(roundSessionId, prefixShape);
+
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
         const fallbackReasoning =
-          target.providerId === "claude_code" || target.providerId === "gemini"
+          target.providerId === "claude_code" ||
+          target.providerId === "gemini" ||
+          target.providerId === "deepseek" ||
+          targetModel.api === "openai-responses" ||
+          targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
-            : targetModel.api === "openai-responses" || targetModel.api === "openai-completions"
-              ? toSimpleStreamReasoning(target.runtime.reasoning)
-              : undefined;
+            : undefined;
         const targetNativeWebSearchStatus =
           target.index === 0
             ? nativeWebSearchStatus
@@ -1459,6 +1281,7 @@ export async function runAssistantWithTools(params: {
           metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
           toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+          workdir: params.workdir,
           streamRetry: {
             onRetry: (attempt, maxAttempts, errorMessage) => {
               params.onToolStatus?.(
@@ -1537,6 +1360,7 @@ export async function runAssistantWithTools(params: {
             context: effectiveContext,
             options: streamOptions,
             round,
+            prefixCache: prefixCacheDiagnostics,
           }),
         );
 
@@ -1611,7 +1435,7 @@ export async function runAssistantWithTools(params: {
     // model would see a schema error blaming its own call. Rewrite such tool
     // results into the truthful transport-error teaching before the next turn.
     const reconcileTruncatedToolResults = () => {
-      if (incompleteToolCallArguments.size === 0) return;
+      if (incompleteToolCallArguments.size === 0) return false;
       const messages = getAgentMessages(agent);
       let changed = false;
       const next = messages.map((message) => {
@@ -1631,6 +1455,7 @@ export async function runAssistantWithTools(params: {
       if (changed && agent) {
         agent.state.messages = next;
       }
+      return changed;
     };
 
     agent = new Agent({
@@ -1708,13 +1533,55 @@ export async function runAssistantWithTools(params: {
         }
         return undefined;
       },
-      transformContext: async (_messages, _signal) => {
-        const override = await consumePendingTurnOverride();
-        if (override) {
-          applyTurnContextOverride(override);
+      // 0.84 起 pi-agent-core 用 prepareNextTurnWithContext 取代了原先靠
+      // transformContext 顺带做的 turn 间改写。二者的关键差异:transformContext
+      // 拿不到 loop 的 context,只能读回 agent.state.messages;而 loop 的
+      // currentContext.messages 是 createContextSnapshot() 切出的**另一个数组**,
+      // agent.state 上的改写不会自动回流。所以这里必须显式把改写后的消息作为
+      // context 返回,否则 message_end 里对 assistant 的规范化(工具名归一、
+      // hostedSearch 块回填、seed 工具调用去重)和截断结果重写全部只活在
+      // agent.state,下一轮请求仍按旧快照发出。
+      prepareNextTurnWithContext: async ({ message, toolResults, context }, signal) => {
+        const reconciled = reconcileTruncatedToolResults();
+        // agent.state 是 message_end 规范化后的权威副本;只要它与 loop 快照长度
+        // 一致,就以它为准(内容可能已被就地替换,长度相同不代表内容相同)。
+        const stateMessages = getAgentMessages(agent);
+        const currentContext: AgentContext =
+          agent && stateMessages.length === context.messages.length
+            ? { ...context, messages: stateMessages.slice() }
+            : reconciled
+              ? { ...context, messages: agent ? stateMessages.slice() : context.messages }
+              : context;
+        const contextChanged = currentContext !== context;
+        if (
+          !params.onBeforeNextTurn ||
+          message.stopReason !== "toolUse" ||
+          toolResults.length === 0
+        ) {
+          return contextChanged ? { context: currentContext } : undefined;
         }
-        reconcileTruncatedToolResults();
-        return getAgentMessages(agent).slice();
+
+        const runtimeMessages = currentContext.messages as Message[];
+        const override = await params.onBeforeNextTurn({
+          round: currentRound,
+          assistant: message,
+          toolResults,
+          runtimeContext: {
+            systemPrompt: currentSystemPrompt,
+            messages: runtimeMessages.slice(),
+            tools: llmTools,
+          },
+          emittedMessages:
+            emittedBaselineIndex <= 0
+              ? runtimeMessages.slice()
+              : runtimeMessages.slice(emittedBaselineIndex),
+          signal: signal ?? params.signal,
+        });
+        if (!override) {
+          return contextChanged ? { context: currentContext } : undefined;
+        }
+        const nextContext = applyTurnContextOverride(override);
+        return nextContext ? { context: nextContext } : undefined;
       },
     });
 
@@ -1880,35 +1747,6 @@ export async function runAssistantWithTools(params: {
             }
           }
           break;
-        case "turn_end": {
-          const toolResults = event.toolResults.filter(
-            (message): message is ToolResultMessage => message.role === "toolResult",
-          );
-          if (
-            params.onBeforeNextTurn &&
-            event.message.role === "assistant" &&
-            event.message.stopReason === "toolUse" &&
-            toolResults.length > 0
-          ) {
-            const runtimeMessages = getAgentMessages(agent);
-            const runtimeSnapshot: Context = {
-              systemPrompt: currentSystemPrompt,
-              messages: runtimeMessages.slice(),
-              tools: llmTools,
-            };
-            const emittedSnapshot = getMessagesSinceBaseline(agent, emittedBaselineIndex);
-            const assistant = event.message;
-            pendingTurnOverridePromise = params.onBeforeNextTurn({
-              round: currentRound,
-              assistant,
-              toolResults,
-              runtimeContext: runtimeSnapshot,
-              emittedMessages: emittedSnapshot,
-              signal: params.signal,
-            });
-          }
-          break;
-        }
         case "tool_execution_start": {
           nativeWebSearchStatusController.pause();
           const toolCall =
@@ -1966,12 +1804,6 @@ export async function runAssistantWithTools(params: {
         throwIfRunnerCancelled(params.signal);
         await agent.continue();
         throwIfRunnerCancelled(params.signal);
-
-        const override = await consumePendingTurnOverride();
-        throwIfRunnerCancelled(params.signal);
-        if (override) {
-          applyTurnContextOverride(override);
-        }
 
         const recoveredSeedTurn = pendingRecoveredSeedTurnRef.current;
         pendingRecoveredSeedTurnRef.current = null;
@@ -2031,7 +1863,7 @@ export async function runAssistantWithTools(params: {
 
         if (params.onBeforeNextTurn) {
           throwIfRunnerCancelled(params.signal);
-          pendingTurnOverridePromise = params.onBeforeNextTurn({
+          const override = await params.onBeforeNextTurn({
             round: recoveredSeedRound,
             assistant: recoveredSeedAssistant,
             toolResults: syntheticToolResults,
@@ -2043,6 +1875,10 @@ export async function runAssistantWithTools(params: {
             emittedMessages: getMessagesSinceBaseline(agent, emittedBaselineIndex),
             signal: params.signal,
           });
+          throwIfRunnerCancelled(params.signal);
+          if (override) {
+            applyTurnContextOverride(override);
+          }
         }
       }
 

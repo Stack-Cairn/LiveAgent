@@ -7,7 +7,7 @@ const loader = createWebModuleLoader();
 const composer = loader.loadModule("@liveagent/ui/components/chat/MentionComposer.tsx");
 const composerText = loader.loadModule("@liveagent/ui/lib/chat/composerText.ts");
 const draftText = loader.loadModule("src/app/chatDraft.ts");
-const uploadedFiles = loader.loadModule("src/lib/chat/uploadedFiles.ts");
+const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
 const composerSource = readFileSync(
   new URL("../../../agent-ui/src/components/chat/MentionComposer.tsx", import.meta.url),
   "utf8",

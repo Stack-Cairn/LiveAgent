@@ -28,7 +28,7 @@ function createCardModule(rootDir) {
           };
         },
       },
-      "@liveagent/app/components/icons": {
+      "@liveagent/ui/components/IconSet": {
         FilePenLine: NullIcon,
         FolderTree: NullIcon,
         GitCommitHorizontal: NullIcon,

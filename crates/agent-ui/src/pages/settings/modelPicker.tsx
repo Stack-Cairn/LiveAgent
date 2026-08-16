@@ -1,14 +1,15 @@
+import type { ProviderId } from "@liveagent/app/lib/settings/index";
 import {
   Check,
   ChevronDown,
   ClaudeIcon,
+  DeepseekIcon,
   GeminiIcon,
   GrokIcon,
   OpenaiChatgptIcon,
   Search,
   Sparkles,
-} from "@liveagent/app/components/icons";
-import type { ProviderId } from "@liveagent/app/lib/settings/index";
+} from "@liveagent/ui/components/IconSet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?:
   if (type === "claude_code") return <ClaudeIcon className={cls} />;
   if (type === "gemini") return <GeminiIcon className={cls} />;
   if (type === "xai") return <GrokIcon className={cls} />;
+  if (type === "deepseek") return <DeepseekIcon className={cls} />;
   return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
 }
 

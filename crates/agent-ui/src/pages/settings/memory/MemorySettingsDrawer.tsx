@@ -1,9 +1,10 @@
 // Memory settings drawer: organizer model/schedule/scope/mode, extraction
 // summary model, Run Now, quota-ladder banner and the wipe-all danger zone.
 //
-// Shared implementation owned by @liveagent/ui. Platform-specific capabilities
-// are supplied by each host's pages/settings/memory/platform.tsx module.
+// Shared implementation owned by @liveagent/ui. Organizer wake-up capability
+// is supplied by each host's agent-ui-adapters/memoryOrganizer.ts module.
 
+import { canRunOrganizerLocally, pokeMemoryOrganizer } from "@liveagent/adapters/memoryOrganizer";
 import {
   type AppSettings,
   computeNextMemoryOrganizerRunAt,
@@ -12,21 +13,11 @@ import {
   type MemoryOrganizerScope,
   updateMemorySettings,
 } from "@liveagent/app/lib/settings";
-import {
-  AgentActivationSwitch,
-  AlertTriangle,
-  Button,
-  canRunOrganizerLocally,
-  DrawerSelect,
-  History,
-  ModelPicker,
-  parseModelValue,
-  pokeMemoryOrganizer,
-  RefreshCw,
-  Trash2,
-  toModelValue,
-  X,
-} from "@liveagent/app/pages/settings/memory/platform";
+import { AlertTriangle, History, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
+import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -36,6 +27,7 @@ import {
   memoryQuotaSummary,
 } from "../../../lib/memory/api";
 import { deriveQuotaLadder } from "../../../lib/memory/organizer/quota";
+import { DrawerSelect } from "./DrawerSelect";
 import { OrganizerHistoryModal } from "./OrganizerHistoryModal";
 import {
   formatTime,

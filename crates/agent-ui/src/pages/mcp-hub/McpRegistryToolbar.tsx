@@ -1,4 +1,4 @@
-import { RefreshCw } from "@liveagent/app/components/icons";
+import { RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";
 import { useLocale } from "@liveagent/ui/i18n/index";

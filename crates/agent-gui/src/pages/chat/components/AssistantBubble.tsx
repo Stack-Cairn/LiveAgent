@@ -35,8 +35,11 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   const { unit } = row;
   if (unit.kind === "footer") return null;
 
+  // 只有仍在直播的状态单元才渲染转圈状态行。落定交接阶段的同一单元
+  // (live:false) 若继续渲染，会在底部留下一个永远旋转的 spinner——运行早已
+  // 结束，用户却以为任务还在后台跑。
   const status =
-    unit.kind === "status" ? (
+    unit.kind === "status" && row.live ? (
       <LiveAssistantStatus
         status={toolStatus}
         isCompaction={isCompactionRunning}

@@ -1,36 +1,66 @@
 import {
+  copyWorkspacePreviewImage,
+  saveWorkspacePreviewImage,
   supportsExternalWorkspaceOpen,
   WorkspaceOverlayTitleBar,
   workspaceOverlayStackClassName,
 } from "@liveagent/adapters/workspacePreview";
 import {
+  type FileTypeIconComponent,
+  getFileTypeIcon,
+} from "@liveagent/ui/components/chat/fileTypeIcons";
+import {
   AlertTriangle,
   ChevronRight,
+  Copy,
+  Download,
   ExternalLink,
   FilePenLine,
   FileText,
+  Info,
   Loader2,
+  Maximize2,
   Minus,
   Plus,
   RefreshCw,
   RotateCwSquare,
   X,
-} from "@liveagent/app/components/icons";
-import {
-  type FileTypeIconComponent,
-  getFileTypeIcon,
-} from "@liveagent/ui/components/chat/fileTypeIcons";
+} from "@liveagent/ui/components/IconSet";
 import { WorkspaceMarkdownPreview } from "@liveagent/ui/components/workspace-editor/WorkspaceMarkdownPreview";
 import {
   getWorkspacePreviewKind,
   isWorkspaceEditablePreviewPath,
   type WorkspacePreviewKind,
 } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
+import {
+  clampImageViewerPan,
+  clampImageViewerState,
+  fitImageViewerSize,
+  IMAGE_VIEWER_MAX_SCALE,
+  IMAGE_VIEWER_MIN_SCALE,
+  type ImageViewerSize,
+  type ImageViewerState,
+  imageViewerScaleAfterStep,
+  imageViewerScaleAfterWheelDelta,
+  resetImageViewerState,
+  workspaceImageAbsolutePathForCopy,
+  workspaceImageRelativePathForCopy,
+  zoomImageViewerAtPoint,
+} from "@liveagent/ui/components/workspace-editor/workspaceImageViewer";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import { renderAsync } from "docx-preview";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { read, utils } from "xlsx";
 
 export type WorkspaceFilePreviewOpenRequest = {
@@ -80,12 +110,6 @@ type SpreadsheetTable = {
 const FILE_PREVIEW_OVERLAY_ANIMATION_MS = 180;
 const SPREADSHEET_MAX_ROWS = 250;
 const SPREADSHEET_MAX_COLUMNS = 80;
-const IMAGE_PREVIEW_MIN_SCALE = 0.25;
-const IMAGE_PREVIEW_MAX_SCALE = 4;
-const IMAGE_PREVIEW_SCALE_STEP = 0.25;
-const IMAGE_PREVIEW_WHEEL_SCALE_STEP = 0.1;
-const IMAGE_PREVIEW_ENTER_ANIMATION_MS = 200;
-
 type ImagePreviewTransitionDirection = -1 | 0 | 1;
 
 function basename(path: string) {
@@ -154,15 +178,6 @@ function resolvePreviewKind(path: string, mimeType: string): WorkspacePreviewKin
 
 function decodePreviewText(bytes: Uint8Array) {
   return new TextDecoder("utf-8").decode(bytes);
-}
-
-function clampImageScale(scale: number) {
-  return Math.min(Math.max(scale, IMAGE_PREVIEW_MIN_SCALE), IMAGE_PREVIEW_MAX_SCALE);
-}
-
-function normalizeRotation(degrees: number) {
-  const next = degrees % 360;
-  return next < 0 ? next + 360 : next;
 }
 
 function normalizeImagePaths(paths: string[] | undefined, activePath: string) {
@@ -469,7 +484,8 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
   }, [spreadsheet?.activeSheetName]);
 
   const activePreviewRequest = activeRequest ?? openRequest;
-  const activePath = preview?.path ?? activePreviewRequest?.path ?? "";
+  // The request comes from the workspace file tree and retains its full logical path.
+  const activePath = activePreviewRequest?.path ?? preview?.path ?? "";
   const kind = preview?.kind ?? (activePath ? getWorkspacePreviewKind(activePath) : null) ?? "text";
   const PreviewIcon = getPreviewIcon(kind);
   const imagePaths = useMemo(
@@ -479,8 +495,9 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
   );
   const canOpenEditor = Boolean(activePreviewRequest && isWorkspaceEditablePreviewPath(activePath));
   const canOpenExternal = Boolean(
-    supportsExternalWorkspaceOpen && activePreviewRequest && activePath && !canOpenEditor,
+    supportsExternalWorkspaceOpen && activePreviewRequest && activePath,
   );
+  const showHeaderOpenExternal = canOpenExternal && !canOpenEditor && kind !== "image";
 
   const openImagePath = useCallback(
     (path: string, transitionDirection: ImagePreviewTransitionDirection = 0) => {
@@ -541,7 +558,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
               <FilePenLine className="h-4 w-4" />
             </button>
           ) : null}
-          {canOpenExternal ? (
+          {showHeaderOpenExternal ? (
             <button
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -592,10 +609,13 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
             imagePaths={imagePaths}
             imageTransitionDirection={imageTransitionDirection}
             isSwitchingImage={loading && preview.kind === "image"}
+            canOpenImageInSystemViewer={canOpenExternal}
             spreadsheet={spreadsheet}
             activeSheetName={activeSheetName}
+            onOpenImageInSystemViewer={() => void openExternal()}
             onOpenImagePath={openImagePath}
             onActiveSheetNameChange={setActiveSheetName}
+            onActionError={setError}
             onRenderError={setRenderError}
           />
         ) : loading ? (
@@ -629,10 +649,13 @@ function PreviewBody(props: {
   imagePaths: string[];
   imageTransitionDirection: ImagePreviewTransitionDirection;
   isSwitchingImage: boolean;
+  canOpenImageInSystemViewer: boolean;
   spreadsheet: SpreadsheetTable | null;
   activeSheetName: string;
+  onOpenImageInSystemViewer: () => void;
   onOpenImagePath: (path: string, direction?: ImagePreviewTransitionDirection) => void;
   onActiveSheetNameChange: (sheetName: string) => void;
+  onActionError: (message: string | null) => void;
   onRenderError: (message: string | null) => void;
 }) {
   const {
@@ -642,10 +665,13 @@ function PreviewBody(props: {
     imagePaths,
     imageTransitionDirection,
     isSwitchingImage,
+    canOpenImageInSystemViewer,
     spreadsheet,
     activeSheetName,
+    onOpenImageInSystemViewer,
     onOpenImagePath,
     onActiveSheetNameChange,
+    onActionError,
     onRenderError,
   } = props;
   const { t } = useLocale();
@@ -680,11 +706,15 @@ function PreviewBody(props: {
       <WorkspaceImagePreviewBody
         key={`${preview.path}:${preview.contentHash}`}
         activePath={activePath}
+        canOpenInSystemViewer={canOpenImageInSystemViewer}
         imagePaths={imagePaths}
         transitionDirection={imageTransitionDirection}
         isSwitchingImage={isSwitchingImage}
         preview={preview}
+        workdir={workdir}
+        onOpenInSystemViewer={onOpenImageInSystemViewer}
         onOpenImagePath={onOpenImagePath}
+        onActionError={onActionError}
       />
     );
   }
@@ -825,16 +855,18 @@ function PreviewBody(props: {
 function ImagePreviewToolButton(props: {
   label: string;
   disabled?: boolean;
+  pressed?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
-  const { label, disabled, onClick, children } = props;
+  const { label, disabled, pressed, onClick, children } = props;
   return (
     <button
       type="button"
       className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
       title={label}
       aria-label={label}
+      aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
     >
@@ -843,38 +875,119 @@ function ImagePreviewToolButton(props: {
   );
 }
 
+function imageViewerAnchor(
+  event: { clientX: number; clientY: number },
+  viewport: HTMLDivElement | null,
+) {
+  const rect = viewport?.getBoundingClientRect();
+  if (!rect) return { x: 0, y: 0 };
+  return {
+    x: event.clientX - rect.left - rect.width / 2,
+    y: event.clientY - rect.top - rect.height / 2,
+  };
+}
+
+function formatImageDimensions(width: number, height: number) {
+  return width > 0 && height > 0 ? `${width} x ${height}` : "";
+}
+
+async function savePreviewImage(preview: LoadedPreview) {
+  await saveWorkspacePreviewImage({
+    data: preview.data,
+    fileName: basename(preview.path) || "image",
+    mimeType: preview.mimeType,
+  });
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Text clipboard is unavailable");
+}
+
 function WorkspaceImagePreviewBody(props: {
   preview: LoadedPreview;
+  workdir: string;
   activePath: string;
   imagePaths: string[];
+  canOpenInSystemViewer: boolean;
   transitionDirection: ImagePreviewTransitionDirection;
   isSwitchingImage: boolean;
+  onOpenInSystemViewer: () => void;
   onOpenImagePath: (path: string, direction?: ImagePreviewTransitionDirection) => void;
+  onActionError: (message: string | null) => void;
 }) {
   const {
     preview,
+    workdir,
     activePath,
     imagePaths,
+    canOpenInSystemViewer,
     transitionDirection,
     isSwitchingImage,
+    onOpenInSystemViewer,
     onOpenImagePath,
+    onActionError,
   } = props;
   const { t } = useLocale();
-  const [scale, setScale] = useState(1);
-  const [rotation, setRotation] = useState(0);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const [viewerState, setViewerState] = useState<ImageViewerState>(resetImageViewerState);
+  const [viewportSize, setViewportSize] = useState<ImageViewerSize>({ width: 0, height: 0 });
+  const [naturalSize, setNaturalSize] = useState<ImageViewerSize>({ width: 0, height: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [isEntering, setIsEntering] = useState(true);
-  const [isClippingEnterOverflow, setIsClippingEnterOverflow] = useState(true);
 
   const activeImageIndex = imagePaths.indexOf(activePath);
   const imageCount = Math.max(imagePaths.length, 1);
   const imageNumber = activeImageIndex >= 0 ? activeImageIndex + 1 : 1;
   const canOpenPrevious = activeImageIndex > 0;
   const canOpenNext = activeImageIndex >= 0 && activeImageIndex < imagePaths.length - 1;
-  const canZoomOut = scale > IMAGE_PREVIEW_MIN_SCALE;
-  const canZoomIn = scale < IMAGE_PREVIEW_MAX_SCALE;
+  const canZoomOut = viewerState.scale > IMAGE_VIEWER_MIN_SCALE;
+  const canZoomIn = viewerState.scale < IMAGE_VIEWER_MAX_SCALE;
   const counter = t("workspaceFilePreview.imageCounter")
     .replace("{index}", String(imageNumber))
     .replace("{total}", String(imageCount));
+
+  const imageSize = useMemo(
+    () => fitImageViewerSize(naturalSize, viewportSize, viewerState.rotation),
+    [naturalSize, viewportSize, viewerState.rotation],
+  );
+  const viewerOptions = useMemo(() => ({ imageSize, viewportSize }), [imageSize, viewportSize]);
+  const displayDimensions = formatImageDimensions(naturalSize.width, naturalSize.height);
+  const maxPan = clampImageViewerPan(
+    { x: 1_000_000, y: 1_000_000 },
+    {
+      ...viewerOptions,
+      scale: viewerState.scale,
+      rotation: viewerState.rotation,
+    },
+  );
+  const canPan = maxPan.x > 0 || maxPan.y > 0;
 
   const openImageAt = useCallback(
     (index: number) => {
@@ -887,22 +1000,164 @@ function WorkspaceImagePreviewBody(props: {
 
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => setIsEntering(false));
-    const timeout = window.setTimeout(
-      () => setIsClippingEnterOverflow(false),
-      IMAGE_PREVIEW_ENTER_ANIMATION_MS,
-    );
     return () => {
       window.cancelAnimationFrame(animationFrame);
-      window.clearTimeout(timeout);
     };
   }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const updateViewportSize = () => {
+      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
+    };
+    updateViewportSize();
+    const observer = new ResizeObserver(updateViewportSize);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  // A fixed menu needs its actual rendered size to avoid overflowing the
+  // browser viewport near the lower-right corner.
+  useLayoutEffect(() => {
+    if (!contextMenu || contextMenuPosition) return;
+    const menu = contextMenuRef.current;
+    if (!menu) return;
+    const rect = menu.getBoundingClientRect();
+    const inset = 8;
+    setContextMenuPosition({
+      x: Math.max(inset, Math.min(contextMenu.x, window.innerWidth - rect.width - inset)),
+      y: Math.max(inset, Math.min(contextMenu.y, window.innerHeight - rect.height - inset)),
+    });
+  }, [contextMenu, contextMenuPosition]);
+
+  useEffect(() => {
+    setViewerState((current) => clampImageViewerState(current, viewerOptions));
+  }, [viewerOptions]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setContextMenu(null);
+      setContextMenuPosition(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [contextMenu]);
 
   const enterTranslateX = transitionDirection > 0 ? 18 : transitionDirection < 0 ? -18 : 0;
   const enterScale = transitionDirection === 0 ? 0.985 : 0.99;
 
+  const zoomByStep = useCallback(
+    (direction: -1 | 1, anchor = { x: 0, y: 0 }) => {
+      setViewerState((current) =>
+        zoomImageViewerAtPoint(
+          current,
+          imageViewerScaleAfterStep(current.scale, direction),
+          anchor,
+          viewerOptions,
+        ),
+      );
+    },
+    [viewerOptions],
+  );
+
+  const zoomByWheel = useCallback(
+    (deltaY: number, deltaMode: number, anchor: { x: number; y: number }) => {
+      setViewerState((current) =>
+        zoomImageViewerAtPoint(
+          current,
+          imageViewerScaleAfterWheelDelta(current.scale, deltaY, deltaMode),
+          anchor,
+          viewerOptions,
+        ),
+      );
+    },
+    [viewerOptions],
+  );
+
+  const rotateImage = useCallback(
+    (direction: -1 | 1) => {
+      setViewerState((current) =>
+        clampImageViewerState(
+          { ...current, rotation: current.rotation + direction * 90 },
+          viewerOptions,
+        ),
+      );
+    },
+    [viewerOptions],
+  );
+
+  const handleCopyImage = useCallback(async () => {
+    try {
+      await copyWorkspacePreviewImage({
+        data: preview.data,
+        mimeType: preview.mimeType,
+      });
+    } catch (error) {
+      onActionError(toMessage(error, t("workspaceFilePreview.copyImageFailed")));
+    }
+  }, [onActionError, preview, t]);
+
+  const handleCopyAbsolutePath = useCallback(async () => {
+    try {
+      await copyTextToClipboard(workspaceImageAbsolutePathForCopy(workdir, activePath));
+    } catch (error) {
+      onActionError(toMessage(error, t("workspaceFilePreview.copyPathFailed")));
+    }
+  }, [activePath, onActionError, t, workdir]);
+
+  const handleCopyRelativePath = useCallback(async () => {
+    try {
+      await copyTextToClipboard(workspaceImageRelativePathForCopy(workdir, activePath));
+    } catch (error) {
+      onActionError(toMessage(error, t("workspaceFilePreview.copyPathFailed")));
+    }
+  }, [activePath, onActionError, t, workdir]);
+
+  const handleSaveImage = useCallback(async () => {
+    try {
+      await savePreviewImage(preview);
+    } catch (error) {
+      onActionError(toMessage(error, t("workspaceFilePreview.saveImageFailed")));
+    }
+  }, [onActionError, preview, t]);
+
+  const handleFullscreen = useCallback(async () => {
+    const viewport = viewportRef.current;
+    if (!viewport?.requestFullscreen) {
+      onActionError(t("workspaceFilePreview.fullscreenFailed"));
+      return;
+    }
+    try {
+      await viewport.requestFullscreen();
+    } catch (error) {
+      onActionError(toMessage(error, t("workspaceFilePreview.fullscreenFailed")));
+    }
+  }, [onActionError, t]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (contextMenu) {
+        event.preventDefault();
+        setContextMenu(null);
+        setContextMenuPosition(null);
+        return;
+      }
+      if (showInfo) {
+        event.preventDefault();
+        setShowInfo(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [contextMenu, showInfo]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/25">
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/90 px-2">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-border bg-background/90 px-2">
         <div className="flex min-w-0 items-center gap-1">
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.previousImage")}
@@ -924,44 +1179,153 @@ function WorkspaceImagePreviewBody(props: {
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.zoomOut")}
             disabled={!canZoomOut}
-            onClick={() =>
-              setScale((current) => clampImageScale(current - IMAGE_PREVIEW_SCALE_STEP))
-            }
+            onClick={() => zoomByStep(-1)}
           >
             <Minus className="h-4 w-4" />
           </ImagePreviewToolButton>
           <span className="w-11 text-center text-[11px] tabular-nums text-muted-foreground">
-            {Math.round(scale * 100)}%
+            {Math.round(viewerState.scale * 100)}%
           </span>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.zoomIn")}
             disabled={!canZoomIn}
-            onClick={() =>
-              setScale((current) => clampImageScale(current + IMAGE_PREVIEW_SCALE_STEP))
-            }
+            onClick={() => zoomByStep(1)}
           >
             <Plus className="h-4 w-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
-            label={t("workspaceFilePreview.rotateImage")}
-            onClick={() => setRotation((current) => normalizeRotation(current + 90))}
+            label={t("workspaceFilePreview.rotateLeft")}
+            onClick={() => rotateImage(-1)}
+          >
+            <RotateCwSquare className="h-4 w-4 -scale-x-100" />
+          </ImagePreviewToolButton>
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.rotateRight")}
+            onClick={() => rotateImage(1)}
           >
             <RotateCwSquare className="h-4 w-4" />
+          </ImagePreviewToolButton>
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.resetImage")}
+            onClick={() => setViewerState(resetImageViewerState())}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </ImagePreviewToolButton>
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.downloadImage")}
+            onClick={() => void handleSaveImage()}
+          >
+            <Download className="h-4 w-4" />
+          </ImagePreviewToolButton>
+          {canOpenInSystemViewer ? (
+            <ImagePreviewToolButton
+              label={t("workspaceFilePreview.openInSystemImageViewer")}
+              onClick={onOpenInSystemViewer}
+            >
+              <ExternalLink className="h-4 w-4" />
+            </ImagePreviewToolButton>
+          ) : null}
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.copyImage")}
+            onClick={() => void handleCopyImage()}
+          >
+            <Copy className="h-4 w-4" />
+          </ImagePreviewToolButton>
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.toggleImageInfo")}
+            pressed={showInfo}
+            onClick={() => setShowInfo((current) => !current)}
+          >
+            <Info className="h-4 w-4" />
+          </ImagePreviewToolButton>
+          <ImagePreviewToolButton
+            label={t("workspaceFilePreview.fullscreen")}
+            onClick={() => void handleFullscreen()}
+          >
+            <Maximize2 className="h-4 w-4" />
           </ImagePreviewToolButton>
         </div>
       </div>
       <div
+        ref={viewportRef}
+        role="application"
+        aria-label={t("workspaceFilePreview.imageViewer")}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: The application-role viewport takes focus so its copy/reset shortcuts stay scoped to it instead of a window listener.
+        tabIndex={0}
         className={cn(
-          "relative min-h-0 flex-1",
-          isClippingEnterOverflow ? "overflow-x-hidden overflow-y-auto" : "overflow-auto",
+          "relative min-h-0 flex-1 touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+          isDragging ? "cursor-grabbing" : canPan ? "cursor-grab" : "cursor-default",
         )}
+        onKeyDown={(event) => {
+          // Scoped to the focused viewport so chat/sidebar inputs keep native
+          // copy and digit keys while the preview is open.
+          if (event.currentTarget !== event.target || event.defaultPrevented) return;
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey &&
+            event.key.toLowerCase() === "c"
+          ) {
+            event.preventDefault();
+            void handleCopyImage();
+            return;
+          }
+          if (event.key === "0" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            setViewerState(resetImageViewerState());
+          }
+        }}
         onWheel={(event) => {
           if (event.deltaY === 0) return;
           event.preventDefault();
-          const direction = event.deltaY < 0 ? 1 : -1;
-          setScale((current) =>
-            clampImageScale(current + direction * IMAGE_PREVIEW_WHEEL_SCALE_STEP),
-          );
+          zoomByWheel(event.deltaY, event.deltaMode, imageViewerAnchor(event, viewportRef.current));
+        }}
+        onPointerDown={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          if (contextMenu) {
+            setContextMenu(null);
+            setContextMenuPosition(null);
+            return;
+          }
+          if (event.button !== 0 || !canPan) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: viewerState.x,
+            originY: viewerState.y,
+          };
+          setIsDragging(true);
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          setViewerState((current) => ({
+            ...current,
+            ...clampImageViewerPan(
+              {
+                x: drag.originX + event.clientX - drag.startX,
+                y: drag.originY + event.clientY - drag.startY,
+              },
+              { ...viewerOptions, scale: current.scale, rotation: current.rotation },
+            ),
+          }));
+        }}
+        onPointerUp={(event) => {
+          if (dragRef.current?.pointerId !== event.pointerId) return;
+          dragRef.current = null;
+          setIsDragging(false);
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setIsDragging(false);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setContextMenu({ x: event.clientX, y: event.clientY });
+          setContextMenuPosition(null);
         }}
       >
         {isSwitchingImage ? (
@@ -970,7 +1334,7 @@ function WorkspaceImagePreviewBody(props: {
           </div>
         ) : null}
         <div
-          className="flex h-full min-h-full w-full min-w-full items-center justify-center p-4 transition-[opacity,transform,filter] duration-200 ease-out motion-reduce:transition-none sm:p-6"
+          className="absolute inset-0 flex items-center justify-center transition-[opacity,transform,filter] duration-200 ease-out motion-reduce:transition-none"
           style={{
             filter: isEntering ? "blur(1px)" : "blur(0px)",
             opacity: isEntering ? 0 : 1,
@@ -980,25 +1344,221 @@ function WorkspaceImagePreviewBody(props: {
           }}
         >
           <div
-            className="flex shrink-0 items-center justify-center"
+            className="relative shrink-0"
             style={{
-              height: `${scale * 100}%`,
-              width: `${scale * 100}%`,
+              height: `${imageSize.height}px`,
+              width: `${imageSize.width}px`,
+              transform: `translate(${viewerState.x}px, ${viewerState.y}px) scale(${viewerState.scale})`,
+              transformOrigin: "center",
+              transition: isDragging ? "none" : "transform 120ms ease-out",
             }}
           >
-            <img
-              className="h-full w-full select-none object-contain"
-              src={preview.blobUrl}
-              alt={basename(preview.path)}
-              draggable={false}
-              style={{
-                transform: `rotate(${rotation}deg)`,
-                transformOrigin: "center",
-                transition: "transform 120ms ease-out",
-              }}
-            />
+            <div
+              className="h-full w-full"
+              style={{ transform: `rotate(${viewerState.rotation}deg)`, transformOrigin: "center" }}
+            >
+              <img
+                className="h-full w-full select-none object-contain"
+                src={preview.blobUrl}
+                alt={basename(preview.path)}
+                draggable={false}
+                onLoad={(event) => {
+                  setNaturalSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  });
+                }}
+              />
+            </div>
           </div>
         </div>
+        {showInfo ? (
+          <div
+            role="dialog"
+            aria-label={t("workspaceFilePreview.imageInfo")}
+            className="absolute right-3 top-3 z-10 w-64 border border-border bg-popover/95 p-3 text-xs text-popover-foreground shadow-xl backdrop-blur"
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">{t("workspaceFilePreview.imageInfo")}</div>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title={t("workspaceFilePreview.close")}
+                aria-label={t("workspaceFilePreview.close")}
+                onClick={() => setShowInfo(false)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-muted-foreground">
+              <dt>{t("workspaceFilePreview.fileName")}</dt>
+              <dd className="truncate text-right text-foreground" title={basename(preview.path)}>
+                {basename(preview.path)}
+              </dd>
+              <dt>{t("workspaceFilePreview.dimensions")}</dt>
+              <dd className="text-right text-foreground">{displayDimensions || "-"}</dd>
+              <dt>{t("workspaceFilePreview.fileSize")}</dt>
+              <dd className="text-right text-foreground">{formatBytes(preview.sizeBytes)}</dd>
+              <dt>{t("workspaceFilePreview.fileType")}</dt>
+              <dd className="truncate text-right text-foreground" title={preview.mimeType}>
+                {preview.mimeType}
+              </dd>
+            </dl>
+          </div>
+        ) : null}
+        {contextMenu
+          ? createPortal(
+              <div
+                ref={contextMenuRef}
+                role="menu"
+                className="fixed z-[90] min-w-48 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
+                style={{
+                  left: (contextMenuPosition ?? contextMenu).x,
+                  top: (contextMenuPosition ?? contextMenu).y,
+                  visibility: contextMenuPosition ? undefined : "hidden",
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    setViewerState(resetImageViewerState());
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.resetImage")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    rotateImage(-1);
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <RotateCwSquare className="h-3.5 w-3.5 -scale-x-100" />
+                  {t("workspaceFilePreview.rotateLeft")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    rotateImage(1);
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <RotateCwSquare className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.rotateRight")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    void handleSaveImage();
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.downloadImage")}
+                </button>
+                {canOpenInSystemViewer ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                    onClick={() => {
+                      onOpenInSystemViewer();
+                      setContextMenu(null);
+                      setContextMenuPosition(null);
+                    }}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {t("workspaceFilePreview.openInSystemImageViewer")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    void handleCopyImage();
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.copyImage")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    void handleCopyAbsolutePath();
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.copyImageAbsolutePath")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    void handleCopyRelativePath();
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.copyImageRelativePath")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    setShowInfo(true);
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.imageInfo")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    void handleFullscreen();
+                    setContextMenu(null);
+                    setContextMenuPosition(null);
+                  }}
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  {t("workspaceFilePreview.fullscreen")}
+                </button>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );

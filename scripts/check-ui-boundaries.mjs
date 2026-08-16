@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
+import {
+  findRetiredSharedDeclarations,
+  rendersImportedComponent,
+} from "./ui-boundary-declarations.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
+const toPosixPath = (path) => path.split(sep).join("/");
 
 function listSourceFiles(root, directory = root) {
   const files = [];
@@ -113,22 +118,114 @@ for (const check of checks) {
 }
 
 const sharedRoot = join(repoRoot, "crates/agent-ui/src");
+const sharedFacades = new Map([
+  [
+    "crates/agent-gui/src/lib/settings/index.ts",
+    `export * from "@liveagent/ui/lib/settings";
+
+export {
+  applyMcpOps,
+  applyMcpOpsToAppSettings,
+  type McpSettingsOp,
+  selectEnabledMcpServers,
+} from "./mcpOps";
+`,
+  ],
+  [
+    "crates/agent-gateway/web/src/lib/settings/index.ts",
+    `export * from "@liveagent/ui/lib/settings";
+`,
+  ],
+  [
+    "crates/agent-gateway/web/src/lib/chat/uiMessages.ts",
+    `export * from "@liveagent/ui/lib/chat/uiMessages";
+`,
+  ],
+]);
+for (const [facadePath, expectedSource] of sharedFacades) {
+  const absolutePath = join(repoRoot, facadePath);
+  if (!existsSync(absolutePath)) continue;
+  if (readFileSync(absolutePath, "utf8") === expectedSource) continue;
+  failures += 1;
+  console.error(`${facadePath}: 共享兼容入口只能重导出 agent-ui 真源`);
+}
+
 const appRoots = [
   join(repoRoot, "crates/agent-gui/src"),
   join(repoRoot, "crates/agent-gateway/web/src"),
 ];
+const retiredSharedDeclarations = [
+  "buildGatewayMessageRefPayload",
+  "buildHistoryMessageRefPayload",
+  "normalizeSftpEntry",
+  "normalizeSftpTransfer",
+  "normalizeSftpListResponse",
+  "normalizeSftpStatResponse",
+  "normalizeSftpActionResponse",
+  "normalizeSftpTransferResponse",
+  "normalizeSftpTransferEvent",
+  "normalizeTerminalSession",
+  "normalizeTerminalSshMetadata",
+  "normalizeTerminalSshPrompt",
+  "normalizeTerminalSshLatency",
+  "normalizeTerminalShellOptions",
+  "normalizeSshTerminalTab",
+  "normalizeSshTerminalTabsSnapshot",
+  "normalizeTerminalSnapshot",
+  "normalizeTerminalSshCreateResult",
+  "normalizeTerminalEvent",
+  "normalizeUnknownTerminalSession",
+  "normalizeTerminalByteContainer",
+  "buildTerminalCreatePayload",
+  "buildTerminalSshCreatePayload",
+  "buildTerminalSshPromptAnswerPayload",
+];
+const retiredSharedDeclarationNames = new Set(retiredSharedDeclarations);
+for (const appRoot of appRoots) {
+  for (const file of listSourceFiles(appRoot)) {
+    const source = readFileSync(file, "utf8");
+    for (const declaration of findRetiredSharedDeclarations(
+      source,
+      file,
+      retiredSharedDeclarationNames,
+    )) {
+      failures += 1;
+      console.error(
+        `${relative(repoRoot, file)}:${declaration.line}:${declaration.column}: ${declaration.name} 已迁移到 agent-ui，宿主只能导入共享实现`,
+      );
+    }
+  }
+}
 for (const sharedFile of listSourceFiles(sharedRoot)) {
   const sharedRelativePath = relative(sharedRoot, sharedFile);
   for (const appRoot of appRoots) {
-    if (!existsSync(join(appRoot, sharedRelativePath))) continue;
+    const appFile = join(appRoot, sharedRelativePath);
+    if (!existsSync(appFile)) continue;
+    if (sharedFacades.has(toPosixPath(relative(repoRoot, appFile)))) continue;
     failures += 1;
     console.error(
-      `${relative(repoRoot, appRoot)}/${sharedRelativePath}: 共享源码不能在应用目录保留同路径副本`,
+      `${toPosixPath(relative(repoRoot, appFile))}: 共享源码不能在应用目录保留同路径副本`,
     );
   }
 }
 
 const retiredSharedCopies = [
+  "crates/agent-gui/src/components/icons.tsx",
+  "crates/agent-gui/src/agent-ui-adapters/chatModelOptions.ts",
+  "crates/agent-gui/src/agent-ui-adapters/mentionReferences.ts",
+  "crates/agent-gui/src/lib/chat/changedFilesAdapter.ts",
+  "crates/agent-gui/src/lib/chat/assistantBubbleAdapter.ts",
+  "crates/agent-gui/src/lib/chat/chatPageHelpersAdapter.ts",
+  "crates/agent-gui/src/lib/chat/messages/changedFiles.ts",
+  "crates/agent-gui/src/lib/chat/messages/fileChangeStats.ts",
+  "crates/agent-gui/src/lib/chat/messages/hostedSearch.ts",
+  "crates/agent-gui/src/lib/chat/messages/mentionReferences.ts",
+  "crates/agent-gui/src/lib/chat/messages/toolPreview.ts",
+  "crates/agent-gui/src/lib/chat/messages/uploadedFiles.ts",
+  "crates/agent-gui/src/lib/chat/messages/userMessageContent.tsx",
+  "crates/agent-gui/src/lib/chat/toolPreviewAdapter.ts",
+  "crates/agent-gui/src/lib/system/fontFamily.ts",
+  "crates/agent-gui/src/lib/settings/index.ts",
   "crates/agent-gui/src/pages/chat/components/ChatFileDropOverlay.tsx",
   "crates/agent-gui/src/pages/chat/components/WorkspaceOverlayHost.tsx",
   "crates/agent-gui/src/pages/chat/components/assistant-bubble/RoundContent.tsx",
@@ -138,8 +235,28 @@ const retiredSharedCopies = [
   "crates/agent-gui/src/pages/chat/components/assistant-bubble/ToolTraceGroup.tsx",
   "crates/agent-gui/src/pages/chat/components/assistant-bubble/assistantBubbleUtils.ts",
   "crates/agent-gui/src/pages/chat/hooks/useChatSkills.ts",
+  "crates/agent-gui/src/pages/chat/transcript/EditableUserMessageBubble.tsx",
+  "crates/agent-gui/src/pages/chat/workspace/useWorkspaceOverlays.ts",
+  "crates/agent-gui/src/pages/settings/memory/platform.tsx",
+  "crates/agent-gateway/web/src/components/icons.tsx",
+  "crates/agent-gateway/web/src/agent-ui-adapters/chatModelOptions.ts",
+  "crates/agent-gateway/web/src/agent-ui-adapters/mentionReferences.ts",
   "crates/agent-gateway/web/src/app/FileDropOverlay.tsx",
   "crates/agent-gateway/web/src/app/WorkspaceOverlayHost.tsx",
+  "crates/agent-gateway/web/src/lib/chat/changedFiles.ts",
+  "crates/agent-gateway/web/src/lib/chat/assistantBubbleAdapter.ts",
+  "crates/agent-gateway/web/src/lib/chat/changedFilesAdapter.ts",
+  "crates/agent-gateway/web/src/lib/chat/chatPageHelpersAdapter.ts",
+  "crates/agent-gateway/web/src/lib/chat/fileChangeStats.ts",
+  "crates/agent-gateway/web/src/lib/chat/hostedSearch.ts",
+  "crates/agent-gateway/web/src/lib/chat/mentionReferences.ts",
+  "crates/agent-gateway/web/src/lib/chat/toolPreview.ts",
+  "crates/agent-gateway/web/src/lib/chat/toolPreviewAdapter.ts",
+  "crates/agent-gateway/web/src/lib/chat/uploadedFiles.ts",
+  "crates/agent-gateway/web/src/lib/chat/userMessageContent.tsx",
+  "crates/agent-gateway/web/src/lib/chat/uiMessages.ts",
+  "crates/agent-gateway/web/src/lib/fontFamily.ts",
+  "crates/agent-gateway/web/src/lib/settings/index.ts",
   "crates/agent-gateway/web/src/pages/chat/AssistantBubble.tsx",
   "crates/agent-gateway/web/src/pages/chat/assistant-bubble/RoundContent.tsx",
   "crates/agent-gateway/web/src/pages/chat/assistant-bubble/ToolCallItem.tsx",
@@ -149,23 +266,50 @@ const retiredSharedCopies = [
   "crates/agent-gateway/web/src/pages/chat/assistant-bubble/assistantBubbleUtils.ts",
   "crates/agent-gateway/web/src/pages/chat/queue/chatTurnQueue.ts",
   "crates/agent-gateway/web/src/pages/chat/useChatSkills.ts",
+  "crates/agent-gateway/web/src/pages/settings/memory/platform.tsx",
 ];
 for (const retiredPath of retiredSharedCopies) {
+  if (sharedFacades.has(retiredPath)) continue;
   if (!existsSync(join(repoRoot, retiredPath))) continue;
   failures += 1;
   console.error(`${retiredPath}: 已迁移到 agent-ui 的共享源码不能在宿主目录重新创建`);
 }
 
 const applicationEntries = [
-  join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
-  join(repoRoot, "crates/agent-gateway/web/src/app/GatewayApp.tsx"),
+  [
+    join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
+    join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
+  ],
+  [
+    join(repoRoot, "crates/agent-gateway/web/src/app/GatewayApp.tsx"),
+    join(repoRoot, "crates/agent-gateway/web/src/app/GatewayAppView.tsx"),
+  ],
 ];
-for (const appFile of applicationEntries) {
-  const source = readFileSync(appFile, "utf8");
-  if (source.includes("@liveagent/ui/application/ApplicationView")) continue;
+for (const [entryFile, viewFile] of applicationEntries) {
+  const entrySource = readFileSync(entryFile, "utf8");
+  const viewSource = readFileSync(viewFile, "utf8");
+  const viewComponentName = basename(viewFile, ".tsx");
+  // 断言真实的渲染委托，而非文本巧合：入口必须以 JSX 实际渲染 View 组件
+  // （仅 import type 不算数），View 必须 import 共享 ApplicationView 并渲染它
+  // （注释里出现路径字符串不算数）。
+  const delegatesToView =
+    entryFile === viewFile ||
+    rendersImportedComponent(
+      entrySource,
+      entryFile,
+      `./${viewComponentName}`,
+      viewComponentName,
+    );
+  const rendersSharedApplicationView = rendersImportedComponent(
+    viewSource,
+    viewFile,
+    "@liveagent/ui/application/ApplicationView",
+    "ApplicationView",
+  );
+  if (delegatesToView && rendersSharedApplicationView) continue;
   failures += 1;
   console.error(
-    `${relative(repoRoot, appFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,
+    `${relative(repoRoot, entryFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,
   );
 }
 

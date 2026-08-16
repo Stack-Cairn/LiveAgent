@@ -5,7 +5,7 @@
 // 纯展示 + 决定回调;数据(pending 列表)与提交动作由各端注入:GUI 直连桌面审批服务,
 // WebUI 走网关 tool_approval，端差异一律留在各端宿主。
 
-import { Shield } from "@liveagent/app/components/icons";
+import { Shield } from "@liveagent/ui/components/IconSet";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useState } from "react";

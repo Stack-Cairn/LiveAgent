@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
 use crate::runtime::sftp::{
-    SftpActionResponse, SftpEntry, SftpEventPayload, SftpListResponse, SftpStatResponse,
-    SftpTransferResponse, SftpTransferState,
+    SftpActionResponse, SftpEntry, SftpEventPayload, SftpListResponse, SftpReadTextResponse,
+    SftpStatResponse, SftpTransferResponse, SftpTransferState,
 };
 
 use super::*;
@@ -129,6 +129,44 @@ impl GatewayController {
                     .await?;
                 Ok(sftp_transfer_response_to_proto(action, response))
             }
+            "read_text" => {
+                let response = self
+                    .sftp_registry
+                    .read_text(
+                        request.session_id,
+                        Some(request.project_path_key),
+                        request.remote_path,
+                        (request.offset > 0).then_some(request.offset),
+                        usize::try_from(request.max_bytes)
+                            .ok()
+                            .filter(|max_bytes| *max_bytes > 0),
+                        Some(request.strict_utf8),
+                    )
+                    .await?;
+                Ok(sftp_read_text_response_to_proto(action, response))
+            }
+            "write_text" => {
+                let response = self
+                    .sftp_registry
+                    .write_text(
+                        request.session_id,
+                        Some(request.project_path_key),
+                        request.remote_path,
+                        request.content,
+                        request.overwrite,
+                        request.create_parent_dirs,
+                        // proto3 scalars have no presence: 0 means "skip the
+                        // check" (a genuine epoch-0 mtime skips it too).
+                        (request.expected_mtime > 0).then_some(request.expected_mtime),
+                        (request.expected_size_bytes > 0).then_some(request.expected_size_bytes),
+                    )
+                    .await?;
+                // response.action is "write_text" or "conflict"; the conflict
+                // marker must reach the browser, so don't echo the request
+                // action here.
+                let response_action = response.action.clone();
+                Ok(sftp_action_response_to_proto(response_action, response))
+            }
             "cancel" => {
                 self.sftp_registry
                     .cancel_transfer(request.session_id, request.from_path)?;
@@ -139,6 +177,7 @@ impl GatewayController {
                     entry: None,
                     exists: false,
                     transfer: None,
+                    ..Default::default()
                 })
             }
             _ => Err(format!("unsupported sftp action: {action}")),
@@ -196,6 +235,7 @@ pub(crate) fn sftp_list_response_to_proto(
         entry: None,
         exists: false,
         transfer: None,
+        ..Default::default()
     }
 }
 
@@ -214,6 +254,7 @@ pub(crate) fn sftp_stat_response_to_proto(
         entry: response.entry.map(sftp_entry_to_proto),
         exists: response.exists,
         transfer: None,
+        ..Default::default()
     }
 }
 
@@ -228,6 +269,7 @@ pub(crate) fn sftp_action_response_to_proto(
         entry: response.entry.map(sftp_entry_to_proto),
         exists: false,
         transfer: response.transfer.map(sftp_transfer_to_proto),
+        ..Default::default()
     }
 }
 
@@ -242,6 +284,24 @@ pub(crate) fn sftp_transfer_response_to_proto(
         entry: None,
         exists: false,
         transfer: Some(sftp_transfer_to_proto(response.transfer)),
+        ..Default::default()
+    }
+}
+
+pub(crate) fn sftp_read_text_response_to_proto(
+    action: String,
+    response: SftpReadTextResponse,
+) -> proto::SftpResponse {
+    proto::SftpResponse {
+        action,
+        path: response.path,
+        entry: response.entry.map(sftp_entry_to_proto),
+        content: response.content,
+        offset: response.offset,
+        bytes_read: response.bytes_read as u64,
+        size_bytes: response.size_bytes,
+        truncated: response.truncated,
+        ..Default::default()
     }
 }
 

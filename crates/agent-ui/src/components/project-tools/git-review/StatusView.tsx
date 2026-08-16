@@ -1,5 +1,6 @@
-// GitReview status view: staged/unstaged change lists, the commit bar, the
-// working-tree/branch diff pane and the change context menus.
+// GitReview status view: staged/unstaged change lists, the commit composer
+// pinned under the change list, the working-tree/branch diff pane and the
+// change context menus.
 //
 // Shared implementation owned by @liveagent/ui. Host-specific Git operations
 // and optional platform capabilities enter through the shared contracts.
@@ -12,11 +13,10 @@ import {
   FilePenLine,
   FolderTree,
   GitCommitHorizontal,
-  Loader2,
   MoreHorizontal,
   RefreshCw,
   Trash2,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitStatusEntry } from "@liveagent/ui/lib/git/types";
 import {
@@ -32,8 +32,8 @@ import {
 import { cn } from "../../../lib/shared/utils";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
 import { useRightDockToolContext } from "../RightDockContext";
+import { GitCommitComposer } from "./CommitComposer";
 import { DiffReviewCard } from "./DiffView";
 import {
   basename,
@@ -196,7 +196,6 @@ export function GitReviewStatusView(props: {
   );
   const hiddenStagedEntryCount = Math.max(0, stagedEntries.length - visibleStagedEntries.length);
   const hiddenWorkingEntryCount = Math.max(0, workingEntries.length - visibleWorkingEntries.length);
-  const operationBusy = busy !== "";
   const hasStageableChanges = state.dirtyCounts.unstaged > 0 || state.dirtyCounts.untracked > 0;
   const hasStagedChanges = state.dirtyCounts.staged > 0;
   const hasDiscardableChanges = entries.length > 0;
@@ -618,6 +617,13 @@ export function GitReviewStatusView(props: {
               </>
             )}
           </div>
+          <GitCommitComposer
+            commitMessage={commitMessage}
+            data={data}
+            onCommitMessageChange={onCommitMessageChange}
+            stagedEntries={stagedEntries}
+            writeDisabled={writeDisabled}
+          />
         </aside>
         <main
           ref={detailPaneRef}
@@ -627,35 +633,6 @@ export function GitReviewStatusView(props: {
             !useSplitReviewLayout && "flex-1",
           )}
         >
-          <div className="mb-3 flex shrink-0 items-center gap-2">
-            <GitCommitHorizontal className="h-4 w-4 text-muted-foreground" />
-            <Input
-              value={commitMessage}
-              onChange={(event) => onCommitMessageChange(event.target.value)}
-              placeholder={t("projectTools.gitReview.commitMessagePlaceholder")}
-              disabled={writeDisabled || operationBusy}
-              className="h-8 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))] focus-visible:ring-1 focus-visible:ring-border/40"
-            />
-            <Button
-              size="sm"
-              disabled={writeDisabled || operationBusy || !commitMessage.trim()}
-              onClick={() => {
-                void runOperation(
-                  "commit",
-                  () => gitClient!.commit(cwd, commitMessage),
-                  "commit",
-                ).then((ok) => {
-                  if (ok) onCommitMessageChange("");
-                });
-              }}
-            >
-              {busy === "commit" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                t("projectTools.gitReview.commit")
-              )}
-            </Button>
-          </div>
           {selectedEntry ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               <div className="flex shrink-0 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs">

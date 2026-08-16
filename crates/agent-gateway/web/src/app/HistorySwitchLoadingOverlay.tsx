@@ -1,4 +1,4 @@
-import { Loader2 } from "@/components/icons";
+import { Loader2 } from "@liveagent/ui/components/IconSet";
 import type { AppSettings } from "@/lib/settings";
 
 export function HistorySwitchLoadingOverlay(props: { locale: AppSettings["locale"] }) {

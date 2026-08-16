@@ -1,5 +1,5 @@
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
-import { FolderOpen, GitBranch, Loader2, X } from "@liveagent/app/components/icons";
+import { FolderOpen, GitBranch, Loader2, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";

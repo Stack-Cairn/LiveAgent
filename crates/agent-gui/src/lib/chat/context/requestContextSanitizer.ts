@@ -1,7 +1,7 @@
 import type { Context, Message, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { normalizeHostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import { isSubagentCardToolCall } from "../../subagents/card";
 import type { DisplayImageItemDetails, DisplayImageResultDetails } from "../../tools/builtinTypes";
-import { normalizeHostedSearchBlock } from "../messages/hostedSearch";
 import { isOnlyDsmlOrphanCloseTags, stripDsmlToolCallMarkup } from "../runner/deepSeekDsml";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

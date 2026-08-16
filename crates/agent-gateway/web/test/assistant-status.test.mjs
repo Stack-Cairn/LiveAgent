@@ -11,7 +11,7 @@ function Loader2(props) {
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
   mocks: {
-    "@liveagent/app/components/icons": { Loader2 },
+    "@liveagent/ui/components/IconSet": { Loader2 },
     "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => key }) },
   },
 });

@@ -6,9 +6,11 @@ import type {
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
+import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
+import { resolveTailBlockAnchorId } from "../../../lib/chat/context/contextTailBlock";
 import {
   isAbortedAssistantMessage,
   type SuppressedToolTraceSnapshot,
@@ -33,7 +35,6 @@ import type {
   MemoryExtractionStatusText,
   MemoryExtractionVisibleEvents,
 } from "../../../lib/chat/memory/extractionEngine";
-import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
   appendTextDeltaToRound,
   appendThinkingDeltaToRound,
@@ -62,14 +63,17 @@ import {
 } from "../../../lib/settings";
 import {
   AGENT_TOOL_NAME,
-  buildRosterReminder,
+  buildRosterIdentitySection,
+  buildRosterRunStatusSection,
   createSubagentScheduler,
   isSubagentCardToolCall,
+  renderMessageBusDelta,
   renderMessageBusSnapshot,
   SUBAGENT_PARENT_ID,
   type SubagentConversationStore,
   type SubagentTemplate,
 } from "../../../lib/subagents";
+import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
@@ -105,6 +109,7 @@ export type PersistConversationParams = {
 
 const AGENT_PERF_LOG_THRESHOLD_MS = 250;
 const TOOL_CALL_DELTA_RAF_FALLBACK_DELAY_MS = 64;
+const PARENT_MESSAGE_BUS_AGENT_NAME = "Parent Agent";
 
 function perfNowMs() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -216,6 +221,7 @@ export type RunAgentConversationTurnParams = {
     model: string;
   };
   effectiveWorkdir: string;
+  additionalRoots?: readonly AdditionalProjectRoot[];
   effectiveSkillsEnabled: boolean;
   showSilentMemoryExtraction: boolean;
   skillsRootDir?: string;
@@ -257,7 +263,11 @@ export type RunAgentConversationTurnParams = {
   buildPreparedContext: (
     state: ConversationViewState,
     tools?: Context["tools"],
-    options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
+    options?: {
+      includeAbortedMessages?: boolean;
+      includeUploadedFilesMetadata?: boolean;
+      includeMemoryTurnUpdates?: boolean;
+    },
   ) => Context;
   compaction: CompactionController;
   cancellation: TurnCancellation;
@@ -289,6 +299,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtimeModel,
     selectedModel,
     effectiveWorkdir,
+    additionalRoots,
     effectiveSkillsEnabled,
     showSilentMemoryExtraction,
     skillsRootDir,
@@ -345,33 +356,61 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // this turn. In-flight extraction from the previous turn keeps running.
   memoryExtraction.noteTurnBoundary(conversationId);
 
-  const loadParentBusSnapshot = async () => {
-    if (!subagentStore) return "";
+  const loadParentBusMessages = async () => {
+    if (!subagentStore) return null;
     try {
-      return renderMessageBusSnapshot({
-        messages: await subagentStore.listBusMessages(SUBAGENT_PARENT_ID),
-        currentAgentId: SUBAGENT_PARENT_ID,
-        currentAgentName: "Parent Agent",
-      });
+      return await subagentStore.listBusMessages(SUBAGENT_PARENT_ID);
     } catch (error) {
       console.warn("Failed to load parent message bus snapshot", error);
-      return "";
+      return null;
     }
   };
   const subagentStoreReadyStartedAt = perfNowMs();
-  let subagentReminder = "";
+  // roster 拆两段：身份字段（id / name / role / mode）稳定，留在 systemPrompt；
+  // 运行状态（status / last_task / last_summary）随子代理 run 推进而变，后置到消息尾部，
+  // 否则每推进一次状态就改写 systemPrompt，system 块连同其后的全部历史一并作废。
+  let rosterIdentitySection = "";
+  // 消息总线快照同样按“压缩纪元”冻结：只在 run 起始与各压缩边界重算。
+  // run 内新到的子 agent 消息不回头改写 systemPrompt（那会作废 system 块及其后
+  // 的全部历史），改由 renderMessageBusDelta 渲染成增量块挂到消息尾部投递——
+  // 尾部本就在缓存断点之后、每轮重读，追加不额外损失命中率。
   let parentMessageBusSnapshot = "";
+  // 已渲染进上下文的 bus 游标（seq）：run 内只投递其后的增量。
+  let renderedBusSeq = 0;
+  // 当前冻结快照实际覆盖到的 seq。必须与 renderedBusSeq 分开记：后者会被尾部增量
+  // 推进，快照却只在压缩边界重算，两者在 run 内本就不成对。
+  let frozenBusSeq = 0;
+  const refreezeParentMessageBus = async () => {
+    const messages = await loadParentBusMessages();
+    // 读失败时保持上一份快照，并把游标退回该快照覆盖的位置：调用点都在压缩之后，
+    // 挂着增量的尾部块可能已被截断，游标停在原处会让那段消息既不在快照里也不在
+    // 历史里，永久丢失。退回后下一轮重投——重投只多花 token，丢消息不可逆。
+    if (!messages) {
+      renderedBusSeq = frozenBusSeq;
+      return;
+    }
+    const snapshot = renderMessageBusSnapshot({
+      messages,
+      currentAgentId: SUBAGENT_PARENT_ID,
+      currentAgentName: PARENT_MESSAGE_BUS_AGENT_NAME,
+    });
+    parentMessageBusSnapshot = snapshot.text;
+    // 游标必须用快照实际覆盖到的 seq（连续已渲染前缀），不能用全体可见消息的
+    // 最大 seq：快照有条数上限，被配额挤掉的消息若被游标跳过，就既不在快照里
+    // 也不会再被 delta 投递，静默丢失。
+    frozenBusSeq = snapshot.renderedSeq;
+    renderedBusSeq = frozenBusSeq;
+  };
   if (subagentStore) {
     try {
       await subagentStore.ready();
-      subagentReminder = buildRosterReminder({
+      rosterIdentitySection = buildRosterIdentitySection({
         identities: subagentStore.listIdentities(),
-        latestRunsByAgent: subagentStore.latestRunsByAgent(),
       });
     } catch (error) {
       console.warn("Failed to load the subagent roster", error);
     }
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
+    await refreezeParentMessageBus();
   }
   finishAgentPerfSpan(
     conversationDebugLogger,
@@ -382,26 +421,65 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       identityCount: subagentStore?.listIdentities().length ?? 0,
     },
   );
-  const refreshParentMessageBusSnapshot = async () => {
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
-    return parentMessageBusSnapshot;
+  const buildParentMessageBusDelta = async () => {
+    const messages = await loadParentBusMessages();
+    if (!messages) return { text: "", lastSeq: renderedBusSeq };
+    return renderMessageBusDelta({
+      messages,
+      sinceSeq: renderedBusSeq,
+      currentAgentId: SUBAGENT_PARENT_ID,
+      currentAgentName: PARENT_MESSAGE_BUS_AGENT_NAME,
+    });
   };
+  // 已投递进上下文的 roster 易变段：与 bus 的 seq 游标同理，只有真正挂上才推进。
+  // run 起始不投递——此时消息尾部还没有安全锚点（末条是 user 消息），首次投递发生在
+  // 第一轮工具结果之后；在那之前 Agent 工具描述里的 roster 已带有 status / summary，
+  // 模型真要委派时看得到。
+  let renderedRosterRunStatus = "";
+  const buildRosterRunStatusDelta = () => {
+    if (!subagentStore) return "";
+    let section = "";
+    try {
+      section = buildRosterRunStatusSection({
+        identities: subagentStore.listIdentities(),
+        latestRunsByAgent: subagentStore.latestRunsByAgent(),
+      });
+    } catch (error) {
+      console.warn("Failed to render the subagent run status", error);
+      return "";
+    }
+    // 内容没变就不投递：每轮无条件追加等于亲手打穿缓存。
+    return section === renderedRosterRunStatus ? "" : section;
+  };
+  // 任务状态快照按“压缩纪元”冻结：只在 run 起始与各压缩边界重算，run 内不再重读。
+  // 缓存前缀按字节匹配，systemPrompt 排在全部消息之前——每轮重读 meta.taskList
+  // 等于每次 TaskUpdate 都改写前缀，system 块连同其后的全部历史一并作废。
+  // 模型感知任务状态的主通道是 TaskCreate / TaskUpdate / TaskList 的工具结果，
+  // 这份 JSON 只在历史被压缩截断、工具结果被摘要掉之后才不可替代（见
+  // formatTaskListRuntimeContext 的文案），而那一刻前缀本来就要重建，重新冻结是
+  // 免费的。代价是 run 内新建的任务不出现在 system 段，由工具结果覆盖。
+  let frozenTaskListContext = "";
+  const refreezeTaskListContext = () => {
+    // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
+    // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
+    const taskList = getNextConversationState().meta.taskList;
+    frozenTaskListContext =
+      taskList && taskList.runId === taskStateStore.runId
+        ? formatTaskListRuntimeContext(taskList)
+        : "";
+    return frozenTaskListContext;
+  };
+  refreezeTaskListContext();
   const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
-    if (subagentReminder) {
-      systemPrompt = appendSystemPrompt(systemPrompt, subagentReminder);
+    if (rosterIdentitySection) {
+      systemPrompt = appendSystemPrompt(systemPrompt, rosterIdentitySection);
     }
     if (parentMessageBusSnapshot) {
       systemPrompt = appendSystemPrompt(systemPrompt, parentMessageBusSnapshot);
     }
-    // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
-    // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
-    const taskList = getNextConversationState().meta.taskList;
-    if (taskList && taskList.runId === taskStateStore.runId) {
-      const taskListContext = formatTaskListRuntimeContext(taskList);
-      if (taskListContext) {
-        systemPrompt = appendSystemPrompt(systemPrompt, taskListContext);
-      }
+    if (frozenTaskListContext) {
+      systemPrompt = appendSystemPrompt(systemPrompt, frozenTaskListContext);
     }
     return systemPrompt !== context.systemPrompt
       ? {
@@ -418,6 +496,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   const sandboxActive = safetyMode === "sandbox" || safetyMode === "sandboxOffline";
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir: effectiveWorkdir,
+    additionalRoots,
     providerId,
     runtimePlatform,
     fileState,
@@ -493,6 +572,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       toolCount: combinedTools.length,
     },
   );
+  // 压缩边界①：发送前压缩已重建前缀，此处重新冻结不额外损失命中率。
+  // bus 快照不在这里重冻：它几毫秒前刚在本函数起始冻结过，发送前压缩只重写历史与
+  // systemPrompt，不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
+  refreezeTaskListContext();
 
   const combinedExecutor: (
     toolCall: ToolCall,
@@ -778,6 +861,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         runtimePlatform,
         context: agentContext,
         workdir: effectiveWorkdir,
+        additionalRoots,
         sessionId,
         nativeWebSearch: nativeWebSearchEnabled,
         tools: combinedTools,
@@ -971,7 +1055,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
           latestAgentEmittedMessages = emittedMessages.slice();
-          await refreshParentMessageBusSnapshot();
           const tempState = appendMessagesToConversation(
             getNextConversationState(),
             emittedMessages,
@@ -981,6 +1064,17 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
               includeUploadedFilesMetadata: true,
             }),
           );
+          // 尾部投递：systemPrompt 里的 bus 快照与 roster 身份段都已冻结，run 内新到的
+          // bus 消息与推进后的 roster 运行状态合并成**同一个**块作为 wireTailText 交给
+          // runner——runner 累积后只挂到每次出站请求上，agent 运行时状态与
+          // emittedMessages 始终不含它，不会泄漏进持久化、UI 与记忆抽取。
+          const busDelta = await buildParentMessageBusDelta();
+          const rosterRunStatusDelta = buildRosterRunStatusDelta();
+          const tailBlockText = [busDelta.text, rosterRunStatusDelta].filter(Boolean).join("\n\n");
+          // 探锚：只判断尾部块此刻能否安全挂上（解析得到锚点 = 可挂），不改写
+          // tempContext.messages 本身。真正的挂载与锚点钉死发生在 runner 侧。
+          const tailBlockAttachable =
+            Boolean(tailBlockText) && resolveTailBlockAnchorId(tempContext.messages) !== null;
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,
@@ -989,15 +1083,31 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             includeUploadedFilesMetadata: true,
           });
           if (!compactedContext) {
-            return parentMessageBusSnapshot
-              ? {
-                  context: tempContext,
-                  emittedMessages,
-                }
-              : null;
+            // 没有增量时返回 null：不产生任何额外内容，运行时状态原样续跑。
+            if (!tailBlockAttachable) {
+              return null;
+            }
+            // 只有确认能挂上才推进游标与基线；没有安全锚点时下一轮重试，避免丢内容。
+            renderedBusSeq = busDelta.lastSeq;
+            if (rosterRunStatusDelta) {
+              renderedRosterRunStatus = rosterRunStatusDelta;
+            }
+            return {
+              context: tempContext,
+              emittedMessages,
+              wireTailText: tailBlockText,
+            };
           }
           latestAgentEmittedMessages = [];
           clearPersistableAgentProgress();
+          // 压缩边界②：run 内压缩后重新冻结，必须赶在下面组装续跑上下文之前。
+          refreezeTaskListContext();
+          // 压缩会截断历史，runner 里累积的尾部投递内容也随本 override 不带
+          // wireTailText 而被清空，必须连同游标一起重新冻结，否则那些消息既
+          // 不在快照里也不会再被投递。
+          await refreezeParentMessageBus();
+          // 同理：roster 易变段的投递基线也随之作废，重置后下一轮重新投递。
+          renderedRosterRunStatus = "";
           return {
             context: withAgentRuntimeContext(compactedContext),
             emittedMessages: [],
@@ -1056,6 +1166,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       if (!compactionResult.context) {
         throw new Error("Mid-stream compaction did not provide a continuation context.");
       }
+      // 压缩边界③：中途流式压缩后重新冻结，续跑上下文在下一轮循环由
+      // withAgentRuntimeContext 包装 pendingAgentContext 时才读取冻结值。
+      refreezeTaskListContext();
+      await refreezeParentMessageBus();
+      renderedRosterRunStatus = "";
       pendingAgentContext = compactionResult.context;
       if (compactionResult.shouldDisableProtection) {
         midStreamProtectionDisabled = true;
@@ -1110,7 +1225,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       sessionId,
       conversationId,
       workdir: conversationCwd ?? effectiveWorkdir,
-      messages: buildPreparedContext(finalState).messages,
+      // 抽取子模型看到的必须是用户真正说的话:memory 增量块只服务主模型的缓存,
+      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。
+      messages: buildPreparedContext(finalState, undefined, { includeMemoryTurnUpdates: false })
+        .messages,
       statusText: memoryExtractionStatusText,
       signal: cancellation.userStop.signal,
       debugLogger: conversationDebugLogger,
@@ -1118,7 +1236,37 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     });
   };
 
-  if (showSilentMemoryExtraction && shouldRunMemoryExtraction) {
+  const persistCompletedState = (state: ConversationViewState) =>
+    persistConversationWithHistorySync({
+      conversationId,
+      sessionId,
+      providerId,
+      model,
+      cwd: conversationCwd,
+      state,
+      fallbackTitle,
+      createdAt,
+      titlePromise,
+    });
+
+  const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
+  if (pendingTerminalAssistantMeta) {
+    commitAssistantRoundMeta(
+      pendingTerminalAssistantMeta.assistant,
+      pendingTerminalAssistantMeta.round,
+    );
+  }
+  hookLifecycle.endAgent();
+
+  applyConversationState(finalState);
+  freezeGatewayFinalProjection(finalState, true);
+  settleLiveTranscript(transcriptStore);
+  const historyPersisted = await persistCompletedState(finalState);
+
+  // Memory extraction reads the in-memory final state. Only run it after the
+  // durable history write succeeds so we never keep "memory has the answer,
+  // chat history only has the user prompt" after a failed final persist.
+  if (historyPersisted && showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     const extraction = await runPostTurnMemoryExtraction({
       roundOffset: memoryRoundOffset,
       onTurnStart: (round) => {
@@ -1248,29 +1396,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       );
     }
   }
-  const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
-  if (pendingTerminalAssistantMeta) {
-    commitAssistantRoundMeta(
-      pendingTerminalAssistantMeta.assistant,
-      pendingTerminalAssistantMeta.round,
-    );
+  if (completedState !== finalState) {
+    applyConversationState(completedState);
+    freezeGatewayFinalProjection(completedState, true);
+    settleLiveTranscript(transcriptStore);
+    await persistCompletedState(completedState);
   }
-  hookLifecycle.endAgent();
-  applyConversationState(completedState);
-  freezeGatewayFinalProjection(completedState, true);
-  settleLiveTranscript(transcriptStore);
-  await persistConversationWithHistorySync({
-    conversationId,
-    sessionId,
-    providerId,
-    model,
-    cwd: conversationCwd,
-    state: completedState,
-    fallbackTitle,
-    createdAt,
-    titlePromise,
-  });
-  if (!showSilentMemoryExtraction && shouldRunMemoryExtraction) {
+  if (historyPersisted && !showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     void runPostTurnMemoryExtraction();
   }
 }

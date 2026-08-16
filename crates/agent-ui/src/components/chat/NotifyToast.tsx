@@ -1,4 +1,5 @@
-import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/app/components/icons";
+import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/ui/components/IconSet";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, useEffect, useRef } from "react";
 
 export type NotifyItem = {
@@ -28,6 +29,7 @@ const ToastEntry = memo(function ToastEntry(props: {
   onDismiss: (id: string) => void;
 }) {
   const { item, onDismiss } = props;
+  const { t } = useLocale();
   const elRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,7 +54,10 @@ const ToastEntry = memo(function ToastEntry(props: {
   return (
     <div
       ref={elRef}
-      className={`notify-toast-enter pointer-events-auto flex w-72 items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl ${
+      role={item.type === "error" ? "alert" : "status"}
+      aria-live={item.type === "error" ? "assertive" : "polite"}
+      aria-atomic="true"
+      className={`notify-toast-enter pointer-events-auto flex w-[min(18rem,calc(100vw-2rem))] items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl ${
         isWarning
           ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
           : isSuccess
@@ -61,14 +66,23 @@ const ToastEntry = memo(function ToastEntry(props: {
       }`}
     >
       {isWarning ? (
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <AlertTriangle
+          aria-hidden="true"
+          className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+        />
       ) : isSuccess ? (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <CheckCircle2
+          aria-hidden="true"
+          className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+        />
       ) : (
-        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+        <XCircle
+          aria-hidden="true"
+          className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+        />
       )}
       <p
-        className={`min-w-0 flex-1 leading-relaxed ${
+        className={`min-w-0 flex-1 whitespace-pre-wrap break-words leading-relaxed ${
           isWarning
             ? "text-amber-800 dark:text-amber-200"
             : isSuccess
@@ -81,9 +95,10 @@ const ToastEntry = memo(function ToastEntry(props: {
       <button
         type="button"
         onClick={() => onDismiss(item.id)}
-        className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 hover:opacity-100 transition-opacity"
+        aria-label={t("common.dismissNotification")}
+        className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
       >
-        <X className="h-3.5 w-3.5" />
+        <X aria-hidden="true" className="h-3.5 w-3.5" />
       </button>
     </div>
   );

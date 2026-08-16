@@ -1,7 +1,7 @@
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { MutableRefObject } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode, ProviderId } from "../../../lib/settings";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 
@@ -100,7 +100,8 @@ export function normalizeGatewayProviderType(value: string): ProviderId | null {
     normalized === "codex" ||
     normalized === "claude_code" ||
     normalized === "gemini" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "deepseek"
   ) {
     return normalized;
   }

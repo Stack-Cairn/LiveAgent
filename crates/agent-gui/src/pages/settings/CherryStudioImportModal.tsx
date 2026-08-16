@@ -1,12 +1,7 @@
-import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
-import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
-import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Check,
   ClaudeIcon,
+  DeepseekIcon,
   FolderOpen,
   GeminiIcon,
   GrokIcon,
@@ -14,7 +9,13 @@ import {
   RefreshCw,
   Settings,
   X,
-} from "../../components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
 
 export type CherryProviderImportItem = {
@@ -57,19 +58,21 @@ type CherryStudioImportModalProps = {
   onConfirm: (items: CherryProviderImportItem[]) => void;
 };
 
-const PROVIDER_ORDER: ProviderId[] = ["claude_code", "codex", "gemini", "xai"];
+const PROVIDER_ORDER: ProviderId[] = ["claude_code", "codex", "gemini", "xai", "deepseek"];
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",
   gemini: "Gemini",
   xai: "Grok",
+  deepseek: "DeepSeek",
 };
 
 function ProviderTypeIcon({ type }: { type: ProviderId }) {
   if (type === "claude_code") return <ClaudeIcon height="1em" />;
   if (type === "gemini") return <GeminiIcon height="1em" />;
   if (type === "xai") return <GrokIcon height="1em" />;
+  if (type === "deepseek") return <DeepseekIcon height="1em" />;
   return <OpenaiChatgptIcon height="1em" className="fill-current dark:text-white" />;
 }
 
@@ -80,6 +83,7 @@ function itemKey(item: CherryProviderImportItem) {
 function itemProtocolLabel(item: CherryProviderImportItem) {
   if (item.providerType === "claude_code") return "Anthropic Messages";
   if (item.providerType === "gemini") return "Gemini Generate Content";
+  if (item.providerType === "deepseek") return "DeepSeek Chat Completions";
   return item.requestFormat === "openai-responses" ? "Responses API" : "Chat Completions";
 }
 

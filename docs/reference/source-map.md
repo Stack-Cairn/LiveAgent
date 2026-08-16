@@ -48,6 +48,8 @@
 | Settings defaults/storage/sync | `crates/agent-gui/src/lib/settings/*` |
 | Builtin tool registry | `crates/agent-gui/src/lib/tools/builtinRegistry.ts` |
 | FS tools | `crates/agent-gui/src/lib/tools/fsTools.ts` |
+| 项目附加目录策略 | `crates/agent-gui/src/lib/tools/fsTools.ts`、`src/lib/tools/pathUtils.ts` |
+| 项目附加目录授权 | `crates/agent-gui/src/lib/workspaceRootGrants.ts`、`src-tauri/src/commands/workspace/root_grants.rs` |
 | Shell tools | `crates/agent-gui/src/lib/tools/shellTools.ts` |
 | MCP tools | `crates/agent-gui/src/lib/tools/mcpTools.ts`、`mcpManagerTools.ts` |
 | Skills tools | `crates/agent-gui/src/lib/tools/skillTools.ts` |
@@ -98,6 +100,7 @@
 | Handlers | `crates/agent-gateway/internal/handler/*` |
 | Proto source | `crates/agent-gateway/proto/v2/gateway.proto`（业务消息）、`proto/v2/gateway_ws.proto`（v2 帧壳） |
 | Generated proto | `crates/agent-gateway/internal/proto/v2/*` |
+| 项目附加目录协议 | `WorkspaceRootGrantsRequest` 的 `list`、`apply`、`revoke` action；`internal/protocol/pbws/guard.go` 负责白名单与字段校验 |
 
 ## WebUI
 

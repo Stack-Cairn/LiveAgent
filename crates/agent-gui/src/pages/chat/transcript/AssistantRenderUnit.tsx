@@ -1,10 +1,10 @@
 import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
+import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import { collectChangedFiles } from "../../../lib/chat/messages/changedFiles";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import { AssistantAvatar, AssistantBubbleUnit } from "../components/AssistantBubble";
 import { AssistantRowFooter } from "./RowActions";
 import type { AssistantFooterRenderUnit, AssistantUnitRow } from "./rowModel";

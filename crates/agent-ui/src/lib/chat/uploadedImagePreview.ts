@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { PendingUploadedFile } from "./uploadTypes";
 
 export type UploadedImagePreviewResult = {
@@ -219,4 +220,55 @@ export async function loadUploadedImagePreview(params: {
 
   uploadedImagePreviewRequests.set(cacheKey, request);
   return request;
+}
+
+export function useUploadedImagePreview(
+  file?: PendingUploadedFile,
+  workspaceRoot?: string,
+  loader?: UploadedImagePreviewLoader,
+) {
+  const normalizedWorkspaceRoot = normalizeCachePart(workspaceRoot);
+  const absolutePath = normalizeCachePart(file?.absolutePath);
+  const cacheKey = file ? getUploadedImagePreviewCacheKey(normalizedWorkspaceRoot, file) : "";
+  const [imageSrc, setImageSrc] = useState<string | null | undefined>(() => {
+    if (!file || !normalizedWorkspaceRoot) return null;
+    return readUploadedImagePreviewCache(normalizedWorkspaceRoot, file);
+  });
+
+  useEffect(() => {
+    if (!file || !cacheKey || !normalizedWorkspaceRoot) {
+      setImageSrc(null);
+      return;
+    }
+
+    const cached = readUploadedImagePreviewCache(normalizedWorkspaceRoot, file);
+    if (cached !== undefined) {
+      setImageSrc(cached);
+      return;
+    }
+    if (!absolutePath || !loader) {
+      setImageSrc(null);
+      return;
+    }
+
+    let cancelled = false;
+    setImageSrc(undefined);
+    void loadUploadedImagePreview({
+      workspaceRoot: normalizedWorkspaceRoot,
+      file,
+      loader,
+    }).then((value) => {
+      if (!cancelled) {
+        setImageSrc(value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [absolutePath, cacheKey, file, loader, normalizedWorkspaceRoot]);
+
+  return {
+    imageSrc: imageSrc ?? null,
+    isLoading: Boolean(cacheKey && absolutePath && loader) && imageSrc === undefined,
+  };
 }

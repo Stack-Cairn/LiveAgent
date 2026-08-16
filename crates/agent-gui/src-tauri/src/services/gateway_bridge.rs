@@ -13,11 +13,19 @@ use crate::commands::{
         fs_write_text_sync,
     },
     git::{git_gateway_clone_task_action_sync, GitCloneTaskRegistry},
+    root_grants::{
+        workspace_root_grants_apply, workspace_root_grants_list, workspace_root_grants_revoke,
+        WorkspaceRootAccess, WorkspaceRootGrant, WorkspaceRootGrantDraft,
+    },
     settings::{load_providers, open_db},
     system::{
-        system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
-        system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
-        system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
+        system_create_project_folder_sync, system_import_directory_abort_sync,
+        system_import_directory_chunk_sync, system_import_directory_commit_sync,
+        system_import_directory_start_sync, system_import_directory_sync,
+        system_import_uploaded_readable_files_sync, system_list_skill_files_sync,
+        system_read_skill_metadata_sync, system_read_skill_text_sync,
+        system_read_uploaded_image_preview_sync, SystemImportDirectoryInputFile,
+        SystemReadableFileUploadInput,
     },
 };
 use crate::services::automation::{
@@ -384,15 +392,116 @@ pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, Strin
 pub async fn handle_provider_models(
     request: proto::ProviderModelsRequest,
 ) -> Result<proto::ProviderModelsResponse, String> {
+    let provider_type = request.provider_type.trim().to_string();
+    let request_api_key = request.api_key.trim().to_string();
+    let config = if request_api_key.is_empty() {
+        let provider_id = request.provider_id.trim().to_string();
+        let expected_provider_type = provider_type.clone();
+        let is_full_url = request.is_full_url;
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_models_config(
+                &provider_id,
+                &expected_provider_type,
+                is_full_url,
+                load_providers(&conn)?,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    } else {
+        ProviderModelsRequestConfig {
+            provider_type,
+            base_url: request.base_url.trim().to_string(),
+            api_key: request_api_key,
+            use_system_proxy: request.use_system_proxy,
+            models_url: Some(request.models_url.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            is_full_url: request.is_full_url.unwrap_or(false),
+        }
+    };
     let models_json = crate::services::provider_models::fetch_provider_models(
-        request.provider_type.trim(),
-        request.base_url.trim(),
-        request.api_key.trim(),
-        request.use_system_proxy,
-        Some(request.models_url.trim()).filter(|value| !value.is_empty()),
+        &config.provider_type,
+        &config.base_url,
+        &config.api_key,
+        config.use_system_proxy,
+        config.models_url.as_deref(),
+        config.is_full_url,
     )
     .await?;
     Ok(proto::ProviderModelsResponse { models_json })
+}
+
+#[derive(Debug, PartialEq)]
+struct ProviderModelsRequestConfig {
+    provider_type: String,
+    base_url: String,
+    api_key: String,
+    use_system_proxy: bool,
+    models_url: Option<String>,
+    is_full_url: bool,
+}
+
+fn resolve_stored_provider_models_config(
+    provider_id: &str,
+    expected_provider_type: &str,
+    is_full_url: Option<bool>,
+    providers: Option<Value>,
+) -> Result<ProviderModelsRequestConfig, String> {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let providers = providers
+        .and_then(|value| value.as_array().cloned())
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let provider = providers
+        .into_iter()
+        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let stored_provider_type = provider
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    if stored_provider_type != expected_provider_type.trim() {
+        return Err("供应商类型与已保存配置不匹配".to_string());
+    }
+    let api_key = provider
+        .get("apiKey")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
+    let base_url = provider
+        .get("baseUrl")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let models_url = provider
+        .get("modelsUrl")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    Ok(ProviderModelsRequestConfig {
+        provider_type: stored_provider_type.to_string(),
+        base_url,
+        api_key,
+        use_system_proxy: provider
+            .get("useSystemProxy")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        models_url,
+        is_full_url: is_full_url.unwrap_or_else(|| {
+            provider
+                .get("isFullUrl")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        }),
+    })
 }
 
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
@@ -453,6 +562,65 @@ pub async fn handle_fs_roots() -> Result<proto::FsRootsResponse, String> {
                 })
                 .collect(),
         })
+}
+
+fn workspace_root_grant_to_proto(grant: WorkspaceRootGrant) -> proto::WorkspaceRootGrant {
+    proto::WorkspaceRootGrant {
+        id: grant.id,
+        project_id: grant.project_id,
+        project_path_key: grant.project_path_key,
+        alias: grant.alias,
+        display_path: grant.display_path,
+        canonical_path: grant.canonical_path,
+        access: grant.access.as_str().to_string(),
+        state: grant.state.as_str().to_string(),
+        created_at: grant.created_at,
+        updated_at: grant.updated_at,
+    }
+}
+
+pub async fn handle_workspace_root_grants(
+    request: proto::WorkspaceRootGrantsRequest,
+) -> Result<proto::WorkspaceRootGrantsResponse, String> {
+    let action = request.action.trim();
+    let grants = match action {
+        "list" => {
+            if !request.grants.is_empty() {
+                return Err("列出目录授权时不能携带授权草稿".to_string());
+            }
+            workspace_root_grants_list(request.project_id, request.project_path).await?
+        }
+        "apply" => {
+            let drafts = request
+                .grants
+                .into_iter()
+                .map(|grant| {
+                    Ok(WorkspaceRootGrantDraft {
+                        id: grant.id,
+                        alias: grant.alias,
+                        display_path: grant.display_path,
+                        access: WorkspaceRootAccess::parse(grant.access.trim())?,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            workspace_root_grants_apply(request.project_id, request.project_path, drafts).await?
+        }
+        "revoke" => {
+            if !request.project_path.trim().is_empty() || !request.grants.is_empty() {
+                return Err("撤销目录授权时只能提供项目 id".to_string());
+            }
+            workspace_root_grants_revoke(request.project_id).await?;
+            Vec::new()
+        }
+        _ => return Err(format!("不支持的目录授权操作：{action}")),
+    };
+
+    Ok(proto::WorkspaceRootGrantsResponse {
+        grants: grants
+            .into_iter()
+            .map(workspace_root_grant_to_proto)
+            .collect(),
+    })
 }
 
 pub async fn handle_fs_list_dirs(
@@ -753,6 +921,64 @@ pub async fn handle_upload_readable_files(
             })
             .collect(),
         skipped: response.skipped,
+    })
+}
+
+pub async fn handle_import_directory(
+    request: proto::ImportDirectoryRequest,
+) -> Result<proto::ImportDirectoryResponse, String> {
+    let transfer_id = request.transfer_id.clone();
+    let operation = proto::ImportDirectoryOperation::try_from(request.operation)
+        .map_err(|_| format!("不支持的目录导入操作：{}", request.operation))?;
+    let outcome = tauri::async_runtime::spawn_blocking(move || match operation {
+        proto::ImportDirectoryOperation::Start => system_import_directory_start_sync(
+            request.transfer_id,
+            request.name,
+            request.target,
+            request.total_files,
+            request.total_bytes,
+        ),
+        proto::ImportDirectoryOperation::WriteChunk => system_import_directory_chunk_sync(
+            request.transfer_id,
+            request.relative_path,
+            request.offset,
+            request.chunk,
+            request.file_complete,
+        ),
+        proto::ImportDirectoryOperation::Commit => {
+            system_import_directory_commit_sync(request.transfer_id)
+        }
+        proto::ImportDirectoryOperation::Abort => {
+            system_import_directory_abort_sync(request.transfer_id)?;
+            Ok(crate::commands::system::SystemImportDirectoryOutcome {
+                root_path: String::new(),
+                file_count: 0,
+                skipped: Vec::new(),
+                received_bytes: 0,
+            })
+        }
+        proto::ImportDirectoryOperation::Unspecified => {
+            #[allow(deprecated)]
+            let files = request
+                .files
+                .into_iter()
+                .map(|file| SystemImportDirectoryInputFile {
+                    relative_path: file.relative_path,
+                    content: file.content,
+                })
+                .collect();
+            system_import_directory_sync(request.name, request.target, files)
+        }
+    })
+    .await
+    .map_err(|e| format!("gateway import directory join failed: {e}"))??;
+
+    Ok(proto::ImportDirectoryResponse {
+        root_path: outcome.root_path,
+        file_count: i32::try_from(outcome.file_count).unwrap_or(i32::MAX),
+        skipped: outcome.skipped,
+        transfer_id,
+        received_bytes: outcome.received_bytes,
     })
 }
 
@@ -1419,7 +1645,7 @@ mod tests {
     use super::{
         flatten_history_messages_json, flatten_history_messages_json_window,
         is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        sanitize_provider_summaries,
+        resolve_stored_provider_models_config, sanitize_provider_summaries,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -1488,6 +1714,67 @@ mod tests {
         assert_eq!(result[0]["nativeWebSearchEnabled"], false);
         assert_eq!(result[0]["apiKey"], Value::Null);
         assert_eq!(result[0]["baseUrl"], Value::Null);
+    }
+
+    #[test]
+    fn provider_models_resolves_redacted_webui_config_from_matching_provider() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1/responses",
+            "apiKey": "stored-secret",
+            "isFullUrl": true,
+            "modelsUrl": "https://stored.example.com/models",
+            "useSystemProxy": true
+        }]);
+        assert_eq!(
+            resolve_stored_provider_models_config("provider-a", "codex", None, Some(providers))
+                .expect("stored provider config"),
+            super::ProviderModelsRequestConfig {
+                provider_type: "codex".to_string(),
+                base_url: "https://stored.example.com/v1/responses".to_string(),
+                api_key: "stored-secret".to_string(),
+                use_system_proxy: true,
+                models_url: Some("https://stored.example.com/models".to_string()),
+                is_full_url: true,
+            }
+        );
+    }
+
+    #[test]
+    fn provider_models_applies_webui_full_url_mode_to_stored_endpoint() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1/responses",
+            "apiKey": "stored-secret",
+            "isFullUrl": false
+        }]);
+        let config = resolve_stored_provider_models_config(
+            "provider-a",
+            "codex",
+            Some(true),
+            Some(providers),
+        )
+        .expect("stored provider config with draft full URL mode");
+
+        assert_eq!(config.base_url, "https://stored.example.com/v1/responses");
+        assert_eq!(config.api_key, "stored-secret");
+        assert!(config.is_full_url);
+    }
+
+    #[test]
+    fn provider_models_rejects_mismatched_stored_provider_type() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "claude_code",
+            "apiKey": "stored-secret"
+        }]);
+        assert_eq!(
+            resolve_stored_provider_models_config("provider-a", "codex", None, Some(providers))
+                .expect_err("provider type mismatch"),
+            "供应商类型与已保存配置不匹配"
+        );
     }
 
     #[test]

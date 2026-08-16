@@ -1,4 +1,4 @@
-import { X } from "@liveagent/app/components/icons";
+import { X } from "@liveagent/ui/components/IconSet";
 import { type ReactNode, useMemo, useState } from "react";
 import { ImagePreview, type ImagePreviewSlide } from "./ImagePreview";
 

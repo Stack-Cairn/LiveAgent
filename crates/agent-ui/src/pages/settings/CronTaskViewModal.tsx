@@ -14,7 +14,7 @@ import {
   Timer,
   X,
   XCircle,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type CronRunRecord,

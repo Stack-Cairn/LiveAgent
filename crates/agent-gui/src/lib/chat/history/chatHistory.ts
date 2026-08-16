@@ -429,6 +429,11 @@ function buildChatHistoryConversationInput(params: {
     state,
   } = params;
 
+  // Header totals must stay anchored on state.meta. After a conversation is
+  // reopened from history, state.segments only holds the active segment while
+  // meta.totalMessageCount still counts every sealed row in SQLite — summing
+  // the in-memory segments would undercount and trip the backend segment-sum
+  // consistency check on every persist.
   return {
     id: conversationId,
     title,
@@ -446,13 +451,23 @@ function buildChatHistoryConversationInput(params: {
   };
 }
 
+function resolveSegmentMessageCount(segment: StoredContextSegment): number {
+  // Live messages are the source of truth. Fall back to messageCount only when
+  // the messages array is absent (defensive); an empty array means zero messages.
+  if (Array.isArray(segment.messages)) {
+    return segment.messages.length;
+  }
+  return typeof segment.messageCount === "number" ? segment.messageCount : 0;
+}
+
 function buildChatHistorySegmentInput(segment: StoredContextSegment): ChatHistorySegmentWireRecord {
+  const messageCount = resolveSegmentMessageCount(segment);
   return {
     segmentIndex: segment.segmentIndex,
     segmentId: segment.segmentId,
     summaryJson: segment.summary ? JSON.stringify(segment.summary) : undefined,
-    messagesJson: JSON.stringify(segment.messages),
-    messageCount: segment.messageCount,
+    messagesJson: JSON.stringify(segment.messages ?? []),
+    messageCount,
     startMessageId: segment.startMessageId,
     endMessageId: segment.endMessageId,
     createdAt: segment.createdAt,
@@ -542,10 +557,58 @@ type PersistConversationRuntimeParams = {
   commitPersistenceCursor: (cursor: ConversationPersistenceCursor) => void;
 };
 
+function findSegmentByIndex(
+  state: ConversationViewState,
+  segmentIndex: number,
+): StoredContextSegment | undefined {
+  return state.segments.find((segment) => segment.segmentIndex === segmentIndex);
+}
+
+function conversationInputForCursor(
+  conversation: ChatHistoryConversationInput,
+  state: ConversationViewState,
+  activeSegmentIndex: number,
+): ChatHistoryConversationInput {
+  // Each intermediate append must advertise exactly the totals that exist
+  // after that step lands: the backend append precondition requires
+  // totalSegmentCount == stored count + 1, and the consistency check compares
+  // the header against COUNT/SUM over all rows inside the same transaction.
+  //
+  // Subtract the not-yet-appended in-memory segments from the final header
+  // total instead of re-summing in-memory segments from zero: after a
+  // conversation is reopened from history, the sealed rows before the loaded
+  // active segment exist only in SQLite.
+  const pendingBeyondStep = state.segments
+    .filter((segment) => segment.segmentIndex > activeSegmentIndex)
+    .reduce((sum, segment) => sum + resolveSegmentMessageCount(segment), 0);
+  const totalSegmentCount = activeSegmentIndex + 1;
+  const totalMessageCount = Math.max(0, conversation.totalMessageCount - pendingBeyondStep);
+  let contextMetaJson = conversation.contextMetaJson;
+  try {
+    const meta = JSON.parse(conversation.contextMetaJson) as Record<string, unknown>;
+    contextMetaJson = JSON.stringify({
+      ...meta,
+      activeSegmentIndex,
+      totalSegmentCount,
+      totalMessageCount,
+    });
+  } catch {
+    // Keep the original payload if meta is not JSON; header counts still win.
+  }
+  return {
+    ...conversation,
+    contextMetaJson,
+    activeSegmentIndex,
+    totalSegmentCount,
+    totalMessageCount,
+  };
+}
+
 async function writeConversationRuntime(
   conversation: ChatHistoryConversationInput,
   cursor: ConversationPersistenceCursor | null,
   state: ConversationViewState,
+  commitPersistenceCursor: (cursor: ConversationPersistenceCursor) => void,
 ) {
   const activeSegment = getActiveSegment(state);
   if (!activeSegment) {
@@ -556,60 +619,91 @@ async function writeConversationRuntime(
     if (state.segments[0]?.segmentIndex !== 0) {
       throw new Error("已存在的历史会话缺少持久化游标");
     }
-    return upsertChatHistoryRaw({
+    const summary = await upsertChatHistoryRaw({
       ...conversation,
       segments: state.segments.map(buildChatHistorySegmentInput),
     });
+    commitPersistenceCursor({
+      activeSegmentIndex: activeSegment.segmentIndex,
+      activeSegmentId: activeSegment.segmentId,
+    });
+    return summary;
+  }
+
+  if (activeSegment.segmentIndex < cursor.activeSegmentIndex) {
+    throw new Error(
+      `不支持的历史分段回退：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
+    );
   }
 
   if (activeSegment.segmentIndex === cursor.activeSegmentIndex) {
     if (activeSegment.segmentId !== cursor.activeSegmentId) {
       throw new Error("活跃历史分段身份与持久化游标不一致");
     }
-    return upsertChatHistoryActiveSegmentRaw({
+    const summary = await upsertChatHistoryActiveSegmentRaw({
       conversation,
       segment: buildChatHistorySegmentInput(activeSegment),
     });
+    commitPersistenceCursor({
+      activeSegmentIndex: activeSegment.segmentIndex,
+      activeSegmentId: activeSegment.segmentId,
+    });
+    return summary;
   }
 
-  if (activeSegment.segmentIndex === cursor.activeSegmentIndex + 1) {
-    const previousSegment = state.segments.find(
-      (segment) => segment.segmentIndex === cursor.activeSegmentIndex,
-    );
+  // Catch up one segment at a time when the in-memory active segment jumped
+  // ahead of the durable cursor (e.g. multiple compactions between persists).
+  // Previously this threw "不支持的历史分段跳变" and left the DB on the
+  // user-only snapshot after a long agent turn.
+  let workingCursor: ConversationPersistenceCursor = { ...cursor };
+  let summary: ChatHistorySummary | null = null;
+
+  while (workingCursor.activeSegmentIndex < activeSegment.segmentIndex) {
+    const previousSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex);
+    const nextSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex + 1);
     if (!previousSegment) {
       throw new Error("追加历史分段时缺少待封存的上一活跃分段");
     }
-    if (previousSegment.segmentId !== cursor.activeSegmentId) {
+    if (!nextSegment) {
+      throw new Error(`追加历史分段时缺少目标分段：${workingCursor.activeSegmentIndex + 1}`);
+    }
+    if (previousSegment.segmentId !== workingCursor.activeSegmentId) {
       throw new Error("待封存历史分段身份与持久化游标不一致");
     }
-    return appendChatHistorySegmentRaw({
-      conversation,
+
+    summary = await appendChatHistorySegmentRaw({
+      conversation: conversationInputForCursor(conversation, state, nextSegment.segmentIndex),
       previousSegment: buildChatHistorySegmentInput(previousSegment),
-      segment: buildChatHistorySegmentInput(activeSegment),
+      segment: buildChatHistorySegmentInput(nextSegment),
     });
+    workingCursor = {
+      activeSegmentIndex: nextSegment.segmentIndex,
+      activeSegmentId: nextSegment.segmentId,
+    };
+    // Commit after every successful append so a later failure can resume from
+    // the durable frontier instead of replaying a sealed segment.
+    commitPersistenceCursor(workingCursor);
   }
 
-  throw new Error(
-    `不支持的历史分段跳变：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
-  );
+  if (activeSegment.segmentId !== workingCursor.activeSegmentId) {
+    throw new Error("活跃历史分段身份与持久化游标不一致");
+  }
+  if (!summary) {
+    throw new Error(
+      `不支持的历史分段跳变：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
+    );
+  }
+  return summary;
 }
 
 export async function persistConversationRuntime(params: PersistConversationRuntimeParams) {
   return withConversationWriteLock(params.conversationId, async () => {
     const conversation = buildChatHistoryConversationInput(params);
-    const summary = await writeConversationRuntime(
+    return writeConversationRuntime(
       conversation,
       params.getPersistenceCursor(),
       params.state,
+      params.commitPersistenceCursor,
     );
-    const activeSegment = getActiveSegment(params.state);
-    if (!activeSegment) {
-      throw new Error("持久化成功后缺少活跃分段");
-    }
-    params.commitPersistenceCursor({
-      activeSegmentIndex: activeSegment.segmentIndex,
-      activeSegmentId: activeSegment.segmentId,
-    });
-    return summary;
   });
 }

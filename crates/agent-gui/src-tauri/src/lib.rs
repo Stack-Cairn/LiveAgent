@@ -86,6 +86,9 @@ macro_rules! app_invoke_handler {
             commands::fs::fs_grep,
             commands::fs::fs_mention_list,
             commands::chat_file_links::open_chat_file_link,
+            commands::root_grants::workspace_root_grants_list,
+            commands::root_grants::workspace_root_grants_apply,
+            commands::root_grants::workspace_root_grants_revoke,
             // Subagent worktrees
             commands::subagent_worktree::subagent_worktree_create,
             commands::subagent_worktree::subagent_worktree_status,
@@ -242,8 +245,11 @@ macro_rules! app_invoke_handler {
             commands::git::git_stash_push,
             commands::git::git_stash_pop,
             commands::system::system_pick_folder,
+            commands::system::system_resolve_dropped_workspace_folders,
+            commands::system::system_classify_dropped_paths,
             commands::system::system_pick_file,
             commands::system::system_sandbox_capability,
+            commands::system::system_save_preview_file,
             commands::system::system_create_project_folder,
             commands::system::system_import_pasted_texts,
             commands::system::system_import_readable_file_paths,
@@ -260,6 +266,7 @@ macro_rules! app_invoke_handler {
             commands::system::system_begin_power_activity,
             commands::system::system_end_power_activity,
             commands::system::system_clipboard_read_text,
+            commands::system::system_clipboard_write_image,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
@@ -721,6 +728,7 @@ pub fn run() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
                 commands::system::gc_upload_staging_on_startup();
+                commands::system::start_directory_import_staging_gc();
                 app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");

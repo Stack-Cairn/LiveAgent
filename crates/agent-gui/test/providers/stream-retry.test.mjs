@@ -266,8 +266,48 @@ test("withStreamRetry backoff aborted before it can fire prevents any further at
 
   const events = await collectEvents(wrapped);
   assert.equal(calls, 1);
+  assert.equal(events.length, 1);
   assert.equal(events[0].type, "error");
-  assert.match(events[0].error.errorMessage, /503/);
+  // A stop during the backoff is a cancellation, not the failed attempt's
+  // transport error: replaying the 503 here would hide the fact that the user
+  // stopped the run, so every abort branch upstream would miss it.
+  assert.equal(events[0].reason, "aborted");
+  assert.equal(events[0].error.stopReason, "aborted");
+});
+
+test("withStreamRetry resolves an aborted backoff to an aborted final message", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("cancelled"));
+  const wrapped = withStreamRetry(() => createErrorStream("502 bad gateway"), {
+    maxAttempts: 5,
+    signal: controller.signal,
+  });
+
+  await collectEvents(wrapped);
+  const final = await wrapped.result();
+  assert.equal(final.stopReason, "aborted");
+  // The model identity of the cancelled round survives, so the persisted
+  // record still says which provider/model the stopped turn belonged to.
+  assert.equal(final.model, "test-model");
+  assert.equal(final.provider, "anthropic");
+});
+
+test("withStreamRetry reports the retry that was cancelled through onRetry", async () => {
+  // The status row and the persisted stop notice both read the last retry
+  // record, so the retry that was in flight when the user stopped must have
+  // been reported before the abort lands.
+  const controller = new AbortController();
+  controller.abort(new Error("cancelled"));
+  const retryCalls = [];
+  const wrapped = withStreamRetry(() => createErrorStream("502 bad gateway"), {
+    maxAttempts: 5,
+    signal: controller.signal,
+    onRetry: (attempt, maxAttempts, errorMessage) =>
+      retryCalls.push([attempt, maxAttempts, errorMessage]),
+  });
+
+  await collectEvents(wrapped);
+  assert.deepEqual(retryCalls, [[1, 4, "502 bad gateway"]]);
 });
 
 test("withStreamRetry with disabled:true never retries", async () => {

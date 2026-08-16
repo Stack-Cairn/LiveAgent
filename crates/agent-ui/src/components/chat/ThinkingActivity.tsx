@@ -1,7 +1,7 @@
-import { ChevronRight, Lightbulb } from "@liveagent/app/components/icons";
-import type { ChatFileLink } from "../../lib/chat/chatFileLinks";
+import { ChevronRight, Lightbulb } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useRef, useState } from "react";
+import type { ChatFileLink } from "../../lib/chat/chatFileLinks";
 import { Markdown } from "../Markdown";
 import { AssistantStatus } from "./AssistantStatus";
 import { LazyCollapse } from "./LazyCollapse";

@@ -1,4 +1,4 @@
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 
 type ImportReadableFilesResponse = {
   files: PendingUploadedFile[];

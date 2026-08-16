@@ -1,10 +1,7 @@
-import type {
-  FileToolFieldPreview,
-  FileToolPreview,
-} from "@liveagent/app/lib/chat/toolPreviewAdapter";
 import { useChangedFilesActions } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { FileToolFieldPreview, FileToolPreview } from "@liveagent/ui/lib/chat/toolPreview";
 import {
   MetaTags,
   PathDisplay,

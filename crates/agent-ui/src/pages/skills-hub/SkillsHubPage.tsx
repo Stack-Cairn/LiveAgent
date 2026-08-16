@@ -1,4 +1,10 @@
 import {
+  type AppSettings,
+  removeWorkspaceResourceReferences,
+  updateSkills,
+} from "@liveagent/app/lib/settings";
+import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
+import {
   AlertTriangle,
   BookOpen,
   Check,
@@ -11,13 +17,7 @@ import {
   Server,
   Trash2,
   X,
-} from "@liveagent/app/components/icons";
-import {
-  type AppSettings,
-  removeWorkspaceResourceReferences,
-  updateSkills,
-} from "@liveagent/app/lib/settings";
-import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
+} from "@liveagent/ui/components/IconSet";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";

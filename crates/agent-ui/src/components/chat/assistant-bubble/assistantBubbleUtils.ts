@@ -1,14 +1,15 @@
+import { isTaskToolName } from "@liveagent/ui/contracts/task";
 import type {
   HostedSearchBlock,
   ToolResultMessage,
   ToolTraceItem,
   UiRound,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import {
+  isDynamicMcpToolName,
   safeStringify,
   shouldDisplayToolTraceItem,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
-import { isTaskToolName } from "@liveagent/ui/contracts/task";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type {
   SubagentCardDetails,
   SubagentReportDetails,
@@ -329,7 +330,7 @@ export function getBuiltinResultKind(result?: ToolResultMessage) {
 
 export function isBuiltinShareToolName(name: string) {
   const trimmed = name.trim();
-  if (trimmed.startsWith("mcp_")) {
+  if (isDynamicMcpToolName(trimmed)) {
     return true;
   }
   if (isTaskToolName(trimmed)) {

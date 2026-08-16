@@ -20,7 +20,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const userAttachmentCardsPath = path.resolve(
   rootDir,
-  "src/pages/chat/transcript/UserAttachmentCards.tsx",
+  "../agent-ui/src/components/chat/UserAttachmentCards.tsx",
 );
 
 let capturedCardsProps = [];
@@ -38,14 +38,13 @@ const loader = createTsModuleLoader({
 });
 
 const { EditableUserMessageBubble } = loader.loadModule(
-  "src/pages/chat/transcript/EditableUserMessageBubble.tsx",
+  "@liveagent/ui/components/chat/EditableUserMessageBubble.tsx",
 );
 
 function renderBubble(props) {
   capturedCardsProps = [];
   renderToStaticMarkup(
     jsxRuntime.jsx(EditableUserMessageBubble, {
-      compactedClass: "",
       onCancel: () => {},
       onSubmit: () => {},
       ...props,

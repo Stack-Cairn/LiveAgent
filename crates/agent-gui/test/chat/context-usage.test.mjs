@@ -15,7 +15,10 @@ const chatTurnQueueSource = readFileSync(
   "utf8",
 );
 const gatewayAppSource = readFileSync(
-  new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
+  new URL(
+    "../../../agent-gateway/web/src/app/hooks/useGatewayConversationRuntime.ts",
+    import.meta.url,
+  ),
   "utf8",
 );
 

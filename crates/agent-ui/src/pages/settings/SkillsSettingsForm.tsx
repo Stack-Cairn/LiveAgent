@@ -1,3 +1,5 @@
+import { updateSkills } from "@liveagent/app/lib/settings/index";
+import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   AlertTriangle,
   BookOpen,
@@ -8,9 +10,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-} from "@liveagent/app/components/icons";
-import { updateSkills } from "@liveagent/app/lib/settings/index";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {

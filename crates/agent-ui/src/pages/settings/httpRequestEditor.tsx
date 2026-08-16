@@ -1,4 +1,4 @@
-import { ChevronDown, Globe, Trash2 } from "@liveagent/app/components/icons";
+import { ChevronDown, Globe, Trash2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   canHttpMethodHaveBody,

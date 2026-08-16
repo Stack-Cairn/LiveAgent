@@ -5,7 +5,7 @@ import {
   Folder,
   OpenaiChatgptIcon,
   SkillIcon,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 
 export const EXTERNAL_TOOL_SOURCE_LABELS: Readonly<Record<string, string>> = {
   "claude-code": "Claude Code",

@@ -1,4 +1,5 @@
 import {
+  type AssistantMessage,
   type AssistantMessageEvent,
   type AssistantMessageEventStream,
   createAssistantMessageEventStream,
@@ -51,6 +52,21 @@ export function computeStreamRetryBackoffMs(attempt: number): number {
   return base * (0.9 + Math.random() * 0.2);
 }
 
+/**
+ * The cancellation terminal a consumer must see when the user stops the run
+ * during a retry backoff. It reuses the failed attempt's model identity so the
+ * record keeps saying which provider/model the cancelled round belonged to.
+ */
+function buildAbortedAssistantMessage(previous: AssistantMessage | undefined): AssistantMessage {
+  return {
+    ...(previous ?? {}),
+    role: "assistant",
+    content: previous?.content ?? [],
+    stopReason: "aborted",
+    errorMessage: "Cancelled",
+  } as AssistantMessage;
+}
+
 function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<void> {
   if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("Aborted"));
   if (ms <= 0) return Promise.resolve();
@@ -79,7 +95,9 @@ function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<vo
  * sees the failed attempt's events. Once committed, or once retries are
  * exhausted/disabled, events pass straight through untouched. `onRetry` /
  * `onRetryRecovered` let callers surface an ephemeral "reconnecting" status
- * in place of the frozen UI, mirroring codex's TUI behavior.
+ * in place of the frozen UI, mirroring codex's TUI behavior. A stop during the
+ * backoff ends the stream with an `aborted` terminal, never with the failed
+ * attempt's transport error.
  *
  * The pump below runs eagerly (not gated on the returned stream being
  * iterated) because pi-ai's own stream factories start their network work as
@@ -136,9 +154,22 @@ export function withStreamRetry(
             source = factory();
             continue;
           } catch {
-            // Aborted mid-backoff, or the next attempt failed to start —
-            // surface the prior attempt's real failure below instead of
-            // hanging the consumer on a retry that will never happen.
+            // Stopped mid-backoff: the terminal must say "aborted", not replay
+            // the prior attempt's transport error. Handing the consumer that
+            // error instead loses the fact that the user stopped the run — the
+            // abort branches upstream never fire, so nothing records the
+            // cancellation and the status row falls back to a spinner.
+            if (signal?.aborted) {
+              const aborted = buildAbortedAssistantMessage(
+                terminalMessage(terminal) as AssistantMessage | undefined,
+              );
+              output.push({ type: "error", reason: "aborted", error: aborted });
+              output.end(aborted);
+              return;
+            }
+            // The next attempt failed to start — surface the prior attempt's
+            // real failure below instead of hanging the consumer on a retry
+            // that will never happen.
           }
         }
       }

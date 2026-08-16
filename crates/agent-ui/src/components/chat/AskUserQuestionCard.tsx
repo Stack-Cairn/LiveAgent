@@ -2,7 +2,7 @@
 // 排在首位；纯展示组件，提交动作由调用方注入（GUI 直连工具挂起表，WebUI 走网关）。
 // 两端直接复用本组件，端差异一律留在各端的 ToolCallItem。
 
-import { Check, Sparkles } from "@liveagent/app/components/icons";
+import { Check, Sparkles } from "@liveagent/ui/components/IconSet";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useMemo, useState } from "react";

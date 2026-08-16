@@ -1,19 +1,14 @@
-import { tokenizeUserMessage as tokenizeHostUserMessage } from "../lib/chat/userMessageContent";
+import { tokenizeUserMessage as tokenizeSharedUserMessage } from "@liveagent/ui/lib/chat/userMessageContent";
 
 export {
   extractGitHubCommitSha,
   extractGitHubFileReference,
-} from "../lib/chat/userMessageContent";
+} from "@liveagent/ui/lib/chat/userMessageContent";
 
-export function tokenizeUserMessage(...args: Parameters<typeof tokenizeHostUserMessage>) {
-  return tokenizeHostUserMessage(...args).map((segment) => {
-    if (segment.type !== "mention") return segment;
-    return {
-      type: "mention" as const,
-      reference: {
-        path: segment.path,
-        kind: segment.isDir ? ("dir" as const) : ("file" as const),
-      },
-    };
+export function tokenizeUserMessage(...args: Parameters<typeof tokenizeSharedUserMessage>) {
+  const [text, pastedTextFiles, options] = args;
+  return tokenizeSharedUserMessage(text, pastedTextFiles, {
+    ...options,
+    legacyInlineFileMentions: true,
   });
 }

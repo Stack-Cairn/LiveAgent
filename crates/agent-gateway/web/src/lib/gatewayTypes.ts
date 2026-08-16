@@ -1,3 +1,4 @@
+import type { ChatQueueItemDetail, ChatQueueSnapshot } from "@liveagent/ui/contracts/chatQueue";
 import type {
   ChatRuntimeControls,
   CodexRequestFormat,
@@ -6,6 +7,12 @@ import type {
   ProviderModelConfig,
   ReasoningLevel,
 } from "@/lib/settings";
+
+export type {
+  ChatQueueItemDetail,
+  ChatQueueItemSummary,
+  ChatQueueSnapshot,
+} from "@liveagent/ui/contracts/chatQueue";
 
 export type AgentStatus = {
   online: boolean;
@@ -170,26 +177,6 @@ export type CronManagePayload = {
   action: string;
   task_id?: string;
   task_json?: string;
-};
-
-export type ChatQueueItemSummary = {
-  id: string;
-  previewText: string;
-  fileCount: number;
-  createdAt: number;
-  source: "gui" | "webui";
-  editable: boolean;
-};
-
-export type ChatQueueSnapshot = {
-  conversationId: string;
-  revision: number;
-  items: ChatQueueItemSummary[];
-};
-
-export type ChatQueueItemDetail = ChatQueueItemSummary & {
-  draftJson: string;
-  uploadedFilesJson: string;
 };
 
 export type ChatQueueResponse = {

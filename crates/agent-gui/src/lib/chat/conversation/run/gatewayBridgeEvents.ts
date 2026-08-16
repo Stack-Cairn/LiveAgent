@@ -1,3 +1,4 @@
+import { buildHistoryMessageRefPayload } from "@liveagent/ui/lib/chat/historyMessageRef";
 import type { ConversationViewState, HistoryMessageRef } from "../conversationState";
 import type { RetryAttemptRecord } from "../liveTranscriptStore";
 
@@ -20,19 +21,6 @@ type QueueUserMessageOptions = {
   // rebase without waiting for a history refresh.
   messageRef?: HistoryMessageRef;
 };
-
-// Wire shape mirror of the gateway's ChatMessageRef (snake_case), matching
-// the webui's buildHistoryMessageRefPayload byte for byte.
-function buildGatewayMessageRefPayload(ref: HistoryMessageRef): Record<string, unknown> {
-  return {
-    segment_index: ref.segmentIndex,
-    message_index: ref.messageIndex,
-    segment_id: ref.segmentId,
-    message_id: ref.messageId,
-    role: ref.role,
-    content_hash: ref.contentHash,
-  };
-}
 
 type GatewayBridgeSendResult = Promise<void> | void;
 
@@ -145,11 +133,11 @@ export function createGatewayBridgeEventController(
         ),
         conversation_id: params.conversationId,
         ...(options?.messageRef
-          ? { message_ref: buildGatewayMessageRefPayload(options.messageRef) }
+          ? { message_ref: buildHistoryMessageRefPayload(options.messageRef) }
           : {}),
         ...(options?.baseMessageRef
           ? {
-              base_message_ref: buildGatewayMessageRefPayload(options.baseMessageRef),
+              base_message_ref: buildHistoryMessageRefPayload(options.baseMessageRef),
               reason: "edit_resend",
             }
           : {}),

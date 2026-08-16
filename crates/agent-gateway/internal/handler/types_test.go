@@ -59,6 +59,24 @@ func TestNormalizeChatSelectedModelAcceptsXai(t *testing.T) {
 	}
 }
 
+func TestNormalizeChatSelectedModelAcceptsDeepSeek(t *testing.T) {
+	t.Parallel()
+
+	got, err := NormalizeChatSelectedModel(&ChatSelectedModelBody{
+		CustomProviderID: " builtin-deepseek ",
+		Model:            " deepseek-reasoner ",
+		ProviderType:     " deepseek ",
+	})
+	if err != nil {
+		t.Fatalf("NormalizeChatSelectedModel() error = %v", err)
+	}
+	if got.CustomProviderID != "builtin-deepseek" ||
+		got.Model != "deepseek-reasoner" ||
+		got.ProviderType != "deepseek" {
+		t.Fatalf("NormalizeChatSelectedModel() = %#v", got)
+	}
+}
+
 func TestNormalizeChatSelectedModelRejectsUnknownProviderType(t *testing.T) {
 	t.Parallel()
 

@@ -4,15 +4,6 @@ import {
   submitAskUserQuestionAnswers,
   usePendingToolApproval,
 } from "@liveagent/adapters/assistantBubble";
-import {
-  deriveFileChangeStats,
-  FILE_TOOL_TEXT_FIELDS,
-  previewText,
-  summarizeToolCall,
-  type ToolResultMessage,
-  type ToolTraceItem,
-  toolResultMessageToText,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
@@ -25,6 +16,15 @@ import {
   parseAskUserQuestionResultDetails,
   sanitizeAskUserQuestionItems,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  deriveFileChangeStats,
+  FILE_TOOL_TEXT_FIELDS,
+  previewText,
+  summarizeToolCall,
+  type ToolResultMessage,
+  type ToolTraceItem,
+  toolResultMessageToText,
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -39,6 +39,17 @@ import {
   isSubagentCardToolCall,
 } from "./assistantBubbleUtils";
 import { ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
+
+// 折叠摘要里行内命令的展示上限:远超任何实际窗口一行可容纳的字符数,视觉
+// 省略仍由 CSS truncate 决定;仅防御超长单行命令(如内联脚本)把常驻 DOM
+// 与原生 title 撑爆。完整命令在展开区可查看。
+const INLINE_COMMAND_PREVIEW_MAX_CHARS = 600;
+
+function capInlineCommandPreview(text: string) {
+  return text.length > INLINE_COMMAND_PREVIEW_MAX_CHARS
+    ? `${text.slice(0, INLINE_COMMAND_PREVIEW_MAX_CHARS)}…`
+    : text;
+}
 
 function ToolCallItem({
   item,
@@ -102,6 +113,11 @@ function ToolCallItem({
       ? item.toolCall.arguments.command.trim()
       : "";
   const firstLine = inlineCommand ? inlineCommand.split("\n")[0] : "";
+  // 折叠行的行内命令:视觉截断交给 CSS(truncate 按实际可用宽度出省略号),
+  // 不再按固定字符数硬切(#444)。DOM 文本与原生 title 各留一个远超可视宽度
+  // 的上限,防止超长单行命令把常驻摘要行与悬浮提示撑到不可用。
+  const firstLinePreview = capInlineCommandPreview(firstLine);
+  const inlineCommandTitle = inlineCommand ? capInlineCommandPreview(inlineCommand) : "";
   const toolArgsSummary =
     isRedactedToolContent || isBash || inlineCommand
       ? ""
@@ -175,7 +191,7 @@ function ToolCallItem({
             (styled per the block container) matches the summary text */}
         <div
           className="min-w-0 truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/55"
-          title={!isBash && !inlineCommand && toolArgsSummary ? toolArgsSummary : undefined}
+          title={inlineCommandTitle || toolArgsSummary || undefined}
         >
           <span className="font-sans text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground/80 group-hover/tool:text-foreground">
             {title.name}
@@ -187,10 +203,9 @@ function ToolCallItem({
             ) : null}
           </span>
 
-          {firstLine ? (
+          {firstLinePreview ? (
             <span className="ml-1.5">
-              <span className="text-muted-foreground/30">$</span>{" "}
-              {firstLine.length > 48 ? `${firstLine.slice(0, 48)}…` : firstLine}
+              <span className="text-muted-foreground/30">$</span> {firstLinePreview}
             </span>
           ) : toolArgsSummary ? (
             <span className="ml-1.5">{toolArgsSummary}</span>

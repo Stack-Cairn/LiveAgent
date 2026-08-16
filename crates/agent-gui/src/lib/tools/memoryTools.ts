@@ -27,6 +27,7 @@ import type {
   MemorySearchType,
   MemoryType,
 } from "@liveagent/ui/lib/memory/schema";
+import { asRecord } from "@liveagent/ui/lib/shared/value";
 import { Type } from "typebox";
 import {
   MEMORY_MANAGER_ACTION_DESCRIPTION_RO,
@@ -218,12 +219,6 @@ function createMemoryManagerParameters(mode: MemoryToolMode) {
       }),
     ),
   });
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function asString(value: unknown) {

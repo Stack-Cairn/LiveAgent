@@ -77,7 +77,7 @@ function createCardHarness(initialState = {}) {
           return { t: (key) => key };
         },
       },
-      "@liveagent/app/components/icons": {
+      "@liveagent/ui/components/IconSet": {
         Check: (props) => ({ type: "Check", props }),
         Sparkles: (props) => ({ type: "Sparkles", props }),
       },

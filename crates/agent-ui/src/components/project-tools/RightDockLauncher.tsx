@@ -1,4 +1,4 @@
-import { ChevronRight, Cpu, Plus, Terminal } from "@liveagent/app/components/icons";
+import { ChevronRight, Cpu, Plus, Terminal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "../../lib/shared/utils";
 import type { TerminalShellOption } from "../../lib/terminal/types";

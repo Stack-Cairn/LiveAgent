@@ -5,6 +5,18 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
 const workspaceProjects = loader.loadModule("@liveagent/ui/lib/workspaceProjects.ts");
+const workspaceProjectRemoval = loader.loadModule(
+  "@liveagent/ui/lib/workspaceProjectRemoval.ts",
+);
+const workspaceProjectRemovalHooks = createTsModuleLoader({
+  mocks: {
+    react: {
+      useCallback(callback) {
+        return callback;
+      },
+    },
+  },
+}).loadModule("@liveagent/ui/lib/workspaceProjectRemoval.ts");
 
 function project(id, path, index) {
   return {
@@ -21,6 +33,41 @@ function withLastConversationAt(item, lastConversationAt) {
   return {
     ...item,
     lastConversationAt,
+  };
+}
+
+function createRemovalActions({ visibleProjects, persistedProjects, beforeRemove }) {
+  let currentSettings = settings.normalizeSettings({
+    ...settings.getDefaultSettings(),
+    system: {
+      ...settings.getDefaultSettings().system,
+      workspaceProjects: persistedProjects,
+      activeWorkspaceProjectId: visibleProjects.at(-1)?.id,
+    },
+  });
+  let errorMessage = null;
+  let activeProjectId = currentSettings.system.activeWorkspaceProjectId;
+  const actions = workspaceProjectRemovalHooks.useWorkspaceProjectSettingsActions({
+    setSettings(updater) {
+      currentSettings = updater(currentSettings);
+    },
+    workspaceProjects: visibleProjects,
+    archivedWorkspaceProjectPathKeys: new Set(),
+    activeWorkspaceProject: visibleProjects.find((item) => item.id === activeProjectId),
+    activateWorkspaceProject() {},
+    setActiveWorkspaceProjectId(updater) {
+      activeProjectId = updater(activeProjectId);
+    },
+    t: (key) => key,
+    setErrorMessage(message) {
+      errorMessage = message;
+    },
+    beforeRemoveWorkspaceProject: beforeRemove,
+  });
+  return {
+    actions,
+    getSettings: () => currentSettings,
+    getErrorMessage: () => errorMessage,
   };
 }
 
@@ -290,6 +337,258 @@ test("removed (hidden) paths are dropped from the archived list", () => {
   );
 
   assert.deepEqual(resolved.archivedWorkspaceProjectPaths, ["/tmp/project-b"]);
+});
+
+test("workspace project removal clears every path-scoped setting", () => {
+  const removedProject = project("project-a", "/tmp/project-a", 2);
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const previousSettings = settings.normalizeSettings({
+    ...settings.getDefaultSettings(),
+    system: {
+      ...settings.getDefaultSettings().system,
+      workspaceProjects: [defaultProject, removedProject],
+      workspaceProjectGroups: [
+        {
+          id: "group-a",
+          name: "Group A",
+          projectPaths: ["/tmp/project-a", "/tmp/default-project"],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      missingWorkspaceProjectPaths: ["/tmp/project-a"],
+      archivedWorkspaceProjectPaths: ["/tmp/project-a"],
+      workspaceResourceSettings: {
+        "/tmp/project-a": {
+          mode: "custom",
+          skillNames: ["skill-a"],
+          mcpServerIds: ["mcp-a"],
+          stateVersion: 1,
+          writerId: "test",
+          updatedAt: 1,
+        },
+      },
+    },
+    customSettings: {
+      ...settings.getDefaultSettings().customSettings,
+      rightDock: {
+        projects: {
+          "/tmp/project-a": {
+            tabOrder: ["fileTree"],
+            tools: { fileTree: { openedAt: 1 } },
+            openVersion: 1,
+            stateVersion: 1,
+            writerId: "test",
+            lastUsedAt: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const next = workspaceProjectRemoval.removeWorkspaceProjectFromSettings(
+    previousSettings,
+    removedProject,
+    [defaultProject, removedProject],
+    new Set([settings.workspaceProjectPathKey(removedProject.path)]),
+  );
+
+  assert.deepEqual(next.system.workspaceProjects.map((item) => item.id), [
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+  ]);
+  assert.deepEqual(next.system.workspaceProjectGroups[0].projectPaths, [
+    "/tmp/default-project",
+  ]);
+  assert.deepEqual(next.system.hiddenWorkspaceProjectPaths, ["/tmp/project-a"]);
+  assert.deepEqual(next.system.missingWorkspaceProjectPaths, []);
+  assert.deepEqual(next.system.archivedWorkspaceProjectPaths, []);
+  assert.equal(next.system.workspaceResourceSettings["/tmp/project-a"].mode, "inherit");
+  assert.deepEqual(next.customSettings.rightDock.projects["/tmp/project-a"].tools, {});
+});
+
+test("worktree removal revokes root grants before removing project settings", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const worktreeProject = {
+    ...project("project-worktree", "/tmp/project-worktree", 2),
+    kind: "worktree",
+  };
+  const revokedProjectIds = [];
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, worktreeProject],
+    persistedProjects: [defaultProject, worktreeProject],
+    beforeRemove: async (removedProject) => {
+      revokedProjectIds.push(removedProject.id);
+    },
+  });
+
+  await harness.actions.handleWorktreeRemoved({ path: worktreeProject.path });
+
+  assert.deepEqual(revokedProjectIds, [worktreeProject.id]);
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID],
+  );
+});
+
+test("history project removal revokes stable project id even when it is not persisted", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const historyProject = {
+    ...project("history-a1b2c3", "/tmp/history-project", 2),
+    kind: "history",
+  };
+  const revokedProjectIds = [];
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, historyProject],
+    persistedProjects: [defaultProject],
+    beforeRemove: async (removedProject) => {
+      revokedProjectIds.push(removedProject.id);
+    },
+  });
+
+  const removed = await harness.actions.removeWorkspaceProject(historyProject);
+
+  assert.equal(removed, true);
+  assert.deepEqual(revokedProjectIds, [historyProject.id]);
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID],
+  );
+  assert.deepEqual(harness.getSettings().system.hiddenWorkspaceProjectPaths, [historyProject.path]);
+});
+
+test("workspace project settings stay intact when root grant revocation fails", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const removableProject = project("project-a", "/tmp/project-a", 2);
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, removableProject],
+    persistedProjects: [defaultProject, removableProject],
+    beforeRemove: async () => {
+      throw new Error("revoke failed");
+    },
+  });
+
+  const removed = await harness.actions.removeWorkspaceProject(removableProject);
+
+  assert.equal(removed, false);
+  assert.equal(harness.getErrorMessage(), "revoke failed");
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID, removableProject.id],
+  );
+});
+
+test("workspace project removal resets matching active project aliases", () => {
+  const removedProject = project("project-a", "C:\\Repo", 2);
+  const aliasProject = project("project-alias", "c:/repo/", 3);
+  const projects = [removedProject, aliasProject];
+
+  assert.equal(
+    workspaceProjectRemoval.resolveActiveWorkspaceProjectIdAfterRemoval(
+      aliasProject.id,
+      removedProject,
+      projects,
+    ),
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+  );
+  assert.equal(
+    workspaceProjectRemoval.resolveActiveWorkspaceProjectIdAfterRemoval(
+      "unrelated",
+      removedProject,
+      projects,
+    ),
+    "unrelated",
+  );
+});
+
+test("workspace project lookup matches normalized paths and rejects empty paths", () => {
+  const windowsProject = project("project-a", "C:\\Repo", 2);
+  const posixProject = project("project-b", "/tmp/project-b", 3);
+  const projects = [windowsProject, posixProject];
+
+  assert.equal(
+    workspaceProjectRemoval.findWorkspaceProjectByPath(projects, " c:/repo/ "),
+    windowsProject,
+  );
+  assert.equal(
+    workspaceProjectRemoval.findWorkspaceProjectByPath(projects, "/tmp/project-b/"),
+    posixProject,
+  );
+  assert.equal(workspaceProjectRemoval.findWorkspaceProjectByPath(projects, "  "), undefined);
+  assert.equal(
+    workspaceProjectRemoval.findWorkspaceProjectByPath(projects, "/tmp/missing"),
+    undefined,
+  );
+});
+
+test("workspace project archive resolves an active fallback and matches path aliases", () => {
+  const archivedProject = project("project-a", "C:\\Repo", 2);
+  const aliasProject = project("project-alias", "c:/repo/", 3);
+  const fallbackProject = project("project-b", "C:\\Other", 4);
+
+  assert.equal(
+    workspaceProjectRemoval.workspaceProjectsMatch(aliasProject, archivedProject),
+    true,
+  );
+  assert.equal(
+    workspaceProjectRemoval.findWorkspaceProjectArchiveFallback(
+      archivedProject,
+      [archivedProject, aliasProject, fallbackProject],
+      new Set(),
+    ),
+    fallbackProject,
+  );
+  assert.equal(
+    workspaceProjectRemoval.findWorkspaceProjectArchiveFallback(
+      archivedProject,
+      [archivedProject, aliasProject],
+      new Set(),
+    ),
+    undefined,
+  );
+});
+
+test("workspace project archive and unarchive settings updates are idempotent", () => {
+  const archivedProject = project("project-a", " C:\\Repo\\ ", 2);
+  const previousSettings = settings.getDefaultSettings();
+  const archived = workspaceProjectRemoval.archiveWorkspaceProjectInSettings(
+    previousSettings,
+    archivedProject,
+  );
+
+  assert.deepEqual(archived.system.archivedWorkspaceProjectPaths, ["C:\\Repo\\"]);
+  assert.equal(
+    workspaceProjectRemoval.archiveWorkspaceProjectInSettings(
+      archived,
+      project("project-alias", "c:/repo", 3),
+    ),
+    archived,
+  );
+
+  const unarchived = workspaceProjectRemoval.unarchiveWorkspaceProjectInSettings(
+    archived,
+    project("project-alias", "c:/repo", 3),
+  );
+  assert.deepEqual(unarchived.system.archivedWorkspaceProjectPaths, []);
+  assert.equal(
+    workspaceProjectRemoval.unarchiveWorkspaceProjectInSettings(unarchived, archivedProject),
+    unarchived,
+  );
 });
 
 test("conversation activity persistence does not rewrite project metadata ordering", () => {

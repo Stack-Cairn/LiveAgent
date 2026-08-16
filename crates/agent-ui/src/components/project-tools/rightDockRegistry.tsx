@@ -1,4 +1,4 @@
-import { FolderTree, GitBranch, Globe, Key } from "@liveagent/app/components/icons";
+import { FolderTree, GitBranch, Globe, Key } from "@liveagent/ui/components/IconSet";
 import { FileTreePanel } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { GitReviewPanel } from "@liveagent/ui/components/project-tools/git-review/index";
 import type { ReactNode } from "react";

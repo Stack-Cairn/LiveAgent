@@ -1,5 +1,5 @@
 import { assistantStatusSpinnerClassName } from "@liveagent/adapters/assistantStatus";
-import { Loader2 } from "@liveagent/app/components/icons";
+import { Loader2 } from "@liveagent/ui/components/IconSet";
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/index";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/assistantStatus";

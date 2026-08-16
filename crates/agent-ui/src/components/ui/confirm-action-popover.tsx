@@ -1,5 +1,5 @@
 import { Popover } from "@base-ui/react";
-import { AlertTriangle } from "@liveagent/app/components/icons";
+import { AlertTriangle } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ReactNode } from "react";
 import { Button } from "./button";

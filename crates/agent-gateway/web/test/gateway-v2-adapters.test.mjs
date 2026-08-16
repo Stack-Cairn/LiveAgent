@@ -26,6 +26,46 @@ function decodeClientFrame(bytes) {
   return pb.fromBinary(v2.WebClientFrameSchema, bytes);
 }
 
+test("provider model requests carry the stored provider identity to the desktop", () => {
+  const encoded = encodeRequestFrame(
+    "provider-models-1",
+    "provider.models",
+    {
+      type: "codex",
+      base_url: "https://relay.example.com/v1",
+      api_key: "",
+      use_system_proxy: true,
+      models_url: "https://relay.example.com/models",
+      provider_id: "provider-a",
+      is_full_url: true,
+    },
+    "agent-1",
+  );
+  const frame = decodeClientFrame(encoded);
+  assert.equal(frame.agentId, "agent-1");
+  assert.equal(frame.payload.value.payload.case, "providerModels");
+  assert.deepEqual(
+    {
+      providerType: frame.payload.value.payload.value.providerType,
+      baseUrl: frame.payload.value.payload.value.baseUrl,
+      apiKey: frame.payload.value.payload.value.apiKey,
+      useSystemProxy: frame.payload.value.payload.value.useSystemProxy,
+      modelsUrl: frame.payload.value.payload.value.modelsUrl,
+      providerId: frame.payload.value.payload.value.providerId,
+      isFullUrl: frame.payload.value.payload.value.isFullUrl,
+    },
+    {
+      providerType: "codex",
+      baseUrl: "https://relay.example.com/v1",
+      apiKey: "",
+      useSystemProxy: true,
+      modelsUrl: "https://relay.example.com/models",
+      providerId: "provider-a",
+      isFullUrl: true,
+    },
+  );
+});
+
 test("chat file open requests remain agent-scoped and preserve source locations", () => {
   const encoded = encodeRequestFrame(
     "file-open-1",
@@ -99,6 +139,105 @@ test("chat file open requests remain agent-scoped and preserve source locations"
     column: 4,
     outsideWorkspace: false,
   });
+});
+
+test("workspace root grants round-trip through the agent-scoped gateway protocol", () => {
+  const encoded = encodeRequestFrame(
+    "workspace-roots-1",
+    "workspace_root_grants.apply",
+    {
+      project_id: "project-1",
+      project_path: "C:/work/project",
+      grants: [
+        {
+          id: "grant-1",
+          alias: "shared",
+          display_path: "C:/work/shared",
+          access: "read",
+        },
+        {
+          alias: "generated",
+          display_path: "C:/work/generated",
+          access: "write",
+        },
+      ],
+    },
+    "agent-1",
+  );
+  const frame = decodeClientFrame(encoded);
+  assert.equal(frame.agentId, "agent-1");
+  assert.equal(frame.payload.value.payload.case, "workspaceRootGrants");
+  assert.equal(frame.payload.value.payload.value.action, "apply");
+  assert.equal(frame.payload.value.payload.value.grants[0].id, "grant-1");
+  assert.equal(frame.payload.value.payload.value.grants[1].id, undefined);
+  assert.equal(frame.payload.value.payload.value.grants[1].access, "write");
+
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "workspace-roots-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "workspace-roots-1",
+          workspace_root_grants_resp: {
+            grants: [
+              {
+                id: "grant-1",
+                project_id: "project-1",
+                project_path_key: "c:/work/project",
+                alias: "shared",
+                display_path: "C:/work/shared",
+                canonical_path: "C:/work/shared",
+                access: "read",
+                state: "active",
+                created_at: 1700000000000,
+                updated_at: 1700000001000,
+              },
+            ],
+          },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload.grants[0], {
+    id: "grant-1",
+    projectId: "project-1",
+    projectPathKey: "c:/work/project",
+    alias: "shared",
+    displayPath: "C:/work/shared",
+    canonicalPath: "C:/work/shared",
+    access: "read",
+    state: "active",
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+  });
+
+  const revokeFrame = decodeClientFrame(
+    encodeRequestFrame(
+      "workspace-roots-revoke-1",
+      "workspace_root_grants.revoke",
+      { project_id: "history-a1b2c3" },
+      "agent-1",
+    ),
+  );
+  assert.equal(revokeFrame.agentId, "agent-1");
+  assert.equal(revokeFrame.payload.value.payload.case, "workspaceRootGrants");
+  assert.deepEqual(
+    {
+      action: revokeFrame.payload.value.payload.value.action,
+      projectId: revokeFrame.payload.value.payload.value.projectId,
+      projectPath: revokeFrame.payload.value.payload.value.projectPath,
+      grants: revokeFrame.payload.value.payload.value.grants,
+    },
+    {
+      action: "revoke",
+      projectId: "history-a1b2c3",
+      projectPath: "",
+      grants: [],
+    },
+  );
 });
 
 test("adapters convert int64/uint64 fields to Number at realistic maxima", () => {

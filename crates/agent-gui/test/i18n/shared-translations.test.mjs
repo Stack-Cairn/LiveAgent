@@ -16,6 +16,9 @@ const guiTranslations = guiLoader.loadModule("src/i18n/config.ts").translations;
 const webTranslations = createTsModuleLoader({ rootDir: webRoot }).loadModule(
   "src/i18n/config.ts",
 ).translations;
+const sharedTranslations = guiLoader.loadModule(
+  "@liveagent/ui/i18n/sharedTranslations.ts",
+).SHARED_TRANSLATIONS;
 const hostTranslations = [
   ["GUI", guiTranslations],
   ["WebUI", webTranslations],
@@ -186,6 +189,20 @@ test("both hosts provide every shared literal translation key", () => {
           `${host} ${locale} is missing ${key}, used at ${references.join(", ")}`,
         );
       }
+    }
+  }
+});
+
+test("host translation overrides contain no identical shared messages", () => {
+  for (const locale of locales) {
+    for (const [key, value] of Object.entries(guiTranslations[locale])) {
+      if (!Object.hasOwn(webTranslations[locale], key)) continue;
+      if (webTranslations[locale][key] !== value) continue;
+      assert.equal(
+        sharedTranslations[locale][key],
+        value,
+        `${locale} identical host message ${key} must live in shared translations`,
+      );
     }
   }
 });

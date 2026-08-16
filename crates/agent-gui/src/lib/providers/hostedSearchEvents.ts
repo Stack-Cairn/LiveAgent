@@ -1,11 +1,12 @@
-import { createUuid } from "@liveagent/ui/lib/shared/id";
 import {
   type HostedSearchBlock,
   type HostedSearchSource,
   type HostedSearchStatus,
   mergeHostedSearchBlocks,
   normalizeHostedSearchStatus,
-} from "../chat/messages/hostedSearch";
+} from "@liveagent/ui/lib/chat/hostedSearch";
+import { hashText } from "@liveagent/ui/lib/shared/hash";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { ProviderId } from "../settings";
 
 type HostedSearchUpdate = {
@@ -64,15 +65,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
 }
 
 function safeStringify(value: unknown) {
@@ -777,7 +769,7 @@ export function createHostedSearchEventAggregator(params: {
     const derivedId =
       update.id?.trim() ||
       (update.queries?.length
-        ? `hosted-search-${params.providerId}-${stableHash(update.queries.join("|"))}`
+        ? `hosted-search-${params.providerId}-${hashText(update.queries.join("|"))}`
         : lastId);
     lastId = derivedId;
     const incoming: HostedSearchBlock = {

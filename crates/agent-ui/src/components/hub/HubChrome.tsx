@@ -1,5 +1,5 @@
 import { HubTitleBar, usesOverlayTitleBar } from "@liveagent/adapters/hubChrome";
-import { PanelLeft } from "@liveagent/app/components/icons";
+import { PanelLeft } from "@liveagent/ui/components/IconSet";
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n";
 import { cn } from "../../lib/shared/utils";

@@ -1,4 +1,5 @@
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { MutableRefObject } from "react";
@@ -7,7 +8,6 @@ import type {
   RenderTimelineItem,
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { SectionId } from "../../settings/types";
 
 export type ChatTranscriptProps = {

@@ -102,7 +102,7 @@ LiveAgent 的记忆系统由 Rust `MemoryStore` 作为本地真相源；前端 T
 
 | 场景 | 实现 |
 |---|---|
-| 共享纪律 | schema、config、API、organizer 纯逻辑与 Settings 组件位于 `crates/agent-ui`；平台差异只进各端 `pages/settings/memory/platform.tsx`。 |
+| 共享纪律 | schema、config、API、organizer 纯逻辑与 Settings 组件位于 `crates/agent-ui`；本地 organizer 唤醒能力只进各端 `agent-ui-adapters/memoryOrganizer.ts`。 |
 | WebUI MemoryPanel | 通过 `memory.manage` 转发到桌面端；desktop 桥的 `handle_memory_manage_sync` 为显式 match（新增命令需加臂）。 |
 | WebUI organizer | Run Now 创建 pending run（`pokeMemoryOrganizer` 恒 false → QueuedRemote 提示），实际执行依赖桌面端认领。 |
 | 提取/组织执行 | 仅桌面端（`prompts/*`、`extraction/*`、`organizer/{pipeline,service}`、`memoryTools` 不进入 WebUI 宿主）。 |

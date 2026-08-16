@@ -252,3 +252,24 @@ test("without failover params the stream goes straight to the primary", async ()
   assert.equal(streamCalls.length, 1);
   assert.equal(streamCalls[0].model.baseUrl, "https://primary.example");
 });
+
+test("DeepSeek title-style text requests preserve explicit thinking-off and workdir", async () => {
+  streamImpl = () => successStream("title");
+
+  await streamAssistantMessage(
+    baseParams({
+      providerId: "deepseek",
+      model: "deepseek-reasoner",
+      runtime: {
+        ...makeRuntime("https://api.deepseek.com/v1"),
+        reasoning: "off",
+      },
+      workdir: "/workspace",
+    }),
+  );
+
+  assert.equal(streamCalls.length, 1);
+  assert.equal(streamCalls[0].options.reasoning, undefined);
+  assert.equal(streamCalls[0].options.deepSeekThinking, "disabled");
+  assert.equal(streamCalls[0].options.workdir, "/workspace");
+});

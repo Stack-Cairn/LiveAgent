@@ -1,5 +1,5 @@
 import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
-import { FolderTree, Lightbulb, Settings, Wrench } from "@liveagent/app/components/icons";
+import { FolderTree, Lightbulb, Settings, Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { type CSSProperties, useEffect, useState } from "react";
 

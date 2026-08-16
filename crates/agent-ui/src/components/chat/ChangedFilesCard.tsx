@@ -5,14 +5,11 @@
 // through context so transcript row props stay memo-stable; without a
 // provider (shared read-only views) the card renders as plain data.
 
-import { FilePenLine, FolderTree, GitCommitHorizontal } from "@liveagent/app/components/icons";
-import type {
-  ChangedFileEntry,
-  ChangedFilesSummary,
-} from "@liveagent/app/lib/chat/changedFilesAdapter";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { FilePenLine, FolderTree, GitCommitHorizontal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ChangedFileEntry, ChangedFilesSummary } from "@liveagent/ui/lib/chat/changedFiles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isSkillPath } from "@liveagent/ui/lib/skills/skillPaths";
 import { createContext, memo, useContext, useMemo } from "react";

@@ -5,11 +5,15 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const i18n = loader.loadModule("src/i18n/config.ts");
 
-test("supported locales and default locale are stable", () => {
+test("supported locales, fallback, and system language detection are stable", () => {
   assert.equal(i18n.DEFAULT_LOCALE, "zh-CN");
   assert.deepEqual([...i18n.SUPPORTED_LOCALES], ["zh-CN", "en-US"]);
   assert.equal(i18n.normalizeLocale("en-US"), "en-US");
   assert.equal(i18n.normalizeLocale("fr-FR"), "zh-CN");
+  assert.equal(i18n.detectSystemLocale(["en-GB"]), "en-US");
+  assert.equal(i18n.detectSystemLocale(["fr-FR", "en-US"]), "en-US");
+  assert.equal(i18n.detectSystemLocale(["zh-Hans-CN", "en-US"]), "zh-CN");
+  assert.equal(i18n.detectSystemLocale(["fr-FR"]), "zh-CN");
 });
 
 test("all locales expose the same translation keys", () => {

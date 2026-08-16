@@ -1,5 +1,5 @@
-import { BookOpen, Check, FileText, ScrollText, X } from "@liveagent/app/components/icons";
 import type { AgentPromptTemplate } from "@liveagent/app/lib/settings";
+import { BookOpen, Check, FileText, ScrollText, X } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useState } from "react";
 import { createPortal } from "react-dom";

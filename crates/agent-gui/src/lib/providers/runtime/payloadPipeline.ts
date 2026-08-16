@@ -1,7 +1,6 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { PromptCacheHintMode, ProviderId } from "../../settings";
-import { attachDeepSeekProviderPayloadAdapter } from "../deepSeekProviderAdapter";
 import {
   attachAnthropicMessagesNativeAttachments,
   attachGeminiGenerativeAINativeAttachments,
@@ -14,7 +13,6 @@ import { attachCodexPromptCacheHint } from "./codexPromptCache";
 import { attachCodexResponsesStorage } from "./codexStorage";
 import { attachGeminiThoughtSignatureGuard } from "./geminiToolPayload";
 import { attachProviderNativeWebSearch } from "./nativeSearchPayload";
-import { attachOpenAICompletionsFinishReasonCompatibility } from "./openAICompletionsStream";
 import type { StreamOptionsEx } from "./types";
 import { attachXaiResponsesPayloadCompat } from "./xaiResponsesPayload";
 
@@ -99,15 +97,9 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       params.providerId,
       params.baseUrl,
       params.promptCacheHintMode,
-      params.model?.api,
+      params.model,
       options,
     ),
-  (options, params) =>
-    attachOpenAICompletionsFinishReasonCompatibility(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-      modelApi: params.model?.api,
-    }),
   (options, params) =>
     attachProviderNativeWebSearch(params.providerId, options, params.nativeWebSearch, {
       baseUrl: params.baseUrl,
@@ -144,12 +136,6 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       workdir: params.workdir,
     });
   },
-  (options, params) =>
-    attachDeepSeekProviderPayloadAdapter(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-      model: params.model,
-    }),
   (options, params) =>
     attachGeminiThoughtSignatureGuard(options, {
       providerId: params.providerId,

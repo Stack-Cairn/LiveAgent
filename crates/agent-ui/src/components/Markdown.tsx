@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronUp, Copy, ExternalLink, X } from "@liveagent/app/components/icons";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, X } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";

@@ -11,7 +11,7 @@ const { buildGatewayFinalProjectionEntries, buildGatewayRuntimeSnapshotEntries }
 const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
   "src/pages/chat/turns/gatewayToolPreview.ts",
 );
-const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
+const toolPreview = loader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
 const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
 const askShared = loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 

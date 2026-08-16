@@ -1,4 +1,6 @@
 import { sshLocalForwardClient } from "@liveagent/adapters/sshLocalForwardClient";
+import type { SshHostConfig } from "@liveagent/app/lib/settings";
+import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -21,9 +23,7 @@ import {
   Wifi,
   WifiOff,
   X,
-} from "@liveagent/app/components/icons";
-import type { SshHostConfig } from "@liveagent/app/lib/settings";
-import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
+} from "@liveagent/ui/components/IconSet";
 import { SshPortForwardDialog } from "@liveagent/ui/components/project-tools/SshPortForwardDialog";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";

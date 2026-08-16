@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const gatewayAppSource = readFileSync(new URL("../src/app/GatewayApp.tsx", import.meta.url), "utf8");
+const gatewayAppSource = readFileSync(
+  new URL("../src/app/GatewayAppView.tsx", import.meta.url),
+  "utf8",
+);
 
 test("WebUI share modals use the browser origin", () => {
   const historyShareModal = gatewayAppSource.match(

@@ -1,33 +1,3 @@
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import { parsePastedTextDisplayReferences } from "../../../lib/chat/messages/uploadedFiles";
-
-export function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: string) {
-  const pastedTextReferences = parsePastedTextDisplayReferences(text);
-  if (pastedTextReferences.length === 0 || files.length === 0) {
-    return {
-      visibleFiles: files,
-      pastedTextFiles: [],
-    };
-  }
-
-  const pastedTextPaths = new Set(pastedTextReferences.map((reference) => reference.relativePath));
-  const pastedTextFiles: PendingUploadedFile[] = [];
-  const visibleFiles: PendingUploadedFile[] = [];
-
-  for (const file of files) {
-    if (pastedTextPaths.has(file.relativePath)) {
-      pastedTextFiles.push(file);
-    } else {
-      visibleFiles.push(file);
-    }
-  }
-
-  return {
-    visibleFiles,
-    pastedTextFiles,
-  };
-}
-
 export type TranscriptContextMenuState = {
   x: number;
   y: number;

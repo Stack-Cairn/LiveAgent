@@ -1,4 +1,3 @@
-import type { UiRound } from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import {
   AssistantStatus,
   CompactingText,
@@ -8,6 +7,7 @@ import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearc
 import { ThinkingActivity } from "@liveagent/ui/components/chat/ThinkingActivity";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";

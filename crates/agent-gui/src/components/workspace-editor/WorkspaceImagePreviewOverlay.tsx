@@ -1,8 +1,15 @@
+import {
+  AlertTriangle,
+  ImageIcon,
+  ImageOff,
+  Loader2,
+  RefreshCw,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ImageIcon, ImageOff, Loader2, RefreshCw, X } from "../icons";
 import { MacOsTitleBarSpacer } from "../MacOsTitleBarSpacer";
 
 export type WorkspaceImagePreviewOpenRequest = {

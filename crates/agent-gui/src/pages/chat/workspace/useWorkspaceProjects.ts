@@ -6,9 +6,11 @@ import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import {
   assignWorkspaceProjectToGroup,
+  createWorkspaceProjectFromPath,
   ensureWorktreeProjectGroup,
   fallbackWorkspaceProjectName,
   findWorkspaceProject,
+  getDefaultWorkspaceProjectPath,
   mergeWorkspaceProjectsWithHistory,
 } from "@liveagent/ui/lib/workspaceProjects";
 import { invoke } from "@tauri-apps/api/core";
@@ -34,10 +36,6 @@ import {
 } from "../../../lib/settings";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
-import {
-  createWorkspaceProjectFromPath,
-  getDefaultWorkspaceProjectPath,
-} from "./workspaceProjectsModel";
 
 type UseWorkspaceProjectsParams = {
   settings: AppSettings;
@@ -124,8 +122,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     sidebarStore.setScope(sidebarScope);
   }, [sidebarScope, sidebarStore]);
   const historyScopeKey = sidebarScopeKey(sidebarScope);
-  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
-  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
@@ -371,6 +367,22 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     }
   }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir, setErrorMessage]);
 
+  const handleDropWorkspaceFolders = useCallback(
+    async (paths: string[]) => {
+      try {
+        const folders = await invoke<string[]>("system_resolve_dropped_workspace_folders", {
+          paths,
+        });
+        for (const path of folders) {
+          activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
+        }
+      } catch (error) {
+        setErrorMessage(asErrorMessage(error, "添加拖入的工作空间失败"));
+      }
+    },
+    [activateWorkspaceProject, setErrorMessage],
+  );
+
   const handleCloneWorkspaceProject = useCallback(
     async (remoteUrl: string, parent: string, name: string, branch: string) => {
       await startWorkspaceCloneTask({
@@ -576,29 +588,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setSettings],
   );
 
-  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
-    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-    setProjectRenamingId(project.id);
-    setProjectRenameDraft(project.name);
-  }, []);
-
-  const handleCommitWorkspaceProjectRename = useCallback(() => {
-    if (!projectRenamingId) {
-      return;
-    }
-    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
-    if (project) {
-      commitWorkspaceProjectRename(project, projectRenameDraft);
-    }
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
-
-  const handleCancelWorkspaceProjectRename = useCallback(() => {
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, []);
-
   const handleSetWorkspaceProjectPinned = useCallback(
     (project: WorkspaceProject, isPinned: boolean) => {
       const pathKey = workspaceProjectPathKey(project.path);
@@ -684,10 +673,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     activeWorkspaceProjectPath,
     sidebarScope,
     historyScopeKey,
-    projectRenamingId,
-    setProjectRenamingId,
-    projectRenameDraft,
-    setProjectRenameDraft,
     checkWorkspaceProjectDirectory,
     activateWorkspaceProject,
     handleSelectWorkspaceProject,
@@ -700,6 +685,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,
     handleOpenWorkspaceFolder,
+    handleDropWorkspaceFolders,
     handleCloneWorkspaceProject,
     handleOpenClonedWorkspace,
     handleOpenWorktree,
@@ -710,9 +696,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     handleMoveWorkspaceProjectToGroup,
     handleToggleWorkspaceGroupCollapsed,
     handleLoadWorkspaceRemoteBranches,
-    handleStartRenamingWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
-    handleCancelWorkspaceProjectRename,
+    commitWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,

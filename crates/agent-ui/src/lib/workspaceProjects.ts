@@ -29,6 +29,25 @@ export function fallbackWorkspaceProjectName(path: string) {
   );
 }
 
+export function getDefaultWorkspaceProjectPath(system: SystemSettings) {
+  return (
+    system.workspaceProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.path ||
+    system.workdir
+  );
+}
+
+export function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["kind"]) {
+  const now = Date.now();
+  return {
+    id: `${kind}-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    name: fallbackWorkspaceProjectName(path),
+    path,
+    kind,
+    createdAt: now,
+    updatedAt: now,
+  } satisfies WorkspaceProject;
+}
+
 function stableProjectIdForPath(path: string) {
   let hash = 2166136261;
   for (const ch of path) {

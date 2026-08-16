@@ -4,12 +4,11 @@ import {
   contextUsageRatio,
   positiveTokenCount,
 } from "@liveagent/ui/lib/chat/contextUsage";
-
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
 import { type ConversationViewState, getActiveSegment } from "../conversation/conversationState";
 import type { TurnCancellation } from "../conversation/turnCancellation";
-import type { PendingUploadedFile } from "../messages/uploadedFiles";
 import { isAbortLikeError } from "../page/chatPageHelpers";
 import { createSyntheticContinueUserMessage, runCompaction } from "./engine";
 import {
@@ -57,6 +56,10 @@ export type CompactionSinks = {
     uploadedFiles: PendingUploadedFile[],
   ) => void;
   persistRollback?: (state: ConversationViewState) => Promise<unknown>;
+  // 压缩成功落地后的通知(finalizeCheckpoint 统一触发,三条压缩路径共用)。
+  // 用于失效那些按消息 id 挂在 user 消息上的注入状态:载体消息被压缩移出
+  // active segment 后,继续增量会静默丢变化,必须整体重冻结。
+  onCompacted?: () => void;
 };
 
 export type CompactionPreSendBinding = {
@@ -212,6 +215,9 @@ export class CompactionController {
     params.apply(checkpointState);
     this.settleCompleted(params.trigger, params.newSegmentIndex);
     params.binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
+    // 放在最后:checkpoint 上下文估值仍需按压缩前的注入状态计算,通知只影响
+    // 下一轮 planTurn 的走向。
+    params.binding.sinks.onCompacted?.();
     return { checkpointState, checkpointTokens };
   }
 

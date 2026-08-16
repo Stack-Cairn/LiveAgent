@@ -1,19 +1,17 @@
 import type { Message, ToolCall, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
-
+import type { SharedChatEntry } from "@liveagent/ui/contracts/chatEntry";
+import {
+  getUserMessageAttachments,
+  getUserMessageDisplayText,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
-import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
   safeStringify,
   summarizeToolCall,
   toolResultMessageToText,
   type UiRound,
 } from "../../../lib/chat/messages/uiMessages";
-import {
-  getUserMessageAttachments,
-  getUserMessageDisplayText,
-  type PendingUploadedFile,
-} from "../../../lib/chat/messages/uploadedFiles";
 import { buildGatewayToolCallPreviewArguments } from "../turns/gatewayToolPreview";
 
 export type GatewayRuntimeSnapshotState = "running" | "completed" | "failed" | "cancelled";
@@ -29,39 +27,12 @@ type GatewayAssistantMeta = {
   contextRelevant?: boolean;
 };
 
-export type GatewayRuntimeSnapshotEntry =
-  | {
-      id: string;
-      kind: "user";
-      text: string;
-      attachments: PendingUploadedFile[];
-      messageId: string;
-    }
-  | { id: string; kind: "assistant"; text: string; round?: number; meta?: GatewayAssistantMeta }
-  | { id: string; kind: "thinking"; text: string; round?: number }
-  | {
-      id: string;
-      kind: "tool_call";
-      round?: number;
-      toolCall: ToolCall;
-      summary?: string;
-      text: string;
-    }
-  | {
-      id: string;
-      kind: "tool_result";
-      round?: number;
-      toolResult: ToolResultMessage;
-      summary?: string;
-      text: string;
-    }
-  | {
-      id: string;
-      kind: "hosted_search";
-      round?: number;
-      hostedSearch: HostedSearchBlock;
-    }
-  | { id: string; kind: "error"; text: string };
+export type GatewayRuntimeSnapshotEntry = SharedChatEntry<
+  ToolCall,
+  ToolResultMessage,
+  GatewayAssistantMeta,
+  { messageId: string }
+>;
 
 export type GatewayRuntimeSnapshotInput = {
   userMessage?: Message | null;

@@ -12,6 +12,7 @@ import { runAssistantWithTools } from "../chat/runner/agentRunner";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
+import type { AdditionalProjectRoot } from "../tools/additionalProjectRoots";
 import { renderMessageBusSnapshot } from "./bus";
 import { toolErrorResult } from "./errors";
 import type { SubagentWorktreeIpc } from "./ipc/worktree";
@@ -51,6 +52,7 @@ export type SubagentRunEnvironment = {
   runtime: ProviderRuntimeConfig;
   runtimePlatform?: RuntimePlatform;
   workdir: string;
+  additionalRoots?: readonly AdditionalProjectRoot[];
   sessionId?: string;
   messageBusEnabled: boolean;
   store: SubagentConversationStore;
@@ -287,7 +289,7 @@ export async function executeSubagentRun(
         messages,
         currentAgentId: spec.id,
         currentAgentName: identity.name,
-      });
+      }).text;
     } catch (error) {
       console.warn("Failed to load subagent message bus snapshot", error);
       return "";
@@ -568,6 +570,7 @@ export async function executeSubagentRun(
       runtimePlatform: env.runtimePlatform,
       context: buildRequestContext(baseState),
       workdir: childWorkdir,
+      additionalRoots: env.additionalRoots,
       sessionId: subagentSessionId,
       nativeWebSearch: env.runtime.nativeWebSearchEnabled !== false,
       tools: childTools,

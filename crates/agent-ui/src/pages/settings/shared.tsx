@@ -1,4 +1,4 @@
-import { CheckCircle2 } from "@liveagent/app/components/icons";
+import { CheckCircle2 } from "@liveagent/ui/components/IconSet";
 import type { ReactNode } from "react";
 import { Switch } from "../../components/ui/switch";
 import { cn } from "../../lib/shared/utils";

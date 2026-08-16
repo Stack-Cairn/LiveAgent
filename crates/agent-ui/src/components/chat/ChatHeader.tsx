@@ -1,10 +1,20 @@
 import { Popover } from "@base-ui/react";
 import { isDesktopChatHeaderInset } from "@liveagent/adapters/chatHeaderChrome";
 import {
+  type AppSettings,
+  getNextTheme,
+  isAgentDevMode,
+  isAgentExecutionMode,
+  type ProviderId,
+  type SelectedModel,
+  type Theme,
+} from "@liveagent/app/lib/settings";
+import {
   ArrowDownAZ,
   Check,
   ChevronDown,
   ClaudeIcon,
+  DeepseekIcon,
   GeminiIcon,
   GrokIcon,
   Layers,
@@ -16,26 +26,18 @@ import {
   Search,
   Settings,
   Sun,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import {
   groupModelOptionsByProvider,
   type ProviderSortMode,
   persistProviderSortMode,
   readStoredProviderSortMode,
   sortModelOptionGroups,
-} from "@liveagent/app/lib/chat/chatPageHelpersAdapter";
-import { type ModelOption, parseModelValue } from "@liveagent/app/lib/providers/llm";
-import {
-  type AppSettings,
-  getNextTheme,
-  isAgentDevMode,
-  isAgentExecutionMode,
-  type ProviderId,
-  type SelectedModel,
-  type Theme,
-} from "@liveagent/app/lib/settings";
-import { Button } from "@liveagent/ui/components/ui/button";
-import { useLocale } from "@liveagent/ui/i18n/index";
+} from "@liveagent/ui/lib/models/modelOptions";
+import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
 
@@ -44,6 +46,7 @@ function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: 
   if (type === "claude_code") return <ClaudeIcon className={cls} />;
   if (type === "gemini") return <GeminiIcon className={cls} />;
   if (type === "xai") return <GrokIcon className={cls} />;
+  if (type === "deepseek") return <DeepseekIcon className={cls} />;
   return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
 }
 
@@ -57,7 +60,7 @@ export type ChatHeaderProps = {
   settings: AppSettings;
   hasModels: boolean;
   currentModelLabel: string;
-  modelOptions: ModelOption[];
+  modelOptions: SharedModelOption<ProviderId>[];
   selectedValue?: string;
   sidebarOpen: boolean;
   onSelectModel: (selection: SelectedModel) => void;

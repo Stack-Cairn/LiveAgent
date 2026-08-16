@@ -83,10 +83,21 @@ test("buildProviderModelsUrl defaults to /v1/models and falls back to official e
     providerUtils.buildProviderModelsUrl("codex", "https://relay.example.com/v1", "default"),
     "https://relay.example.com/v1/models",
   );
+  assert.equal(
+    providerUtils.buildProviderModelsUrl(
+      "deepseek",
+      providerUtils.normalizeProviderModelsBaseUrl(
+        "deepseek",
+        "https://api.deepseek.com/v1/chat/completions",
+      ),
+      "default",
+    ),
+    "https://api.deepseek.com/v1/models",
+  );
 });
 
 test("buildProviderModelsAttempts uses Authorization first and official auth second", () => {
-  const attemptsByProvider = ["claude_code", "codex", "gemini", "xai"].map((type) => [
+  const attemptsByProvider = ["claude_code", "codex", "gemini", "xai", "deepseek"].map((type) => [
     type,
     providerUtils.buildProviderModelsAttempts(type, "test-key"),
   ]);
@@ -98,9 +109,9 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
     assert.equal(attempts[0].headers["x-goog-api-key"], undefined);
   }
 
-  // codex/xai 官方形式与首次尝试一致，收敛为一次；claude_code/gemini 带官方鉴权头重试。
+  // codex/xai/deepseek 官方形式与首次尝试一致，收敛为一次；claude_code/gemini 带官方鉴权头重试。
   const attemptsFor = Object.fromEntries(attemptsByProvider);
-  for (const type of ["codex", "xai"]) {
+  for (const type of ["codex", "xai", "deepseek"]) {
     assert.deepEqual(
       attemptsFor[type].map((attempt) => attempt.kind),
       ["default"],
@@ -365,7 +376,7 @@ test("fetchModelsFromApi retries claude_code with official anthropic auth", asyn
 });
 
 test("fetchModelsFromApi requests OpenAI-compatible providers exactly once", async () => {
-  for (const type of ["codex", "xai"]) {
+  for (const type of ["codex", "xai", "deepseek"]) {
     await withFetchStub(
       () => jsonResponse(503, { error: "temporary failure" }),
       async (calls) => {
@@ -421,11 +432,13 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
   try {
     const models = await providerUtils.fetchModelsFromApi(
       "codex",
-      "https://relay.example.com/v1",
+      "https://relay.example.com/custom/v1/chat/completions?region=cn",
       "test-key",
       {
         useSystemProxy: true,
+        isFullUrl: true,
         modelsUrl: "https://catalog.example.com/models?api-version=2026-01",
+        providerId: "provider-codex",
       },
     );
     assert.deepEqual(
@@ -435,10 +448,12 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
     assert.deepEqual(gatewayInvokeCalls, [
       {
         type: "codex",
-        base_url: "https://relay.example.com/v1",
+        base_url: "https://relay.example.com/custom/v1/chat/completions?region=cn",
         api_key: "test-key",
         use_system_proxy: true,
         models_url: "https://catalog.example.com/models?api-version=2026-01",
+        provider_id: "provider-codex",
+        is_full_url: true,
       },
     ]);
   } finally {
@@ -525,6 +540,54 @@ test("mergeFetchedModels immediately normalizes a stale 1000K context to 1M", ()
   assert.equal(model.contextWindow, 1_000_000);
   assert.equal(model.maxOutputToken, 64_000);
   assert.equal(providerUtils.formatTokenCount(model.contextWindow), "1M");
+});
+
+test("mergeFetchedModels adopts fresh provider-declared limits over a stale stored value", () => {
+  const [model] = providerUtils.mergeFetchedModels(
+    [
+      {
+        id: "relay-model",
+        contextWindow: 300_000,
+        maxOutputToken: 50_000,
+        limitsSource: "provider",
+      },
+    ],
+    [
+      {
+        id: "relay-model",
+        contextWindow: 200_000,
+        maxOutputToken: 32_000,
+        limitsSource: "catalog",
+      },
+    ],
+  );
+  assert.equal(model.contextWindow, 300_000);
+  assert.equal(model.maxOutputToken, 50_000);
+  assert.equal(model.limitsSource, "provider");
+});
+
+test("mergeFetchedModels never overwrites a user-edited stored value with a fresh fetch", () => {
+  const [model] = providerUtils.mergeFetchedModels(
+    [
+      {
+        id: "relay-model",
+        contextWindow: 300_000,
+        maxOutputToken: 50_000,
+        limitsSource: "provider",
+      },
+    ],
+    [
+      {
+        id: "relay-model",
+        contextWindow: 999_000,
+        maxOutputToken: 1_000,
+        limitsSource: "user",
+      },
+    ],
+  );
+  assert.equal(model.contextWindow, 999_000);
+  assert.equal(model.maxOutputToken, 1_000);
+  assert.equal(model.limitsSource, "user");
 });
 
 test("model bulk helpers count and apply only selected active states", () => {

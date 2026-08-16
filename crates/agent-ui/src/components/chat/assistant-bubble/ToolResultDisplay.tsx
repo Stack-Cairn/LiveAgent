@@ -1,9 +1,22 @@
+import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
+import {
+  type MetaTag,
+  MetaTags,
+  PathDisplay,
+  ToolFactGrid,
+  ToolScrollablePre,
+  ToolSurface,
+  ToolSurfaceLabel,
+} from "@liveagent/ui/components/chat/ToolSurfaces";
+import { Markdown } from "@liveagent/ui/components/Markdown";
 import {
   type DeleteResultDetails,
   deriveFileToolPreview,
   type EditResultDetails,
   type GlobResultDetails,
   type GrepResultDetails,
+  isDynamicMcpToolName,
   type ListResultDetails,
   type McpManagerResultDetails,
   previewText,
@@ -19,19 +32,7 @@ import {
   toolCallArgsForDisplay,
   toolResultMessageToText,
   type WriteResultDetails,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
-import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
-import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
-import {
-  type MetaTag,
-  MetaTags,
-  PathDisplay,
-  ToolFactGrid,
-  ToolScrollablePre,
-  ToolSurface,
-  ToolSurfaceLabel,
-} from "@liveagent/ui/components/chat/ToolSurfaces";
-import { Markdown } from "@liveagent/ui/components/Markdown";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
@@ -99,13 +100,24 @@ function buildPagedResultTags(params: {
   ];
 }
 
+// Longest string that still reads well inside a fact-grid cell (~3 wrapped
+// lines); longer values switch the whole display to the complete JSON view.
+const GENERIC_GRID_VALUE_MAX_CHARS = 200;
+
 /** Extract tool-specific display info */
-function getToolDisplay(toolCall: { name: string; arguments?: Record<string, unknown> }) {
+function getToolDisplay(toolCall: ToolTraceItem["toolCall"]) {
   const args = toolCall.arguments || {};
   const name = toolCall.name;
   const path = typeof args.path === "string" ? (args.path as string) : null;
   const pattern = typeof args.pattern === "string" ? (args.pattern as string) : null;
   const tags: MetaTag[] = [];
+
+  // Dynamic MCP tools carry arbitrary commands and nested payloads; their
+  // expanded view must show the complete (display-sanitized) arguments, not
+  // the primitive-only fact grid (#444).
+  if (isDynamicMcpToolName(name)) {
+    return { type: "raw" as const, path: null, pattern: null, tags };
+  }
 
   switch (name) {
     case "Read":
@@ -203,13 +215,23 @@ function getToolDisplay(toolCall: { name: string; arguments?: Record<string, unk
         : { type: "generic" as const, path: null, pattern: null, tags };
     }
     default: {
-      // Generic: collect all string/number/boolean args
+      // Generic args: short primitives keep the compact fact grid; anything
+      // long or nested falls through to the complete JSON view — the expanded
+      // area must never lose argument content irreversibly (#444). Iterating
+      // the display projection keeps synthetic __-keys hidden and oversized
+      // strings capped with an explicit length marker.
       const entries: MetaTag[] = [];
-      for (const [k, v] of Object.entries(args)) {
-        if (typeof v === "string")
-          entries.push({ label: k, value: v.length > 60 ? `${v.slice(0, 60)}…` : v });
-        else if (typeof v === "number" || typeof v === "boolean")
-          entries.push({ label: k, value: String(v) });
+      for (const [key, value] of Object.entries(toolCallArgsForDisplay(toolCall))) {
+        if (typeof value === "string") {
+          if (value.length > GENERIC_GRID_VALUE_MAX_CHARS) {
+            return { type: "raw" as const, path: null, pattern: null, tags };
+          }
+          entries.push({ label: key, value });
+        } else if (typeof value === "number" || typeof value === "boolean") {
+          entries.push({ label: key, value: String(value) });
+        } else if (value !== null && value !== undefined) {
+          return { type: "raw" as const, path: null, pattern: null, tags };
+        }
       }
       return { type: "generic" as const, path: null, pattern: null, tags: entries };
     }
@@ -333,11 +355,14 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     return <ToolFactGrid tags={display.tags} />;
   }
 
-  // Fallback: raw JSON, cached by argument identity — settled tool args are
-  // immutable, so virtualizer remounts reuse the stringified form.
+  // Fallback: complete JSON — dynamic MCP tools and generic args carrying
+  // long or nested values. The surface is height-bounded and wraps long
+  // lines; oversized fields arrive pre-capped with an explicit marker from
+  // toolCallArgsForDisplay. Cached by argument identity — settled tool args
+  // are immutable, so virtualizer remounts reuse the stringified form.
   return (
     <ToolSurface className="overflow-hidden px-0 py-0">
-      <ToolScrollablePre className="max-h-44 rounded-none">
+      <ToolScrollablePre className="max-h-56 whitespace-pre-wrap break-words rounded-none">
         {getRawArgsDisplayText(toolCall)}
       </ToolScrollablePre>
     </ToolSurface>

@@ -284,6 +284,49 @@ func TestForgetAgentPurgesOfflineTunnelRecordsAndRoutes(t *testing.T) {
 	}
 }
 
+func TestSetRelayHealthChecksRegistrationWhileHoldingTunnelLock(t *testing.T) {
+	m := newTunnelTestManager(t)
+	m.registry.mu.Lock()
+	registryLocked := true
+	defer func() {
+		if registryLocked {
+			m.registry.mu.Unlock()
+		}
+	}()
+
+	relayUpdated := make(chan struct{})
+	go func() {
+		m.setRelayHealth("test-agent", &gatewayv2.TunnelHealth{Status: "late"})
+		close(relayUpdated)
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for m.tunnels.mu.TryLock() {
+		m.tunnels.mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatal("relay health update did not acquire the tunnel lock before checking registration")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	delete(m.registry.agents, "test-agent")
+	m.registry.mu.Unlock()
+	registryLocked = false
+
+	select {
+	case <-relayUpdated:
+	case <-time.After(time.Second):
+		t.Fatal("relay health update did not finish")
+	}
+
+	m.tunnels.mu.Lock()
+	_, relayRestored := m.tunnels.relays["test-agent"]
+	m.tunnels.mu.Unlock()
+	if relayRestored {
+		t.Fatal("relay health update restored deleted agent state")
+	}
+}
+
 func TestSubscribeTunnelStateReceivesBroadcasts(t *testing.T) {
 	m := newTunnelTestManager(t)
 	ch, cleanup := m.SubscribeTunnelState()

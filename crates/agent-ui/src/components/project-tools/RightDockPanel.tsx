@@ -1,11 +1,14 @@
-import { X } from "@liveagent/app/components/icons";
-import type {
-  RightDockFileTreeState,
-  RightDockFileTreeStatePatch,
-  RightDockProjectState,
-  SshHostConfig,
+import {
+  closeRightDockBackgroundTasksTabState,
+  openRightDockBackgroundTasksTabState,
+  type RightDockBackgroundTasksState,
+  type RightDockFileTreeState,
+  type RightDockFileTreeStatePatch,
+  type RightDockProjectState,
+  type SshHostConfig,
 } from "@liveagent/app/lib/settings";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { X } from "@liveagent/ui/components/IconSet";
 import type {
   GitCommitContextPayload,
   GitFileContextPayload,
@@ -25,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
 import { ensureManagedProcessInit, useManagedProcesses } from "../../lib/managed-process/store";
 import { cn } from "../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
@@ -40,7 +44,6 @@ import {
 import { RightDockChooser, RightDockCreateMenu } from "./RightDockLauncher";
 import { RightDockTabStrip } from "./RightDockTabStrip";
 import {
-  BACKGROUND_TASKS_TAB_ID,
   dirname,
   expandedPathsForFileTreePath,
   formatTerminalSessionTitle,
@@ -72,6 +75,7 @@ type RightDockPanelProps = {
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
   gitDisabledMessage?: string;
+  textGenerationClient?: ProjectToolTextGenerationClient | null;
   tunnelClient?: LocalTunnelClient | null;
   tunnelEnabled?: boolean;
   tunnelDisabledMessage?: string;
@@ -353,6 +357,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     gitClient,
     gitWriteEnabled = true,
     gitDisabledMessage,
+    textGenerationClient,
     tunnelClient,
     tunnelEnabled = true,
     tunnelDisabledMessage,
@@ -471,16 +476,22 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       console.error("managed process init failed", error);
     });
   }, []);
-  // Session-local visibility: the tab stays derived and never writes
-  // persisted right-dock settings for existence. Closing is hide-only — it
-  // snapshots the current task ids and touches no process state; a task id
-  // outside that snapshot (a newly started one) re-derives the tab.
-  const [backgroundTasksOpened, setBackgroundTasksOpened] = useState(false);
-  const [backgroundTasksDismissedIds, setBackgroundTasksDismissedIds] =
-    useState<ReadonlySet<string> | null>(null);
+  // Visibility intent lives in the synced right-dock project state so that
+  // opening/closing the tab on one client mirrors to the others. Closing is
+  // hide-only — it snapshots the current task ids and touches no process
+  // state; a task id outside that snapshot (a newly started one) re-derives
+  // the tab everywhere. Without a project bucket to persist into (no
+  // projectPathKey), a session-local fallback keeps the launcher working.
+  const [localBackgroundTasks, setLocalBackgroundTasks] = useState<RightDockBackgroundTasksState>({
+    opened: false,
+    dismissedIds: [],
+  });
+  const backgroundTasksState = projectPathKey ? projectState.backgroundTasks : localBackgroundTasks;
   const backgroundTasksVisible =
-    backgroundTasksOpened ||
-    managedProcessState.processes.some((process) => !backgroundTasksDismissedIds?.has(process.id));
+    backgroundTasksState.opened ||
+    managedProcessState.processes.some(
+      (process) => !backgroundTasksState.dismissedIds.includes(process.id),
+    );
   const backgroundTasksRunning = managedProcessState.processes.filter(
     (process) => process.running,
   ).length;
@@ -515,18 +526,24 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   }, [createTerminal]);
 
   const openBackgroundTasks = useCallback(() => {
-    setBackgroundTasksOpened(true);
-    setBackgroundTasksDismissedIds(null);
-    activateTab(BACKGROUND_TASKS_TAB_ID);
-  }, [activateTab]);
+    if (projectPathKey) {
+      onProjectStateChange(openRightDockBackgroundTasksTabState);
+      return;
+    }
+    // No project bucket: persisted writes (including tab activation) are
+    // no-ops, so only the session-local visibility flips.
+    setLocalBackgroundTasks({ opened: true, dismissedIds: [] });
+  }, [onProjectStateChange, projectPathKey]);
 
   const closeBackgroundTasks = useCallback(() => {
-    // Ephemeral only; the persisted activeTabId falls back at render time.
-    setBackgroundTasksOpened(false);
-    setBackgroundTasksDismissedIds(
-      new Set(managedProcessState.processes.map((process) => process.id)),
-    );
-  }, [managedProcessState.processes]);
+    // Hide-only; the persisted activeTabId falls back at render time.
+    const visibleIds = managedProcessState.processes.map((process) => process.id);
+    if (projectPathKey) {
+      onProjectStateChange((current) => closeRightDockBackgroundTasksTabState(current, visibleIds));
+      return;
+    }
+    setLocalBackgroundTasks({ opened: false, dismissedIds: visibleIds });
+  }, [managedProcessState.processes, onProjectStateChange, projectPathKey]);
 
   const {
     consumeSuppressedTabClick,
@@ -643,6 +660,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       clients: {
         terminal: client,
         git: gitClient,
+        textGeneration: textGenerationClient,
         tunnel: tunnelClient,
         workspaceActivity: workspaceActivityClient,
       },
@@ -717,6 +735,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       sshSessions,
       terminalDisabledMessage,
       terminalReady,
+      textGenerationClient,
       theme,
       tunnelClient,
       tunnelDisabledMessage,

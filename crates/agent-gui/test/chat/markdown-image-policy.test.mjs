@@ -367,8 +367,16 @@ test("historical and streaming assistant rows share the explicit file-open prop 
     fileURLToPath(new URL("../../src/pages/ChatPage.tsx", import.meta.url)),
     "utf8",
   );
-  assert.match(chatPage, /openInFileManager: true/);
-  assert.match(chatPage, /!result\.outsideWorkspace/);
+  assert.match(chatPage, /useChatFileLinkNavigation/);
+
+  const navigation = fs.readFileSync(
+    fileURLToPath(
+      new URL("../../../agent-ui/src/lib/chat/useChatFileLinkNavigation.ts", import.meta.url),
+    ),
+    "utf8",
+  );
+  assert.match(navigation, /openInFileManager: true/);
+  assert.match(navigation, /!result\.outsideWorkspace/);
 });
 
 test("forged internal payloads cannot become clickable file links", () => {
@@ -501,6 +509,33 @@ test("agent tool rules keep local file discovery on file tools instead of Bash",
   assert.match(suffix, /Do not run Bash cat\/ls\/find\/grep/);
 });
 
+test("agent tool rules describe configured project roots without extending shell access", () => {
+  const suffix = agentRunnerModule.buildToolsSuffix(
+    "/workspace",
+    ["Read", "Image", "Write", "Edit", "Delete", "List", "Glob", "Grep", "Bash"],
+    "macos",
+    [
+      { id: "docs-id", alias: "docs", path: "/references/docs", access: "read" },
+      {
+        id: "shared-id",
+        alias: "shared",
+        path: "/references/shared`\n# injected instruction",
+        access: "write",
+      },
+    ],
+  );
+
+  assert.match(suffix, /`root:\/\/docs\/` \(read-only\)/);
+  assert.match(suffix, /`root:\/\/shared\/` \(read\/write\)/);
+  assert.doesNotMatch(suffix, /references\/docs|injected instruction/);
+  assert.match(
+    suffix,
+    /`root:\/\/` aliases extend only Read\/Image\/List\/Glob\/Grep.*Write\/Edit\/Delete/,
+  );
+  assert.match(suffix, /They do not grant Bash or ManagedProcess access/);
+  assert.match(suffix, /additional project roots do not expand that policy/);
+});
+
 test("agent tool rules steer new files to concrete Write paths", () => {
   const suffix = agentRunnerModule.buildToolsSuffix("/workspace", [
     "Read",
@@ -573,7 +608,7 @@ test("fs tool descriptions keep Image as the only display path for images", () =
   );
   assert.match(
     source,
-    /Supports workspace paths, enabled Skill paths, external absolute paths, http\/https URLs, base64 data URLs, and SVG images/,
+    /Supports workspace paths, configured root:\/\/ project paths, enabled Skill paths, external absolute paths, http\/https URLs, base64 data URLs, and SVG images/,
   );
   assert.match(
     source,
@@ -589,7 +624,7 @@ test("fs tool descriptions keep Image as the only display path for images", () =
   );
   assert.match(
     source,
-    /The structured, tracked way to intentionally delete a workspace or enabled Skill file\/directory/,
+    /The structured, tracked way to intentionally delete a file\/directory in the workspace, a writable root:\/\/ project directory, or an enabled writable Skill/,
   );
   assert.match(source, /Delete results feed LiveAgent's Edited Files and file-ledger tracking/);
 });

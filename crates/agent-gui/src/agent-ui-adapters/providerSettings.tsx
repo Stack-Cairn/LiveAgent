@@ -1,3 +1,12 @@
+import {
+  CheckCircle2,
+  ChevronDown,
+  Download,
+  Key,
+  Loader2,
+  RefreshCw,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -18,15 +27,6 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../src-tauri/icons/custom/cherrystudio.png";
-import {
-  CheckCircle2,
-  ChevronDown,
-  Download,
-  Key,
-  Loader2,
-  RefreshCw,
-  X,
-} from "../components/icons";
 import type { ProviderModelConfig } from "../lib/settings";
 import {
   type AppSettings,
@@ -106,7 +106,10 @@ function ccsProviderIsTransferable(item: CcsProviderImportItem) {
   );
 }
 
-function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>): CustomProvider {
+export function providerFromCcs(
+  item: CcsProviderImportItem,
+  existingIds: Set<string>,
+): CustomProvider {
   const baseId =
     `ccswitch-${item.sourceId}`
       .toLowerCase()
@@ -138,8 +141,11 @@ function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>):
           ? item.requestFormat
           : undefined,
     reasoning: "off",
-    promptCachingEnabled: item.providerType !== "gemini" && item.providerType !== "xai",
-    nativeWebSearchEnabled: true,
+    promptCachingEnabled:
+      item.providerType !== "gemini" &&
+      item.providerType !== "xai" &&
+      item.providerType !== "deepseek",
+    nativeWebSearchEnabled: item.providerType !== "deepseek",
     useSystemProxy: false,
     usageQuery: getDefaultUsageQueryConfig(),
   };
@@ -169,7 +175,7 @@ function cherryEffectiveApiKey(item: CherryProviderImportItem, existing?: Custom
   return existing?.apiKey?.trim() ? existing.apiKey : item.apiKey;
 }
 
-function providerFromCherry(
+export function providerFromCherry(
   item: CherryProviderImportItem,
   allItems: CherryProviderImportItem[],
   existing?: CustomProvider,
@@ -195,9 +201,12 @@ function providerFromCherry(
           : undefined,
     reasoning: existing?.reasoning ?? "off",
     promptCachingEnabled:
-      existing?.promptCachingEnabled ??
-      (item.providerType !== "gemini" && item.providerType !== "xai"),
-    nativeWebSearchEnabled: existing?.nativeWebSearchEnabled ?? true,
+      item.providerType === "deepseek"
+        ? false
+        : (existing?.promptCachingEnabled ??
+          (item.providerType !== "gemini" && item.providerType !== "xai")),
+    nativeWebSearchEnabled:
+      item.providerType === "deepseek" ? false : (existing?.nativeWebSearchEnabled ?? true),
     useSystemProxy: existing?.useSystemProxy ?? false,
     usageQuery: existing?.usageQuery ?? getDefaultUsageQueryConfig(),
   };

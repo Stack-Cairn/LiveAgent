@@ -95,6 +95,7 @@ function readLocalUiSettings(): {
     ) as Record<string, unknown>;
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
+      commitMessageModel: normalizeSelectedModel(obj.commitMessageModel),
       chatSidebar: {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,
@@ -127,6 +128,8 @@ function readLocalUiSettings(): {
     }
 
     const parsed = JSON.parse(raw) as LocalUiSettings | null;
+    const hasStoredLocale =
+      parsed !== null && typeof parsed === "object" && Object.hasOwn(parsed, "locale");
     return {
       skills: normalizeSkillsSettings(parsed?.skills ?? defaults.skills),
       chatRuntimeControls: normalizeChatRuntimeControls(
@@ -139,7 +142,7 @@ function readLocalUiSettings(): {
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
       modelFailover: parsed?.modelFailover ?? defaults.modelFailover,
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
-      locale: normalizeLocale(parsed?.locale ?? defaults.locale),
+      locale: normalizeLocale(hasStoredLocale ? parsed?.locale : defaults.locale),
       closeWindowBehavior: normalizeCloseWindowBehavior(
         parsed?.closeWindowBehavior ?? defaults.closeWindowBehavior,
       ),

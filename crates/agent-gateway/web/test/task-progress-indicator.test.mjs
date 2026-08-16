@@ -5,7 +5,9 @@ import test from "node:test";
 import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
-const iconsPath = fileURLToPath(new URL("../src/components/icons/index.ts", import.meta.url));
+const iconsPath = fileURLToPath(
+  new URL("../../../agent-ui/src/components/IconSet.tsx", import.meta.url),
+);
 const utilsPath = fileURLToPath(new URL("../src/lib/shared/utils.ts", import.meta.url));
 const localeContextPath = fileURLToPath(
   new URL("../../../agent-ui/src/i18n/LocaleContext.tsx", import.meta.url),

@@ -62,6 +62,8 @@ message GatewayEnvelope {
     ProviderUsageRequest provider_usage = 93;
     ChatFileOpenRequest chat_file_open = 94;
     HistorySetCwdRequest history_set_cwd = 95;
+    WorkspaceRootGrantsRequest workspace_root_grants = 96;
+    ImportDirectoryRequest import_directory = 97;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -137,6 +139,8 @@ message AgentEnvelope {
     ChatFileOpenResponse chat_file_open_resp = 98;
     ErrorResponse error = 99;
     HistorySetCwdResponse history_set_cwd_resp = 100;
+    WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
+    ImportDirectoryResponse import_directory_resp = 102;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -178,6 +182,45 @@ message UploadReadableFilesRequest {
 message UploadReadableFilesResponse {
   repeated ChatUploadedFile files = 1;
   repeated string skipped = 2;
+}
+
+// 浏览器拖入的整个文件夹经 HTTP 上传后由网关转发到 Agent 宿主机落盘。
+// target 决定落盘基目录："workspace" 创建为新工作空间目录，
+// "project-root" 创建为待挂载的附属目录。
+message ImportDirectoryFile {
+  string relative_path = 1;  // 文件夹内的相对路径，正斜杠分隔
+  bytes content = 2;
+}
+
+enum ImportDirectoryOperation {
+  IMPORT_DIRECTORY_OPERATION_UNSPECIFIED = 0;
+  IMPORT_DIRECTORY_OPERATION_START = 1;
+  IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK = 2;
+  IMPORT_DIRECTORY_OPERATION_COMMIT = 3;
+  IMPORT_DIRECTORY_OPERATION_ABORT = 4;
+}
+
+message ImportDirectoryRequest {
+  string name = 1;    // START：拖入的文件夹名（单个路径组件）
+  string target = 2;  // START："workspace" | "project-root"
+  // 旧版整目录信封，仅保留兼容；新客户端必须使用下面的分块字段。
+  repeated ImportDirectoryFile files = 3 [deprecated = true];
+  string transfer_id = 4;
+  ImportDirectoryOperation operation = 5;
+  uint32 total_files = 6;  // START：目录文件总数
+  uint64 total_bytes = 7;  // START：目录内容总字节数（不含协议开销）
+  string relative_path = 8;  // WRITE_CHUNK：目录内相对路径
+  uint64 offset = 9;  // WRITE_CHUNK：当前文件内的连续字节偏移
+  bytes chunk = 10;  // WRITE_CHUNK：单块最多 1 MiB
+  bool file_complete = 11;  // WRITE_CHUNK：当前块是该文件最后一块
+}
+
+message ImportDirectoryResponse {
+  string root_path = 1;  // Agent 宿主机上创建的目录绝对路径
+  int32 file_count = 2;
+  repeated string skipped = 3;
+  string transfer_id = 4;
+  uint64 received_bytes = 5;
 }
 
 message UploadedImagePreviewRequest {
@@ -446,6 +489,15 @@ message SftpRequest {
   string target_path = 10;
   bool recursive = 11;
   bool overwrite = 12;
+  string content = 13;
+  uint64 offset = 14;
+  uint64 max_bytes = 15;
+  bool strict_utf8 = 16;
+  // write_text conflict guard; 0 means "skip the check" (proto3 has no
+  // presence for scalars, an mtime/size of exactly 0 is accepted as-is).
+  uint64 expected_mtime = 17;
+  uint64 expected_size_bytes = 18;
+  bool create_parent_dirs = 19;
 }
 
 message SftpEntry {
@@ -478,6 +530,11 @@ message SftpResponse {
   SftpEntry entry = 4;
   bool exists = 5;
   SftpTransfer transfer = 6;
+  string content = 7;
+  uint64 offset = 8;
+  uint64 bytes_read = 9;
+  uint64 size_bytes = 10;
+  bool truncated = 11;
 }
 
 message SftpEvent {
@@ -1164,6 +1221,10 @@ message ProviderModelsRequest {
   bool use_system_proxy = 4;
   // 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
   string models_url = 5;
+  // WebUI 编辑已保存供应商时用于让桌面端复用本地密钥；密钥不返回浏览器。
+  string provider_id = 6;
+  // 当前草稿是否把 base_url 作为完整聊天端点解释；未提供时沿用已保存配置。
+  optional bool is_full_url = 7;
 }
 
 message ProviderModelsResponse {
@@ -1292,4 +1353,35 @@ message HistorySetCwdRequest {
 
 message HistorySetCwdResponse {
   ConversationSummary conversation = 1;
+}
+
+message WorkspaceRootGrantDraft {
+  optional string id = 1;
+  string alias = 2;
+  string display_path = 3;
+  string access = 4;
+}
+
+message WorkspaceRootGrant {
+  string id = 1;
+  string project_id = 2;
+  string project_path_key = 3;
+  string alias = 4;
+  string display_path = 5;
+  string canonical_path = 6;
+  string access = 7;
+  string state = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+message WorkspaceRootGrantsRequest {
+  string action = 1;
+  string project_id = 2;
+  string project_path = 3;
+  repeated WorkspaceRootGrantDraft grants = 4;
+}
+
+message WorkspaceRootGrantsResponse {
+  repeated WorkspaceRootGrant grants = 1;
 }

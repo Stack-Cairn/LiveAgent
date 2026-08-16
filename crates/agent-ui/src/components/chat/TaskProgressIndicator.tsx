@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2 } from "@liveagent/app/components/icons";
+import { CheckCircle2, Circle, Loader2 } from "@liveagent/ui/components/IconSet";
 import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,

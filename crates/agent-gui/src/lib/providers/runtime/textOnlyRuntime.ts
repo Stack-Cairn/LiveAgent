@@ -4,7 +4,7 @@ import {
   type HostedSearchBlock,
   type HostedSearchOrderedBlock,
   mergeHostedSearchBlocks,
-} from "../../chat/messages/hostedSearch";
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
 import { withPowerActivity } from "../../system/powerActivity";
@@ -102,9 +102,15 @@ function buildTextOnlyStreamOptions(params: {
       ((params.providerId === "codex" || params.providerId === "xai") &&
         (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
       (params.providerId === "claude_code" && params.model.api === "anthropic-messages") ||
-      (params.providerId === "gemini" && params.model.api === "google-generative-ai")
+      (params.providerId === "gemini" && params.model.api === "google-generative-ai") ||
+      params.providerId === "deepseek"
         ? toSimpleStreamReasoning(params.runtime.reasoning)
         : undefined,
+    deepSeekThinking:
+      params.providerId === "deepseek" && params.runtime.reasoning === "off"
+        ? "disabled"
+        : undefined,
+    workdir: params.workdir,
     // Text-only mode cannot execute local tools. Provider-native web search is
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",

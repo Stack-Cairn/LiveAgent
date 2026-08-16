@@ -1,8 +1,8 @@
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { memo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import type { AssistantActivityRow as AssistantActivityRowModel } from "./rowModel";
 

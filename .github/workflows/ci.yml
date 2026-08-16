@@ -224,8 +224,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @liveagent/ui...
+
       - name: Check shared UI dependency boundaries
-        run: node scripts/check-ui-boundaries.mjs
+        run: pnpm check:ui-boundaries
 
   whitespace:
     name: Diff Hygiene

@@ -1,10 +1,9 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-
 import {
   getUserMessageAttachments,
   type PendingUploadedFile,
-} from "../chat/messages/uploadedFiles";
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import { invoke } from "@tauri-apps/api/core";
 
 type PayloadHook = (payload: unknown, model: Model<any>) => unknown | Promise<unknown>;
 

@@ -6,9 +6,9 @@
 // 说明:MCP 工具按 server、插件工具按工具的策略已就地内联到各自 Hub 卡片旁
 //(需运行时数据),不在本节;本节聚焦内置工具,补上内置工具此前不可管控的缺口。
 
-import { Wrench } from "@liveagent/app/components/icons";
 import { type ToolPolicy, updateSystem } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useMemo } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";

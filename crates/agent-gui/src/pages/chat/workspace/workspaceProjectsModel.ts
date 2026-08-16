@@ -1,10 +1,4 @@
-import { fallbackWorkspaceProjectName } from "@liveagent/ui/lib/workspaceProjects";
 import { listChatHistory } from "../../../lib/chat/history/chatHistory";
-import {
-  type AppSettings,
-  DEFAULT_WORKSPACE_PROJECT_ID,
-  type WorkspaceProject,
-} from "../../../lib/settings";
 
 const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 
@@ -32,23 +26,4 @@ export async function listChatHistoryIdsForProjectPath(projectPath: string) {
     }
   }
   return ids;
-}
-
-export function getDefaultWorkspaceProjectPath(system: AppSettings["system"]) {
-  return (
-    system.workspaceProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.path ||
-    system.workdir
-  );
-}
-
-export function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["kind"]) {
-  const now = Date.now();
-  return {
-    id: `${kind}-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    name: fallbackWorkspaceProjectName(path),
-    path,
-    kind,
-    createdAt: now,
-    updatedAt: now,
-  } satisfies WorkspaceProject;
 }

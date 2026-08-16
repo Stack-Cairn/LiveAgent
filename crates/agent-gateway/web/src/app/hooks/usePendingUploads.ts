@@ -1,15 +1,21 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { t as translate } from "@liveagent/ui/i18n/index";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { registerLocalUploadedImagePreviews } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { type DragEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
-import { mergePendingUploadedFiles } from "@/lib/chat/uploadedFiles";
 import {
   clipboardHasFileSignal,
   extractClipboardFiles,
   readClipboardFiles,
 } from "@/lib/clipboardFiles";
+import {
+  collectDroppedPayload,
+  type DroppedDirectory,
+  hasDirectoryEntry,
+  snapshotDroppedEntries,
+} from "@/lib/directoryDrop";
 import type { AppSettings } from "@/lib/settings";
 import { importReadableFiles } from "@/lib/uploadReadableFiles";
 
@@ -34,6 +40,14 @@ type UsePendingUploadsParams = {
   // Upload feedback goes to the top-right toast stack, never into the
   // transcript area — a failed upload is not conversation output.
   addNotify: (type: NotifyItem["type"], message: string) => void;
+  /** 正文区拖入文件夹时的接管回调（挂载为附属目录）；未提供则忽略文件夹。 */
+  onDropDirectories?: (directories: DroppedDirectory[]) => void;
+  /**
+   * 无会话兜底：页面刚打开、还没有任何会话 id 时开始上传，由宿主创建一个
+   * 本地草稿会话并返回其 id（等价于点一次“新对话”），附件挂到该草稿上，
+   * 首条消息发出后随现有的 moveConversationUploads 迁移到真实会话。
+   */
+  ensureUploadConversation?: () => string;
 };
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -51,6 +65,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     displayedConversationWorkdirRef,
     composerRef,
     addNotify,
+    onDropDirectories,
+    ensureUploadConversation,
   } = params;
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
@@ -178,7 +194,15 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.requireWorkdir", locale));
         return;
       }
-      const targetConversationId = displayedConversationIdRef.current;
+      let targetConversationId = displayedConversationIdRef.current;
+      if (!targetConversationId && ensureUploadConversation) {
+        targetConversationId = ensureUploadConversation().trim();
+        if (targetConversationId) {
+          // 重渲染前 displayed id 仍是旧值，手动同步 ref 让本次导入及其
+          // isDisplayedConversation 判定立即指向新草稿。
+          displayedConversationIdRef.current = targetConversationId;
+        }
+      }
       if (!targetConversationId) {
         addNotify("warning", "请先选择或创建会话后再上传文件。");
         return;
@@ -255,6 +279,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       addNotify,
       composerRef,
       displayedConversationWorkdirRef,
+      ensureUploadConversation,
       executionMode,
       getPendingUploadsForConversation,
       isDisplayedConversation,
@@ -318,12 +343,20 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     token,
   ]);
 
+  // 上传命中区与桌面端对齐：只有落在标记的聊天面板（正文 + 输入器）内的
+  // 拖放才算上传，聊天头部等其他区域忽略。
+  const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
+    return (
+      event.target instanceof Element &&
+      event.target.closest("[data-file-upload-drop-zone]") !== null
+    );
+  }, []);
+
   const handleFileDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!dragEventHasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     uploadDragDepthRef.current += 1;
-    setIsFileDropActive(true);
   }, []);
 
   const handleFileDragOver = useCallback(
@@ -331,10 +364,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (!dragEventHasFiles(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      event.dataTransfer.dropEffect = canDropUpload ? "copy" : "none";
-      setIsFileDropActive(true);
+      const overZone = dropLandsInUploadZone(event);
+      event.dataTransfer.dropEffect = overZone && canDropUpload ? "copy" : "none";
+      setIsFileDropActive(overZone);
     },
-    [],
+    [dropLandsInUploadZone],
   );
 
   const handleFileDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -360,6 +394,31 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       event.stopPropagation();
       uploadDragDepthRef.current = 0;
       setIsFileDropActive(false);
+      if (!dropLandsInUploadZone(event)) return;
+
+      // DataTransferItem 只在同步阶段有效，目录判定必须先于任何 await。
+      const entries = snapshotDroppedEntries(event.dataTransfer);
+      if (hasDirectoryEntry(entries)) {
+        void collectDroppedPayload(entries)
+          .then((payload) => {
+            if (payload.directories.length > 0) {
+              onDropDirectories?.(payload.directories);
+            }
+            if (payload.files.length === 0) return;
+            if (!options.canDropUpload) {
+              addNotify("warning", options.disabledMessage);
+              return;
+            }
+            return handleImportReadableFiles(payload.files);
+          })
+          .catch((error) => {
+            addNotify(
+              "error",
+              asErrorMessage(error, translate("chat.workspaceDropFailed", locale)),
+            );
+          });
+        return;
+      }
 
       const files = Array.from(event.dataTransfer.files ?? []);
       if (files.length === 0) return;
@@ -369,7 +428,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       }
       void handleImportReadableFiles(files);
     },
-    [addNotify, handleImportReadableFiles],
+    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, locale, onDropDirectories],
   );
 
   return {

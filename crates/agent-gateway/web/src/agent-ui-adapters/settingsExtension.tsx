@@ -1,5 +1,5 @@
+import { MonitorSmartphone } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
-import { MonitorSmartphone } from "../components/icons";
 import { DevicesSection } from "../pages/settings/DevicesSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 

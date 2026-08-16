@@ -1,20 +1,4 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { formatErrorDisplayText } from "./errors";
-
-export function assistantMessageToText(message: AssistantMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "text") text += block.text;
-  }
-  if (text.trim()) return text;
-  if (message.stopReason === "error") {
-    return formatErrorDisplayText(message.errorMessage, "Request failed");
-  }
-  if (message.stopReason === "aborted") {
-    return formatErrorDisplayText(message.errorMessage, "Cancelled");
-  }
-  return text;
-}
+export { assistantMessageToText } from "@liveagent/ui/lib/providers/errorMessage";
 
 export function createStreamingTextReconciler() {
   const emittedTextByKey = new Map<string, string>();

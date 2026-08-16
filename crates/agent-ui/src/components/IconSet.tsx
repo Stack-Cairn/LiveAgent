@@ -2,6 +2,7 @@ import { type ComponentType, type SVGProps, useId } from "react";
 import McpLogoSource from "~icons/gravity-ui/logo-mcp";
 import ConnectionIconSource from "~icons/gravity-ui/plug-connection";
 import ClaudeSource from "~icons/logos/claude-icon";
+import DeepseekSource from "~icons/logos/deepseek";
 import GrokSource from "~icons/logos/grok-icon";
 import OpenAISource from "~icons/logos/openai-icon";
 import ActivitySource from "~icons/lucide/activity";
@@ -127,6 +128,7 @@ import Undo2Source from "~icons/lucide/undo-2";
 import UploadSource from "~icons/lucide/upload";
 import UserSource from "~icons/lucide/user";
 import WalletSource from "~icons/lucide/wallet";
+import WandSparklesSource from "~icons/lucide/wand-sparkles";
 import WaypointsSource from "~icons/lucide/waypoints";
 import WifiSource from "~icons/lucide/wifi";
 import WifiOffSource from "~icons/lucide/wifi-off";
@@ -463,6 +465,7 @@ function GeminiIconSource({ title, ...props }: SVGProps<SVGSVGElement> & { title
 export const AlertTriangle = createIcon(AlertTriangleSource);
 export const AlertCircle = createIcon(AlertCircleSource);
 export const ClaudeIcon = createIcon(ClaudeSource);
+export const DeepseekIcon = createIcon(DeepseekSource);
 export const GeminiIcon = createIcon(GeminiIconSource);
 /**
  * Grok brand mark from the Iconify `logos` set (`logos:grok-icon`).
@@ -597,6 +600,7 @@ export const Undo2 = createIcon(Undo2Source);
 export const Upload = createIcon(UploadSource);
 export const User = createIcon(UserSource);
 export const Wallet = createIcon(WalletSource);
+export const WandSparkles = createIcon(WandSparklesSource);
 export const Waypoints = createIcon(WaypointsSource);
 export const Wifi = createIcon(WifiSource);
 export const WifiOff = createIcon(WifiOffSource);
