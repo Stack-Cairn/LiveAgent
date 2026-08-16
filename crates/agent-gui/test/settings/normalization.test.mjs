@@ -319,52 +319,20 @@ test("DeepSeek provider normalization keeps native routing and disables unsuppor
   assert.equal(provider.models[0].maxOutputToken, 384_000);
 });
 
-test("legacy Codex-group official DeepSeek configs migrate to the deepseek provider (#420)", () => {
-  // v1.2.4 起 codex 分组不再按模型 ID 强制 chat-completions，未显式选过
-  // 请求格式的存量配置被 requestFormat 兜底翻转到 Responses 协议导致断流。
-  const migrated = settings.normalizeCustomProvider({
+test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
+  // 存量 codex 分组挂 DeepSeek 的配置不做自动改判：用户自行迁移到正式
+  // deepseek 分组（避免归一化层堆积一次性迁移逻辑）。
+  const legacy = settings.normalizeCustomProvider({
     id: "legacy-deepseek",
     name: "DeepSeek",
     type: "codex",
     baseUrl: "https://api.deepseek.com/v1",
     apiKey: "sk-legacy",
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-chat"],
     activeModels: ["deepseek-chat"],
   });
-  assert.equal(migrated.type, "deepseek");
-  assert.equal(migrated.requestFormat, undefined);
-  assert.equal(migrated.promptCachingEnabled, false);
-  assert.equal(migrated.nativeWebSearchEnabled, false);
-  assert.equal(migrated.apiKey, "sk-legacy");
-  assert.deepEqual(migrated.activeModels, ["deepseek-chat"]);
-
-  // 显式选过 Responses 的官方域名配置同样迁移：官方端点的 Responses 支持
-  // 不稳定正是 #420 的断流来源。
-  const explicitResponses = settings.normalizeCustomProvider({
-    id: "legacy-deepseek-responses",
-    type: "codex",
-    baseUrl: "https://api.deepseek.com",
-    requestFormat: "openai-responses",
-  });
-  assert.equal(explicitResponses.type, "deepseek");
-  assert.equal(explicitResponses.requestFormat, undefined);
-
-  // 中转域名无法判定归属，保持 codex 不动。
-  const relay = settings.normalizeCustomProvider({
-    id: "relay-deepseek",
-    type: "codex",
-    baseUrl: "https://relay.example.test/v1",
-    models: ["deepseek-chat"],
-  });
-  assert.equal(relay.type, "codex");
-
-  // claude_code 分组的 /anthropic 端点仍走 Anthropic 协议，不迁移。
-  const anthropic = settings.normalizeCustomProvider({
-    id: "anthropic-deepseek",
-    type: "claude_code",
-    baseUrl: "https://api.deepseek.com/anthropic",
-  });
-  assert.equal(anthropic.type, "claude_code");
+  assert.equal(legacy.type, "codex");
+  assert.equal(legacy.requestFormat, "openai-responses");
 });
 
 test("settings normalization drops stale selected models and preserves valid selections", () => {

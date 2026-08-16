@@ -801,28 +801,6 @@ function normalizeProviderId(input: unknown): ProviderId {
   }
 }
 
-// 与 Rust 导入侧 is_official_deepseek_base_url 同判定：仅官方域名。中转域名
-// 无法可靠判定归属，不做改判。
-function isOfficialDeepSeekBaseUrl(value: unknown): boolean {
-  if (typeof value !== "string" || !value.trim()) return false;
-  try {
-    return new URL(value.trim()).hostname.toLowerCase() === "api.deepseek.com";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 存量配置一次性改判（#420）：v1.2.4 起 codex 分组不再按模型 ID 强制
- * chat-completions，未显式选过请求格式的存量 DeepSeek 配置被 requestFormat
- * 兜底静默翻转到 Responses 协议，官方端点断流/502。挂在 codex 分组下、指向
- * 官方域名的配置迁入正式 deepseek 分组（原生 chat-completions，协议固定）。
- * claude_code 分组的 /anthropic 端点配置仍走 Anthropic 协议，不在此迁移。
- */
-function reclassifyProviderId(type: ProviderId, baseUrl: unknown): ProviderId {
-  return type === "codex" && isOfficialDeepSeekBaseUrl(baseUrl) ? "deepseek" : type;
-}
-
 function normalizeProviderName(id: string, input: unknown): string {
   const name = typeof input === "string" && input.trim() ? input.trim() : "未命名供应商";
   if (id === "builtin-claude_code" && name === "Claude Code") return "Anthropic";
@@ -944,7 +922,7 @@ function normalizeUsageQueryConfig(input: unknown): UsageQueryConfig {
 
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const type = reclassifyProviderId(normalizeProviderId(obj.type), obj.baseUrl);
+  const type = normalizeProviderId(obj.type);
   const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
