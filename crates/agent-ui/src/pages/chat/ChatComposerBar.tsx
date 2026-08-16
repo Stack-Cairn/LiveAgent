@@ -941,22 +941,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
 
           <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
             <div className="flex min-w-0 flex-1 items-center gap-1">
-              <ComposerModelControls
-                executionMode={executionMode}
-                hasModels={hasModels}
-                currentModelLabel={currentModelLabel}
-                modelOptions={modelOptions}
-                selectedValue={selectedValue}
-                chatRuntimeControls={chatRuntimeControls}
-                reasoningOptions={reasoningOptions}
-                thinkingAlwaysOn={thinkingAlwaysOn}
-                disabled={controlsDisabled}
-                onSelectModel={onSelectModel}
-                onSelectExecutionMode={onSelectExecutionMode}
-                onOpenSettings={onOpenSettings}
-                onChatRuntimeControlsChange={onChatRuntimeControlsChange}
-              />
-
               <RuntimeControlTooltip label={uploadTooltip}>
                 <button
                   type="button"
@@ -994,6 +978,22 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   ) : null}
                 </button>
               </RuntimeControlTooltip>
+
+              <ComposerModelControls
+                executionMode={executionMode}
+                hasModels={hasModels}
+                currentModelLabel={currentModelLabel}
+                modelOptions={modelOptions}
+                selectedValue={selectedValue}
+                chatRuntimeControls={chatRuntimeControls}
+                reasoningOptions={reasoningOptions}
+                thinkingAlwaysOn={thinkingAlwaysOn}
+                disabled={controlsDisabled}
+                onSelectModel={onSelectModel}
+                onSelectExecutionMode={onSelectExecutionMode}
+                onOpenSettings={onOpenSettings}
+                onChatRuntimeControlsChange={onChatRuntimeControlsChange}
+              />
 
               <GitBranchSelector
                 workdir={workdir}

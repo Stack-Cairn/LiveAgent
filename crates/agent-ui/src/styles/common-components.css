@@ -1038,17 +1038,3 @@
     }
   }
 }
-@media (hover: hover) {
-  .app-workbench-chrome-actions {
-    pointer-events: none;
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-
-  .app-workbench-chrome:hover .app-workbench-chrome-actions,
-  .app-workbench-chrome:focus-within .app-workbench-chrome-actions {
-    pointer-events: auto;
-    opacity: 1;
-    transform: translateY(0);
-  }
-}

@@ -83,12 +83,12 @@ test("provider groups reveal the edit affordance before the count on hover", () 
   }
 });
 
-test("model and runtime controls are colocated in the composer instead of the header", () => {
+test("upload stays leftmost before model controls in the composer toolbar", () => {
   assert.match(composerSource, /<ComposerModelControls/);
   assert.match(composerSource, /<RuntimeControlTooltip label=\{uploadTooltip\}>/);
   assert.ok(
-    composerSource.indexOf("<ComposerModelControls") <
-      composerSource.indexOf("<RuntimeControlTooltip label={uploadTooltip}>"),
+    composerSource.indexOf("<RuntimeControlTooltip label={uploadTooltip}>") <
+      composerSource.indexOf("<ComposerModelControls"),
   );
   assert.doesNotMatch(headerSource, /model-selector-trigger|Popover\.Root|currentModelLabel/);
 

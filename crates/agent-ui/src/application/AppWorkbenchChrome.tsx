@@ -21,7 +21,6 @@ export function AppWorkbenchChrome(props: AppWorkbenchChromeProps) {
       <ChatHeader
         {...headerProps}
         sidebarOpen={sidebarOpen}
-        autoHideActions
         className="pointer-events-auto h-full"
       />
       {overlay}

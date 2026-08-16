@@ -14,6 +14,14 @@ const chromeSource = readFileSync(
   new URL("../../../agent-ui/src/application/AppWorkbenchChrome.tsx", import.meta.url),
   "utf8",
 );
+const headerSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
+  "utf8",
+);
+const commonComponentsCss = readFileSync(
+  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
+  "utf8",
+);
 const rightDockPanelSource = readFileSync(
   new URL("../../../agent-ui/src/components/project-tools/RightDockPanel.tsx", import.meta.url),
   "utf8",
@@ -42,7 +50,9 @@ test("application chrome is attached to the center column instead of the right d
   assert.doesNotMatch(applicationViewSource, /ChatHeader|headerOverlay|headerClassName/);
   assert.match(chromeSource, /absolute inset-x-0 top-0/);
   assert.doesNotMatch(chromeSource, /left-\[272px\]|right-0/);
-  assert.match(chromeSource, /autoHideActions/);
+  assert.doesNotMatch(chromeSource, /autoHideActions/);
+  assert.doesNotMatch(headerSource, /autoHideActions|app-workbench-chrome-actions/);
+  assert.doesNotMatch(commonComponentsCss, /\.app-workbench-chrome-actions/);
 });
 
 test("right dock width moves the center-column chrome with the panel", () => {

@@ -26,7 +26,6 @@ export type ChatHeaderProps = {
   onOpenSidebar: () => void;
   preThemeActions?: ReactNode;
   trailingActions?: ReactNode;
-  autoHideActions?: boolean;
   className?: string;
 };
 
@@ -39,7 +38,6 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     onOpenSidebar,
     preThemeActions,
     trailingActions,
-    autoHideActions = false,
     className,
   } = props;
   const { t } = useLocale();
@@ -77,10 +75,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
 
       <div
         data-app-workbench-actions=""
-        className={cn(
-          "flex shrink-0 -translate-y-px items-center gap-1 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none",
-          autoHideActions && "app-workbench-chrome-actions",
-        )}
+        className="flex shrink-0 -translate-y-px items-center gap-1"
       >
         {preThemeActions}
         <Button
