@@ -109,7 +109,7 @@ export function useGatewayHistoryReconciliation({
       if (!conversationId) return;
       const windowStates = historyWindowStatesRef.current;
       const windowState = windowStates.get(conversationId);
-      if (windowState) {
+      if (windowState && event.conversation) {
         const noted = noteHistoryWindowTotal(windowState, event.conversation.message_count);
         if (noted !== windowState) windowStates.set(conversationId, noted);
       }

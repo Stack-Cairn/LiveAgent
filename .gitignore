@@ -49,3 +49,6 @@ workspace.zip
 /.trellis
 /AGENTS.md
 /CLAUDE.md
+
+# 本地工具链(protoc/LLVM),不提交
+/.tools/

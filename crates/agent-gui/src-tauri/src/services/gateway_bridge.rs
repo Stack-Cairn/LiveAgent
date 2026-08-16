@@ -1483,6 +1483,19 @@ fn redact_builtin_tool_content_json(raw: &str) -> Result<String, String> {
                     );
                 }
             }
+            // 归档段摘要(role=summary)是 LLM 对含工具输出的历史窗口的浓缩,
+            // 其提示词要求原文保留路径/命令/错误信息——无法可靠剥离工具内容,
+            // 在 redact 语义下整体替换,避免泄露绕过。
+            Some("summary") => {
+                object.insert(
+                    "content".to_string(),
+                    json!([{ "type": "text", "text": "历史段摘要已脱敏" }]),
+                );
+                object.insert(
+                    "details".to_string(),
+                    json!({ "kind": "redacted_tool_content" }),
+                );
+            }
             _ => {}
         }
     }
@@ -2051,6 +2064,36 @@ mod tests {
         assert_eq!(blocks[2]["redacted"], true);
         assert_eq!(items[3]["content"][0]["text"], "工具调用内容已脱敏");
         assert_eq!(items[3]["details"]["kind"], "redacted_tool_content");
+    }
+
+    #[test]
+    fn redact_builtin_tool_content_redacts_archived_segment_summaries() {
+        // role=summary 是 LLM 对含工具输出的归档段的浓缩(提示词要求原文保留
+        // 路径/命令/错误信息);redact 语义下必须整体替换,否则分享泄露绕过。
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "user",
+                "content": [{ "type": "text", "text": "normal message" }]
+            },
+            {
+                "role": "summary",
+                "content": "用户运行 `cat /home/alice/.ssh/id_rsa`,输出为 SECRET-KEY-12345,错误信息: Permission denied /etc/passwd"
+            }
+        ]))
+        .expect("serialize input");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact builtin tool content");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted output");
+        let items = parsed.as_array().expect("redacted history array");
+
+        assert_eq!(items[0]["content"][0]["text"], "normal message");
+        let summary = &items[1];
+        assert_eq!(summary["role"], "summary");
+        assert_eq!(summary["content"][0]["text"], "历史段摘要已脱敏");
+        assert_eq!(summary["details"]["kind"], "redacted_tool_content");
+        let serialized = serde_json::to_string(&items[1]).expect("serialize summary");
+        assert!(!serialized.contains("SECRET-KEY-12345"), "summary tool content leaked: {serialized}");
+        assert!(!serialized.contains("/home/alice"), "summary path leaked: {serialized}");
     }
 
     #[test]

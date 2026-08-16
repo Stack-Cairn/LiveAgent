@@ -16,6 +16,7 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
 // 终端数据面（/ws/v2/terminal）：两端共用一条路径，角色由 hello 区分。浏览器
@@ -227,6 +228,13 @@ func (s *Server) writeTerminalFrame(conn *websocket.Conn, frame *gatewayv2.Termi
 // 浏览器角色
 // ---------------------------------------------------------------------------
 
+// terminalBrowserMaxTrackedIDs 限制单连接 attach/detach 跟踪的会话/流 id 数量：
+// 无上限时任意长度、任意数量的 session_id 会把网关内存打爆（单帧可达 1 MiB）。
+const terminalBrowserMaxTrackedIDs = 512
+
+// terminalBrowserMaxIDLen 限制单个 session_id / stream_id 的长度上限。
+const terminalBrowserMaxIDLen = 512
+
 type terminalBrowserConn struct {
 	srv  *Server
 	sm   *session.Manager
@@ -238,6 +246,10 @@ type terminalBrowserConn struct {
 	out  chan []byte
 	done chan struct{}
 	once sync.Once
+
+	// rateLimiter 与主链路同款入站限速（100 帧/秒、突发 200、3 次违规断连）：
+	// 终端链路此前完全没有帧率限制，可被单连接以任意速率灌帧。
+	rateLimiter *wscore.InboundRateLimiter
 
 	mu       sync.RWMutex
 	attached map[string]struct{}
@@ -252,6 +264,9 @@ func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
 		agentID:  agentID,
 		out:      make(chan []byte, terminalWriteQueueSize),
 		done:     make(chan struct{}),
+		rateLimiter: wscore.NewInboundRateLimiter(
+			browserInboundFramesPerSecond, browserInboundBurst, browserRateLimitMaxViolations,
+		),
 		attached: make(map[string]struct{}),
 		streams:  make(map[string]struct{}),
 	}
@@ -264,6 +279,17 @@ func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
 		frame, ok := readTerminalFrame(conn)
 		if !ok {
 			return
+		}
+		// 入站限速：与主链路同款，超限丢帧、连续违规判定失控客户端、关闭连接。
+		if allowed, exceeded := c.rateLimiter.Allow(); !allowed {
+			if exceeded {
+				return
+			}
+			c.enqueueFrame(terminalErrorFrame(
+				&gatewayv2.TerminalStreamFrame{Kind: "error"},
+				"too many requests",
+			))
+			continue
 		}
 		streamFrame := frame.GetFrame()
 		if streamFrame == nil {
@@ -369,11 +395,15 @@ func (c *terminalBrowserConn) remember(sessionID string, streamID string) {
 	if sessionID == "" && streamID == "" {
 		return
 	}
+	// 长度上限：拒绝超长 id 进跟踪表（帧可携带任意长度字符串）。
+	if len(sessionID) > terminalBrowserMaxIDLen || len(streamID) > terminalBrowserMaxIDLen {
+		return
+	}
 	c.mu.Lock()
-	if sessionID != "" {
+	if sessionID != "" && len(c.attached) < terminalBrowserMaxTrackedIDs {
 		c.attached[sessionID] = struct{}{}
 	}
-	if streamID != "" {
+	if streamID != "" && len(c.streams) < terminalBrowserMaxTrackedIDs {
 		c.streams[streamID] = struct{}{}
 	}
 	c.mu.Unlock()

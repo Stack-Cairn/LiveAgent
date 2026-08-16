@@ -208,6 +208,13 @@ export function createWebSidebarBackend(deps: WebSidebarBackendDeps): SidebarBac
           listener({ kind: "delete", conversationId });
           return;
         }
+        // 网关可能发出不带 conversation 对象的 upsert(会话隔离/迁移场景,
+        // adapters 不生成该键)。normalizeGatewayConversationSummary 对
+        // undefined 会抛 TypeError,中断 emitHistory 对后续监听者的投递,
+        // 这里直接跳过该帧。
+        if (!event.conversation) {
+          return;
+        }
         listener({
           kind: "upsert",
           conversationId,

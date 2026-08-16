@@ -125,6 +125,10 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
 }
 
 async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
+    // 纵深防御:非 WebView 来源的 fetch(恶意网页)直接拒绝。
+    if !image_proxy_origin_allowed(&headers) {
+        return error_response(StatusCode::FORBIDDEN, "Image proxy origin is not allowed", &headers);
+    }
     let target_url = match validate_image_proxy_url(&query.url) {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
@@ -240,7 +244,76 @@ fn validate_image_proxy_url(raw: &str) -> Result<Url, String> {
             "Image URL must be a valid absolute URL without embedded credentials".to_string(),
         );
     }
+    // SSRF 防护:拒绝指向本机/内网/云元数据/保留段的字面 IP 目标(与网关 Go 侧
+    // outbound_http.go 的 blocked prefixes 对齐)。本地代理以应用身份出网,
+    // 若放行 127.0.0.1 / 169.254.169.254 等目标,任何本机页面或提示注入的
+    // 模型输出图片 URL 都能用它探测/访问内网服务。注意:图片外链(<img>)请求
+    // 不带 Origin,来源校验挡不住,此处是唯一且必须的主防线。
+    if let Some(host) = url.host_str() {
+        let host = host.trim_start_matches('[').trim_end_matches(']');
+        // 回环主机名(无拨号时 DNS 检查,字面拦截,与 Go 侧 127.0.0.0/8 等价)。
+        let host_lower = host.to_ascii_lowercase();
+        if host_lower == "localhost" || host_lower == "localhost.localdomain" {
+            return Err("Image URL host is in a blocked IP range".to_string());
+        }
+        match host.parse::<std::net::IpAddr>() {
+            Ok(std::net::IpAddr::V4(ip)) => {
+                if is_blocked_image_proxy_ipv4(ip) {
+                    return Err("Image URL host is in a blocked IP range".to_string());
+                }
+            }
+            // IPv6 回环 ::1 与 127.0.0.1 同语义,拒绝。
+            Ok(std::net::IpAddr::V6(ip)) if ip.is_loopback() => {
+                return Err("Image URL host is in a blocked IP range".to_string());
+            }
+            _ => {}
+        }
+    }
     Ok(url)
+}
+
+/// 判断 IPv4 字面地址是否属于禁止出网访问的段(与 Go 侧 outbound_http.go 对齐,
+/// 出站代理语义:回环/私网/link-local/多播/保留全部拒绝)。
+fn is_blocked_image_proxy_ipv4(ip: std::net::Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    let [a, b, c, _] = octets;
+    // 0.0.0.0/8、10.0.0.0/8、127.0.0.0/8、169.254.0.0/16、172.16.0.0/12、
+    // 192.0.0.0/24、192.0.2.0/24、192.88.99.0/24、192.168.0.0/16、
+    // 198.18.0.0/15、198.51.100.0/24、203.0.113.0/24、224.0.0.0/4、
+    // 240.0.0.0/4(含广播)、100.64.0.0/10
+    (a == 0)
+        || (a == 10)
+        || (a == 100 && (64..=127).contains(&b))
+        || (a == 127)
+        || (a == 169 && b == 254)
+        || (a == 172 && (16..=31).contains(&b))
+        || (a == 192 && b == 0 && c == 0)
+        || (a == 192 && b == 0 && c == 2)
+        || (a == 192 && b == 88 && c == 99)
+        || (a == 192 && b == 168)
+        || (a == 198 && (18..=19).contains(&b))
+        || (a == 198 && b == 51 && c == 100)
+        || (a == 203 && b == 0 && c == 113)
+        || (a >= 224)
+}
+
+/// 本地来源校验:image-proxy 端点无 token(<img> 无法携带自定义头),以 Origin
+/// 白名单作纵深防御——只允许空 Origin(非浏览器)、Tauri WebView 来源或同源
+/// 请求;恶意网页的 fetch 携带其自身 Origin,会被拒绝。注意浏览器 <img> 请求
+/// 不带 Origin,该检查不拦截 img 路径(由上面的 IP 黑名单兜底)。
+fn image_proxy_origin_allowed(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(ORIGIN).and_then(|value| value.to_str().ok()) else {
+        return true;
+    };
+    let origin = origin.trim();
+    if origin.is_empty() {
+        return true;
+    }
+    match origin.to_ascii_lowercase().as_str() {
+        // Tauri WebView 的来源(Windows/macOS/Linux 桌面)。
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost" => true,
+        _ => false,
+    }
 }
 
 fn image_proxy_referer(target_url: &Url) -> String {
@@ -866,6 +939,62 @@ mod tests {
         assert!(validate_image_proxy_url("http://example.com/photo.png").is_ok());
         assert!(validate_image_proxy_url("file:///tmp/photo.png").is_err());
         assert!(validate_image_proxy_url("https://user:pass@example.com/photo.png").is_err());
+    }
+
+    #[test]
+    fn rejects_ssrf_targets_in_image_proxy_urls() {
+        // 回环 / 私网 / 云元数据 / link-local / 多播 / 保留 / 广播段全部拒绝。
+        for value in [
+            "http://127.0.0.1:3000/admin",
+            "http://localhost:3000/admin",
+            "http://[::1]:5173",
+            "http://10.0.0.5:80/",
+            "http://172.16.0.1:80/",
+            "http://192.168.1.1:80/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://169.254.170.2/",
+            "http://100.64.0.1:80/",
+            "http://224.0.0.1:80/",
+            "http://255.255.255.255:80/",
+            "http://0.0.0.0:80/",
+            "http://192.0.2.1:80/",
+            "http://198.51.100.1:80/",
+            "http://203.0.113.1:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // 公网字面 IP 与域名不受影响。
+        assert!(validate_image_proxy_url("http://8.8.8.8:8080/photo.png").is_ok());
+        assert!(validate_image_proxy_url("https://example.com/photo.png").is_ok());
+    }
+
+    #[test]
+    fn image_proxy_origin_check_blocks_foreign_web_pages() {
+        use axum::http::HeaderMap;
+
+        let empty = HeaderMap::new();
+        assert!(image_proxy_origin_allowed(&empty), "no Origin allowed");
+
+        for origin in [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", origin.parse().unwrap());
+            assert!(image_proxy_origin_allowed(&headers), "{origin}");
+        }
+
+        for origin in [
+            "https://evil.example",
+            "http://127.0.0.1:3000",
+            "null",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", origin.parse().unwrap());
+            assert!(!image_proxy_origin_allowed(&headers), "{origin}");
+        }
     }
 
     #[test]
