@@ -1441,7 +1441,7 @@ export function createFsTools(params: {
           mode: "rewrite",
           expected_mtime_ms: primed?.snapshot.mtimeMs,
           expected_content_hash: primed?.snapshot.contentHash,
-          checkpoint: checkpointCtx,
+          ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
         },
       });
     } catch (error) {
@@ -1529,7 +1529,7 @@ export function createFsTools(params: {
           replace_all,
           expected_mtime_ms: snapshot.mtimeMs,
           expected_content_hash: snapshot.contentHash,
-          checkpoint: checkpointCtx,
+          ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
         },
       });
     } catch (error) {
@@ -1595,7 +1595,7 @@ export function createFsTools(params: {
       args: {
         workdir: resolved.root,
         path,
-        checkpoint: checkpointCtx,
+        ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
       },
     });
     fileState.clear(statePathKey(resolved));
