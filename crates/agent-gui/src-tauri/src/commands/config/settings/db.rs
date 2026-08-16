@@ -105,6 +105,13 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             payload_json TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS workbench_layout (
+            scope_id TEXT PRIMARY KEY NOT NULL,
+            schema_version INTEGER NOT NULL,
+            revision INTEGER NOT NULL,
+            payload_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS workspace_root_grants (
             grant_id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL,

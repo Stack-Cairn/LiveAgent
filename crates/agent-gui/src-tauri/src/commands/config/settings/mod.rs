@@ -165,5 +165,6 @@ include!("memory_settings.rs");
 include!("model_failover.rs");
 include!("gateway_sync.rs");
 include!("ssh/mod.rs");
+include!("workbench_layout.rs");
 include!("commands.rs");
 include!("tests.rs");
