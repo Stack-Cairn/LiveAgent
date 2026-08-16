@@ -29,7 +29,7 @@ use crate::commands::{
     },
 };
 use crate::services::automation::{
-    validate_cron_expression, AutomationApplyInput, AutomationStore,
+    validate_cron_expression, AutomationApplyInput, AutomationStore, CronTask,
 };
 use crate::services::gateway::proto;
 use crate::services::memory::{
@@ -72,6 +72,16 @@ struct HistorySharedListArgs {
     page: i64,
     #[serde(alias = "pageSize")]
     page_size: i64,
+}
+
+/// 远程边界策略:WebUI 的 run_now 只允许触发已启用任务。
+/// enabled 只控制定时调度(本地 Run Now 对禁用/耗尽任务保持可用,见
+/// scheduler.rs),因此限制施加在远程 cron.manage 边界而非全局 Scheduler。
+fn ensure_remote_run_now_allowed(task: &CronTask) -> Result<(), String> {
+    if !task.enabled {
+        return Err("Cron task is disabled and cannot be triggered remotely".to_string());
+    }
+    Ok(())
 }
 
 /// Gateway relay for the automation domain. Web clients speak the same
@@ -126,9 +136,19 @@ pub async fn handle_cron_manage(
         }
         "run_now" => {
             let task_id = parse_required_cron_task_id(&request, "run_now")?;
-            let store = Arc::clone(&store);
+            // 远程边界单独限制:禁用的任务不允许经 WebUI 远程手动触发
+            // (本地的 Run Now 语义不变——enabled 只控制定时调度,见 scheduler.rs)。
+            let check_store = Arc::clone(&store);
+            let task_id_for_check = task_id.clone();
+            let (_, task) = tauri::async_runtime::spawn_blocking(move || {
+                check_store.cron_task_for_manual_run(&task_id_for_check)
+            })
+            .await
+            .map_err(|e| format!("gateway run_now load join failed: {e}"))??;
+            ensure_remote_run_now_allowed(&task)?;
+            let run_store = Arc::clone(&store);
             let response =
-                tauri::async_runtime::spawn_blocking(move || store.run_cron_task_now(&task_id))
+                tauri::async_runtime::spawn_blocking(move || run_store.run_cron_task_now(&task_id))
                     .await
                     .map_err(|e| format!("gateway run_now join failed: {e}"))??;
             serialize_cron_manage_result(&response)?
@@ -1643,13 +1663,15 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        flatten_history_messages_json, flatten_history_messages_json_window,
-        is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        resolve_stored_provider_models_config, sanitize_provider_summaries,
+        ensure_remote_run_now_allowed, flatten_history_messages_json,
+        flatten_history_messages_json_window, is_builtin_share_tool_name, parse_runs_limit,
+        redact_builtin_tool_content_json, resolve_stored_provider_models_config,
+        sanitize_provider_summaries,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
     };
+    use crate::services::automation::CronTask;
 
     fn make_segment(
         segment_index: i64,
@@ -2051,6 +2073,64 @@ mod tests {
         assert_eq!(blocks[2]["redacted"], true);
         assert_eq!(items[3]["content"][0]["text"], "工具调用内容已脱敏");
         assert_eq!(items[3]["details"]["kind"], "redacted_tool_content");
+    }
+
+    fn make_cron_task(enabled: bool) -> CronTask {
+        CronTask {
+            id: "task-remote".to_string(),
+            name: "Remote Task".to_string(),
+            description: String::new(),
+            cron: "0 * * * * *".to_string(),
+            enabled,
+            remaining_executions: None,
+            timeout_seconds: 300,
+            kind: "bash".to_string(),
+            script: Some("echo remote".to_string()),
+            requests: None,
+            prompt: None,
+            selected_model: None,
+            reasoning: None,
+            workdir: None,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn remote_run_now_rejects_disabled_tasks_but_local_semantics_unchanged() {
+        // 远程边界:禁用的任务不可经 WebUI 手动触发。
+        let error = ensure_remote_run_now_allowed(&make_cron_task(false))
+            .expect_err("remote run_now must reject disabled tasks");
+        assert!(error.contains("disabled"), "error = {error}");
+        assert!(error.contains("remotely"), "error = {error}");
+
+        // 启用任务放行。
+        assert!(ensure_remote_run_now_allowed(&make_cron_task(true)).is_ok());
+
+        // 本地语义对照:store 层仍可把禁用任务作为手动运行上下文加载
+        // (UI 的 Run Now 按钮不因 enabled=false 禁用;enabled 只控制定时调度)。
+        let store = crate::services::automation::AutomationStore::open_in_memory()
+            .expect("open automation store");
+        let base = store.snapshot().expect("snapshot").cron.revision;
+        let response = store
+            .cron_apply(crate::services::automation::AutomationApplyInput {
+                base_revision: base,
+                ops: vec![crate::services::automation::AutomationOp::Create {
+                    item: json!({
+                        "id": "disabled-local",
+                        "name": "Disabled Local",
+                        "cron": "0 * * * * *",
+                        "enabled": false,
+                        "type": "bash",
+                        "script": "echo local",
+                    }),
+                }],
+            })
+            .expect("apply disabled task");
+        let task_id = response.cron.tasks[0].id.clone();
+        let (_, manual_task) = store
+            .cron_task_for_manual_run(&task_id)
+            .expect("disabled task remains loadable for local manual run");
+        assert!(!manual_task.enabled);
     }
 
     #[test]

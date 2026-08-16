@@ -1832,31 +1832,45 @@ export async function runAssistantWithTools(params: {
         for (const toolCall of recoveredSeedToolCalls) {
           throwIfRunnerCancelled(params.signal);
           toolCallsById.set(toolCall.id, toolCall);
+          const effectiveSeedToolCall = normalizeToolCallNameForExecution(toolCall);
+
+          // 审批门必须先于任何执行事件:onToolExecutionStart 会派发
+          // tool_execution_start,Hook 可据此立即执行 Bash/HTTP——拒绝必须
+          // 发生在副作用事件之前(提示注入可诱导模型输出 <seed:tool_call>,
+          // 门是唯一裁决点,不能先宣告执行再拒绝)。
+          let deniedReason: string | null = null;
+          if (params.resolveToolGate) {
+            const gate = await params.resolveToolGate(effectiveSeedToolCall, params.signal);
+            if (!gate.allow) {
+              deniedReason = gate.reason;
+            }
+          }
+
           const shouldSilenceToolCall = shouldSilenceProviderNativeToolCall(toolCall);
+          if (deniedReason !== null) {
+            const deniedToolResult: ToolResultMessage = {
+              role: "toolResult",
+              toolCallId: effectiveSeedToolCall.id,
+              toolName: effectiveSeedToolCall.name,
+              content: [{ type: "text", text: deniedReason }],
+              details: {},
+              isError: true,
+              timestamp: Date.now(),
+            };
+            syntheticToolResults.push(deniedToolResult);
+            if (!shouldSilenceToolCall) {
+              // 与执行路径对称补齐 onToolResult:拒绝结果进入 transcript 并
+              // 触发 toolResultReceived 收尾 Hook 生命周期,不留下缺失
+              // tool_execution_end 的运行中状态。
+              params.onToolResult?.(toolCall, deniedToolResult, recoveredSeedRound);
+            }
+            continue;
+          }
+
           if (!shouldSilenceToolCall) {
             params.onToolCall?.(toolCall, recoveredSeedRound);
             params.onToolStatus?.(`正在执行：${summarizeToolCall(toolCall)}`);
             params.onToolExecutionStart?.(toolCall, recoveredSeedRound);
-          }
-
-          // 审批门:seed 恢复的调用与结构化调用同权——用户配置的 ask/deny 策略
-          // 必须同样拦截标记恢复路径(提示注入可诱导模型输出 <seed:tool_call>),
-          // 拒绝时 reason 作为 toolResult 交给模型,与 beforeToolCall block 同渲染。
-          const effectiveSeedToolCall = normalizeToolCallNameForExecution(toolCall);
-          if (params.resolveToolGate) {
-            const gate = await params.resolveToolGate(effectiveSeedToolCall, params.signal);
-            if (!gate.allow) {
-              syntheticToolResults.push({
-                role: "toolResult",
-                toolCallId: effectiveSeedToolCall.id,
-                toolName: effectiveSeedToolCall.name,
-                content: [{ type: "text", text: gate.reason }],
-                details: {},
-                isError: true,
-                timestamp: Date.now(),
-              });
-              continue;
-            }
           }
 
           const result = await executeSingleToolCall(toolCall, params.signal);

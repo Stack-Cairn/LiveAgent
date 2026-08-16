@@ -2565,11 +2565,15 @@ After`),
     createTextAssistant("after recovered tool"),
   );
   const gateCalls = [];
+  const executionStarts = [];
+  const toolResults = [];
   const { params, executedToolCalls } = createBaseParams({
     resolveToolGate: async (toolCall) => {
       gateCalls.push(toolCall);
       return { allow: false, reason: "blocked by test gate" };
     },
+    onToolExecutionStart: (toolCall) => executionStarts.push(toolCall),
+    onToolResult: (toolCall, toolResult) => toolResults.push({ toolCall, toolResult }),
   });
 
   const result = await runAssistantWithTools(params);
@@ -2580,6 +2584,20 @@ After`),
     "approval gate must run for recovered seed tool calls (prompt-injected markup must not bypass ask/deny policy)",
   );
   assert.equal(executedToolCalls.length, 0, "denied seed tool call must not execute");
+  assert.equal(
+    executionStarts.length,
+    0,
+    "denied seed call must not announce execution start — onToolExecutionStart dispatches tool_execution_start, which Hook runners execute on (Bash/HTTP must not run before denial)",
+  );
+  assert.equal(
+    toolResults.length,
+    1,
+    "denied seed call must still emit its tool result (toolResultReceived pairing, no dangling running state)",
+  );
+  assert.ok(
+    JSON.stringify(toolResults[0].toolResult.content).includes("blocked by test gate"),
+    "denial reason must reach the transcript via onToolResult",
+  );
   assert.ok(
     JSON.stringify(result.emittedMessages).includes("blocked by test gate"),
     "denial reason must reach the model as the tool result, same as structured-call blocks",

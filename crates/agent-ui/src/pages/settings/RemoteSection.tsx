@@ -23,6 +23,7 @@ import {
   Terminal,
   Wifi,
   WifiOff,
+  Zap,
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -546,6 +547,18 @@ export function RemoteSection(props: SettingsSectionProps) {
             onToggle={() =>
               updateRemoteSettings(setSettings, {
                 enableWebTunnels: !settings.remote.enableWebTunnels,
+              })
+            }
+          />
+
+          <ToggleOptionCard
+            icon={Zap}
+            title={t("settings.remoteWebAutomation")}
+            hint={t("settings.remoteWebAutomationHint")}
+            checked={settings.remote.enableWebAutomation}
+            onToggle={() =>
+              updateRemoteSettings(setSettings, {
+                enableWebAutomation: !settings.remote.enableWebAutomation,
               })
             }
           />

@@ -213,6 +213,7 @@ mod tests {
         assert!(stored.enable_web_ssh_terminal);
         assert!(stored.enable_web_git);
         assert!(stored.enable_web_tunnels);
+        assert!(stored.enable_web_automation);
     }
 
     #[test]

@@ -1109,6 +1109,7 @@ test("gateway settings sync redacts ssh secrets and preserves configured state",
     remote: {
       enableWebTerminal: true,
       enableWebSshTerminal: true,
+      enableWebAutomation: true,
     },
   });
 
@@ -1130,6 +1131,7 @@ test("gateway settings sync redacts ssh secrets and preserves configured state",
     enableWebSshTerminal: true,
     enableWebGit: false,
     enableWebTunnels: false,
+    enableWebAutomation: true,
   });
 
   const updatePayload = sync.buildGatewaySettingsSyncPayload(appSettings, {
@@ -3293,4 +3295,37 @@ test("workspace resource overflow uses locale-independent Unicode code-point ord
   assert.ok(normalized["/repo/_"]);
   assert.ok(normalized["/repo/a"]);
   assert.equal(normalized["/repo/ä"], undefined);
+});
+
+test("enableWebAutomation round-trips through normalization and gateway sync", () => {
+  // 归一化保留 enableWebAutomation(此前被丢弃,导致后端字段永久 false)。
+  const normalized = settings.normalizeSettings({
+    remote: { enableWebAutomation: true },
+  });
+  assert.equal(normalized.remote.enableWebAutomation, true);
+  assert.equal(
+    settings.normalizeSettings({ remote: { enableWebAutomation: "yes" } }).remote
+      .enableWebAutomation,
+    false,
+    "non-boolean input normalizes to false",
+  );
+
+  // 同步载荷携带该字段:网关侧 WebAutomationEnabled 门控依赖它。
+  const payload = sync.buildGatewaySettingsSyncPayload(normalized);
+  assert.equal(payload.remote.enableWebAutomation, true);
+
+  // 应用到另一端的默认设置(全 false)后仍为 true,再归一化不丢。
+  const applied = sync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({}),
+    payload,
+  );
+  assert.equal(applied.remote.enableWebAutomation, true);
+  const reNormalized = settings.normalizeSettings({ remote: applied.remote });
+  assert.equal(reNormalized.remote.enableWebAutomation, true);
+
+  // 缺字段的旧载荷不得把现有 true 覆盖为 false(merge 只处理 hasOwn 键)。
+  const kept = sync.applyGatewaySettingsSyncPayload(applied, {
+    remote: { enableWebTerminal: true },
+  });
+  assert.equal(kept.remote.enableWebAutomation, true);
 });

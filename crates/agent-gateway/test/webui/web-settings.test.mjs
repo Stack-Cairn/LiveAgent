@@ -801,6 +801,7 @@ test("gateway settings sync keeps remote connection local and syncs web terminal
     enableWebSshTerminal: synced.remote.enableWebSshTerminal,
     enableWebGit: synced.remote.enableWebGit,
     enableWebTunnels: synced.remote.enableWebTunnels,
+    enableWebAutomation: synced.remote.enableWebAutomation,
   });
   assert.deepEqual(payload.chatRuntimeControls, synced.chatRuntimeControls);
 });

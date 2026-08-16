@@ -580,6 +580,7 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
     enableWebSshTerminal: obj.enableWebSshTerminal === true,
     enableWebGit: obj.enableWebGit === true,
     enableWebTunnels: obj.enableWebTunnels === true,
+    enableWebAutomation: obj.enableWebAutomation === true,
   };
 }
 
@@ -1408,6 +1409,7 @@ export function getDefaultSettings(): AppSettings {
       enableWebSshTerminal: false,
       enableWebGit: false,
       enableWebTunnels: false,
+      enableWebAutomation: false,
     },
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),

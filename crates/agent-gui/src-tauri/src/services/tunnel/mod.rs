@@ -5,7 +5,7 @@
 pub mod proxy;
 pub mod store;
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -66,27 +66,14 @@ pub(crate) fn validate_tunnel_target_url(input: &str) -> Result<TunnelTarget, St
 /// SSRF 黑名单对齐，但保留 loopback 与 RFC1918/ULA：暴露本地服务是 tunnel 本职）。
 fn is_blocked_tunnel_target_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => {
-            let octets = v4.octets();
-            // 0.0.0.0/8 本网络
-            if octets[0] == 0 {
-                return true;
-            }
-            // 169.254.0.0/16 link-local（含云元数据 169.254.169.254 / 169.254.170.2）
-            if octets[0] == 169 && octets[1] == 254 {
-                return true;
-            }
-            // 224.0.0.0/4 多播
-            if (224..=239).contains(&octets[0]) {
-                return true;
-            }
-            // 240.0.0.0/4 保留（含 255.255.255.255 广播）
-            if octets[0] >= 240 {
-                return true;
-            }
-            false
-        }
+        IpAddr::V4(v4) => is_blocked_tunnel_target_ipv4(v4),
         IpAddr::V6(v6) => {
+            // IPv4-mapped IPv6（::ffff:a.b.c.d）先还原为 IPv4 再走 IPv4 黑名单
+            // （与网关 Go 侧 outbound_http.go 的 Unmap() 先例一致）——否则
+            // http://[::ffff:169.254.169.254]/ 可绕过元数据段拦截。
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked_tunnel_target_ipv4(v4);
+            }
             let segments = v6.segments();
             // ::/128 未指定地址（不可路由）。::1 回环与 127.0.0.1 同语义，是
             // tunnel 的本职暴露目标，保持放行。
@@ -104,6 +91,23 @@ fn is_blocked_tunnel_target_ip(ip: IpAddr) -> bool {
             false
         }
     }
+}
+
+/// IPv4 黑名单本体:0.0.0.0/8、169.254.0.0/16(云元数据/link-local)、
+/// 224.0.0.0/4 多播、240.0.0.0/4 保留(含广播)。loopback 与 RFC1918 放行
+/// (暴露本地/内网服务是 tunnel 本职)。
+fn is_blocked_tunnel_target_ipv4(v4: Ipv4Addr) -> bool {
+    let octets = v4.octets();
+    if octets[0] == 0 {
+        return true;
+    }
+    if octets[0] == 169 && octets[1] == 254 {
+        return true;
+    }
+    if (224..=239).contains(&octets[0]) {
+        return true;
+    }
+    octets[0] >= 240
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -667,6 +671,33 @@ mod tests {
             "http://[ff02::1]:8080",
         ] {
             assert!(validate_tunnel_target_url(value).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn validate_tunnel_target_url_rejects_ipv4_mapped_metadata_ranges() {
+        // IPv4-mapped IPv6 必须先 unmap 再走 IPv4 黑名单(与网关 Go 侧
+        // Unmap() 先例一致):::ffff:169.254.169.254 等价于云元数据地址,
+        // 不得作为隧道目标。创建路径(validate)与数据面(proxy.rs 复用同一
+        // 校验)共用此函数,此处即覆盖两条路径的判定。
+        for value in [
+            "http://[::ffff:169.254.169.254]:80/latest/meta-data/",
+            "http://[::ffff:a9fe:a9fe]:80/",
+            "http://[::ffff:169.254.170.2]:80/",
+            "http://[::ffff:224.0.0.1]:8080",
+            "http://[::ffff:255.255.255.255]:8080",
+        ] {
+            assert!(validate_tunnel_target_url(value).is_err(), "{value}");
+        }
+
+        // mapped 形式的合法段(RFC1918/公网)语义不变:暴露内网/本地服务
+        // 是 tunnel 本职,与直写 IPv4 形式同权放行。
+        for value in [
+            "http://[::ffff:192.168.1.5]:3000",
+            "http://[::ffff:10.0.0.20]:8080",
+            "http://[::ffff:8.8.8.8]:8080",
+        ] {
+            assert!(validate_tunnel_target_url(value).is_ok(), "{value}");
         }
     }
 }
