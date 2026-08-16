@@ -31,6 +31,8 @@
 
 Chat runtime 中的 Bash 采用可恢复 session：初始等待窗口结束后，未完成的命令返回 `session_id` 和绝对 `cursor`；模型通过 `ProcessWait` 等待并增量读取同一进程，通过 `ProcessStop` 终止完整进程树。非 Chat runtime 继续使用原有同步 Shell 路径。
 
+GUI 与 WebUI 均按调用顺序独立展示 `Bash`、`ProcessWait` 和 `ProcessStop`，保留每次调用的参数、状态快照和增量输出，不跨 round 合并或隐藏 session 控制工具。
+
 | 字段/状态 | 语义 |
 |---|---|
 | `session_duration_ms` | 从最初 Bash 启动开始计算的累计时长；不同响应之间不得相加。底层兼容 details 仍使用 `duration_ms`。 |
@@ -39,7 +41,6 @@ Chat runtime 中的 Bash 采用可恢复 session：初始等待窗口结束后�
 | `cancelled` | 由 `ProcessStop`、Chat Stop 或应用生命周期取消。 |
 | `timed_out` | 显式硬超时触发。 |
 | `output_truncated` | Session 环形缓冲已经淘汰调用方请求的历史输出。 |
-| `display_truncated` | 仅表示合并后的 UI 卡片只展示最后 64K 字符，不代表 session 输出读取发生丢失。 |
 
 ### 验收提示词
 
@@ -57,7 +58,7 @@ Chat runtime 中的 Bash 采用可恢复 session：初始等待窗口结束后�
    - 对预计较安静的长任务使用 yield_time_ms=60000。
 4. 一直等待到 completed、failed、cancelled 或 timed_out。session_duration_ms 是从最初 Bash 启动开始计算的累计时长，不得把多次响应的值相加。
 5. 完成后再次运行 `git status --porcelain=v1`，逐行比较测试前后基线是否完全一致。
-6. 报告测试命令启动次数、ProcessWait 次数、session_id、cursor 推进、最终状态、exit_code、最终 session_duration_ms、output_truncated、display_truncated、测试统计和 Git 基线比较结果。
+6. 报告测试命令启动次数、ProcessWait 次数、session_id、cursor 推进、最终状态、exit_code、最终 session_duration_ms、output_truncated、测试统计和 Git 基线比较结果。
 ```
 
 ## 执行边界

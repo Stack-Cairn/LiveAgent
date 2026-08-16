@@ -67,12 +67,13 @@ type ShellResultDetails = {
 type ShellSessionResultDetails = {
   session_id: string;
   status: string;
-  wait_count?: number;
-  stop_count?: number;
+  cursor?: number;
+  has_more?: boolean;
   exit_code?: number | null;
   duration_ms: number;
+  shell?: string;
+  timeout_ms?: number | null;
   output_truncated?: boolean;
-  display_truncated?: boolean;
 };
 
 function isShellResultDetails(value: unknown): value is ShellResultDetails {
@@ -458,37 +459,42 @@ export function ToolResultDisplay({
   const images = getToolResultImages(result);
   const shellDetails = isShellResultDetails(result.details) ? result.details : null;
   const shellSessionDetails = isShellSessionResultDetails(result.details) ? result.details : null;
+  const isShellSessionTool =
+    item.toolCall.name === "Bash" ||
+    item.toolCall.name === "ProcessWait" ||
+    item.toolCall.name === "ProcessStop";
+
+  if (isShellSessionTool && shellSessionDetails) {
+    return (
+      <ToolSurface>
+        <MetaTags
+          tags={[
+            { label: "session", value: shellSessionDetails.session_id },
+            { label: "status", value: shellSessionDetails.status },
+            ...(typeof shellSessionDetails.cursor === "number"
+              ? [{ label: "cursor", value: String(shellSessionDetails.cursor) }]
+              : []),
+            ...(shellSessionDetails.has_more ? [{ label: "more", value: "true" }] : []),
+            ...(typeof shellSessionDetails.exit_code === "number"
+              ? [{ label: "exit", value: String(shellSessionDetails.exit_code) }]
+              : []),
+            { label: "session duration", value: `${shellSessionDetails.duration_ms} ms` },
+            ...(shellSessionDetails.shell
+              ? [{ label: "shell", value: shellSessionDetails.shell }]
+              : []),
+            ...(typeof shellSessionDetails.timeout_ms === "number"
+              ? [{ label: "timeout_ms", value: String(shellSessionDetails.timeout_ms) }]
+              : []),
+            ...(shellSessionDetails.output_truncated
+              ? [{ label: "session output", value: "truncated" }]
+              : []),
+          ]}
+        />
+      </ToolSurface>
+    );
+  }
 
   if (item.toolCall.name === "Bash") {
-    if (shellSessionDetails) {
-      return (
-        <ToolSurface>
-          <MetaTags
-            tags={[
-              { label: "session", value: shellSessionDetails.session_id },
-              { label: "status", value: shellSessionDetails.status },
-              ...(typeof shellSessionDetails.exit_code === "number"
-                ? [{ label: "exit", value: String(shellSessionDetails.exit_code) }]
-                : []),
-              { label: "session duration", value: `${shellSessionDetails.duration_ms} ms` },
-              ...(typeof shellSessionDetails.wait_count === "number"
-                ? [{ label: "waits", value: String(shellSessionDetails.wait_count) }]
-                : []),
-              ...(typeof shellSessionDetails.stop_count === "number" &&
-              shellSessionDetails.stop_count > 0
-                ? [{ label: "stops", value: String(shellSessionDetails.stop_count) }]
-                : []),
-              ...(shellSessionDetails.output_truncated
-                ? [{ label: "session output", value: "truncated" }]
-                : []),
-              ...(shellSessionDetails.display_truncated
-                ? [{ label: "display", value: "last 64K chars" }]
-                : []),
-            ]}
-          />
-        </ToolSurface>
-      );
-    }
     if (!shellDetails) return null;
 
     return (

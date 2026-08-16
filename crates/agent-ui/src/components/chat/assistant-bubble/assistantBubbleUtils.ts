@@ -213,32 +213,12 @@ export function getToolDisplayName(name: string) {
 type ShellSessionDisplayDetails = {
   sessionId: string;
   status: string;
-  waitCount: number;
-  stopCount: number;
-  /**
-   * 仅 mergeShellSessionRounds 产出的聚合卡为 true。原始逐条结果里的
-   * status 是当次调用返回时的快照（Bash 首响应恒为 running），不能作为
-   * “会话仍在运行”的实时依据。
-   */
-  mergedDisplay: boolean;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function shellSessionIdFromItem(item: ToolTraceItem) {
-  if (item.toolCall.name === "Bash") {
-    const details = asRecord(item.toolResult?.details);
-    return typeof details?.session_id === "string" ? details.session_id.trim() : "";
-  }
-  if (item.toolCall.name === "ProcessWait" || item.toolCall.name === "ProcessStop") {
-    const sessionId = item.toolCall.arguments?.session_id;
-    return typeof sessionId === "string" ? sessionId.trim() : "";
-  }
-  return "";
 }
 
 export function getShellSessionDisplayDetails(
@@ -251,151 +231,7 @@ export function getShellSessionDisplayDetails(
   return {
     sessionId,
     status,
-    waitCount:
-      typeof details?.wait_count === "number" && Number.isFinite(details.wait_count)
-        ? Math.max(0, Math.floor(details.wait_count))
-        : 0,
-    stopCount:
-      typeof details?.stop_count === "number" && Number.isFinite(details.stop_count)
-        ? Math.max(0, Math.floor(details.stop_count))
-        : 0,
-    mergedDisplay: details?.shell_session_display === true,
   };
-}
-
-export function mergeShellSessionRounds<T extends UiRound>(rounds: readonly T[]): T[] {
-  type ShellSessionGroup = {
-    anchor?: ToolTraceItem;
-    items: ToolTraceItem[];
-  };
-  const groups = new Map<string, ShellSessionGroup>();
-
-  for (const round of rounds) {
-    for (const block of round.blocks) {
-      if (block.kind !== "tool") continue;
-      const sessionId = shellSessionIdFromItem(block.item);
-      if (!sessionId) continue;
-      const group = groups.get(sessionId) ?? { items: [] };
-      group.items.push(block.item);
-      if (block.item.toolCall.name === "Bash" && !group.anchor) {
-        group.anchor = block.item;
-      }
-      groups.set(sessionId, group);
-    }
-  }
-
-  const replacements = new Map<string, ToolTraceItem>();
-  const hiddenToolCallIds = new Set<string>();
-  for (const [sessionId, group] of groups) {
-    const anchor = group.anchor;
-    if (!anchor) continue;
-    const anchorId = anchor.toolCall.id?.trim();
-    if (!anchorId) continue;
-
-    let latestResult = anchor.toolResult;
-    let status = getShellSessionDisplayDetails(anchor.toolResult)?.status || "running";
-    let waitCount = 0;
-    let stopCount = 0;
-    let output = "";
-    let outputTruncated = false;
-    let displayTruncated = false;
-    let lastStream = "";
-    for (const item of group.items) {
-      const isSessionControl =
-        item.toolCall.name === "ProcessWait" || item.toolCall.name === "ProcessStop";
-      const itemSessionDetails = getShellSessionDisplayDetails(item.toolResult);
-      if (isSessionControl && item.toolResult && !itemSessionDetails) {
-        continue;
-      }
-      if (item.toolCall.name === "ProcessWait") waitCount += 1;
-      if (item.toolCall.name === "ProcessStop") stopCount += 1;
-      if (item.toolResult) {
-        latestResult = item.toolResult;
-        status = itemSessionDetails?.status || status;
-        const details = asRecord(item.toolResult.details);
-        if (details?.output_truncated === true) outputTruncated = true;
-        if (Array.isArray(details?.output)) {
-          for (const rawChunk of details.output) {
-            const chunk = asRecord(rawChunk);
-            const stream = chunk?.stream === "stderr" ? "stderr" : "stdout";
-            const text = typeof chunk?.text === "string" ? chunk.text : "";
-            if (!text) continue;
-            if (lastStream && lastStream !== stream) {
-              output += `\n[${stream}]\n`;
-            }
-            output += text;
-            lastStream = stream;
-          }
-        }
-      }
-      const itemId = item.toolCall.id?.trim();
-      if (itemId && itemId !== anchorId) hiddenToolCallIds.add(itemId);
-    }
-
-    if (output.length > 64 * 1024) {
-      output = output.slice(-(64 * 1024));
-      displayTruncated = true;
-    }
-    if (!latestResult) continue;
-    const latestDetails = asRecord(latestResult.details) ?? {};
-    const duration =
-      typeof latestDetails.duration_ms === "number" ? latestDetails.duration_ms : undefined;
-    const summary = [
-      "# Shell Session",
-      `status: ${status}`,
-      `session_id: ${sessionId}`,
-      `wait_count: ${waitCount}`,
-      stopCount > 0 ? `stop_count: ${stopCount}` : null,
-      duration !== undefined ? `session_duration_ms: ${duration}` : null,
-      outputTruncated ? "output_truncated: true" : null,
-      displayTruncated ? "display_truncated: true" : null,
-      "",
-      "output:",
-      output,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
-    replacements.set(anchorId, {
-      toolCall: anchor.toolCall,
-      toolResult: {
-        ...latestResult,
-        toolCallId: anchorId,
-        toolName: "Bash",
-        content: [{ type: "text", text: summary }],
-        details: {
-          ...latestDetails,
-          session_id: sessionId,
-          status,
-          wait_count: waitCount,
-          stop_count: stopCount,
-          shell_session_display: true,
-          output_truncated: outputTruncated,
-          display_truncated: displayTruncated,
-        },
-        isError: status === "failed" || status === "timed_out",
-      },
-    });
-  }
-
-  if (replacements.size === 0) return rounds.slice();
-  return rounds.map((round) => {
-    const blocks: UiRound["blocks"] = [];
-    for (const block of round.blocks) {
-      if (block.kind !== "tool") {
-        blocks.push(block);
-        continue;
-      }
-      const id = block.item.toolCall.id?.trim();
-      if (!id) {
-        blocks.push(block);
-        continue;
-      }
-      if (hiddenToolCallIds.has(id)) continue;
-      const replacement = replacements.get(id);
-      blocks.push(replacement ? { ...block, item: replacement } : block);
-    }
-    return { ...round, blocks };
-  });
 }
 
 const TOOL_CARD_ACTION_NAMES = new Set([
@@ -474,6 +310,8 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
         block.item.toolCall.name === "Image" ||
         isTaskToolName(block.item.toolCall.name) ||
         block.item.toolCall.name === "AskUserQuestion" ||
+        block.item.toolCall.name === "ProcessWait" ||
+        block.item.toolCall.name === "ProcessStop" ||
         isAgentToolName(block.item.toolCall.name)
       ) {
         flushPendingTools();

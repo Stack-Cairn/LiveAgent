@@ -353,7 +353,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.tool.failed": "失败",
   "chat.tool.success": "已完成",
   "chat.tool.stopped": "已停止",
-  "chat.tool.waitCount": "已等待 {count} 次",
   "chat.tool.waiting": "等待",
   "chat.tool.command": "命令",
   "chat.tool.args": "参数",

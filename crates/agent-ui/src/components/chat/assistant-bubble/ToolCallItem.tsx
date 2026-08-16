@@ -66,14 +66,14 @@ function ToolCallItem({
   const { t } = useLocale();
   const result = item.toolResult;
   const builtinResultKind = getBuiltinResultKind(result);
-  // 会话状态标签与常转 spinner 只对聚合卡（mergeShellSessionRounds 产出，
-  // 带 mergedDisplay 标记）生效：逐条渲染的原始 Bash 结果里 status 是当次
-  // 调用返回时的快照（首响应恒为 running），会话在后续卡片里才落定，若据
-  // 此常转会在桌面端历史里留下永远转圈的卡片。
-  const shellSessionDetails = getShellSessionDisplayDetails(result);
-  const mergedShellSession = shellSessionDetails?.mergedDisplay ? shellSessionDetails : null;
-  const shellSessionIsRunning = mergedShellSession?.status === "running";
-  const displayIsRunning = Boolean(isRunning || shellSessionIsRunning);
+  const isBash = item.toolCall.name === "Bash";
+  const isShellSessionControl =
+    item.toolCall.name === "ProcessWait" || item.toolCall.name === "ProcessStop";
+  const isShellSessionTool = isBash || isShellSessionControl;
+  const shellSessionDetails = isShellSessionTool ? getShellSessionDisplayDetails(result) : null;
+  const shellSessionStatus = shellSessionDetails?.status;
+  const shellSessionFailed = shellSessionStatus === "failed" || shellSessionStatus === "timed_out";
+  const displayIsRunning = Boolean(isRunning);
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
   const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
@@ -113,7 +113,6 @@ function ToolCallItem({
     !isAskUser &&
     (!isSubagentCard || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
-  const isBash = item.toolCall.name === "Bash";
   const isManagedProcess = item.toolCall.name === "ManagedProcess";
   const inlineCommand =
     !isRedactedToolContent &&
@@ -152,29 +151,30 @@ function ToolCallItem({
 
   const statusLabel = isApprovalPending
     ? t("chat.toolApproval.waitingStatus")
-    : mergedShellSession
-      ? mergedShellSession.status === "running"
+    : isRunning
+      ? isAskUser
+        ? askQuestions.length > 0
+          ? t("chat.askUser.waiting")
+          : t("chat.askUser.preparing")
+        : t("chat.tool.running")
+      : shellSessionStatus === "running"
         ? t("chat.tool.running")
-        : mergedShellSession.status === "cancelled"
+        : shellSessionStatus === "cancelled"
           ? t("chat.tool.stopped")
-          : mergedShellSession.status === "completed"
+          : shellSessionStatus === "completed"
             ? t("chat.tool.success")
-            : t("chat.tool.failed")
-      : isRunning
-        ? isAskUser
-          ? askQuestions.length > 0
-            ? t("chat.askUser.waiting")
-            : t("chat.askUser.preparing")
-          : t("chat.tool.running")
-        : result
-          ? result.isError
-            ? t("chat.tool.failed")
-            : t("chat.tool.success")
-          : t("chat.tool.waiting");
+            : shellSessionFailed
+              ? t("chat.tool.failed")
+              : result
+                ? result.isError
+                  ? t("chat.tool.failed")
+                  : t("chat.tool.success")
+                : t("chat.tool.waiting");
 
-  const statusTextClass = result?.isError
-    ? "text-[hsl(var(--chat-error))]"
-    : "text-muted-foreground/60";
+  const statusTextClass =
+    result?.isError || shellSessionFailed
+      ? "text-[hsl(var(--chat-error))]"
+      : "text-muted-foreground/60";
 
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
@@ -226,11 +226,6 @@ function ToolCallItem({
             </span>
           ) : toolArgsSummary ? (
             <span className="ml-1.5">{toolArgsSummary}</span>
-          ) : null}
-          {mergedShellSession && mergedShellSession.waitCount > 0 ? (
-            <span className="ml-1.5 text-muted-foreground/50">
-              {t("chat.tool.waitCount").replace("{count}", String(mergedShellSession.waitCount))}
-            </span>
           ) : null}
         </div>
 
@@ -310,12 +305,12 @@ function ToolCallItem({
                   if (!/\S/.test(resultText)) return null;
                   if (builtinResultKind && builtinResultKind !== "read_image") return null;
 
-                  if (isBash || readOnly) {
+                  if (isShellSessionTool || readOnly) {
                     return (
                       <ToolScrollablePre
                         className={cn(
                           "max-h-56",
-                          isBash
+                          isShellSessionTool
                             ? "bg-zinc-950/85 text-zinc-300/90 dark:bg-zinc-900/80"
                             : "bg-black/[0.02] dark:bg-white/[0.03]",
                         )}
