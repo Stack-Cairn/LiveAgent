@@ -31,6 +31,7 @@ import {
   THEME_OPTIONS,
   type Theme,
 } from "./lib/settings";
+import { getSettingsErrorMessage, SettingsStorageError } from "./lib/settings/errors";
 import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
@@ -45,12 +46,6 @@ function getDefaultContext(): Context {
   return {
     messages: [],
   };
-}
-
-function asErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  const text = String(error ?? "").trim();
-  return text || fallback;
 }
 
 function interpolateMessage(template: string, values: Record<string, string>) {
@@ -300,12 +295,18 @@ export default function App() {
         }
       } catch (error) {
         if (!cancelled) {
+          console.error("load persisted settings failed", error);
           const fallback = getDefaultSettings();
           settingsRef.current = fallback;
           setSettingsState(fallback);
           setSettingsSaveState({
             status: "error",
-            message: asErrorMessage(error, "加载设置失败，已回退到默认配置。"),
+            message: getSettingsErrorMessage(
+              error,
+              translate("app.settingsLoadFailed", fallback.locale),
+              fallback.locale,
+              translate,
+            ),
           });
         }
       } finally {
@@ -345,7 +346,7 @@ export default function App() {
             setSettingsState(merged);
           }
           if (persistResult.conflict) {
-            throw new Error(persistResult.conflict);
+            throw new SettingsStorageError(persistResult.conflict);
           }
           if (publishSync) {
             await publishGatewaySettingsSync(publishTarget);
@@ -358,9 +359,10 @@ export default function App() {
         })
         .catch((error) => {
           if (saveSequenceRef.current === saveSequence) {
+            console.error("persist settings failed", error);
             setSettingsSaveState({
               status: "error",
-              message: asErrorMessage(error, fallback),
+              message: getSettingsErrorMessage(error, fallback, next.locale, translate),
             });
           }
         });
@@ -382,7 +384,7 @@ export default function App() {
       queueSettingsSave(
         prev,
         next,
-        "保存设置失败。",
+        translate("app.settingsSaveFailed", next.locale),
         hasSettingsSyncChanged(prev, next) || hasSensitiveSettingsUpdates(next),
       );
     },
@@ -426,9 +428,15 @@ export default function App() {
       setSettingsProviderId(section === "providers" ? providerId : undefined);
       openSettingsOverlay();
       void reloadPersistedSettings().catch((error) => {
+        console.error("reload persisted settings failed", error);
         setSettingsSaveState({
           status: "error",
-          message: asErrorMessage(error, "重新加载设置失败，当前显示的是旧配置。"),
+          message: getSettingsErrorMessage(
+            error,
+            translate("app.settingsReloadFailed", settingsRef.current.locale),
+            settingsRef.current.locale,
+            translate,
+          ),
         });
       });
     },
@@ -583,7 +591,12 @@ export default function App() {
         }
         settingsRef.current = next;
         setSettingsState(next);
-        queueSettingsSave(prev, next, "同步 WebUI 设置失败。", publicChanged);
+        queueSettingsSave(
+          prev,
+          next,
+          translate("app.gatewaySettingsSyncFailed", next.locale),
+          publicChanged,
+        );
       },
     );
 

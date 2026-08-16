@@ -26,8 +26,6 @@ export function shouldSendAnthropicLongContextHeader(baseUrl: string | undefined
     host === "api.anthropic.com" ||
     host.includes("aiplatform.googleapis.com") ||
     host.includes("vertexai.googleapis.com") ||
-    host.endsWith(".deepseek.com") ||
-    host === "deepseek.com" ||
     host.endsWith(".amazonaws.com")
   );
 }

@@ -54,13 +54,10 @@ export type StreamOptionsEx = SimpleStreamOptions & {
    * 所以这里我们自己调用 streamAnthropic() 并把 toolChoice 显式传下去。
    */
   toolChoice?: ToolChoice;
-  /**
-   * DeepSeek 的 Anthropic 兼容端点偶尔会把工具调用泄漏成 DSML 文本。
-   * 开启后在事件流层把 DSML 转回结构化 toolCall，避免 stop 截断工具循环。
-   */
-  deepSeekDsmlToolCallRepair?: boolean;
-  deepSeekProviderAdapter?: boolean;
-  deepSeekAnthropicPayloadToolBlockFlattening?: boolean;
+  /** DeepSeek-only wire override for callers that must explicitly disable thinking. */
+  deepSeekThinking?: "disabled";
+  /** Conversation workdir used to resolve provider-native local attachments. */
+  workdir?: string;
   /** Escape hatch for the unified provider stream retry in streamByApi.ts. */
   streamRetry?: StreamRetryConfig;
 };

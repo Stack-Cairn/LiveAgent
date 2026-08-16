@@ -4,6 +4,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::runtime::shell_runner::{run_shell_script, ShellRunRegistry, ShellRunResponse};
+use crate::runtime::shell_session::{ShellSessionManager, ShellSessionResponse};
 
 #[derive(Debug, Serialize)]
 pub struct ShellCancelResponse {
@@ -57,4 +58,57 @@ pub fn runtime_cancel(
     ShellCancelResponse {
         cancelled: registry.cancel(run_id.trim()),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command(rename_all = "snake_case")]
+pub async fn shell_session_start(
+    manager: State<'_, Arc<ShellSessionManager>>,
+    session_id: String,
+    workdir: String,
+    command: String,
+    cwd: Option<String>,
+    yield_time_ms: Option<u64>,
+    timeout_ms: Option<u64>,
+    max_timeout_ms: Option<u64>,
+) -> Result<ShellSessionResponse, String> {
+    let manager = Arc::clone(manager.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.start(
+            session_id,
+            workdir,
+            command,
+            cwd,
+            yield_time_ms,
+            timeout_ms,
+            max_timeout_ms,
+        )
+    })
+    .await
+    .map_err(|error| format!("shell_session_start join failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn shell_session_wait(
+    manager: State<'_, Arc<ShellSessionManager>>,
+    session_id: String,
+    cursor: Option<u64>,
+    yield_time_ms: Option<u64>,
+) -> Result<ShellSessionResponse, String> {
+    let manager = Arc::clone(manager.inner());
+    tauri::async_runtime::spawn_blocking(move || manager.wait(&session_id, cursor, yield_time_ms))
+        .await
+        .map_err(|error| format!("shell_session_wait join failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn shell_session_stop(
+    manager: State<'_, Arc<ShellSessionManager>>,
+    session_id: String,
+    cursor: Option<u64>,
+) -> Result<ShellSessionResponse, String> {
+    let manager = Arc::clone(manager.inner());
+    tauri::async_runtime::spawn_blocking(move || manager.stop(&session_id, cursor))
+        .await
+        .map_err(|error| format!("shell_session_stop join failed: {error}"))?
 }

@@ -1,4 +1,5 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
+import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
@@ -134,6 +135,7 @@ import {
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
+import { ConversationSurface } from "./chat/surfaces/ConversationSurface";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
@@ -1278,6 +1280,12 @@ export function ChatPage(props: ChatPageProps) {
   });
   manualCompactActionRef.current = handleManualCompact;
 
+  const handleSelectExecutionMode = useCallback(
+    (mode: "text" | "tools") =>
+      setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
+    [setSettings],
+  );
+
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true);
   }, []);
@@ -1640,77 +1648,123 @@ export function ChatPage(props: ChatPageProps) {
   });
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
-      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        <MacOsTitleBarToggle
+    <div
+      data-app-frame="three-column"
+      className="relative flex h-full min-h-0 w-full overflow-hidden"
+    >
+      <MacOsTitleBarToggle
+        sidebarOpen={sidebarOpen}
+        onToggle={handleToggleSidebar}
+        onOpenSettings={() => onOpenSettings()}
+        appUpdate={appUpdate}
+      />
+      {/* ---- Left column: navigation/sidebar ---- */}
+      <ChatSidebarContainer
+        store={sidebarStore}
+        currentConversationId={currentConversationId}
+        isOpen={sidebarOpen}
+        fontScale={settings.customSettings.fontScale.sidebar}
+        activeView={activeView}
+        showProjects={isAgentMode}
+        projects={workspaceProjects}
+        workspaceProjectGroups={workspaceProjectGroups}
+        activeProjectId={activeWorkspaceProject?.id}
+        missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+        projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+        workspaceFolderDropActive={isWorkspaceFolderDropActive}
+        recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+        onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+        onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+        onCreateProject={handleOpenCreateWorkspaceProject}
+        onCreateWorkspaceGroup={handleCreateWorkspaceGroup}
+        onRenameWorkspaceGroup={handleRenameWorkspaceGroup}
+        onDeleteWorkspaceGroup={handleDeleteWorkspaceGroup}
+        onMoveProjectToGroup={handleMoveWorkspaceProjectToGroup}
+        onToggleWorkspaceGroupCollapsed={handleToggleWorkspaceGroupCollapsed}
+        onSelectProject={handleSelectWorkspaceProject}
+        onNewConversationForProject={handleNewConversationForProject}
+        onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
+        onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
+        onConfigureProject={setProjectSettingsProject}
+        onSetProjectPinned={handleSetWorkspaceProjectPinned}
+        onRemoveProject={handleRemoveWorkspaceProject}
+        onArchiveProject={handleArchiveWorkspaceProject}
+        onUnarchiveProject={handleUnarchiveWorkspaceProject}
+        archivedProjectPathKeys={archivedWorkspaceProjectPathKeys}
+        onNewConversation={() => {
+          setActiveView("chat");
+          if (activeView !== "chat" && isDraftConversation) {
+            return;
+          }
+          handleNewConversation();
+        }}
+        onSelectConversation={(id) => {
+          setActiveView("chat");
+          handleSelectConversation(id);
+        }}
+        onConversationDeleted={handleConversationDeleted}
+        onConversationCwdChanged={handleConversationCwdChanged}
+        canShareConversations={canShareHistory}
+        sharedConversationCount={sharedHistoryItems.length}
+        onShareConversation={handleOpenShareModal}
+        onOpenSharedConversations={handleOpenSharedHistoryManager}
+        onCloseSidebar={handleCloseSidebar}
+        onOpenSettings={() => onOpenSettings()}
+        appUpdate={appUpdate}
+        onOpenSkillsHub={() => {
+          cacheActiveComposerDraft();
+          setRightDockOpen(false);
+          setActiveView("skills-hub");
+        }}
+        onOpenMcpHub={() => {
+          cacheActiveComposerDraft();
+          setRightDockOpen(false);
+          setActiveView("mcp-hub");
+        }}
+      />
+
+      {/* ---- Center column: workbench chrome + conversation surfaces ---- */}
+      <div
+        data-app-frame-column="main"
+        className="relative flex flex-col min-h-0 min-w-0 flex-1 overflow-hidden"
+      >
+        <AppWorkbenchChrome
+          settings={settings}
           sidebarOpen={sidebarOpen}
-          onToggle={handleToggleSidebar}
-          onOpenSettings={() => onOpenSettings()}
-          appUpdate={appUpdate}
-        />
-        {/* ---- Sidebar ---- */}
-        <ChatSidebarContainer
-          store={sidebarStore}
-          currentConversationId={currentConversationId}
-          isOpen={sidebarOpen}
-          fontScale={settings.customSettings.fontScale.sidebar}
-          activeView={activeView}
-          showProjects={isAgentMode}
-          projects={workspaceProjects}
-          workspaceProjectGroups={workspaceProjectGroups}
-          activeProjectId={activeWorkspaceProject?.id}
-          missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-          projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
-          workspaceFolderDropActive={isWorkspaceFolderDropActive}
-          recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
-          onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
-          onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
-          onCreateProject={handleOpenCreateWorkspaceProject}
-          onCreateWorkspaceGroup={handleCreateWorkspaceGroup}
-          onRenameWorkspaceGroup={handleRenameWorkspaceGroup}
-          onDeleteWorkspaceGroup={handleDeleteWorkspaceGroup}
-          onMoveProjectToGroup={handleMoveWorkspaceProjectToGroup}
-          onToggleWorkspaceGroupCollapsed={handleToggleWorkspaceGroupCollapsed}
-          onSelectProject={handleSelectWorkspaceProject}
-          onNewConversationForProject={handleNewConversationForProject}
-          onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-          onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-          onConfigureProject={setProjectSettingsProject}
-          onSetProjectPinned={handleSetWorkspaceProjectPinned}
-          onRemoveProject={handleRemoveWorkspaceProject}
-          onArchiveProject={handleArchiveWorkspaceProject}
-          onUnarchiveProject={handleUnarchiveWorkspaceProject}
-          archivedProjectPathKeys={archivedWorkspaceProjectPathKeys}
-          onNewConversation={() => {
-            setActiveView("chat");
-            if (activeView !== "chat" && isDraftConversation) {
-              return;
-            }
-            handleNewConversation();
-          }}
-          onSelectConversation={(id) => {
-            setActiveView("chat");
-            handleSelectConversation(id);
-          }}
-          onConversationDeleted={handleConversationDeleted}
-          onConversationCwdChanged={handleConversationCwdChanged}
-          canShareConversations={canShareHistory}
-          sharedConversationCount={sharedHistoryItems.length}
-          onShareConversation={handleOpenShareModal}
-          onOpenSharedConversations={handleOpenSharedHistoryManager}
-          onCloseSidebar={handleCloseSidebar}
-          onOpenSettings={() => onOpenSettings()}
-          appUpdate={appUpdate}
-          onOpenSkillsHub={() => {
-            cacheActiveComposerDraft();
-            setRightDockOpen(false);
-            setActiveView("skills-hub");
-          }}
-          onOpenMcpHub={() => {
-            cacheActiveComposerDraft();
-            setRightDockOpen(false);
-            setActiveView("mcp-hub");
-          }}
+          onOpenSettings={onOpenSettings}
+          onToggleTheme={onToggleTheme}
+          onOpenSidebar={handleOpenSidebar}
+          trailingActions={
+            <>
+              <CheckpointRewindMenu
+                conversationId={currentConversationId}
+                workspaceRoot={currentConversationWorkspaceRoot}
+                project={activeWorkspaceProject}
+                disabled={!currentConversationId || isSending}
+                onRewound={(info) => {
+                  // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
+                  // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+                  //
+                  // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
+                  // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
+                  // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
+                  // 那要改写已落库的摘要才能修,不在本功能范围内。
+                  const zhLocale = locale === "zh-CN";
+                  const summary = zhLocale
+                    ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}`
+                    : `Code rewound: restored ${info.restoredFiles}, deleted ${info.deletedFiles}${info.conflicts > 0 ? `, ${info.conflicts} conflict(s) skipped` : ""}${info.failed > 0 ? `, ${info.failed} failed` : ""}`;
+                  addNotify(info.failed > 0 || info.conflicts > 0 ? "error" : "success", summary);
+                }}
+              />
+              <ProjectToolsPanelToggle
+                isOpen={rightDockOpen}
+                sessionCount={projectTerminalSessions.length}
+                disabledMessage={terminalDisabledMessage}
+                onToggle={() => setRightDockOpen((open) => !open)}
+              />
+            </>
+          }
+          overlay={<NotifyToast items={notifyItems} onDismiss={dismissNotify} />}
         />
 
         {workspaceCreateModalOpen ? (
@@ -1780,147 +1834,115 @@ export function ChatPage(props: ChatPageProps) {
             } as CSSProperties
           }
           chat={{
-            onSelectExecutionMode: (mode) =>
-              setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
-            hasModels,
-            currentModelLabel,
-            modelOptions,
-            selectedValue,
-            sidebarOpen,
-            onSelectModel: handleSelectModel,
-            onOpenSettings,
-            onToggleTheme,
-            onOpenSidebar: handleOpenSidebar,
-            trailingActions: (
-              <>
-                <CheckpointRewindMenu
-                  conversationId={currentConversationId}
-                  workspaceRoot={currentConversationWorkspaceRoot}
-                  project={activeWorkspaceProject}
-                  disabled={!currentConversationId || isSending}
-                  onRewound={(info) => {
-                    // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
-                    // 无需手动失效——注册表与 fileState 每用户轮都会重建。
-                    //
-                    // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
-                    // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
-                    // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
-                    // 那要改写已落库的摘要才能修,不在本功能范围内。
-                    const zhLocale = locale === "zh-CN";
-                    const summary = zhLocale
-                      ? `已回退代码：恢复 ${info.restoredFiles} 个、删除 ${info.deletedFiles} 个${info.conflicts > 0 ? `，冲突跳过 ${info.conflicts} 个` : ""}${info.failed > 0 ? `，失败 ${info.failed} 个` : ""}`
-                      : `Code rewound: restored ${info.restoredFiles}, deleted ${info.deletedFiles}${info.conflicts > 0 ? `, ${info.conflicts} conflict(s) skipped` : ""}${info.failed > 0 ? `, ${info.failed} failed` : ""}`;
-                    addNotify(info.failed > 0 || info.conflicts > 0 ? "error" : "success", summary);
-                  }}
-                />
-                <ProjectToolsPanelToggle
-                  isOpen={rightDockOpen}
-                  sessionCount={projectTerminalSessions.length}
-                  disabledMessage={terminalDisabledMessage}
-                  onToggle={() => setRightDockOpen((open) => !open)}
-                />
-              </>
-            ),
-            headerClassName: "relative z-20",
-            headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
             content: (
-              <div
-                data-file-upload-drop-zone=""
-                className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
-              >
-                <ChangedFilesActionsProvider value={changedFilesActions}>
-                  <ChatTranscript
-                    conversationId={currentConversationId}
-                    workspaceRoot={currentConversationWorkspaceRoot}
-                    gitClient={tauriGitClient}
-                    followRef={scrollFollowRef}
-                    hasModels={hasModels}
-                    historyItems={transcriptItems}
-                    hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                    onLoadEarlierHistory={handleLoadEarlierHistory}
-                    isHistorySwitching={conversationOpenState.showOverlay}
-                    isSending={isSending}
-                    isAgentMode={isAgentMode}
-                    showUsage={isAgentDevExecutionMode}
-                    usageContextWindow={currentModelContextWindow}
-                    liveTranscriptStore={liveTranscriptStore}
-                    isCompactionRunning={isCompactionRunning}
-                    bottomReservePx={composerOverlayHeight}
-                    contentWidth={settings.customSettings.chatTranscript.width}
-                    onContentWidthChange={handleChatTranscriptWidthChange}
-                    onOpenFileLink={handleOpenChatFileLink}
-                    onResendFromEdit={handleResendFromEdit}
-                    onBranchConversation={
-                      // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
-                      isConversationHydrating || isConversationHydrationFailed
-                        ? undefined
-                        : handleBranchConversation
-                    }
-                    branchPendingMessageId={branchPendingMessageId}
-                    onOpenSettings={onOpenSettings}
-                    onSuggestionSelect={handleEmptyStateSuggestion}
-                    suggestionsDisabled={isSuggestionTyping}
-                  />
-                </ChangedFilesActionsProvider>
-
-                <ChatComposerBar
-                  surface="desktop"
-                  composerRef={composerRef}
-                  isSending={isSending}
-                  isUploadingFiles={isUploadingFiles}
-                  isInputDisabled={isComposerInputDisabled}
-                  inputPlaceholder={composerPlaceholder}
-                  workdir={displayedConversationWorkdir}
-                  enabledSkills={enabledComposerSkills}
-                  isAgentMode={isAgentMode}
-                  chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
-                  reasoningOptions={chatRuntimeReasoningOptions}
-                  thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
-                  contextUsageTokensSource={contextUsageTokensSource}
-                  contextWindow={currentModelContextWindow}
-                  onManualCompactConfirm={handleManualCompact}
-                  manualCompactBlocked={isCompactionRunning}
-                  gitClient={tauriGitClient}
-                  workspaceActivityClient={tauriWorkspaceActivityClient}
-                  onOpenWorktree={handleOpenWorktree}
-                  onWorktreeRemoved={handleWorktreeRemoved}
-                  onSend={handleSend}
-                  onStop={handleStopSending}
-                  onComposerBusyChange={handleComposerBusyChange}
-                  onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
-                  onPickReadableFiles={pickReadableFiles}
-                  onPasteFiles={importReadableFiles}
-                  onLoadUploadedImagePreview={loadComposerUploadedImagePreview}
-                  loadHistoryPrompts={loadComposerHistoryPrompts}
-                  pendingUploadedFiles={pendingUploadedFiles}
-                  onRemovePendingUpload={removePendingUpload}
-                  queuedTurns={queuedChatTurnsForCurrentConversation}
-                  onRunQueuedTurnNow={runQueuedTurnNow}
-                  onMoveQueuedTurnUp={moveQueuedTurnUp}
-                  onEditQueuedTurn={editQueuedTurn}
-                  onRemoveQueuedTurn={removeQueuedTurn}
-                  onHeightChange={setComposerOverlayHeight}
-                  taskProgressBar={
-                    <CurrentTaskProgress
-                      key={currentConversationId}
+              <ConversationSurface
+                conversationId={currentConversationId}
+                transcript={
+                  <ChangedFilesActionsProvider value={changedFilesActions}>
+                    <ChatTranscript
+                      conversationId={currentConversationId}
+                      workspaceRoot={currentConversationWorkspaceRoot}
+                      gitClient={tauriGitClient}
+                      followRef={scrollFollowRef}
+                      hasModels={hasModels}
                       historyItems={transcriptItems}
+                      hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                      onLoadEarlierHistory={handleLoadEarlierHistory}
+                      isHistorySwitching={conversationOpenState.showOverlay}
+                      isSending={isSending}
+                      isAgentMode={isAgentMode}
+                      showUsage={isAgentDevExecutionMode}
+                      usageContextWindow={currentModelContextWindow}
                       liveTranscriptStore={liveTranscriptStore}
-                      isConversationRunning={
-                        isSending || isConversationRunning(currentConversationId)
+                      isCompactionRunning={isCompactionRunning}
+                      bottomReservePx={composerOverlayHeight}
+                      contentWidth={settings.customSettings.chatTranscript.width}
+                      onContentWidthChange={handleChatTranscriptWidthChange}
+                      onOpenFileLink={handleOpenChatFileLink}
+                      onResendFromEdit={handleResendFromEdit}
+                      onBranchConversation={
+                        // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
+                        isConversationHydrating || isConversationHydrationFailed
+                          ? undefined
+                          : handleBranchConversation
                       }
+                      branchPendingMessageId={branchPendingMessageId}
+                      onOpenSettings={onOpenSettings}
+                      onSuggestionSelect={handleEmptyStateSuggestion}
+                      suggestionsDisabled={isSuggestionTyping}
                     />
-                  }
-                  approvalBar={approvalBar}
-                />
-                {isFileDropActive ? (
-                  <FileDropOverlay
-                    canDropUpload={canDropUpload}
-                    title={fileDropTitle}
-                    description={fileDropDescription}
-                    limitHint={fileDropLimitHint}
+                  </ChangedFilesActionsProvider>
+                }
+                composer={
+                  <ChatComposerBar
+                    surface="desktop"
+                    composerRef={composerRef}
+                    isSending={isSending}
+                    isUploadingFiles={isUploadingFiles}
+                    isInputDisabled={isComposerInputDisabled}
+                    inputPlaceholder={composerPlaceholder}
+                    workdir={displayedConversationWorkdir}
+                    enabledSkills={enabledComposerSkills}
+                    executionMode={settings.system.executionMode}
+                    hasModels={hasModels}
+                    currentModelLabel={currentModelLabel}
+                    modelOptions={modelOptions}
+                    selectedValue={selectedValue}
+                    chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                    reasoningOptions={chatRuntimeReasoningOptions}
+                    thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                    contextUsageTokensSource={contextUsageTokensSource}
+                    contextWindow={currentModelContextWindow}
+                    onManualCompactConfirm={handleManualCompact}
+                    manualCompactBlocked={isCompactionRunning}
+                    gitClient={tauriGitClient}
+                    workspaceActivityClient={tauriWorkspaceActivityClient}
+                    onOpenWorktree={handleOpenWorktree}
+                    onWorktreeRemoved={handleWorktreeRemoved}
+                    onSend={handleSend}
+                    onStop={handleStopSending}
+                    onComposerBusyChange={handleComposerBusyChange}
+                    onSelectModel={handleSelectModel}
+                    onSelectExecutionMode={handleSelectExecutionMode}
+                    onOpenSettings={onOpenSettings}
+                    onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
+                    onPickReadableFiles={pickReadableFiles}
+                    onPasteFiles={importReadableFiles}
+                    onLoadUploadedImagePreview={loadComposerUploadedImagePreview}
+                    loadHistoryPrompts={loadComposerHistoryPrompts}
+                    pendingUploadedFiles={pendingUploadedFiles}
+                    onRemovePendingUpload={removePendingUpload}
+                    queuedTurns={queuedChatTurnsForCurrentConversation}
+                    onRunQueuedTurnNow={runQueuedTurnNow}
+                    onMoveQueuedTurnUp={moveQueuedTurnUp}
+                    onEditQueuedTurn={editQueuedTurn}
+                    onRemoveQueuedTurn={removeQueuedTurn}
+                    onHeightChange={setComposerOverlayHeight}
+                    taskProgressBar={
+                      <CurrentTaskProgress
+                        key={currentConversationId}
+                        historyItems={transcriptItems}
+                        liveTranscriptStore={liveTranscriptStore}
+                        isConversationRunning={
+                          isSending || isConversationRunning(currentConversationId)
+                        }
+                      />
+                    }
+                    approvalBar={approvalBar}
+                    fileDropOverlay={
+                      isFileDropActive ? (
+                        <FileDropOverlay
+                          variant="composer"
+                          canDropUpload={canDropUpload}
+                          title={fileDropTitle}
+                          description={fileDropDescription}
+                          limitHint={fileDropLimitHint}
+                        />
+                      ) : null
+                    }
                   />
-                ) : null}
-              </div>
+                }
+              />
             ),
           }}
           workspaceOverlays={

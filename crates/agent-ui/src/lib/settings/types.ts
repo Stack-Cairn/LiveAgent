@@ -2,7 +2,7 @@ import type { Locale } from "@liveagent/app/i18n/config";
 import type { ThinkingLevel } from "@liveagent/ui/lib/models/modelThinking";
 import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 
-export type ProviderId = "codex" | "claude_code" | "gemini" | "xai";
+export type ProviderId = "codex" | "claude_code" | "gemini" | "xai" | "deepseek";
 
 export type ExecutionMode = "text" | "tools" | "agent-dev";
 
@@ -194,6 +194,7 @@ export const PROVIDER_FAILOVER_TYPES: readonly ProviderId[] = [
   "codex",
   "gemini",
   "xai",
+  "deepseek",
 ];
 
 export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
@@ -210,6 +211,7 @@ export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
     codex: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
     gemini: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
     xai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    deepseek: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
   };
 }
 
@@ -325,7 +327,8 @@ export type ChatRuntimeReasoningProviderKey =
   | "codex_openai_responses"
   | "codex_openai_completions"
   | "gemini"
-  | "xai";
+  | "xai"
+  | "deepseek";
 
 export type AgentPromptTemplate = {
   id: string;
@@ -534,6 +537,7 @@ export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
     codex_openai_completions: "high",
     gemini: "high",
     xai: "high",
+    deepseek: "high",
   },
 };
 

@@ -309,6 +309,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.managed_process.desc": "启动并管理长时间运行的后台进程",
   "settings.builtinTool.managed_process.detail":
     "启动、探活与停止长时间运行的后台进程（如开发服务器），进程记录可跨应用重启保留。仅在对话场景注册。",
+  "settings.builtinTool.process_wait.name": "等待命令",
+  "settings.builtinTool.process_wait.desc": "等待运行中的 Bash 会话并读取新增输出",
+  "settings.builtinTool.process_wait.detail":
+    "继续等待现有 Bash 会话，不会再启动 Shell 进程；命令完成、输出需要分页或达到等待时限时返回。",
+  "settings.builtinTool.process_stop.name": "停止命令",
+  "settings.builtinTool.process_stop.desc": "停止运行中的 Bash 会话",
+  "settings.builtinTool.process_stop.detail": "终止 Bash 会话的完整进程树，并返回最终缓冲输出。",
   "settings.builtinTool.read_terminal.name": "读取终端",
   "settings.builtinTool.read_terminal.desc": "读取右侧终端面板的屏幕内容",
   "settings.builtinTool.read_terminal.detail":

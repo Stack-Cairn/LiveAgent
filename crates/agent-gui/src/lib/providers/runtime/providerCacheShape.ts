@@ -35,6 +35,12 @@ export function describeProviderCacheShape(params: {
   cacheRetention?: CacheRetention;
   headers?: StreamOptionsEx["headers"];
 }): PrefixShapeCacheControl {
+  if (params.providerId === "deepseek") {
+    return {
+      cacheRetention: "automatic",
+      breakpointStrategy: "deepseek-prefix",
+    };
+  }
   if (params.providerId === "codex") {
     return describeCodexCacheShape(
       params.providerId,

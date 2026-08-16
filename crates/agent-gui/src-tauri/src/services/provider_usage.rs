@@ -551,7 +551,7 @@ fn load_provider(provider_id: &str) -> Result<StoredProvider, String> {
 fn prepare_query(provider: &StoredProvider) -> Result<PreparedQuery, String> {
     if !matches!(
         provider.provider_type.as_str(),
-        "claude_code" | "codex" | "gemini" | "xai"
+        "claude_code" | "codex" | "gemini" | "xai" | "deepseek"
     ) {
         return Err("Unsupported provider type".to_string());
     }
@@ -2001,6 +2001,20 @@ mod tests {
 
         assert!(prepare_query(&test_provider("balance", "http://api.deepseek.com/v1")).is_err());
         assert!(prepare_query(&test_provider("balance", "https://api.other.example/v1")).is_err());
+    }
+
+    #[test]
+    fn deepseek_provider_type_is_allowed_for_usage_queries() {
+        let mut provider = test_provider("balance", "https://api.deepseek.com/v1");
+        provider.provider_type = "deepseek".to_string();
+
+        let prepared = prepare_query(&provider).expect("prepare deepseek balance query");
+
+        assert_eq!(prepared.primary.adapter, ProviderAdapter::DeepSeek);
+        assert_eq!(
+            prepared.primary.request.url.as_str(),
+            "https://api.deepseek.com/user/balance"
+        );
     }
 
     #[test]

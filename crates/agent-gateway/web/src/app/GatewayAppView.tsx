@@ -1,4 +1,5 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
+import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
@@ -24,7 +25,7 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useCallback } from "react";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
   getNextTheme,
@@ -299,6 +300,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const handleSelectExecutionMode = useCallback(
+    (mode: "text" | "tools") =>
+      setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
+    [setSettings],
+  );
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
@@ -427,6 +433,47 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
             <main className="gateway-main-shell">
               <div className="gateway-main-backdrop" />
+              <AppWorkbenchChrome
+                settings={settings}
+                sidebarOpen={sidebarOpen}
+                onOpenSettings={openSettings}
+                onToggleTheme={() =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    theme: getNextTheme(prev.theme),
+                  }))
+                }
+                onOpenSidebar={() => setSidebarOpen(true)}
+                trailingActions={
+                  <>
+                    <ProjectToolsPanelToggle
+                      isOpen={rightDockOpen}
+                      sessionCount={projectTerminalSessions.length}
+                      disabledMessage={projectToolsDisabledMessage}
+                      className="gateway-project-tools-panel-toggle"
+                      onToggle={() => setRightDockOpen((open) => !open)}
+                    />
+                    <UserMenu
+                      open={userMenuOpen}
+                      onOpenChange={setUserMenuOpen}
+                      userMenuLabel={userMenuLabel}
+                      userAvatarLabel={userAvatarLabel}
+                      agentStatus={
+                        status === null ? "unknown" : status.online ? "online" : "offline"
+                      }
+                      agentSelector={
+                        <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
+                      }
+                      onLogout={handleLogout}
+                    />
+                  </>
+                }
+                overlay={
+                  <div className="relative z-50">
+                    <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+                  </div>
+                }
+              />
               <ApplicationView
                 activeView={activeView}
                 settings={settings}
@@ -448,52 +495,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragLeave: handleFileDragLeave,
                     onDrop: handleFileDrop,
                   },
-                  onSelectExecutionMode: (mode) =>
-                    setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
-                  hasModels: modelOptions.length > 0,
-                  currentModelLabel,
-                  modelOptions,
-                  selectedValue,
-                  sidebarOpen,
-                  onSelectModel: handleSelectModel,
-                  onOpenSettings: openSettings,
-                  onToggleTheme: () =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      theme: getNextTheme(prev.theme),
-                    })),
-                  onOpenSidebar: () => setSidebarOpen(true),
-                  trailingActions: (
-                    <>
-                      <ProjectToolsPanelToggle
-                        isOpen={rightDockOpen}
-                        sessionCount={projectTerminalSessions.length}
-                        disabledMessage={projectToolsDisabledMessage}
-                        className="gateway-project-tools-panel-toggle"
-                        onToggle={() => setRightDockOpen((open) => !open)}
-                      />
-                      <UserMenu
-                        open={userMenuOpen}
-                        onOpenChange={setUserMenuOpen}
-                        userMenuLabel={userMenuLabel}
-                        userAvatarLabel={userAvatarLabel}
-                        agentStatus={
-                          status === null ? "unknown" : status.online ? "online" : "offline"
-                        }
-                        agentSelector={
-                          <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
-                        }
-                        onLogout={handleLogout}
-                      />
-                    </>
-                  ),
-                  headerOverlay: (
-                    // Zero-height anchor: NotifyToast positions itself below
-                    // the header's bottom edge, mirroring the GUI placement.
-                    <div className="relative z-50">
-                      <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-                    </div>
-                  ),
                   content: (
                     <>
                       {statusError ? (
@@ -513,7 +514,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
                       <section
                         ref={transcriptStageRef}
-                        data-file-upload-drop-zone=""
                         className="gateway-transcript-stage"
                         // Preferred (persisted) width, so a fresh mount paints at
                         // the user's width instead of the default.
@@ -619,7 +619,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
-                          isAgentMode={isAgentMode}
+                          executionMode={settings.system.executionMode}
+                          hasModels={modelOptions.length > 0}
+                          currentModelLabel={currentModelLabel}
+                          modelOptions={modelOptions}
+                          selectedValue={selectedValue}
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
@@ -633,6 +637,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           gitWriteEnabled={settings.remote.enableWebGit}
                           gitDisabledMessage={gitDisabledMessage}
                           workspaceActivityClient={workspaceActivityClient}
+                          onSelectModel={handleSelectModel}
+                          onSelectExecutionMode={handleSelectExecutionMode}
+                          onOpenSettings={openSettings}
                           onSend={() => {
                             if (
                               submitInFlightRef.current ||
@@ -762,15 +769,18 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             />
                           }
                           approvalBar={approvalBar}
+                          fileDropOverlay={
+                            isFileDropActive ? (
+                              <FileDropOverlay
+                                variant="composer"
+                                canDropUpload={canDropUpload}
+                                title={fileDropTitle}
+                                description={fileDropDescription}
+                                limitHint={fileDropLimitHint}
+                              />
+                            ) : null
+                          }
                         />
-                        {isFileDropActive ? (
-                          <FileDropOverlay
-                            canDropUpload={canDropUpload}
-                            title={fileDropTitle}
-                            description={fileDropDescription}
-                            limitHint={fileDropLimitHint}
-                          />
-                        ) : null}
                       </section>
                     </>
                   ),

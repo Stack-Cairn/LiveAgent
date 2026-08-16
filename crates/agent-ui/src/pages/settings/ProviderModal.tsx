@@ -156,7 +156,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
   const [promptCachingEnabled, setPromptCachingEnabled] = useState(
-    initialData?.promptCachingEnabled ?? (providerType !== "gemini" && providerType !== "xai"),
+    initialData?.promptCachingEnabled ??
+      (providerType !== "gemini" && providerType !== "xai" && providerType !== "deepseek"),
   );
   const [promptCacheHintMode, setPromptCacheHintMode] = useState<PromptCacheHintMode>(
     initialData?.promptCacheHintMode ??
@@ -685,7 +686,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       promptCachingEnabled:
         providerType === "codex"
           ? promptCacheHintMode !== "none"
-          : providerType === "gemini" || providerType === "xai"
+          : providerType === "gemini" || providerType === "xai" || providerType === "deepseek"
             ? false
             : promptCachingEnabled,
       promptCacheHintMode: providerType === "codex" ? promptCacheHintMode : undefined,
@@ -693,7 +694,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
           ? "long"
           : undefined,
-      nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
+      nativeWebSearchEnabled:
+        providerType === "deepseek" ? false : (initialData?.nativeWebSearchEnabled ?? true),
       useSystemProxy,
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });
