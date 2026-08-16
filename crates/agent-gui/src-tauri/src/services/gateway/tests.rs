@@ -79,6 +79,7 @@ fn gateway_chat_request(
         runtime_controls: None,
         execution_mode: String::new(),
         workdir: String::new(),
+        command_safety_mode: String::new(),
         uploaded_files: Vec::new(),
         queue_policy: String::new(),
     }
@@ -111,6 +112,7 @@ fn gateway_chat_command_mapping_preserves_rebase_signal() {
         message: "edited".to_string(),
         execution_mode: "tools".to_string(),
         workdir: "/workspace".to_string(),
+        command_safety_mode: "sandbox".to_string(),
         ..Default::default()
     };
 
@@ -145,6 +147,7 @@ fn gateway_chat_command_mapping_preserves_rebase_signal() {
     assert_eq!(base_message_ref.content_hash, "fnv1a32:00000000");
     assert_eq!(event.execution_mode, "tools");
     assert_eq!(event.workdir, "/workspace");
+    assert_eq!(event.command_safety_mode, "sandbox");
 }
 
 #[test]

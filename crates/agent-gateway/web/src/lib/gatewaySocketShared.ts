@@ -67,6 +67,7 @@ export type GatewayRequestOptions = {
 export type GatewayChatSystemSettings = {
   executionMode?: string;
   workdir?: string;
+  commandSafetyMode?: string;
 };
 
 export type GatewayChatCommandInput = {
@@ -460,6 +461,7 @@ export function buildChatCommandPayload(input: GatewayChatCommandInput) {
       client_request_id: clientRequestId,
       execution_mode: systemSettings?.executionMode?.trim() || "text",
       workdir: systemSettings?.workdir?.trim() || "",
+      command_safety_mode: systemSettings?.commandSafetyMode?.trim() || "",
       uploaded_files:
         input.uploadedFiles?.map((file) => ({
           relative_path: file.relativePath,

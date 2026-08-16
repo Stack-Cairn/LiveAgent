@@ -59,6 +59,7 @@ import {
   type AppSettings,
   applyMcpOpsToAppSettings,
   type ChatRuntimeControls,
+  type CommandSafetyMode,
   type ExecutionMode,
   filterMcpSettingsForWorkspace,
   getSshProjectHostIds,
@@ -309,6 +310,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     conversationIdOverride?: string;
     executionModeOverride?: ExecutionMode;
     workdirOverride?: string;
+    commandSafetyModeOverride?: CommandSafetyMode;
     runtimeControlsOverride?: ChatRuntimeControls;
     gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
     preserveComposerOnStart?: boolean;
@@ -333,6 +335,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.executionModeOverride ??
       gatewayBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
+    // 命令安全模式同样遵循 override → 网关直带 → 本地设置 的优先级链;远端 WebUI
+    // 选定的安全模式经此生效(P1#1),未指定时回落本地 settings.system。
+    const effectiveCommandSafetyMode =
+      overrides?.commandSafetyModeOverride ??
+      gatewayBridgeRequest?.commandSafetyModeOverride ??
+      settings.system.commandSafetyMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
     const effectiveWorkdir = resolveEffectiveConversationWorkdir({
       isAgentMode: effectiveIsAgentMode,
@@ -1585,7 +1593,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
-            commandSafetyMode: settings.system.commandSafetyMode,
+            commandSafetyMode: effectiveCommandSafetyMode,
             applyMcpOps: (ops) => {
               const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
               setSettings((prev) =>

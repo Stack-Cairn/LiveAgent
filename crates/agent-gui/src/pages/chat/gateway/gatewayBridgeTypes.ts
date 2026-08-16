@@ -2,7 +2,12 @@ import type { MentionComposerDraft } from "@liveagent/ui/components/chat/Mention
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { MutableRefObject } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import type { ChatRuntimeControls, ExecutionMode, ProviderId } from "../../../lib/settings";
+import type {
+  ChatRuntimeControls,
+  CommandSafetyMode,
+  ExecutionMode,
+  ProviderId,
+} from "../../../lib/settings";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 
 export type GatewaySelectedModelEvent = {
@@ -27,6 +32,7 @@ export type GatewayChatRequestEvent = {
   runtimeControls?: GatewayChatRuntimeControlsEvent;
   executionMode?: string;
   workdir?: string;
+  commandSafetyMode?: string;
   uploadedFiles?: PendingUploadedFile[];
   queuePolicy?: "auto" | "append" | "interrupt" | string;
 };
@@ -65,6 +71,7 @@ export type ActiveGatewayBridgeRequest = {
   runtimeControlsOverride?: ChatRuntimeControls;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
+  commandSafetyModeOverride?: CommandSafetyMode;
 };
 
 export type SendChatAction = (overrides?: {
@@ -74,6 +81,7 @@ export type SendChatAction = (overrides?: {
   conversationIdOverride?: string;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
+  commandSafetyModeOverride?: CommandSafetyMode;
   runtimeControlsOverride?: ChatRuntimeControls;
   gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
   preserveComposerOnStart?: boolean;
@@ -116,6 +124,23 @@ export function normalizeGatewayExecutionMode(
     case "agent-dev":
     case "text":
       return value.trim() as ExecutionMode;
+    default:
+      return undefined;
+  }
+}
+
+// 命令安全模式的网关归一化。返回 undefined(而非某个默认模式)表示"远端未指定",
+// 让 useSendChatTurn 的优先级链回落到本地 settings.system.commandSafetyMode;绝不
+// 默认成 "auto",以免静默下调桌面端已选的更严格模式(fail-closed)。
+export function normalizeGatewayCommandSafetyMode(
+  value: string | null | undefined,
+): CommandSafetyMode | undefined {
+  switch (value?.trim()) {
+    case "ask":
+    case "auto":
+    case "sandbox":
+    case "sandboxOffline":
+      return value.trim() as CommandSafetyMode;
     default:
       return undefined;
   }

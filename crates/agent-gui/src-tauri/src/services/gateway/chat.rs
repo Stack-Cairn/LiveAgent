@@ -170,6 +170,7 @@ impl GatewayController {
             runtime_controls,
             execution_mode,
             workdir,
+            command_safety_mode,
             uploaded_files,
             queue_policy,
         } = request;
@@ -204,6 +205,7 @@ impl GatewayController {
             runtime_controls,
             execution_mode,
             workdir,
+            command_safety_mode,
             uploaded_files: uploaded_files
                 .into_iter()
                 .map(|file| GatewayUploadedFileEvent {

@@ -10,6 +10,7 @@ import {
   type GatewayChatCancelEvent,
   type GatewayChatClaimedRequest,
   type GatewayChatRequestReadyEvent,
+  normalizeGatewayCommandSafetyMode,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
 } from "./gatewayBridgeTypes";
@@ -482,6 +483,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
             : undefined,
           executionModeOverride: normalizeGatewayExecutionMode(payload.executionMode),
           workdirOverride: normalizeGatewayWorkdir(payload.workdir),
+          commandSafetyModeOverride: normalizeGatewayCommandSafetyMode(payload.commandSafetyMode),
         });
         const markRuntimeStarted = async () => {
           await invoke("gateway_chat_mark_started", {
@@ -496,6 +498,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           conversationIdOverride: resolvedConversationId,
           executionModeOverride: gatewayBridgeRequest.executionModeOverride,
           workdirOverride: gatewayBridgeRequest.workdirOverride,
+          commandSafetyModeOverride: gatewayBridgeRequest.commandSafetyModeOverride,
           runtimeControlsOverride: gatewayBridgeRequest.runtimeControlsOverride,
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
           editResendBaseMessageRef: baseMessageRef,

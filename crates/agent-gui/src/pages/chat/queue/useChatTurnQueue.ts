@@ -11,6 +11,7 @@ import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTra
 import {
   type AppSettings,
   type ChatRuntimeControls,
+  type CommandSafetyMode,
   type ExecutionMode,
   isAgentExecutionMode,
   normalizeChatRuntimeControls,
@@ -21,6 +22,7 @@ import { createTextComposerDraft } from "../composer/composerDraftText";
 import type { ActiveGatewayBridgeRequest, SendChatAction } from "../gateway/gatewayBridgeTypes";
 import {
   type GatewayChatClaimedRequest,
+  normalizeGatewayCommandSafetyMode,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
 } from "../gateway/gatewayBridgeTypes";
@@ -147,6 +149,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         createdAt: number;
         executionMode: ExecutionMode;
         workdir: string;
+        commandSafetyMode: CommandSafetyMode;
         runtimeControls: ChatRuntimeControls;
         gatewayRequest?: QueuedChatTurn["gatewayRequest"];
       })
@@ -399,6 +402,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         ? queuedChatTurnEditSlotRef.current
         : null;
     const executionMode = editSlot?.executionMode ?? settings.system.executionMode;
+    const commandSafetyMode = editSlot?.commandSafetyMode ?? settings.system.commandSafetyMode;
     const workdirForTurn = isAgentExecutionMode(executionMode)
       ? (
           editSlot?.workdir ??
@@ -414,6 +418,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       uploadedFiles,
       executionMode,
       workdir: workdirForTurn,
+      commandSafetyMode,
       runtimeControls: editSlot?.runtimeControls ?? settings.chatRuntimeControls,
       createdAt: editSlot?.createdAt,
       gatewayRequest: editSlot?.gatewayRequest,
@@ -500,6 +505,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
                 : queuedTurn.runtimeControls,
               executionModeOverride: queuedTurn.executionMode,
               workdirOverride: queuedTurn.workdir,
+              commandSafetyModeOverride: queuedTurn.commandSafetyMode,
             }
           : null;
         const markGatewayStarted =
@@ -518,6 +524,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           conversationIdOverride: targetConversationId,
           executionModeOverride: queuedTurn.executionMode,
           workdirOverride: queuedTurn.workdir,
+          commandSafetyModeOverride: queuedTurn.commandSafetyMode,
           runtimeControlsOverride: queuedTurn.runtimeControls,
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
           preserveComposerOnStart: true,
@@ -677,6 +684,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       createdAt: queuedTurn.createdAt,
       executionMode: queuedTurn.executionMode,
       workdir: queuedTurn.workdir,
+      commandSafetyMode: queuedTurn.commandSafetyMode,
       runtimeControls: { ...queuedTurn.runtimeControls },
       gatewayRequest: queuedTurn.gatewayRequest ? { ...queuedTurn.gatewayRequest } : undefined,
     };
@@ -722,6 +730,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
 
     const executionMode =
       normalizeGatewayExecutionMode(payload.executionMode) ?? settings.system.executionMode;
+    const commandSafetyMode =
+      normalizeGatewayCommandSafetyMode(payload.commandSafetyMode) ??
+      settings.system.commandSafetyMode;
     const workdir =
       normalizeGatewayWorkdir(payload.workdir) ??
       conversationRuntimeCacheRef.current.get(targetConversationId)?.workdir ??
@@ -737,6 +748,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       uploadedFiles,
       executionMode,
       workdir: isAgentExecutionMode(executionMode) ? workdir : "",
+      commandSafetyMode,
       runtimeControls,
       gatewayRequest: {
         requestId,
