@@ -63,6 +63,28 @@ export function findPaneIdByConversationId(
   return findPaneIdBySurfaceKey(layout, `conversation:${targetId}`);
 }
 
+/**
+ * The split directly hosting `paneId` as one of its two children — the split a
+ * pane-scoped equalize acts on. Null when the pane is the whole tree (a lone
+ * root leaf has no parent split) or is not mounted at all.
+ */
+export function findParentSplitId(
+  layout: Pick<WorkbenchLayout, "root">,
+  paneId: string,
+): string | null {
+  const targetId = paneId.trim();
+  if (!targetId || !layout.root) return null;
+  const walk = (node: PaneNode): string | null => {
+    if (node.type === "leaf") return null;
+    const hostsTarget =
+      (node.first.type === "leaf" && node.first.paneId === targetId) ||
+      (node.second.type === "leaf" && node.second.paneId === targetId);
+    if (hostsTarget) return node.splitId;
+    return walk(node.first) ?? walk(node.second);
+  };
+  return walk(layout.root);
+}
+
 export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): WorkbenchLayoutIssue[] {
   const issues: WorkbenchLayoutIssue[] = [];
   if (layout.schemaVersion !== WORKBENCH_LAYOUT_SCHEMA_VERSION) {

@@ -1,13 +1,21 @@
 import {
   getWorkbenchRevisionError,
   type WorkbenchCommand,
+  type WorkbenchCommandContext,
   type WorkbenchCommandError,
   type WorkbenchCommandErrorCode,
   type WorkbenchCommandResult,
   type WorkbenchMoveTarget,
   type WorkbenchOpenTarget,
 } from "./commands";
-import { clampSplitRatio } from "./geometry";
+import {
+  canSplitRectOnAxis,
+  clampSplitRatio,
+  computeWorkbenchGeometry,
+  minPaneSizeForAxis,
+  splitRegionForTarget,
+  WORKBENCH_DIVIDER_SIZE,
+} from "./geometry";
 import { collectWorkbenchLayoutIssues, findPaneIdBySurfaceKey } from "./invariants";
 import {
   type PaneNode,
@@ -190,6 +198,43 @@ function graftAtTarget(
   }
 }
 
+/**
+ * Reject a split whose two halves cannot both hold the hard minimum pane size.
+ *
+ * Only runs when the caller supplied pixel `context`; without it the reducer
+ * has no geometry to judge against and stays permissive. The target rect is
+ * measured against `tree` — for moves that is the tree with the pane already
+ * detached, so the rejection matches what the user would actually get.
+ */
+function insufficientSpaceError(
+  tree: PaneNode | null,
+  target: WorkbenchOpenTarget | WorkbenchMoveTarget,
+  context: WorkbenchCommandContext | undefined,
+  currentRevision: number,
+): { ok: false; error: WorkbenchCommandError } | null {
+  if (!context) return null;
+  if (target.kind === "canvas-empty" || target.kind === "pane-center") return null;
+  // An edge drop onto an empty canvas becomes the root pane, never a split.
+  if (tree === null) return null;
+  const dividerSize = context.dividerSize ?? WORKBENCH_DIVIDER_SIZE;
+  const geometry = computeWorkbenchGeometry(
+    tree,
+    { left: 0, top: 0, width: context.canvasSize.width, height: context.canvasSize.height },
+    { dividerSize },
+  );
+  const region = splitRegionForTarget(geometry, target);
+  // A target absent from the geometry is a missing target, not a space
+  // failure; the graft below reports it as `target-not-found`.
+  if (!region) return null;
+  if (canSplitRectOnAxis(region.rect, region.axis, dividerSize)) return null;
+  const available = region.axis === "horizontal" ? region.rect.width : region.rect.height;
+  return commandError(
+    "insufficient-space",
+    `Splitting this region ${region.axis === "horizontal" ? "horizontally" : "vertically"} would leave panes under the ${minPaneSizeForAxis(region.axis)}px minimum (region is ${available}px).`,
+    currentRevision,
+  );
+}
+
 function swapLeaves(node: PaneNode, firstPaneId: string, secondPaneId: string): PaneNode {
   if (node.type === "leaf") {
     if (node.paneId === firstPaneId) return { ...node, paneId: secondPaneId };
@@ -346,6 +391,13 @@ export function applyWorkbenchCommand(
         command.target.kind === "canvas-edge" && layout.root === null
           ? { kind: "canvas-empty" }
           : command.target;
+      const spaceError = insufficientSpaceError(
+        layout.root,
+        target,
+        command.context,
+        layout.revision,
+      );
+      if (spaceError) return spaceError;
       const nextRoot = graftAtTarget(
         layout.root,
         { type: "leaf", paneId: pane.paneId },
@@ -413,6 +465,15 @@ export function applyWorkbenchCommand(
           layout.revision,
         );
       }
+      // The space check also measures the detached tree, so freeing the pane's
+      // own room is reflected before the split is judged.
+      const spaceError = insufficientSpaceError(
+        removal.node,
+        command.target,
+        command.context,
+        layout.revision,
+      );
+      if (spaceError) return spaceError;
       const nextRoot = graftAtTarget(
         removal.node,
         { type: "leaf", paneId: command.paneId },

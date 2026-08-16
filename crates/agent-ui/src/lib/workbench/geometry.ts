@@ -1,4 +1,4 @@
-import type { PaneNode, WorkbenchAxis } from "./types";
+import type { PaneNode, WorkbenchAxis, WorkbenchEdge } from "./types";
 
 /** Integer CSS-pixel rectangle relative to the workbench canvas origin. */
 export type WorkbenchRect = {
@@ -33,6 +33,76 @@ export const WORKBENCH_MIN_SPLIT_RATIO = 0.05;
 export const WORKBENCH_MAX_SPLIT_RATIO = 0.95;
 export const MIN_CONVERSATION_PANE_WIDTH = 320;
 export const MIN_CONVERSATION_PANE_HEIGHT = 220;
+
+export function workbenchEdgeAxis(edge: WorkbenchEdge): WorkbenchAxis {
+  return edge === "left" || edge === "right" ? "horizontal" : "vertical";
+}
+
+/** Hard minimum a pane must keep along `axis` for the layout to stay usable. */
+export function minPaneSizeForAxis(axis: WorkbenchAxis): number {
+  return axis === "horizontal" ? MIN_CONVERSATION_PANE_WIDTH : MIN_CONVERSATION_PANE_HEIGHT;
+}
+
+/**
+ * Whether halving `rect` along `axis` leaves both sides at or above the hard
+ * minimum. Splits always start at ratio 0.5, so this is the exact feasibility
+ * test for inserting a pane into that region.
+ */
+export function canSplitRectOnAxis(
+  rect: WorkbenchRect,
+  axis: WorkbenchAxis,
+  dividerSize: number = WORKBENCH_DIVIDER_SIZE,
+): boolean {
+  const total = (axis === "horizontal" ? rect.width : rect.height) - dividerSize;
+  return total / 2 >= minPaneSizeForAxis(axis);
+}
+
+/** Drop targets that insert a new pane by splitting an existing region. */
+export type WorkbenchSplitTarget =
+  | { kind: "canvas-edge"; edge: WorkbenchEdge }
+  | { kind: "pane-edge"; paneId: string; edge: WorkbenchEdge }
+  | { kind: "divider"; splitId: string; edge: WorkbenchEdge };
+
+/**
+ * The region a split target would halve, plus the axis it is halved along.
+ * Returns null when the target no longer exists in `geometry` — callers treat
+ * that as a missing target rather than a space failure.
+ */
+export function splitRegionForTarget(
+  geometry: WorkbenchGeometry,
+  target: WorkbenchSplitTarget,
+): { rect: WorkbenchRect; axis: WorkbenchAxis } | null {
+  if (target.kind === "canvas-edge") {
+    return { rect: geometry.canvas, axis: workbenchEdgeAxis(target.edge) };
+  }
+  if (target.kind === "pane-edge") {
+    const pane = geometry.panes.find((entry) => entry.paneId === target.paneId);
+    return pane ? { rect: pane.rect, axis: workbenchEdgeAxis(target.edge) } : null;
+  }
+  const divider = geometry.dividers.find((entry) => entry.splitId === target.splitId);
+  if (!divider) return null;
+  // A divider insert halves the region on the chosen side of the bar, along
+  // the existing split's own axis.
+  const before = target.edge === "left" || target.edge === "top";
+  const { rect: bar, splitArea } = divider;
+  const rect: WorkbenchRect =
+    divider.axis === "horizontal"
+      ? before
+        ? { ...splitArea, width: bar.left - splitArea.left }
+        : {
+            ...splitArea,
+            left: bar.left + bar.width,
+            width: splitArea.left + splitArea.width - (bar.left + bar.width),
+          }
+      : before
+        ? { ...splitArea, height: bar.top - splitArea.top }
+        : {
+            ...splitArea,
+            top: bar.top + bar.height,
+            height: splitArea.top + splitArea.height - (bar.top + bar.height),
+          };
+  return { rect, axis: divider.axis };
+}
 
 export function clampSplitRatio(ratio: number): number {
   if (!Number.isFinite(ratio)) return 0.5;

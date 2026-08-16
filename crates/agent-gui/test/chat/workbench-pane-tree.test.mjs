@@ -13,6 +13,7 @@ const {
   decodeWorkbenchLayout,
   encodeWorkbenchLayout,
   findAdjacentPaneId,
+  findParentSplitId,
   hitTestWorkbenchDrop,
   previewRectForDropTarget,
   WORKBENCH_LAYOUT_SCHEMA_VERSION,
@@ -429,6 +430,31 @@ test("keyboard adjacency picks the nearest pane with perpendicular overlap", () 
   assert.equal(findAdjacentPaneId(geometry, "pane-a", "left"), null);
 });
 
+test("parent split lookup resolves the split a pane-scoped equalize acts on", () => {
+  // A lone root leaf sits in no split, so there is nothing to equalize.
+  assert.equal(findParentSplitId(openRoot(), "pane-a"), null);
+
+  let layout = openRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+  });
+  const rootSplitId = layout.root.splitId;
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "pane-edge", paneId: "pane-b", edge: "bottom" },
+  });
+
+  // pane-a still hangs off the root split; pane-b/pane-c share the nested one.
+  assert.equal(findParentSplitId(layout, "pane-a"), rootSplitId);
+  const nestedSplitId = findParentSplitId(layout, "pane-b");
+  assert.notEqual(nestedSplitId, rootSplitId);
+  assert.equal(findParentSplitId(layout, "pane-c"), nestedSplitId);
+  assert.equal(findParentSplitId(layout, "pane-missing"), null);
+});
+
 test("ratio min-size clamping keeps both sides above the pane minimum", () => {
   const splitArea = { left: 0, top: 0, width: 1008, height: 600 };
   const clamped = clampRatioToMinSize({
@@ -527,4 +553,175 @@ test("codec repairs a fully invalid tree into an empty layout", () => {
   assert.equal(decoded.repaired, true);
   assert.equal(decoded.layout.root, null);
   assert.equal(decoded.layout.focusedPaneId, null);
+});
+
+// --- B-16: split feasibility (`context.canvasSize`) -------------------------
+// The reducer is a pure tree model, so it can only reject a split when the
+// caller hands it the canvas it is laying out into. Commands without `context`
+// keep the old permissive behaviour.
+
+const TIGHT_CANVAS = { width: 700, height: 500 };
+
+test("split with insufficient width is rejected and leaves the layout untouched", () => {
+  const layout = openRoot();
+  // 700px canvas: halving it leaves 346px per side, over the 320px minimum.
+  const wideEnough = apply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+  assert.equal(wideEnough.ok, true);
+
+  // Splitting either half again would leave ~169px per side.
+  const tooNarrow = apply(wideEnough.layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "pane-edge", paneId: "pane-b", edge: "right" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+  assert.equal(tooNarrow.ok, false);
+  assert.equal(tooNarrow.error.code, "insufficient-space");
+  assert.equal(tooNarrow.error.currentRevision, wideEnough.layout.revision);
+  assert.equal(wideEnough.layout.panes["pane-c"], undefined);
+  assert.deepEqual(leafIds(wideEnough.layout.root), ["pane-a", "pane-b"]);
+});
+
+test("split with insufficient height is rejected on the vertical axis", () => {
+  const layout = openRoot();
+  const short = { width: 1200, height: 400 };
+  const ok = apply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "bottom" },
+    context: { canvasSize: { width: 1200, height: 800 } },
+  });
+  assert.equal(ok.ok, true);
+
+  // 400px tall: each half would be 196px, under the 220px minimum.
+  const rejected = apply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "bottom" },
+    context: { canvasSize: short },
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error.code, "insufficient-space");
+  assert.equal(rejected.error.currentRevision, layout.revision);
+});
+
+test("split feasibility is not enforced when no context is supplied", () => {
+  let layout = openRoot();
+  // Same tree as the rejected case above, but with no pixel context: the
+  // reducer has nothing to judge against, so the old behaviour stands.
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+  });
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "pane-edge", paneId: "pane-b", edge: "right" },
+  });
+  assert.deepEqual(leafIds(layout.root), ["pane-a", "pane-b", "pane-c"]);
+});
+
+test("canvas-edge and divider splits honour the minimum too", () => {
+  let layout = openRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+
+  // Wrapping a 600px canvas in another horizontal split leaves 296px halves.
+  const canvasEdge = apply(openRoot(), {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "canvas-edge", edge: "left" },
+    context: { canvasSize: { width: 600, height: 800 } },
+  });
+  assert.equal(canvasEdge.ok, false);
+  assert.equal(canvasEdge.error.code, "insufficient-space");
+
+  // Inserting at the divider halves one side of it — also too tight.
+  const divider = apply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "divider", splitId: layout.root.splitId, edge: "left" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+  assert.equal(divider.ok, false);
+  assert.equal(divider.error.code, "insufficient-space");
+
+  // The same divider insert succeeds once the canvas is wide enough.
+  const roomy = apply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-c", "conversation-c"),
+    target: { kind: "divider", splitId: layout.root.splitId, edge: "left" },
+    context: { canvasSize: { width: 1600, height: 800 } },
+  });
+  assert.equal(roomy.ok, true);
+  assert.deepEqual(leafIds(roomy.layout.root), ["pane-a", "pane-c", "pane-b"]);
+});
+
+test("MOVE_PANE measures space against the tree with the pane detached", () => {
+  let layout = openRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+
+  // Moving pane-b below pane-a: detaching it first gives pane-a the full
+  // 700x500 canvas, so the vertical split has 246px per half — legal.
+  const moved = apply(layout, {
+    type: "MOVE_PANE",
+    paneId: "pane-b",
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "bottom" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+  assert.equal(moved.ok, true);
+  assert.equal(moved.layout.root.axis, "vertical");
+
+  // The same move on a 400px-tall canvas leaves 196px per half — rejected.
+  const tooShort = apply(layout, {
+    type: "MOVE_PANE",
+    paneId: "pane-b",
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "bottom" },
+    context: { canvasSize: { width: 700, height: 400 } },
+  });
+  assert.equal(tooShort.ok, false);
+  assert.equal(tooShort.error.code, "insufficient-space");
+  assert.equal(tooShort.error.currentRevision, layout.revision);
+  assert.equal(layout.root.axis, "horizontal");
+});
+
+test("space checks do not apply to pane-center swaps or the empty canvas", () => {
+  const empty = apply(createEmptyWorkbenchLayout(), {
+    type: "OPEN_PANE",
+    pane: pane("pane-a", "conversation-a"),
+    target: { kind: "canvas-edge", edge: "left" },
+    context: { canvasSize: { width: 100, height: 100 } },
+  });
+  assert.equal(empty.ok, true, "an edge drop on an empty canvas becomes the root pane");
+
+  let layout = openRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: pane("pane-b", "conversation-b"),
+    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+    context: { canvasSize: TIGHT_CANVAS },
+  });
+  const swapped = apply(layout, {
+    type: "MOVE_PANE",
+    paneId: "pane-b",
+    target: { kind: "pane-center", paneId: "pane-a" },
+    context: { canvasSize: { width: 100, height: 100 } },
+  });
+  assert.equal(swapped.ok, true, "swaps create no split, so space is irrelevant");
+  assert.deepEqual(leafIds(swapped.layout.root), ["pane-b", "pane-a"]);
 });

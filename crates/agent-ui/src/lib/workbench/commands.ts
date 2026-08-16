@@ -1,3 +1,4 @@
+import type { WorkbenchRect } from "./geometry";
 import type { PaneRecord, WorkbenchEdge, WorkbenchLayout } from "./types";
 
 export type WorkbenchOpenTarget =
@@ -10,8 +11,21 @@ export type WorkbenchMoveTarget =
   | Exclude<WorkbenchOpenTarget, { kind: "canvas-empty" }>
   | { kind: "pane-center"; paneId: string };
 
+/**
+ * Optional pixel context for commands that split a region. The reducer is a
+ * pure tree model, so minimum-size feasibility can only be judged when the
+ * caller supplies the canvas it is laying out into. Omit it and splits are
+ * accepted unconditionally (pre-existing behaviour).
+ */
+export type WorkbenchCommandContext = {
+  canvasSize: Pick<WorkbenchRect, "width" | "height">;
+  /** Defaults to WORKBENCH_DIVIDER_SIZE; pass the canvas' real divider size. */
+  dividerSize?: number;
+};
+
 type RevisionedWorkbenchCommand = {
   expectedRevision: number;
+  context?: WorkbenchCommandContext;
 };
 
 export type WorkbenchCommand = RevisionedWorkbenchCommand &
@@ -28,6 +42,7 @@ export type WorkbenchCommand = RevisionedWorkbenchCommand &
 export type WorkbenchCommandErrorCode =
   | "duplicate-conversation"
   | "duplicate-surface"
+  | "insufficient-space"
   | "invalid-layout"
   | "minimum-size"
   | "pane-not-found"
