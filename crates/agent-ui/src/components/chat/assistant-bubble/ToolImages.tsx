@@ -453,10 +453,7 @@ export function ToolResultImagePreview(props: {
           onActionError={setActionError}
         />
       ) : null}
-      <ImagePreviewActionFeedback
-        message={actionError}
-        onDismiss={() => setActionError(null)}
-      />
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }
@@ -678,10 +675,7 @@ export function NativeDisplayImageBlock(props: {
           onActionError={setActionError}
         />
       ) : null}
-      <ImagePreviewActionFeedback
-        message={actionError}
-        onDismiss={() => setActionError(null)}
-      />
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }

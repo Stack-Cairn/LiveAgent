@@ -44,36 +44,37 @@ export function ComposerAttachmentCard(props: {
     src: string | null;
     status: "loaded" | "error";
   } | null>(null);
-  const previewSlides = useMemo<ImagePreviewSlide[]>(
-    () => {
-      if (!imageSrc) return [];
-      const workdir = workspaceRoot?.trim() ?? "";
-      const absolutePath = file?.absolutePath?.trim() ?? "";
-      const relativePath = file?.relativePath.trim() ?? "";
-      return [
-        {
-          src: imageSrc,
-          alt: fileName,
-          title: fileName,
-          fileName,
-          sizeBytes: file?.sizeBytes,
-          ...(file && workdir && absolutePath && relativePath
-            ? {
-                attachment: {
-                  workdir,
-                  absolutePath,
-                  relativePath,
-                },
-              }
-            : {}),
-        },
-      ];
-    },
-    [file, fileName, imageSrc, workspaceRoot],
-  );
+  const previewSlides = useMemo<ImagePreviewSlide[]>(() => {
+    if (!imageSrc) return [];
+    const workdir = workspaceRoot?.trim() ?? "";
+    const absolutePath = file?.absolutePath?.trim() ?? "";
+    const relativePath = file?.relativePath.trim() ?? "";
+    return [
+      {
+        src: imageSrc,
+        alt: fileName,
+        title: fileName,
+        fileName,
+        sizeBytes: file?.sizeBytes,
+        ...(file && workdir && absolutePath && relativePath
+          ? {
+              attachment: {
+                workdir,
+                absolutePath,
+                relativePath,
+              },
+            }
+          : {}),
+      },
+    ];
+  }, [file, fileName, imageSrc, workspaceRoot]);
   const previewSlide = previewSlides[0];
-  const imageLoadFailed = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error");
-  const canPreview = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded");
+  const imageLoadFailed = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error",
+  );
+  const canPreview = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded",
+  );
 
   // 图片附件：纯缩略图方块，点击放大预览，文件名放悬浮提示，角标删除。
   if (imageSrc || isImageLoading) {
@@ -112,7 +113,9 @@ export function ComposerAttachmentCard(props: {
             />
           </button>
         ) : imageLoadFailed ? (
-          <span className="flex h-full w-full items-center justify-center text-muted-foreground">{fallbackIcon}</span>
+          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+            {fallbackIcon}
+          </span>
         ) : (
           <span className="block h-full w-full animate-pulse bg-black/[0.055] dark:bg-white/[0.09]" />
         )}
@@ -143,10 +146,7 @@ export function ComposerAttachmentCard(props: {
             onActionError={setActionError}
           />
         ) : null}
-        <ImagePreviewActionFeedback
-          message={actionError}
-          onDismiss={() => setActionError(null)}
-        />
+        <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
       </div>
     );
   }

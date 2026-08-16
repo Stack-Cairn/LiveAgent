@@ -75,16 +75,17 @@ function UserImageAttachmentCard(props: {
   } | null>(null);
   const labeledPreview = `${previewLabel}: ${file.fileName}`;
   const FallbackIcon = getUploadedFileTypeIcon(file);
-  const previewSlides = useMemo<ImagePreviewSlide[]>(
-    () => {
-      const slide = createUserAttachmentImagePreviewSlide(file, imageSrc, workspaceRoot);
-      return slide ? [slide] : [];
-    },
-    [file, imageSrc, workspaceRoot],
-  );
+  const previewSlides = useMemo<ImagePreviewSlide[]>(() => {
+    const slide = createUserAttachmentImagePreviewSlide(file, imageSrc, workspaceRoot);
+    return slide ? [slide] : [];
+  }, [file, imageSrc, workspaceRoot]);
   const previewSlide = previewSlides[0];
-  const imageLoadFailed = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error");
-  const canPreview = Boolean(imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded");
+  const imageLoadFailed = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error",
+  );
+  const canPreview = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded",
+  );
 
   return (
     <div

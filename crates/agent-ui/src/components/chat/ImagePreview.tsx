@@ -71,7 +71,9 @@ type ImagePreviewProps = {
 };
 
 type MenuPosition = { x: number; y: number };
-type ImagePreviewDataResolver = (slide: ImagePreviewSlide) => ReturnType<typeof resolveImagePreviewData>;
+type ImagePreviewDataResolver = (
+  slide: ImagePreviewSlide,
+) => ReturnType<typeof resolveImagePreviewData>;
 
 function toMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -91,7 +93,10 @@ function formatDimensions(size: ImageViewerSize) {
   return size.width > 0 && size.height > 0 ? `${size.width} x ${size.height}` : "-";
 }
 
-function imageViewerAnchor(event: { clientX: number; clientY: number }, viewport: HTMLElement | null) {
+function imageViewerAnchor(
+  event: { clientX: number; clientY: number },
+  viewport: HTMLElement | null,
+) {
   const rect = viewport?.getBoundingClientRect();
   if (!rect) return { x: 0, y: 0 };
   return {
@@ -342,13 +347,17 @@ export function ImagePreviewContextMenu(props: {
         </ImagePreviewMenuItem>
       ) : null}
       {capabilities.canSave ? (
-        <ImagePreviewMenuItem onClick={() => run(() => saveImagePreviewSlide(slide), t("chat.imageViewer.saveFailed"))}>
+        <ImagePreviewMenuItem
+          onClick={() => run(() => saveImagePreviewSlide(slide), t("chat.imageViewer.saveFailed"))}
+        >
           <Download className="h-3.5 w-3.5" />
           {t("chat.imageViewer.save")}
         </ImagePreviewMenuItem>
       ) : null}
       {capabilities.canCopyImage ? (
-        <ImagePreviewMenuItem onClick={() => run(() => copyImagePreviewSlide(slide), t("chat.imageViewer.copyFailed"))}>
+        <ImagePreviewMenuItem
+          onClick={() => run(() => copyImagePreviewSlide(slide), t("chat.imageViewer.copyFailed"))}
+        >
           <Copy className="h-3.5 w-3.5" />
           {t("chat.imageViewer.copy")}
         </ImagePreviewMenuItem>
@@ -649,9 +658,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
   };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex min-h-0 min-w-0 items-center justify-center bg-black/50 p-3 backdrop-blur-sm sm:p-6"
-    >
+    <div className="fixed inset-0 z-[100] flex min-h-0 min-w-0 items-center justify-center bg-black/50 p-3 backdrop-blur-sm sm:p-6">
       <div
         ref={dialogRef}
         role="dialog"
@@ -663,14 +670,14 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           if (event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-          if (contextMenu) {
-            setContextMenu(null);
-          } else if (showInfo) {
-            setShowInfo(false);
-          } else if (isFullscreen) {
-            void handleFullscreen();
-          } else {
-            closeViewer();
+            if (contextMenu) {
+              setContextMenu(null);
+            } else if (showInfo) {
+              setShowInfo(false);
+            } else if (isFullscreen) {
+              void handleFullscreen();
+            } else {
+              closeViewer();
             }
             return;
           }
@@ -692,318 +699,365 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
       >
         <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-black/30 px-2">
           <div className="flex min-w-0 items-center gap-1">
-          {imageCount > 1 ? (
-            <>
-              <ImagePreviewToolButton
-                label={t("chat.imageViewer.previous")}
-                disabled={!canOpenPrevious}
-                onClick={() => setActiveImage(clampedIndex - 1)}
-              >
-                <ChevronRight className="h-4 w-4 rotate-180" />
-              </ImagePreviewToolButton>
-              <ImagePreviewToolButton
-                label={t("chat.imageViewer.next")}
-                disabled={!canOpenNext}
-                onClick={() => setActiveImage(clampedIndex + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </ImagePreviewToolButton>
-              <span className="ml-1 shrink-0 text-[11px] tabular-nums text-white/65">
-                {clampedIndex + 1} / {imageCount}
-              </span>
-            </>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1 overflow-x-auto">
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.zoomOut")}
-            disabled={viewerState.scale <= IMAGE_VIEWER_MIN_SCALE}
-            onClick={() => zoomByStep(-1)}
-          >
-            <Minus className="h-4 w-4" />
-          </ImagePreviewToolButton>
-          <span className="w-11 text-center text-[11px] tabular-nums text-white/65">
-            {Math.round(viewerState.scale * 100)}%
-          </span>
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.zoomIn")}
-            disabled={viewerState.scale >= IMAGE_VIEWER_MAX_SCALE}
-            onClick={() => zoomByStep(1)}
-          >
-            <Plus className="h-4 w-4" />
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton label={t("chat.imageViewer.rotateLeft")} onClick={() => rotateImage(-1)}>
-            <RotateCwSquare className="h-4 w-4 -scale-x-100" />
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton label={t("chat.imageViewer.rotateRight")} onClick={() => rotateImage(1)}>
-            <RotateCwSquare className="h-4 w-4" />
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.reset")}
-            onClick={() => setViewerState(resetImageViewerState())}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.save")}
-            disabled={isSaving}
-            onClick={() => void saveImage()}
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          </ImagePreviewToolButton>
-          {capabilities?.canOpenSystem ? (
-            <ImagePreviewToolButton label={t("chat.imageViewer.openSystem")} onClick={() => void openSystemViewer()}>
-              <ExternalLink className="h-4 w-4" />
-            </ImagePreviewToolButton>
-          ) : null}
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.copy")}
-            disabled={isCopying}
-            onClick={() => void copyImage()}
-          >
-            {isCopying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton
-            label={t("chat.imageViewer.info")}
-            pressed={showInfo}
-            onClick={() => setShowInfo((current) => !current)}
-          >
-            <Info className="h-4 w-4" />
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton
-            label={t(isFullscreen ? "chat.imageViewer.exitFullscreen" : "chat.imageViewer.fullscreen")}
-            onClick={() => void handleFullscreen()}
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </ImagePreviewToolButton>
-          <ImagePreviewToolButton label={closeLabel} onClick={closeViewer}>
-            <X className="h-4 w-4" />
-          </ImagePreviewToolButton>
+            {imageCount > 1 ? (
+              <>
+                <ImagePreviewToolButton
+                  label={t("chat.imageViewer.previous")}
+                  disabled={!canOpenPrevious}
+                  onClick={() => setActiveImage(clampedIndex - 1)}
+                >
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                </ImagePreviewToolButton>
+                <ImagePreviewToolButton
+                  label={t("chat.imageViewer.next")}
+                  disabled={!canOpenNext}
+                  onClick={() => setActiveImage(clampedIndex + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </ImagePreviewToolButton>
+                <span className="ml-1 shrink-0 text-[11px] tabular-nums text-white/65">
+                  {clampedIndex + 1} / {imageCount}
+                </span>
+              </>
+            ) : null}
           </div>
-      </div>
-      <div
-        ref={viewportRef}
-        role="application"
-        aria-label={t("chat.imageViewer.viewer")}
-        className={cn(
-          "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
-          isDragging ? "cursor-grabbing" : canPan ? "cursor-grab" : "cursor-default",
-        )}
-        onWheel={(event) => {
-          if (event.deltaY === 0) return;
-          event.preventDefault();
-          zoomByWheel(event.deltaY, event.deltaMode, imageViewerAnchor(event, viewportRef.current));
-        }}
-        onPointerDown={(event) => {
-          if (contextMenu) {
-            setContextMenu(null);
-            return;
-          }
-          if (event.button !== 0 || !canPan) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          dragRef.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            originX: viewerState.x,
-            originY: viewerState.y,
-          };
-          setIsDragging(true);
-        }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag || drag.pointerId !== event.pointerId) return;
-          setViewerState((current) => ({
-            ...current,
-            ...clampImageViewerPan(
-              {
-                x: drag.originX + event.clientX - drag.startX,
-                y: drag.originY + event.clientY - drag.startY,
-              },
-              { ...viewerOptions, scale: current.scale, rotation: current.rotation },
-            ),
-          }));
-        }}
-        onPointerUp={(event) => {
-          if (dragRef.current?.pointerId !== event.pointerId) return;
-          dragRef.current = null;
-          setIsDragging(false);
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-          setIsDragging(false);
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          setContextMenu({ x: event.clientX, y: event.clientY });
-        }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div
-            className="relative shrink-0"
-            style={{
-              height: `${imageSize.height}px`,
-              width: `${imageSize.width}px`,
-              transform: `translate(${viewerState.x}px, ${viewerState.y}px) scale(${viewerState.scale})`,
-              transformOrigin: "center",
-              transition: isDragging ? "none" : "transform 120ms ease-out",
-            }}
-          >
-            <div className="h-full w-full" style={{ transform: `rotate(${viewerState.rotation}deg)` }}>
-              <img
-                key={`${slide.src}:${slide.dataBase64?.length ?? 0}`}
-                className="h-full w-full select-none object-contain"
-                src={imageSource}
-                alt={slide.alt ?? getImagePreviewDisplayName(slide)}
-                draggable={false}
-                onLoad={(event) => {
-                  setNaturalSize({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  });
-                  if (
-                    supportsDirectUploadedImageCopy &&
-                    getImagePreviewMimeType(slide) !== "image/svg+xml" &&
-                    isVerifiedImagePreviewAttachment(slide.attachment)
-                  ) {
-                    void prepareUploadedImagePreviewCopy({
-                      workdir: slide.attachment.workdir,
-                      absolutePath: slide.attachment.absolutePath,
-                    }).catch(() => undefined);
-                  }
-                  if (hasInlineImageData) void resolveCachedImageData(slide);
-                }}
-                onError={() => setActionError(t("chat.imageViewer.unavailable"))}
-              />
-            </div>
-          </div>
-        </div>
-        {actionError ? (
-          <div role="alert" className="absolute left-3 top-3 z-10 max-w-[min(28rem,calc(100%-1.5rem))] rounded-md border border-red-300/30 bg-red-950/85 px-3 py-2 text-xs text-red-100 shadow-lg">
-            {actionError}
-          </div>
-        ) : null}
-        {showInfo ? (
-          <div
-            role="dialog"
-            aria-label={t("chat.imageViewer.infoPanel")}
-            className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-white/15 bg-black/80 p-3 text-xs text-white shadow-xl backdrop-blur"
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold">{t("chat.imageViewer.infoPanel")}</div>
-              <button
-                type="button"
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/65 hover:bg-white/10 hover:text-white"
-                title={closeLabel}
-                aria-label={closeLabel}
-                onClick={() => setShowInfo(false)}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-white/60">
-              <dt>{t("chat.imageViewer.fileName")}</dt>
-              <dd className="truncate text-right text-white" title={getImagePreviewDisplayName(slide)}>
-                {getImagePreviewDisplayName(slide)}
-              </dd>
-              <dt>{t("chat.imageViewer.dimensions")}</dt>
-              <dd className="text-right text-white">{formatDimensions(naturalSize)}</dd>
-              <dt>{t("chat.imageViewer.fileSize")}</dt>
-              <dd className="text-right text-white">{formatBytes(slide.sizeBytes)}</dd>
-              <dt>{t("chat.imageViewer.fileType")}</dt>
-              <dd className="truncate text-right text-white" title={getImagePreviewMimeType(slide)}>
-                {getImagePreviewMimeType(slide)}
-              </dd>
-              {capabilities?.canCopyPaths && verifiedAttachment ? (
-                <>
-                  <dt>{t("chat.imageViewer.absolutePath")}</dt>
-                  <dd className="truncate text-right text-white" title={verifiedAttachment.absolutePath}>
-                    {verifiedAttachment.absolutePath}
-                  </dd>
-                  <dt>{t("chat.imageViewer.relativePath")}</dt>
-                  <dd className="truncate text-right text-white" title={verifiedAttachment.relativePath}>
-                    {verifiedAttachment.relativePath}
-                  </dd>
-                </>
-              ) : null}
-            </dl>
-          </div>
-        ) : null}
-        {contextMenu ? (
-          <ImagePreviewContextMenu
-            slide={slide}
-            position={contextMenu}
-            onClose={() => setContextMenu(null)}
-            onActionError={setActionError}
-          >
-            <ImagePreviewMenuItem
+          <div className="flex shrink-0 items-center gap-1 overflow-x-auto">
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.zoomOut")}
               disabled={viewerState.scale <= IMAGE_VIEWER_MIN_SCALE}
-              onClick={() => {
-                zoomByStep(-1);
-                setContextMenu(null);
-              }}
+              onClick={() => zoomByStep(-1)}
             >
-              <Minus className="h-3.5 w-3.5" />
-              {t("chat.imageViewer.zoomOut")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
+              <Minus className="h-4 w-4" />
+            </ImagePreviewToolButton>
+            <span className="w-11 text-center text-[11px] tabular-nums text-white/65">
+              {Math.round(viewerState.scale * 100)}%
+            </span>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.zoomIn")}
               disabled={viewerState.scale >= IMAGE_VIEWER_MAX_SCALE}
-              onClick={() => {
-                zoomByStep(1);
-                setContextMenu(null);
+              onClick={() => zoomByStep(1)}
+            >
+              <Plus className="h-4 w-4" />
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.rotateLeft")}
+              onClick={() => rotateImage(-1)}
+            >
+              <RotateCwSquare className="h-4 w-4 -scale-x-100" />
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.rotateRight")}
+              onClick={() => rotateImage(1)}
+            >
+              <RotateCwSquare className="h-4 w-4" />
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.reset")}
+              onClick={() => setViewerState(resetImageViewerState())}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.save")}
+              disabled={isSaving}
+              onClick={() => void saveImage()}
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+            </ImagePreviewToolButton>
+            {capabilities?.canOpenSystem ? (
+              <ImagePreviewToolButton
+                label={t("chat.imageViewer.openSystem")}
+                onClick={() => void openSystemViewer()}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </ImagePreviewToolButton>
+            ) : null}
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.copy")}
+              disabled={isCopying}
+              onClick={() => void copyImage()}
+            >
+              {isCopying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t("chat.imageViewer.info")}
+              pressed={showInfo}
+              onClick={() => setShowInfo((current) => !current)}
+            >
+              <Info className="h-4 w-4" />
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton
+              label={t(
+                isFullscreen ? "chat.imageViewer.exitFullscreen" : "chat.imageViewer.fullscreen",
+              )}
+              onClick={() => void handleFullscreen()}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </ImagePreviewToolButton>
+            <ImagePreviewToolButton label={closeLabel} onClick={closeViewer}>
+              <X className="h-4 w-4" />
+            </ImagePreviewToolButton>
+          </div>
+        </div>
+        <div
+          ref={viewportRef}
+          role="application"
+          aria-label={t("chat.imageViewer.viewer")}
+          className={cn(
+            "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
+            isDragging ? "cursor-grabbing" : canPan ? "cursor-grab" : "cursor-default",
+          )}
+          onWheel={(event) => {
+            if (event.deltaY === 0) return;
+            event.preventDefault();
+            zoomByWheel(
+              event.deltaY,
+              event.deltaMode,
+              imageViewerAnchor(event, viewportRef.current),
+            );
+          }}
+          onPointerDown={(event) => {
+            if (contextMenu) {
+              setContextMenu(null);
+              return;
+            }
+            if (event.button !== 0 || !canPan) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              originX: viewerState.x,
+              originY: viewerState.y,
+            };
+            setIsDragging(true);
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            setViewerState((current) => ({
+              ...current,
+              ...clampImageViewerPan(
+                {
+                  x: drag.originX + event.clientX - drag.startX,
+                  y: drag.originY + event.clientY - drag.startY,
+                },
+                { ...viewerOptions, scale: current.scale, rotation: current.rotation },
+              ),
+            }));
+          }}
+          onPointerUp={(event) => {
+            if (dragRef.current?.pointerId !== event.pointerId) return;
+            dragRef.current = null;
+            setIsDragging(false);
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => {
+            dragRef.current = null;
+            setIsDragging(false);
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setContextMenu({ x: event.clientX, y: event.clientY });
+          }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="relative shrink-0"
+              style={{
+                height: `${imageSize.height}px`,
+                width: `${imageSize.width}px`,
+                transform: `translate(${viewerState.x}px, ${viewerState.y}px) scale(${viewerState.scale})`,
+                transformOrigin: "center",
+                transition: isDragging ? "none" : "transform 120ms ease-out",
               }}
             >
-              <Plus className="h-3.5 w-3.5" />
-              {t("chat.imageViewer.zoomIn")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
-              onClick={() => {
-                setViewerState(resetImageViewerState());
-                setContextMenu(null);
-              }}
+              <div
+                className="h-full w-full"
+                style={{ transform: `rotate(${viewerState.rotation}deg)` }}
+              >
+                <img
+                  key={`${slide.src}:${slide.dataBase64?.length ?? 0}`}
+                  className="h-full w-full select-none object-contain"
+                  src={imageSource}
+                  alt={slide.alt ?? getImagePreviewDisplayName(slide)}
+                  draggable={false}
+                  onLoad={(event) => {
+                    setNaturalSize({
+                      width: event.currentTarget.naturalWidth,
+                      height: event.currentTarget.naturalHeight,
+                    });
+                    if (
+                      supportsDirectUploadedImageCopy &&
+                      getImagePreviewMimeType(slide) !== "image/svg+xml" &&
+                      isVerifiedImagePreviewAttachment(slide.attachment)
+                    ) {
+                      void prepareUploadedImagePreviewCopy({
+                        workdir: slide.attachment.workdir,
+                        absolutePath: slide.attachment.absolutePath,
+                      }).catch(() => undefined);
+                    }
+                    if (hasInlineImageData) void resolveCachedImageData(slide);
+                  }}
+                  onError={() => setActionError(t("chat.imageViewer.unavailable"))}
+                />
+              </div>
+            </div>
+          </div>
+          {actionError ? (
+            <div
+              role="alert"
+              className="absolute left-3 top-3 z-10 max-w-[min(28rem,calc(100%-1.5rem))] rounded-md border border-red-300/30 bg-red-950/85 px-3 py-2 text-xs text-red-100 shadow-lg"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
-              {t("chat.imageViewer.reset")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
-              onClick={() => {
-                rotateImage(-1);
-                setContextMenu(null);
-              }}
+              {actionError}
+            </div>
+          ) : null}
+          {showInfo ? (
+            <div
+              role="dialog"
+              aria-label={t("chat.imageViewer.infoPanel")}
+              className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-white/15 bg-black/80 p-3 text-xs text-white shadow-xl backdrop-blur"
             >
-              <RotateCwSquare className="h-3.5 w-3.5 -scale-x-100" />
-              {t("chat.imageViewer.rotateLeft")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
-              onClick={() => {
-                rotateImage(1);
-                setContextMenu(null);
-              }}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold">{t("chat.imageViewer.infoPanel")}</div>
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/65 hover:bg-white/10 hover:text-white"
+                  title={closeLabel}
+                  aria-label={closeLabel}
+                  onClick={() => setShowInfo(false)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-white/60">
+                <dt>{t("chat.imageViewer.fileName")}</dt>
+                <dd
+                  className="truncate text-right text-white"
+                  title={getImagePreviewDisplayName(slide)}
+                >
+                  {getImagePreviewDisplayName(slide)}
+                </dd>
+                <dt>{t("chat.imageViewer.dimensions")}</dt>
+                <dd className="text-right text-white">{formatDimensions(naturalSize)}</dd>
+                <dt>{t("chat.imageViewer.fileSize")}</dt>
+                <dd className="text-right text-white">{formatBytes(slide.sizeBytes)}</dd>
+                <dt>{t("chat.imageViewer.fileType")}</dt>
+                <dd
+                  className="truncate text-right text-white"
+                  title={getImagePreviewMimeType(slide)}
+                >
+                  {getImagePreviewMimeType(slide)}
+                </dd>
+                {capabilities?.canCopyPaths && verifiedAttachment ? (
+                  <>
+                    <dt>{t("chat.imageViewer.absolutePath")}</dt>
+                    <dd
+                      className="truncate text-right text-white"
+                      title={verifiedAttachment.absolutePath}
+                    >
+                      {verifiedAttachment.absolutePath}
+                    </dd>
+                    <dt>{t("chat.imageViewer.relativePath")}</dt>
+                    <dd
+                      className="truncate text-right text-white"
+                      title={verifiedAttachment.relativePath}
+                    >
+                      {verifiedAttachment.relativePath}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+            </div>
+          ) : null}
+          {contextMenu ? (
+            <ImagePreviewContextMenu
+              slide={slide}
+              position={contextMenu}
+              onClose={() => setContextMenu(null)}
+              onActionError={setActionError}
             >
-              <RotateCwSquare className="h-3.5 w-3.5" />
-              {t("chat.imageViewer.rotateRight")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
-              onClick={() => {
-                setShowInfo(true);
-                setContextMenu(null);
-              }}
-            >
-              <Info className="h-3.5 w-3.5" />
-              {t("chat.imageViewer.info")}
-            </ImagePreviewMenuItem>
-            <ImagePreviewMenuItem
-              onClick={() => {
-                void handleFullscreen();
-                setContextMenu(null);
-              }}
-            >
-              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              {t(isFullscreen ? "chat.imageViewer.exitFullscreen" : "chat.imageViewer.fullscreen")}
-            </ImagePreviewMenuItem>
-          </ImagePreviewContextMenu>
-        ) : null}
+              <ImagePreviewMenuItem
+                disabled={viewerState.scale <= IMAGE_VIEWER_MIN_SCALE}
+                onClick={() => {
+                  zoomByStep(-1);
+                  setContextMenu(null);
+                }}
+              >
+                <Minus className="h-3.5 w-3.5" />
+                {t("chat.imageViewer.zoomOut")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                disabled={viewerState.scale >= IMAGE_VIEWER_MAX_SCALE}
+                onClick={() => {
+                  zoomByStep(1);
+                  setContextMenu(null);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t("chat.imageViewer.zoomIn")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                onClick={() => {
+                  setViewerState(resetImageViewerState());
+                  setContextMenu(null);
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {t("chat.imageViewer.reset")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                onClick={() => {
+                  rotateImage(-1);
+                  setContextMenu(null);
+                }}
+              >
+                <RotateCwSquare className="h-3.5 w-3.5 -scale-x-100" />
+                {t("chat.imageViewer.rotateLeft")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                onClick={() => {
+                  rotateImage(1);
+                  setContextMenu(null);
+                }}
+              >
+                <RotateCwSquare className="h-3.5 w-3.5" />
+                {t("chat.imageViewer.rotateRight")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                onClick={() => {
+                  setShowInfo(true);
+                  setContextMenu(null);
+                }}
+              >
+                <Info className="h-3.5 w-3.5" />
+                {t("chat.imageViewer.info")}
+              </ImagePreviewMenuItem>
+              <ImagePreviewMenuItem
+                onClick={() => {
+                  void handleFullscreen();
+                  setContextMenu(null);
+                }}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5" />
+                )}
+                {t(
+                  isFullscreen ? "chat.imageViewer.exitFullscreen" : "chat.imageViewer.fullscreen",
+                )}
+              </ImagePreviewMenuItem>
+            </ImagePreviewContextMenu>
+          ) : null}
         </div>
       </div>
     </div>,

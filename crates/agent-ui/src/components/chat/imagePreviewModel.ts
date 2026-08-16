@@ -198,10 +198,7 @@ export function isVerifiedImagePreviewAttachment(
   );
 }
 
-export function getImagePreviewCapabilities(
-  slide: ImagePreviewSlide,
-  supportsSystemOpen: boolean,
-) {
+export function getImagePreviewCapabilities(slide: ImagePreviewSlide, supportsSystemOpen: boolean) {
   const hasSource = Boolean(slide.src.trim() || slide.dataBase64?.trim());
   const hasAttachment = isVerifiedImagePreviewAttachment(slide.attachment);
   return {
@@ -295,7 +292,10 @@ export function fitImageViewerSize(
     return { width: 0, height: 0 };
   }
 
-  const rotatedSize = rotatedImageViewerSize({ width: naturalWidth, height: naturalHeight }, rotation);
+  const rotatedSize = rotatedImageViewerSize(
+    { width: naturalWidth, height: naturalHeight },
+    rotation,
+  );
   const ratio = Math.min(viewportWidth / rotatedSize.width, viewportHeight / rotatedSize.height);
   return { width: naturalWidth * ratio, height: naturalHeight * ratio };
 }
