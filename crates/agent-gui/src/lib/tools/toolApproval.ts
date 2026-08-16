@@ -39,11 +39,21 @@ const sessionAllowByConversation = new Map<string, Set<string>>();
 // useSyncExternalStore 订阅:pending 表变更时 bump version 并通知,驱动审批卡片
 // 在挂起出现/落定时重渲染(被审批的工具调用本身早已在转录中)。
 const listeners = new Set<() => void>();
+const listenersByConversation = new Map<string, Set<() => void>>();
+const pendingSnapshotsByConversation = new Map<string, PendingToolApprovalSummary[]>();
+const EMPTY_PENDING_APPROVALS: PendingToolApprovalSummary[] = [];
+Object.freeze(EMPTY_PENDING_APPROVALS);
 let version = 0;
 
-function emitChange() {
+function emitChange(conversationId: string) {
+  const key = conversationId.trim();
   version += 1;
   for (const listener of listeners) listener();
+  if (!key) return;
+  pendingSnapshotsByConversation.delete(key);
+  const conversationListeners = listenersByConversation.get(key);
+  if (!conversationListeners) return;
+  for (const listener of Array.from(conversationListeners)) listener();
 }
 
 export function subscribeToolApprovals(listener: () => void): () => void {
@@ -55,6 +65,23 @@ export function subscribeToolApprovals(listener: () => void): () => void {
 
 export function getToolApprovalVersion(): number {
   return version;
+}
+
+export function subscribeToolApprovalsForConversation(
+  conversationId: string,
+  listener: () => void,
+): () => void {
+  const key = conversationId.trim();
+  if (!key) return () => undefined;
+  const conversationListeners = listenersByConversation.get(key) ?? new Set();
+  conversationListeners.add(listener);
+  listenersByConversation.set(key, conversationListeners);
+  return () => {
+    conversationListeners.delete(listener);
+    if (conversationListeners.size === 0) {
+      listenersByConversation.delete(key);
+    }
+  };
 }
 
 export function getPendingToolApproval(toolCallId: string): PendingToolApproval | null {
@@ -96,6 +123,19 @@ export function listPendingToolApprovalsForConversation(
   return out;
 }
 
+export function getPendingToolApprovalsSnapshot(
+  conversationId: string,
+): PendingToolApprovalSummary[] {
+  const key = conversationId.trim();
+  if (!key) return EMPTY_PENDING_APPROVALS;
+  const cached = pendingSnapshotsByConversation.get(key);
+  if (cached) return cached;
+  const pending = listPendingToolApprovalsForConversation(key);
+  if (pending.length === 0) return EMPTY_PENDING_APPROVALS;
+  pendingSnapshotsByConversation.set(key, pending);
+  return pending;
+}
+
 export function isSessionApproved(conversationId: string, toolName: string): boolean {
   return sessionAllowByConversation.get(conversationId)?.has(toolName) ?? false;
 }
@@ -131,13 +171,14 @@ export function answerToolApproval(
 
 /** 会话销毁兜底:挂起中的审批按“取消(未批准)”落定。正常中止由 AbortSignal 处理。 */
 export function cancelPendingToolApprovalsForConversation(conversationId: string) {
+  const targetConversationId = conversationId.trim();
   for (const [toolCallId, pending] of pendingByToolCallId) {
-    if (pending.conversationId === conversationId) {
+    if (pending.conversationId === targetConversationId) {
       pendingByToolCallId.delete(toolCallId);
       pending.settle({ kind: "cancelled" });
     }
   }
-  sessionAllowByConversation.delete(conversationId);
+  sessionAllowByConversation.delete(targetConversationId);
 }
 
 /**
@@ -155,6 +196,7 @@ export function requestToolApproval(params: {
   timeoutMs?: number;
 }): Promise<ToolApprovalSettlement> {
   const toolCallId = params.toolCallId.trim();
+  const conversationId = params.conversationId.trim();
   const timeoutMs = params.timeoutMs ?? TOOL_APPROVAL_TIMEOUT_MS;
   const deadlineAt = Date.now() + timeoutMs;
 
@@ -171,15 +213,15 @@ export function requestToolApproval(params: {
       params.signal?.removeEventListener("abort", onAbort);
       clearTimeout(timeoutId);
       if (settlement.kind === "decided" && settlement.decision === "approve_session") {
-        rememberSessionApproval(params.conversationId, params.toolName);
+        rememberSessionApproval(conversationId, params.toolName);
       }
-      emitChange();
+      emitChange(conversationId);
       resolve(settlement);
     };
     const onAbort = () => settle({ kind: "cancelled" });
     const timeoutId = setTimeout(() => settle({ kind: "timeout" }), Math.max(0, timeoutMs));
     const pending: PendingToolApproval = {
-      conversationId: params.conversationId,
+      conversationId,
       toolName: params.toolName,
       summary: params.summary ?? "",
       deadlineAt,
@@ -187,6 +229,6 @@ export function requestToolApproval(params: {
     };
     pendingByToolCallId.set(toolCallId, pending);
     params.signal?.addEventListener("abort", onAbort, { once: true });
-    emitChange();
+    emitChange(conversationId);
   });
 }
