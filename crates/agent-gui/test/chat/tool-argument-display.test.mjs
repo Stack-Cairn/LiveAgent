@@ -205,6 +205,9 @@ function createToolCallItemRenderer() {
         getBuiltinResultKind() {
           return null;
         },
+        getShellSessionDisplayDetails() {
+          return null;
+        },
         getSubagentInlineSummary() {
           return "";
         },
