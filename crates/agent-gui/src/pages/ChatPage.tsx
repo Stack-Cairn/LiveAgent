@@ -10,6 +10,7 @@ import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
+import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
 import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
@@ -43,6 +44,7 @@ import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
   findAdjacentPaneId,
+  findParentSplitId,
   hitTestWorkbenchDrop,
   type WorkbenchDropTarget,
   type WorkbenchGeometry,
@@ -2116,8 +2118,8 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, workbenchProjectForConversation],
   );
 
-  // Right Dock 终端 tab 拖出:既有会话进入画板。dock 的 tab 只列本地会话,
-  // SSH 会话的宿主是 workspace overlay,首期不提供拖出入口。
+  // Right Dock 终端 tab 拖出:既有会话进入画板。dock 的 tab 只列本地会话;
+  // SSH 会话从 workspace overlay 的 shell tab 拖出(handleSshTerminalTabDragIntent)。
   const handleTerminalTabWorkbenchDragIntent = useCallback(
     (session: TerminalSession, event: { pointerId: number; clientX: number; clientY: number }) => {
       const projectPathKey = session.projectPathKey || workspaceProjectPathKey(session.cwd);
@@ -2138,6 +2140,44 @@ export function ChatPage(props: ChatPageProps) {
       );
     },
     [beginWorkbenchDrag, workspaceProjects],
+  );
+
+  // SSH overlay 的 shell tab 拖出与 dock tab 同一 payload 通路;drop 时由
+  // terminalSurfaceForSession 依 session.ssh.hostId 构造 sshTerminal surface,
+  // 租约建立后 overlay 自动显示"已在画板中打开"占位。
+  const handleSshTerminalTabDragIntent = handleTerminalTabWorkbenchDragIntent;
+
+  // 空态"新建终端"按钮拖出:落点新建终端 Pane(几何先行,PTY 由宿主异步建)。
+  const handleNewTerminalWorkbenchDragIntent = useCallback(
+    (event: { pointerId: number; clientX: number; clientY: number }) => {
+      if (!terminalProjectPath) return;
+      const project = workspaceProjects.find(
+        (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
+      );
+      beginWorkbenchDrag(
+        {
+          kind: "newTerminal",
+          project: {
+            projectId: project?.id ?? `project:${terminalProjectPathKey}`,
+            projectPathKey: terminalProjectPathKey,
+          },
+          title: t("projectTools.newTerminal"),
+        },
+        event,
+      );
+    },
+    [beginWorkbenchDrag, t, terminalProjectPath, terminalProjectPathKey, workspaceProjects],
+  );
+
+  // 画板 Pane 持有租约的会话:overlay/占位的"前往 Pane"聚焦通路。
+  const focusWorkbenchTerminalPane = useCallback(
+    (sessionId: string) => {
+      const paneId = terminalPaneLease.paneIdFor(sessionId);
+      if (paneId && workbench.layoutRef.current.panes[paneId]) {
+        handleWorkbenchFocusPane(paneId);
+      }
+    },
+    [handleWorkbenchFocusPane, workbench],
   );
 
   const handleProjectWorkbenchDragIntent = useCallback(
@@ -2332,11 +2372,18 @@ export function ChatPage(props: ChatPageProps) {
     workbench,
   ]);
 
-  // Keyboard equivalents for pane focus moves: Meta/Ctrl+Alt+Arrow.
+  // Keyboard equivalents for workbench pane commands, all on Meta/Ctrl+Alt:
+  // Arrow focuses the adjacent pane, Shift+Arrow moves the focused pane there,
+  // W closes it, and =/+ equalizes its parent split. Every command needs at
+  // least two panes; with one pane the workbench has nothing to navigate.
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
+      const layout = workbench.layoutRef.current;
+      const focusedPaneId = layout.focusedPaneId;
+      if (!focusedPaneId || Object.keys(layout.panes).length < 2) return;
+
       const direction =
         event.key === "ArrowLeft"
           ? ("left" as const)
@@ -2347,18 +2394,42 @@ export function ChatPage(props: ChatPageProps) {
               : event.key === "ArrowDown"
                 ? ("bottom" as const)
                 : null;
-      if (!direction) return;
-      const layout = workbench.layoutRef.current;
-      const geometry = workbenchGeometryRef.current;
-      if (!layout.focusedPaneId || !geometry) return;
-      const nextPaneId = findAdjacentPaneId(geometry, layout.focusedPaneId, direction);
-      if (!nextPaneId) return;
-      event.preventDefault();
-      handleWorkbenchFocusPane(nextPaneId);
+      if (direction) {
+        const geometry = workbenchGeometryRef.current;
+        if (!geometry) return;
+        const nextPaneId = findAdjacentPaneId(geometry, focusedPaneId, direction);
+        if (!nextPaneId) return;
+        event.preventDefault();
+        // Shift grafts the focused pane onto the neighbour's far edge, so the
+        // pane ends up exactly where a plain focus move would have gone.
+        if (event.shiftKey) {
+          workbench.movePane(focusedPaneId, {
+            kind: "pane-edge",
+            paneId: nextPaneId,
+            edge: direction,
+          });
+          return;
+        }
+        handleWorkbenchFocusPane(nextPaneId);
+        return;
+      }
+
+      if (event.shiftKey) return;
+      if (event.key === "w" || event.key === "W") {
+        event.preventDefault();
+        handleWorkbenchClosePane(focusedPaneId);
+        return;
+      }
+      if (event.key === "=" || event.key === "+") {
+        const splitId = findParentSplitId(layout, focusedPaneId);
+        if (!splitId) return;
+        event.preventDefault();
+        workbench.equalizeSplit(splitId);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleWorkbenchFocusPane, workbench]);
+  }, [handleWorkbenchClosePane, handleWorkbenchFocusPane, workbench]);
 
   // Background pane controllers (conversations visible in unfocused panes).
   const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
@@ -2555,20 +2626,50 @@ export function ChatPage(props: ChatPageProps) {
   const conversationPaneHostEnvironment =
     createConversationPaneHostEnvironment(workbenchRegistrations);
 
+  // Human-readable pane title, shared by the chrome tooltip/drag payload and
+  // the pane's accessible region label.
+  const workbenchPaneTitle = (surface: PaneRecord["surface"]): string => {
+    switch (surface.kind) {
+      case "conversation":
+        return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
+      case "localTerminal":
+        return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
+      case "sshTerminal":
+        return surface.launchSpec.title?.trim() || surface.launchSpec.sshHostId.trim() || "SSH";
+      case "unsupported":
+        return surface.originalKind;
+    }
+  };
+
+  // Per-pane region label: screen readers must be able to tell panes apart, so
+  // terminals never read as "Conversation pane" and conversations carry their
+  // title (plus the workspace name when the pane resolves to a known project).
+  const workbenchPaneRegionLabel = (pane: PaneRecord): string => {
+    const surface = pane.surface;
+    if (surface.kind === "unsupported") return t("workbench.paneRegionUnsupported");
+    const title = workbenchPaneTitle(surface);
+    if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
+      return t("workbench.paneRegionTerminal").replace("{title}", title);
+    }
+    if (!title) return t("workbench.paneRegion");
+    const workspaceName = workspaceProjects
+      .find((entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey)
+      ?.name.trim();
+    if (!workspaceName) {
+      return t("workbench.paneRegionConversation").replace("{title}", title);
+    }
+    return t("workbench.paneRegionConversationInWorkspace")
+      .replace("{title}", title)
+      .replace("{workspace}", workspaceName);
+  };
+
   const renderWorkbenchPaneChrome = (
     pane: PaneRecord,
     context: { isFocused: boolean; paneCount: number },
   ) => {
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
-    const title =
-      surface.kind === "conversation"
-        ? sidebarConversationsById.get(surface.conversationId)?.title?.trim() || ""
-        : surface.kind === "localTerminal"
-          ? surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal"
-          : surface.kind === "sshTerminal"
-            ? surface.launchSpec.title?.trim() || surface.launchSpec.sshHostId.trim() || "SSH"
-            : surface.originalKind;
+    const title = workbenchPaneTitle(surface);
     return (
       <PaneChrome
         paneId={pane.paneId}
@@ -2592,7 +2693,7 @@ export function ChatPage(props: ChatPageProps) {
       <WorkbenchCanvas
         layout={workbench.layout}
         labels={{
-          paneRegion: () => t("workbench.paneRegion"),
+          paneRegion: (pane) => workbenchPaneRegionLabel(pane),
           separator: t("workbench.resizeDivider"),
         }}
         renderPaneContent={(pane, paneContext) => {
@@ -2606,18 +2707,13 @@ export function ChatPage(props: ChatPageProps) {
                 theme={effectiveTheme}
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
+                onSessionKilled={() => handleWorkbenchClosePane(pane.paneId)}
               />
             );
           }
           if (surface.kind === "unsupported") {
             return (
-              <div
-                data-workbench-surface="unsupported-placeholder"
-                className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center"
-              >
-                <p className="text-sm text-muted-foreground">{t("workbench.unsupportedPane")}</p>
-                <p className="text-xs text-muted-foreground/70">{surface.originalKind}</p>
-              </div>
+              <UnsupportedPaneSurface paneId={pane.paneId} originalKind={surface.originalKind} />
             );
           }
           const conversationId = surface.conversationId;
@@ -2922,6 +3018,13 @@ export function ChatPage(props: ChatPageProps) {
                 workspaceOverlays.setWorkspaceSshTerminalOpen(false)
               }
               onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
+              sshTerminalPaneLeasedSessionIds={hiddenDockSessionIds}
+              onSshTerminalFocusLeasedSession={
+                sessionWorkbench.enabled ? focusWorkbenchTerminalPane : undefined
+              }
+              onSshTerminalSessionTabDragStart={
+                sessionWorkbench.enabled ? handleSshTerminalTabDragIntent : undefined
+              }
             />
           }
         />
@@ -2959,6 +3062,9 @@ export function ChatPage(props: ChatPageProps) {
         onSessionsChange={handleRightDockSessionsChange}
         onTerminalTabDragStart={
           sessionWorkbench.enabled ? handleTerminalTabWorkbenchDragIntent : undefined
+        }
+        onNewTerminalDragStart={
+          sessionWorkbench.enabled ? handleNewTerminalWorkbenchDragIntent : undefined
         }
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
