@@ -75,4 +75,13 @@ chardetng = "0.1.17"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSButton", "NSControl", "NSView", "NSWindow"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+    "Win32_System_JobObjects",
+    "Win32_System_Console",
+    "Win32_System_Environment",
+] }

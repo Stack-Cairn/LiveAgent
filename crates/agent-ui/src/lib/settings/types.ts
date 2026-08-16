@@ -236,8 +236,9 @@ export type ToolPolicy = "allow" | "ask" | "deny";
 // - ask:每次带副作用的工具调用都请求用户批准(只读工具不拦)。
 // - auto:按工具审批策略直接执行(既有默认行为)。
 // - sandbox / sandboxOffline:Bash 与常驻进程在 OS 级沙箱内执行(macOS
-//   Seatbelt / Linux bubblewrap;Windows 暂不支持),写入限工作区+临时目录,
-//   敏感目录掩蔽;offline 变体额外断网。
+//   Seatbelt / Linux bubblewrap / Windows 受限令牌 WRITE_RESTRICTED),写入限
+//   工作区+临时目录;offline 变体额外断网。敏感目录读掩蔽与断网需 macOS/Linux —
+//   Windows 免管理员方案只围栏写,故 sandboxOffline 在 Windows 上不可用。
 export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
 
 export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [

@@ -1,4 +1,4 @@
-import { inferSandboxPlatform, useSandboxCapability } from "@liveagent/adapters/sandboxCapability";
+import { useSandboxCapability } from "@liveagent/adapters/sandboxCapability";
 import type { CommandSafetyMode } from "@liveagent/app/lib/settings";
 import { Hand, Shield, ShieldOff, Zap } from "@liveagent/ui/components/IconSet";
 import {
@@ -10,7 +10,6 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useMemo } from "react";
 
 const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.ask",
@@ -39,15 +38,17 @@ export function CommandSafetyModeSelector(props: {
   const { surface, value, disabled, onChange } = props;
   const { t } = useLocale();
   const capability = useSandboxCapability();
-  // 桌面端平台同步可知,Windows 立即禁用沙箱两项;WebUI 为 null(执行端平台
-  // 未知),不禁用,由桌面端执行层 fail-closed 兜底。探测结果进一步覆盖。
-  const platform = useMemo(() => inferSandboxPlatform(), []);
-  const sandboxUnavailable =
-    platform === "windows" || (capability !== null && !capability.supported);
-  const sandboxUnavailableHint =
-    platform === "windows"
-      ? t("chat.safety.sandboxUnavailableWindows")
-      : t("chat.safety.sandboxUnavailable");
+  // 写围栏(sandbox):平台不支持时禁用。桌面端探测返回前(null)乐观启用,由执行层
+  // fail-closed 兜底;WebUI 执行端平台未知,同样交由 fail-closed。
+  const sandboxUnavailable = capability !== null && !capability.supported;
+  // 断网(sandboxOffline):额外要求平台可断网。Windows 免管理员方案 network_control=false
+  // ⇒ 仅此项禁用,sandbox 仍可用。
+  const offlineUnavailable =
+    sandboxUnavailable || (capability !== null && !capability.network_control);
+  // 禁用时的说明文案:整体不可用优先,否则为“仅断网不可用”。
+  const disabledHint = sandboxUnavailable
+    ? t("chat.safety.sandboxUnavailable")
+    : t("chat.safety.sandboxOfflineUnavailable");
   // 当前值本身不可用(如设置同步自 macOS,本机是 Windows)时仍显示,但标红提示
   // 由执行层报错兜底;这里不做静默改写,避免设置回写抖动。
   const selected = isCommandSafetyMode(value) ? value : "auto";
@@ -101,8 +102,12 @@ export function CommandSafetyModeSelector(props: {
       </SelectTrigger>
       <SelectContent className="sidebar-context-menu min-w-64 rounded-xl border-0">
         {(["ask", "auto", "sandbox", "sandboxOffline"] as const).map((mode) => {
-          const isSandboxEntry = mode === "sandbox" || mode === "sandboxOffline";
-          const entryDisabled = isSandboxEntry && sandboxUnavailable;
+          const entryDisabled =
+            mode === "sandbox"
+              ? sandboxUnavailable
+              : mode === "sandboxOffline"
+                ? offlineUnavailable
+                : false;
           return (
             <SelectItem
               key={mode}
@@ -125,7 +130,7 @@ export function CommandSafetyModeSelector(props: {
                 <span className="flex min-w-0 flex-col">
                   <span className="font-medium">{t(MODE_I18N_KEYS[mode])}</span>
                   <span className="text-[11px] leading-4 text-muted-foreground">
-                    {entryDisabled ? sandboxUnavailableHint : t(MODE_DESC_I18N_KEYS[mode])}
+                    {entryDisabled ? disabledHint : t(MODE_DESC_I18N_KEYS[mode])}
                   </span>
                 </span>
               </span>

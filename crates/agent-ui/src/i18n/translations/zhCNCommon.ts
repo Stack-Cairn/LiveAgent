@@ -252,7 +252,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.safety.sandboxOffline": "沙箱·断网",
   "chat.safety.sandboxOfflineDesc": "在沙箱基础上进一步禁止命令联网",
   "chat.safety.sandboxUnavailable": "当前平台沙箱机制不可用",
-  "chat.safety.sandboxUnavailableWindows": "Windows 暂不支持（受限令牌方案开发中）",
+  "chat.safety.sandboxOfflineUnavailable": "当前平台不支持断网沙箱(Windows 免管理员方案无法断网)",
   "chat.emptyRound": "（无回复）",
   "chat.inputHint": "输入消息，@ 引用文件，提示词可队列发送...",
   "chat.inputHintWithSkills": "输入消息，@ 引用文件，/ 引用Skills，提示词可队列发送...",
