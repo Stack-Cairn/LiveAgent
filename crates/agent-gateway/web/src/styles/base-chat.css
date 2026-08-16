@@ -536,6 +536,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 .gateway-main-shell {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   min-width: 0;
   flex: 1;

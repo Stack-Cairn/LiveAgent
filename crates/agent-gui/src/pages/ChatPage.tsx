@@ -1725,7 +1725,7 @@ export function ChatPage(props: ChatPageProps) {
       {/* ---- Center column: workbench chrome + conversation surfaces ---- */}
       <div
         data-app-frame-column="main"
-        className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+        className="relative flex flex-col min-h-0 min-w-0 flex-1 overflow-hidden"
       >
         <AppWorkbenchChrome
           settings={settings}

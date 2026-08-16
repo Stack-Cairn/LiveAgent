@@ -14,7 +14,7 @@ export function AppWorkbenchChrome(props: AppWorkbenchChromeProps) {
     <div
       data-app-workbench-chrome=""
       className={cn(
-        "app-workbench-chrome pointer-events-none absolute inset-x-0 top-0 z-[45] h-12",
+        "app-workbench-chrome pointer-events-none relative z-[45] h-12 shrink-0",
         className,
       )}
     >
