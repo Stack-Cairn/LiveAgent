@@ -33,6 +33,9 @@ function createHookHarness() {
     useMemo(factory) {
       return factory();
     },
+    useSyncExternalStore(_subscribe, getSnapshot) {
+      return getSnapshot();
+    },
     useEffect(effect, deps = []) {
       const index = effectIndex++;
       const previous = effects[index];

@@ -6,7 +6,18 @@ import {
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { invoke } from "@tauri-apps/api/core";
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  type ConversationUploadStore,
+  createConversationUploadStore,
+} from "../conversations/conversationUploadStore";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];
@@ -29,6 +40,7 @@ type UsePendingUploadsParams = {
   isAgentMode: boolean;
   workdir: string;
   conversationId: string;
+  uploadStore?: ConversationUploadStore;
   currentConversationIdRef: MutableRefObject<string>;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   setErrorMessage: (message: string | null) => void;
@@ -61,16 +73,32 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     isAgentMode,
     workdir,
     conversationId,
+    uploadStore: providedUploadStore,
     currentConversationIdRef,
     composerRef,
     setErrorMessage,
     addNotify,
   } = params;
-  const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
+  const fallbackUploadStoreRef = useRef<ConversationUploadStore | null>(null);
+  if (!fallbackUploadStoreRef.current) {
+    fallbackUploadStoreRef.current = createConversationUploadStore();
+  }
+  const uploadStore = providedUploadStore ?? fallbackUploadStoreRef.current;
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const uploadTaskActiveRef = useRef(false);
-  const pendingUploadsByConversationRef = useRef(new Map<string, PendingUploadedFile[]>());
-  const pendingUploadedFilesRef = useRef(pendingUploadedFiles);
+  const subscribePendingUploads = useCallback(
+    (listener: () => void) => uploadStore.subscribe(conversationId, listener),
+    [conversationId, uploadStore],
+  );
+  const getPendingUploadsSnapshot = useCallback(
+    () => uploadStore.getSnapshot(conversationId),
+    [conversationId, uploadStore],
+  );
+  const pendingUploadedFiles = useSyncExternalStore(
+    subscribePendingUploads,
+    getPendingUploadsSnapshot,
+    getPendingUploadsSnapshot,
+  );
   // Render-assigned mirrors: an in-flight import settling between a render
   // and its effects must still see the latest mode/workdir when it decides
   // whether its result is stale.
@@ -85,52 +113,18 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   } | null>(null);
 
   const getPendingUploadsForConversation = useCallback(
-    (conversationId: string) => {
-      const targetConversationId = conversationId.trim();
-      if (
-        !targetConversationId ||
-        currentConversationIdRef.current.trim() === targetConversationId
-      ) {
-        return pendingUploadedFilesRef.current;
-      }
-      return pendingUploadsByConversationRef.current.get(targetConversationId) ?? [];
-    },
-    [currentConversationIdRef],
+    (conversationId: string) => uploadStore.getSnapshot(conversationId),
+    [uploadStore],
   );
 
-  // The single write path: keeps the per-conversation map, the synchronous
-  // read ref, and the rendered state in step within the same tick. Every
+  // The single write path keeps uploads owned by their conversation. Every
   // pending-uploads mutation (including the consumers') must go through it.
   const setPendingUploadsForConversation = useCallback(
     (conversationId: string, nextFiles: PendingUploadedFile[]) => {
-      const targetConversationId = conversationId.trim();
-      const normalizedFiles = nextFiles.slice();
-      if (targetConversationId) {
-        if (normalizedFiles.length > 0) {
-          pendingUploadsByConversationRef.current.set(targetConversationId, normalizedFiles);
-        } else {
-          pendingUploadsByConversationRef.current.delete(targetConversationId);
-        }
-      }
-      if (
-        !targetConversationId ||
-        currentConversationIdRef.current.trim() === targetConversationId
-      ) {
-        pendingUploadedFilesRef.current = normalizedFiles;
-        setPendingUploadedFiles(normalizedFiles);
-      }
+      uploadStore.set(conversationId, nextFiles);
     },
-    [currentConversationIdRef],
+    [uploadStore],
   );
-
-  useEffect(() => {
-    const targetConversationId = conversationId.trim();
-    const nextFiles = targetConversationId
-      ? (pendingUploadsByConversationRef.current.get(targetConversationId) ?? [])
-      : [];
-    pendingUploadedFilesRef.current = nextFiles;
-    setPendingUploadedFiles(nextFiles);
-  }, [conversationId]);
 
   useEffect(() => {
     const previous = uploadContextRef.current;
@@ -139,9 +133,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     if (previous.isAgentMode !== isAgentMode) {
       // Attachments are only usable in tools mode; a mode flip invalidates
       // every conversation's pending uploads.
-      pendingUploadsByConversationRef.current.clear();
-      pendingUploadedFilesRef.current = [];
-      setPendingUploadedFiles([]);
+      uploadStore.clear();
       return;
     }
     // Switching conversations must not invalidate any conversation's
@@ -151,7 +143,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     if (previous.conversationId !== conversationId) return;
     if (previous.workdir === workdir) return;
     setPendingUploadsForConversation(conversationId, []);
-  }, [isAgentMode, workdir, conversationId, setPendingUploadsForConversation]);
+  }, [isAgentMode, workdir, conversationId, setPendingUploadsForConversation, uploadStore]);
 
   const captureUploadTarget = useCallback((): UploadTarget | null => {
     const targetConversationId = currentConversationIdRef.current.trim();

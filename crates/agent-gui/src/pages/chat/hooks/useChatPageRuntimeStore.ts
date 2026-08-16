@@ -6,6 +6,7 @@ import {
 } from "../../../lib/chat/conversation/conversationState";
 import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";
 import type { SelectedModel } from "../../../lib/settings";
+import { createConversationRuntimeRegistry } from "../conversations/createConversationRuntimeRegistry";
 import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
@@ -70,7 +71,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
 
   const currentConversationIdRef = useRef<string>(initialConversation.conversationId);
   const conversationRuntimeCacheRef = useRef(
-    new Map<string, ConversationRuntimeEntry>([
+    createConversationRuntimeRegistry([
       [
         initialConversation.conversationId,
         createConversationRuntimeEntry({
@@ -366,6 +367,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
 
   return {
     currentConversationIdRef,
+    conversationRuntimeRegistry: conversationRuntimeCacheRef.current,
     conversationRuntimeCacheRef,
     conversationPersistenceCursorRef,
     runningConversationIdsRef,

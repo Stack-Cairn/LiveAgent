@@ -129,6 +129,13 @@ export function setConversationRuntimeCacheEntry(
 ) {
   const key = conversationId.trim();
   if (!key) return;
+  const observableCache = cache as Map<string, ConversationRuntimeEntry> & {
+    setRuntimeEntry?: (conversationId: string, entry: ConversationRuntimeEntry) => void;
+  };
+  if (observableCache.setRuntimeEntry) {
+    observableCache.setRuntimeEntry(key, entry);
+    return;
+  }
   if (cache.has(key)) {
     cache.delete(key);
   }

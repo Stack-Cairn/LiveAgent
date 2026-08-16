@@ -1,14 +1,13 @@
-import type {
-  MentionComposerDraft,
-  MentionComposerHandle,
-} from "@liveagent/ui/components/chat/MentionComposer";
+import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { type MutableRefObject, useEffect, useRef } from "react";
+import type { ConversationDraftStore } from "../conversations/conversationDraftStore";
 
 type UseComposerDraftCacheParams = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   currentConversationIdRef: MutableRefObject<string>;
   activeView: "chat" | "skills-hub" | "mcp-hub";
   currentConversationId: string;
+  draftStore: ConversationDraftStore;
 };
 
 /**
@@ -18,8 +17,9 @@ type UseComposerDraftCacheParams = {
  * belongs to, so restores never clobber freshly-typed input.
  */
 export function useComposerDraftCache(params: UseComposerDraftCacheParams) {
-  const { composerRef, currentConversationIdRef, activeView, currentConversationId } = params;
-  const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
+  const { composerRef, currentConversationIdRef, activeView, currentConversationId, draftStore } =
+    params;
+  const composerDraftCacheRef = useRef<ConversationDraftStore>(draftStore);
   const composerDraftOwnerRef = useRef(currentConversationId);
 
   function cacheActiveComposerDraft(conversationId = composerDraftOwnerRef.current) {
