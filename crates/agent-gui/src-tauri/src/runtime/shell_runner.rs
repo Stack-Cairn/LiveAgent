@@ -246,6 +246,30 @@ fn resolve_absolute_cwd(value: &str) -> Result<PathBuf, ShellError> {
     Ok(canon)
 }
 
+pub(crate) fn resolve_shell_cwd(workdir: &str, cwd: Option<&str>) -> Result<PathBuf, String> {
+    let wd = canonicalize_workdir(workdir).map_err(|error| error.to_string())?;
+    match cwd {
+        None => Ok(wd),
+        Some(value) if is_absolute_cwd_input(value.trim()) => {
+            resolve_absolute_cwd(value.trim()).map_err(|error| error.to_string())
+        }
+        Some(value) => match sanitize_rel_path_core(value).map_err(|error| error.to_string())? {
+            None => Ok(wd),
+            Some(rel) => {
+                let target = ensure_within_workdir_existing(&wd, &wd.join(rel))
+                    .map_err(|error| error.to_string())?;
+                let metadata = fs::metadata(&target).map_err(|error| error.to_string())?;
+                if !metadata.is_dir() {
+                    return Err(
+                        ShellError::Other("cwd must be a directory".to_string()).to_string()
+                    );
+                }
+                Ok(target)
+            }
+        },
+    }
+}
+
 #[derive(Default)]
 struct StreamReadState {
     buf: Vec<u8>,
@@ -746,34 +770,12 @@ pub(crate) fn run_shell_script_with_envs(
     cancel_token: Option<ShellCancelToken>,
     envs: &[(String, String)],
 ) -> Result<ShellRunResponse, String> {
-    let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
-
     let cmd = command.trim();
     if cmd.is_empty() {
         return Err(ShellError::Other("command cannot be empty".to_string()).to_string());
     }
 
-    let actual_cwd = match cwd {
-        None => wd.clone(),
-        Some(cwd_value) if is_absolute_cwd_input(cwd_value.trim()) => {
-            resolve_absolute_cwd(cwd_value.trim()).map_err(|e| e.to_string())?
-        }
-        Some(cwd_rel) => match sanitize_rel_path_core(&cwd_rel).map_err(|e| e.to_string())? {
-            None => wd.clone(),
-            Some(rel) => {
-                let target = wd.join(rel);
-                let target =
-                    ensure_within_workdir_existing(&wd, &target).map_err(|e| e.to_string())?;
-                let md = fs::metadata(&target).map_err(|e| e.to_string())?;
-                if !md.is_dir() {
-                    return Err(
-                        ShellError::Other("cwd must be a directory".to_string()).to_string()
-                    );
-                }
-                target
-            }
-        },
-    };
+    let actual_cwd = resolve_shell_cwd(&workdir, cwd.as_deref())?;
 
     let effective_timeout_ms = normalize_timeout_ms(timeout_ms, max_timeout_ms);
     let timeout = Duration::from_millis(effective_timeout_ms);

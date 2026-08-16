@@ -187,7 +187,7 @@ fn normalize_provider_base_url(provider_type: &str, raw: &str) -> Result<Url, St
     }
 
     let mut path = url.path().trim_end_matches('/').to_string();
-    if provider_type == "codex" || provider_type == "xai" {
+    if matches!(provider_type, "codex" | "xai" | "deepseek") {
         let lower = path.to_ascii_lowercase();
         if let Some(suffix) = CODEX_MODELS_SUFFIXES
             .iter()
@@ -215,7 +215,10 @@ fn normalize_provider_base_url(provider_type: &str, raw: &str) -> Result<Url, St
 }
 
 fn validate_provider_type(provider_type: &str) -> Result<(), String> {
-    if matches!(provider_type, "claude_code" | "codex" | "gemini" | "xai") {
+    if matches!(
+        provider_type,
+        "claude_code" | "codex" | "gemini" | "xai" | "deepseek"
+    ) {
         Ok(())
     } else {
         Err("不支持的供应商类型".to_string())
@@ -300,7 +303,7 @@ fn build_provider_models_attempts_with_override(
             .unwrap_or_else(|| build_provider_models_url(provider_type, &base_url, official)),
         headers: build_provider_models_headers(provider_type, api_key, official),
     });
-    // codex/xai 的官方形式与统一首次尝试完全一致，重复请求同一端点没有意义，收敛为一次。
+    // codex/xai/deepseek 的官方形式与统一首次尝试完全一致，重复请求同一端点没有意义，收敛为一次。
     let mut attempts = vec![default_attempt];
     if official_attempt.url != attempts[0].url || official_attempt.headers != attempts[0].headers {
         attempts.push(official_attempt);
@@ -438,7 +441,7 @@ mod tests {
         assert_eq!(claude.len(), 2);
         assert_eq!(claude[0].url, claude[1].url);
 
-        // codex/xai 官方形式与统一首次尝试完全一致，收敛为一次请求。
+        // codex/xai/deepseek 官方形式与统一首次尝试完全一致，收敛为一次请求。
         let codex = build_provider_models_attempts(
             "codex",
             "https://relay.example.com/v1/responses",
@@ -447,6 +450,18 @@ mod tests {
         .expect("codex attempts");
         assert_eq!(codex.len(), 1);
         assert_eq!(codex[0].url.as_str(), "https://relay.example.com/v1/models");
+
+        let deepseek = build_provider_models_attempts(
+            "deepseek",
+            "https://api.deepseek.com/v1/chat/completions",
+            "key",
+        )
+        .expect("deepseek attempts");
+        assert_eq!(deepseek.len(), 1);
+        assert_eq!(
+            deepseek[0].url.as_str(),
+            "https://api.deepseek.com/v1/models"
+        );
     }
 
     #[test]
@@ -521,7 +536,7 @@ mod tests {
 
     #[test]
     fn provider_model_headers_exclude_inference_identity() {
-        for provider_type in ["claude_code", "codex", "gemini", "xai"] {
+        for provider_type in ["claude_code", "codex", "gemini", "xai", "deepseek"] {
             for official in [false, true] {
                 let headers = build_provider_models_headers(provider_type, "key", official);
                 let names = headers
@@ -551,6 +566,7 @@ mod tests {
             ("codex", "authorization"),
             ("gemini", "x-goog-api-key"),
             ("xai", "authorization"),
+            ("deepseek", "authorization"),
         ] {
             for (official, expected) in [(false, "authorization"), (true, official_expected)] {
                 let headers = build_provider_models_headers(provider_type, "key", official);

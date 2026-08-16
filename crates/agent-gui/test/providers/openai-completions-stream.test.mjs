@@ -249,14 +249,7 @@ test("openai-completions: model compat infers finish reasons only for non-offici
     undefined,
     "https://api.openai.com/v1",
   );
-  const deepSeek = createModelFromConfig(
-    "codex",
-    "deepseek-chat",
-    "https://api.deepseek.com/v1",
-    "openai-completions",
-  );
 
   assert.equal(compatible.compat.supportsFinishReason, false);
   assert.notEqual(official.compat?.supportsFinishReason, false);
-  assert.equal(deepSeek.compat.supportsFinishReason, false);
 });

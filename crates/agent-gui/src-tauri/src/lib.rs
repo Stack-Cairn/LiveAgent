@@ -168,6 +168,9 @@ macro_rules! app_invoke_handler {
             commands::cron::automation_complete_prompt_run,
             // Local command execution
             commands::shell::shell_run,
+            commands::shell::shell_session_start,
+            commands::shell::shell_session_wait,
+            commands::shell::shell_session_stop,
             commands::shell::runtime_cancel,
             commands::process::managed_process_start,
             commands::process::managed_process_status,
@@ -668,6 +671,8 @@ pub fn run() {
     let power_activity = Arc::new(services::power_activity::PowerActivityManager::default());
     let managed_process_registry =
         Arc::new(runtime::managed_process::ManagedProcessRegistry::open());
+    let shell_session_manager = Arc::new(runtime::shell_session::ShellSessionManager::default());
+    runtime::shell_session::ShellSessionManager::start_cleaner(&shell_session_manager);
     let terminal_registry = Arc::new(runtime::terminal::TerminalSessionRegistry::default());
     let git_clone_task_registry = Arc::new(commands::git::GitCloneTaskRegistry::default());
     let sftp_registry = Arc::new(runtime::sftp::SftpSessionRegistry::new(Arc::clone(
@@ -703,6 +708,7 @@ pub fn run() {
         .manage(Arc::clone(&provider_usage_service))
         .manage(Arc::clone(&power_activity))
         .manage(Arc::new(runtime::shell_runner::ShellRunRegistry::default()))
+        .manage(Arc::clone(&shell_session_manager))
         .manage(Arc::clone(&managed_process_registry))
         .manage(Arc::clone(&terminal_registry))
         .manage(Arc::clone(&sftp_registry))
@@ -833,6 +839,7 @@ pub fn run() {
                 // Real exit: reclaim every non-isolated managed process
                 // before the OS tears us down (Drop is not guaranteed).
                 terminal_registry.shutdown_cleanup();
+                shell_session_manager.shutdown_cleanup();
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
                 power_activity.clear_all();

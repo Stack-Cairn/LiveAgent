@@ -1267,7 +1267,7 @@ After`),
   );
 });
 
-test("runAssistantWithTools recovers flattened DeepSeek tool request text as a next-turn path", async () => {
+test("runAssistantWithTools does not infer tool calls from DeepSeek-labeled flattened text", async () => {
   resetFakeStreams(
     createTextAssistant(
       `Checking before execution.
@@ -1296,25 +1296,20 @@ This text should not be shown as a raw tool request.`,
 
   const result = await runAssistantWithTools(params);
 
-  assert.equal(executedToolCalls.length, 1);
-  assert.equal(executedToolCalls[0].id, "call_00_flattened_read");
-  assert.equal(executedToolCalls[0].name, "Read");
-  assert.deepEqual(executedToolCalls[0].arguments, { path: "src/App.tsx" });
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].assistant.stopReason, "toolUse");
-  assert.equal(beforeNextTurnSnapshots[0].toolResults.length, 1);
-  const recoveredAssistantText = result.emittedMessages[0].content
+  assert.equal(executedToolCalls.length, 0);
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  const assistantText = result.emittedMessages[0].content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("tool_call_id"), false);
+  assert.equal(assistantText.includes("tool_call_id"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools strips repeated historical tool call text without duplicate execution", async () => {
+test("runAssistantWithTools preserves flattened text while executing only the structured call", async () => {
   const grepCall = createToolCall("call_00_native_grep", "Grep", {
     pattern: "express",
     file_pattern: "**/*.js",
@@ -1369,17 +1364,13 @@ arguments: {"pattern": "express", "file_pattern": "**/*.js", "ignore_case": true
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("Historical tool call"), false);
+  assert.equal(recoveredAssistantText.includes("Historical tool call"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
   );
 
-  // 剥离 seed 标记会**替换**整条 assistant 消息对象(而不是就地改写),而
-  // pi-agent-core 的 loop 持有 createContextSnapshot() 切出的另一个数组——
-  // 替换只落在 agent.state 上。prepareNextTurnWithContext 必须把规范化后的
-  // 消息作为 context 交还,否则下一轮仍把这段"历史工具调用"文本发回给模型,
-  // 模型会照着它再调一次工具(重复执行的根源)。
+  // DeepSeek 元数据不再触发文本重写；下一轮只依赖已经存在的结构化工具调用。
   const followUpAssistant = observedStreamContexts
     .at(-1)
     .messages.find((message) => message.role === "assistant");
@@ -1388,10 +1379,10 @@ arguments: {"pattern": "express", "file_pattern": "**/*.js", "ignore_case": true
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(followUpText.includes("Historical tool call"), false);
+  assert.equal(followUpText.includes("Historical tool call"), true);
 });
 
-test("runAssistantWithTools dedupes recovered lowercase tool text against canonical structured calls", async () => {
+test("runAssistantWithTools executes a canonical structured call once despite matching prose", async () => {
   const writeCall = createToolCall("call_00_native_write", "Write", {
     path: "report.html",
     content: "<html></html>",
@@ -1759,8 +1750,8 @@ test("runAssistantWithTools rewrites schema-validation errors for truncated call
 });
 
 test("runAssistantWithTools refuses a tool call salvaged without a toolcall_end", async () => {
-  // Simulates the DSML wrapper's recoverable-stream-end salvage: the done
-  // message carries a toolCall block whose argument stream never finished.
+  // Simulates a transport that emits a final toolCall block even though its
+  // argument stream never produced toolcall_end.
   const danglingWriteCall = createToolCall("call_00_dangling_write", "Write", {
     path: "/",
     content: "",
@@ -1797,7 +1788,7 @@ test("runAssistantWithTools refuses a tool call salvaged without a toolcall_end"
   assert.match(toolResults[0].toolResult.content[0].text, /truncated in transit/);
 });
 
-test("runAssistantWithTools strips bare tool_name text without duplicate execution", async () => {
+test("runAssistantWithTools preserves bare tool_name text without duplicate execution", async () => {
   const grepCall = createToolCall("call_00_native_route_grep", "Grep", {
     pattern: "express|route|api",
     file_pattern: "*.js",
@@ -1850,15 +1841,15 @@ arguments:
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("tool_name: Grep"), false);
-  assert.equal(recoveredAssistantText.includes("arguments:"), false);
+  assert.equal(recoveredAssistantText.includes("tool_name: Grep"), true);
+  assert.equal(recoveredAssistantText.includes("arguments:"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
   );
 });
 
-test("runAssistantWithTools strips malformed historical tool text without guessing execution", async () => {
+test("runAssistantWithTools preserves malformed historical tool text without guessing execution", async () => {
   const bashCall = createToolCall("call_01_native_bash", "Bash", {
     command: "ls -la tool-test/",
     cwd: ".",
@@ -1908,8 +1899,8 @@ arguments:
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("Historical assistant tool request"), false);
-  assert.equal(recoveredAssistantText.includes("tool_name: Bash"), false);
+  assert.equal(recoveredAssistantText.includes("Historical assistant tool request"), true);
+  assert.equal(recoveredAssistantText.includes("tool_name: Bash"), true);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "assistant"],
@@ -1976,20 +1967,20 @@ arguments:
   );
 });
 
-test("runAssistantWithTools recovers DSML text tool calls as a next-turn path", async () => {
+test("runAssistantWithTools preserves DSML text without recovering a tool call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Before
+  const assistantText = `Before
 <${dsml}tool_calls>
   <${dsml}invoke name="Read">
     <${dsml}parameter name="path" string="true">src/App.tsx</${dsml}parameter>
   </${dsml}invoke>
 </${dsml}tool_calls>
-After`),
-    createTextAssistant("after recovered DSML tool"),
-  );
+After`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
+  const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
+    ...toolEvents.handlers,
     onBeforeNextTurn: async (snapshot) => {
       beforeNextTurnSnapshots.push(snapshot);
       return null;
@@ -1998,34 +1989,30 @@ After`),
 
   const result = await runAssistantWithTools(params);
 
-  assert.equal(executedToolCalls.length, 1);
-  assert.equal(executedToolCalls[0].name, "Read");
-  assert.deepEqual(executedToolCalls[0].arguments, { path: "src/App.tsx" });
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].assistant.stopReason, "toolUse");
-  assert.equal(beforeNextTurnSnapshots[0].toolResults.length, 1);
-  const recoveredAssistantText = result.emittedMessages[0].content
+  assert.equal(executedToolCalls.length, 0);
+  toolEvents.assertSilent();
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  assert.equal(recoveredAssistantText.includes("DSML"), false);
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools bridges recovered DSML provider web_search without a local executor", async () => {
+test("runAssistantWithTools does not bridge a DSML text web_search call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Searching again
+  const assistantText = `Searching again
 <${dsml}tool_calls>
   <${dsml}invoke name="web_search">
     <${dsml}parameter name="query" string="true">Deno Deploy alternatives temporary domain</${dsml}parameter>
   </${dsml}invoke>
-</${dsml}tool_calls>`),
-    createTextAssistant("final answer"),
-  );
+</${dsml}tool_calls>`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
@@ -2042,19 +2029,20 @@ test("runAssistantWithTools bridges recovered DSML provider web_search without a
   assert.equal(executedToolCalls.length, 0);
   assert.equal(observedStreamContexts[0].tools.some((tool) => tool.name === "web_search"), false);
   toolEvents.assertSilent();
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.equal(beforeNextTurnSnapshots[0].toolResults[0].isError, false);
-  assert.match(
-    beforeNextTurnSnapshots[0].toolResults[0].content[0].text,
-    /provider-native web search request/,
-  );
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 
-test("runAssistantWithTools silently bridges structured DSML web_search tool calls", async () => {
+test("runAssistantWithTools silently bridges structured compatible web_search tool calls", async () => {
   const webSearchCall = createToolCall("dsml-tool-call-structured-search", "web_search", {
     query: "LiveAgent DeepSeek structured DSML search",
   });
@@ -2065,7 +2053,7 @@ test("runAssistantWithTools silently bridges structured DSML web_search tool cal
       {
         api: "anthropic-messages",
         provider: "anthropic",
-        model: "deepseek-chat",
+        model: "claude-compatible-model",
       },
     ),
     createTextAssistant("final answer"),
@@ -2074,9 +2062,9 @@ test("runAssistantWithTools silently bridges structured DSML web_search tool cal
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
     providerId: "claude_code",
-    model: "deepseek-chat",
+    model: "claude-compatible-model",
     runtime: {
-      baseUrl: "https://api.deepseek.com/anthropic",
+      baseUrl: "https://relay.example.test/anthropic",
       apiKey: "test-key",
       requestFormat: "anthropic-messages",
       nativeWebSearchEnabled: true,
@@ -2369,7 +2357,7 @@ test("runAssistantWithTools silently bridges leaked provider-native web_fetch to
   );
 });
 
-test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls for DeepSeek", async () => {
+test("runAssistantWithTools silently bridges compatible Claude Code WebSearch tool calls", async () => {
   const webSearchCall = createToolCall("call_00_X84be89XQazCll4eRQVm9797", "WebSearch", {
     query: "weibo-like-someone github",
   });
@@ -2380,7 +2368,7 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
       {
         api: "anthropic-messages",
         provider: "anthropic",
-        model: "deepseek-v4-flash",
+        model: "claude-compatible-model",
       },
     ),
     createTextAssistant("final answer"),
@@ -2388,9 +2376,9 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
     providerId: "claude_code",
-    model: "deepseek-v4-flash",
+    model: "claude-compatible-model",
     runtime: {
-      baseUrl: "https://api.deepseek.com/anthropic",
+      baseUrl: "https://relay.example.test/anthropic",
       apiKey: "test-key",
       requestFormat: "anthropic-messages",
       nativeWebSearchEnabled: true,
@@ -2426,17 +2414,15 @@ test("runAssistantWithTools silently bridges Claude Code WebSearch tool calls fo
   );
 });
 
-test("runAssistantWithTools bridges recovered DSML builtin_web_search additionalContext", async () => {
+test("runAssistantWithTools does not bridge a DSML text builtin_web_search call", async () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
-  resetFakeStreams(
-    createTextAssistant(`Searching
+  const assistantText = `Searching
 <${dsml}tool_calls>
   <${dsml}invoke name="builtin_web_search">
     <${dsml}parameter name="additionalContext" string="true">DeepSeek Anthropic DSML web search</${dsml}parameter>
   </${dsml}invoke>
-</${dsml}tool_calls>`),
-    createTextAssistant("final answer"),
-  );
+</${dsml}tool_calls>`;
+  resetFakeStreams(createTextAssistant(assistantText));
   const beforeNextTurnSnapshots = [];
   const toolEvents = createToolEventRecorder();
   const { params, executedToolCalls } = createBaseParams({
@@ -2452,14 +2438,16 @@ test("runAssistantWithTools bridges recovered DSML builtin_web_search additional
 
   assert.equal(executedToolCalls.length, 0);
   toolEvents.assertSilent();
-  assert.equal(beforeNextTurnSnapshots.length, 1);
-  assert.match(
-    beforeNextTurnSnapshots[0].toolResults[0].content[0].text,
-    /Requested query: DeepSeek Anthropic DSML web search/,
-  );
+  assert.equal(beforeNextTurnSnapshots.length, 0);
+  assert.equal(observedStreamContexts.length, 1);
+  const emittedAssistantText = result.emittedMessages[0].content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.equal(emittedAssistantText, assistantText);
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
-    ["assistant", "toolResult", "assistant"],
+    ["assistant"],
   );
 });
 

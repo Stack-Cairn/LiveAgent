@@ -1,7 +1,6 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { PromptCacheHintMode, ProviderId } from "../../settings";
-import { attachDeepSeekProviderPayloadAdapter } from "../deepSeekProviderAdapter";
 import {
   attachAnthropicMessagesNativeAttachments,
   attachGeminiGenerativeAINativeAttachments,
@@ -137,12 +136,6 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       workdir: params.workdir,
     });
   },
-  (options, params) =>
-    attachDeepSeekProviderPayloadAdapter(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-      model: params.model,
-    }),
   (options, params) =>
     attachGeminiThoughtSignatureGuard(options, {
       providerId: params.providerId,
