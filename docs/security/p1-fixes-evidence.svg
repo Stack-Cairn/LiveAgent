@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="480" viewBox="0 0 920 480">
+  <rect width="920" height="480" fill="#f6f8fa"/>
+  <text x="24" y="36" font-family="Consolas, monospace" font-size="20" font-weight="bold" fill="#24292f">中危批次修复验证 — 复现测试证据(before/after)</text>
+  <g font-family="Consolas, monospace" font-size="14">
+    <rect x="24" y="60" width="420" height="390" rx="6" fill="#fff1f0" stroke="#d1242f" stroke-width="1.5"/>
+    <text x="40" y="86" font-weight="bold" fill="#d1242f">修复前(漏洞复现)</text>
+    <text x="40" y="116" fill="#24292f">M1 本地代理: FAIL</text>
+    <text x="40" y="136" fill="#57606a">  http://169.254.169.254 与 127.0.0.1</text>
+    <text x="40" y="156" fill="#57606a">  目标通过校验(无 IP 过滤)</text>
+    <text x="40" y="186" fill="#24292f">M2 terminal attach: FAIL</text>
+    <text x="40" y="206" fill="#57606a">  无帧率限制,任意数量 session_id</text>
+    <text x="40" y="226" fill="#57606a">  无界进跟踪表</text>
+    <text x="40" y="256" fill="#24292f">M3 SVG XSS: FAIL</text>
+    <text x="40" y="276" fill="#57606a">  image-proxy 直出 SVG,无 CSP/</text>
+    <text x="40" y="296" fill="#57606a">  Content-Disposition,顶层导航执行脚本</text>
+    <text x="40" y="326" fill="#24292f">M4 分享脱敏: FAIL</text>
+    <text x="40" y="346" fill="#57606a">  role=summary 摘要原样流出</text>
+    <text x="40" y="376" fill="#24292f">M5 git 大小写: FAIL</text>
+    <text x="40" y="396" fill="#57606a">  CLONE_START 绕过写操作门控被转发</text>
+    <text x="40" y="426" fill="#24292f">M6 history.event: FAIL</text>
+    <text x="40" y="446" fill="#57606a">  无 conversation 的 upsert 抛 TypeError</text>
+    <rect x="476" y="60" width="420" height="390" rx="6" fill="#f0fff4" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="492" y="86" font-weight="bold" fill="#1a7f37">修复后(验证通过)</text>
+    <text x="492" y="116" fill="#24292f">M1 本地代理: PASS</text>
+    <text x="492" y="136" fill="#57606a">  回环/私网/元数据/保留段全部拒绝,</text>
+    <text x="492" y="156" fill="#57606a">  恶意网页 fetch 被 Origin 校验拒绝</text>
+    <text x="492" y="186" fill="#24292f">M2 terminal attach: PASS</text>
+    <text x="492" y="206" fill="#57606a">  100fps 限速 + 跟踪表 512 容量上限</text>
+    <text x="492" y="226" fill="#57606a">  + 512 字符 id 长度上限</text>
+    <text x="492" y="256" fill="#24292f">M3 SVG XSS: PASS</text>
+    <text x="492" y="276" fill="#57606a">  SVG 响应带 sandbox CSP + inline 处置</text>
+    <text x="492" y="306" fill="#24292f">M4 分享脱敏: PASS</text>
+    <text x="492" y="326" fill="#57606a">  summary 整体替换为"历史段摘要已脱敏"</text>
+    <text x="492" y="356" fill="#24292f">M5 git 大小写: PASS</text>
+    <text x="492" y="376" fill="#57606a">  action 归一化后门控生效</text>
+    <text x="492" y="406" fill="#24292f">M6 history.event: PASS</text>
+    <text x="492" y="426" fill="#57606a">  无 conversation 的帧被跳过,</text>
+    <text x="492" y="446" fill="#57606a">  后续监听者不受影响</text>
+  </g>
+</svg>
