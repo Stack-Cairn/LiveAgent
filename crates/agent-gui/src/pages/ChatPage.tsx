@@ -1795,6 +1795,8 @@ export function ChatPage(props: ChatPageProps) {
               <>
                 <CheckpointRewindMenu
                   conversationId={currentConversationId}
+                  workspaceRoot={currentConversationWorkspaceRoot}
+                  project={activeWorkspaceProject}
                   disabled={!currentConversationId || isSending}
                   onRewound={(info) => {
                     // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存

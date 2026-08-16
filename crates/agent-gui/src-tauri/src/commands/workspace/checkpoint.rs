@@ -6,14 +6,26 @@
 //! - 捕获发生在 fs 命令实现内部(与变更同一次调用),不引入额外 IPC,
 //!   也不重复 root:// / skill:// 的路径解析。
 //! - 记录只存 `root + relPath`(捕获时已解析的根 + 相对路径),绝不把
-//!   绝对路径当作恢复授权:回退时基于当前文件系统重新校验根与相对路径,
-//!   拒绝路径链上的符号链接与(Unix)多硬链接目标,写入走临时文件 + 原子
-//!   rename,并可携带预览时的内容哈希做冲突检测(TOCTOU 防护)。
+//!   绝对路径当作恢复授权:回退时要求 root 仍属于当前授权根集合、root 自身
+//!   不是符号链接,再重新过滤相对路径并逐级拒绝链上的符号链接与(Unix)多
+//!   硬链接目标;写入前紧邻再校验一次整条链(窗口期防护),落盘走临时文件 +
+//!   原子 rename,并携带预览时的内容哈希做冲突检测(TOCTOU 防护,缺哈希
+//!   一律判冲突而非覆盖)。
+//! - 授权根集合 = 调用方给出的当前工作区根与仍 active 的额外授权根,加上
+//!   后端自行推导的两类自有根:Skills 根(skill:// 写入记在这里)与各授权根
+//!   所在的 git 仓库根(subagent worktree apply 把父工作区前像记在那里)。
+//!   后两类不接受调用方传入,所以不构成新的授权入口;仓库根的向上推导在
+//!   主目录与文件系统根处封顶,避免"主目录本身是 dotfiles 仓库"时把整个
+//!   主目录变成可写的回退目标。
 //! - turn 身份:TS 侧只传稳定的 turnId(每轮唯一的随机 ID),turn_seq 由
 //!   本模块在 INDEX_LOCK 下按会话单调分配——时钟回拨/重复 ID 都不会打乱
 //!   回退顺序。UI 展示时间用 firstCapturedAt,不再复用序号。
 //! - blob 是原始字节拷贝(不内嵌 JSON),索引是追加式 index.jsonl;
 //!   回退正确性来自"每个路径取 turn_seq >= target 的最早一条记录"。
+//! - 索引物理上只追加不截断,但语义上会剪枝:一次完整成功的回退会写下
+//!   turn_seq=target 的 kind="rewind" 标记,读取侧据此丢弃 >= target 的
+//!   "陈旧未来"记录,避免回退后菜单里还留着已被撤销的轮次。部分成功
+//!   (有冲突/失败)的回退写 turn_seq=0 的标记,只审计、不剪枝。
 //! - 捕获是尽力而为:内部错误只追加 kind="error" 记录(让该轮在 UI 上
 //!   显示"不完整")并记日志,绝不让文件写入本身失败。
 //! - 容量防线:单文件、会话总量、记录条数三个上限,超限记 error 不捕获。
@@ -227,8 +239,15 @@ fn normalize_rel(rel: &Path) -> String {
 
 /// 在 INDEX_LOCK 下解析本轮的 turn_seq:同 turnId 复用,否则 max+1。
 /// 时钟无关,严格随会话内出现顺序单调递增。
+///
+/// rewind 标记的 turn_id 恒为空串,且部分回退时 turn_seq 记 0(哨兵)。若调用
+/// 方也传空 turnId 进来,就会复用到标记的 seq——尤其是复用到 0,让整轮捕获落在
+/// 合法 seq 之下、永远回退不到。标记不参与 turnId 复用。
 fn resolve_turn_seq(records: &[CheckpointRecord], turn_id: &str) -> u64 {
-    if let Some(existing) = records.iter().find(|r| r.turn_id == turn_id) {
+    if let Some(existing) = records
+        .iter()
+        .find(|r| r.kind != "rewind" && r.turn_id == turn_id)
+    {
         return existing.turn_seq;
     }
     records.iter().map(|r| r.turn_seq).max().unwrap_or(0) + 1
@@ -271,6 +290,28 @@ fn capture_at(
     root: &Path,
     rel_path: &Path,
     pre_image: PreImage,
+) -> Result<u64, String> {
+    capture_at_with_limits(
+        dir,
+        turn_id,
+        root,
+        rel_path,
+        pre_image,
+        MAX_BLOB_BYTES,
+        MAX_TOTAL_BLOB_BYTES,
+    )
+}
+
+/// 上限可注入的捕获实现:单测用小上限真实走超限分支,免得为了覆盖
+/// 32MB 判断真的造一个 32MB 文件。
+fn capture_at_with_limits(
+    dir: &Path,
+    turn_id: &str,
+    root: &Path,
+    rel_path: &Path,
+    pre_image: PreImage,
+    max_blob_bytes: u64,
+    max_total_blob_bytes: u64,
 ) -> Result<u64, String> {
     ensure_conversation_dirs(dir)?;
     let root_str = normalize_root(root);
@@ -331,16 +372,30 @@ fn capture_at(
             let bytes = match bytes {
                 Some(b) => b,
                 None => {
+                    // 先看元数据再读盘:超限文件不该为了记一条 error
+                    // 而被整个读进内存。
+                    let len = fs::metadata(&abs_path).map_err(|e| e.to_string())?.len();
+                    if len > max_blob_bytes {
+                        append_error_record(
+                            dir,
+                            turn_seq,
+                            turn_id,
+                            &root_str,
+                            &rel_str,
+                            &format!("file too large to checkpoint ({len} bytes)"),
+                        );
+                        return Ok(turn_seq);
+                    }
                     owned = fs::read(&abs_path).map_err(|e| e.to_string())?;
                     &owned
                 }
             };
-            if bytes.len() as u64 > MAX_BLOB_BYTES {
+            if bytes.len() as u64 > max_blob_bytes {
                 append_error_record(
                     dir,
                     turn_seq,
                     turn_id,
-                    &record_root_for_error(root),
+                    &root_str,
                     &rel_str,
                     &format!("file too large to checkpoint ({} bytes)", bytes.len()),
                 );
@@ -351,12 +406,12 @@ fn capture_at(
                 .filter(|r| r.blob.is_some())
                 .map(|r| r.size)
                 .sum();
-            if total.saturating_add(bytes.len() as u64) > MAX_TOTAL_BLOB_BYTES {
+            if total.saturating_add(bytes.len() as u64) > max_total_blob_bytes {
                 append_error_record(
                     dir,
                     turn_seq,
                     turn_id,
-                    &record_root_for_error(root),
+                    &root_str,
                     &rel_str,
                     "conversation checkpoint storage cap reached",
                 );
@@ -396,10 +451,6 @@ fn capture_at(
     Ok(turn_seq)
 }
 
-fn record_root_for_error(root: &Path) -> String {
-    normalize_root(root)
-}
-
 fn capture_inner(
     ctx: &CheckpointCtx,
     root: &Path,
@@ -408,6 +459,33 @@ fn capture_inner(
 ) -> Result<(), String> {
     let dir = conversation_dir(&ctx.conversation_id)?;
     capture_at(&dir, &ctx.turn_id, root, rel_path, pre_image).map(|_| ())
+}
+
+/// 把"这个路径没能拿到前像"如实写进索引:该轮在 UI 上显示 ⚠ 不完整,
+/// diff 里也能定位到具体路径。索引目录不可用时只剩日志。
+fn record_capture_skip(ctx: &CheckpointCtx, root: &Path, rel_path: &Path, reason: &str) {
+    let Ok(dir) = conversation_dir(&ctx.conversation_id) else {
+        return;
+    };
+    if ensure_conversation_dirs(&dir).is_err() {
+        return;
+    }
+    let Ok(_guard) = INDEX_LOCK.lock() else {
+        return;
+    };
+    let existing = read_index(&dir);
+    if existing.len() >= MAX_RECORDS_PER_CONVERSATION {
+        return;
+    }
+    let seq = resolve_turn_seq(&existing, &ctx.turn_id);
+    append_error_record(
+        &dir,
+        seq,
+        &ctx.turn_id,
+        &normalize_root(root),
+        &normalize_rel(rel_path),
+        reason,
+    );
 }
 
 /// fs 变更命令的捕获入口:尽力而为,失败追加 error 记录 + 日志,
@@ -425,24 +503,7 @@ pub fn capture_pre_image(
             root.join(rel_path).display()
         );
         // 尽力把失败写进索引让该轮显示"不完整";目录不可用时只剩日志。
-        if let Ok(dir) = conversation_dir(&ctx.conversation_id) {
-            if ensure_conversation_dirs(&dir).is_ok() {
-                if let Ok(_guard) = INDEX_LOCK.lock() {
-                    let existing = read_index(&dir);
-                    if existing.len() < MAX_RECORDS_PER_CONVERSATION {
-                        let seq = resolve_turn_seq(&existing, &ctx.turn_id);
-                        append_error_record(
-                            &dir,
-                            seq,
-                            &ctx.turn_id,
-                            &normalize_root(root),
-                            &normalize_rel(rel_path),
-                            &error,
-                        );
-                    }
-                }
-            }
-        }
+        record_capture_skip(ctx, root, rel_path, &error);
     }
 }
 
@@ -462,16 +523,33 @@ pub struct CheckpointTurnSummary {
     pub first_captured_at: u64,
 }
 
-/// 会话内可回退的轮列表,按 turn_seq 升序。error/rewind 记录不计入文件数,
-/// error 使该轮标记 incomplete。
-fn checkpoint_list_sync(conversation_id: String) -> Result<Vec<CheckpointTurnSummary>, String> {
-    let dir = conversation_dir(&conversation_id)?;
-    let records = read_index(&dir);
-    let mut turns: Vec<CheckpointTurnSummary> = Vec::new();
+/// 索引的"活记录"视图:剔除被回退作废的陈旧未来轮。
+/// 一条 turn_seq=t(t>0)的 rewind 标记表示 t 及之后的改动已被完整撤销,
+/// 那些轮不该再出现在时间线里,也不该参与下一次回退的聚合;标记自身只作
+/// 审计,永不返回。turn_seq=0 的标记来自部分成功的回退,不剪枝。
+/// 注意:capture 侧的 turn_seq 分配与同轮去重仍读原始索引,保证序号在
+/// 剪枝后依然单调,不会和陈旧记录撞号。
+fn live_records(records: Vec<CheckpointRecord>) -> Vec<CheckpointRecord> {
+    let mut out: Vec<CheckpointRecord> = Vec::new();
     for record in records {
         if record.kind == "rewind" {
+            if record.turn_seq > 0 {
+                out.retain(|r| r.turn_seq < record.turn_seq);
+            }
             continue;
         }
+        out.push(record);
+    }
+    out
+}
+
+/// 会话内可回退的轮列表,按 turn_seq 升序。error 记录不计入文件数,
+/// 但使该轮标记 incomplete;被回退作废的陈旧轮已由 live_records 剔除。
+fn checkpoint_list_sync(conversation_id: String) -> Result<Vec<CheckpointTurnSummary>, String> {
+    let dir = conversation_dir(&conversation_id)?;
+    let records = live_records(read_index(&dir));
+    let mut turns: Vec<CheckpointTurnSummary> = Vec::new();
+    for record in records {
         let summary = match turns.iter_mut().find(|t| t.turn_seq == record.turn_seq) {
             Some(existing) => existing,
             None => {
@@ -517,10 +595,11 @@ pub struct CheckpointDiffEntry {
     pub path: String,
     /// 冲突检测的往返键:UI 把 (key, currentHash) 原样带回 rewind。
     pub key: String,
-    /// "restore" | "delete" | "clean" | "skip-dir" | "missing-blob" | "capture-error"
+    /// "restore" | "delete" | "clean" | "skip-dir" | "missing-blob" | "unresolvable"
     pub action: String,
-    /// 预览时目标文件的内容哈希;文件不存在时为 "absent"。
-    /// rewind 时重新计算比对,不一致则跳过该文件并上报冲突。
+    /// 预览时目标文件的内容哈希;文件不存在时为 "absent"。目标不可解析
+    /// (根未授权 / 路径链有符号链接)或目录标记时为 None。
+    /// rewind 时重新计算比对,不一致或缺失则跳过该文件并上报冲突。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_hash: Option<String>,
 }
@@ -534,28 +613,26 @@ pub struct CheckpointDiffStats {
     pub clean_files: usize,
     pub skipped_dirs: usize,
     pub missing_blobs: usize,
+    /// 根已不在授权工作区集合内、或路径链上出现符号链接的条目:一律不回退。
+    pub unresolvable_files: usize,
     /// 捕获阶段就失败的条目数:回退不覆盖这些文件,提示用户可能不完整。
     pub capture_errors: usize,
     pub entries: Vec<CheckpointDiffEntry>,
 }
 
 /// 取 turn_seq >= target 的可恢复记录,按文件序(即时间序)每路径保留最早一条。
-/// error 记录单独返回计数;rewind 审计标记直接跳过。
+/// error 记录单独返回计数;陈旧未来轮与 rewind 标记已由 live_records 剔除。
 fn earliest_records_since(dir: &Path, turn_seq: u64) -> (Vec<CheckpointRecord>, usize) {
     let mut seen: Vec<String> = Vec::new();
     let mut out: Vec<CheckpointRecord> = Vec::new();
     let mut errors = 0usize;
-    for record in read_index(dir) {
+    for record in live_records(read_index(dir)) {
         if record.turn_seq < turn_seq {
             continue;
         }
-        match record.kind.as_str() {
-            "rewind" => continue,
-            "error" => {
-                errors += 1;
-                continue;
-            }
-            _ => {}
+        if record.kind == "error" {
+            errors += 1;
+            continue;
         }
         let key = record_key(&record.root, &record.rel_path);
         if seen.iter().any(|p| p == &key) {
@@ -567,12 +644,100 @@ fn earliest_records_since(dir: &Path, turn_seq: u64) -> (Vec<CheckpointRecord>, 
     (out, errors)
 }
 
-/// 回退目标的重新校验:根必须仍然存在且 canonicalize 后与记录一致口径,
-/// 相对路径重新过滤(仅 Normal 分量),并逐级拒绝路径链上的符号链接。
+/// 调用方给出的"当前仍然授权的工作区根"归一化:自身是符号链接的根不予采信,
+/// 其余 canonicalize 后去重。空集合意味着任何记录都无法回退(fail-closed)。
+fn canonical_authorized_roots(roots: &[String]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut push = |candidate: PathBuf| {
+        if !out.contains(&candidate) {
+            out.push(candidate);
+        }
+    };
+    for raw in roots {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let path = Path::new(trimmed);
+        if matches!(fs::symlink_metadata(path), Ok(md) if md.file_type().is_symlink()) {
+            continue;
+        }
+        let Ok(canonical) = fs::canonicalize(path) else {
+            continue;
+        };
+        // subagent worktree 的 apply 把父工作区前像记在父仓库根下(见
+        // subagent_worktree.rs),那个根不在调用方给出的列表里。它由已授权
+        // 的根自身向上推导得到,不接受调用方传入,因此不构成新的授权入口。
+        if let Some(repo_root) = enclosing_repo_root(&canonical) {
+            push(repo_root);
+        }
+        push(canonical);
+    }
+    // skill:// 写入的前像记在 Skills 根下,该根由后端自有配置决定,
+    // 前端无从提供;漏掉它会让写过技能文件的轮次永远回退不了。
+    if let Ok(skills_root) = crate::services::skills::skills_root_dir() {
+        push(skills_root);
+    }
+    out
+}
+
+/// 从已授权的根向上找最近的 git 仓库根(`.git` 可能是目录也可能是 worktree
+/// 的文件)。找不到就说明这个根不在仓库里,没有额外根需要放行。
+///
+/// 向上走必须封顶:主目录本身常常就是个 dotfiles 仓库,盘符/文件系统根也可能
+/// 被 `git init` 过。无界地走上去会把整个主目录(乃至整块盘)变成可写的回退
+/// 目标,等于把授权根开成通配符,所以这两类候选一律不采信。
+fn enclosing_repo_root(start: &Path) -> Option<PathBuf> {
+    let home = dirs::home_dir().and_then(|h| fs::canonicalize(h).ok());
+    let mut cursor = Some(start);
+    while let Some(dir) = cursor {
+        // 没有 parent 说明已经到文件系统/盘符根,不能当仓库根。
+        let parent = dir.parent()?;
+        if home.as_deref() == Some(dir) {
+            return None;
+        }
+        if dir.join(".git").exists() {
+            return fs::canonicalize(dir).ok();
+        }
+        cursor = Some(parent);
+    }
+    None
+}
+
+/// 回退授权链的第一环:记录里的 root 必须仍是当前授权工作区根之一。
+/// 先用 symlink_metadata 拒绝"根自身是符号链接"——工作区被改名后在原路径
+/// 挂一个指向别处的链接,canonicalize 会跟随它把回退写到工作区外。
+fn resolve_authorized_root(
+    root_str: &str,
+    authorized_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let raw = Path::new(root_str);
+    match fs::symlink_metadata(raw) {
+        Ok(md) if md.file_type().is_symlink() => {
+            return Err("refusing to follow a symlinked checkpoint root".to_string());
+        }
+        Ok(md) if !md.is_dir() => {
+            return Err("checkpoint root is no longer a directory".to_string());
+        }
+        Ok(_) => {}
+        Err(e) => return Err(format!("checkpoint root unavailable: {e}")),
+    }
+    let root = fs::canonicalize(raw).map_err(|e| format!("checkpoint root unavailable: {e}"))?;
+    if !authorized_roots.iter().any(|allowed| allowed == &root) {
+        return Err("checkpoint root is not an authorized workspace root".to_string());
+    }
+    Ok(root)
+}
+
+/// 回退目标的重新校验:根必须仍在授权集合内且不是符号链接,相对路径重新
+/// 过滤(仅 Normal 分量),并逐级拒绝路径链上的符号链接。
 /// 绝不信任捕获时的绝对路径——这是 rewind 的唯一授权通道。
-fn resolve_rewind_target(root_str: &str, rel_str: &str) -> Result<PathBuf, String> {
-    let root = fs::canonicalize(Path::new(root_str))
-        .map_err(|e| format!("checkpoint root unavailable: {e}"))?;
+fn resolve_rewind_target(
+    root_str: &str,
+    rel_str: &str,
+    authorized_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let root = resolve_authorized_root(root_str, authorized_roots)?;
     let rel = PathBuf::from(rel_str);
     if rel.as_os_str().is_empty() {
         return Err("empty relative path".to_string());
@@ -626,7 +791,11 @@ fn current_state_hash(target: &Path) -> String {
     }
 }
 
-fn classify_entry(dir: &Path, record: &CheckpointRecord) -> CheckpointDiffEntry {
+fn classify_entry(
+    dir: &Path,
+    record: &CheckpointRecord,
+    authorized_roots: &[PathBuf],
+) -> CheckpointDiffEntry {
     let key = record_key(&record.root, &record.rel_path);
     let display = format!("{}/{}", record.root, record.rel_path);
     if record.kind == "dir" {
@@ -637,46 +806,58 @@ fn classify_entry(dir: &Path, record: &CheckpointRecord) -> CheckpointDiffEntry 
             current_hash: None,
         };
     }
-    let (action, current_hash) = match resolve_rewind_target(&record.root, &record.rel_path) {
-        Err(_) => ("missing-blob", None),
-        Ok(target) => {
-            let hash = current_state_hash(&target);
-            if !record.existed_before {
-                if hash == "absent" {
-                    ("clean", Some(hash))
-                } else {
-                    ("delete", Some(hash))
-                }
-            } else {
-                match &record.blob {
-                    None => ("missing-blob", None),
-                    Some(blob) => match fs::read(blobs_dir(dir).join(blob)) {
-                        Err(_) => ("missing-blob", None),
-                        Ok(expected) => {
-                            if sha256_hex(&expected) == hash {
-                                ("clean", Some(hash))
-                            } else {
-                                ("restore", Some(hash))
-                            }
-                        }
-                    },
-                }
-            }
+    // 目标解析不通过(根未授权 / 路径链有符号链接)时没有可比对的现状哈希;
+    // rewind 侧会在同一处再次失败并计入 failed,不会走到冲突检测。
+    let target = match resolve_rewind_target(&record.root, &record.rel_path, authorized_roots) {
+        Ok(target) => target,
+        Err(_) => {
+            return CheckpointDiffEntry {
+                path: display,
+                key,
+                action: "unresolvable".to_string(),
+                current_hash: None,
+            };
         }
     };
+    let hash = current_state_hash(&target);
+    let action = if !record.existed_before {
+        if hash == "absent" {
+            "clean"
+        } else {
+            "delete"
+        }
+    } else {
+        match &record.blob {
+            None => "missing-blob",
+            Some(blob) => match fs::read(blobs_dir(dir).join(blob)) {
+                Err(_) => "missing-blob",
+                Ok(expected) => {
+                    if sha256_hex(&expected) == hash {
+                        "clean"
+                    } else {
+                        "restore"
+                    }
+                }
+            },
+        }
+    };
+    // 目标可解析的条目一律回传现状哈希(含 clean / missing-blob):
+    // rewind 侧对缺哈希的条目一律判冲突,少回传一个就等于放弃一条防线。
     CheckpointDiffEntry {
         path: display,
         key,
         action: action.to_string(),
-        current_hash,
+        current_hash: Some(hash),
     }
 }
 
 fn checkpoint_diff_stats_sync(
     conversation_id: String,
     turn_seq: u64,
+    authorized_roots: Vec<String>,
 ) -> Result<CheckpointDiffStats, String> {
     let dir = conversation_dir(&conversation_id)?;
+    let authorized = canonical_authorized_roots(&authorized_roots);
     let (records, capture_errors) = earliest_records_since(&dir, turn_seq);
     let mut stats = CheckpointDiffStats {
         turn_seq,
@@ -685,17 +866,19 @@ fn checkpoint_diff_stats_sync(
         clean_files: 0,
         skipped_dirs: 0,
         missing_blobs: 0,
+        unresolvable_files: 0,
         capture_errors,
         entries: Vec::new(),
     };
     for record in records {
-        let entry = classify_entry(&dir, &record);
+        let entry = classify_entry(&dir, &record, &authorized);
         match entry.action.as_str() {
             "restore" => stats.restore_files += 1,
             "delete" => stats.delete_files += 1,
             "clean" => stats.clean_files += 1,
             "skip-dir" => stats.skipped_dirs += 1,
             "missing-blob" => stats.missing_blobs += 1,
+            "unresolvable" => stats.unresolvable_files += 1,
             _ => {}
         }
         stats.entries.push(entry);
@@ -707,9 +890,10 @@ fn checkpoint_diff_stats_sync(
 pub async fn checkpoint_diff_stats(
     conversation_id: String,
     turn_seq: u64,
+    authorized_roots: Vec<String>,
 ) -> Result<CheckpointDiffStats, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        checkpoint_diff_stats_sync(conversation_id, turn_seq)
+        checkpoint_diff_stats_sync(conversation_id, turn_seq, authorized_roots)
     })
     .await
     .map_err(|e| format!("checkpoint_diff_stats join failed: {e}"))?
@@ -769,19 +953,32 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// 把 turn_seq >= target 的所有被改文件恢复到各自最早的前像。
-/// 索引保持追加式不截断:回退后继续对话产生的新记录 turn_seq 更大,
-/// 再次回退仍按"每路径最早一条"取值,语义自洽。
+/// 索引物理上仍然只追加,但完整成功的回退会写下 turn_seq=target 的 rewind
+/// 标记,读取侧据此把 >= target 的陈旧未来记录剪掉,菜单不再残留已撤销的
+/// 轮次;有冲突/失败时写 turn_seq=0 的标记,只审计不剪枝,以免把还没回退
+/// 成功的路径一并埋掉。
 fn checkpoint_rewind_code_sync(
     conversation_id: String,
     turn_seq: u64,
-    expected: Option<Vec<CheckpointExpectedEntry>>,
+    authorized_roots: Vec<String>,
+    expected: Vec<CheckpointExpectedEntry>,
 ) -> Result<CheckpointRewindResult, String> {
     let dir = conversation_dir(&conversation_id)?;
-    let result = rewind_at(&dir, turn_seq, expected.as_deref());
-    // 回退审计标记:写入索引留痕(kind="rewind" 不参与任何恢复语义)。
+    let authorized = canonical_authorized_roots(&authorized_roots);
+    // 整段(读索引 → 逐个恢复 → 写标记)持锁:回退期间若有工具捕获落盘,新
+    // 记录的 turn_seq 会落在 target 之上,随后写下的剪枝标记会把这些刚发生
+    // 的改动一并当作"陈旧未来"埋掉,前像就再也找不回来了。锁守的是 `()`,
+    // 中毒不代表数据不一致,直接取回内部值,不因此让回退失败。
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let result = rewind_at(&dir, turn_seq, &authorized, Some(&expected));
+    // skipped_dirs 也算没回退干净:被递归删除的目录恢复不了,这一轮的现场
+    // 并没有真正复原,不能剪掉时间线让用户以为已经撤销。
+    let complete =
+        result.conflicts.is_empty() && result.failed.is_empty() && result.skipped_dirs == 0;
+    // 回退审计标记:turn_seq>0 时同时承担"剪掉陈旧未来轮"的语义。
     let marker = CheckpointRecord {
         schema: 2,
-        turn_seq,
+        turn_seq: if complete { turn_seq } else { 0 },
         turn_id: String::new(),
         root: String::new(),
         rel_path: String::new(),
@@ -792,30 +989,35 @@ fn checkpoint_rewind_code_sync(
         mtime_ms: 0,
         captured_at: now_ms(),
         note: Some(format!(
-            "restored={} deleted={} conflicts={} failed={}",
+            "target={} restored={} deleted={} conflicts={} failed={} complete={}",
+            turn_seq,
             result.restored_files,
             result.deleted_files,
             result.conflicts.len(),
-            result.failed.len()
+            result.failed.len(),
+            complete
         )),
     };
-    if let Ok(_guard) = INDEX_LOCK.lock() {
-        let _ = append_record(&dir, &marker);
-    }
+    // 仍在上面那把锁里,直接追加即可。
+    let _ = append_record(&dir, &marker);
     Ok(result)
 }
 
 /// 目录可注入的回退实现,便于单测绕过 home 解析。
+/// `expected` = Some 时进入 fail-closed 模式:任何可解析目标都必须带上预览
+/// 时的现状哈希且比对一致,否则判冲突跳过。None 只保留给内部/单测调用。
 fn rewind_at(
     dir: &Path,
     turn_seq: u64,
+    authorized_roots: &[PathBuf],
     expected: Option<&[CheckpointExpectedEntry]>,
 ) -> CheckpointRewindResult {
-    let expected_by_key: HashMap<&str, &str> = expected
-        .unwrap_or(&[])
-        .iter()
-        .map(|e| (e.key.as_str(), e.current_hash.as_str()))
-        .collect();
+    let expected_by_key: Option<HashMap<&str, &str>> = expected.map(|entries| {
+        entries
+            .iter()
+            .map(|e| (e.key.as_str(), e.current_hash.as_str()))
+            .collect()
+    });
     let mut result = CheckpointRewindResult {
         turn_seq,
         restored_files: 0,
@@ -832,20 +1034,28 @@ fn rewind_at(
             result.skipped_dirs += 1;
             continue;
         }
-        // 授权链:root 重新 canonicalize + 相对路径重新过滤 + 全链拒符号链接。
-        let target = match resolve_rewind_target(&record.root, &record.rel_path) {
+        // 授权链:root 仍在授权集合内且非符号链接 + 相对路径重新过滤 +
+        // 全链拒符号链接。
+        let target = match resolve_rewind_target(&record.root, &record.rel_path, authorized_roots) {
             Ok(t) => t,
             Err(e) => {
                 result.failed.push(format!("{display}: {e}"));
                 continue;
             }
         };
-        // TOCTOU 防护:与预览时的内容哈希比对,不一致 = 预览后被改,跳过。
+        // TOCTOU 防护:与预览时的内容哈希比对。缺失该键说明预览与本次执行
+        // 对不上(旧版前端 / 被裁剪的请求),一律判冲突,绝不 fail-open。
+        // "unreadable" 是"这次没读到内容"的哨兵而不是内容摘要,两次都没读到
+        // 并不等于内容没变,拿它比相等同样是 fail-open,所以直接判冲突。
         let key = record_key(&record.root, &record.rel_path);
-        if let Some(expected_hash) = expected_by_key.get(key.as_str()) {
-            if current_state_hash(&target) != *expected_hash {
-                result.conflicts.push(display);
-                continue;
+        if let Some(map) = &expected_by_key {
+            let current = current_state_hash(&target);
+            match map.get(key.as_str()) {
+                Some(expected) if current != "unreadable" && current == **expected => {}
+                _ => {
+                    result.conflicts.push(display);
+                    continue;
+                }
             }
         }
         if !record.existed_before {
@@ -862,6 +1072,11 @@ fn rewind_at(
                         continue;
                     }
                     if let Err(e) = reject_multi_hardlink(&md) {
+                        result.failed.push(format!("{display}: {e}"));
+                        continue;
+                    }
+                    // 检查与写入之间的窗口:紧邻动作再走一遍授权链。
+                    if let Err(e) = reverify_target(&record, &target, authorized_roots) {
                         result.failed.push(format!("{display}: {e}"));
                         continue;
                     }
@@ -897,6 +1112,8 @@ fn rewind_at(
                 }
                 Err(_) => {}
             }
+            // 检查与写入之间的窗口:紧邻落盘再走一遍授权链。
+            reverify_target(&record, &target, authorized_roots)?;
             atomic_write(&target, &pre_image)?;
             Ok(true)
         })();
@@ -909,14 +1126,29 @@ fn rewind_at(
     result
 }
 
+/// 校验与动作之间存在窗口期(攻击者可在此把 root 或某级父目录换成符号
+/// 链接),所以在真正写/删之前紧邻重跑一次授权链并确认目标没有漂移。
+fn reverify_target(
+    record: &CheckpointRecord,
+    target: &Path,
+    authorized_roots: &[PathBuf],
+) -> Result<(), String> {
+    let again = resolve_rewind_target(&record.root, &record.rel_path, authorized_roots)?;
+    if again != target {
+        return Err("checkpoint target changed during rewind".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn checkpoint_rewind_code(
     conversation_id: String,
     turn_seq: u64,
-    expected: Option<Vec<CheckpointExpectedEntry>>,
+    authorized_roots: Vec<String>,
+    expected: Vec<CheckpointExpectedEntry>,
 ) -> Result<CheckpointRewindResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        checkpoint_rewind_code_sync(conversation_id, turn_seq, expected)
+        checkpoint_rewind_code_sync(conversation_id, turn_seq, authorized_roots, expected)
     })
     .await
     .map_err(|e| format!("checkpoint_rewind_code join failed: {e}"))?
@@ -941,9 +1173,26 @@ pub async fn checkpoint_clear(conversation_id: String) -> Result<(), String> {
 // worktree 子代理合并的前像捕获(供 subagent_worktree_apply 调用)
 // ---------------------------------------------------------------------------
 
+/// worktree.apply 的前像分类。Err 表示这个路径拿不到可回退的前像,
+/// 调用方必须把原因写成 error 记录,而不是静默跳过。
+fn classify_worktree_pre_image(abs: &Path) -> Result<PreImage<'static>, String> {
+    match fs::symlink_metadata(abs) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PreImage::Missing),
+        Err(e) => Err(format!("pre-image stat failed: {e}")),
+        // 符号链接不做前像捕获,与 fs_delete 的语义保持一致。
+        Ok(md) if md.file_type().is_symlink() => {
+            Err("symlink pre-image not captured".to_string())
+        }
+        Ok(md) if md.is_file() => Ok(PreImage::File(None)),
+        Ok(md) if md.is_dir() => Ok(PreImage::Dir),
+        Ok(_) => Err("unsupported file type; pre-image not captured".to_string()),
+    }
+}
+
 /// 在 worktree.apply 修改父工作区之前,对将被覆盖/删除的路径捕获父工作区
 /// 前像。路径来自 collect_apply_paths(git 相对路径),root 为父仓库根。
-/// 尽力而为:单个路径失败记 error 记录,不阻断合并。
+/// 尽力而为:单个路径失败或被跳过都记 error 记录(该轮在 UI 上显示 ⚠),
+/// 不阻断合并。
 pub fn capture_worktree_apply_pre_images(
     ctx: Option<&CheckpointCtx>,
     parent_repo_root: &Path,
@@ -953,15 +1202,16 @@ pub fn capture_worktree_apply_pre_images(
     for rel in rel_paths {
         let rel_path = PathBuf::from(rel);
         let abs = parent_repo_root.join(&rel_path);
-        let pre_image = match fs::symlink_metadata(&abs) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => PreImage::Missing,
-            Err(_) => continue,
-            Ok(md) if md.is_file() => PreImage::File(None),
-            Ok(md) if md.is_dir() => PreImage::Dir,
-            // 符号链接不做前像捕获,与 fs_delete 的语义保持一致。
-            Ok(_) => continue,
-        };
-        capture_pre_image(Some(ctx), parent_repo_root, &rel_path, pre_image);
+        match classify_worktree_pre_image(&abs) {
+            Ok(pre_image) => capture_pre_image(Some(ctx), parent_repo_root, &rel_path, pre_image),
+            Err(reason) => {
+                eprintln!(
+                    "checkpoint worktree pre-image skipped for {}: {reason}",
+                    abs.display()
+                );
+                record_capture_skip(ctx, parent_repo_root, &rel_path, &reason);
+            }
+        }
     }
 }
 
@@ -971,6 +1221,25 @@ mod tests {
 
     fn rel(file: &Path, root: &Path) -> PathBuf {
         file.strip_prefix(root).unwrap().to_path_buf()
+    }
+
+    /// 单测里的"当前授权工作区根"集合:等价于前端把工作区根传回后端。
+    fn roots(root: &Path) -> Vec<PathBuf> {
+        vec![root.to_path_buf()]
+    }
+
+    fn expected_from_diff(ckpt: &Path, turn_seq: u64, root: &Path) -> Vec<CheckpointExpectedEntry> {
+        let (records, _) = earliest_records_since(ckpt, turn_seq);
+        records
+            .iter()
+            .map(|r| classify_entry(ckpt, r, &roots(root)))
+            .filter_map(|entry| {
+                entry.current_hash.map(|hash| CheckpointExpectedEntry {
+                    key: entry.key,
+                    current_hash: hash,
+                })
+            })
+            .collect()
     }
 
     #[test]
@@ -987,7 +1256,7 @@ mod tests {
         fs::write(&file, "v2").unwrap();
 
         // 回退到第 1 轮之前应恢复 v1。
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
     }
@@ -1003,7 +1272,7 @@ mod tests {
             capture_at(&ckpt, "turn-1", &root, &rel(&file, &root), PreImage::Missing).unwrap();
         fs::write(&file, "created").unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.deleted_files, 1);
         assert!(!file.exists());
     }
@@ -1024,7 +1293,7 @@ mod tests {
         fs::write(&file, "v3").unwrap();
 
         // 回退到 turn-1 之前:取最早前像 v1,而不是 turn-2 的 v2。
-        let result = rewind_at(&ckpt, seq1, None);
+        let result = rewind_at(&ckpt, seq1, &roots(&root), None);
         assert_eq!(result.restored_files, 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
     }
@@ -1044,7 +1313,7 @@ mod tests {
         fs::write(&file, "v3").unwrap();
 
         // 只回退 turn-2:恢复 v2,保留 turn-1 的改动。
-        let result = rewind_at(&ckpt, seq2, None);
+        let result = rewind_at(&ckpt, seq2, &roots(&root), None);
         assert_eq!(result.restored_files, 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v2");
     }
@@ -1088,6 +1357,22 @@ mod tests {
     }
 
     #[test]
+    fn rewind_marker_is_never_reused_as_a_turn_seq() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let a = root.join("a.txt");
+        fs::write(&a, "a").unwrap();
+        let s1 = capture_at(&ckpt, "t-x", &root, &rel(&a, &root), PreImage::File(None)).unwrap();
+        // 部分回退写下的哨兵标记:turn_id 为空、turn_seq 为 0。
+        append_rewind_marker(&ckpt, 0);
+
+        // 调用方也传空 turnId 时不能复用到标记的 0,否则这一轮永远回退不到。
+        let records = read_index(&ckpt);
+        assert_eq!(resolve_turn_seq(&records, ""), s1 + 1);
+    }
+
+    #[test]
     fn dir_marker_is_skipped_but_counted() {
         let tmp = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(tmp.path()).unwrap();
@@ -1099,7 +1384,7 @@ mod tests {
             capture_at(&ckpt, "turn-1", &root, &rel(&dir_path, &root), PreImage::Dir).unwrap();
         fs::remove_dir_all(&dir_path).unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.skipped_dirs, 1);
         assert!(!dir_path.exists());
     }
@@ -1117,7 +1402,7 @@ mod tests {
             .unwrap();
         fs::remove_dir_all(root.join("x")).unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 1);
         assert_eq!(fs::read_to_string(&nested).unwrap(), "v1");
     }
@@ -1141,7 +1426,7 @@ mod tests {
             key: record_key(&normalize_root(&root), &normalize_rel(&r)),
             current_hash: preview_hash,
         }];
-        let result = rewind_at(&ckpt, seq, Some(&expected));
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&expected));
         assert_eq!(result.restored_files, 0);
         assert_eq!(result.conflicts.len(), 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v3");
@@ -1151,7 +1436,7 @@ mod tests {
             key: record_key(&normalize_root(&root), &normalize_rel(&r)),
             current_hash: sha256_hex(b"v3"),
         }];
-        let result = rewind_at(&ckpt, seq, Some(&expected));
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&expected));
         assert_eq!(result.restored_files, 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
     }
@@ -1173,7 +1458,7 @@ mod tests {
         fs::remove_file(&file).unwrap();
         std::os::unix::fs::symlink(&outside, &file).unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 0);
         assert_eq!(result.failed.len(), 1);
         assert_eq!(fs::read_to_string(&outside).unwrap(), "secret");
@@ -1198,7 +1483,7 @@ mod tests {
         fs::remove_dir_all(&sub).unwrap();
         std::os::unix::fs::symlink(&elsewhere, &sub).unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 0);
         assert_eq!(result.failed.len(), 1);
         assert!(!elsewhere.join("a.txt").exists());
@@ -1219,7 +1504,7 @@ mod tests {
         // 捕获后给目标加硬链接:恢复会波及别名路径,必须拒绝。
         fs::hard_link(&file, root.join("alias.txt")).unwrap();
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 0);
         assert_eq!(result.failed.len(), 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v2");
@@ -1241,7 +1526,7 @@ mod tests {
             fs::remove_file(entry.unwrap().path()).unwrap();
         }
 
-        let result = rewind_at(&ckpt, seq, None);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
         assert_eq!(result.restored_files, 0);
         assert_eq!(result.failed.len(), 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), "v2");
@@ -1288,25 +1573,80 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(tmp.path()).unwrap();
         let ckpt = root.join("ckpt");
-        let file = root.join("big.bin");
-        fs::write(&file, "x").unwrap();
+        let big = root.join("big.bin");
+        let small = root.join("small.bin");
+        fs::write(&big, "0123456789").unwrap();
+        fs::write(&small, "ok").unwrap();
 
-        // 借用 File(Some) 注入超限长度不现实(会占内存),改走总量上限逻辑
-        // 的等价断言:直接验证 MAX_BLOB_BYTES 判断分支通过一个小的假上限
-        // 不可注入,这里退而验证 error 记录让该轮 incomplete。
-        // 真实流程里 capture_at 开头就调 ensure_conversation_dirs,这里补齐。
-        ensure_conversation_dirs(&ckpt).unwrap();
-        append_error_record(
+        // File(None):元数据即判定超限,不读盘就记 error,不产出 blob。
+        capture_at_with_limits(
             &ckpt,
-            1,
             "turn-1",
-            &normalize_root(&root),
-            "big.bin",
-            "file too large to checkpoint",
-        );
+            &root,
+            &rel(&big, &root),
+            PreImage::File(None),
+            4,
+            MAX_TOTAL_BLOB_BYTES,
+        )
+        .unwrap();
+        // File(Some):调用方已持有字节时同样受同一个上限约束。
+        capture_at_with_limits(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&small, &root),
+            PreImage::File(Some(b"too-long-for-cap")),
+            4,
+            MAX_TOTAL_BLOB_BYTES,
+        )
+        .unwrap();
+
         let records = read_index(&ckpt);
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].kind, "error");
+        assert_eq!(records.len(), 2);
+        assert!(records.iter().all(|r| r.kind == "error"));
+        assert!(records.iter().all(|r| r.blob.is_none()));
+        assert!(records[0].note.as_deref().unwrap().contains("10 bytes"));
+        let blobs: Vec<_> = fs::read_dir(blobs_dir(&ckpt)).unwrap().collect();
+        assert!(blobs.is_empty());
+
+        // 上限之内仍然正常落 blob。
+        capture_at_with_limits(
+            &ckpt,
+            "turn-2",
+            &root,
+            &rel(&small, &root),
+            PreImage::File(None),
+            4,
+            MAX_TOTAL_BLOB_BYTES,
+        )
+        .unwrap();
+        assert_eq!(fs::read_dir(blobs_dir(&ckpt)).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn total_storage_cap_records_error_instead_of_blob() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let a = root.join("a.txt");
+        let b = root.join("b.txt");
+        fs::write(&a, "aaaa").unwrap();
+        fs::write(&b, "bbbb").unwrap();
+
+        capture_at_with_limits(&ckpt, "t-1", &root, &rel(&a, &root), PreImage::File(None), 64, 6)
+            .unwrap();
+        capture_at_with_limits(&ckpt, "t-2", &root, &rel(&b, &root), PreImage::File(None), 64, 6)
+            .unwrap();
+
+        let records = read_index(&ckpt);
+        assert_eq!(records.len(), 2);
+        assert!(records[0].blob.is_some());
+        assert_eq!(records[1].kind, "error");
+        assert!(records[1]
+            .note
+            .as_deref()
+            .unwrap()
+            .contains("storage cap reached"));
     }
 
     #[test]
@@ -1352,7 +1692,7 @@ mod tests {
         fs::write(&existing, "worktree-v2").unwrap();
         fs::write(parent.join("new.txt"), "worktree-new").unwrap();
 
-        let result = rewind_at(&ckpt, 1, None);
+        let result = rewind_at(&ckpt, 1, &roots(&parent), None);
         assert_eq!(result.restored_files, 1);
         assert_eq!(result.deleted_files, 1);
         assert_eq!(fs::read_to_string(&existing).unwrap(), "parent-v1");
@@ -1374,7 +1714,7 @@ mod tests {
         fs::write(&dirty, "v2").unwrap();
 
         let (records, _) = earliest_records_since(&ckpt, 1);
-        let entries: Vec<_> = records.iter().map(|r| classify_entry(&ckpt, r)).collect();
+        let entries: Vec<_> = records.iter().map(|r| classify_entry(&ckpt, r, &roots(&root))).collect();
         let dirty_entry = entries
             .iter()
             .find(|e| e.path.ends_with("dirty.txt"))
@@ -1390,7 +1730,56 @@ mod tests {
     }
 
     #[test]
-    fn rewind_marker_is_appended_but_inert() {
+    fn authorized_roots_include_backend_owned_repo_and_skills_roots() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(tmp.path()).unwrap();
+        let repo = base.join("repo");
+        let workspace = repo.join("crates").join("app");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(repo.join(".git")).unwrap();
+
+        let authorized = canonical_authorized_roots(&[workspace.to_string_lossy().to_string()]);
+        assert!(authorized.contains(&workspace));
+        // worktree apply 把前像记在父仓库根下,漏了它那些轮次永远回退不了。
+        assert!(authorized.contains(&fs::canonicalize(&repo).unwrap()));
+        // skill:// 写入记在 Skills 根下,同理必须在集合里。
+        let skills_root = crate::services::skills::skills_root_dir().unwrap();
+        assert!(authorized.contains(&skills_root));
+    }
+
+    #[test]
+    fn worktree_records_under_parent_repo_root_stay_rewindable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(tmp.path()).unwrap();
+        let repo = base.join("repo");
+        let workspace = repo.join("crates").join("app");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        let ckpt = base.join("ckpt");
+
+        // 模拟 capture_worktree_apply_pre_images:前像记在父仓库根下。
+        let file = repo.join("shared.txt");
+        fs::write(&file, "v1").unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &fs::canonicalize(&repo).unwrap(),
+            &rel(&file, &repo),
+            PreImage::File(None),
+        )
+        .unwrap();
+        fs::write(&file, "v2").unwrap();
+
+        // 前端只给得出工作区根,父仓库根靠后端推导补上。
+        let authorized = canonical_authorized_roots(&[workspace.to_string_lossy().to_string()]);
+        let result = rewind_at(&ckpt, seq, &authorized, None);
+        assert!(result.failed.is_empty(), "failed: {:?}", result.failed);
+        assert_eq!(result.restored_files, 1);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v1");
+    }
+
+    #[test]
+    fn rewind_marker_cuts_stale_future_turns() {
         let tmp = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(tmp.path()).unwrap();
         let ckpt = root.join("ckpt");
@@ -1400,12 +1789,51 @@ mod tests {
 
         let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
         fs::write(&file, "v2").unwrap();
-        // 手工追加 rewind 标记,验证它不参与列表/回退。
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
+        assert_eq!(result.restored_files, 1);
+
+        // 完整成功的回退写 turn_seq=target 的标记:turn-1 属于"已撤销的
+        // 未来",既不该再出现在菜单里,也不该参与下一次聚合。
+        append_rewind_marker(&ckpt, seq);
+        assert!(live_records(read_index(&ckpt)).is_empty());
+        let (records, errors) = earliest_records_since(&ckpt, 1);
+        assert!(records.is_empty());
+        assert_eq!(errors, 0);
+
+        // 剪枝只影响读取侧:新一轮仍拿到更大的 turn_seq,不会和陈旧记录撞号。
+        fs::write(&file, "v3").unwrap();
+        let next = capture_at(&ckpt, "turn-2", &root, &r, PreImage::File(None)).unwrap();
+        assert!(next > seq);
+        let (records, _) = earliest_records_since(&ckpt, next);
+        assert_eq!(records.len(), 1);
+    }
+
+    #[test]
+    fn partial_rewind_marker_does_not_cut_timeline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        fs::write(&file, "v2").unwrap();
+        // 部分成功(有冲突/失败)时标记 turn_seq=0:只审计,不剪枝,
+        // 否则没回退成功的路径会被永久埋掉。
+        append_rewind_marker(&ckpt, 0);
+        let (records, _) = earliest_records_since(&ckpt, seq);
+        assert_eq!(records.len(), 1);
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
+        assert_eq!(result.restored_files, 1);
+    }
+
+    fn append_rewind_marker(ckpt: &Path, turn_seq: u64) {
         append_record(
-            &ckpt,
+            ckpt,
             &CheckpointRecord {
                 schema: 2,
-                turn_seq: seq,
+                turn_seq,
                 turn_id: String::new(),
                 root: String::new(),
                 rel_path: String::new(),
@@ -1419,10 +1847,142 @@ mod tests {
             },
         )
         .unwrap();
-        let (records, errors) = earliest_records_since(&ckpt, seq);
-        assert_eq!(records.len(), 1);
-        assert_eq!(errors, 0);
-        let result = rewind_at(&ckpt, seq, None);
+    }
+
+    #[test]
+    fn missing_expected_hash_is_treated_as_conflict() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let dirty = root.join("dirty.txt");
+        let untouched = root.join("clean.txt");
+        fs::write(&dirty, "v1").unwrap();
+        fs::write(&untouched, "same").unwrap();
+
+        let seq =
+            capture_at(&ckpt, "turn-1", &root, &rel(&dirty, &root), PreImage::File(None)).unwrap();
+        capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&untouched, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
+        fs::write(&dirty, "v2").unwrap();
+
+        // 预览时 clean.txt 是 clean;确认对话框期间被手改。只带回 restore
+        // 条目的哈希(旧前端行为)时,后端必须判冲突而不是照旧覆盖。
+        let only_restore: Vec<CheckpointExpectedEntry> = expected_from_diff(&ckpt, seq, &root)
+            .into_iter()
+            .filter(|e| e.key.ends_with("dirty.txt"))
+            .collect();
+        assert_eq!(only_restore.len(), 1);
+        fs::write(&untouched, "hand-edited").unwrap();
+
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&only_restore));
         assert_eq!(result.restored_files, 1);
+        assert_eq!(result.conflicts.len(), 1);
+        assert!(result.conflicts[0].ends_with("clean.txt"));
+        assert_eq!(fs::read_to_string(&untouched).unwrap(), "hand-edited");
+
+        // 完整回传所有可解析条目的哈希时才会真正覆盖。
+        let full = expected_from_diff(&ckpt, seq, &root);
+        let result = rewind_at(&ckpt, seq, &roots(&root), Some(&full));
+        assert!(result.conflicts.is_empty());
+        assert_eq!(fs::read_to_string(&untouched).unwrap(), "same");
+    }
+
+    #[test]
+    fn unauthorized_root_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        fs::write(&file, "v2").unwrap();
+
+        // 授权集合为空(或不含该根)时一律拒绝,文件保持原样。
+        let result = rewind_at(&ckpt, seq, &[], None);
+        assert_eq!(result.restored_files, 0);
+        assert_eq!(result.failed.len(), 1);
+        assert!(result.failed[0].contains("authorized workspace root"));
+        assert_eq!(fs::read_to_string(&file).unwrap(), "v2");
+
+        // diff 预览侧同口径:标 unresolvable 且不回传哈希。
+        let (records, _) = earliest_records_since(&ckpt, seq);
+        let entry = classify_entry(&ckpt, &records[0], &[]);
+        assert_eq!(entry.action, "unresolvable");
+        assert!(entry.current_hash.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_root_after_rename_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(tmp.path()).unwrap();
+        let root = base.join("workspace");
+        fs::create_dir_all(&root).unwrap();
+        let ckpt = base.join("ckpt");
+        let file = root.join("a.txt");
+        let r = rel(&file, &root);
+        fs::write(&file, "v1").unwrap();
+
+        let seq = capture_at(&ckpt, "turn-1", &root, &r, PreImage::File(None)).unwrap();
+        fs::write(&file, "v2").unwrap();
+
+        // 把工作区整体改名,再在原路径挂一个指向区外目录的符号链接:
+        // 直接 canonicalize 会跟随链接把回退写到工作区外。
+        let outside = base.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("a.txt"), "outside-secret").unwrap();
+        fs::rename(&root, base.join("workspace-moved")).unwrap();
+        std::os::unix::fs::symlink(&outside, &root).unwrap();
+
+        // 前端把("当前的")工作区根原样传回来也不行:根自身是符号链接就拒绝。
+        let result = rewind_at(&ckpt, seq, &roots(&root), None);
+        assert_eq!(result.restored_files, 0);
+        assert_eq!(result.failed.len(), 1);
+        assert!(result.failed[0].contains("symlinked checkpoint root"));
+        assert_eq!(
+            fs::read_to_string(outside.join("a.txt")).unwrap(),
+            "outside-secret"
+        );
+
+        // canonical_authorized_roots 也不采信符号链接根:它不会出现在集合里。
+        let authorized = canonical_authorized_roots(&[root.to_string_lossy().to_string()]);
+        assert!(!authorized.contains(&root));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn worktree_pre_image_classification_reports_skips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let file = root.join("a.txt");
+        fs::write(&file, "v1").unwrap();
+        let dir_path = root.join("sub");
+        fs::create_dir_all(&dir_path).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+
+        assert!(matches!(
+            classify_worktree_pre_image(&file),
+            Ok(PreImage::File(None))
+        ));
+        assert!(matches!(
+            classify_worktree_pre_image(&dir_path),
+            Ok(PreImage::Dir)
+        ));
+        assert!(matches!(
+            classify_worktree_pre_image(&root.join("nope.txt")),
+            Ok(PreImage::Missing)
+        ));
+        // 符号链接不静默跳过:返回原因,由调用方写成 error 记录。
+        let err = classify_worktree_pre_image(&link).unwrap_err();
+        assert!(err.contains("symlink"));
     }
 }

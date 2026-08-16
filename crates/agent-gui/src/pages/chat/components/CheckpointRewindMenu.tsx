@@ -11,6 +11,8 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
+import type { WorkspaceProject } from "../../../lib/settings";
+import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 
 type CheckpointTurnSummary = {
   turnSeq: number;
@@ -29,6 +31,8 @@ type CheckpointDiffStats = {
   cleanFiles: number;
   skippedDirs: number;
   missingBlobs: number;
+  /** 根已不在当前授权工作区集合内、或路径链上出现符号链接的条目：一律不回退。 */
+  unresolvableFiles: number;
   captureErrors: number;
   entries: { path: string; key: string; action: string; currentHash?: string }[];
 };
@@ -48,6 +52,10 @@ type CheckpointRewindResult = {
 // 桌面端专属入口:检查点数据只存在于桌面本机,WebUI 暂不提供(P2)。
 export function CheckpointRewindMenu(props: {
   conversationId: string;
+  /** 当前会话的工作区根：授权集合的基准项。 */
+  workspaceRoot?: string;
+  /** 当前激活项目：用于取额外授权根（workspace root grants）。 */
+  project?: Pick<WorkspaceProject, "id" | "path"> | null;
   disabled?: boolean;
   /** 回退完成后回调(通知/转录记录由宿主页面处理)。 */
   onRewound?: (info: {
@@ -58,7 +66,7 @@ export function CheckpointRewindMenu(props: {
     failed: number;
   }) => void;
 }) {
-  const { conversationId, disabled, onRewound } = props;
+  const { conversationId, workspaceRoot, project, disabled, onRewound } = props;
   const { locale } = useLocale();
   const zh = locale === "zh-CN";
   const { confirm, dialog } = useConfirmDialog();
@@ -80,13 +88,37 @@ export function CheckpointRewindMenu(props: {
     }
   };
 
+  // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 的额外授权根。
+  // 后端只认这个集合里的 root，记录里存的绝对路径本身不构成授权。
+  const resolveAuthorizedRoots = async () => {
+    const roots: string[] = [];
+    const push = (raw?: string | null) => {
+      const value = raw?.trim();
+      if (value && !roots.includes(value)) roots.push(value);
+    };
+    push(workspaceRoot);
+    if (project) {
+      try {
+        const grants = await listWorkspaceRootGrants(project);
+        for (const grant of grants) {
+          if (grant.state === "active") push(grant.canonicalPath);
+        }
+      } catch {
+        // 取不到额外授权根时只保留工作区根：宁可少回退，不可越权写入。
+      }
+    }
+    return roots;
+  };
+
   const rewindTo = async (turn: CheckpointTurnSummary) => {
     const turnSeq = turn.turnSeq;
     setBusyTurn(turnSeq);
     try {
+      const authorizedRoots = await resolveAuthorizedRoots();
       const stats = await invoke<CheckpointDiffStats>("checkpoint_diff_stats", {
         conversation_id: conversationId,
         turn_seq: turnSeq,
+        authorized_roots: authorizedRoots,
       });
       const parts: string[] = [];
       if (stats.restoreFiles > 0)
@@ -108,6 +140,12 @@ export function CheckpointRewindMenu(props: {
       if (stats.missingBlobs > 0)
         parts.push(
           zh ? `${stats.missingBlobs} 个前像缺失` : `${stats.missingBlobs} blob(s) missing`,
+        );
+      if (stats.unresolvableFiles > 0)
+        parts.push(
+          zh
+            ? `${stats.unresolvableFiles} 个路径已不可回退（根未授权或路径含符号链接）`
+            : `${stats.unresolvableFiles} path(s) not rewindable (root unauthorized or symlinked)`,
         );
       if (stats.captureErrors > 0 || turn.incomplete)
         parts.push(
@@ -136,13 +174,15 @@ export function CheckpointRewindMenu(props: {
       if (!confirmed) return;
       // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
       // 修改的文件会被跳过并报告为冲突,绝不覆盖(TOCTOU 防护)。
-      const expected = actionable.map((entry) => ({
-        key: entry.key,
-        currentHash: entry.currentHash ?? "absent",
-      }));
+      // 必须回传全部可解析条目(含 clean)——后端对缺哈希的条目一律判冲突,
+      // 只带 restore/delete 会让确认期间被手改的 clean 文件被静默覆盖。
+      const expected = stats.entries.flatMap((entry) =>
+        entry.currentHash == null ? [] : [{ key: entry.key, currentHash: entry.currentHash }],
+      );
       const result = await invoke<CheckpointRewindResult>("checkpoint_rewind_code", {
         conversation_id: conversationId,
         turn_seq: turnSeq,
+        authorized_roots: authorizedRoots,
         expected,
       });
       onRewound?.({
