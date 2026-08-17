@@ -43,6 +43,7 @@ import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
@@ -64,6 +65,8 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import {
   type CSSProperties,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -119,20 +122,6 @@ import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
-import {
-  createChatRuntimeHost,
-  type EnsureGatewayBridgeConversationReadyOptions,
-  MAX_UPLOAD_FILES,
-  pruneIdleConversationRuntimeCaches,
-  type SendChatAction,
-  useChatPageRuntimeStore,
-  useChatSkills,
-  useConversationHistoryActions,
-  useEditResend,
-  useGatewayBridgeListeners,
-  useLiveTranscriptController,
-  usePendingUploads,
-} from "./chat";
 import type { ChatPageProps } from "./chat/chatPageTypes";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
 import type {
@@ -144,15 +133,25 @@ import { useConversationHydrationPhase } from "./chat/conversations/useConversat
 import { useConversationPaneHostBridge } from "./chat/conversations/useConversationPaneHostBridge";
 import { useConversationRuntimeEntrySnapshot } from "./chat/conversations/useConversationRuntimeEntrySnapshot";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
+import type {
+  EnsureGatewayBridgeConversationReadyOptions,
+  SendChatAction,
+} from "./chat/gateway/gatewayBridgeTypes";
+import { useGatewayBridgeListeners } from "./chat/gateway/useGatewayBridgeListeners";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
+import { useConversationHistoryActions } from "./chat/history/useConversationHistoryActions";
 import {
   createContextUsageTokensSource,
   useContextUsageTokensSource,
 } from "./chat/hooks/useContextUsageTokensSource";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
+import { useChatPageRuntimeStore } from "./chat/hooks/useChatPageRuntimeStore";
+import { useEditResend } from "./chat/hooks/useEditResend";
+import { useLiveTranscriptController } from "./chat/hooks/useLiveTranscriptController";
+import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
 import {
@@ -160,7 +159,11 @@ import {
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
-import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
+import {
+  pruneIdleConversationRuntimeCaches,
+  syncMovedConversationRuntimeWorkdir,
+} from "./chat/runtime/chatPageRuntime";
+import { createChatRuntimeHost } from "./chat/runtime/ChatRuntimeHost";
 import { resolveActiveModelSelection } from "./chat/runtime/modelSelection";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
@@ -171,10 +174,6 @@ import {
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
-import {
-  ConversationPaneHost,
-  RestorableConversationPaneHost,
-} from "./chat/surfaces/ConversationPaneHost";
 import {
   type ConversationPaneBinding,
   ConversationPaneHostEnvironmentProvider,
@@ -204,6 +203,13 @@ import {
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
+
+const ConversationPaneHost = lazy(async () => ({
+  default: (await import("./chat/surfaces/ConversationPaneHost")).ConversationPaneHost,
+}));
+const RestorableConversationPaneHost = lazy(async () => ({
+  default: (await import("./chat/surfaces/ConversationPaneHost")).RestorableConversationPaneHost,
+}));
 
 export function ChatPage(props: ChatPageProps) {
   const {
@@ -2892,14 +2898,16 @@ export function ChatPage(props: ChatPageProps) {
             </div>
           ) : null;
           const host = (
-            <RestorableConversationPaneHost
-              ref={isCurrent ? conversationPaneHostRef : undefined}
-              paneId={pane.paneId}
-              conversationId={conversationId}
-              project={surface.project}
-              title={sidebarConversationsById.get(conversationId)?.title}
-              deferHydration={!paneContext.isFocused}
-            />
+            <Suspense fallback={<PaneLoadingSkeleton label={t("app.loading")} />}>
+              <RestorableConversationPaneHost
+                ref={isCurrent ? conversationPaneHostRef : undefined}
+                paneId={pane.paneId}
+                conversationId={conversationId}
+                project={surface.project}
+                title={sidebarConversationsById.get(conversationId)?.title}
+                deferHydration={!paneContext.isFocused}
+              />
+            </Suspense>
           );
           if (!blockedBanner) return host;
           return (
@@ -2929,12 +2937,14 @@ export function ChatPage(props: ChatPageProps) {
     </ConversationPaneHostEnvironmentProvider>
   ) : (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
-      <ConversationPaneHost
-        ref={conversationPaneHostRef}
-        paneId="root-conversation-pane"
-        conversationId={currentConversationId}
-        project={conversationSurfaceProject}
-      />
+      <Suspense fallback={<PaneLoadingSkeleton label={t("app.loading")} />}>
+        <ConversationPaneHost
+          ref={conversationPaneHostRef}
+          paneId="root-conversation-pane"
+          conversationId={currentConversationId}
+          project={conversationSurfaceProject}
+        />
+      </Suspense>
     </ConversationPaneHostEnvironmentProvider>
   );
 

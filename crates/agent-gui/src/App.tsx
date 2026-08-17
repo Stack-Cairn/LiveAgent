@@ -3,7 +3,6 @@ import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
-import { initAutomation } from "@liveagent/ui/lib/automation/index";
 import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncPayload,
@@ -25,9 +24,7 @@ import {
   useState,
 } from "react";
 import { AppBootShell } from "./components/app/AppBootShell";
-import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
-import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
 import {
@@ -48,7 +45,6 @@ import {
   publishGatewaySettingsSync,
   type SettingsSaveState,
 } from "./lib/settings/storage";
-import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import type { SectionId } from "./pages/settings/types";
 
 let chatPageModule: Promise<typeof import("./pages/ChatPage")> | null = null;
@@ -58,11 +54,15 @@ function loadChatPage() {
   return chatPageModule;
 }
 
-void loadChatPage();
-
 const ChatPage = lazy(async () => ({ default: (await loadChatPage()).ChatPage }));
 const SettingsPage = lazy(async () => ({
   default: (await import("@liveagent/ui/pages/settings/SettingsPage")).SettingsPage,
+}));
+const CronPromptRunner = lazy(async () => ({
+  default: (await import("./components/cron/CronPromptRunner")).CronPromptRunner,
+}));
+const MemoryOrganizerHost = lazy(async () => ({
+  default: (await import("./components/memory/useMemoryOrganizer")).MemoryOrganizerHost,
 }));
 
 function getDefaultContext(): Context {
@@ -212,6 +212,7 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
+  const [backgroundHostsReady, setBackgroundHostsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
@@ -272,7 +273,9 @@ export default function App() {
 
   // 启动时恢复本机保存的全局快捷键（桌面端专属，非 Tauri 环境内部自动忽略）。
   useEffect(() => {
-    void applyStoredGlobalShortcuts().catch(() => {});
+    void import("./lib/shortcuts/globalShortcuts")
+      .then(({ applyStoredGlobalShortcuts }) => applyStoredGlobalShortcuts())
+      .catch(() => {});
   }, []);
 
   // 窗口置顶状态：Rust 侧是唯一事实源（快捷键或指示器切换都经它广播），
@@ -314,7 +317,9 @@ export default function App() {
 
     async function hydrateSettings() {
       try {
-        const { settings: loaded, defaultWorkdir } = await loadPersistedSettingsWithDefaults();
+        const persistedSettingsPromise = loadPersistedSettingsWithDefaults();
+        void loadChatPage();
+        const { settings: loaded, defaultWorkdir } = await persistedSettingsPromise;
         if (!cancelled) {
           defaultWorkdirRef.current = defaultWorkdir;
           const loadedWithDefaults = applyRuntimeSystemDefaults(loaded, defaultWorkdir);
@@ -353,6 +358,17 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!settingsReady) return;
+    const revealBackgroundHosts = () => setBackgroundHostsReady(true);
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(revealBackgroundHosts, { timeout: 1_000 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(revealBackgroundHosts, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [settingsReady]);
 
   const queueSettingsSave = useCallback(
     (prev: AppSettings, next: AppSettings, fallback: string, publishSync: boolean) => {
@@ -594,9 +610,11 @@ export default function App() {
 
   useEffect(() => {
     if (!settingsReady) return;
-    void initAutomation().catch((error) => {
-      console.warn("Failed to initialize automation store", error);
-    });
+    void import("@liveagent/ui/lib/automation/index")
+      .then(({ initAutomation }) => initAutomation())
+      .catch((error) => {
+        console.warn("Failed to initialize automation store", error);
+      });
   }, [settingsReady]);
 
   useEffect(() => {
@@ -654,8 +672,12 @@ export default function App() {
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppChrome>
-        <CronPromptRunner settings={settings} />
-        <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
+        {backgroundHostsReady ? (
+          <Suspense fallback={null}>
+            <CronPromptRunner settings={settings} />
+            <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
+          </Suspense>
+        ) : null}
         <AppErrorBoundary>
           <Suspense
             fallback={<AppBootShell loadingLabel={translate("app.loading", settings.locale)} />}

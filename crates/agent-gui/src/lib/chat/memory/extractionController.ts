@@ -16,19 +16,26 @@ import {
 } from "@liveagent/ui/lib/memory/config";
 import { extractLatestUserText } from "../../memory/extraction/context";
 import { extractionSkipReason, isConfirmationDeferral } from "../../memory/extraction/gating";
-import {
-  type MemoryExtractionEngineParams,
-  type MemoryExtractionResult,
-  runMemoryExtraction,
+import type {
+  MemoryExtractionEngineParams,
+  MemoryExtractionResult,
 } from "./extractionEngine";
 
-type EngineFn = typeof runMemoryExtraction;
-let engine: EngineFn = runMemoryExtraction;
+type EngineFn = (params: MemoryExtractionEngineParams) => Promise<MemoryExtractionResult>;
+let engineOverride: EngineFn | null = null;
+
+async function runExtractionEngine(
+  params: MemoryExtractionEngineParams,
+): Promise<MemoryExtractionResult> {
+  if (engineOverride) return engineOverride(params);
+  const { runMemoryExtraction } = await import("./extractionEngine");
+  return runMemoryExtraction(params);
+}
 
 /** Test seam: swap the engine so controller semantics (atomic claim,
  *  coalescing, abort, LRU) are testable without an LLM. */
 export function __setMemoryExtractionEngineForTests(next: EngineFn | null) {
-  engine = next ?? runMemoryExtraction;
+  engineOverride = next;
 }
 
 export type MemoryExtractionRequest = Omit<
@@ -141,7 +148,7 @@ async function process(
   }
 
   try {
-    const result = await engine({
+    const result = await runExtractionEngine({
       ...request,
       alreadyWrittenSlugs: [...state.writtenSlugs],
       confirmationDeferralOnly: deferral,

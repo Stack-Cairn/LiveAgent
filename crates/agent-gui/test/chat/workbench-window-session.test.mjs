@@ -285,6 +285,18 @@ test("startup paints theme and shell before progressively hydrating pane content
     new URL("../../src-tauri/src/commands/config/settings/db.rs", import.meta.url),
     "utf8",
   );
+  const chatRuntimeHostSource = readFileSync(
+    new URL("../../src/pages/chat/runtime/ChatRuntimeHost.ts", import.meta.url),
+    "utf8",
+  );
+  const sendChatTurnSource = readFileSync(
+    new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
+    "utf8",
+  );
+  const extractionControllerSource = readFileSync(
+    new URL("../../src/lib/chat/memory/extractionController.ts", import.meta.url),
+    "utf8",
+  );
   const conversationPaneHostSource = readFileSync(
     new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
     "utf8",
@@ -315,15 +327,41 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.match(tauriLibSource, /ready_state\.0\.store\(false, Ordering::SeqCst\)/);
   assert.match(tauriLibSource, /window\.hide\(\)/);
   assert.match(appSource, /chatPageModule \?\?= import\("\.\/pages\/ChatPage"\)/);
-  assert.match(appSource, /void loadChatPage\(\);/);
+  assert.match(
+    appSource,
+    /const persistedSettingsPromise = loadPersistedSettingsWithDefaults\(\);[\s\S]{0,320}void loadChatPage\(\);[\s\S]{0,160}await persistedSettingsPromise/,
+  );
   assert.match(appSource, /getBootAlignedDefaultSettings/);
   assert.match(appSource, /document\.documentElement\.classList\.contains\("dark"\)/);
-  assert.doesNotMatch(appSource, /requestAnimationFrame\([\s\S]{0,120}loadChatPage/);
+  assert.doesNotMatch(appSource, /\nvoid loadChatPage\(\);/);
+  assert.match(appSource, /import\("\.\/lib\/shortcuts\/globalShortcuts"\)/);
+  assert.match(appSource, /import\("@liveagent\/ui\/lib\/automation\/index"\)/);
+  assert.match(appSource, /backgroundHostsReady/);
+  assert.match(appSource, /requestIdleCallback\(revealBackgroundHosts/);
+  assert.match(chatRuntimeHostSource, /import\("\.\.\/turns\/runAgentConversationTurn"\)/);
+  assert.match(chatRuntimeHostSource, /import\("\.\.\/turns\/runTextConversationTurn"\)/);
+  assert.doesNotMatch(
+    chatRuntimeHostSource,
+    /import \{[\s\S]{0,100}runAgentConversationTurn[\s\S]{0,100}\} from/,
+  );
+  assert.match(sendChatTurnSource, /import\("\.\.\/\.\.\/\.\.\/lib\/memory\/prompts\/injection"\)/);
+  assert.match(
+    sendChatTurnSource,
+    /import\("\.\.\/\.\.\/\.\.\/lib\/chat\/memory\/injectionController"\)/,
+  );
+  assert.match(extractionControllerSource, /import\("\.\/extractionEngine"\)/);
+  assert.doesNotMatch(extractionControllerSource, /runMemoryExtraction,\s*\} from/);
   assert.doesNotMatch(appSource, /import \{ ChatPage \} from "\.\/pages\/ChatPage"/);
   assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
   assert.ok(chatSource.indexOf("useWorkspaceProjects({") < chatSource.indexOf("sidebarStore.start()"));
   assert.match(chatSource, /if \(!workbench\.restoreReady\)[\s\S]{0,180}<PaneLoadingSkeleton/);
   assert.match(chatSource, /workbenchPrefetchConversationRef/);
+  assert.match(chatSource, /import\("\.\/chat\/surfaces\/ConversationPaneHost"\)/);
+  assert.doesNotMatch(chatSource, /from "\.\/chat";/);
+  assert.match(
+    chatSource,
+    /<Suspense fallback=\{<PaneLoadingSkeleton label=\{t\("app\.loading"\)\} \/>\}>/,
+  );
   assert.match(
     chatSource,
     /hydrateConversationActionRef\.current\(conversationId\)\.catch/,
