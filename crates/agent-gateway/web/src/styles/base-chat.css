@@ -658,6 +658,9 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   min-height: 0;
   flex: 1;
   overflow: hidden;
+  /* Container for transcript overlays (FloorNavRail) — keeps their cqw-based
+     clamping in sync with the desktop app's @container transcript root. */
+  container-type: inline-size;
 }
 
 .gateway-transcript-scroll-shell {

@@ -293,7 +293,9 @@ export function FloorNavRail(props: {
       aria-label={railLabel}
       aria-hidden={!railVisible || undefined}
       className={cn(
-        "pointer-events-none absolute right-4 top-2 z-10 flex items-center transition-opacity duration-200",
+        // 极窄容器(如 280px 以下的分屏 Pane)整条隐藏:短横线列会压住正文,
+        // 面板展开更无从谈起。容器查询挂在转录根的 @container 上。
+        "pointer-events-none absolute right-4 top-2 z-10 flex items-center transition-opacity duration-200 @max-[280px]:hidden",
         railVisible ? "opacity-100" : "opacity-0",
       )}
       style={{ bottom: bottomOffset }}
@@ -301,7 +303,9 @@ export function FloorNavRail(props: {
       {expanded ? (
         <div
           className={cn(
-            "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100vw-2rem)] touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-[0_12px_32px_-16px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
+            // 宽度按容器(转录区/Pane)钳制而非视口:分屏窄 Pane 下面板不得
+            // 溢出 Pane。无容器祖先时 cqw 按视口回退,行为与旧 100vw 一致。
+            "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100cqw-2rem)] touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-[0_12px_32px_-16px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
             // 隐藏态不吃指针事件：触摸透传给转写区，不会点到看不见的控件。
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
