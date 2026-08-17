@@ -615,7 +615,7 @@ impl TerminalSessionRegistry {
                 }
             }
         }
-        {
+        let became_finished = {
             let mut record = match entry.record.lock() {
                 Ok(record) => record,
                 Err(_) => return,
@@ -625,9 +625,18 @@ impl TerminalSessionRegistry {
                 record.finished_at = Some(now_ms());
                 record.exit_code = exit_code;
                 record.updated_at = now_ms();
+                true
+            } else {
+                false
             }
+        };
+        // First finisher wins the broadcast. `close()` and the PTY reader
+        // thread race here (terminate → reader EOF → mark_finished); an
+        // unconditional broadcast lets the loser emit a stray `exit` AFTER
+        // `closed`, which the frontend would re-append as a ghost session.
+        if became_finished {
+            self.broadcast("exit", &entry, None, None, None);
         }
-        self.broadcast("exit", &entry, None, None, None);
     }
 }
 pub struct TerminalSubscriberGuard {

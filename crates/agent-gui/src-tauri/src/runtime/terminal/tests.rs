@@ -1218,3 +1218,54 @@ fn registry_create_rejects_cwd_outside_the_project() {
     );
     assert_eq!(registry.running_session_count(), 0);
 }
+
+#[test]
+fn mark_finished_broadcasts_exit_only_for_the_first_finisher() {
+    // close() 与 PTY reader 线程在终止时都会调 mark_finished;若两次都广播
+    // exit,输掉竞态的那次会在 closed 之后送达,前端将把刚关闭的会话复活成
+    // 幽灵(attach 必败的 dock tab)。首个 finisher 独占广播。
+    let registry = Arc::new(TerminalSessionRegistry::default());
+    insert_test_ssh_session(
+        &registry,
+        "ssh-exit-once",
+        "/tmp/project",
+        false,
+        SSH_STATUS_CONNECTED,
+    );
+    let (rx, _guard) = registry.subscribe();
+
+    registry.mark_finished("ssh-exit-once");
+    registry.mark_finished("ssh-exit-once");
+
+    let mut exit_events = 0;
+    while let Ok(event) = rx.try_recv() {
+        if event.payload.kind == "exit" {
+            exit_events += 1;
+        }
+    }
+    assert_eq!(exit_events, 1, "duplicate mark_finished must not re-broadcast exit");
+}
+
+#[test]
+fn close_emits_exit_then_closed_without_a_trailing_exit() {
+    let registry = Arc::new(TerminalSessionRegistry::default());
+    insert_test_ssh_session(
+        &registry,
+        "ssh-close-order",
+        "/tmp/project",
+        false,
+        SSH_STATUS_CONNECTED,
+    );
+    let (rx, _guard) = registry.subscribe();
+
+    registry
+        .close("ssh-close-order".to_string())
+        .expect("close test session");
+    // 模拟 reader 线程迟到的 mark_finished:会话已移除,必须完全静默。
+    registry.mark_finished("ssh-close-order");
+
+    let kinds: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
+        .map(|event| event.payload.kind)
+        .collect();
+    assert_eq!(kinds, vec!["exit".to_string(), "closed".to_string()]);
+}
