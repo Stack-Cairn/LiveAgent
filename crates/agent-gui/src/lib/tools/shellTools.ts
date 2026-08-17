@@ -63,6 +63,8 @@ type ShellSessionResponse = {
   platform?: string;
   profile?: string;
   shell_family?: string;
+  /** Effective OS sandbox mechanism (for example seatbelt/bubblewrap/restricted-token). */
+  sandbox?: string;
   timeout_ms?: number | null;
 };
 
@@ -351,6 +353,7 @@ function buildShellSessionToolResult(params: {
     response.platform ? `platform: ${response.platform}` : null,
     response.profile ? `profile: ${response.profile}` : null,
     response.shell_family ? `shell_family: ${response.shell_family}` : null,
+    response.sandbox ? `sandbox: ${response.sandbox}` : null,
     params.cwd ? `cwd: ${params.cwd}` : null,
     response.exit_code !== null && response.exit_code !== undefined
       ? `exit_code: ${response.exit_code}`
@@ -768,7 +771,7 @@ export function createShellTools(params: {
 
   const toolBash: Tool = {
     name: "Bash",
-    description: `Execute a non-interactive shell command on the local machine for builds, tests, package managers, external CLIs, curl/API calls, running Skill scripts, or explicitly requested shell work. Runtime platform: ${platformLabel}. ${shellPolicy}${sandboxPolicy} Reserve it for commands that truly require a shell — do NOT use Bash for file operations the dedicated tools handle: use Read/List/Glob/Grep instead of cat/ls/find/grep/rg for any workspace or Skill content; always use Delete for intentional workspace or Skill deletions instead of Bash, scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd, because only structured Delete calls make deletions visible in Edited Files and file-ledger tracking; use Image instead of open/xdg-open/file paths to show pictures. Use curl with an explicit timeout such as \`--max-time 30\` for endpoint tests. ${backgroundPolicy} Running a Skill script: set cwd to \`skill://<enabled-skill>/scripts\` and run a relative command, or execute the absolute script path directly when that Skill is enabled. Use / as the path separator; Windows \\ is auto-normalized. Returns stdout, stderr, exit_code, platform, profile, and shell_family. ${allowResumableShell ? `Bash waits up to yield_time_ms (default 10000ms), then returns a session_id while the same command continues; use ProcessWait to continue waiting and ProcessStop to terminate it. Session responses report session_duration_ms as cumulative elapsed time from the original Bash start, so never add it across responses. Terminal statuses are completed, failed, cancelled, and timed_out. timeout_ms is an optional hard runtime limit and is capped at ${GLOBAL_BASH_MAX_TIMEOUT_MS}ms; omit it for no hard limit.` : `For ${timeoutPolicy.providerLabel}, timeout defaults to ${timeoutPolicy.defaultTimeoutMs}ms and is capped at ${timeoutPolicy.maxTimeoutMs}ms; larger timeout_ms values are accepted by the schema but clamped before execution.`} High risk: use carefully.`,
+    description: `Execute a non-interactive shell command on the local machine for builds, tests, package managers, external CLIs, curl/API calls, running Skill scripts, or explicitly requested shell work. Runtime platform: ${platformLabel}. ${shellPolicy}${sandboxPolicy} Reserve it for commands that truly require a shell — do NOT use Bash for file operations the dedicated tools handle: use Read/List/Glob/Grep instead of cat/ls/find/grep/rg for any workspace or Skill content; always use Delete for intentional workspace or Skill deletions instead of Bash, scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd, because only structured Delete calls make deletions visible in Edited Files and file-ledger tracking; use Image instead of open/xdg-open/file paths to show pictures. Use curl with an explicit timeout such as \`--max-time 30\` for endpoint tests. ${backgroundPolicy} Running a Skill script: set cwd to \`skill://<enabled-skill>/scripts\` and run a relative command, or execute the absolute script path directly when that Skill is enabled. Use / as the path separator; Windows \\ is auto-normalized. Returns stdout, stderr, exit_code, platform, profile, shell_family, and the effective sandbox mechanism. ${allowResumableShell ? `Bash waits up to yield_time_ms (default 10000ms), then returns a session_id while the same command continues; use ProcessWait to continue waiting and ProcessStop to terminate it. Session responses report session_duration_ms as cumulative elapsed time from the original Bash start, so never add it across responses. Terminal statuses are completed, failed, cancelled, and timed_out. timeout_ms is an optional hard runtime limit and is capped at ${GLOBAL_BASH_MAX_TIMEOUT_MS}ms; omit it for no hard limit.` : `For ${timeoutPolicy.providerLabel}, timeout defaults to ${timeoutPolicy.defaultTimeoutMs}ms and is capped at ${timeoutPolicy.maxTimeoutMs}ms; larger timeout_ms values are accepted by the schema but clamped before execution.`} High risk: use carefully.`,
     parameters: strictToolParameters({
       command: Type.String({
         description: "Shell command to execute (prefer non-interactive, idempotent commands).",
@@ -1363,6 +1366,8 @@ export function createShellTools(params: {
             yield_time_ms,
             timeout_ms,
             max_timeout_ms: GLOBAL_BASH_MAX_TIMEOUT_MS,
+            sandbox: sandboxEnabled || undefined,
+            sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
           },
           signal,
           {

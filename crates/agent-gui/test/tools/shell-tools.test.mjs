@@ -1062,6 +1062,58 @@ test("resumable Bash yields a session without applying an implicit hard timeout"
   assert.doesNotMatch(result.content[0].text, /Bash sleep 10/);
 });
 
+test("sandboxed resumable Bash forwards the sandbox contract to the session", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "shell_session_start");
+          return {
+            status: "completed",
+            session_id: args.session_id,
+            cursor: 0,
+            output: [],
+            output_truncated: false,
+            has_more: false,
+            exit_code: 0,
+            duration_ms: 5,
+            shell: "bash",
+            platform: "windows",
+            profile: "windows-git-bash",
+            shell_family: "posix",
+            sandbox: "restricted-token",
+            timeout_ms: null,
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "D:/workspace/project",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "sandboxed-session",
+    name: "Bash",
+    arguments: { command: "echo probe" },
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+  assert.match(result.content[0].text, /sandbox: restricted-token/);
+});
+
 test("resumable Bash stops a running session returned after cancellation", async () => {
   let resolveStart;
   let startResolved = false;
