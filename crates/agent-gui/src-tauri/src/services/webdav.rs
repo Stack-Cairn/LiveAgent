@@ -447,4 +447,85 @@ mod tests {
             assert!(!message.contains("token=abc"), "{message}");
         }
     }
+
+    /// 真实服务器联通性测试。**默认不跑**（`#[ignore]`）。
+    ///
+    /// 凭据只从环境变量读，永不落进仓库：
+    /// ```text
+    /// LIVEAGENT_WEBDAV_URL=https://dav.jianguoyun.com/dav/ \
+    /// LIVEAGENT_WEBDAV_USER=... \
+    /// LIVEAGENT_WEBDAV_PASS=... \
+    /// cargo test --lib services::webdav::tests::live -- --ignored --nocapture
+    /// ```
+    /// 三个变量缺任一即跳过，避免在 CI 上变成失败。
+    ///
+    /// 四段合成一个用例而不是四个：它们共用同一个远端目录，并行跑会互相踩踏
+    /// （建目录/写文件/删文件的顺序不确定）。
+    #[tokio::test]
+    #[ignore = "需要真实 WebDAV 账号，通过 LIVEAGENT_WEBDAV_* 环境变量提供"]
+    async fn live_webdav_end_to_end() {
+        let (Ok(base_url), Ok(username), Ok(password)) = (
+            std::env::var("LIVEAGENT_WEBDAV_URL"),
+            std::env::var("LIVEAGENT_WEBDAV_USER"),
+            std::env::var("LIVEAGENT_WEBDAV_PASS"),
+        ) else {
+            eprintln!("跳过：未设置 LIVEAGENT_WEBDAV_URL / _USER / _PASS");
+            return;
+        };
+
+        let creds = WebdavCredentials {
+            base_url,
+            username,
+            password,
+        };
+
+        // ① 测试连接成功（AC6 正向）
+        test_connection(&creds).await.expect("test_connection 应成功");
+        eprintln!("① test_connection: ok");
+
+        // ② 错误密码走到坚果云特判文案（AC6 反向 + 错误映射）
+        let bad = WebdavCredentials {
+            password: "definitely-not-the-password".to_string(),
+            ..creds.clone()
+        };
+        let err = test_connection(&bad)
+            .await
+            .expect_err("错误密码应认证失败");
+        assert!(err.contains("认证失败"), "{err}");
+        assert!(
+            !err.contains("definitely-not-the-password"),
+            "错误文案不得回显凭据：{err}"
+        );
+        eprintln!("② 错误密码: {err}");
+
+        // ③ 建目录 → PUT → GET 往返（AC8/AC9 的传输基础）
+        let dir = format!("liveagent-livetest-{}", std::process::id());
+        ensure_remote_dirs(&creds, &[&dir])
+            .await
+            .expect("ensure_remote_dirs 应成功");
+        // 重复调用必须幂等（走 MKCOL 405/409 → PROPFIND 回落这条分支）
+        ensure_remote_dirs(&creds, &[&dir])
+            .await
+            .expect("ensure_remote_dirs 应幂等");
+        eprintln!("③ ensure_remote_dirs（含幂等重试）: ok");
+
+        // 载荷刻意含中文：验证 UTF-8 字节在 PUT/GET 往返中不被服务器改写。
+        let body = r#"{"hello":"webdav","zh":"中文"}"#.as_bytes().to_vec();
+        put_bytes(&creds, &[&dir, "probe.json"], body.clone(), "application/json")
+            .await
+            .expect("put_bytes 应成功");
+        let fetched = get_bytes(&creds, &[&dir, "probe.json"], 1024 * 1024, "探针")
+            .await
+            .expect("get_bytes 应成功")
+            .expect("刚上传的文件必须存在");
+        assert_eq!(fetched, body, "下行字节必须与上行完全一致");
+        eprintln!("④ put/get 往返 {} 字节: 一致", body.len());
+
+        // ④ 缺失文件返回 Ok(None) 而不是 Err —— 「远端还没有备份」的判定基础
+        let missing = get_bytes(&creds, &[&dir, "no-such-file.json"], 1024, "探针")
+            .await
+            .expect("404 不应报错");
+        assert!(missing.is_none(), "缺失文件应返回 Ok(None)");
+        eprintln!("⑤ 缺失文件: Ok(None)");
+    }
 }

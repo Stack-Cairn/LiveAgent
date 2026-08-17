@@ -2203,4 +2203,169 @@ mod tests {
         let view: BackupSyncConfigView = config.into();
         assert_eq!(view.last_error.as_deref(), Some("远端存储空间不足"));
     }
+
+    /// 真实服务器上的「两台设备」往返。**默认不跑**（`#[ignore]`）。
+    ///
+    /// ```text
+    /// LIVEAGENT_WEBDAV_URL=... LIVEAGENT_WEBDAV_USER=... LIVEAGENT_WEBDAV_PASS=... \
+    /// cargo test --lib settings::tests::live -- --ignored --nocapture
+    /// ```
+    ///
+    /// 为什么不直接调 `settings_backup_upload` / `settings_backup_download`：
+    /// 那两个命令读写真实的 `~/.liveagent/config.sqlite`，跑测试会改掉开发者
+    /// 自己的配置。这里用两个内存库扮演设备 A / B，复用同一套采集、序列化、
+    /// manifest 构造与校验函数，网络部分则完全走真实 `services::webdav`。
+    /// 因此覆盖的是 AC7（跨设备一致）与 AC9（校验和把关），而非命令壳。
+    #[tokio::test]
+    #[ignore = "需要真实 WebDAV 账号，通过 LIVEAGENT_WEBDAV_* 环境变量提供"]
+    async fn live_cross_device_snapshot_round_trip() {
+        let (Ok(url), Ok(username), Ok(password)) = (
+            std::env::var("LIVEAGENT_WEBDAV_URL"),
+            std::env::var("LIVEAGENT_WEBDAV_USER"),
+            std::env::var("LIVEAGENT_WEBDAV_PASS"),
+        ) else {
+            eprintln!("跳过：未设置 LIVEAGENT_WEBDAV_URL / _USER / _PASS");
+            return;
+        };
+
+        let config = BackupSyncConfig {
+            url,
+            username,
+            password,
+            remote_dir: format!("liveagent-livetest-{}", std::process::id()),
+            profile: "default".to_string(),
+            auto_sync: false,
+            last_sync_at: None,
+            last_error: None,
+        };
+        let creds = backup_credentials(&config).expect("credentials");
+
+        // —— 设备 A：采集并上传 ——
+        let mut device_a = open_memory_db();
+        save_providers(
+            &mut device_a,
+            json!([{ "id": "p-live", "name": "实机 Provider", "apiKey": "sk-live-probe" }]),
+        )
+        .expect("seed providers on device A");
+        save_mcp(
+            &mut device_a,
+            json!({ "servers": [{ "id": "s-live" }], "selected": ["s-live"] }),
+        )
+        .expect("seed mcp on device A");
+
+        let snapshot = collect_backup_snapshot(&device_a, Some(json!({ "enabled": ["skill-x"] })))
+            .expect("collect snapshot");
+        let manifest = build_backup_manifest(&snapshot);
+        let document = serialize_backup_document(&snapshot, &manifest).expect("serialize");
+        let body = document.into_bytes();
+
+        let remote_manifest_body = serde_json::to_vec_pretty(&json!({
+            "protocolVersion": manifest.protocol_version,
+            "schemaVersion": manifest.schema_version,
+            "snapshotId": manifest.snapshot_id,
+            "createdAt": manifest.created_at,
+            "deviceName": manifest.device_name,
+            "appVersion": manifest.app_version,
+            "encryption": "none",
+            "domains": {
+                "providers": 1, "mcp": 1, "system": 0, "skills": 1,
+            },
+            "size": body.len(),
+            "sha256": backup_sha256_hex(&body),
+        }))
+        .expect("serialize remote manifest");
+
+        crate::services::webdav::ensure_remote_dirs(&creds, &backup_remote_segments(&config))
+            .await
+            .expect("ensure remote dirs");
+        // 与生产同序：先 config 再 manifest。
+        crate::services::webdav::put_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
+            body.clone(),
+            "application/json",
+        )
+        .await
+        .expect("put config.json");
+        crate::services::webdav::put_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
+            remote_manifest_body,
+            "application/json",
+        )
+        .await
+        .expect("put manifest.json");
+        eprintln!("上传完成：config {} 字节", body.len());
+
+        // —— 设备 B：拉 manifest → 拉 config → 校验 → 应用 ——
+        let manifest_bytes = crate::services::webdav::get_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
+            WEBDAV_MANIFEST_MAX_BYTES,
+            "远端备份元信息",
+        )
+        .await
+        .expect("get manifest")
+        .expect("manifest 必须存在");
+        let remote = parse_backup_remote_manifest(&manifest_bytes).expect("parse remote manifest");
+        eprintln!(
+            "远端 manifest：设备 {} / {} 字节",
+            remote.manifest.device_name, remote.size
+        );
+
+        let config_bytes = crate::services::webdav::get_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
+            WEBDAV_CONFIG_MAX_BYTES,
+            "远端配置",
+        )
+        .await
+        .expect("get config")
+        .expect("config 必须存在");
+
+        // AC9 正向：真实服务器往返后校验和必须仍然吻合。
+        verify_backup_payload(&config_bytes, remote.size, &remote.sha256)
+            .expect("真实往返后校验和应吻合");
+        eprintln!("校验通过：sha256 {}", &remote.sha256[..16]);
+
+        // AC9 反向：篡改一个字节必须被拦下。
+        let mut tampered = config_bytes.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01;
+        let err = verify_backup_payload(&tampered, remote.size, &remote.sha256)
+            .expect_err("篡改后必须校验失败");
+        assert!(err.contains("校验和不匹配"), "{err}");
+
+        // AC7：应用到设备 B，四域应与设备 A 一致。
+        let text = String::from_utf8(config_bytes).expect("utf-8 config");
+        let (parsed_snapshot, _) = parse_backup_document(&text).expect("parse document");
+        let mut device_b = open_memory_db();
+        save_providers(&mut device_b, json!([{ "id": "stale-b", "name": "旧配置" }]))
+            .expect("seed providers on device B");
+        apply_backup_snapshot_to_db(&mut device_b, &parsed_snapshot).expect("apply on device B");
+
+        assert_eq!(
+            load_providers(&device_b).expect("load providers on B"),
+            load_providers(&device_a).expect("load providers on A"),
+            "设备 B 的 providers 应与设备 A 一致"
+        );
+        assert_eq!(
+            load_mcp(&device_b).expect("load mcp on B"),
+            load_mcp(&device_a).expect("load mcp on A"),
+            "设备 B 的 mcp 应与设备 A 一致"
+        );
+        // 技能启用态不落库，只随快照回传给前端。
+        assert_eq!(
+            parsed_snapshot.skills,
+            Some(json!({ "enabled": ["skill-x"] })),
+            "skills 应原样往返"
+        );
+        // 设备级凭据绝不能随快照流转（S2）。
+        assert!(
+            !text.contains(&config.username),
+            "快照不得含 WebDAV 用户名"
+        );
+        assert!(!text.contains("backupSync"), "快照不得含同步配置");
+        eprintln!("设备 B 还原一致，且快照不含 WebDAV 凭据");
+    }
 }
