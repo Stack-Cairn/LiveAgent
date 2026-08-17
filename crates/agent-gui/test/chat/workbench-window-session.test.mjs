@@ -249,6 +249,10 @@ test("startup paints theme and shell before progressively hydrating pane content
     new URL("../../src-tauri/tauri.conf.json", import.meta.url),
     "utf8",
   );
+  const tauriMacConfigSource = readFileSync(
+    new URL("../../src-tauri/tauri.macos.conf.json", import.meta.url),
+    "utf8",
+  );
   const appCommandSource = readFileSync(
     new URL("../../src-tauri/src/commands/app/app.rs", import.meta.url),
     "utf8",
@@ -265,6 +269,10 @@ test("startup paints theme and shell before progressively hydrating pane content
     new URL("../../src/pages/chat/transcript/TranscriptLoadingStates.tsx", import.meta.url),
     "utf8",
   );
+  const conversationPaneHostSource = readFileSync(
+    new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
+    "utf8",
+  );
 
   const themeScript = htmlSource.indexOf('localStorage.getItem("liveagent.ui-settings.v1")');
   const staticShell = htmlSource.indexOf('data-static-boot-shell=""');
@@ -275,17 +283,30 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.ok(frontendReady >= 0 && frontendReady < appScript);
   assert.match(htmlSource, /--liveagent-boot-background/);
   assert.match(htmlSource, /liveagent\.sessionWorkbench\.layout\.v1/);
+  assert.match(
+    htmlSource,
+    /requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame\(\(\) => \{/,
+  );
+  assert.match(htmlSource, /setTimeout\(revealOnce, 250\)/);
   assert.match(tauriConfigSource, /"visible": false/);
+  assert.match(tauriMacConfigSource, /"visible": false/);
   assert.match(appCommandSource, /pub fn app_frontend_ready/);
   assert.match(appCommandSource, /ready_state\.0\.store\(true, Ordering::SeqCst\)/);
   assert.match(tauriLibSource, /commands::app::app_frontend_ready/);
   assert.match(tauriLibSource, /FrontendReadyState::default/);
   assert.match(tauriLibSource, /if !ready_state\.0\.load\(Ordering::SeqCst\)/);
+  assert.match(tauriLibSource, /PageLoadEvent::Started/);
+  assert.match(tauriLibSource, /ready_state\.0\.store\(false, Ordering::SeqCst\)/);
+  assert.match(tauriLibSource, /window\.hide\(\)/);
   assert.match(appSource, /chatPageModule \?\?= import\("\.\/pages\/ChatPage"\)/);
-  assert.match(appSource, /requestAnimationFrame\([\s\S]{0,120}loadChatPage/);
+  assert.match(appSource, /void loadChatPage\(\);/);
+  assert.doesNotMatch(appSource, /requestAnimationFrame\([\s\S]{0,120}loadChatPage/);
   assert.doesNotMatch(appSource, /import \{ ChatPage \} from "\.\/pages\/ChatPage"/);
   assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
+  assert.ok(chatSource.indexOf("useWorkspaceProjects({") < chatSource.indexOf("sidebarStore.start()"));
   assert.match(chatSource, /if \(!workbench\.restoreReady\)[\s\S]{0,180}<PaneLoadingSkeleton/);
+  assert.match(chatSource, /deferHydration=\{!paneContext\.isFocused\}/);
+  assert.match(conversationPaneHostSource, /window\.requestIdleCallback\(hydrate/);
   assert.match(chatSource, /void resolveLiveTerminalSurfaceIds\([\s\S]{0,260}attemptRestore/);
   assert.doesNotMatch(chatSource, /await resolveLiveTerminalSurfaceIds/);
   assert.match(transcriptLoadingSource, /<PaneLoadingSkeleton/);

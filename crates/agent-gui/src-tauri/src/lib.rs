@@ -733,6 +733,24 @@ pub fn run() {
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
+        .on_page_load(|webview, payload| {
+            if webview.label() != MAIN_WINDOW_LABEL
+                || !matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                return;
+            }
+            let app = webview.app_handle();
+            if let Some(ready_state) =
+                app.try_state::<Arc<commands::app::FrontendReadyState>>()
+            {
+                ready_state.0.store(false, Ordering::SeqCst);
+            }
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                if window.is_visible().unwrap_or(false) {
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup({
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);

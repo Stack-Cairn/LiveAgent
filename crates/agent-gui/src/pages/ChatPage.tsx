@@ -263,12 +263,6 @@ export function ChatPage(props: ChatPageProps) {
   // workdirs, running set); ChatPage only issues imperative calls and keeps a
   // few narrow selector subscriptions.
   const sidebarStore = useMemo(() => createSidebarStore(createGuiSidebarBackend()), []);
-  useEffect(() => {
-    sidebarStore.start();
-    return () => {
-      sidebarStore.stop();
-    };
-  }, [sidebarStore]);
   const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
     () => undefined,
   );
@@ -329,6 +323,12 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef,
     prepareComposerForConversationChangeActionRef,
   });
+  useEffect(() => {
+    sidebarStore.start();
+    return () => {
+      sidebarStore.stop();
+    };
+  }, [sidebarStore]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus({
     remote: settings.remote,
@@ -2855,6 +2855,7 @@ export function ChatPage(props: ChatPageProps) {
               conversationId={conversationId}
               project={surface.project}
               title={sidebarConversationsById.get(conversationId)?.title}
+              deferHydration={!paneContext.isFocused}
             />
           );
           if (!blockedBanner) return host;

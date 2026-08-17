@@ -57,6 +57,8 @@ function loadChatPage() {
   return chatPageModule;
 }
 
+void loadChatPage();
+
 const ChatPage = lazy(async () => ({ default: (await loadChatPage()).ChatPage }));
 const SettingsPage = lazy(async () => ({
   default: (await import("@liveagent/ui/pages/settings/SettingsPage")).SettingsPage,
@@ -586,17 +588,6 @@ export default function App() {
       console.warn("Failed to initialize automation store", error);
     });
   }, [settingsReady]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const frame = window.requestAnimationFrame(() => {
-      if (!cancelled) void loadChatPage();
-    });
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-    };
-  }, []);
 
   useEffect(() => {
     if (!settingsReady) {

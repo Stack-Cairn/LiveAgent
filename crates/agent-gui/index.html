@@ -345,7 +345,20 @@
           });
         };
         void document.documentElement.offsetHeight;
-        reveal();
+        let revealed = false;
+        const revealOnce = () => {
+          if (revealed) return;
+          revealed = true;
+          performance.mark?.("liveagent:first-paint-ready");
+          reveal();
+        };
+        const revealFallback = window.setTimeout(revealOnce, 250);
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            window.clearTimeout(revealFallback);
+            revealOnce();
+          });
+        });
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

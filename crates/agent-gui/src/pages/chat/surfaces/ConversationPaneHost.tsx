@@ -31,13 +31,14 @@ export type ConversationPaneHostProps = {
 
 export type RestorableConversationPaneHostProps = ConversationPaneHostProps & {
   title?: string;
+  deferHydration?: boolean;
 };
 
 export const RestorableConversationPaneHost = forwardRef<
   ConversationPaneHostHandle,
   RestorableConversationPaneHostProps
 >(function RestorableConversationPaneHost(props, forwardedRef) {
-  const { title, ...identity } = props;
+  const { title, deferHydration = false, ...identity } = props;
   const { t } = useLocale();
   const { controller } = useConversationPaneBinding(identity);
   const snapshot = useConversationSurfaceSnapshot(controller);
@@ -46,9 +47,29 @@ export const RestorableConversationPaneHost = forwardRef<
     if (snapshot.runtime || snapshot.lifecycle.hydrating || snapshot.lifecycle.hydrationFailed) {
       return;
     }
-    void controller.hydrate().catch(() => undefined);
+    let cancelled = false;
+    const hydrate = () => {
+      if (!cancelled) void controller.hydrate().catch(() => undefined);
+    };
+    if (!deferHydration) {
+      hydrate();
+      return;
+    }
+    if (typeof window.requestIdleCallback === "function") {
+      const idleCallback = window.requestIdleCallback(hydrate, { timeout: 800 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleCallback);
+      };
+    }
+    const timeout = window.setTimeout(hydrate, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
   }, [
     controller,
+    deferHydration,
     snapshot.lifecycle.hydrating,
     snapshot.lifecycle.hydrationFailed,
     snapshot.runtime,

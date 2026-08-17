@@ -8,6 +8,7 @@
         "height": 800,
         "minWidth": 1200,
         "minHeight": 720,
+        "visible": false,
         "backgroundThrottling": "disabled",
         "titleBarStyle": "Overlay",
         "trafficLightPosition": { "x": 18, "y": 26 }
