@@ -110,8 +110,7 @@ export function CheckpointRewindMenu(props: {
       try {
         const grants = await listWorkspaceRootGrants(project);
         for (const grant of grants) {
-          if (grant.state === "active" && grant.access === "write")
-            push(grant.canonicalPath);
+          if (grant.state === "active" && grant.access === "write") push(grant.canonicalPath);
         }
       } catch {
         // 取不到额外授权根时只保留工作区根：宁可少回退，不可越权写入。
