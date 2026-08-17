@@ -72,9 +72,10 @@ function getDefaultContext(): Context {
 }
 
 function getBootAlignedDefaultSettings(): AppSettings {
-  const settings = getDefaultSettings();
+  const defaults = getDefaultSettings();
+  if (typeof document === "undefined") return defaults;
   return {
-    ...settings,
+    ...defaults,
     theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
   };
 }

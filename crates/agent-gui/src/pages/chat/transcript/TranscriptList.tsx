@@ -275,15 +275,15 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
 
   // First-layout settle watch: the transcript stays hidden (parent-gated)
   // until the initial scroll-to-end and its estimate→measure corrections
-  // have converged — scroll offset and total size unchanged across two
-  // frames — then reveals in one shot. Streaming conversations and empty
-  // transcripts reveal immediately; a hard cap always reveals.
+  // have converged — scroll offset and total size unchanged across one frame
+  // — then reveals in one shot. The caller enables this only for large static
+  // transcripts, and a short hard cap keeps startup responsive.
   const hasRows = rows.length > 0;
   const settledRef = useRef(false);
   const onFirstLayoutSettledRef = useRef(onFirstLayoutSettled);
   onFirstLayoutSettledRef.current = onFirstLayoutSettled;
   useLayoutEffect(() => {
-    if (settledRef.current || scrollViewport === null) {
+    if (settledRef.current || scrollViewport === null || !onFirstLayoutSettled) {
       return;
     }
     const settle = () => {
@@ -306,14 +306,14 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
         totalSize === previousTotalSize && scrollTop === previousScrollTop ? stableFrames + 1 : 0;
       previousTotalSize = totalSize;
       previousScrollTop = scrollTop;
-      if (stableFrames >= 2 || performance.now() - startedAt > 800) {
+      if (stableFrames >= 1 || performance.now() - startedAt > 240) {
         settle();
         return;
       }
       frame = requestAnimationFrame(check);
     });
     return () => cancelAnimationFrame(frame);
-  }, [hasRows, isSending, scrollViewport, virtualizer]);
+  }, [hasRows, isSending, onFirstLayoutSettled, scrollViewport, virtualizer]);
 
   // Snapshot measured heights for the next open of this conversation.
   const saveMeasurementsRef = useRef(() => {});

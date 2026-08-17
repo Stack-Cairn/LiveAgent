@@ -1944,12 +1944,16 @@ export function ChatPage(props: ChatPageProps) {
     onCommandError: handleWorkbenchCommandError,
   });
 
+  // The crash shadow already identifies the pane the user was looking at.
+  // Warm that conversation while the sidebar validates the full layout so the
+  // authoritative restore can activate a cache hit instead of starting the
+  // history read only after sidebar + layout IPC have both completed.
   const workbenchPrefetchConversationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!sessionWorkbench.enabled || workbench.restoreReady) return;
     const layout = workbench.layoutRef.current;
-    const focusedPane = layout.focusedPaneId ? layout.panes[layout.focusedPaneId] : undefined;
-    if (focusedPane?.surface.kind !== "conversation") return;
+    const focusedPane = layout.focusedPaneId ? layout.panes[layout.focusedPaneId] : null;
+    if (!focusedPane || focusedPane.surface.kind !== "conversation") return;
     const conversationId = focusedPane.surface.conversationId.trim();
     if (!conversationId || workbenchPrefetchConversationRef.current === conversationId) return;
     workbenchPrefetchConversationRef.current = conversationId;

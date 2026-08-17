@@ -222,6 +222,19 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     );
     resetVisibleTransientState();
 
+    const prefetched = backgroundHydrationRef.current.get(id);
+    if (prefetched) {
+      try {
+        await prefetched;
+      } catch {
+        hydration.markHydrating(id);
+      }
+      if (conversationLoadSequenceRef.current !== loadSequence) {
+        hydration.clearHydrating(id);
+        return "painted";
+      }
+    }
+
     const cached = conversationRuntimeCacheRef.current.get(id);
     if (cached) {
       const historyItem = sidebarStore.peek(id);

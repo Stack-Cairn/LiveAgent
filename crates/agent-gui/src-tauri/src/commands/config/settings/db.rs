@@ -5,6 +5,9 @@ fn now_ms() -> i64 {
     duration.as_millis() as i64
 }
 
+static SCHEMA_INITIALIZED: OnceLock<()> = OnceLock::new();
+static SCHEMA_INITIALIZE_LOCK: Mutex<()> = Mutex::new(());
+
 pub(crate) fn config_dir() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
@@ -144,7 +147,15 @@ pub(crate) fn open_db() -> Result<Connection, String> {
     let mut conn = Connection::open(db_path).map_err(|e| format!("打开设置数据库失败：{e}"))?;
     conn.busy_timeout(Duration::from_secs(5))
         .map_err(|e| format!("设置 SQLite busy_timeout 失败：{e}"))?;
-    initialize_schema(&conn)?;
-    ensure_remote_agent_id(&mut conn)?;
+    if SCHEMA_INITIALIZED.get().is_none() {
+        let _guard = SCHEMA_INITIALIZE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if SCHEMA_INITIALIZED.get().is_none() {
+            initialize_schema(&conn)?;
+            ensure_remote_agent_id(&mut conn)?;
+            let _ = SCHEMA_INITIALIZED.set(());
+        }
+    }
     Ok(conn)
 }

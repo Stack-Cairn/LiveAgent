@@ -36,6 +36,10 @@ import {
 
 export type { ChatTranscriptProps } from "./transcriptTypes";
 
+// Short and medium conversations paint directly. Only large transcripts keep
+// the convergence gate that prevents a visible estimate-to-measure jump.
+const DEFER_REVEAL_HISTORY_ITEM_THRESHOLD = 120;
+
 export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscriptProps) {
   const {
     conversationId,
@@ -162,16 +166,18 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     branchPendingMessageId: branchPendingMessageId ?? null,
   });
 
-  // A freshly opened conversation stays behind the loading overlay until its
-  // first layout settles (TranscriptList reports convergence), then reveals
-  // in one shot — estimate→measure corrections never show as jumps.
+  // Large conversations stay behind the loading overlay until their first
+  // layout settles. Ordinary conversations paint immediately instead of
+  // paying a second loading-state transition after history is already ready.
+  const shouldDeferTranscriptReveal =
+    !isSending && historyItems.length >= DEFER_REVEAL_HISTORY_ITEM_THRESHOLD;
   const [settledConversationId, setSettledConversationId] = useState<string | null>(null);
   const handleFirstLayoutSettled = useCallback(() => {
     setSettledConversationId(conversationId);
   }, [conversationId]);
   const isTranscriptSettling =
     shouldReserveTranscriptBottomSpace &&
-    historyItems.length >= 120 &&
+    shouldDeferTranscriptReveal &&
     settledConversationId !== conversationId;
 
   useLayoutEffect(() => {
@@ -348,7 +354,9 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 onAnchorUserRowChange={setActiveFloorKey}
                 onResendFromEdit={onResendFromEdit}
                 onBranchConversation={onBranchConversation}
-                onFirstLayoutSettled={handleFirstLayoutSettled}
+                onFirstLayoutSettled={
+                  shouldDeferTranscriptReveal ? handleFirstLayoutSettled : undefined
+                }
               />
             </RowInteractionProvider>
           </div>

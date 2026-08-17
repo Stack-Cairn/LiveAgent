@@ -269,6 +269,22 @@ test("startup paints theme and shell before progressively hydrating pane content
     new URL("../../src/pages/chat/transcript/TranscriptLoadingStates.tsx", import.meta.url),
     "utf8",
   );
+  const transcriptSource = readFileSync(
+    new URL("../../src/pages/chat/transcript/ChatTranscript.tsx", import.meta.url),
+    "utf8",
+  );
+  const transcriptListSource = readFileSync(
+    new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url),
+    "utf8",
+  );
+  const historyActionsSource = readFileSync(
+    new URL("../../src/pages/chat/history/useConversationHistoryActions.ts", import.meta.url),
+    "utf8",
+  );
+  const settingsDbSource = readFileSync(
+    new URL("../../src-tauri/src/commands/config/settings/db.rs", import.meta.url),
+    "utf8",
+  );
   const conversationPaneHostSource = readFileSync(
     new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
     "utf8",
@@ -300,15 +316,31 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.match(tauriLibSource, /window\.hide\(\)/);
   assert.match(appSource, /chatPageModule \?\?= import\("\.\/pages\/ChatPage"\)/);
   assert.match(appSource, /void loadChatPage\(\);/);
+  assert.match(appSource, /getBootAlignedDefaultSettings/);
+  assert.match(appSource, /document\.documentElement\.classList\.contains\("dark"\)/);
   assert.doesNotMatch(appSource, /requestAnimationFrame\([\s\S]{0,120}loadChatPage/);
   assert.doesNotMatch(appSource, /import \{ ChatPage \} from "\.\/pages\/ChatPage"/);
   assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
   assert.ok(chatSource.indexOf("useWorkspaceProjects({") < chatSource.indexOf("sidebarStore.start()"));
   assert.match(chatSource, /if \(!workbench\.restoreReady\)[\s\S]{0,180}<PaneLoadingSkeleton/);
+  assert.match(chatSource, /workbenchPrefetchConversationRef/);
+  assert.match(
+    chatSource,
+    /hydrateConversationActionRef\.current\(conversationId\)\.catch/,
+  );
   assert.match(chatSource, /deferHydration=\{!paneContext\.isFocused\}/);
   assert.match(conversationPaneHostSource, /window\.requestIdleCallback\(hydrate/);
+  assert.match(historyActionsSource, /await backgroundHydration/);
+  assert.match(settingsDbSource, /SCHEMA_INITIALIZED\.get\(\)\.is_none\(\)/);
   assert.match(chatSource, /void resolveLiveTerminalSurfaceIds\([\s\S]{0,260}attemptRestore/);
   assert.doesNotMatch(chatSource, /await resolveLiveTerminalSurfaceIds/);
   assert.match(transcriptLoadingSource, /<PaneLoadingSkeleton/);
   assert.doesNotMatch(transcriptLoadingSource, /LoaderCircle/);
+  assert.match(transcriptSource, /DEFER_REVEAL_HISTORY_ITEM_THRESHOLD = 120/);
+  assert.match(
+    transcriptSource,
+    /shouldDeferTranscriptReveal \? handleFirstLayoutSettled : undefined/,
+  );
+  assert.match(transcriptListSource, /stableFrames >= 1/);
+  assert.match(transcriptListSource, /performance\.now\(\) - startedAt > 240/);
 });
