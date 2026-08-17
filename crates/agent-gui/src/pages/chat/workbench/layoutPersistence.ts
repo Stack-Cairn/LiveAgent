@@ -13,6 +13,8 @@ type PersistedWorkbenchLayoutRecord = {
 
 export type WorkbenchLayoutPersistence = {
   load(): Promise<string | null>;
+  /** Synchronous last-known-good copy used when the process is force-killed. */
+  saveCrashShadow(payloadJson: string): void;
   save(input: { payloadJson: string; schemaVersion: number; revision: number }): void;
   /** Keep a diagnostic copy of a corrupted payload, then drop the original. */
   saveCorrupted(raw: string): void;
@@ -34,6 +36,18 @@ function writeLocalStorage(payloadJson: string): void {
   }
 }
 
+function payloadRevision(payloadJson: string | null): number {
+  if (!payloadJson) return -1;
+  try {
+    const parsed = JSON.parse(payloadJson) as { revision?: unknown };
+    return typeof parsed.revision === "number" && Number.isInteger(parsed.revision)
+      ? parsed.revision
+      : -1;
+  } catch {
+    return -1;
+  }
+}
+
 /**
  * Native persistence for the window workbench layout: the SQLite
  * `workbench_layout` table on desktop (never synced through the Gateway),
@@ -45,25 +59,37 @@ export function createWorkbenchLayoutPersistence(): WorkbenchLayoutPersistence {
   return {
     async load() {
       if (!native) return readLocalStorage();
+      const localPayload = readLocalStorage();
       try {
         const record = await invoke<PersistedWorkbenchLayoutRecord | null>(
           "workbench_layout_load",
           { scopeId: WORKBENCH_LAYOUT_SCOPE_ID },
         );
-        if (record?.payloadJson) return record.payloadJson;
+        if (record?.payloadJson) {
+          return payloadRevision(localPayload) > record.revision
+            ? localPayload
+            : record.payloadJson;
+        }
       } catch (error) {
         console.warn("failed to load workbench layout from sqlite", error);
-        return readLocalStorage();
+        return localPayload;
       }
       // Migrate the pre-SQLite localStorage payload once, then keep SQLite
       // authoritative (the local copy stays as a harmless shadow).
-      return readLocalStorage();
+      return localPayload;
+    },
+    saveCrashShadow(payloadJson) {
+      writeLocalStorage(payloadJson);
     },
     save(input) {
       if (!native) {
         writeLocalStorage(input.payloadJson);
         return;
       }
+      // Synchronous crash shadow: a force-quit can kill the process before the
+      // async SQLite invoke commits. Startup compares revisions and chooses the
+      // newer shadow, which the normal post-restore save migrates back to SQLite.
+      writeLocalStorage(input.payloadJson);
       void invoke("workbench_layout_save", {
         scopeId: WORKBENCH_LAYOUT_SCOPE_ID,
         schemaVersion: input.schemaVersion,

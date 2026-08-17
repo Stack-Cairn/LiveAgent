@@ -1,13 +1,22 @@
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import type { ProjectRef } from "@liveagent/ui/lib/workbench/types";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { CurrentTaskProgress } from "../components/CurrentTaskProgress";
 import { PendingToolApprovalBar } from "../components/PendingToolApprovalBar";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
+import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
 import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
 import { ChatTranscript } from "../transcript/ChatTranscript";
 import { useConversationPaneBinding } from "./ConversationPaneHostEnvironment";
@@ -18,6 +27,51 @@ export type ConversationPaneHostProps = {
   conversationId: string;
   project: ProjectRef;
 };
+
+export type RestorableConversationPaneHostProps = ConversationPaneHostProps & {
+  title?: string;
+};
+
+export const RestorableConversationPaneHost = forwardRef<
+  ConversationPaneHostHandle,
+  RestorableConversationPaneHostProps
+>(function RestorableConversationPaneHost(props, forwardedRef) {
+  const { title, ...identity } = props;
+  const { t } = useLocale();
+  const { controller } = useConversationPaneBinding(identity);
+  const snapshot = useConversationSurfaceSnapshot(controller);
+
+  useEffect(() => {
+    if (snapshot.runtime || snapshot.lifecycle.hydrating || snapshot.lifecycle.hydrationFailed) {
+      return;
+    }
+    void controller.hydrate().catch(() => undefined);
+  }, [
+    controller,
+    snapshot.lifecycle.hydrating,
+    snapshot.lifecycle.hydrationFailed,
+    snapshot.runtime,
+  ]);
+
+  if (!snapshot.runtime) {
+    const loading = snapshot.lifecycle.hydrating;
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-sm text-muted-foreground">{title || t("chat.pendingTitle")}</p>
+        <button
+          type="button"
+          disabled={loading}
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+          onClick={() => void controller.retry().catch(() => undefined)}
+        >
+          {loading ? t("chat.loadingConversation") : t("workbench.loadConversation")}
+        </button>
+      </div>
+    );
+  }
+
+  return <ConversationPaneHost ref={forwardedRef} {...identity} />;
+});
 
 export const ConversationPaneHost = forwardRef<
   ConversationPaneHostHandle,

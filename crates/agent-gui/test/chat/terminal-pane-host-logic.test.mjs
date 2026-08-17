@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// TerminalPaneHost 的纯逻辑层:休眠判定(恢复的 Pane 绝不静默建 PTY)、
+// TerminalPaneHost 的纯逻辑层:恢复 Pane 自动重建、陈旧绑定清理、
 // ensure 的挂载竞态去重、restartFromLaunchSpec 的收尾顺序。
 // 宿主本身需要 DOM 才能挂载,这里分两层覆盖:
 //   1) 模型层——真实 runtime 模块(授权集 + 绑定表 + ensure)的组合语义;
@@ -66,38 +66,28 @@ function countingClient() {
 }
 
 /**
- * 宿主的休眠判定:`!boundSessionId && !launchRequested`,其中 launchRequested
- * 的初值即 auto-launch 授权。这里用真实的绑定表与授权集复算同一组合,源码断言
- * 负责钉住宿主里的表达式与本函数一致。
+ * 宿主的休眠判定:`!boundSessionId && !launchRequested`。恢复时
+ * launchRequested 固定为 true;这里只复算显式 kill 后的兜底状态。
  */
-function isDormantOnMount(bindings, registry, surfaceId) {
+function isDormant(bindings, launchRequested, surfaceId) {
   const boundSessionId = bindings.get(surfaceId);
-  const launchRequested = registry.isAuthorized(surfaceId);
   return !boundSessionId && !launchRequested;
 }
 
 // ---------------------------------------------------------------------------
-// 模型层:授权语义与休眠判定
+// 模型层:自动恢复、授权键与休眠判定
 // ---------------------------------------------------------------------------
 
-test("a fresh registry authorizes nothing: every restored surface mounts dormant", () => {
+test("a restored surface without a binding mounts ready to auto-launch", () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
-  const previousRun = createTerminalPaneAutoLaunchRegistry();
-  previousRun.authorize("surface-a");
-
-  // 应用重启:授权集是窗口级内存,新建实例不继承上一轮的授权;
-  // sessionStorage 也已清空,绑定为空 —— 布局恢复出的 Pane 必须休眠。
-  const registry = createTerminalPaneAutoLaunchRegistry();
-  assert.equal(registry.isAuthorized("surface-a"), false);
-  assert.equal(isDormantOnMount(bindings, registry, "surface-a"), true);
+  assert.equal(isDormant(bindings, true, "surface-a"), false);
 });
 
-test("authorization is per surface: one restart never wakes a sibling pane", () => {
+test("only explicit kill puts an unbound surface into the dormant fallback", () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
-  const registry = createTerminalPaneAutoLaunchRegistry();
-  registry.authorize("surface-a");
-  assert.equal(isDormantOnMount(bindings, registry, "surface-a"), false);
-  assert.equal(isDormantOnMount(bindings, registry, "surface-b"), true);
+  assert.equal(isDormant(bindings, false, "surface-a"), true);
+  bindings.set("surface-a", "session-1");
+  assert.equal(isDormant(bindings, false, "surface-a"), false);
 });
 
 test("authorization keys are trimmed on both write and read", () => {
@@ -112,40 +102,28 @@ test("a webview reload that keeps its binding mounts live, not dormant", () => {
   // sessionStorage 存活 + Rust 终端注册表存活:绑定命中,无需授权即可直接重挂。
   const bindings = createTerminalPaneBindingStore({ storage: null });
   bindings.set("surface-a", "session-1");
-  const registry = createTerminalPaneAutoLaunchRegistry();
-  assert.equal(isDormantOnMount(bindings, registry, "surface-a"), false);
+  assert.equal(isDormant(bindings, true, "surface-a"), false);
 });
 
-test("the explicit restart authorizes the surface and then ensure may create a PTY", async () => {
+test("a restored unbound surface immediately ensures a replacement PTY", async () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
-  const registry = createTerminalPaneAutoLaunchRegistry();
   const client = countingClient();
   const surface = localSurface("surface-a");
   const inflight = new Map();
 
-  // 休眠占位:即使 sessions 已加载,宿主也不会走 ensure。
-  assert.equal(isDormantOnMount(bindings, registry, surface.surfaceId), true);
-  assert.equal(client.created, 0);
-
-  // 用户点「重新启动」:授权 → 退出休眠 → 常规 ensure。
-  registry.authorize(surface.surfaceId);
-  assert.equal(isDormantOnMount(bindings, registry, surface.surfaceId), false);
+  assert.equal(isDormant(bindings, true, surface.surfaceId), false);
   const created = await ensureTerminalPaneSession(surface, { client, bindings, inflight });
   assert.equal(client.created, 1);
   assert.equal(bindings.get("surface-a"), created.id);
 });
 
-test("killing the session leaves the surface authorized, so the host must close the pane", () => {
-  // kill 只回收绑定,不撤销授权(会话曾经绑定过 = 已授权)。仍挂载的宿主会
-  // 因此立刻 ensure 出一个新 PTY —— 这正是 kill 必须由页面 closePane 收尾的原因。
+test("kill revokes launchRequested until the page closes the pane", () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
-  const registry = createTerminalPaneAutoLaunchRegistry();
   bindings.set("surface-a", "session-1");
-  registry.authorize("surface-a");
 
   bindings.delete("surface-a");
   assert.equal(bindings.get("surface-a"), null);
-  assert.equal(isDormantOnMount(bindings, registry, "surface-a"), false);
+  assert.equal(isDormant(bindings, false, "surface-a"), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -217,13 +195,9 @@ function assertOrder(block, steps, label) {
   }
 }
 
-test("host derives dormancy from the binding plus the auto-launch authorization", () => {
+test("host auto-launches restored panes and reserves dormancy for kill cleanup", () => {
   assert.match(hostSource, /const dormant = !boundSessionId && !launchRequested;/);
-  // launchRequested 的初值来自授权集(恢复的 Pane 为 false)。
-  assert.match(
-    hostSource,
-    /useState\(\(\) =>[\s\S]{0,80}terminalPaneAutoLaunch\.isAuthorized\(surface\.surfaceId\)/,
-  );
+  assert.match(hostSource, /const \[launchRequested, setLaunchRequested\] = useState\(true\);/);
   // 绑定命中即视为授权:会话退出后的重启不再回落到休眠占位。
   const bindingEffect = blockFrom(hostSource, "if (!boundSessionId) return;");
   assertOrder(
@@ -246,18 +220,24 @@ test("the ensure effect early-returns while dormant and re-runs when dormancy ch
   assert.match(ensureEffect, /\}, \[[^\]]*\bdormant\b[^\]]*\]\);$/);
 });
 
-test("a bound-but-missing session becomes an error state instead of a silent respawn", () => {
+test("a bound-but-missing session drops the stale binding before auto-recreate", () => {
   const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
   assertOrder(
     ensureEffect,
-    ["if (boundSessionId) {", 'setErrorState({ kind: "session-missing" })'],
-    "session-missing branch",
+    [
+      "if (boundSessionId) {",
+      "terminalPaneBindings.delete(surface.surfaceId)",
+      "setCreatedSession(null)",
+    ],
+    "stale-binding branch",
   );
-  // 该分支直接返回,不落到下面的 ensure。
-  assert.match(ensureEffect, /setErrorState\(\{ kind: "session-missing" \}\);\s*\n\s*return;/);
-  // 绑定分支的 return 早于 ensure:有绑定就绝不新建 PTY。
+  assert.match(
+    ensureEffect,
+    /terminalPaneBindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
+  );
+  // 先触发 binding store 更新,下一轮 effect 才进入 ensure,避免同轮双建。
   assert.ok(
-    ensureEffect.indexOf('setErrorState({ kind: "session-missing" })') <
+    ensureEffect.indexOf("terminalPaneBindings.delete(surface.surfaceId)") <
       ensureEffect.indexOf("ensureTerminalPaneSession(surface, {"),
   );
 });
@@ -280,7 +260,7 @@ test("restartFromLaunchSpec closes the stale session, drops the binding, then au
   assert.equal(restart.includes("ensureTerminalPaneSession"), false);
 });
 
-test("dormant panes render the exited placeholder and never a live viewport", () => {
+test("the explicit-kill dormant fallback never renders a live viewport", () => {
   assert.match(hostSource, /if \(dormant\) \{[\s\S]{0,200}phase = "exited";/);
   // 只有持有租约的会话才会被交给视口渲染。
   assert.match(hostSource, /const leased = session !== null && leasedSessionId === session\.id;/);
@@ -295,6 +275,7 @@ test("kill closes the process, reclaims the binding, and hands the pane back to 
       "tauriTerminalClient",
       ".close(targetSessionId)",
       "terminalPaneBindings.delete(surface.surfaceId)",
+      "setLaunchRequested(false)",
       "onSessionKilled?.()",
     ],
     "killSession",

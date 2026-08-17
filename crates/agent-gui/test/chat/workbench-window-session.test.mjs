@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -111,12 +112,12 @@ test("restore filtering empties the layout when nothing survives", () => {
   assert.equal(filtered.focusedPaneId, null);
 });
 
-test("restore filtering always keeps terminal panes (dormant placeholder restore)", () => {
+test("restore filtering keeps terminal panes for launchSpec auto-recreation", () => {
   const filtered = filterLayoutToLiveSurfaces(mixedLayout(), {
     validConversationIds: new Set(["conv-a"]),
   });
-  // Terminal panes restore as dormant placeholders (launchSpec is the
-  // recovery identity; no PTY is created); unsupported panes pass through.
+  // launchSpec is the recovery identity; the host recreates the PTY after
+  // layout filtering. Unsupported panes pass through unchanged.
   assert.deepEqual(Object.keys(filtered.panes).sort(), ["pane-a", "pane-b", "pane-c"]);
   assert.equal(filtered.panes["pane-b"].surface.kind, "localTerminal");
   assert.equal(filtered.panes["pane-c"].surface.kind, "unsupported");
@@ -127,7 +128,7 @@ test("restore filtering always keeps terminal panes (dormant placeholder restore
 
 test("restore filtering drops terminal panes whose cwd escaped their project", () => {
   // 布局 JSON 不是授权凭据:持久化文件被改成「project 声称 /w/term-b、
-  // cwd 指向 /etc」时,该 Pane 不能作为可重启占位活下来。
+  // cwd 指向 /etc」时,该 Pane 不能作为可重建终端活下来。
   const layout = mixedLayout();
   layout.panes["pane-b"].surface.launchSpec.cwd = "/etc";
   const filtered = filterLayoutToLiveSurfaces(layout, {
@@ -172,4 +173,35 @@ test("persisted layout round-trips through the codec", () => {
   assert.equal(decoded.ok, true);
   assert.deepEqual(decoded.layout, layout);
   assert.equal(typeof WORKBENCH_LAYOUT_STORAGE_KEY, "string");
+});
+
+test("layout changes write a synchronous crash shadow before the debounce", () => {
+  const hookSource = readFileSync(
+    new URL("../../src/pages/chat/workbench/useWindowWorkbench.ts", import.meta.url),
+    "utf8",
+  );
+  const effectStart = hookSource.indexOf("persistCrashShadowNow(layout)");
+  const debounceStart = hookSource.indexOf("window.setTimeout", effectStart);
+  assert.notEqual(effectStart, -1);
+  assert.notEqual(debounceStart, -1);
+  assert.ok(effectStart < debounceStart);
+  const dispatchStart = hookSource.indexOf("const dispatch = useCallback");
+  const refCommit = hookSource.indexOf("layoutRef.current = result.layout", dispatchStart);
+  const crashCommit = hookSource.indexOf("persistCrashShadowNow(result.layout)", dispatchStart);
+  const reactCommit = hookSource.indexOf("setLayout(result.layout)", dispatchStart);
+  assert.ok(refCommit < crashCommit && crashCommit < reactCommit);
+  assert.match(hookSource, /window\.addEventListener\("pagehide", flush\)/);
+  assert.match(hookSource, /document\.addEventListener\("visibilitychange", flushWhenHidden\)/);
+});
+
+test("native restore chooses a newer crash shadow over sqlite", () => {
+  const persistenceSource = readFileSync(
+    new URL("../../src/pages/chat/workbench/layoutPersistence.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    persistenceSource,
+    /payloadRevision\(localPayload\) > record\.revision\s*\? localPayload\s*: record\.payloadJson/,
+  );
+  assert.match(persistenceSource, /saveCrashShadow\(payloadJson\)[\s\S]{0,80}writeLocalStorage/);
 });

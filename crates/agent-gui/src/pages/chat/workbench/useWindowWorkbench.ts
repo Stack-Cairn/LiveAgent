@@ -96,9 +96,8 @@ function surfaceIsLive(pane: PaneRecord, live: LiveWorkbenchSurfaces): boolean {
       // placeholder.
       if (!terminalLaunchSpecIsInProject(pane.surface)) return false;
       // Terminal panes otherwise always survive restore: their launchSpec is a
-      // full recovery identity. Dead sessions restore as a dormant "exited"
-      // placeholder (no PTY is created until the user restarts), so keeping
-      // the pane is safe even when the live-session probe failed.
+      // full recovery identity. Dead sessions are recreated by TerminalPaneHost
+      // after restore, while live webview-reload sessions reattach by binding.
       return true;
     case "unsupported":
       // Forward-compat passthrough: newer-version panes must survive restore.
@@ -168,6 +167,8 @@ type WorkbenchCommandInput = WorkbenchCommand extends infer Command
 export type WorkbenchLayoutPersistenceAdapter = {
   load(): Promise<string | null>;
   save(input: { payloadJson: string; schemaVersion: number; revision: number }): void;
+  /** Synchronous last-known-good copy used when the process is force-killed. */
+  saveCrashShadow(payloadJson: string): void;
   saveCorrupted(raw: string): void;
 };
 
@@ -261,6 +262,26 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   const commandErrorRef = useRef(onCommandError);
   commandErrorRef.current = onCommandError;
 
+  const persistLayoutNow = useCallback(
+    (candidate: WorkbenchLayout) => {
+      if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
+      persistenceRef.current.save({
+        payloadJson: encodeWorkbenchLayout(candidate),
+        schemaVersion: candidate.schemaVersion,
+        revision: candidate.revision,
+      });
+    },
+    [enabled],
+  );
+
+  const persistCrashShadowNow = useCallback(
+    (candidate: WorkbenchLayout) => {
+      if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
+      persistenceRef.current.saveCrashShadow(encodeWorkbenchLayout(candidate));
+    },
+    [enabled],
+  );
+
   /**
    * Pixel context for the reducer's feasibility checks, read fresh per command
    * so a resize between renders never judges against a stale canvas. Only the
@@ -280,14 +301,13 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
 
   useEffect(() => {
     if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
+    // Keep the latest revision synchronously before entering the debounce
+    // window. A hard process kill does not reliably deliver unload events.
+    persistCrashShadowNow(layout);
     if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
     persistTimerRef.current = window.setTimeout(() => {
       persistTimerRef.current = null;
-      persistenceRef.current?.save({
-        payloadJson: encodeWorkbenchLayout(layout),
-        schemaVersion: layout.schemaVersion,
-        revision: layout.revision,
-      });
+      persistLayoutNow(layout);
     }, PERSIST_DEBOUNCE_MS);
     return () => {
       if (persistTimerRef.current !== null) {
@@ -295,7 +315,36 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
         persistTimerRef.current = null;
       }
     };
-  }, [enabled, layout]);
+  }, [enabled, layout, persistCrashShadowNow, persistLayoutNow]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      !persistenceRef.current ||
+      typeof window === "undefined" ||
+      typeof document === "undefined"
+    ) {
+      return;
+    }
+    const flush = () => {
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistLayoutNow(layoutRef.current);
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [enabled, persistLayoutNow]);
 
   const dispatch = useCallback(
     (command: WorkbenchCommand): WorkbenchCommandResult => {
@@ -306,13 +355,17 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       const result = applyWorkbenchCommand(layoutRef.current, contextual);
       if (result.ok) {
         layoutRef.current = result.layout;
+        // Commit the recovery identity before React paints the new geometry.
+        // A force-kill immediately after a visible drag/split therefore still
+        // has the exact accepted revision in localStorage.
+        persistCrashShadowNow(result.layout);
         setLayout(result.layout);
       } else {
         commandErrorRef.current?.(result.error);
       }
       return result;
     },
-    [commandContext],
+    [commandContext, persistCrashShadowNow],
   );
 
   const dispatchCurrent = useCallback(

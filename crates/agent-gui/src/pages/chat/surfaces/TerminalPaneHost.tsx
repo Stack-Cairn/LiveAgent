@@ -31,7 +31,6 @@ export type TerminalPaneHostProps = {
 };
 
 type TerminalPaneErrorState =
-  | { kind: "session-missing" }
   | { kind: "ssh-prompt" }
   | { kind: "create-failed"; message: string }
   | { kind: "lease"; message: string };
@@ -40,10 +39,9 @@ const SSH_LATENCY_POLL_MS = 15_000;
 
 /**
  * 终端 Pane 的页面侧宿主:把布局层的 launchSpec 身份接到运行时——
- * 绑定(surfaceId→sessionId)解析既有会话;绑定缺失时区分两条进入路径:
- * 本次会话内显式创建的 surface(auto-launch 已授权)自动按 launchSpec 建
- * 会话,恢复的 surface(应用重启/绑定对账清空)停在休眠占位,用户点
- * "重新启动"才建 PTY。渲染前必须持有该会话的视图租约,保证输出流单消费、
+ * 绑定(surfaceId→sessionId)解析既有会话;绑定缺失时按持久化 launchSpec
+ * 自动重建新的 PTY/SSH 会话。完整应用重启无法复活旧进程,但 Pane、cwd、
+ * shell/host 与交互能力会自动恢复。渲染前必须持有该会话的视图租约,保证输出流单消费、
  * 输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
@@ -67,10 +65,9 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const [errorState, setErrorState] = useState<TerminalPaneErrorState | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const [leasedSessionId, setLeasedSessionId] = useState<string | null>(null);
-  // 恢复占位 → 用户点重启后置 true;与 auto-launch 授权一起驱动 ensure。
-  const [launchRequested, setLaunchRequested] = useState(() =>
-    terminalPaneAutoLaunch.isAuthorized(surface.surfaceId),
-  );
+  // 恢复 Pane 默认自动按 launchSpec 重建。显式 kill 会置 false 并关闭 Pane,
+  // 防止关闭收尾前的同一宿主瞬间重建进程。
+  const [launchRequested, setLaunchRequested] = useState(true);
 
   const liveSession = boundSessionId
     ? (sessions.find((entry) => entry.id === boundSessionId) ?? null)
@@ -90,14 +87,17 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     setLaunchRequested(true);
   }, [boundSessionId, surface.surfaceId]);
 
-  // 休眠占位(恢复的 Pane,绑定为空且未授权):不自动建 PTY。
+  // 仅显式 kill 的短暂收尾阶段会休眠;正常恢复始终自动重建。
   const dormant = !boundSessionId && !launchRequested;
 
   useEffect(() => {
     if (!sessionsLoaded || session || errorState || dormant) return;
     if (boundSessionId) {
-      // 绑定指向的会话已不在注册表:会话被外部关闭,或应用重启后的陈旧绑定。
-      setErrorState({ kind: "session-missing" });
+      // 完整应用重启后 Rust 注册表为空,但部分 WebView 实现仍可能留下
+      // sessionStorage 绑定。清掉陈旧 sessionId,下一次 effect 自动按
+      // launchSpec 重建,不要求用户手动介入。
+      terminalPaneBindings.delete(surface.surfaceId);
+      setCreatedSession(null);
       return;
     }
     let cancelled = false;
@@ -222,7 +222,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       void tauriTerminalClient.close(staleSessionId).catch(() => {});
     }
     terminalPaneBindings.delete(surface.surfaceId);
-    // 休眠占位的显式重启 = 授权 auto-launch,此后进入常规 ensure 流程。
+    // 手动重试重新授权,此后进入常规 ensure 流程。
     terminalPaneAutoLaunch.authorize(surface.surfaceId);
     setLaunchRequested(true);
     setCreatedSession(null);
@@ -232,8 +232,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
 
   const errorMessageFor = (state: TerminalPaneErrorState): string => {
     switch (state.kind) {
-      case "session-missing":
-        return t("workbench.terminalSessionMissing");
       case "ssh-prompt":
         return t("workbench.terminalSshPrompt");
       case "create-failed":
@@ -248,7 +246,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   let errorMessage: string | null = null;
   let onRetry: (() => void) | undefined = restartFromLaunchSpec;
   if (dormant) {
-    // 恢复的 Pane:进程已随应用退出;布局与 launchSpec 保留,等待显式重启。
+    // 显式 kill 收尾兜底;正常恢复不会进入该分支。
     phase = "exited";
   } else if (errorState) {
     phase = "error";
