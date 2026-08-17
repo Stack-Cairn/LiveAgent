@@ -1,6 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { type CSSProperties, useEffect, useRef } from "react";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
@@ -27,6 +28,10 @@ type XTermViewportProps = {
 
 const SNAPSHOT_ATTACH_RETRY_MIN_MS = 500;
 const SNAPSHOT_ATTACH_RETRY_MAX_MS = 5_000;
+// 容器连续变化（divider 拖动）时的两级节流：视觉 fit 周期性执行保持跟手，
+// PTY resize 只在尺寸稳定后（尾沿）提交一次，避免拖动过程向后端刷 resize。
+const FIT_THROTTLE_MS = 80;
+const PTY_RESIZE_DEBOUNCE_MS = 100;
 
 function terminalTheme(theme: "light" | "dark") {
   if (theme === "dark") {
@@ -175,6 +180,20 @@ export function XTermViewport({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    // WebGL 渲染器：多 Pane 同时渲染时 DOM 渲染器主线程压力线性叠加，WebGL
+    // 走 GPU。上下文创建失败（WebGL2 不可用）或运行中丢失时回退默认渲染器。
+    let webglAddon: WebglAddon | null = null;
+    try {
+      const addon = new WebglAddon();
+      addon.onContextLoss(() => {
+        addon.dispose();
+        if (webglAddon === addon) webglAddon = null;
+      });
+      term.loadAddon(addon);
+      webglAddon = addon;
+    } catch {
+      webglAddon = null;
+    }
     let touchScrollActive = false;
     let touchScrollCancelled = false;
     let lastTouchX = 0;
@@ -195,15 +214,39 @@ export function XTermViewport({
       focusTerminal();
     };
 
-    const fitAndResize = () => {
+    let ptyResizeTimer: number | null = null;
+    let lastVisualFitAt = 0;
+
+    // 视觉 fit：只重排 xterm 网格（term.cols/rows 随之更新），不触发后端。
+    const fitVisual = () => {
       if (disposed) return;
       if (!terminalContainerHasSize(container)) return;
+      lastVisualFitAt = Date.now();
       try {
         fit.fit();
-        streamHandle?.resize(term.cols, term.rows);
       } catch {
         // xterm fit can throw while the panel is hidden or measuring at zero size.
       }
+    };
+
+    // PTY resize 提交：尾沿去抖，尺寸稳定后一定提交最终值（streamBuffer 内部
+    // 还有 16ms 合并，双层叠加后拖动过程后端只收到稳定尺寸）。
+    const schedulePtyResizeCommit = () => {
+      if (ptyResizeTimer !== null) {
+        window.clearTimeout(ptyResizeTimer);
+      }
+      ptyResizeTimer = window.setTimeout(() => {
+        ptyResizeTimer = null;
+        if (disposed) return;
+        streamHandle?.resize(term.cols, term.rows);
+      }, PTY_RESIZE_DEBOUNCE_MS);
+    };
+
+    const fitAndResize = () => {
+      if (disposed) return;
+      if (!terminalContainerHasSize(container)) return;
+      fitVisual();
+      schedulePtyResizeCommit();
     };
     fitAndResizeRef.current = fitAndResize;
 
@@ -216,6 +259,11 @@ export function XTermViewport({
     window.addEventListener(CODE_FONT_FAMILY_CHANGE_EVENT, handleCodeFontFamilyChange);
 
     const resizeObserver = new ResizeObserver(() => {
+      // 拖动中周期性做视觉 fit 保持跟手（节流 FIT_THROTTLE_MS）……
+      if (Date.now() - lastVisualFitAt >= FIT_THROTTLE_MS) {
+        fitVisual();
+      }
+      // ……尾沿再做一次最终 fit + PTY resize 提交，保证结束尺寸一定生效。
       if (resizeTimerRef.current !== null) {
         window.clearTimeout(resizeTimerRef.current);
       }
@@ -491,6 +539,10 @@ export function XTermViewport({
         window.clearTimeout(resizeTimerRef.current);
         resizeTimerRef.current = null;
       }
+      if (ptyResizeTimer !== null) {
+        window.clearTimeout(ptyResizeTimer);
+        ptyResizeTimer = null;
+      }
       clearSnapshotRetryTimer();
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("touchstart", handleTouchStart);
@@ -500,6 +552,13 @@ export function XTermViewport({
       streamOutputUnsubscribe?.();
       streamInputUnsubscribe?.();
       streamHandle?.dispose();
+      // 先释放 WebGL 上下文再销毁 terminal，避免 dispose 顺序问题。
+      try {
+        webglAddon?.dispose();
+      } catch {
+        // 上下文已丢失时 dispose 可能抛错，忽略。
+      }
+      webglAddon = null;
       term.dispose();
       window.removeEventListener(CODE_FONT_FAMILY_CHANGE_EVENT, handleCodeFontFamilyChange);
     };
