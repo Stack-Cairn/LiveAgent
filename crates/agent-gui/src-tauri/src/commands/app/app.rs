@@ -21,10 +21,32 @@ pub struct GlobalShortcutRegistry {
 #[derive(Default)]
 pub struct WindowPinState(pub AtomicBool);
 
+#[derive(Default)]
+pub struct FrontendReadyState(pub AtomicBool);
+
 /// 前端查询当前置顶状态（webview 重载后恢复置顶指示器）。
 #[tauri::command]
 pub fn app_window_pinned(pin_state: State<'_, Arc<WindowPinState>>) -> bool {
     pin_state.0.load(Ordering::SeqCst)
+}
+
+/// HTML 的静态启动骨架完成同步布局后再显示原生窗口，避免 WebView
+/// 导航到首个可绘制帧之间暴露系统默认白色背景。
+#[tauri::command]
+pub fn app_frontend_ready(
+    window: tauri::WebviewWindow,
+    ready_state: State<'_, Arc<FrontendReadyState>>,
+) -> Result<(), String> {
+    ready_state.0.store(true, Ordering::SeqCst);
+    if window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    window
+        .show()
+        .map_err(|error| format!("failed to show frontend-ready window: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("failed to focus frontend-ready window: {error}"))
 }
 
 /// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经

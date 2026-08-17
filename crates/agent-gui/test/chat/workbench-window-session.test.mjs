@@ -245,6 +245,18 @@ test("native restore chooses a newer crash shadow over sqlite", () => {
 test("startup paints theme and shell before progressively hydrating pane contents", () => {
   const htmlSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const tauriConfigSource = readFileSync(
+    new URL("../../src-tauri/tauri.conf.json", import.meta.url),
+    "utf8",
+  );
+  const appCommandSource = readFileSync(
+    new URL("../../src-tauri/src/commands/app/app.rs", import.meta.url),
+    "utf8",
+  );
+  const tauriLibSource = readFileSync(
+    new URL("../../src-tauri/src/lib.rs", import.meta.url),
+    "utf8",
+  );
   const chatSource = readFileSync(
     new URL("../../src/pages/ChatPage.tsx", import.meta.url),
     "utf8",
@@ -255,9 +267,23 @@ test("startup paints theme and shell before progressively hydrating pane content
   );
 
   const themeScript = htmlSource.indexOf('localStorage.getItem("liveagent.ui-settings.v1")');
+  const staticShell = htmlSource.indexOf('data-static-boot-shell=""');
+  const frontendReady = htmlSource.indexOf('invoke("app_frontend_ready")');
   const appScript = htmlSource.indexOf('src="/src/main.tsx"');
   assert.ok(themeScript >= 0 && themeScript < appScript);
+  assert.ok(staticShell >= 0 && staticShell < appScript);
+  assert.ok(frontendReady >= 0 && frontendReady < appScript);
   assert.match(htmlSource, /--liveagent-boot-background/);
+  assert.match(htmlSource, /liveagent\.sessionWorkbench\.layout\.v1/);
+  assert.match(tauriConfigSource, /"visible": false/);
+  assert.match(appCommandSource, /pub fn app_frontend_ready/);
+  assert.match(appCommandSource, /ready_state\.0\.store\(true, Ordering::SeqCst\)/);
+  assert.match(tauriLibSource, /commands::app::app_frontend_ready/);
+  assert.match(tauriLibSource, /FrontendReadyState::default/);
+  assert.match(tauriLibSource, /if !ready_state\.0\.load\(Ordering::SeqCst\)/);
+  assert.match(appSource, /chatPageModule \?\?= import\("\.\/pages\/ChatPage"\)/);
+  assert.match(appSource, /requestAnimationFrame\([\s\S]{0,120}loadChatPage/);
+  assert.doesNotMatch(appSource, /import \{ ChatPage \} from "\.\/pages\/ChatPage"/);
   assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
   assert.match(chatSource, /if \(!workbench\.restoreReady\)[\s\S]{0,180}<PaneLoadingSkeleton/);
   assert.match(chatSource, /void resolveLiveTerminalSurfaceIds\([\s\S]{0,260}attemptRestore/);

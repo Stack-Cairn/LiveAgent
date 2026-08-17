@@ -11,10 +11,18 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
-import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AppBootShell } from "./components/app/AppBootShell";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
@@ -40,8 +48,19 @@ import {
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
-import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
+
+let chatPageModule: Promise<typeof import("./pages/ChatPage")> | null = null;
+
+function loadChatPage() {
+  chatPageModule ??= import("./pages/ChatPage");
+  return chatPageModule;
+}
+
+const ChatPage = lazy(async () => ({ default: (await loadChatPage()).ChatPage }));
+const SettingsPage = lazy(async () => ({
+  default: (await import("@liveagent/ui/pages/settings/SettingsPage")).SettingsPage,
+}));
 
 function getDefaultContext(): Context {
   return {
@@ -569,6 +588,17 @@ export default function App() {
   }, [settingsReady]);
 
   useEffect(() => {
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      if (!cancelled) void loadChatPage();
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!settingsReady) {
       return;
     }
@@ -626,18 +656,22 @@ export default function App() {
         <CronPromptRunner settings={settings} />
         <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
         <AppErrorBoundary>
-          <ChatPage
-            settings={settings}
-            setSettings={setSettings}
-            getMcpSettings={getMcpSettings}
-            getToolPolicies={getToolPolicies}
-            context={context}
-            setContext={setContext}
-            onOpenSettings={openSettings}
-            onToggleTheme={toggleTheme}
-            appUpdate={appUpdate}
-            onRunningConversationCountChange={handleRunningConversationCountChange}
-          />
+          <Suspense
+            fallback={<AppBootShell loadingLabel={translate("app.loading", settings.locale)} />}
+          >
+            <ChatPage
+              settings={settings}
+              setSettings={setSettings}
+              getMcpSettings={getMcpSettings}
+              getToolPolicies={getToolPolicies}
+              context={context}
+              setContext={setContext}
+              onOpenSettings={openSettings}
+              onToggleTheme={toggleTheme}
+              appUpdate={appUpdate}
+              onRunningConversationCountChange={handleRunningConversationCountChange}
+            />
+          </Suspense>
         </AppErrorBoundary>
         {visible && (
           <div
@@ -647,15 +681,23 @@ export default function App() {
             onTransitionEnd={handleTransitionEnd}
           >
             <AppErrorBoundary>
-              <SettingsPage
-                settings={settings}
-                setSettings={setSettings}
-                saveState={settingsSaveState}
-                onBack={closeSettings}
-                initialSection={settingsSection}
-                initialProviderId={settingsProviderId}
-                appUpdate={appUpdate}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
+                    {translate("app.loading", settings.locale)}
+                  </div>
+                }
+              >
+                <SettingsPage
+                  settings={settings}
+                  setSettings={setSettings}
+                  saveState={settingsSaveState}
+                  onBack={closeSettings}
+                  initialSection={settingsSection}
+                  initialProviderId={settingsProviderId}
+                  appUpdate={appUpdate}
+                />
+              </Suspense>
             </AppErrorBoundary>
           </div>
         )}

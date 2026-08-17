@@ -147,6 +147,7 @@ macro_rules! app_invoke_handler {
             commands::update::app_update_install,
             commands::update::app_restart,
             commands::app::app_runtime_platform,
+            commands::app::app_frontend_ready,
             commands::app::app_set_close_window_behavior,
             commands::app::app_set_global_shortcuts,
             commands::app::app_window_pinned,
@@ -311,6 +312,11 @@ macro_rules! app_invoke_handler {
 }
 
 fn show_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(ready_state) = app.try_state::<Arc<commands::app::FrontendReadyState>>() {
+        if !ready_state.0.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+    }
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         window.show()?;
         window.unminimize()?;
@@ -710,6 +716,7 @@ pub fn run() {
                 .build(),
         )
         .manage(Arc::new(commands::app::GlobalShortcutRegistry::default()))
+        .manage(Arc::new(commands::app::FrontendReadyState::default()))
         .manage(Arc::new(commands::app::WindowPinState::default()))
         .manage(Arc::new(commands::mcp::McpRuntimeManager::default()))
         .manage(Arc::clone(&memory_store))

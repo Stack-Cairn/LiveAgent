@@ -18,6 +18,7 @@
         "height": 800,
         "minWidth": 1200,
         "minHeight": 720,
+        "visible": false,
         "backgroundThrottling": "disabled"
       }
     ],
