@@ -80,7 +80,9 @@ test("workspace drops create the conversation before the pane, verified by workd
 test("archived and missing workspaces block panes and never rebind the dock", () => {
   assert.match(chatPageSource, /workbench\.projectArchived/);
   assert.match(chatPageSource, /workbench\.projectMissing/);
-  assert.match(chatPageSource, /!archivedWorkspaceProjectPathKeys\.has\(projectPathKey\)/);
+  // archived/missing 判定收敛在 resolveWorkbenchPaneProject 内(模型测试见
+  // workbench-pane-project-context.test.mjs);ChatPage 只经解析器激活。
+  assert.match(chatPageSource, /resolveWorkbenchPaneProject\(projectPathKey, \{/);
 });
 
 test("native file drags focus the hovered pane so drops land in it", () => {
