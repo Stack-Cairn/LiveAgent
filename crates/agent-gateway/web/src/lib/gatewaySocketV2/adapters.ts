@@ -339,6 +339,7 @@ function buildChatCommand(body: J) {
         : undefined,
       executionMode: str(inner.execution_mode),
       workdir: str(inner.workdir),
+      commandSafetyMode: str(inner.command_safety_mode),
       uploadedFiles: uploadedFiles.map((file) => {
         const raw = rec(file);
         return create(ChatUploadedFileSchema, {

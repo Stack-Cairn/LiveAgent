@@ -28,7 +28,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
-import { createShellTools } from "./shellTools";
+import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
@@ -157,6 +157,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   providerId: ProviderId;
   runtimePlatform?: RuntimePlatform;
   fileState: FileToolState;
+  /** OS 级沙箱设置;透传给 Bash / ManagedProcess 执行层。 */
+  sandbox?: ShellSandboxSettings;
   skillsEnabled: boolean;
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
@@ -214,6 +216,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       managedProcessEnabled: params.runtimeScope === "chat",
       resumableShellEnabled: params.runtimeScope === "chat",
       resolveHomeDir,
+      sandbox: params.sandbox,
     }),
     ...(params.skillsEnabled
       ? [

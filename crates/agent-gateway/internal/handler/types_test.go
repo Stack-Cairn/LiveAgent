@@ -23,6 +23,28 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	}
 }
 
+func TestNormalizeCommandSafetyMode(t *testing.T) {
+	t.Parallel()
+
+	// 空串/未知值归为空串(表示"远端未指定"),桌面端据此回落本地设置;
+	// 绝不默认成某个具体模式,以免静默下调桌面端已选的更严格模式。
+	cases := map[string]string{
+		"":               "",
+		"unknown":        "",
+		" ask ":          "ask",
+		"ask":            "ask",
+		"auto":           "auto",
+		"sandbox":        "sandbox",
+		"sandboxOffline": "sandboxOffline",
+	}
+
+	for input, want := range cases {
+		if got := NormalizeCommandSafetyMode(input); got != want {
+			t.Fatalf("NormalizeCommandSafetyMode(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestNormalizeChatSelectedModelAcceptsGemini(t *testing.T) {
 	t.Parallel()
 

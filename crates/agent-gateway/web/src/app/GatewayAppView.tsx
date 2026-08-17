@@ -37,6 +37,7 @@ import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
+  updateSystem,
   updateWorkspaceResourceSettings,
 } from "@/lib/settings";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
@@ -682,6 +683,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           modelOptions={modelOptions}
                           selectedValue={selectedValue}
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                          commandSafetyMode={settings.system.commandSafetyMode}
+                          onCommandSafetyModeChange={(mode) =>
+                            setSettings((prev) =>
+                              prev.system.commandSafetyMode === mode
+                                ? prev
+                                : updateSystem(prev, { commandSafetyMode: mode }),
+                            )
+                          }
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
                           contextUsageTokensSource={contextUsageTokensSource}

@@ -436,7 +436,9 @@ impl ShellSessionManager {
             }
             self.make_room_locked(&mut sessions)?;
 
-            let spawned = spawn_platform_shell_command(command, &actual_cwd, &[], || {
+            // 可恢复 shell session 暂不进入沙箱执行(沙箱围栏面向一次性命令),
+            // 因此 sandbox_spec 传 None。
+            let spawned = spawn_platform_shell_command(command, &actual_cwd, &[], None, || {
                 Ok((Stdio::piped(), Stdio::piped()))
             })?;
             let mut child = spawned.child;

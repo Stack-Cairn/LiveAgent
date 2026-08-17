@@ -66,6 +66,7 @@ import type {
   ChatRuntimeReasoningProviderKey,
   CloseWindowBehavior,
   CodexRequestFormat,
+  CommandSafetyMode,
   CustomProvider,
   CustomSettings,
   EffectiveWorkspaceResources,
@@ -104,6 +105,7 @@ import type {
   WorkspaceResourceSettings,
 } from "./types";
 import {
+  COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
   PROMPT_CACHE_HINT_MODES,
@@ -1176,12 +1178,19 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   };
 }
 
+export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
+  return typeof input === "string" && (COMMAND_SAFETY_MODES as readonly string[]).includes(input)
+    ? (input as CommandSafetyMode)
+    : "auto";
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
+    commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     activeWorkspaceProjectId:
@@ -1384,6 +1393,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
+      commandSafetyMode: "auto",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

@@ -459,8 +459,23 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_SYSTEM_PROXY_KEY.to_string(),
         normalize_system_proxy_value(system.get(SYSTEM_SYSTEM_PROXY_KEY)),
     );
+    system.insert(
+        SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
+        normalize_command_safety_mode_value(system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY)),
+    );
 
     Value::Object(system)
+}
+
+/// "ask" | "auto" | "sandbox" | "sandboxOffline",缺省 "auto",与前端
+/// normalizeCommandSafetyMode 一致。
+fn normalize_command_safety_mode_value(raw: Option<&Value>) -> Value {
+    let mode = raw
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| matches!(*value, "ask" | "auto" | "sandbox" | "sandboxOffline"))
+        .unwrap_or("auto");
+    Value::String(mode.to_string())
 }
 
 fn load_system_with_defaults(conn: &Connection, default_workdir: &str) -> Result<Value, String> {
@@ -500,6 +515,7 @@ fn save_system_with_default_workdir(
         SYSTEM_EXECUTION_MODE_KEY,
         SYSTEM_WORKDIR_KEY,
         SYSTEM_TOOL_POLICIES_KEY,
+        SYSTEM_COMMAND_SAFETY_MODE_KEY,
         SYSTEM_WORKSPACE_PROJECTS_KEY,
         SYSTEM_WORKSPACE_PROJECT_GROUPS_KEY,
         SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY,

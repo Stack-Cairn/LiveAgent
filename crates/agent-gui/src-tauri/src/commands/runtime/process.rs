@@ -6,8 +6,10 @@ use crate::runtime::managed_process::{
     ManagedProcessLogResponse, ManagedProcessRegistry, ManagedProcessSnapshot,
     ManagedProcessStartResponse, ManagedProcessStatusResponse, ManagedProcessStopResponse,
 };
+use crate::runtime::sandbox::SandboxOptions;
 
 #[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
 pub fn managed_process_start(
     registry: State<'_, Arc<ManagedProcessRegistry>>,
     workdir: String,
@@ -15,8 +17,20 @@ pub fn managed_process_start(
     cwd: Option<String>,
     label: Option<String>,
     isolated: Option<bool>,
+    sandbox: Option<bool>,
+    sandbox_allow_network: Option<bool>,
 ) -> Result<ManagedProcessStartResponse, String> {
-    registry.start(workdir, command, cwd, label, isolated.unwrap_or(false))
+    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
+        allow_network: sandbox_allow_network.unwrap_or(true),
+    });
+    registry.start(
+        workdir,
+        command,
+        cwd,
+        label,
+        isolated.unwrap_or(false),
+        sandbox_options,
+    )
 }
 
 #[tauri::command(rename_all = "snake_case")]

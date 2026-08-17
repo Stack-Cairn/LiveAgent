@@ -1,11 +1,13 @@
 import {
   type ChatRuntimeControls,
+  type CommandSafetyMode,
   type ExecutionMode,
   isAgentExecutionMode,
   type ProviderId,
   type ReasoningLevel,
   type SelectedModel,
 } from "@liveagent/app/lib/settings";
+import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
 import { ComposerModelControls } from "@liveagent/ui/components/chat/ComposerModelControls";
 import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
@@ -225,6 +227,9 @@ export type ChatComposerBarProps = {
   modelOptions: SharedModelOption<ProviderId>[];
   selectedValue?: string;
   chatRuntimeControls: ChatRuntimeControls;
+  /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
+  commandSafetyMode?: CommandSafetyMode;
+  onCommandSafetyModeChange?: (mode: CommandSafetyMode) => void;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
   gitClient?: GitClient | null;
@@ -292,6 +297,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     modelOptions,
     selectedValue,
     chatRuntimeControls,
+    commandSafetyMode,
+    onCommandSafetyModeChange,
     reasoningOptions,
     thinkingAlwaysOn,
     gitClient,
@@ -996,6 +1003,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 onOpenSettings={onOpenSettings}
                 onChatRuntimeControlsChange={onChatRuntimeControlsChange}
               />
+
+              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
+                <CommandSafetyModeSelector
+                  surface={surface}
+                  value={commandSafetyMode}
+                  disabled={controlsDisabled}
+                  onChange={onCommandSafetyModeChange}
+                />
+              ) : null}
 
               <GitBranchSelector
                 workdir={workdir}

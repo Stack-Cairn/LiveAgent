@@ -31,6 +31,7 @@ type ShellRunResponse = {
   platform?: string;
   profile?: string;
   shell_family?: string;
+  sandbox?: string;
   stdout: string;
   stderr: string;
   stdout_truncated: boolean;
@@ -486,6 +487,11 @@ function buildCancelledResult(params: {
   };
 }
 
+export type ShellSandboxSettings = {
+  enabled: boolean;
+  allowNetwork: boolean;
+};
+
 export function createShellTools(params: {
   workdir: string;
   providerId: ProviderId;
@@ -496,11 +502,18 @@ export function createShellTools(params: {
   managedProcessEnabled?: boolean;
   resumableShellEnabled?: boolean;
   resolveHomeDir?: () => Promise<string>;
+  /** OS 级沙箱(macOS Seatbelt / Linux bwrap);undefined 或 enabled=false 时直跑。 */
+  sandbox?: ShellSandboxSettings;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
   const runtimePlatform =
     normalizeRuntimePlatform(params.runtimePlatform) ?? inferRuntimePlatform();
   const platformLabel = runtimePlatformLabel(runtimePlatform);
+  const sandboxEnabled = params.sandbox?.enabled === true;
+  const sandboxAllowNetwork = params.sandbox?.allowNetwork !== false;
+  const sandboxPolicy = sandboxEnabled
+    ? ` Sandbox mode is ON: commands run inside an OS-level sandbox — writes are limited to the workspace and temp dirs, credential dirs (~/.ssh etc.) are masked${sandboxAllowNetwork ? "" : ", and network access is blocked"}. "Operation not permitted" outside the workspace means the sandbox blocked it; do not retry with sudo — ask the user instead.`
+    : "";
   const shellPolicy =
     runtimePlatform === "windows"
       ? "Windows runs Bash commands with Git Bash (POSIX semantics) when available, falling back to pwsh, then Windows PowerShell, then cmd only if Git Bash is not installed. Write POSIX/bash syntax by default: `export NAME=value`, `&&`, `/dev/null`, forward-slash paths. If the result header reports `shell_family: powershell` or `shell_family: cmd`, Git Bash is missing on this machine — switch to PowerShell syntax and suggest installing Git for Windows or setting LIVEAGENT_GIT_BASH_PATH."
@@ -755,7 +768,7 @@ export function createShellTools(params: {
 
   const toolBash: Tool = {
     name: "Bash",
-    description: `Execute a non-interactive shell command on the local machine for builds, tests, package managers, external CLIs, curl/API calls, running Skill scripts, or explicitly requested shell work. Runtime platform: ${platformLabel}. ${shellPolicy} Reserve it for commands that truly require a shell — do NOT use Bash for file operations the dedicated tools handle: use Read/List/Glob/Grep instead of cat/ls/find/grep/rg for any workspace or Skill content; always use Delete for intentional workspace or Skill deletions instead of Bash, scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd, because only structured Delete calls make deletions visible in Edited Files and file-ledger tracking; use Image instead of open/xdg-open/file paths to show pictures. Use curl with an explicit timeout such as \`--max-time 30\` for endpoint tests. ${backgroundPolicy} Running a Skill script: set cwd to \`skill://<enabled-skill>/scripts\` and run a relative command, or execute the absolute script path directly when that Skill is enabled. Use / as the path separator; Windows \\ is auto-normalized. Returns stdout, stderr, exit_code, platform, profile, and shell_family. ${allowResumableShell ? `Bash waits up to yield_time_ms (default 10000ms), then returns a session_id while the same command continues; use ProcessWait to continue waiting and ProcessStop to terminate it. Session responses report session_duration_ms as cumulative elapsed time from the original Bash start, so never add it across responses. Terminal statuses are completed, failed, cancelled, and timed_out. timeout_ms is an optional hard runtime limit and is capped at ${GLOBAL_BASH_MAX_TIMEOUT_MS}ms; omit it for no hard limit.` : `For ${timeoutPolicy.providerLabel}, timeout defaults to ${timeoutPolicy.defaultTimeoutMs}ms and is capped at ${timeoutPolicy.maxTimeoutMs}ms; larger timeout_ms values are accepted by the schema but clamped before execution.`} High risk: use carefully.`,
+    description: `Execute a non-interactive shell command on the local machine for builds, tests, package managers, external CLIs, curl/API calls, running Skill scripts, or explicitly requested shell work. Runtime platform: ${platformLabel}. ${shellPolicy}${sandboxPolicy} Reserve it for commands that truly require a shell — do NOT use Bash for file operations the dedicated tools handle: use Read/List/Glob/Grep instead of cat/ls/find/grep/rg for any workspace or Skill content; always use Delete for intentional workspace or Skill deletions instead of Bash, scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd, because only structured Delete calls make deletions visible in Edited Files and file-ledger tracking; use Image instead of open/xdg-open/file paths to show pictures. Use curl with an explicit timeout such as \`--max-time 30\` for endpoint tests. ${backgroundPolicy} Running a Skill script: set cwd to \`skill://<enabled-skill>/scripts\` and run a relative command, or execute the absolute script path directly when that Skill is enabled. Use / as the path separator; Windows \\ is auto-normalized. Returns stdout, stderr, exit_code, platform, profile, and shell_family. ${allowResumableShell ? `Bash waits up to yield_time_ms (default 10000ms), then returns a session_id while the same command continues; use ProcessWait to continue waiting and ProcessStop to terminate it. Session responses report session_duration_ms as cumulative elapsed time from the original Bash start, so never add it across responses. Terminal statuses are completed, failed, cancelled, and timed_out. timeout_ms is an optional hard runtime limit and is capped at ${GLOBAL_BASH_MAX_TIMEOUT_MS}ms; omit it for no hard limit.` : `For ${timeoutPolicy.providerLabel}, timeout defaults to ${timeoutPolicy.defaultTimeoutMs}ms and is capped at ${timeoutPolicy.maxTimeoutMs}ms; larger timeout_ms values are accepted by the schema but clamped before execution.`} High risk: use carefully.`,
     parameters: strictToolParameters({
       command: Type.String({
         description: "Shell command to execute (prefer non-interactive, idempotent commands).",
@@ -1074,6 +1087,10 @@ export function createShellTools(params: {
             cwd: cwd || undefined,
             label: label || undefined,
             isolated: isolated || undefined,
+            // 跟随所选模式:sandboxOffline 下常驻进程同样断网(无法对外提供服务,
+            // 需要 dev server 时应切回"沙箱"模式)。
+            sandbox: sandboxEnabled || undefined,
+            sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
           },
           signal,
           {
@@ -1423,6 +1440,8 @@ export function createShellTools(params: {
         max_timeout_ms: timeoutPolicy.maxTimeoutMs,
         provider_id: params.providerId,
         run_id,
+        sandbox: sandboxEnabled || undefined,
+        sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
       } as any);
 
       const header = [
@@ -1431,6 +1450,7 @@ export function createShellTools(params: {
         res.platform ? `platform: ${res.platform}` : null,
         res.profile ? `profile: ${res.profile}` : null,
         res.shell_family ? `shell_family: ${res.shell_family}` : null,
+        res.sandbox ? `sandbox: ${res.sandbox}` : null,
         `cwd: ${formatResolvedTarget(cwdResolved)}`,
         `exit_code: ${res.exit_code}`,
         res.timed_out ? `timed_out: true` : null,

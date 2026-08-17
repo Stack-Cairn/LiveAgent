@@ -103,5 +103,6 @@ export function buildGatewaySystemSettings(settings: AppSettings, workdirOverrid
   return {
     executionMode: settings.system.executionMode,
     workdir: workdirOverride ?? settings.system.workdir.trim(),
+    commandSafetyMode: settings.system.commandSafetyMode,
   };
 }

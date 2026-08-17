@@ -676,6 +676,9 @@ message ChatRequest {
   string client_request_id = 8;
   ChatRuntimeControls runtime_controls = 9;
   string queue_policy = 10;
+  // 命令安全模式(ask/auto/sandbox/sandboxOffline)。远端 WebUI 直带,桌面端据此
+  // 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
+  string command_safety_mode = 11;
 }
 
 message ChatMessageRef {

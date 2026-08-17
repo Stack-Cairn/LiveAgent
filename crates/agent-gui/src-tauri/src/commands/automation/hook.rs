@@ -166,6 +166,8 @@ pub(crate) fn run_hook_script_sync(
         None,
         token.clone(),
         &context,
+        // Hook 脚本是用户显式配置的自动化,不属于模型驱动面,不套沙箱。
+        None,
     );
 
     if let (Some(scope), Some(token)) = (&scope_id, &token) {

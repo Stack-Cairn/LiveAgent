@@ -14,6 +14,7 @@ use crate::runtime::platform::{
     expand_tilde_path, maybe_augment_macos_path, shell_basename, strip_windows_verbatim_prefix,
 };
 use crate::runtime::process::{configure_child_process_group, terminate_child_process_tree};
+use crate::runtime::sandbox::{self, SandboxOptions, SandboxSpec};
 
 const MAX_STDOUT_BYTES: usize = 400 * 1024; // 400KB
 const MAX_STDERR_BYTES: usize = 400 * 1024; // 400KB
@@ -111,6 +112,9 @@ pub struct ShellRunResponse {
     pub platform: String,
     pub profile: String,
     pub shell_family: String,
+    /// 沙箱机制("seatbelt"/"bubblewrap"),未启用沙箱时为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<String>,
     pub stdout: String,
     pub stderr: String,
     pub stdout_truncated: bool,
@@ -511,6 +515,8 @@ struct ShellCandidate {
 pub(crate) struct SpawnedPlatformShell {
     pub child: std::process::Child,
     pub profile: ShellExecutionProfile,
+    /// 生效的沙箱机制;None 表示未启用沙箱。
+    pub sandbox: Option<&'static str>,
 }
 
 fn platform_shell_candidates(cmd: &str) -> Vec<ShellCandidate> {
@@ -684,6 +690,7 @@ pub(crate) fn spawn_platform_shell_command<F>(
     command: &str,
     cwd: &Path,
     envs: &[(String, String)],
+    sandbox_spec: Option<&SandboxSpec>,
     mut stdio_factory: F,
 ) -> Result<SpawnedPlatformShell, String>
 where
@@ -693,10 +700,21 @@ where
     let system_proxy_envs = crate::services::system_proxy::shell_proxy_envs()?;
 
     for candidate in platform_shell_candidates(command) {
+        // 沙箱包裹在 shell candidate 选定后、spawn 前进行,fail-closed:包裹
+        // 失败(平台不支持/依赖缺失)直接报错,绝不回退为无沙箱执行。
+        // sandbox-exec/bwrap 按名字解析 shell 时同样遵循 PATH,语义不变。
+        let (spawn_program, spawn_args, sandbox_mechanism) = match sandbox_spec {
+            Some(spec) => {
+                let (program, args, mechanism) =
+                    sandbox::wrap_command(spec, &candidate.program, &candidate.args)?;
+                (program, args, Some(mechanism))
+            }
+            None => (candidate.program.clone(), candidate.args.clone(), None),
+        };
         let (stdout, stderr) =
             stdio_factory().map_err(|err| format!("Failed to prepare shell stdio: {err}"))?;
-        let mut c = Command::new(&candidate.program);
-        c.args(&candidate.args);
+        let mut c = Command::new(&spawn_program);
+        c.args(&spawn_args);
         // 系统代理 env 先注入，调用方 envs（如 LIVEAGENT_HOOK_*）后写保持更高优先级。
         for (key, value) in &system_proxy_envs {
             c.env(key, value);
@@ -721,6 +739,7 @@ where
                 return Ok(SpawnedPlatformShell {
                     child,
                     profile: candidate.profile,
+                    sandbox: sandbox_mechanism,
                 });
             }
             Err(err) => errors.push(format!(
@@ -756,6 +775,7 @@ pub(crate) fn run_shell_script(
         provider_id,
         cancel_token,
         &[],
+        None,
     )
 }
 
@@ -769,6 +789,7 @@ pub(crate) fn run_shell_script_with_envs(
     _provider_id: Option<String>,
     cancel_token: Option<ShellCancelToken>,
     envs: &[(String, String)],
+    sandbox_options: Option<SandboxOptions>,
 ) -> Result<ShellRunResponse, String> {
     let cmd = command.trim();
     if cmd.is_empty() {
@@ -781,11 +802,22 @@ pub(crate) fn run_shell_script_with_envs(
     let timeout = Duration::from_millis(effective_timeout_ms);
     let start = Instant::now();
 
-    let spawned = spawn_platform_shell_command(cmd, &actual_cwd, envs, || {
-        Ok((Stdio::piped(), Stdio::piped()))
-    })?;
+    // 沙箱写围栏锚定 workdir(工作区根)而非 cwd:cwd 可能是子目录,但工具语义
+    // 允许写整个工作区。
+    let sandbox_spec = match sandbox_options {
+        Some(options) => {
+            let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
+            Some(SandboxSpec::from_options(wd, options))
+        }
+        None => None,
+    };
+    let spawned =
+        spawn_platform_shell_command(cmd, &actual_cwd, envs, sandbox_spec.as_ref(), || {
+            Ok((Stdio::piped(), Stdio::piped()))
+        })?;
     let mut child = spawned.child;
     let shell_profile = spawned.profile;
+    let sandbox_mechanism = spawned.sandbox;
     let shell_name = shell_basename(shell_profile.display_shell);
 
     let stdout = child
@@ -868,6 +900,7 @@ process output to a log file, for example: `nohup command > /tmp/liveagent-task.
         platform: shell_profile.platform.to_string(),
         profile: shell_profile.profile.to_string(),
         shell_family: shell_profile.shell_family.to_string(),
+        sandbox: sandbox_mechanism.map(str::to_string),
         stdout: stdout_str,
         stderr: stderr_str,
         stdout_truncated,
