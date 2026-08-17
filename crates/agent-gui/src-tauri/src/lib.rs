@@ -668,6 +668,11 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 最早期钩子:若本进程是 Windows 沙箱的自我再执行启动器(__sandbox_exec),
+    // 就在此建立受限令牌并运行真实命令,以其退出码退出——绝不继续初始化 Tauri。
+    // 非 Windows 平台为空操作。
+    runtime::windows_sandbox::run_sandbox_launcher_if_requested();
+
     let automation_store = Arc::new(
         services::automation::AutomationStore::open()
             .expect("failed to initialize LiveAgent automation store"),

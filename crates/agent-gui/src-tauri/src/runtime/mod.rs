@@ -9,3 +9,4 @@ pub mod shell_runner;
 pub mod shell_session;
 pub mod task_runner;
 pub mod terminal;
+pub mod windows_sandbox;

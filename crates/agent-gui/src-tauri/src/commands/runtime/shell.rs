@@ -82,8 +82,13 @@ pub async fn shell_session_start(
     yield_time_ms: Option<u64>,
     timeout_ms: Option<u64>,
     max_timeout_ms: Option<u64>,
+    sandbox: Option<bool>,
+    sandbox_allow_network: Option<bool>,
 ) -> Result<ShellSessionResponse, String> {
     let manager = Arc::clone(manager.inner());
+    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
+        allow_network: sandbox_allow_network.unwrap_or(true),
+    });
     tauri::async_runtime::spawn_blocking(move || {
         manager.start(
             session_id,
@@ -93,6 +98,7 @@ pub async fn shell_session_start(
             yield_time_ms,
             timeout_ms,
             max_timeout_ms,
+            sandbox_options,
         )
     })
     .await

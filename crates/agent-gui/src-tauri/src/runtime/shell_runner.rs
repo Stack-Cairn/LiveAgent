@@ -183,6 +183,13 @@ fn canonicalize_workdir(workdir: &str) -> Result<PathBuf, ShellError> {
     Ok(strip_windows_verbatim_prefix(fs::canonicalize(&p)?))
 }
 
+/// Canonical workspace root for runtime entry points that need to construct a
+/// sandbox spec. Keep the internal error type private while sharing the exact
+/// validation/canonicalization semantics with the one-shot runner.
+pub(crate) fn canonical_workdir(workdir: &str) -> Result<PathBuf, String> {
+    canonicalize_workdir(workdir).map_err(|error| error.to_string())
+}
+
 fn normalize_rel_path_input(input: &str) -> String {
     input.trim().replace('\\', "/")
 }

@@ -1,14 +1,212 @@
 //! OS 级沙箱(沙箱模式 v1):模型驱动的 Bash / ManagedProcess 在生成子进程前
 //! 由平台原生机制包裹——macOS 走 Seatbelt(/usr/bin/sandbox-exec),Linux 走
-//! bubblewrap(bwrap),Windows 暂不支持(受限令牌 + Job Object + WFP 路线待实现)。
+//! bubblewrap(bwrap),Windows 走受限令牌(CreateRestrictedToken WRITE_RESTRICTED
+//! + 工作区继承写 ACE + Job Object,免管理员/免 UAC)。
 //!
 //! 语义为 workspace-write:读默认放行(工具链/依赖散布全盘,default-deny 不现实),
 //! 写仅限工作区根 + 临时目录,敏感目录(~/.ssh、应用配置库等)读写全掩蔽,网络可
 //! 整体关断。fail-closed:沙箱被请求而平台机制不可用时直接报错,绝不静默降级为
 //! 无沙箱执行。
+//!
+//! Windows 平台限制(免管理员方案的固有边界,见 memory windows-sandbox-facts):
+//! WRITE_RESTRICTED 只围栏“写”,读无法在无管理员下掩蔽敏感目录;断网只能靠
+//! AppContainer 而它会连带默认拒读、破坏工具链。故 Windows 上 sandbox 仅提供写
+//! 围栏,sandboxOffline(断网)不可用 —— `network_control=false`,前端据此禁用,
+//! `wrap_command` 对 `!allow_network` 直接 fail-closed 报错。
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+
+/// 自我再执行启动器子命令标记:Windows `wrap_command` 把 (program, args) 包成
+/// `current_exe __sandbox_exec --write-root <root> -- <program> <args...>`;
+/// 进程启动最早期 `windows_sandbox::run_sandbox_launcher_if_requested` 识别它,
+/// 建受限令牌后 `CreateProcessAsUserW` 真实命令。非 Windows 平台不产生该标记。
+pub(crate) const SANDBOX_EXEC_SUBCOMMAND: &str = "__sandbox_exec";
+
+/// 启动器解析后的调用信息(纯逻辑,跨平台可测)。
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LauncherInvocation {
+    pub write_root: PathBuf,
+    pub program: PathBuf,
+    pub args: Vec<String>,
+}
+
+/// 构造传给自我再执行启动器的参数向量(含子命令标记,作为 argv[1])。
+/// 形如 `[__sandbox_exec, --write-root, <root>, --, <program>, <args...>]`。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn build_launcher_args(write_root: &Path, program: &Path, args: &[String]) -> Vec<String> {
+    let mut out = vec![
+        SANDBOX_EXEC_SUBCOMMAND.to_string(),
+        "--write-root".to_string(),
+        write_root.to_string_lossy().into_owned(),
+        "--".to_string(),
+        program.to_string_lossy().into_owned(),
+    ];
+    out.extend(args.iter().cloned());
+    out
+}
+
+/// 解析启动器 payload(子命令标记之后的部分):`--write-root <root> -- <program> [args...]`。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn parse_launcher_args(payload: &[String]) -> Result<LauncherInvocation, String> {
+    let mut it = payload.iter();
+    let mut write_root: Option<PathBuf> = None;
+    let mut program: Option<PathBuf> = None;
+    let mut rest: Vec<String> = Vec::new();
+    while let Some(tok) = it.next() {
+        match tok.as_str() {
+            "--write-root" => {
+                let value = it
+                    .next()
+                    .ok_or_else(|| "--write-root requires a value".to_string())?;
+                write_root = Some(PathBuf::from(value));
+            }
+            "--" => {
+                program = it.next().map(PathBuf::from);
+                rest = it.cloned().collect();
+                break;
+            }
+            other => return Err(format!("unexpected launcher argument: {other}")),
+        }
+    }
+    let write_root = write_root.ok_or_else(|| "missing --write-root".to_string())?;
+    let program = program.ok_or_else(|| "missing program after `--`".to_string())?;
+    Ok(LauncherInvocation {
+        write_root,
+        program,
+        args: rest,
+    })
+}
+
+/// 由工作区规范路径确定性推导合成 SID(Codex 形式 `S-1-5-21-{4×u32}`)。
+/// 稳定 + 无状态:同一路径永远得同一 SID —— 遗留的继承 ACE 在下次运行仍精确匹配,
+/// 无需持久化。用稳定的 FNV-1a(不用 DefaultHasher,其算法跨版本不保证稳定)。
+/// Windows 路径大小写不敏感,先小写化再哈希,`C:\Foo` 与 `c:\foo` 得同一 SID。
+/// 边角:Rust 的 Unicode 小写化与 Windows 的 upcase 折叠(如 dotted/dotless I、ß)
+/// 不完全一致,非 ASCII 工作区路径的两种大小写可能得不同 SID,导致遗留继承 ACE 不匹配
+/// → 写被拒。这是 fail-closed(功能受限,非逃逸),ASCII 路径不受影响。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn synthetic_workspace_sid(write_root: &Path) -> String {
+    fn fnv1a64(bytes: &[u8]) -> u64 {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in bytes {
+            hash ^= b as u64;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        hash
+    }
+    let canonical = write_root.to_string_lossy().to_lowercase();
+    let h1 = fnv1a64(canonical.as_bytes());
+    // 二次哈希掺入盐,得到独立的低 64 位,凑满 4×u32 子权限。
+    let mut salted = canonical.into_bytes();
+    salted.push(0);
+    salted.extend_from_slice(b"liveagent-sandbox");
+    let h2 = fnv1a64(&salted);
+    let a = (h1 >> 32) as u32;
+    let b = h1 as u32;
+    let c = (h2 >> 32) as u32;
+    let d = h2 as u32;
+    format!("S-1-5-21-{a}-{b}-{c}-{d}")
+}
+
+/// 按 Windows(CommandLineToArgvW)规则拼装命令行,并以 NUL 结尾成 UTF-16。
+/// 算法逐字复刻 Rust 标准库 `make_command_line`/`append_arg`,以保证受限令牌下
+/// `CreateProcessAsUserW` 的子进程收到与非沙箱 `std::process::Command` 完全一致的
+/// argv —— 行为对齐,不引入解析差异。纯逻辑,跨平台可测。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn build_command_line(program: &str, args: &[String]) -> Vec<u16> {
+    fn append_arg(cmd: &mut Vec<u16>, arg: &str) {
+        let arg: Vec<u16> = arg.encode_utf16().collect();
+        let space = u16::from(b' ');
+        let tab = u16::from(b'\t');
+        let quote = u16::from(b'"');
+        let backslash = u16::from(b'\\');
+        let needs_quote = arg.is_empty() || arg.iter().any(|&c| c == space || c == tab);
+        if needs_quote {
+            cmd.push(quote);
+        }
+        let mut backslashes: usize = 0;
+        for &w in &arg {
+            if w == backslash {
+                backslashes += 1;
+            } else {
+                if w == quote {
+                    // 把 " 之前的反斜杠翻倍,再补一个,最后加转义的 "。
+                    for _ in 0..=backslashes {
+                        cmd.push(backslash);
+                    }
+                }
+                backslashes = 0;
+            }
+            cmd.push(w);
+        }
+        if needs_quote {
+            for _ in 0..backslashes {
+                cmd.push(backslash);
+            }
+            cmd.push(quote);
+        }
+    }
+
+    let mut cmd: Vec<u16> = Vec::new();
+    append_arg(&mut cmd, program);
+    for a in args {
+        cmd.push(u16::from(b' '));
+        append_arg(&mut cmd, a);
+    }
+    cmd.push(0);
+    cmd
+}
+
+/// 把裸程序名解析成 PATH 中的绝对路径(Windows 语义:`;` 分隔、套用 PATHEXT),
+/// **只搜索 PATH 里的绝对目录,绝不搜索当前/工作目录**。
+///
+/// 缘由:`CreateProcessAsUserW` 的 `lpApplicationName` 若是“部分名”,Win32 只用当前
+/// 盘符+当前目录补全且**不查 PATH**(见 CreateProcess 文档)。而沙箱启动器的 cwd 就是
+/// 工作区(模型可写),裸名 `cmd.exe` 会在工作区里被补全:轻则找不到而整体失败,重则
+/// 命中模型投毒的同名二进制并被当作 shell 执行。故这里预解析成系统 shell 的绝对路径,
+/// 剔除 PATH 里的相对项(含 `"."`),即便用户 PATH 带 `.` 也不会落到工作区。
+///
+/// 绝对路径入参原样返回。纯逻辑;`is_file` 谓词注入以便跨平台单测(Windows 路径语义
+/// 由 Windows 编译+真机验证,`is_absolute`/`join` 在本机按 Unix 规则)。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn resolve_program_in_path(
+    program: &Path,
+    path_env: &str,
+    pathext: &str,
+    is_file: &dyn Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    if program.is_absolute() {
+        return Some(program.to_path_buf());
+    }
+    let name = program.as_os_str();
+    // 候选扩展名:先原样(""),再逐个 PATHEXT 项(裸名 pwsh → pwsh.EXE)。
+    let mut exts: Vec<String> = vec![String::new()];
+    exts.extend(
+        pathext
+            .split(';')
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+            .map(str::to_string),
+    );
+    for dir in path_env.split(';').map(str::trim) {
+        let dir_path = Path::new(dir);
+        // 只认绝对目录:剔除 ""、"."、相对项 —— 杜绝落回工作区。
+        if !dir_path.is_absolute() {
+            continue;
+        }
+        for ext in &exts {
+            let mut file = name.to_os_string();
+            file.push(ext);
+            let candidate = dir_path.join(&file);
+            if is_file(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SandboxOptions {
@@ -45,6 +243,10 @@ pub struct SandboxCapability {
     pub supported: bool,
     pub mechanism: &'static str,
     pub platform: &'static str,
+    /// 是否支持断网变体(sandboxOffline)。macOS/Linux 在 `supported` 时为 true;
+    /// Windows 免管理员方案无法可靠断网,恒为 false —— 前端据此仅禁用 sandboxOffline,
+    /// 保留 sandbox。`supported=false` 时该字段无意义(整体不可用)。
+    pub network_control: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -184,6 +386,7 @@ mod platform {
                 supported: true,
                 mechanism: "seatbelt",
                 platform: "macos",
+                network_control: true,
                 reason: None,
             }
         } else {
@@ -191,6 +394,7 @@ mod platform {
                 supported: false,
                 mechanism: "seatbelt",
                 platform: "macos",
+                network_control: false,
                 reason: Some(format!("{SANDBOX_EXEC} not found")),
             }
         }
@@ -263,6 +467,7 @@ mod platform {
             supported: false,
             mechanism: "bubblewrap",
             platform: "linux",
+            network_control: false,
             reason: Some(reason),
         };
         // 探测真实可用性(容器/受限内核里 bwrap 可能存在但无法建 namespace)。
@@ -286,6 +491,7 @@ mod platform {
                 supported: true,
                 mechanism: "bubblewrap",
                 platform: "linux",
+                network_control: true,
                 reason: None,
             },
             Ok(output) => unsupported(format!(
@@ -361,23 +567,38 @@ mod platform {
     use super::*;
 
     pub(super) fn capability() -> SandboxCapability {
+        // 免管理员写围栏(CreateRestrictedToken WRITE_RESTRICTED + 工作区继承写 ACE)
+        // 无需任何依赖或提权,恒可用。断网(sandboxOffline)不可用:见模块注释。
         SandboxCapability {
-            supported: false,
-            mechanism: "none",
+            supported: true,
+            mechanism: "restricted-token",
             platform: "windows",
-            reason: Some(
-                "Windows sandbox (restricted token + job object + WFP) is not implemented yet"
-                    .to_string(),
-            ),
+            network_control: false,
+            reason: None,
         }
     }
 
     pub(super) fn wrap_command(
-        _spec: &SandboxSpec,
-        _program: &Path,
-        _args: &[String],
+        spec: &SandboxSpec,
+        program: &Path,
+        args: &[String],
     ) -> Result<(PathBuf, Vec<String>, &'static str), String> {
-        Err("Windows sandbox is not implemented yet".to_string())
+        // fail-closed:免管理员方案无法断网,sandboxOffline 在 Windows 上直接报错,
+        // 绝不静默当作联网沙箱执行。capability.network_control=false 已让前端禁用该项,
+        // 这里是执行层的兜底(设置可能同步自 macOS)。
+        if !spec.allow_network {
+            return Err(
+                "Offline sandbox (no network) is not available on Windows without elevation. \
+Use the plain Sandbox mode, or run on macOS/Linux for the offline variant."
+                    .to_string(),
+            );
+        }
+        // 自我再执行:把真实命令包进 current_exe 的 __sandbox_exec 启动器。启动器在
+        // 进程最早期建受限令牌并 CreateProcessAsUserW 真实命令(见 windows_sandbox)。
+        let current_exe = std::env::current_exe()
+            .map_err(|err| format!("failed to resolve current executable for sandbox: {err}"))?;
+        let launcher_args = build_launcher_args(&spec.write_root, program, args);
+        Ok((current_exe, launcher_args, "restricted-token"))
     }
 }
 
@@ -494,5 +715,124 @@ mod tests {
     #[test]
     fn validate_workspace_allows_ordinary_workspace() {
         assert!(validate_workspace(Path::new("/tmp/liveagent-ordinary-ws")).is_ok());
+    }
+
+    // --- 跨平台纯逻辑(Windows 启动器所依赖,可在任意宿主上运行) ---
+
+    #[test]
+    fn launcher_args_roundtrip() {
+        let program = PathBuf::from(r"C:\Program Files\Git\bin\bash.exe");
+        let args = vec!["-lc".to_string(), "echo \"hi there\" && ls".to_string()];
+        let built = build_launcher_args(Path::new(r"C:\ws\proj"), &program, &args);
+        assert_eq!(built[0], SANDBOX_EXEC_SUBCOMMAND);
+        // payload = built[1..](去掉 argv[1] 子命令标记),即启动器实际解析的部分。
+        let parsed = parse_launcher_args(&built[1..]).expect("parse");
+        assert_eq!(parsed.write_root, PathBuf::from(r"C:\ws\proj"));
+        assert_eq!(parsed.program, program);
+        assert_eq!(parsed.args, args);
+    }
+
+    #[test]
+    fn parse_launcher_args_rejects_incomplete() {
+        assert!(parse_launcher_args(&["--write-root".to_string()]).is_err());
+        assert!(parse_launcher_args(&["--".to_string()]).is_err());
+        assert!(parse_launcher_args(&[]).is_err());
+        // 缺 --write-root。
+        assert!(parse_launcher_args(&["--".to_string(), "cmd.exe".to_string()]).is_err());
+    }
+
+    #[test]
+    fn parse_launcher_args_program_without_extra_args() {
+        let parsed = parse_launcher_args(&[
+            "--write-root".to_string(),
+            r"C:\ws".to_string(),
+            "--".to_string(),
+            "cmd.exe".to_string(),
+        ])
+        .expect("parse");
+        assert_eq!(parsed.program, PathBuf::from("cmd.exe"));
+        assert!(parsed.args.is_empty());
+    }
+
+    #[test]
+    fn synthetic_sid_is_deterministic_and_case_insensitive() {
+        let a = synthetic_workspace_sid(Path::new(r"C:\Users\Me\Project"));
+        let b = synthetic_workspace_sid(Path::new(r"c:\users\me\project"));
+        assert_eq!(a, b, "Windows 路径大小写不敏感,应得同一 SID");
+        assert!(a.starts_with("S-1-5-21-"));
+        // 形如 S-1-5-21-<a>-<b>-<c>-<d>:S,1,5,21 + 4 段子权限 = 8 段。
+        assert_eq!(a.split('-').count(), 8);
+        let other = synthetic_workspace_sid(Path::new(r"C:\Users\Me\Other"));
+        assert_ne!(a, other, "不同路径应得不同 SID");
+    }
+
+    #[test]
+    fn command_line_quotes_spaces_and_escapes_quotes() {
+        let line = build_command_line(
+            r"C:\Program Files\App\app.exe",
+            &["--flag".to_string(), "a b".to_string(), r#"say "hi""#.to_string()],
+        );
+        assert_eq!(line.last(), Some(&0u16), "须以 NUL 结尾");
+        let decoded = String::from_utf16(&line[..line.len() - 1]).unwrap();
+        // 含空格的程序路径整体加引号(反斜杠不因无 `"` 而翻倍)。
+        assert!(decoded.starts_with(r#""C:\Program Files\App\app.exe""#));
+        // 无特殊字符的参数不加引号。
+        assert!(decoded.contains(" --flag "));
+        // 含空格的参数加引号。
+        assert!(decoded.contains(r#" "a b" "#));
+        // 内部的 " 用反斜杠转义。
+        assert!(decoded.ends_with(r#""say \"hi\"""#));
+    }
+
+    #[test]
+    fn command_line_doubles_trailing_backslashes_before_closing_quote() {
+        // 参数含空格需加引号,且以反斜杠结尾时,收尾反斜杠必须翻倍,
+        // 否则会转义掉闭合引号(CommandLineToArgvW 经典陷阱)。
+        let line = build_command_line("prog", &[r"a\b c\".to_string()]);
+        let decoded = String::from_utf16(&line[..line.len() - 1]).unwrap();
+        assert!(decoded.ends_with(r#""a\b c\\""#));
+    }
+
+    // resolve_program_in_path:本机(Unix)按 Unix 绝对/分隔规则验证“搜绝对目录、套
+    // PATHEXT、跳相对项、绝对入参直通”这套算法;Windows 路径语义由 Windows 编译+真机验证。
+    #[test]
+    fn resolve_program_searches_absolute_dirs_first_match_wins() {
+        let present: std::collections::HashSet<PathBuf> =
+            [PathBuf::from("/usr/bin/sh")].into_iter().collect();
+        let is_file = |p: &Path| present.contains(p);
+        let got = resolve_program_in_path(
+            Path::new("sh"),
+            "/nonexist;/usr/bin;/bin",
+            ".EXE",
+            &is_file,
+        );
+        assert_eq!(got, Some(PathBuf::from("/usr/bin/sh")));
+    }
+
+    #[test]
+    fn resolve_program_applies_pathext_to_bare_name() {
+        let present: std::collections::HashSet<PathBuf> =
+            [PathBuf::from("/tools/pwsh.EXE")].into_iter().collect();
+        let is_file = |p: &Path| present.contains(p);
+        let got = resolve_program_in_path(Path::new("pwsh"), "/tools", ".COM;.EXE", &is_file);
+        assert_eq!(got, Some(PathBuf::from("/tools/pwsh.EXE")));
+    }
+
+    #[test]
+    fn resolve_program_never_probes_relative_or_dot_dirs() {
+        // PATH 里的 "." 与相对项绝不被探测:谓词只应收到绝对候选。
+        let is_file = |p: &Path| {
+            assert!(p.is_absolute(), "resolver probed a non-absolute path: {p:?}");
+            false
+        };
+        let got = resolve_program_in_path(Path::new("cmd.exe"), ".;rel/dir;/abs", ".EXE", &is_file);
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn resolve_program_passes_absolute_input_through_without_probing() {
+        let is_file = |_: &Path| panic!("absolute input must not be probed");
+        let got = resolve_program_in_path(Path::new("/bin/sh"), "/other", ".EXE", &is_file);
+        assert_eq!(got, Some(PathBuf::from("/bin/sh")));
     }
 }
