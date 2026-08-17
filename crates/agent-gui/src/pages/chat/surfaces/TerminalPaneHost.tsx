@@ -11,6 +11,7 @@ import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import {
   ensureTerminalPaneSession,
   TerminalPaneSshPromptError,
+  terminalPaneAutoLaunch,
   terminalPaneBindings,
   terminalPaneLease,
 } from "../workbench/terminalPaneRuntime";
@@ -19,6 +20,8 @@ export type TerminalPaneHostProps = {
   paneId: string;
   surface: TerminalWorkbenchSurface;
   isFocused: boolean;
+  /** 极窄 Pane:SSH 状态行进入紧凑渲染(由 rect 派生,不写回布局)。 */
+  isCompact?: boolean;
   theme: "light" | "dark";
   /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
   sessions: readonly TerminalSession[];
@@ -33,14 +36,27 @@ type TerminalPaneErrorState =
   | { kind: "create-failed"; message: string }
   | { kind: "lease"; message: string };
 
+const SSH_LATENCY_POLL_MS = 15_000;
+
 /**
  * 终端 Pane 的页面侧宿主:把布局层的 launchSpec 身份接到运行时——
- * 绑定(surfaceId→sessionId)解析既有会话,缺失时按 launchSpec 异步建会话
- * (布局先行,创建失败停在可重试的 error 态);渲染前必须持有该会话的
- * 视图租约,保证输出流单消费、输入单写。
+ * 绑定(surfaceId→sessionId)解析既有会话;绑定缺失时区分两条进入路径:
+ * 本次会话内显式创建的 surface(auto-launch 已授权)自动按 launchSpec 建
+ * 会话,恢复的 surface(应用重启/绑定对账清空)停在休眠占位,用户点
+ * "重新启动"才建 PTY。渲染前必须持有该会话的视图租约,保证输出流单消费、
+ * 输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
-  const { paneId, surface, isFocused, theme, sessions, sessionsLoaded, onSessionKilled } = props;
+  const {
+    paneId,
+    surface,
+    isFocused,
+    isCompact,
+    theme,
+    sessions,
+    sessionsLoaded,
+    onSessionKilled,
+  } = props;
   const { t } = useLocale();
 
   const boundSessionId = useSyncExternalStore(terminalPaneBindings.subscribe, () =>
@@ -51,6 +67,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const [errorState, setErrorState] = useState<TerminalPaneErrorState | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const [leasedSessionId, setLeasedSessionId] = useState<string | null>(null);
+  // 恢复占位 → 用户点重启后置 true;与 auto-launch 授权一起驱动 ensure。
+  const [launchRequested, setLaunchRequested] = useState(() =>
+    terminalPaneAutoLaunch.isAuthorized(surface.surfaceId),
+  );
 
   const liveSession = boundSessionId
     ? (sessions.find((entry) => entry.id === boundSessionId) ?? null)
@@ -63,8 +83,18 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     if (liveSession && createdSession) setCreatedSession(null);
   }, [createdSession, liveSession]);
 
+  // 绑定命中即视为授权:后续会话退出/消失时的"重新启动"不再回到休眠占位。
   useEffect(() => {
-    if (!sessionsLoaded || session || errorState) return;
+    if (!boundSessionId) return;
+    terminalPaneAutoLaunch.authorize(surface.surfaceId);
+    setLaunchRequested(true);
+  }, [boundSessionId, surface.surfaceId]);
+
+  // 休眠占位(恢复的 Pane,绑定为空且未授权):不自动建 PTY。
+  const dormant = !boundSessionId && !launchRequested;
+
+  useEffect(() => {
+    if (!sessionsLoaded || session || errorState || dormant) return;
     if (boundSessionId) {
       // 绑定指向的会话已不在注册表:会话被外部关闭,或应用重启后的陈旧绑定。
       setErrorState({ kind: "session-missing" });
@@ -92,7 +122,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     return () => {
       cancelled = true;
     };
-  }, [boundSessionId, errorState, session, sessionsLoaded, surface]);
+  }, [boundSessionId, dormant, errorState, session, sessionsLoaded, surface]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -153,6 +183,35 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       .finally(() => setReconnectPending(false));
   }, [reconnectPending, surface.surfaceId]);
 
+  // SSH 延迟:仅聚焦且视口就绪时以固定间隔探测;失败静默置未知("--")。
+  const isSshPane = surface.kind === "sshTerminal";
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const latencyEligible =
+    isSshPane && isFocused && sessionId !== null && session?.running === true && !errorState;
+  useEffect(() => {
+    if (!latencyEligible || !sessionId) {
+      setLatencyMs(null);
+      return;
+    }
+    let cancelled = false;
+    const probe = () => {
+      void tauriTerminalClient
+        .sshLatency(sessionId)
+        .then((result) => {
+          if (!cancelled) setLatencyMs(result.latencyMs);
+        })
+        .catch(() => {
+          if (!cancelled) setLatencyMs(null);
+        });
+    };
+    probe();
+    const timer = window.setInterval(probe, SSH_LATENCY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [latencyEligible, sessionId]);
+
   const restartFromLaunchSpec = useCallback(() => {
     const staleSessionId = terminalPaneBindings.get(surface.surfaceId);
     if (staleSessionId) {
@@ -160,6 +219,9 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       void tauriTerminalClient.close(staleSessionId).catch(() => {});
     }
     terminalPaneBindings.delete(surface.surfaceId);
+    // 休眠占位的显式重启 = 授权 auto-launch,此后进入常规 ensure 流程。
+    terminalPaneAutoLaunch.authorize(surface.surfaceId);
+    setLaunchRequested(true);
     setCreatedSession(null);
     setViewportError(null);
     setErrorState(null);
@@ -182,7 +244,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   let renderSession: TerminalSession | null = null;
   let errorMessage: string | null = null;
   let onRetry: (() => void) | undefined = restartFromLaunchSpec;
-  if (errorState) {
+  if (dormant) {
+    // 恢复的 Pane:进程已随应用退出;布局与 launchSpec 保留,等待显式重启。
+    phase = "exited";
+  } else if (errorState) {
     phase = "error";
     errorMessage = errorMessageFor(errorState);
   } else if (leased && session) {
@@ -219,6 +284,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
         {...commonProps}
         onReconnect={renderSession ? reconnectSsh : undefined}
         isReconnecting={reconnectPending}
+        latencyMs={latencyMs}
+        isCompact={isCompact}
       />
     );
   }

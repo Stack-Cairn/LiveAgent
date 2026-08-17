@@ -179,6 +179,7 @@ import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
 import {
   createTerminalSurfaceId,
   resolveLiveTerminalSurfaceIds,
+  terminalPaneAutoLaunch,
   terminalPaneBindings,
   terminalPaneLease,
 } from "./chat/workbench/terminalPaneRuntime";
@@ -2066,6 +2067,7 @@ export function ChatPage(props: ChatPageProps) {
             )?.path ??
             null,
           createSurfaceId: createTerminalSurfaceId,
+          authorizeAutoLaunch: terminalPaneAutoLaunch.authorize,
           openTerminalSurface: workbench.openTerminalSurface,
           movePane: workbench.movePane,
           focusPane: handleWorkbenchFocusPane,
@@ -2335,15 +2337,15 @@ export function ChatPage(props: ChatPageProps) {
     if (sidebarConversationsById.size === 0) return;
     workbenchRestoreRequestedRef.current = true;
     void (async () => {
-      // 终端对账:webview reload 后 Rust 注册表仍存活,绑定命中的终端 Pane 可
-      // 恢复;list 失败按安全默认丢弃全部终端 Pane,绝不阻塞会话恢复。
-      const liveTerminalSurfaceIds = await resolveLiveTerminalSurfaceIds({
+      // 终端对账:webview reload 后 Rust 注册表仍存活,绑定命中的终端 Pane 直接
+      // 重挂会话;绑定被清掉或 list 失败的 Pane 恢复为休眠占位(不自动建 PTY,
+      // 用户点重启才重建),绝不阻塞会话恢复。
+      await resolveLiveTerminalSurfaceIds({
         client: tauriTerminalClient,
         bindings: terminalPaneBindings,
       });
       const restored = await workbench.attemptRestore({
         validConversationIds: new Set(sidebarConversationsById.keys()),
-        ...(liveTerminalSurfaceIds ? { liveTerminalSurfaceIds } : {}),
       });
       if (restored?.focusConversationId) {
         selectWorkbenchConversation(restored.focusConversationId);
@@ -2665,7 +2667,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const renderWorkbenchPaneChrome = (
     pane: PaneRecord,
-    context: { isFocused: boolean; paneCount: number },
+    context: { isFocused: boolean; paneCount: number; isCompact: boolean },
   ) => {
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
@@ -2675,6 +2677,7 @@ export function ChatPage(props: ChatPageProps) {
         paneId={pane.paneId}
         title={title}
         isFocused={context.isFocused}
+        isCompact={context.isCompact}
         dragHandleLabel={t("workbench.dragPane")}
         closeLabel={t("workbench.closePane")}
         onClose={() => handleWorkbenchClosePane(pane.paneId)}
@@ -2704,6 +2707,7 @@ export function ChatPage(props: ChatPageProps) {
                 paneId={pane.paneId}
                 surface={surface}
                 isFocused={paneContext.isFocused}
+                isCompact={paneContext.isCompact}
                 theme={effectiveTheme}
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
