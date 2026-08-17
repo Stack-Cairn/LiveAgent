@@ -218,11 +218,11 @@ test("clampRatioToSideMinSizes honours asymmetric side minimums", () => {
   assert.ok(cramped >= 0.05 && cramped <= 0.95);
 });
 
-test("paneRendersCompact derives from rect width with view override", () => {
-  assert.equal(paneRendersCompact(WORKBENCH_COMPACT_PANE_WIDTH, {}), false);
-  assert.equal(paneRendersCompact(WORKBENCH_COMPACT_PANE_WIDTH - 1, {}), true);
-  assert.equal(paneRendersCompact(1200, { compactChrome: true }), true);
-  assert.equal(paneRendersCompact(1200, undefined), false);
+test("paneRendersCompact derives from rect width alone", () => {
+  assert.equal(paneRendersCompact(WORKBENCH_COMPACT_PANE_WIDTH - 1), true);
+  assert.equal(paneRendersCompact(WORKBENCH_COMPACT_PANE_WIDTH), false);
+  assert.equal(paneRendersCompact(WORKBENCH_COMPACT_PANE_WIDTH + 1), false);
+  assert.equal(paneRendersCompact(1200), false);
 });
 
 test("drop resolution accepts terminal payloads in terminal-tight spots only", () => {

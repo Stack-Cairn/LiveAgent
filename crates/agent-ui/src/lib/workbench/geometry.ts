@@ -94,8 +94,8 @@ export function subtreeMinSizeForAxis(
 }
 
 /** Whether a pane rect is narrow enough for compact chrome/surface rendering. */
-export function paneRendersCompact(rectWidth: number, view?: { compactChrome?: boolean }): boolean {
-  return view?.compactChrome === true || rectWidth < WORKBENCH_COMPACT_PANE_WIDTH;
+export function paneRendersCompact(rectWidth: number): boolean {
+  return rectWidth < WORKBENCH_COMPACT_PANE_WIDTH;
 }
 
 export function workbenchEdgeAxis(edge: WorkbenchEdge): WorkbenchAxis {
