@@ -1,4 +1,3 @@
-import { Tooltip } from "@base-ui/react";
 import {
   DEFAULT_WORKSPACE_PROJECT_ID,
   type WorkspaceProject,
@@ -36,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -602,7 +602,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                       type="button"
                       aria-hidden="true"
                       tabIndex={-1}
-                      className="chat-history-row-title-menu-anchor absolute inset-0 h-full w-full rounded-[1rem] opacity-0 pointer-events-none"
+                      className="chat-history-row-title-menu-anchor absolute inset-0 h-full w-full rounded-2xl opacity-0 pointer-events-none"
                     />
                   }
                 />
@@ -636,7 +636,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border transition-colors",
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-muted-foreground/45 bg-background/50",
@@ -1219,8 +1219,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
               : "text-foreground/85 hover:bg-foreground/[0.05] hover:text-foreground",
       )}
     >
-      <Tooltip.Root disabled={isInteractionDisabled}>
-        <Tooltip.Trigger
+      <Tooltip disabled={isInteractionDisabled}>
+        <TooltipTrigger
           delay={0}
           closeOnClick
           render={
@@ -1292,24 +1292,16 @@ export const ProjectRow = memo(function ProjectRow(props: {
             </button>
           }
         />
-        <Tooltip.Portal>
-          <Tooltip.Positioner
-            anchor={rowRef}
-            side="right"
-            align="center"
-            sideOffset={10}
-            collisionPadding={8}
-            className="z-[9999]"
-          >
-            <Tooltip.Popup className="w-64 rounded-xl border border-border/60 bg-popover px-3 py-2.5 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
-              <p className="truncate text-sm font-semibold leading-5">{project.name}</p>
-              <p className="mt-1 break-all text-xs leading-4 text-muted-foreground">
-                {project.path}
-              </p>
-            </Tooltip.Popup>
-          </Tooltip.Positioner>
-        </Tooltip.Portal>
-      </Tooltip.Root>
+        <TooltipContent
+          anchor={rowRef}
+          side="right"
+          sideOffset={10}
+          className="w-64 rounded-xl px-3 py-2.5"
+        >
+          <p className="truncate text-sm font-semibold leading-5">{project.name}</p>
+          <p className="mt-1 break-all text-xs leading-4 text-muted-foreground">{project.path}</p>
+        </TooltipContent>
+      </Tooltip>
       <div
         className={cn(
           "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",

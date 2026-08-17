@@ -16,7 +16,6 @@ import {
   MessageSquare,
   Plus,
   Terminal,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -28,10 +27,21 @@ import {
   validateCronExpression,
 } from "@liveagent/ui/lib/automation/index";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogSectionHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -42,7 +52,6 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
-import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   createEmptyRequestDraft,
   type HttpRequestDraft,
@@ -231,7 +240,6 @@ export function CronTaskModal({
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
 
   const promptModelOptions =
     selectedModelValue &&
@@ -337,7 +345,7 @@ export function CronTaskModal({
       };
 
       await onSave(data);
-      requestClose();
+      onClose();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -349,38 +357,29 @@ export function CronTaskModal({
 
   const modalTitle = mode === "add" ? t("settings.cronModalAdd") : t("settings.cronModalEdit");
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeDisabled={isSaving}
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
         {/* Header */}
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Clock3 className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{modalTitle}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <DialogTitle>{modalTitle}</DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs">
               {t("settings.cronExpressionHint")}
-            </p>
+            </DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Body */}
-        <div className="settings-modal-body flex-1 overflow-y-auto">
+        <DialogBody className="p-0 max-[820px]:p-0">
           {/* Step 1: Basic Info */}
           <div className="border-b border-border/30 px-6 py-5">
             <div className="mb-4 flex items-center gap-2">
@@ -493,24 +492,29 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("bash");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "bash"
                     ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "bash"
                       ? "bg-blue-500/15 text-blue-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Terminal className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "bash" ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "bash" ? "text-blue-600 dark:text-blue-400" : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypeBash")}
                   </div>
@@ -532,24 +536,31 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("http");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "http"
                     ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "http"
                       ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Globe className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "http" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "http"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypeHttp")}
                   </div>
@@ -571,24 +582,31 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("prompt");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "prompt"
                     ? "border-violet-500/50 bg-violet-500/5 shadow-sm shadow-violet-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "prompt"
                       ? "bg-violet-500/15 text-violet-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <MessageSquare className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "prompt" ? "text-violet-600 dark:text-violet-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "prompt"
+                        ? "text-violet-600 dark:text-violet-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypePrompt")}
                   </div>
@@ -614,7 +632,7 @@ export function CronTaskModal({
 
           {/* Step 3: Configuration */}
           <div className="px-6 py-5">
-            <div className="settings-modal-step-row mb-4 flex items-center justify-between">
+            <DialogSectionHeader>
               <div className="flex items-center gap-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
                   3
@@ -648,7 +666,7 @@ export function CronTaskModal({
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </DialogSectionHeader>
 
             {/* Workspace pin — first row of the config step; bash/prompt run
                 inside a directory, http does not */}
@@ -677,11 +695,12 @@ export function CronTaskModal({
                   <SelectTrigger className="h-10">
                     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors ${
+                        className={cn(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
                           customWorkdir || workdir
                             ? "bg-amber-500/10 text-amber-500"
-                            : "bg-muted/60 text-muted-foreground"
-                        }`}
+                            : "bg-muted/60 text-muted-foreground",
+                        )}
                       >
                         <Folder className="h-3.5 w-3.5" />
                       </span>
@@ -890,10 +909,10 @@ export function CronTaskModal({
               </div>
             ) : null}
           </div>
-        </div>
+        </DialogBody>
 
         {/* Footer */}
-        <div className="settings-modal-footer flex items-center justify-between border-t border-border/40 px-6 py-4">
+        <DialogFooter className="px-6 min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
               <div className="flex items-center gap-1.5 text-xs text-destructive">
@@ -907,20 +926,19 @@ export function CronTaskModal({
               </div>
             ) : null}
           </div>
-          <div className="settings-modal-actions flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+          <DialogActions>
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
               {t("settings.cancel")}
             </Button>
             <Button
               onClick={() => void handleSave()}
-              disabled={!name.trim() || !cron.trim() || isSaving || isClosing}
+              disabled={!name.trim() || !cron.trim() || isSaving}
             >
               {t("settings.save")}
             </Button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
+          </DialogActions>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

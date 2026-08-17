@@ -114,7 +114,7 @@
   .gateway-editor-host > .chat-history-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    z-index: 45;
+    z-index: var(--layer-panel);
     height: 100svh;
     height: 100dvh;
     width: min(86vw, 272px) !important;
@@ -168,7 +168,7 @@
 
   html[data-liveagent-webui="gateway"] .project-tools-panel {
     inset: 0;
-    z-index: 50;
+    z-index: var(--layer-panel);
     width: 100%;
     height: 100svh;
     height: 100dvh;
@@ -210,7 +210,7 @@
   html[data-liveagent-webui="gateway"] .workspace-file-preview-overlay,
   html[data-liveagent-webui="gateway"] .workspace-image-preview-overlay,
   html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay {
-    z-index: 60;
+    z-index: var(--layer-modal);
   }
 
   html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tabs {
@@ -539,75 +539,6 @@
     flex: 1 1 8rem;
   }
 
-  html[data-liveagent-webui="gateway"] .settings-modal-overlay {
-    align-items: stretch;
-    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-panel {
-    display: flex;
-    width: min(100%, calc(100vw - 16px)) !important;
-    max-width: calc(100vw - 16px) !important;
-    max-height: calc(100dvh - 16px) !important;
-    flex-direction: column;
-    overflow: hidden;
-    border-radius: 16px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-header,
-  html[data-liveagent-webui="gateway"] .settings-modal-subheader {
-    flex: 0 0 auto;
-    padding: 12px 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-body {
-    min-height: 0;
-    overflow-y: auto;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-body.px-6 {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-body.py-5,
-  html[data-liveagent-webui="gateway"] .settings-modal-body.py-4 {
-    padding-top: 14px;
-    padding-bottom: 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-body > .px-6 {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-body > .py-5,
-  html[data-liveagent-webui="gateway"] .settings-modal-body > .py-4 {
-    padding-top: 14px;
-    padding-bottom: 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-footer {
-    align-items: stretch;
-    flex: 0 0 auto;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px 14px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-footer.settings-modal-footer-row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
   html[data-liveagent-webui="gateway"] .settings-tools-header {
     align-items: stretch;
     flex-direction: column;
@@ -651,12 +582,6 @@
   html[data-liveagent-webui="gateway"] .settings-tools-row-action {
     min-height: 40px;
     min-width: 40px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-step-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
   }
 
   html[data-liveagent-webui="gateway"] .settings-http-row {
@@ -811,33 +736,6 @@
   html[data-liveagent-webui="gateway"] .settings-hooks-card-desc {
     font-size: 12.5px;
     line-height: 1.5;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-view-panel {
-    height: calc(100dvh - 16px) !important;
-    flex-direction: column;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-view-left {
-    width: 100% !important;
-    max-height: 42%;
-    border-right: 0;
-    border-bottom: 1px solid hsl(var(--border) / 0.4);
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-view-right {
-    min-height: 0;
-  }
-
-  /* Stacked layout: the logs header (desktop close location) sits mid-modal,
-     so surface the hero copy of the close button at the modal's top-right,
-     right of run-now, and hide the logs-header one. */
-  html[data-liveagent-webui="gateway"] .settings-cron-view-hero-close {
-    display: flex;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-logs-close {
-    display: none;
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row {
@@ -1120,36 +1018,8 @@
     flex-direction: column;
   }
 
-  html[data-liveagent-webui="gateway"] .settings-inline-form > button,
-  html[data-liveagent-webui="gateway"] .settings-modal-actions > button {
+  html[data-liveagent-webui="gateway"] .settings-inline-form > button {
     width: 100%;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-footer > .text-xs,
-  html[data-liveagent-webui="gateway"] .settings-modal-footer > .min-w-0 {
-    min-width: 0;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-footer .truncate {
-    white-space: normal;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-subheader .settings-field-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  html[data-liveagent-webui="gateway"]
-    .settings-modal-subheader
-    .settings-field-row
-    > div:first-child {
-    width: auto;
   }
 
   /* Tool detail modal becomes a bottom sheet on small screens. */
@@ -1243,14 +1113,6 @@
     height: 30px;
     width: 30px;
   }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-logs-header {
-    flex-wrap: wrap;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-cron-logs-header > div {
-    margin-left: auto;
-  }
 }
 
 @media (max-width: 640px) and (prefers-reduced-motion: reduce) {
@@ -1304,10 +1166,6 @@
 
   html[data-liveagent-webui="gateway"] .settings-nav-item {
     padding: 7px 9px;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-panel {
-    border-radius: 14px;
   }
 
   html[data-liveagent-webui="gateway"] .gateway-project-tools-panel-toggle {

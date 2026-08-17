@@ -40,6 +40,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "记忆配额已满：{scope} 已用 {used}/{limit}，请立即整理或删除记忆。",
   "settings.memoryRefresh": "刷新",
+  "settings.memoryRefreshing": "正在刷新",
+  "settings.memoryRefreshComplete": "刷新完成",
+  "settings.memoryRefreshFailed": "刷新失败",
   "settings.memoryOpenSettings": "记忆设置",
   "settings.memorySettingsTitle": "记忆设置",
   "settings.memorySettingsClose": "关闭记忆设置",
@@ -169,6 +172,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "日志",
   "settings.memoryScopeGlobal": "全局",
   "settings.memoryScopeProject": "项目",
+  "settings.memoryScope": "记忆范围",
+  "settings.memoryType": "记忆类型",
   "settings.memoryTypeUser": "用户",
   "settings.memoryTypeFeedback": "偏好",
   "settings.memoryTypeProject": "项目",
@@ -872,7 +877,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsImportDesc":
     "扫描本机 Claude Code、Codex、CodeBuddy 与 AGENTS 的技能目录，勾选后导入到 LiveAgent。",
   "settings.skillsImportOverwriteHint": "同名技能将自动备份后覆盖。",
-  "settings.skillsImportScanning": "正在扫描本地技能...",
+  "settings.skillsImportScanning": "正在扫描",
   "settings.skillsImportRescan": "重新扫描",
   "settings.skillsImportNotDetected": "未检测到",
   "settings.skillsImportEmpty": "该目录下未发现技能",

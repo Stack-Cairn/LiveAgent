@@ -94,13 +94,7 @@ export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
   );
 }
 
-export const PROVIDER_TABS: ProviderId[] = [
-  "claude_code",
-  "codex",
-  "gemini",
-  "xai",
-  "deepseek",
-];
+export const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini", "xai", "deepseek"];
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",

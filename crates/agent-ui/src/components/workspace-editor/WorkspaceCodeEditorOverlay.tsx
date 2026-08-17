@@ -23,6 +23,16 @@ import {
   Undo2,
   X,
 } from "@liveagent/ui/components/IconSet";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -336,7 +346,11 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       }
 
       const contentToSave = tab.content;
-      updateTab(tabKey, (current) => ({ ...current, status: "saving", error: null }));
+      updateTab(tabKey, (current) => ({
+        ...current,
+        status: "saving",
+        error: null,
+      }));
       try {
         const io = ioForSource(tab.projectPathKey, tab.remote);
         const result = await io.write({
@@ -349,7 +363,11 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         });
         if (result.kind === "conflict") {
           const message = t("workspaceEditor.conflictMessage");
-          updateTab(tabKey, (current) => ({ ...current, status: "conflict", error: message }));
+          updateTab(tabKey, (current) => ({
+            ...current,
+            status: "conflict",
+            error: message,
+          }));
           setGlobalError(message);
           return false;
         }
@@ -1095,39 +1113,36 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         ) : null}
       </div>
 
-      {pendingDialog ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-2xl">
-            <div className="text-sm font-semibold">{dialogTitle}</div>
-            <div className="mt-2 text-sm leading-5 text-muted-foreground">{dialogDescription}</div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={() => setPendingDialog(null)}
-              >
+      <AlertDialog
+        open={pendingDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDialog(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-md p-0">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">{dialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription className="leading-5">
+              {dialogDescription}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogActions className="max-sm:grid-cols-1">
+              <Button type="button" variant="outline" onClick={() => setPendingDialog(null)}>
                 {t("workspaceEditor.cancel")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={discardDialogTarget}
-              >
+              </Button>
+              <Button type="button" variant="outline" onClick={discardDialogTarget}>
                 {t("workspaceEditor.discard")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                onClick={saveDialogTarget}
-              >
-                {pendingDialog.kind === "closeOverlay"
+              </Button>
+              <Button type="button" onClick={saveDialogTarget}>
+                {pendingDialog?.kind === "closeOverlay"
                   ? t("workspaceEditor.saveAll")
                   : t("workspaceEditor.save")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+              </Button>
+            </AlertDialogActions>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -67,6 +68,14 @@ const SettingsPage = lazy(async () => ({
 function getDefaultContext(): Context {
   return {
     messages: [],
+  };
+}
+
+function getBootAlignedDefaultSettings(): AppSettings {
+  const settings = getDefaultSettings();
+  return {
+    ...settings,
+    theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
   };
 }
 
@@ -202,7 +211,7 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
-  const [settings, setSettingsState] = useState<AppSettings>(() => getDefaultSettings());
+  const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
   });
@@ -666,9 +675,10 @@ export default function App() {
         </AppErrorBoundary>
         {visible && (
           <div
-            className={`absolute inset-0 z-50 transition-all duration-300 ease-out ${
-              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-            }`}
+            className={cn(
+              "absolute inset-0 z-50 transition-all duration-300 ease-out",
+              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+            )}
             onTransitionEnd={handleTransitionEnd}
           >
             <AppErrorBoundary>
@@ -699,7 +709,7 @@ export default function App() {
               void invoke("app_toggle_window_pin").catch(() => {});
             }}
             title={translate("app.windowPinnedHint", settings.locale)}
-            className="absolute top-3 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
+            className="layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
           >
             <Pin className="h-3 w-3" />
             {translate("app.windowPinned", settings.locale)}

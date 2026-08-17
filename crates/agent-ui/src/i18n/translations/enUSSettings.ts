@@ -43,6 +43,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "Memory quota exhausted: {scope} at {used}/{limit}. Organize or delete memories now.",
   "settings.memoryRefresh": "Refresh",
+  "settings.memoryRefreshing": "Refreshing…",
+  "settings.memoryRefreshComplete": "Refreshed",
+  "settings.memoryRefreshFailed": "Refresh failed",
   "settings.memoryOpenSettings": "Memory settings",
   "settings.memorySettingsTitle": "Memory settings",
   "settings.memorySettingsClose": "Close memory settings",
@@ -178,6 +181,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "Journal",
   "settings.memoryScopeGlobal": "Global",
   "settings.memoryScopeProject": "Project",
+  "settings.memoryScope": "Memory scope",
+  "settings.memoryType": "Memory type",
   "settings.memoryTypeUser": "User",
   "settings.memoryTypeFeedback": "Preference",
   "settings.memoryTypeProject": "Project",
@@ -914,7 +919,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
   "settings.skillsImportOverwriteHint":
     "Skills with the same name are backed up, then overwritten.",
-  "settings.skillsImportScanning": "Scanning local skills...",
+  "settings.skillsImportScanning": "Scanning",
   "settings.skillsImportRescan": "Rescan",
   "settings.skillsImportNotDetected": "Not detected",
   "settings.skillsImportEmpty": "No skills found in this directory",

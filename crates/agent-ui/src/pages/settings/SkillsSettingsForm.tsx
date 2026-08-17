@@ -13,6 +13,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   discoverSkills,
   isAlwaysEnabledSkillName,
@@ -101,9 +102,10 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
           {selectableSkills.length > 0 ? (
             <div className="flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1">
               <div
-                className={`h-1.5 w-1.5 rounded-full ${
-                  selectedCount > 0 ? "bg-emerald-500" : "bg-muted-foreground/40"
-                }`}
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  selectedCount > 0 ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
               />
               <span className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{selectedCount}</span>
@@ -123,26 +125,31 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
             onClick={() =>
               setSettings((prev) => updateSkills(prev, { enabled: !prev.skills.enabled }))
             }
-            className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              settings.skills.enabled ? "bg-primary" : "bg-muted-foreground/30"
-            }`}
+            className={cn(
+              "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              settings.skills.enabled ? "bg-primary" : "bg-muted-foreground/30",
+            )}
           >
             <span
-              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
-                settings.skills.enabled ? "translate-x-5" : "translate-x-1"
-              }`}
+              className={cn(
+                "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform",
+                settings.skills.enabled ? "translate-x-5" : "translate-x-1",
+              )}
             />
           </button>
 
           <Button
             variant="outline"
             size="sm"
-            className={`gap-1.5 transition-all ${loading ? "border-primary/40 bg-primary/5 text-primary" : ""}`}
+            className={cn(
+              "gap-1.5 transition-all",
+              loading ? "border-primary/40 bg-primary/5 text-primary" : "",
+            )}
             onClick={() => void refresh()}
             disabled={loading || skillsLockedByChatMode}
           >
             <RefreshCw
-              className={`h-3.5 w-3.5 transition-transform ${loading ? "animate-spin" : ""}`}
+              className={cn("h-3.5 w-3.5 transition-transform", loading ? "animate-spin" : "")}
             />
             {loading ? t("settings.skillsScanning") : t("settings.skillsScan")}
             {loading && (
@@ -244,11 +251,12 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                 const content = (
                   <>
                     <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
                         checked
                           ? "bg-primary/15 text-primary"
-                          : "bg-muted text-muted-foreground group-hover:bg-accent"
-                      }`}
+                          : "bg-muted text-muted-foreground group-hover:bg-accent",
+                      )}
                     >
                       <Sparkles className="h-4 w-4" />
                     </div>
@@ -278,11 +286,12 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                       </div>
                     ) : (
                       <div
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all",
                           checked
                             ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background group-hover:border-muted-foreground/40"
-                        }`}
+                            : "border-border bg-background group-hover:border-muted-foreground/40",
+                        )}
                       >
                         {checked ? <Check className="skill-check-enter h-3 w-3" /> : null}
                       </div>
@@ -306,11 +315,12 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                     key={`${skill.name}-${scanGeneration}`}
                     type="button"
                     onClick={() => toggleSkill(skill.name, !checked)}
-                    className={`settings-card-row skill-card-enter group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all ${
+                    className={cn(
+                      "settings-card-row skill-card-enter group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
                       checked
                         ? "border-primary/40 bg-primary/5 shadow-xs"
-                        : "border-border/60 bg-background hover:border-border hover:bg-accent/30"
-                    }`}
+                        : "border-border/60 bg-background hover:border-border hover:bg-accent/30",
+                    )}
                   >
                     {content}
                   </button>

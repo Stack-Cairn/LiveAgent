@@ -41,6 +41,10 @@ import type {
   ChatCommandUpdateListener,
   ChatFileOpenResponse,
   ChatQueueListener,
+  CheckpointDiffStats,
+  CheckpointRewindClient,
+  CheckpointRewindResult,
+  CheckpointTurnSummary,
   FsCreateDirResponse,
   FsDeleteResponse,
   FsListDirsResponse,
@@ -341,6 +345,13 @@ export type GatewayWebSocketClientLike = {
     projectId: string,
     projectPath: string,
   ): Promise<GatewayWorkspaceRootGrant[]>;
+  listCheckpointTurns(conversationId: string): Promise<CheckpointTurnSummary[]>;
+  previewCheckpointRewind(
+    params: Parameters<CheckpointRewindClient["preview"]>[0],
+  ): Promise<CheckpointDiffStats>;
+  rewindCheckpoint(
+    params: Parameters<CheckpointRewindClient["rewind"]>[0],
+  ): Promise<CheckpointRewindResult>;
   applyWorkspaceRootGrants(
     projectId: string,
     projectPath: string,

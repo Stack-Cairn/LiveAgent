@@ -46,6 +46,12 @@ import {
   RotateCwSquare,
   X,
 } from "@liveagent/ui/components/IconSet";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -223,7 +229,7 @@ export function ImagePreviewActionFeedback(props: {
 }) {
   if (!props.message || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-x-0 top-0 z-[120] h-0">
+    <div className="layer-toast fixed inset-x-0 top-0 h-0">
       <NotifyToast
         items={[{ id: "image-preview-action-error", type: "error", message: props.message }]}
         onDismiss={props.onDismiss}
@@ -322,7 +328,7 @@ export function ImagePreviewContextMenu(props: {
     <div
       ref={menuRef}
       role="menu"
-      className="fixed z-[110] min-w-52 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
+      className="layer-popover fixed min-w-52 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
       style={{
         left: (menuPosition ?? position).x,
         top: (menuPosition ?? position).y,
@@ -484,12 +490,6 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
     setContextMenu(null);
     setActionError(null);
   }, [activeSlideKey, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -657,30 +657,37 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
     setActiveIndex(clampImagePreviewIndex(nextIndex, imageCount));
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex min-h-0 min-w-0 items-center justify-center bg-black/50 p-3 backdrop-blur-sm sm:p-6">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("chat.imageViewer.viewer")}
-        tabIndex={-1}
-        className="chat-image-preview-dialog flex h-[min(78vh,760px)] w-[min(82vw,1120px)] min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/15 bg-black/90 text-white shadow-2xl outline-none"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (contextMenu) {
-              setContextMenu(null);
-            } else if (showInfo) {
-              setShowInfo(false);
-            } else if (isFullscreen) {
-              void handleFullscreen();
-            } else {
-              closeViewer();
-            }
+  return (
+    <Dialog
+      open={open}
+      disablePointerDismissal
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (nextOpen) return;
+        if (eventDetails.reason === "escape-key") {
+          if (contextMenu) {
+            eventDetails.cancel();
+            setContextMenu(null);
             return;
           }
+          if (showInfo) {
+            eventDetails.cancel();
+            setShowInfo(false);
+            return;
+          }
+          if (isFullscreen) {
+            eventDetails.cancel();
+            void handleFullscreen();
+            return;
+          }
+        }
+        closeViewer();
+      }}
+    >
+      <DialogContent
+        ref={dialogRef}
+        initialFocus={dialogRef}
+        className="chat-image-preview-dialog flex h-[min(78vh,760px)] w-[min(82vw,1120px)] max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-white/15 bg-black/90 p-0 text-white"
+        onKeyDown={(event) => {
           if (
             (event.ctrlKey || event.metaKey) &&
             !event.altKey &&
@@ -697,6 +704,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           }
         }}
       >
+        <DialogTitle className="sr-only">{t("chat.imageViewer.viewer")}</DialogTitle>
         <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-black/30 px-2">
           <div className="flex min-w-0 items-center gap-1">
             {imageCount > 1 ? (
@@ -802,9 +810,13 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </ImagePreviewToolButton>
-            <ImagePreviewToolButton label={closeLabel} onClick={closeViewer}>
+            <DialogClose
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              title={closeLabel}
+              aria-label={closeLabel}
+            >
               <X className="h-4 w-4" />
-            </ImagePreviewToolButton>
+            </DialogClose>
           </div>
         </div>
         <div
@@ -921,8 +933,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
             </div>
           ) : null}
           {showInfo ? (
-            <div
-              role="dialog"
+            <aside
               aria-label={t("chat.imageViewer.infoPanel")}
               className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-white/15 bg-black/80 p-3 text-xs text-white shadow-xl backdrop-blur"
             >
@@ -976,7 +987,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   </>
                 ) : null}
               </dl>
-            </div>
+            </aside>
           ) : null}
           {contextMenu ? (
             <ImagePreviewContextMenu
@@ -1059,8 +1070,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
             </ImagePreviewContextMenu>
           ) : null}
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 });

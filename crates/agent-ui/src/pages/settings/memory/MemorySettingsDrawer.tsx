@@ -14,12 +14,29 @@ import {
   updateMemorySettings,
 } from "@liveagent/app/lib/settings";
 import { AlertTriangle, History, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@liveagent/ui/components/ui/sheet";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   formatMemoryError,
   type MemoryQuotaSummaryResponse,
@@ -163,7 +180,7 @@ export function MemorySettingsDrawer(props: {
         placeholder={noneLabel}
         noneLabel={noneLabel}
         ariaLabel={ariaLabel}
-        triggerClassName="h-9 rounded-lg border-foreground/[0.08] bg-white/55 text-[13px] hover:border-foreground/[0.14] hover:bg-white/75 dark:bg-white/[0.04] dark:hover:bg-white/[0.06]"
+        triggerClassName="h-9 rounded-md border-input bg-background text-[13px] hover:bg-accent/40"
       />
     );
   }
@@ -196,7 +213,10 @@ export function MemorySettingsDrawer(props: {
         !prev.memory.organizerEnabled || prev.memory.organizerSchedule.frequency === "none";
       const organizerSchedule =
         enabled && prev.memory.organizerSchedule.frequency === "none"
-          ? { ...prev.memory.organizerSchedule, frequency: "daily" as MemoryOrganizerFrequency }
+          ? {
+              ...prev.memory.organizerSchedule,
+              frequency: "daily" as MemoryOrganizerFrequency,
+            }
           : prev.memory.organizerSchedule;
       return updateMemorySettings(prev, {
         organizerEnabled: enabled,
@@ -270,57 +290,55 @@ export function MemorySettingsDrawer(props: {
     }
   }
 
-  return createPortal(
-    <div
-      className="skills-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-foreground/[0.04] backdrop-blur-md dark:bg-background/30"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="memory-settings-drawer-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <aside className="skills-drawer-panel relative flex h-full w-full flex-col overflow-hidden border-l border-foreground/[0.06] bg-background/65 shadow-[-30px_0_70px_-32px_rgba(15,23,42,0.28)] backdrop-blur-2xl sm:max-w-[420px] dark:border-foreground/[0.08] dark:bg-background/55">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent dark:via-white/10"
-        />
-        <div className="relative flex items-center gap-3 border-b border-foreground/[0.06] px-6 py-[18px]">
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        variant="inset"
+        className="max-w-none border-border bg-background sm:max-w-[440px]"
+        closeLabel={t("settings.memorySettingsClose")}
+        showCloseButton={false}
+      >
+        <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
           <div className="min-w-0 flex-1">
-            <div
-              id="memory-settings-drawer-title"
-              className="text-[15px] font-semibold leading-tight tracking-tight text-foreground/95"
-            >
+            <SheetTitle className="text-[17px] leading-tight tracking-tight text-foreground/95">
               {t("settings.memorySettingsTitle")}
-            </div>
-            <div className="mt-1 text-[11.5px] leading-snug text-muted-foreground/80">
+            </SheetTitle>
+            <SheetDescription className="mt-1 text-xs leading-snug text-muted-foreground/80">
               {t("settings.memorySettingsLocalOnly")}
-            </div>
+            </SheetDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.05] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.1] hover:text-foreground"
+          <SheetClose
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 rounded-full bg-foreground/[0.05] text-muted-foreground/80 hover:bg-foreground/[0.1] hover:text-foreground"
+              />
+            }
             title={t("settings.memorySettingsClose")}
             aria-label={t("settings.memorySettingsClose")}
           >
             <X className="h-3.5 w-3.5" />
-          </button>
+          </SheetClose>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          <div className="space-y-6">
+        <div
+          aria-hidden="true"
+          className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
+        />
+
+        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="divide-y divide-foreground/[0.08]">
             {quotaLadder.level !== "normal" &&
             quotaLadder.bannerKey &&
             quotaLadder.tightestScope ? (
               <div
-                className={`flex items-start gap-2 rounded-2xl border px-4 py-3 text-[11.5px] leading-relaxed ${
+                className={cn(
+                  "flex items-start gap-2 rounded-2xl border px-4 py-3 text-[11.5px] leading-relaxed",
                   quotaLadder.level === "critical" || quotaLadder.level === "exhausted"
                     ? "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300"
-                    : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300"
-                }`}
+                    : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300",
+                )}
               >
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
@@ -332,12 +350,12 @@ export function MemorySettingsDrawer(props: {
               </div>
             ) : null}
 
-            <section className="space-y-2">
-              <div className="px-1 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted-foreground/65">
+            <section className="py-5 first:pt-4">
+              <div className="mb-3 text-xs font-medium text-muted-foreground">
                 {t("settings.memoryDriverModels")}
               </div>
-              <div className="rounded-2xl border border-foreground/[0.06] bg-white/55 p-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_6px_16px_-12px_rgba(15,23,42,0.08)] backdrop-blur-md dark:bg-white/[0.035] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
-                <label className="block space-y-1.5">
+              <div>
+                <div className="space-y-1.5">
                   <span className="text-[11.5px] text-muted-foreground/90">
                     {t("settings.memoryOrganizerModel")}
                   </span>
@@ -347,9 +365,9 @@ export function MemorySettingsDrawer(props: {
                     t("settings.memoryOrganizerModel"),
                     t("settings.memoryModelNone"),
                   )}
-                </label>
+                </div>
                 <div className="my-3 h-px bg-foreground/[0.05]" />
-                <label className="block space-y-1.5">
+                <div className="space-y-1.5">
                   <span className="text-[11.5px] text-muted-foreground/90">
                     {t("settings.memorySummaryModel")}
                   </span>
@@ -359,7 +377,7 @@ export function MemorySettingsDrawer(props: {
                     t("settings.memorySummaryModel"),
                     t("settings.memorySummaryModelFollow"),
                   )}
-                </label>
+                </div>
                 {modelOptions.length === 0 ? (
                   <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 text-[11.5px] text-amber-700 dark:text-amber-300">
                     {t("settings.memoryModelEmpty")}
@@ -368,9 +386,9 @@ export function MemorySettingsDrawer(props: {
               </div>
             </section>
 
-            <section className="space-y-2">
-              <div className="flex items-center justify-between gap-2 px-1">
-                <div className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted-foreground/65">
+            <section className="py-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="text-xs font-medium text-muted-foreground">
                   {t("settings.memoryOrganizerTitle")}
                 </div>
                 <AgentActivationSwitch
@@ -380,129 +398,121 @@ export function MemorySettingsDrawer(props: {
                   onToggle={handleOrganizerToggle}
                 />
               </div>
-              <div className="rounded-2xl border border-foreground/[0.06] bg-white/55 p-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_6px_16px_-12px_rgba(15,23,42,0.08)] backdrop-blur-md dark:bg-white/[0.035] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
-                <div className="space-y-3">
-                  <div className="grid grid-cols-[1fr_108px] gap-2.5">
-                    <label className="block space-y-1.5">
-                      <span className="text-[11.5px] text-muted-foreground/90">
-                        {t("settings.memoryOrganizerSchedule")}
-                      </span>
-                      <DrawerSelect
-                        value={settings.memory.organizerSchedule.frequency}
-                        disabled={!canEnableOrganizer}
-                        onValueChange={(next) =>
-                          updateOrganizerSchedule({
-                            frequency: next as MemoryOrganizerFrequency,
-                          })
-                        }
-                        ariaLabel={t("settings.memoryOrganizerSchedule")}
-                        options={MEMORY_ORGANIZER_FREQUENCIES.map((item) => ({
-                          value: item.value,
-                          label: t(item.labelKey),
-                        }))}
-                      />
-                    </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-[11.5px] text-muted-foreground/90">
-                        {t("settings.memoryOrganizerTime")}
-                      </span>
-                      <input
-                        type="time"
-                        aria-label={t("settings.memoryOrganizerTime")}
-                        value={timeLocalDraft}
-                        disabled={organizerTimingDisabled}
-                        onChange={(event) => setTimeLocalDraft(event.currentTarget.value)}
-                        onBlur={flushOrganizerTimeLocal}
-                        className={[
-                          "h-9 w-full rounded-lg border border-foreground/[0.08] bg-white/55 px-3 text-[13px] leading-none text-foreground/90",
-                          "outline-none transition-[background-color,border-color] focus:border-foreground/[0.18] focus:bg-white/80",
-                          "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:bg-white/[0.04] dark:focus:bg-white/[0.08]",
-                        ].join(" ")}
-                      />
-                    </label>
+              <div className="space-y-3">
+                <div className="grid grid-cols-[1fr_108px] gap-2.5">
+                  <div className="space-y-1.5">
+                    <span className="text-[11.5px] text-muted-foreground/90">
+                      {t("settings.memoryOrganizerSchedule")}
+                    </span>
+                    <DrawerSelect
+                      value={settings.memory.organizerSchedule.frequency}
+                      disabled={!canEnableOrganizer}
+                      onValueChange={(next) =>
+                        updateOrganizerSchedule({
+                          frequency: next as MemoryOrganizerFrequency,
+                        })
+                      }
+                      ariaLabel={t("settings.memoryOrganizerSchedule")}
+                      options={MEMORY_ORGANIZER_FREQUENCIES.map((item) => ({
+                        value: item.value,
+                        label: t(item.labelKey),
+                      }))}
+                    />
                   </div>
-                  {settings.memory.organizerSchedule.frequency === "weekly" ? (
-                    <label className="block space-y-1.5">
-                      <span className="text-[11.5px] text-muted-foreground/90">
-                        {t("settings.memoryOrganizerWeekday")}
-                      </span>
-                      <DrawerSelect
-                        value={String(settings.memory.organizerSchedule.weekday ?? 1)}
-                        disabled={organizerTimingDisabled}
-                        onValueChange={(next) => updateOrganizerSchedule({ weekday: Number(next) })}
-                        ariaLabel={t("settings.memoryOrganizerWeekday")}
-                        options={MEMORY_ORGANIZER_WEEKDAYS.map((key, index) => ({
-                          value: String(index),
-                          label: t(key),
-                        }))}
-                      />
-                    </label>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <label className="block space-y-1.5">
-                      <span className="text-[11.5px] text-muted-foreground/90">
-                        {t("settings.memoryOrganizerScope")}
-                      </span>
-                      <DrawerSelect
-                        value={settings.memory.organizerScope}
-                        onValueChange={(next) => {
-                          const organizerScope = next as MemoryOrganizerScope;
-                          setSettings((prev) => updateMemorySettings(prev, { organizerScope }));
-                        }}
-                        ariaLabel={t("settings.memoryOrganizerScope")}
-                        options={MEMORY_ORGANIZER_SCOPES.map((item) => ({
-                          value: item.value,
-                          label: t(item.labelKey),
-                        }))}
-                      />
-                    </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-[11.5px] text-muted-foreground/90">
-                        {t("settings.memoryOrganizerMode")}
-                      </span>
-                      <DrawerSelect
-                        value={settings.memory.organizerMode}
-                        onValueChange={(next) => {
-                          const organizerMode = next as MemoryOrganizerMode;
-                          setSettings((prev) => updateMemorySettings(prev, { organizerMode }));
-                        }}
-                        ariaLabel={t("settings.memoryOrganizerMode")}
-                        options={MEMORY_ORGANIZER_MODES.map((item) => ({
-                          value: item.value,
-                          label: t(item.labelKey),
-                        }))}
-                      />
-                    </label>
+                  <div className="space-y-1.5">
+                    <span className="text-[11.5px] text-muted-foreground/90">
+                      {t("settings.memoryOrganizerTime")}
+                    </span>
+                    <Input
+                      type="time"
+                      aria-label={t("settings.memoryOrganizerTime")}
+                      value={timeLocalDraft}
+                      disabled={organizerTimingDisabled}
+                      onChange={(event) => setTimeLocalDraft(event.currentTarget.value)}
+                      onBlur={flushOrganizerTimeLocal}
+                      className="text-[13px] leading-none text-foreground/90"
+                    />
                   </div>
-                  {settings.memory.organizerEnabled && settings.memory.organizerNextRunAt ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-[11.5px] text-muted-foreground">
-                      <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
-                        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/40" />
-                        <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      </span>
-                      <span className="font-medium text-foreground/75">
-                        {t("settings.memoryOrganizerNextRun")}
-                      </span>
-                      <span className="ml-auto font-mono text-foreground/70">
-                        {formatTime(settings.memory.organizerNextRunAt)}
-                      </span>
-                    </div>
-                  ) : null}
-                  {organizerFeedback ? (
-                    <div className="whitespace-pre-wrap rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-[11.5px] text-muted-foreground">
-                      {organizerFeedback}
-                    </div>
-                  ) : null}
                 </div>
+                {settings.memory.organizerSchedule.frequency === "weekly" ? (
+                  <div className="space-y-1.5">
+                    <span className="text-[11.5px] text-muted-foreground/90">
+                      {t("settings.memoryOrganizerWeekday")}
+                    </span>
+                    <DrawerSelect
+                      value={String(settings.memory.organizerSchedule.weekday ?? 1)}
+                      disabled={organizerTimingDisabled}
+                      onValueChange={(next) => updateOrganizerSchedule({ weekday: Number(next) })}
+                      ariaLabel={t("settings.memoryOrganizerWeekday")}
+                      options={MEMORY_ORGANIZER_WEEKDAYS.map((key, index) => ({
+                        value: String(index),
+                        label: t(key),
+                      }))}
+                    />
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1.5">
+                    <span className="text-[11.5px] text-muted-foreground/90">
+                      {t("settings.memoryOrganizerScope")}
+                    </span>
+                    <DrawerSelect
+                      value={settings.memory.organizerScope}
+                      onValueChange={(next) => {
+                        const organizerScope = next as MemoryOrganizerScope;
+                        setSettings((prev) => updateMemorySettings(prev, { organizerScope }));
+                      }}
+                      ariaLabel={t("settings.memoryOrganizerScope")}
+                      options={MEMORY_ORGANIZER_SCOPES.map((item) => ({
+                        value: item.value,
+                        label: t(item.labelKey),
+                      }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[11.5px] text-muted-foreground/90">
+                      {t("settings.memoryOrganizerMode")}
+                    </span>
+                    <DrawerSelect
+                      value={settings.memory.organizerMode}
+                      onValueChange={(next) => {
+                        const organizerMode = next as MemoryOrganizerMode;
+                        setSettings((prev) => updateMemorySettings(prev, { organizerMode }));
+                      }}
+                      ariaLabel={t("settings.memoryOrganizerMode")}
+                      options={MEMORY_ORGANIZER_MODES.map((item) => ({
+                        value: item.value,
+                        label: t(item.labelKey),
+                      }))}
+                    />
+                  </div>
+                </div>
+                {settings.memory.organizerEnabled && settings.memory.organizerNextRunAt ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-[11.5px] text-muted-foreground">
+                    <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/40" />
+                      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                    <span className="font-medium text-foreground/75">
+                      {t("settings.memoryOrganizerNextRun")}
+                    </span>
+                    <span className="ml-auto font-mono text-foreground/70">
+                      {formatTime(settings.memory.organizerNextRunAt)}
+                    </span>
+                  </div>
+                ) : null}
+                {organizerFeedback ? (
+                  <div className="whitespace-pre-wrap rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-[11.5px] text-muted-foreground">
+                    {organizerFeedback}
+                  </div>
+                ) : null}
               </div>
-              <div className="flex gap-2 px-0.5 pt-1">
+              <div className="mt-4 flex gap-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="flex-1 border border-foreground/[0.07] bg-white/45 backdrop-blur hover:bg-white/70 dark:bg-white/[0.035] dark:hover:bg-white/[0.07]"
+                  className="flex-1 border border-input bg-background hover:bg-accent/40"
                   onClick={() => setHistoryOpen(true)}
                 >
                   <History className="h-3.5 w-3.5" />
@@ -516,19 +526,19 @@ export function MemorySettingsDrawer(props: {
                   onClick={handleRunNow}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${organizerSubmitting ? "animate-spin" : ""}`}
+                    className={cn("h-3.5 w-3.5", organizerSubmitting ? "animate-spin" : "")}
                   />
                   {t("settings.memoryOrganizerRunNow")}
                 </Button>
               </div>
             </section>
 
-            <section className="space-y-2">
-              <div className="flex items-center gap-1.5 px-1 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-destructive/75">
+            <section className="py-5 last:pb-0">
+              <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive/80">
                 <AlertTriangle className="h-3 w-3" />
                 {t("settings.memorySettingsDangerZone")}
               </div>
-              <div className="rounded-2xl border border-destructive/15 bg-destructive/[0.025] p-4 backdrop-blur-md">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/[0.04] p-4">
                 <div className="text-[11.5px] leading-relaxed text-muted-foreground">
                   {t("settings.memorySettingsWipeDescription")}
                 </div>
@@ -546,7 +556,7 @@ export function MemorySettingsDrawer(props: {
             </section>
           </div>
         </div>
-      </aside>
+      </SheetContent>
       {historyOpen ? (
         <OrganizerHistoryModal
           t={t}
@@ -556,55 +566,47 @@ export function MemorySettingsDrawer(props: {
         />
       ) : null}
       {drawerWipeConfirmOpen ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="memory-drawer-wipe-confirm-title"
-        >
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setDrawerWipeConfirmOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border bg-background shadow-2xl">
-            <div className="flex items-start gap-3 border-b px-5 py-4">
+        <AlertDialog open onOpenChange={setDrawerWipeConfirmOpen}>
+          <AlertDialogContent className="max-w-md p-0">
+            <AlertDialogHeader className="flex-row items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
               <div className="min-w-0 flex-1">
-                <div id="memory-drawer-wipe-confirm-title" className="text-sm font-semibold">
+                <AlertDialogTitle className="text-sm">
                   {t("settings.memoryWipeConfirmTitle")}
-                </div>
-                <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1 text-xs leading-relaxed">
                   {t("settings.memoryWipeConfirmDescription")}
-                </div>
+                </AlertDialogDescription>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDrawerWipeConfirmOpen(false)}
-                disabled={saving}
-              >
-                {t("settings.memoryCancel")}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setDrawerWipeConfirmOpen(false);
-                  void onRequestWipe();
-                }}
-                disabled={saving}
-              >
-                {t("settings.memoryWipeAll")}
-              </Button>
-            </div>
-          </div>
-        </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDrawerWipeConfirmOpen(false)}
+                  disabled={saving}
+                >
+                  {t("settings.memoryCancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setDrawerWipeConfirmOpen(false);
+                    void onRequestWipe();
+                  }}
+                  disabled={saving}
+                >
+                  {t("settings.memoryWipeAll")}
+                </Button>
+              </AlertDialogActions>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
-    </div>,
-    document.body,
+    </Sheet>
   );
 }

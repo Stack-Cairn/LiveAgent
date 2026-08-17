@@ -478,7 +478,7 @@ function PathNavigator(props: {
           />
           <span className="pointer-events-none absolute right-2 flex items-center gap-1 text-[10px] text-muted-foreground/70">
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}
-            <kbd className="rounded-[5px] border border-border/70 bg-background/80 px-1 py-0.5 font-sans text-muted-foreground/80">
+            <kbd className="rounded-sm border border-border/70 bg-background/80 px-1 py-0.5 font-sans text-muted-foreground/80">
               ↵
             </kbd>
           </span>
@@ -1744,7 +1744,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
       {contextMenu ? (
         <div
-          className="editor-context-menu absolute z-[80] w-[220px] select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+          className="editor-context-menu layer-popover absolute w-[220px] select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => event.preventDefault()}

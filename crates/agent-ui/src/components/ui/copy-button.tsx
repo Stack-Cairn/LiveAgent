@@ -1,8 +1,8 @@
-import { Tooltip } from "@base-ui/react";
 import { Check, Copy } from "@liveagent/ui/components/IconSet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/shared/utils";
 import { Button } from "./button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 const COPY_FEEDBACK_MS = 1600;
 
@@ -72,14 +72,14 @@ export function CopyButton(props: {
 
   return (
     <>
-      <Tooltip.Root
+      <Tooltip
         open={tooltipOpen}
         disabled={disabled}
         onOpenChange={(open) => {
           if (!copied || open) setTooltipOpen(open);
         }}
       >
-        <Tooltip.Trigger
+        <TooltipTrigger
           delay={300}
           closeOnClick={false}
           disabled={disabled}
@@ -104,23 +104,13 @@ export function CopyButton(props: {
             </Button>
           }
         />
-        <Tooltip.Portal>
-          <Tooltip.Positioner
-            side="top"
-            align="center"
-            sideOffset={6}
-            collisionPadding={8}
-            className="z-[9999]"
-          >
-            <Tooltip.Popup className="rounded-lg border border-border/60 bg-popover px-2.5 py-1.5 text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
-              <span className="flex items-center gap-1.5">
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
-                <span>{activeLabel}</span>
-              </span>
-            </Tooltip.Popup>
-          </Tooltip.Positioner>
-        </Tooltip.Portal>
-      </Tooltip.Root>
+        <TooltipContent>
+          <span className="flex items-center gap-1.5">
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
+            <span>{activeLabel}</span>
+          </span>
+        </TooltipContent>
+      </Tooltip>
       <span className="sr-only" role="status" aria-live="polite">
         {copied ? copiedLabel : ""}
       </span>

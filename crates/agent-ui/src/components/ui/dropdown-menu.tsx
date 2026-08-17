@@ -20,7 +20,7 @@ export const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenu
         align={align}
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
-        className="z-[9999]"
+        className="layer-popover"
       >
         <Menu.Popup
           ref={ref}
@@ -85,7 +85,7 @@ export const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownM
         align={align}
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
-        className="z-[9999]"
+        className="layer-popover"
       >
         <Menu.Popup
           ref={ref}

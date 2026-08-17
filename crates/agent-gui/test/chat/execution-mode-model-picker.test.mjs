@@ -24,6 +24,18 @@ const branchSelectorSource = readFileSync(
   new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url),
   "utf8",
 );
+const popoverSource = readFileSync(
+  new URL("../../../agent-ui/src/components/ui/popover.tsx", import.meta.url),
+  "utf8",
+);
+const selectSource = readFileSync(
+  new URL("../../../agent-ui/src/components/ui/select.tsx", import.meta.url),
+  "utf8",
+);
+const baseStylesSource = readFileSync(
+  new URL("../../../agent-ui/src/styles/base.css", import.meta.url),
+  "utf8",
+);
 const iconSetSource = readFileSync(
   new URL("../../../agent-ui/src/components/IconSet.tsx", import.meta.url),
   "utf8",
@@ -31,9 +43,12 @@ const iconSetSource = readFileSync(
 
 test("model pickers use popover semantics instead of menu semantics", () => {
   for (const source of pickerSources) {
-    assert.match(source, /import \{ Popover \} from "@base-ui\/react"/);
-    assert.match(source, /<Popover\.Root open=\{isModelPickerOpen\}/);
-    assert.match(source, /<Popover\.Popup/);
+    assert.match(
+      source,
+      /import \{ Popover, PopoverContent, PopoverTrigger \} from "@liveagent\/ui\/components\/ui\/popover"/,
+    );
+    assert.match(source, /<Popover open=\{isModelPickerOpen\}/);
+    assert.match(source, /<PopoverContent/);
     assert.match(source, /aria-label=\{t\("chat\.selectModel"\)\}/);
     assert.doesNotMatch(source, /DropdownMenu/);
   }
@@ -61,7 +76,7 @@ test("popover interactions preserve mode and model changes until an outside dism
     assert.match(source, /aria-pressed=\{isSelected\}/);
     assert.match(
       source,
-      /<Popover\.Root open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
+      /<Popover open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
     );
     assert.match(source, /onSelectModel\(parsed\);/);
     assert.doesNotMatch(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
@@ -129,6 +144,13 @@ test("compact composer controls remain equal-width centered icon buttons", () =>
   assert.match(composerControlStylesSource, /@max-\[480px\]:gap-0/);
   assert.match(composerControlStylesSource, /@max-\[480px\]:px-0/);
   assert.match(composerControlStylesSource, /@max-\[480px\]:hidden/);
+});
+
+test("composer dropdown portals stay above the composer surface", () => {
+  assert.match(popoverSource, /className="layer-popover isolate"/);
+  assert.match(selectSource, /className="layer-popover"/);
+  assert.match(baseStylesSource, /--layer-popover: 9999;/);
+  assert.match(baseStylesSource, /--layer-modal: 10000;/);
 });
 
 test("DeepSeek provider icon uses the logo-only mark", () => {

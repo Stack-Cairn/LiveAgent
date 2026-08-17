@@ -7,6 +7,7 @@ use crate::commands::{
     chat_file_links::open_chat_file_link_for_conversation,
     chat_history,
     chat_history::ChatHistoryMessageRef,
+    checkpoint,
     fs::{
         fs_create_dir_sync, fs_delete_sync, fs_list_dirs_sync, fs_list_sync, fs_mention_list_sync,
         fs_read_editable_text_sync, fs_read_workspace_image_sync, fs_rename_sync, fs_roots_sync,
@@ -65,6 +66,52 @@ pub async fn handle_provider_usage(
             .await
     };
     provider_usage_response(result)
+}
+
+pub async fn handle_checkpoint(
+    request: proto::CheckpointRequest,
+) -> Result<proto::CheckpointResponse, String> {
+    let action = request.action.trim().to_string();
+    let result_json = match action.as_str() {
+        "list" => {
+            serde_json::to_string(&checkpoint::checkpoint_list(request.conversation_id).await?)
+                .map_err(|error| format!("serialize checkpoint list failed: {error}"))?
+        }
+        "diff" => serde_json::to_string(
+            &checkpoint::checkpoint_diff_stats(
+                request.conversation_id,
+                request.turn_seq,
+                request.authorized_roots,
+            )
+            .await?,
+        )
+        .map_err(|error| format!("serialize checkpoint diff failed: {error}"))?,
+        "rewind" => {
+            let expected = request
+                .expected
+                .into_iter()
+                .map(|entry| checkpoint::CheckpointExpectedEntry {
+                    key: entry.key,
+                    current_hash: entry.current_hash,
+                })
+                .collect();
+            serde_json::to_string(
+                &checkpoint::checkpoint_rewind_code(
+                    request.conversation_id,
+                    request.turn_seq,
+                    request.authorized_roots,
+                    expected,
+                )
+                .await?,
+            )
+            .map_err(|error| format!("serialize checkpoint rewind failed: {error}"))?
+        }
+        _ => return Err(format!("unsupported checkpoint action: {action}")),
+    };
+    Ok(proto::CheckpointResponse {
+        action,
+        result_json,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -806,6 +853,8 @@ pub async fn handle_fs_write_text(
             request.mode,
             expected_mtime_ms,
             expected_content_hash,
+            // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
+            None,
         )
     })
     .await
@@ -854,14 +903,16 @@ pub async fn handle_fs_rename(
 pub async fn handle_fs_delete(
     request: proto::FsDeleteRequest,
 ) -> Result<proto::FsDeleteResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path))
-        .await
-        .map_err(|e| format!("gateway fs delete join failed: {e}"))?
-        .map_err(|e| e.message)
-        .map(|response| proto::FsDeleteResponse {
-            path: response.path,
-            kind: response.kind,
-        })
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_delete_sync(request.workdir, request.path, None)
+    })
+    .await
+    .map_err(|e| format!("gateway fs delete join failed: {e}"))?
+    .map_err(|e| e.message)
+    .map(|response| proto::FsDeleteResponse {
+        path: response.path,
+        kind: response.kind,
+    })
 }
 
 pub async fn handle_git_request(

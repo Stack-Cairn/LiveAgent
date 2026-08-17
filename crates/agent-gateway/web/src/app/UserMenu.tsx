@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 
 type UserMenuProps = {
@@ -58,7 +59,10 @@ export function UserMenu(props: UserMenuProps) {
         <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/90 to-sky-500/90 text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-white">
           {userAvatarLabel || <User className="h-3.5 w-3.5" />}
           <span
-            className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full shadow-sm ring-2 ring-background ${statusDotClass}`}
+            className={cn(
+              "absolute -bottom-1 -right-1 h-3 w-3 rounded-full shadow-sm ring-2 ring-background",
+              statusDotClass,
+            )}
           >
             <span className="sr-only">{statusLabel}</span>
           </span>

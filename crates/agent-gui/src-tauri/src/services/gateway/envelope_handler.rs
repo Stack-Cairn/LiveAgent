@@ -796,6 +796,19 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 400, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::Checkpoint(request)) => {
+                match gateway_bridge::handle_checkpoint(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::CheckpointResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::FsListDirs(request)) => {
                 match gateway_bridge::handle_fs_list_dirs(request).await {
                     Ok(response) => {

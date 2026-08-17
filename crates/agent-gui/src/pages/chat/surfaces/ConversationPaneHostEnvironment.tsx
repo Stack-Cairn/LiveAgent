@@ -1,7 +1,9 @@
 import type { ChangedFilesActions } from "@liveagent/ui/components/chat/ChangedFilesCard";
+import type { CheckpointRewoundInfo } from "@liveagent/ui/lib/chat/checkpointRewind";
 import type { ProjectRef } from "@liveagent/ui/lib/workbench/types";
 import type { ChatComposerBarProps } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { createContext, type ReactNode, useContext } from "react";
+import type { WorkspaceProject } from "../../../lib/settings";
 import type { ConversationSurfaceController } from "../conversations/conversationControllerTypes";
 import type { ChatTranscriptProps } from "../transcript/ChatTranscript";
 
@@ -45,11 +47,19 @@ export type ConversationPaneIdentity = {
   project: ProjectRef;
 };
 
+export type ConversationPaneCheckpointRewind = {
+  /** 授权根来源项目;背景 Pane 传 null 表示仅用会话工作区根。 */
+  project: Pick<WorkspaceProject, "id" | "path"> | null;
+  disabled: boolean;
+  onRewound: (info: CheckpointRewoundInfo) => void;
+};
+
 export type ConversationPaneBinding = {
   controller: ConversationSurfaceController;
   transcript: ConversationTranscriptBindings;
   composer: ConversationComposerBindings;
   changedFilesActions: ChangedFilesActions;
+  checkpointRewind: ConversationPaneCheckpointRewind;
   isConversationRunning: boolean;
   fileDrop: ConversationPaneFileDropState;
 };

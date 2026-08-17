@@ -79,7 +79,7 @@ import {
   type StoreCategoryValue,
 } from "./SkillCategoryControls";
 import { SkillsImportView } from "./SkillsImportView";
-import { ScanActivityDots, SkillsContentLoadingState } from "./SkillsLoading";
+import { SkillsContentLoadingState } from "./SkillsLoading";
 import { SkillsStoreView, TERMINAL_INSTALL_PHASES } from "./SkillsStoreView";
 import {
   includesEveryBulkSelection,
@@ -111,6 +111,14 @@ const STORE_PAGE_LIMIT = 24;
 const EMPTY_SKILLS: SkillSummary[] = [];
 const SCAN_FEEDBACK_DURATION_MS = 6500;
 const SCAN_BUTTON_COMPLETE_DURATION_MS = 2400;
+const MIN_SCAN_LOADING_DURATION_MS = 600;
+
+async function waitForMinimumScanDuration(startedAt: number) {
+  const remaining = MIN_SCAN_LOADING_DURATION_MS - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
+  }
+}
 
 type SkillScanFeedback =
   | { status: "success"; total: number; added: number; updated: number; removed: number }
@@ -202,7 +210,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   >([]);
   const [importedCount, setImportedCount] = useState<number | null>(null);
   const [importToast, setImportToast] = useState<string | null>(null);
-  const importToastTimerRef = useRef<number | null>(null);
   const [previewInstalledSkill, setPreviewInstalledSkill] = useState<SkillSummary | null>(null);
   const [installedPreviewState, setInstalledPreviewState] = useState<InstalledSkillPreviewState>(
     () => emptyInstalledSkillPreviewState(),
@@ -287,6 +294,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       }
       const silent = options?.silent === true;
       const announce = options?.announce === true;
+      const startedAt = Date.now();
       if (announce) {
         resetScanButtonComplete();
       }
@@ -314,6 +322,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         }
       } finally {
         if (!silent) {
+          await waitForMinimumScanDuration(startedAt);
           setLoading(false);
         }
       }
@@ -445,6 +454,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }, [lockedByChatMode, view]);
 
   const rescanExternalSkills = useCallback(async () => {
+    const startedAt = Date.now();
     setExternalLoading(true);
     setExternalError(null);
     try {
@@ -464,6 +474,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       setExternalError(err instanceof Error ? err.message : String(err));
       return false;
     } finally {
+      await waitForMinimumScanDuration(startedAt);
       setExternalLoading(false);
     }
   }, []);
@@ -493,22 +504,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
 
   const showImportToast = useCallback((message: string) => {
-    if (importToastTimerRef.current !== null) {
-      window.clearTimeout(importToastTimerRef.current);
-    }
+    setImportErrors([]);
+    setImportedCount(null);
     setImportToast(message);
-    importToastTimerRef.current = window.setTimeout(() => {
-      setImportToast(null);
-      importToastTimerRef.current = null;
-    }, 5000);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (importToastTimerRef.current !== null) {
-        window.clearTimeout(importToastTimerRef.current);
-      }
-    };
   }, []);
 
   const toggleExternalSkill = useCallback(
@@ -558,6 +556,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         }
         return;
       }
+      setImportToast(null);
       setImportErrors([]);
       setImportedCount(null);
       const failures: Array<{ baseDir: string; name: string; message: string }> = [];
@@ -1495,12 +1494,11 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                 >
                   <span>
                     {loading
-                      ? t("settings.skillsScanning")
+                      ? t("settings.skillsImportScanning")
                       : scanButtonComplete
                         ? t("settings.skillsScanComplete")
                         : t("settings.skillsScan")}
                   </span>
-                  {loading ? <ScanActivityDots /> : null}
                 </span>
               </Button>
             </div>
@@ -1634,7 +1632,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                 ) : null}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-hidden pt-4">
+              <div
+                className={cn(
+                  "min-h-0 flex-1 overflow-hidden",
+                  view === "import" ? "pt-0" : "pt-4",
+                )}
+              >
                 {lockedByChatMode ? (
                   <div className="h-full min-h-0 overflow-y-auto pb-4 pr-1">
                     <GlassPanel tone="muted" className="hub-panel-enter">
@@ -1809,12 +1812,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         importErrors={importErrors}
                         importedCount={importedCount}
                         importToast={importToast}
-                        onDismissImportToast={() => {
-                          if (importToastTimerRef.current !== null) {
-                            window.clearTimeout(importToastTimerRef.current);
-                            importToastTimerRef.current = null;
-                          }
-                          setImportToast(null);
+                        onDismissImportToast={() => setImportToast(null)}
+                        onDismissImportResult={() => {
+                          setImportErrors([]);
+                          setImportedCount(null);
                         }}
                         bulkMode={bulkMode}
                         onToggle={toggleExternalSkill}

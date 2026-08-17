@@ -26,6 +26,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   normalizeIntegerDraftInput,
   parseIntegerDraftValue,
@@ -330,11 +331,12 @@ export function RemoteSection(props: SettingsSectionProps) {
 
         <div className="flex items-center gap-3">
           <div
-            className={`flex max-w-[260px] items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
+            className={cn(
+              "flex max-w-[260px] items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium",
               isConnected
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-muted/50 text-muted-foreground"
-            }`}
+                : "bg-muted/50 text-muted-foreground",
+            )}
             title={status.lastError ?? undefined}
           >
             {isConnected ? (

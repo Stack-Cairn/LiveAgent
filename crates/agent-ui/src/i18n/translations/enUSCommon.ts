@@ -324,6 +324,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.composer.noMatchingEnabledSkills": "No matching enabled Skills",
   "chat.copy": "Copy",
   "chat.edit": "Edit",
+  "chat.rewindCode": "Rewind code changes from this turn",
+  "chat.rewindUnavailable": "No code checkpoint is available for this turn",
   "chat.retry": "Retry",
   "chat.retryConfirmTitle": "Retry this reply?",
   "chat.retryConfirmDescription":
@@ -1177,6 +1179,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "mcpHub.editSubtitle": "Edit configuration for {name}",
   "mcpHub.modalSave": "Save",
   "mcpHub.modalAdd": "Add",
+  "mcpHub.basicSettings": "Basic information",
+  "mcpHub.connectionSettings": "Connection",
+  "mcpHub.optionalDetails": "Details",
   "mcpHub.invalidName": "Server Name is required",
   "mcpHub.invalidCommand": "Command is required",
   "mcpHub.invalidUrl": "URL is required",

@@ -70,7 +70,7 @@ test("application chrome is attached to the center column instead of the right d
   assert.ok(chatPageSource.indexOf("<AppWorkbenchChrome") < chatPageSource.indexOf("<ApplicationView"));
   assert.ok(chatPageSource.indexOf("<ApplicationView") < chatPageSource.indexOf("<RightDockPanel"));
   assert.doesNotMatch(applicationViewSource, /ChatHeader|headerOverlay|headerClassName/);
-  assert.match(chromeSource, /relative z-\[45\] h-12 shrink-0/);
+  assert.match(chromeSource, /layer-panel pointer-events-none relative h-12 shrink-0/);
   assert.doesNotMatch(chromeSource, /absolute inset-x-0 top-0/);
   assert.doesNotMatch(chromeSource, /left-\[272px\]|right-0/);
   assert.match(

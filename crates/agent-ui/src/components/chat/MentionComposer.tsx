@@ -1737,7 +1737,7 @@ export const MentionComposer = memo(
               <div
                 ref={composerContextMenuRef}
                 role="menu"
-                className="fixed z-[120] w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]"
+                className="layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]"
                 style={{
                   left: contextMenuPosition.left,
                   top: contextMenuPosition.top,

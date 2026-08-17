@@ -26,6 +26,7 @@ import {
   type HookType,
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { HookModal } from "./HookModal";
@@ -268,10 +269,16 @@ export function HooksSection(_props: SettingsSectionProps) {
                   <button
                     type="button"
                     onClick={() => togglePhase(groupKey)}
-                    className={`settings-hooks-phase-button flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted/40 ${group.phase.color}`}
+                    className={cn(
+                      "settings-hooks-phase-button flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted/40",
+                      group.phase.color,
+                    )}
                   >
                     <div
-                      className={`flex h-7 w-7 items-center justify-center rounded-lg ${group.phase.bgColor}`}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg",
+                        group.phase.bgColor,
+                      )}
                     >
                       {group.phase.icon}
                     </div>
@@ -282,7 +289,10 @@ export function HooksSection(_props: SettingsSectionProps) {
                         </span>
                         {phaseHookCount > 0 ? (
                           <span
-                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${group.phase.bgColor}`}
+                            className={cn(
+                              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                              group.phase.bgColor,
+                            )}
                           >
                             {phaseHookCount}
                           </span>
@@ -290,9 +300,10 @@ export function HooksSection(_props: SettingsSectionProps) {
                       </div>
                     </div>
                     <ChevronDown
-                      className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
-                        isCollapsed ? "-rotate-90" : ""
-                      }`}
+                      className={cn(
+                        "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                        isCollapsed ? "-rotate-90" : "",
+                      )}
                     />
                   </button>
 
@@ -313,9 +324,10 @@ export function HooksSection(_props: SettingsSectionProps) {
                               <button
                                 type="button"
                                 onClick={() => setActiveEvent(event)}
-                                className={`settings-hooks-event-button group relative flex w-full items-center gap-2.5 rounded-lg py-2 pl-7 pr-2.5 text-left transition-all ${
-                                  selected ? "bg-primary/10 shadow-sm" : "hover:bg-muted/30"
-                                }`}
+                                className={cn(
+                                  "settings-hooks-event-button group relative flex w-full items-center gap-2.5 rounded-lg py-2 pl-7 pr-2.5 text-left transition-all",
+                                  selected ? "bg-primary/10 shadow-sm" : "hover:bg-muted/30",
+                                )}
                               >
                                 <span
                                   aria-hidden
@@ -324,38 +336,45 @@ export function HooksSection(_props: SettingsSectionProps) {
                                   {selected ? (
                                     <span
                                       aria-hidden
-                                      className={`settings-hooks-event-dot-halo absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full ${group.phase.dotColor} opacity-25`}
+                                      className={cn(
+                                        "settings-hooks-event-dot-halo absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                                        group.phase.dotColor,
+                                        "opacity-25",
+                                      )}
                                     />
                                   ) : null}
                                   <span
-                                    className={`settings-hooks-event-dot-core relative block h-full w-full rounded-full ring-2 ring-card transition-all duration-200 ${
+                                    className={cn(
+                                      "settings-hooks-event-dot-core relative block h-full w-full rounded-full ring-2 ring-card transition-all duration-200",
                                       selected
                                         ? group.phase.dotColor
                                         : hasHooks
                                           ? `${group.phase.dotColor} opacity-80`
-                                          : "border border-border/60 bg-card"
-                                    }`}
+                                          : "border border-border/60 bg-card",
+                                    )}
                                   />
                                 </span>
 
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-1.5">
                                     <span
-                                      className={`settings-hooks-event-label text-[13px] font-medium transition-colors ${
+                                      className={cn(
+                                        "settings-hooks-event-label text-[13px] font-medium transition-colors",
                                         selected
                                           ? "text-foreground"
-                                          : "text-muted-foreground group-hover:text-foreground"
-                                      }`}
+                                          : "text-muted-foreground group-hover:text-foreground",
+                                      )}
                                     >
                                       {getHookEventLabel(t, event)}
                                     </span>
                                     {hasHooks ? (
                                       <span
-                                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                                        className={cn(
+                                          "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                                           selected
                                             ? "bg-primary/15 text-primary"
-                                            : "bg-muted/60 text-muted-foreground"
-                                        }`}
+                                            : "bg-muted/60 text-muted-foreground",
+                                        )}
                                       >
                                         {eventHooks.length}
                                       </span>
@@ -384,7 +403,11 @@ export function HooksSection(_props: SettingsSectionProps) {
                   if (!phase) return null;
                   return (
                     <div
-                      className={`settings-hooks-detail-icon flex h-9 w-9 items-center justify-center rounded-xl ${phase.bgColor} ${phase.color}`}
+                      className={cn(
+                        "settings-hooks-detail-icon flex h-9 w-9 items-center justify-center rounded-xl",
+                        phase.bgColor,
+                        phase.color,
+                      )}
                     >
                       {phase.icon}
                     </div>
@@ -433,15 +456,19 @@ export function HooksSection(_props: SettingsSectionProps) {
                   return (
                     <div
                       key={hook.id}
-                      className={`settings-hooks-card group rounded-xl border bg-background/80 p-4 transition-all hover:shadow-sm ${
+                      className={cn(
+                        "settings-hooks-card group rounded-xl border bg-background/80 p-4 transition-all hover:shadow-sm",
                         hook.enabled
                           ? "border-border/60 hover:border-border"
-                          : "border-border/40 opacity-60"
-                      }`}
+                          : "border-border/40 opacity-60",
+                      )}
                     >
                       <div className="settings-card-row settings-hooks-card-row flex items-start gap-3">
                         <div
-                          className={`settings-hooks-card-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${getHookTypeTone(hook.type)}`}
+                          className={cn(
+                            "settings-hooks-card-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                            getHookTypeTone(hook.type),
+                          )}
                         >
                           {hook.type === "command" ? (
                             <Terminal className="h-4.5 w-4.5" />

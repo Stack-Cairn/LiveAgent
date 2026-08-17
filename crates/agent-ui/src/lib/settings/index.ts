@@ -647,11 +647,15 @@ export function createProviderModelConfig(
   };
 }
 
-const VALID_LIMITS_SOURCES: readonly ModelLimitsSource[] = ["catalog", "provider", "fallback", "user"];
+const VALID_LIMITS_SOURCES: readonly ModelLimitsSource[] = [
+  "catalog",
+  "provider",
+  "fallback",
+  "user",
+];
 
 function normalizeLimitsSource(value: unknown): ModelLimitsSource | undefined {
-  return typeof value === "string" &&
-    (VALID_LIMITS_SOURCES as readonly string[]).includes(value)
+  return typeof value === "string" && (VALID_LIMITS_SOURCES as readonly string[]).includes(value)
     ? (value as ModelLimitsSource)
     : undefined;
 }
@@ -723,7 +727,10 @@ export function normalizeProviderModelConfig(
 
     if (resolvedSource === "catalog" || resolvedSource === "fallback") {
       // 加载时按当前目录/兜底重新解析，让目录更新自动传导。
-      limits = { contextWindow: catalogDefaults.contextWindow, maxOutputToken: catalogDefaults.maxOutputToken };
+      limits = {
+        contextWindow: catalogDefaults.contextWindow,
+        maxOutputToken: catalogDefaults.maxOutputToken,
+      };
       limitsSource = catalogDefaults.source;
     } else {
       // provider：供应商实时数据只在“刷新模型列表”那次抓取时存在，加载阶段

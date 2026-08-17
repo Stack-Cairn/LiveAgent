@@ -1,6 +1,18 @@
-import { AlertDialog } from "@base-ui/react/alert-dialog";
-import { AlertTriangle, X } from "@liveagent/ui/components/IconSet";
+import { AlertTriangle } from "@liveagent/ui/components/IconSet";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogBody,
+  AlertDialogClose,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./alert-dialog";
 import { Button } from "./button";
 
 type ConfirmDialogTone = "warning" | "destructive";
@@ -60,100 +72,87 @@ function ConfirmDialog(
   const toneClasses = toneClassNames[tone];
 
   return (
-    <AlertDialog.Root
+    <AlertDialog
       open
       onOpenChange={(open) => {
         if (!open) onCancel();
       }}
     >
-      <AlertDialog.Portal>
-        <AlertDialog.Backdrop className="fixed inset-0 z-[120] bg-black/55 backdrop-blur-sm" />
-        <AlertDialog.Viewport className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <AlertDialog.Popup className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl outline-none">
-            <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClasses.icon}`}
-                >
-                  <AlertTriangle className="h-5 w-5" />
+      <AlertDialogContent className="max-w-md p-0">
+        <AlertDialogHeader className="flex-row items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                toneClasses.icon,
+              )}
+            >
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <AlertDialogTitle className="break-words text-base leading-normal">
+                {title}
+              </AlertDialogTitle>
+              {subtitle ? (
+                <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                  {subtitle}
                 </div>
-                <div className="min-w-0">
-                  <AlertDialog.Title className="break-words text-base font-semibold text-foreground">
-                    {title}
-                  </AlertDialog.Title>
-                  {subtitle ? (
-                    <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                      {subtitle}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              ) : null}
+            </div>
+          </div>
 
-              <AlertDialog.Close
+          <AlertDialogCloseButton
+            label={closeLabel}
+            className="text-muted-foreground hover:text-foreground"
+          />
+        </AlertDialogHeader>
+
+        {description || detail ? (
+          <AlertDialogBody>
+            <AlertDialogDescription className="space-y-3" render={<div />}>
+              {description ? (
+                <div
+                  className={cn("rounded-xl border px-4 py-3 text-sm leading-6", toneClasses.panel)}
+                >
+                  {description}
+                </div>
+              ) : null}
+              {detail ? (
+                <div className="break-words rounded-xl border border-border/60 bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  {detail}
+                </div>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogBody>
+        ) : null}
+
+        <AlertDialogFooter className="bg-muted/20">
+          <AlertDialogActions>
+            {hideCancel ? null : (
+              <AlertDialogClose
                 render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-                    title={closeLabel}
-                    aria-label={closeLabel}
-                  />
+                  <Button type="button" variant={preferCancel ? "default" : "outline"} autoFocus />
                 }
               >
-                <X className="h-4 w-4" />
-              </AlertDialog.Close>
-            </div>
-
-            {description || detail ? (
-              <AlertDialog.Description className="space-y-3 px-5 py-5" render={<div />}>
-                {description ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-sm leading-6 ${toneClasses.panel}`}
-                  >
-                    {description}
-                  </div>
-                ) : null}
-                {detail ? (
-                  <div className="break-words rounded-xl border border-border/60 bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    {detail}
-                  </div>
-                ) : null}
-              </AlertDialog.Description>
-            ) : null}
-
-            <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-              {hideCancel ? null : (
-                <AlertDialog.Close
-                  render={
-                    <Button
-                      type="button"
-                      variant={preferCancel ? "default" : "outline"}
-                      autoFocus
-                      className="w-full sm:w-auto"
-                    />
-                  }
-                >
-                  {cancelLabel}
-                </AlertDialog.Close>
-              )}
-              <Button
-                type="button"
-                variant={preferCancel ? "ghost" : "destructive"}
-                onClick={onConfirm}
-                className={`w-full sm:w-auto ${
-                  preferCancel
-                    ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    : ""
-                }`}
-              >
-                {confirmLabel}
-              </Button>
-            </div>
-          </AlertDialog.Popup>
-        </AlertDialog.Viewport>
-      </AlertDialog.Portal>
-    </AlertDialog.Root>
+                {cancelLabel}
+              </AlertDialogClose>
+            )}
+            <Button
+              type="button"
+              variant={preferCancel ? "ghost" : "destructive"}
+              onClick={onConfirm}
+              className={
+                preferCancel
+                  ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  : undefined
+              }
+            >
+              {confirmLabel}
+            </Button>
+          </AlertDialogActions>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

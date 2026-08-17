@@ -32,11 +32,6 @@ const loader = createWebModuleLoader({
     "../lib/shared/utils": {
       cn: (...parts) => parts.filter(Boolean).join(" "),
     },
-    "../lib/shared/modalMotion": {
-      useModalMotion(onClose) {
-        return { modalState: "open", requestClose: onClose };
-      },
-    },
   },
 });
 

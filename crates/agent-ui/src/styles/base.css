@@ -16,6 +16,15 @@
 }
 
 @theme inline {
+  --radius-xs: calc(var(--radius) - 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
   @keyframes tw-shimmer {
     from {
       background-position: 100% 0;
@@ -25,6 +34,34 @@
       background-position: 0 0;
     }
   }
+}
+
+@utility layer-raised {
+  z-index: var(--layer-raised);
+}
+
+@utility layer-panel {
+  z-index: var(--layer-panel);
+}
+
+@utility layer-popover {
+  z-index: var(--layer-popover);
+}
+
+@utility layer-modal {
+  z-index: var(--layer-modal);
+}
+
+@utility layer-toast {
+  z-index: var(--layer-toast);
+}
+
+@utility layer-critical {
+  z-index: var(--layer-critical);
+}
+
+@utility rounded-inherit {
+  border-radius: inherit;
 }
 
 @utility shimmer {
@@ -164,6 +201,11 @@
     height: 100%;
     -webkit-user-select: none;
     user-select: none;
+  }
+
+  /* Keep Base UI portals above page-local stacking contexts without z-index escalation. */
+  #root {
+    isolation: isolate;
   }
 
   body {
@@ -417,7 +459,16 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
+
+    /* Portal layers use semantic tokens and stay above page-local stacking contexts. */
+    --layer-content: 1;
+    --layer-raised: 10;
+    --layer-panel: 20;
+    --layer-popover: 9999;
+    --layer-modal: 10000;
+    --layer-toast: 10010;
+    --layer-critical: 10020;
 
     /* Sidebar */
     --sidebar-bg: 220 14% 96%;

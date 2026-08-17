@@ -1,5 +1,6 @@
 import { ChevronRight, Lightbulb } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import type { ChatFileLink } from "../../lib/chat/chatFileLinks";
 import { Markdown } from "../Markdown";
@@ -48,7 +49,10 @@ export function ThinkingActivity(props: {
           </>
         )}
         <ChevronRight
-          className={`ml-auto h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out motion-reduce:transition-none ${isOpen ? "rotate-90" : ""}`}
+          className={cn(
+            "ml-auto h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            isOpen ? "rotate-90" : "",
+          )}
         />
       </button>
       <LazyCollapse open={isOpen}>

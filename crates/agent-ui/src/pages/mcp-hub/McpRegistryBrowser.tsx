@@ -15,7 +15,6 @@ import {
   Server,
   Shield,
   Terminal,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
@@ -26,6 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   createUniqueMcpServerId,
@@ -42,7 +47,6 @@ import { enrichMcpServerWithRegistryMetadata } from "@liveagent/ui/lib/mcpServer
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { McpRegistryConfigureModal } from "./McpRegistryConfigureModal";
 import { McpRegistryToolbar } from "./McpRegistryToolbar";
 
@@ -277,7 +281,7 @@ function RegistryCard(props: {
                   placeholder={t("mcpHub.storeVersionLatest")}
                 />
               </SelectTrigger>
-              <SelectContent className="z-[70] min-w-[5.75rem]">
+              <SelectContent className="min-w-[5.75rem]">
                 {versionOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id} className="text-xs">
                     {option.label}
@@ -450,45 +454,11 @@ function McpRegistryPreviewDrawer(props: {
         ? t(installActionKey)
         : t("mcpHub.storeAddDraft");
 
-  const [closing, setClosing] = useState(false);
-  const closeTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleClose = useCallback(() => {
-    if (closing) return;
-    setClosing(true);
-    closeTimerRef.current = window.setTimeout(() => {
-      onClose();
-    }, 220);
-  }, [closing, onClose]);
-
-  return createPortal(
-    <div
-      className={cn(
-        "fixed inset-0 z-50 flex justify-end bg-black/35",
-        closing ? "skills-drawer-backdrop-closing" : "skills-drawer-backdrop",
-      )}
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <aside
-        className={cn(
-          "flex h-full w-full flex-col border-l border-border/70 bg-background shadow-[-18px_0_45px_-28px_rgba(15,23,42,0.45)] dark:shadow-[-18px_0_45px_-28px_rgba(0,0,0,0.7)] md:w-2/5 md:max-w-[34rem]",
-          closing ? "skills-drawer-panel-closing" : "skills-drawer-panel",
-        )}
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        className="max-w-none border-border/70 shadow-[-18px_0_45px_-28px_rgba(15,23,42,0.45)] md:w-2/5 md:max-w-[34rem] dark:shadow-[-18px_0_45px_-28px_rgba(0,0,0,0.7)]"
+        closeLabel={t("settings.cancel")}
       >
         <div className="flex flex-col gap-2.5 border-b border-border/70 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -496,22 +466,13 @@ function McpRegistryPreviewDrawer(props: {
               {data.remote ? <Globe2 className="h-5 w-5" /> : <Server className="h-5 w-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+              <SheetDescription className="text-[10.5px] font-medium uppercase tracking-wider">
                 {t("mcpHub.storePreviewTitle")}
-              </div>
-              <h2 className="mt-0.5 truncate text-[15px] font-semibold tracking-tight text-foreground">
+              </SheetDescription>
+              <SheetTitle className="mt-0.5 truncate text-[15px] tracking-tight">
                 {data.displayName}
-              </h2>
+              </SheetTitle>
             </div>
-            <button
-              type="button"
-              onClick={handleClose}
-              title={t("settings.cancel")}
-              aria-label={t("settings.cancel")}
-              className="flex h-8 w-8 shrink-0 items-center justify-center self-start rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
             <span
@@ -752,9 +713,8 @@ function McpRegistryPreviewDrawer(props: {
             {actionLabel}
           </Button>
         </div>
-      </aside>
-    </div>,
-    document.body,
+      </SheetContent>
+    </Sheet>
   );
 }
 

@@ -15,6 +15,7 @@ import {
 } from "react";
 import { PaneLoadingSkeleton } from "../../../components/app/PaneLoadingSkeleton";
 import { CurrentTaskProgress } from "../components/CurrentTaskProgress";
+import { DesktopCheckpointRewindProvider } from "../components/DesktopCheckpointRewindProvider";
 import { PendingToolApprovalBar } from "../components/PendingToolApprovalBar";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
 import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
@@ -102,8 +103,15 @@ export const ConversationPaneHost = forwardRef<
   ConversationPaneHostProps
 >(function ConversationPaneHost(props, forwardedRef) {
   const { paneId, conversationId, project } = props;
-  const { controller, transcript, composer, changedFilesActions, isConversationRunning, fileDrop } =
-    useConversationPaneBinding({ paneId, conversationId, project });
+  const {
+    controller,
+    transcript,
+    composer,
+    changedFilesActions,
+    checkpointRewind,
+    isConversationRunning,
+    fileDrop,
+  } = useConversationPaneBinding({ paneId, conversationId, project });
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
@@ -157,16 +165,24 @@ export const ConversationPaneHost = forwardRef<
         return {
           transcript: (
             <ChangedFilesActionsProvider value={changedFilesActions}>
-              <ChatTranscript
-                {...transcript}
+              <DesktopCheckpointRewindProvider
                 conversationId={snapshot.conversationId}
-                followRef={scrollFollowRef}
-                historyItems={historyItems}
-                hasMoreHistory={runtime?.state.transcript.hasMoreBefore ?? false}
-                isSending={isSending}
-                isCompactionRunning={isCompactionRunning}
-                bottomReservePx={composerOverlayHeight}
-              />
+                workspaceRoot={transcript.workspaceRoot}
+                project={checkpointRewind.project}
+                disabled={checkpointRewind.disabled}
+                onRewound={checkpointRewind.onRewound}
+              >
+                <ChatTranscript
+                  {...transcript}
+                  conversationId={snapshot.conversationId}
+                  followRef={scrollFollowRef}
+                  historyItems={historyItems}
+                  hasMoreHistory={runtime?.state.transcript.hasMoreBefore ?? false}
+                  isSending={isSending}
+                  isCompactionRunning={isCompactionRunning}
+                  bottomReservePx={composerOverlayHeight}
+                />
+              </DesktopCheckpointRewindProvider>
             </ChangedFilesActionsProvider>
           ),
           composer: (

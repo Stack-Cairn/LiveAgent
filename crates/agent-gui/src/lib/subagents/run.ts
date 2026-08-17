@@ -67,6 +67,8 @@ export type SubagentRunEnvironment = {
     execute: ChildToolExecutor,
   ) => { tools: Tool[]; execute: ChildToolExecutor };
   enqueueWorktreeApply: <T>(run: () => Promise<T>) => Promise<T>;
+  /** 父对话检查点上下文;传给 worktree.apply 让后端在改写父工作区前捕获前像。 */
+  checkpoint?: { conversationId: string; turnId: string };
   onStatus?: (status: string | null) => void;
 };
 
@@ -332,6 +334,7 @@ export async function executeSubagentRun(
             env.worktree.apply({
               parentWorkdir: env.workdir,
               worktreeRoot: worktree!.worktreeRoot,
+              ...(env.checkpoint ? { checkpoint: env.checkpoint } : {}),
             }),
           );
           applyStatus = applyResult.applied ? "applied" : "skipped";

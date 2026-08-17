@@ -70,7 +70,7 @@ export function Popup({
     <div
       ref={popupRef}
       className={cn(
-        "mention-popup-enter fixed z-[100] overflow-hidden rounded-2xl",
+        "mention-popup-enter layer-popover fixed overflow-hidden rounded-2xl",
         "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
       )}
       onMouseDown={(event) => {
@@ -276,7 +276,7 @@ export function CommitMentionTooltip({
   return createPortal(
     <div
       ref={tooltipRef}
-      className="fixed z-[10000] overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
+      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
       style={{
         left,
         top,

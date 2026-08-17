@@ -8,14 +8,22 @@ import {
   OpenaiChatgptIcon,
   RefreshCw,
   Settings,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogSubheader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
 
 export type CherryProviderImportItem = {
@@ -103,7 +111,6 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
   const candidates = response.providers;
   const resolvedDataPath = dataPath ?? response.dataPath ?? "";
   const [pathDialogOpen, setPathDialogOpen] = useState(false);
-  const pathDialog = useAnimatedPresence(pathDialogOpen);
   const hasSyncableItems = useMemo(
     () => candidates.some((item) => item.enabled && item.importable),
     [candidates],
@@ -158,49 +165,36 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
     });
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="关闭 Cherry Studio 同步"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={importing ? undefined : onClose}
-      />
-      <div className="relative z-10 flex h-[min(35rem,88vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b px-6 py-4">
-          <div>
-            <div className="text-base font-semibold">从 Cherry Studio 同步</div>
-            <div className="mt-1 text-xs text-muted-foreground">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
+      <DialogContent
+        className="flex h-[min(35rem,88dvh)] max-w-2xl flex-col p-0"
+        closeDisabled={importing}
+        closeLabel="关闭"
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-start gap-4 px-6">
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-base leading-normal">从 Cherry Studio 同步</DialogTitle>
+            <DialogDescription className="mt-1 text-xs">
               仅同步 Base URL 和 API Key，模型由 LiveAgent 获取并激活；左侧切换供应商类型
-            </div>
+            </DialogDescription>
           </div>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
-              onClick={() => setPathDialogOpen(true)}
-              disabled={importing}
-              title="Cherry Studio 数据目录设置"
-              aria-label="Cherry Studio 数据目录设置"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={onClose}
-              disabled={importing}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground"
+            onClick={() => setPathDialogOpen(true)}
+            disabled={importing}
+            title="Cherry Studio 数据目录设置"
+            aria-label="Cherry Studio 数据目录设置"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </DialogHeader>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-6 py-3">
+        <DialogSubheader className="flex flex-wrap items-center justify-between gap-3 bg-muted/20 px-6 py-3">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -232,9 +226,9 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               清空
             </Button>
           </div>
-        </div>
+        </DialogSubheader>
 
-        <div className="flex min-h-0 flex-1">
+        <DialogBody className="flex overflow-hidden p-0">
           {groups.length === 0 ? (
             <div className="flex flex-1 items-center justify-center px-6 py-10 text-center text-sm text-muted-foreground">
               没有可同步的 Cherry Studio 聊天供应商
@@ -289,22 +283,24 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                       <button
                         key={itemKey(item)}
                         type="button"
-                        className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
                           item.importable
                             ? checked
                               ? "border-primary/45 bg-primary/[0.06]"
                               : "hover:bg-accent/40"
-                            : "cursor-not-allowed bg-muted/25 opacity-65"
-                        }`}
+                            : "cursor-not-allowed bg-muted/25 opacity-65",
+                        )}
                         onClick={() => toggleItem(item)}
                         disabled={!item.importable || importing}
                       >
                         <span
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                             checked && item.importable
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-muted-foreground/40"
-                          }`}
+                              : "border-muted-foreground/40",
+                          )}
                         >
                           {checked && item.importable ? <Check className="h-3 w-3" /> : null}
                         </span>
@@ -351,13 +347,13 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               </div>
             </>
           )}
-        </div>
+        </DialogBody>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-6 py-4">
+        <DialogFooter className="bg-background px-6 min-[821px]:justify-between">
           <div className="text-xs text-muted-foreground">
             已选择 {selectedItems.length} 个供应商配置
           </div>
-          <div className="flex items-center gap-2">
+          <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={importing}>
               取消
             </Button>
@@ -369,85 +365,68 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               {importing ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}
               {importing ? "正在同步…" : `同步 ${selectedItems.length} 个`}
             </Button>
-          </div>
-        </div>
-      </div>
-
-      {pathDialog.shouldRender ? (
-        <div
-          className="settings-modal-overlay absolute inset-0 z-20 flex items-center justify-center p-4"
-          data-state={pathDialog.motionState}
-        >
-          <button
-            type="button"
-            aria-label="关闭数据目录设置"
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setPathDialogOpen(false)}
-          />
-          <div className="settings-modal-panel relative z-10 w-full max-w-md rounded-2xl border bg-background p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold">Cherry Studio 数据目录</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {dataPath
-                    ? "正在使用手动指定的目录"
-                    : "LiveAgent 会自动读取 Cherry Studio 的数据目录设置"}
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setPathDialogOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <Input
-                readOnly
-                value={resolvedDataPath}
-                placeholder={scanning ? "正在检测…" : "未检测到数据目录"}
-                className="h-9 min-w-0 flex-1 text-xs"
-                title={resolvedDataPath}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                disabled={scanning || importing}
-                onClick={onChooseDataDirectory}
-                title="选择数据目录"
-                aria-label="选择 Cherry Studio 数据目录"
-              >
-                {scanning ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FolderOpen className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            {dataPath ? (
-              <div className="mt-4 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                <span>手动指定</span>
+          </DialogActions>
+        </DialogFooter>
+        <Dialog open={pathDialogOpen} onOpenChange={setPathDialogOpen}>
+          <DialogContent
+            className="max-w-md p-0"
+            closeDisabled={scanning || importing}
+            closeLabel="关闭"
+            showCloseButton
+          >
+            <DialogHeader>
+              <DialogTitle className="text-sm leading-normal">Cherry Studio 数据目录</DialogTitle>
+              <DialogDescription className="text-xs">
+                {dataPath
+                  ? "正在使用手动指定的目录"
+                  : "LiveAgent 会自动读取 Cherry Studio 的数据目录设置"}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={resolvedDataPath}
+                  placeholder={scanning ? "正在检测…" : "未检测到数据目录"}
+                  className="h-9 min-w-0 flex-1 text-xs"
+                  title={resolvedDataPath}
+                />
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
                   disabled={scanning || importing}
-                  onClick={onResetDataDirectory}
+                  onClick={onChooseDataDirectory}
+                  title="选择数据目录"
+                  aria-label="选择 Cherry Studio 数据目录"
                 >
-                  恢复自动检测
+                  {scanning ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FolderOpen className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>,
-    document.body,
+              {dataPath ? (
+                <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>手动指定</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={scanning || importing}
+                    onClick={onResetDataDirectory}
+                  >
+                    恢复自动检测
+                  </Button>
+                </div>
+              ) : null}
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </DialogContent>
+    </Dialog>
   );
 }

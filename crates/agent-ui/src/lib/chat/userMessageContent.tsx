@@ -626,7 +626,7 @@ function CommitReferenceTooltip({
   return createPortal(
     <div
       ref={tooltipRef}
-      className="fixed z-[10000] overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
+      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
       style={{
         left,
         top,

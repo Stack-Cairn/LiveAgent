@@ -20,6 +20,7 @@ import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
+import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -220,7 +221,7 @@ export function ChatPage(props: ChatPageProps) {
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const initialConversationRef = useRef(createConversationIdentity());
   const initialConversationStateRef = useRef(createConversationStateFromContext(context));
 
@@ -1817,6 +1818,21 @@ export function ChatPage(props: ChatPageProps) {
   const primaryPaneBinding: ConversationPaneBinding = {
     controller: conversationSurfaceController,
     changedFilesActions,
+    checkpointRewind: {
+      project: activeWorkspaceProject,
+      disabled: !currentConversationId || isSending,
+      onRewound: (info) => {
+        // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
+        // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+        //
+        // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
+        // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
+        // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
+        // 那要改写已落库的摘要才能修,不在本功能范围内。
+        const notice = formatCheckpointRewoundNotification(info, locale === "zh-CN");
+        addNotify(notice.level, notice.message);
+      },
+    },
     isConversationRunning: isConversationRunning(currentConversationId),
     fileDrop: {
       active: isFileDropActive,
@@ -1927,6 +1943,18 @@ export function ChatPage(props: ChatPageProps) {
     dividerSize: WORKBENCH_CANVAS_DIVIDER_SIZE,
     onCommandError: handleWorkbenchCommandError,
   });
+
+  const workbenchPrefetchConversationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionWorkbench.enabled || workbench.restoreReady) return;
+    const layout = workbench.layoutRef.current;
+    const focusedPane = layout.focusedPaneId ? layout.panes[layout.focusedPaneId] : undefined;
+    if (focusedPane?.surface.kind !== "conversation") return;
+    const conversationId = focusedPane.surface.conversationId.trim();
+    if (!conversationId || workbenchPrefetchConversationRef.current === conversationId) return;
+    workbenchPrefetchConversationRef.current = conversationId;
+    void hydrateConversationActionRef.current(conversationId).catch(() => undefined);
+  }, [workbench.restoreReady, workbench.layoutRef]);
 
   // A pane focus/drop selects its conversation asynchronously; until the
   // selection lands, syncCurrentConversation must not rebind the focused pane
@@ -2627,6 +2655,13 @@ export function ChatPage(props: ChatPageProps) {
     return {
       controller,
       changedFilesActions,
+      // 回退是写工作区的破坏性操作,只允许从焦点 Pane 发起(聚焦后走
+      // primaryPaneBinding 的完整授权链);背景 Pane 一律禁用。
+      checkpointRewind: {
+        project: null,
+        disabled: true,
+        onRewound: () => undefined,
+      },
       isConversationRunning: isConversationRunning(conversationId),
       // Native file drop routes only to the focused pane's composer.
       fileDrop: {
@@ -3011,12 +3046,14 @@ export function ChatPage(props: ChatPageProps) {
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
           trailingActions={
-            <ProjectToolsPanelToggle
-              isOpen={rightDockOpen}
-              sessionCount={projectTerminalSessions.length}
-              disabledMessage={terminalDisabledMessage}
-              onToggle={() => setRightDockOpen((open) => !open)}
-            />
+            <>
+              <ProjectToolsPanelToggle
+                isOpen={rightDockOpen}
+                sessionCount={projectTerminalSessions.length}
+                disabledMessage={terminalDisabledMessage}
+                onToggle={() => setRightDockOpen((open) => !open)}
+              />
+            </>
           }
           overlay={<NotifyToast items={notifyItems} onDismiss={dismissNotify} />}
         />

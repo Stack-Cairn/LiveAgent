@@ -41,106 +41,6 @@
     overflow: hidden;
   }
 
-  .settings-modal-overlay {
-    opacity: 0;
-    transition: opacity 180ms ease;
-    will-change: opacity;
-  }
-
-  .settings-modal-overlay[data-state="open"] {
-    opacity: 1;
-  }
-
-  .settings-modal-overlay[data-state="closed"] {
-    pointer-events: none;
-  }
-
-  .settings-modal-panel {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: opacity, transform;
-  }
-
-  .settings-modal-overlay[data-state="open"] .settings-modal-panel {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  .settings-modal-overlay[data-state="closed"] .settings-modal-panel {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-
-  .ssh-forward-dialog-backdrop {
-    opacity: 1;
-    transition: opacity 180ms ease;
-  }
-
-  .ssh-forward-dialog-backdrop[data-starting-style] {
-    opacity: 0;
-  }
-
-  .ssh-forward-dialog-popup {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .ssh-forward-dialog-popup[data-starting-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
-  /* Base UI Dialog 通用进出场（WorktreeCreateModal、RemotePathPickerModal 等）。
-     与 settings-modal-* 的 useModalMotion/data-state 机制不同，Base UI 弹层由
-     data-starting-style / data-ending-style 驱动，退场过渡结束后才卸载。 */
-  .modal-dialog-backdrop {
-    opacity: 1;
-    transition: opacity 180ms ease;
-  }
-
-  .modal-dialog-backdrop[data-starting-style],
-  .modal-dialog-backdrop[data-ending-style] {
-    opacity: 0;
-  }
-
-  .modal-dialog-popup {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    transition:
-      opacity 180ms ease,
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .modal-dialog-popup[data-starting-style],
-  .modal-dialog-popup[data-ending-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
-  /* settings-modal-* 基线为 opacity:0 且靠 data-state 显形；Base UI 驱动的
-     同款外观（复用其响应式布局规则）必须中和该基线，否则弹层恒隐藏。 */
-  .settings-modal-overlay.modal-dialog-viewport {
-    opacity: 1;
-    transition: none;
-  }
-
-  .settings-modal-panel.modal-dialog-popup {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  .settings-modal-panel.modal-dialog-popup[data-starting-style],
-  .settings-modal-panel.modal-dialog-popup[data-ending-style] {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
   .settings-tools-view-enter {
     animation: settingsToolsViewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     will-change: transform, opacity;
@@ -254,34 +154,6 @@
     animation-delay: 140ms;
   }
 
-  .model-selector-dropdown {
-    --model-menu-slide-y: -6px;
-    transform-origin: var(--transform-origin);
-    transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .model-selector-dropdown[data-side="top"] {
-    --model-menu-slide-y: 6px;
-  }
-
-  .model-selector-dropdown[data-starting-style],
-  .model-selector-dropdown[data-ending-style] {
-    opacity: 0;
-    transform: translateY(var(--model-menu-slide-y)) scale(0.96);
-  }
-
-  .model-selector-dropdown[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    transform: translateY(calc(var(--model-menu-slide-y) / 2)) scale(0.98);
-  }
-
-  .model-selector-dropdown[data-open] .model-selector-item {
-    animation: modelSelectorItemIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-  }
-
   @keyframes providerPanelIn {
     from {
       opacity: 0;
@@ -384,17 +256,6 @@
     }
   }
 
-  @keyframes modelSelectorItemIn {
-    from {
-      opacity: 0;
-      transform: translateY(calc(var(--model-menu-slide-y) / 2));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .settings-section-enter,
     .settings-section-title-enter,
@@ -405,13 +266,7 @@
     }
 
     .ssh-auth-panel,
-    .ssh-collapsible,
-    .settings-modal-overlay,
-    .settings-modal-panel,
-    .ssh-forward-dialog-backdrop,
-    .ssh-forward-dialog-popup,
-    .modal-dialog-backdrop,
-    .modal-dialog-popup {
+    .ssh-collapsible {
       transition-duration: 1ms;
     }
 
@@ -419,19 +274,11 @@
     .mention-popup-enter,
     .mention-popup-item,
     .sidebar-context-menu,
-    .sidebar-context-menu [role="menuitem"],
-    .model-selector-dropdown,
-    .model-selector-item {
+    .sidebar-context-menu [role="menuitem"] {
       animation: none !important;
     }
 
     .sidebar-context-menu {
-      transition: none !important;
-    }
-
-    .model-selector-dropdown,
-    .composer-model-trigger,
-    .composer-model-trigger svg {
       transition: none !important;
     }
   }
