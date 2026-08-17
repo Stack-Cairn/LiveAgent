@@ -1,5 +1,6 @@
 import { ChevronRight, Cpu, Plus, Terminal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "../../lib/shared/utils";
 import type { TerminalShellOption } from "../../lib/terminal/types";
 import { buttonVariants } from "../ui/button";
@@ -42,6 +43,11 @@ type RightDockChooserProps = RightDockLauncherActions & {
   creating: boolean;
   loading: boolean;
   error: string | null;
+  /**
+   * 存在时"新建终端"入口可拖出到工作台画板(拖到落点新建终端 Pane);
+   * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
+   */
+  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
 };
 
 export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
@@ -144,17 +150,30 @@ export function RightDockChooser(props: RightDockChooserProps) {
     onCreateTerminal,
     onStartTool,
     onOpenBackgroundTasks,
+    onNewTerminalDragStart,
   } = props;
   const { t } = useLocale();
+  const terminalTileDisabled = !terminalReady || creating;
   const tools = [
     {
       key: "terminal",
       title: t("projectTools.newTerminal"),
       description: t("projectTools.terminalDescription"),
       icon: <Terminal className="h-4.5 w-4.5" />,
-      disabled: !terminalReady || creating,
+      disabled: terminalTileDisabled,
       titleAttr: terminalDisabledMessage,
       onClick: () => onCreateTerminal(),
+      onPointerDown:
+        onNewTerminalDragStart && !terminalTileDisabled
+          ? (event: ReactPointerEvent<HTMLButtonElement>) => {
+              if (event.button !== 0 || event.pointerType === "touch") return;
+              onNewTerminalDragStart({
+                pointerId: event.pointerId,
+                clientX: event.clientX,
+                clientY: event.clientY,
+              });
+            }
+          : undefined,
     },
     ...RIGHT_DOCK_TOOL_DEFINITIONS.map((definition) => ({
       key: definition.kind,
@@ -164,6 +183,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
       disabled: definition.projectRequired ? !projectReady : !tunnelAvailable,
       titleAttr: definition.projectRequired ? disabledMessage : undefined,
       onClick: () => onStartTool(definition.kind),
+      onPointerDown: undefined,
     })),
     {
       key: "backgroundTasks",
@@ -173,6 +193,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
       disabled: false,
       titleAttr: undefined,
       onClick: onOpenBackgroundTasks,
+      onPointerDown: undefined,
     },
   ];
 
@@ -188,6 +209,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
             key={tool.key}
             type="button"
             onClick={tool.onClick}
+            onPointerDown={tool.onPointerDown}
             disabled={tool.disabled}
             title={tool.titleAttr}
             className="group flex items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"

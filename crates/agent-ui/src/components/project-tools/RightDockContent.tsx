@@ -22,12 +22,13 @@ type RightDockContentProps = {
   onTerminalError: (sessionId: string, message: string | null) => void;
   onInitialTerminalSnapshotConsumed: (sessionId: string) => void;
   onCreateTerminal: () => void;
-  /**
-   * 存在时"新建终端"按钮可拖出到工作台画板(拖到落点新建终端 Pane);
-   * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
-   */
-  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  /** 被工作台 Pane 租用的会话:视口换成占位,绝不挂载第二个 XTermViewport。 */
+  leasedSessionIds?: ReadonlySet<string>;
+  /** 租用占位上的"聚焦工作台面板"入口;省略时占位只显示文案。 */
+  onFocusWorkbenchPane?: (sessionId: string) => void;
 };
+
+const NO_LEASED_SESSIONS: ReadonlySet<string> = new Set();
 
 export function RightDockContent(props: RightDockContentProps) {
   const {
@@ -42,7 +43,8 @@ export function RightDockContent(props: RightDockContentProps) {
     onTerminalError,
     onInitialTerminalSnapshotConsumed,
     onCreateTerminal,
-    onNewTerminalDragStart,
+    onFocusWorkbenchPane,
+    leasedSessionIds = NO_LEASED_SESSIONS,
   } = props;
   const { t } = useLocale();
   const context = useRightDockToolContext();
@@ -95,6 +97,32 @@ export function RightDockContent(props: RightDockContentProps) {
               const isActiveTerminal =
                 currentActiveTab === "terminal" && activeSession?.id === session.id;
               if (!isActiveTerminal) return null;
+              // 租给工作台 Pane 的会话在这里绝不挂 XTermViewport:同一 PTY 的
+              // 输出流只能有一个消费者,否则 dock 与 Pane 会互相吞字节。tab 仍
+              // 在列表里,只是视口换成"去 Pane"的占位。
+              if (leasedSessionIds.has(session.id)) {
+                return (
+                  <div
+                    key={session.id}
+                    data-project-tools-terminal-leased={session.id}
+                    className="absolute inset-0 flex min-h-0 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
+                      <Terminal className="h-5 w-5" />
+                    </div>
+                    <div>{t("workbench.terminalLeasedPlaceholder")}</div>
+                    {onFocusWorkbenchPane ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onFocusWorkbenchPane(session.id)}
+                      >
+                        {t("workbench.focusPane")}
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              }
               return (
                 <div key={session.id} className="absolute inset-0 min-h-0">
                   <XTermViewport
@@ -114,6 +142,9 @@ export function RightDockContent(props: RightDockContentProps) {
           </div>
         </div>
       ) : currentActiveTab === "terminal" ? (
+        // Only reachable while the terminal is unavailable — otherwise
+        // RightDockPanel renders RightDockChooser instead, which is where the
+        // drag-to-workbench affordance for "new terminal" lives.
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/80">
             <Terminal className="h-6 w-6 text-muted-foreground" />
@@ -134,23 +165,7 @@ export function RightDockContent(props: RightDockContentProps) {
               </div>
             )}
           </div>
-          <Button
-            onClick={onCreateTerminal}
-            disabled={!terminalReady || creating}
-            size="sm"
-            onPointerDown={
-              onNewTerminalDragStart && terminalReady && !creating
-                ? (event) => {
-                    if (event.button !== 0 || event.pointerType === "touch") return;
-                    onNewTerminalDragStart({
-                      pointerId: event.pointerId,
-                      clientX: event.clientX,
-                      clientY: event.clientY,
-                    });
-                  }
-                : undefined
-            }
-          >
+          <Button onClick={onCreateTerminal} disabled={!terminalReady || creating} size="sm">
             {t("projectTools.newTerminal")}
           </Button>
           {loading ? (

@@ -63,8 +63,11 @@ type RightDockPanelProps = {
   cwd: string;
   sessions?: TerminalSession[];
   sessionsLoaded?: boolean;
-  /** 被工作台 Pane 租用的会话:从 dock 的 tab/视口中隐藏,避免输出流双消费。 */
-  hiddenSessionIds?: ReadonlySet<string>;
+  /**
+   * 被工作台 Pane 租用的会话:tab 保留并标记,视口换成"聚焦面板"占位。
+   * 视口互斥(绝不同时挂两个 XTermViewport)是这里唯一的硬不变量。
+   */
+  leasedSessionIds?: ReadonlySet<string>;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -96,8 +99,12 @@ type RightDockPanelProps = {
     session: TerminalSession,
     event: { pointerId: number; clientX: number; clientY: number },
   ) => void;
-  /** 存在时空态"新建终端"按钮可拖出到工作台画板;点击行为不变。 */
+  /** 存在时空态"新建终端"入口可拖出到工作台画板;点击行为不变。 */
   onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
+  onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  /** 已租用会话的"聚焦工作台面板"通路(tab 菜单 + 视口占位共用)。 */
+  onFocusWorkbenchPane?: (sessionId: string) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
   onInsertCodeReviewSkill?: () => void;
@@ -354,7 +361,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     cwd,
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
-    hiddenSessionIds,
+    leasedSessionIds,
     width,
     theme,
     disabledMessage,
@@ -381,6 +388,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onSessionsChange,
     onTerminalTabDragStart,
     onNewTerminalDragStart,
+    onOpenTerminalInWorkbench,
+    onFocusWorkbenchPane,
     onInsertFileMention,
     onOpenFile,
     onInsertCodeReviewSkill,
@@ -420,6 +429,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     handleCloseRequest,
     handleInitialTerminalSnapshotConsumed,
     initialTerminalSnapshotsRef,
+    leasedSessions,
     loading,
     localSessions,
     pendingCloseSession,
@@ -434,7 +444,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     cwd,
     externalSessions,
     externalSessionsLoaded,
-    hiddenSessionIds,
+    leasedSessionIds,
     isOpen,
     onProjectStateChange,
     onSessionsChange,
@@ -834,6 +844,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       activeSession={activeSession}
                       pendingCloseSessionId={pendingCloseSessionId}
                       closingSessionIds={closingSessionIds}
+                      leasedSessionIds={leasedSessions}
                       draggingTabId={draggingTabId}
                       renderTabDragHandle={renderTabDragHandle}
                       getTabDragProps={getTabDragProps}
@@ -844,6 +855,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onCloseToolTab={closeToolTab}
                       onCloseTerminalRequest={handleCloseRequest}
                       onTerminalTabDragStart={onTerminalTabDragStart}
+                      onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
+                      onFocusWorkbenchPane={onFocusWorkbenchPane}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
@@ -924,6 +937,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onCreateTerminal={createTerminal}
                   onStartTool={startToolTab}
                   onOpenBackgroundTasks={openBackgroundTasks}
+                  onNewTerminalDragStart={onNewTerminalDragStart}
                 />
               ) : (
                 <RightDockContent
@@ -938,7 +952,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
-                  onNewTerminalDragStart={onNewTerminalDragStart}
+                  leasedSessionIds={leasedSessions}
+                  onFocusWorkbenchPane={onFocusWorkbenchPane}
                 />
               )}
             </>

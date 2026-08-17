@@ -17,17 +17,21 @@ import {
 
 const PENDING_CREATE_ACTIVATION_TIMEOUT_MS = 15_000;
 
+const EMPTY_LEASED_SESSIONS: ReadonlySet<string> = new Set();
+
 type UseRightDockSessionsOptions = {
   client: TerminalClient;
   cwd: string;
   externalSessions?: TerminalSession[];
   externalSessionsLoaded?: boolean;
   /**
-   * Sessions currently displayed elsewhere (e.g. leased by a workbench pane).
-   * They are hidden from the dock's tabs/viewports so a terminal stream is
-   * never consumed twice, but they keep flowing through `onSessionsChange`.
+   * Sessions currently displayed elsewhere (leased by a workbench pane). They
+   * stay listed as dock tabs — only marked — so the session does not vanish
+   * from the user's model of the dock. Mutual exclusion of the output stream
+   * is enforced one level down: a leased tab renders a placeholder instead of
+   * an XTermViewport, so the stream is never consumed twice.
    */
-  hiddenSessionIds?: ReadonlySet<string>;
+  leasedSessionIds?: ReadonlySet<string>;
   isOpen: boolean;
   projectPathKey: string;
   projectState: RightDockProjectState;
@@ -48,7 +52,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     cwd,
     externalSessions,
     externalSessionsLoaded,
-    hiddenSessionIds,
+    leasedSessionIds,
     isOpen,
     onProjectStateChange,
     onSessionsChange,
@@ -77,16 +81,26 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     () =>
       sessions.filter(
         (session) =>
-          session.kind !== "ssh" &&
-          terminalSessionBelongsToProject(session, projectPathKey) &&
-          !hiddenSessionIds?.has(session.id),
+          session.kind !== "ssh" && terminalSessionBelongsToProject(session, projectPathKey),
       ),
-    [hiddenSessionIds, projectPathKey, sessions],
+    [projectPathKey, sessions],
   );
   const sshSessions = useMemo(
     () => sessions.filter((session) => session.kind === "ssh"),
     [sessions],
   );
+  // Same treatment for both kinds: the session stays in its list and carries a
+  // leased marker. Local tabs and the SSH overlay each swap their viewport for
+  // a "go to the pane" placeholder, which is what keeps the stream single-
+  // consumer — nothing here removes a session from view.
+  const leasedSessions = useMemo<ReadonlySet<string>>(() => {
+    if (!leasedSessionIds || leasedSessionIds.size === 0) return EMPTY_LEASED_SESSIONS;
+    const live = new Set<string>();
+    for (const session of sessions) {
+      if (leasedSessionIds.has(session.id)) live.add(session.id);
+    }
+    return live;
+  }, [leasedSessionIds, sessions]);
   const activeSession = useMemo(
     () =>
       localSessions.find((session) => session.id === projectState.activeTabId) ??
@@ -398,6 +412,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     handleCloseRequest,
     handleInitialTerminalSnapshotConsumed,
     initialTerminalSnapshotsRef,
+    leasedSessions,
     loading,
     localSessions,
     pendingCloseSession,

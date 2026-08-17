@@ -24,6 +24,9 @@ export type LocalTerminalPaneSurfaceProps = {
    * 分离;入口为悬停显示的两态确认按钮。省略时无 kill 入口。
    */
   onKillSession?: () => void;
+  /** 覆盖 kill 按钮文案(SSH Pane 用"断开连接"而非"结束会话")。 */
+  killLabel?: string;
+  killConfirmLabel?: string;
 };
 
 const KILL_CONFIRM_RESET_MS = 3_000;
@@ -45,8 +48,12 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
     onRetry,
     onError,
     onKillSession,
+    killLabel,
+    killConfirmLabel,
   } = props;
   const { t } = useLocale();
+  const killText = killLabel ?? t("workbench.terminalKill");
+  const killConfirmText = killConfirmLabel ?? t("workbench.terminalKillConfirm");
   // 两态确认(点一次武装、再点执行),超时自动复位;纯视图态,不进入宿主。
   const [killArmed, setKillArmed] = useState(false);
   const killResetTimerRef = useRef<number | null>(null);
@@ -112,8 +119,8 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
       <button
         type="button"
         data-terminal-pane-kill={killArmed ? "armed" : "idle"}
-        title={killArmed ? t("workbench.terminalKillConfirm") : t("workbench.terminalKill")}
-        aria-label={killArmed ? t("workbench.terminalKillConfirm") : t("workbench.terminalKill")}
+        title={killArmed ? killConfirmText : killText}
+        aria-label={killArmed ? killConfirmText : killText}
         onClick={handleKillClick}
         onBlur={() => setKillArmed(false)}
         className={cn(
@@ -124,7 +131,7 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
             : "border-border/70 bg-background/90 text-muted-foreground hover:text-destructive",
         )}
       >
-        {killArmed ? t("workbench.terminalKillConfirm") : t("workbench.terminalKill")}
+        {killArmed ? killConfirmText : killText}
       </button>
     ) : null;
 
