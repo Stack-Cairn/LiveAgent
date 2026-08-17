@@ -1,4 +1,5 @@
 import { AlertTriangle } from "@liveagent/ui/components/IconSet";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -81,7 +82,10 @@ function ConfirmDialog(
         <AlertDialogHeader className="flex-row items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClasses.icon}`}
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                toneClasses.icon,
+              )}
             >
               <AlertTriangle className="h-5 w-5" />
             </div>
@@ -108,7 +112,7 @@ function ConfirmDialog(
             <AlertDialogDescription className="space-y-3" render={<div />}>
               {description ? (
                 <div
-                  className={`rounded-xl border px-4 py-3 text-sm leading-6 ${toneClasses.panel}`}
+                  className={cn("rounded-xl border px-4 py-3 text-sm leading-6", toneClasses.panel)}
                 >
                   {description}
                 </div>

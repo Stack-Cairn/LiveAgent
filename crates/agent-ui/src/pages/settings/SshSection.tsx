@@ -25,6 +25,7 @@ import {
   Upload,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
@@ -378,16 +379,18 @@ function SshHostModal(props: {
               <button
                 type="button"
                 onClick={() => setAuthType("password")}
-                className={`group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5",
                   isPasswordAuth
                     ? "border-emerald-500/40 bg-emerald-500/[0.06] shadow-sm"
-                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20",
+                )}
               >
                 <Lock
-                  className={`h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200 ${
-                    isPasswordAuth ? "scale-110" : "group-hover:scale-105"
-                  }`}
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200",
+                    isPasswordAuth ? "scale-110" : "group-hover:scale-105",
+                  )}
                 />
                 <div className="min-w-0">
                   <div className="text-sm font-medium">{t("settings.sshAuthPassword")}</div>
@@ -397,24 +400,27 @@ function SshHostModal(props: {
                 </div>
                 <Check
                   aria-hidden="true"
-                  className={`ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200 ${
-                    isPasswordAuth ? "scale-100 opacity-100" : "scale-75 opacity-0"
-                  }`}
+                  className={cn(
+                    "ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200",
+                    isPasswordAuth ? "scale-100 opacity-100" : "scale-75 opacity-0",
+                  )}
                 />
               </button>
               <button
                 type="button"
                 onClick={() => setAuthType("privateKey")}
-                className={`group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5",
                   isPrivateKeyAuth
                     ? "border-emerald-500/40 bg-emerald-500/[0.06] shadow-sm"
-                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20",
+                )}
               >
                 <Key
-                  className={`h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200 ${
-                    isPrivateKeyAuth ? "scale-110" : "group-hover:scale-105"
-                  }`}
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200",
+                    isPrivateKeyAuth ? "scale-110" : "group-hover:scale-105",
+                  )}
                 />
                 <div className="min-w-0">
                   <div className="text-sm font-medium">{t("settings.sshAuthPrivateKey")}</div>
@@ -424,24 +430,27 @@ function SshHostModal(props: {
                 </div>
                 <Check
                   aria-hidden="true"
-                  className={`ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200 ${
-                    isPrivateKeyAuth ? "scale-100 opacity-100" : "scale-75 opacity-0"
-                  }`}
+                  className={cn(
+                    "ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200",
+                    isPrivateKeyAuth ? "scale-100 opacity-100" : "scale-75 opacity-0",
+                  )}
                 />
               </button>
               <button
                 type="button"
                 onClick={() => setAuthType("keyboardInteractive")}
-                className={`group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 ${
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-0.5",
                   isKeyboardInteractiveAuth
                     ? "border-emerald-500/40 bg-emerald-500/[0.06] shadow-sm"
-                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-card hover:border-border hover:bg-muted/20",
+                )}
               >
                 <Terminal
-                  className={`h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200 ${
-                    isKeyboardInteractiveAuth ? "scale-110" : "group-hover:scale-105"
-                  }`}
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-emerald-500 transition-transform duration-200",
+                    isKeyboardInteractiveAuth ? "scale-110" : "group-hover:scale-105",
+                  )}
                 />
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
@@ -453,9 +462,10 @@ function SshHostModal(props: {
                 </div>
                 <Check
                   aria-hidden="true"
-                  className={`ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200 ${
-                    isKeyboardInteractiveAuth ? "scale-100 opacity-100" : "scale-75 opacity-0"
-                  }`}
+                  className={cn(
+                    "ml-auto h-4 w-4 shrink-0 text-emerald-500 transition-all duration-200",
+                    isKeyboardInteractiveAuth ? "scale-100 opacity-100" : "scale-75 opacity-0",
+                  )}
                 />
               </button>
             </div>
@@ -557,18 +567,20 @@ function SshHostModal(props: {
             >
               <span>{t("settings.sshAdvancedSettings")}</span>
               <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                  advancedOpen ? "rotate-180" : ""
-                }`}
+                className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                  advancedOpen ? "rotate-180" : "",
+                )}
               />
             </button>
 
             <div className="ssh-collapsible" data-open={advancedOpen}>
               <div
                 aria-hidden={!advancedOpen}
-                className={`ssh-collapsible-inner border-border/60 px-4 transition-[border-width,padding] duration-200 ease-out ${
-                  advancedOpen ? "border-t py-4" : "border-t-0 py-0"
-                }`}
+                className={cn(
+                  "ssh-collapsible-inner border-border/60 px-4 transition-[border-width,padding] duration-200 ease-out",
+                  advancedOpen ? "border-t py-4" : "border-t-0 py-0",
+                )}
                 inert={!advancedOpen}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -581,11 +593,12 @@ function SshHostModal(props: {
                         <button
                           key={type}
                           type="button"
-                          className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                          className={cn(
+                            "rounded-lg px-3 py-2 text-xs font-medium transition-colors",
                             proxyType === type
                               ? "bg-muted text-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                          }`}
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
                           onClick={() => setProxyType(type)}
                         >
                           {type === "socks5"
@@ -787,23 +800,27 @@ function SshImportModal(props: {
                       type="button"
                       disabled={candidate.duplicate}
                       onClick={() => toggle(candidate.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
                         selectedIds.has(candidate.id)
                           ? "border-emerald-500/40 bg-emerald-500/[0.06]"
-                          : "border-border/60 bg-card hover:border-border"
-                      } ${candidate.duplicate ? "cursor-not-allowed opacity-60" : ""}`}
+                          : "border-border/60 bg-card hover:border-border",
+                        candidate.duplicate ? "cursor-not-allowed opacity-60" : "",
+                      )}
                     >
                       <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors duration-150 ${
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors duration-150",
                           selectedIds.has(candidate.id)
                             ? "border-emerald-500 bg-emerald-500 text-white"
-                            : "border-border bg-background"
-                        }`}
+                            : "border-border bg-background",
+                        )}
                       >
                         <Check
-                          className={`h-3.5 w-3.5 transition-transform duration-150 ${
-                            selectedIds.has(candidate.id) ? "scale-100" : "scale-0"
-                          }`}
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform duration-150",
+                            selectedIds.has(candidate.id) ? "scale-100" : "scale-0",
+                          )}
                         />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -922,9 +939,10 @@ function SshHostCard(props: {
 
   const resetStatusNode = resetStatus ? (
     <div
-      className={`text-xs leading-relaxed ${
-        resetStatus.kind === "error" ? "text-destructive" : "text-muted-foreground"
-      }`}
+      className={cn(
+        "text-xs leading-relaxed",
+        resetStatus.kind === "error" ? "text-destructive" : "text-muted-foreground",
+      )}
     >
       {resetStatus.message}
     </div>
@@ -1005,9 +1023,10 @@ function SshViewModeToggle(props: { value: SshViewMode; onChange: (value: SshVie
       <legend className="sr-only">{groupLabel}</legend>
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute bottom-0.5 left-0.5 top-0.5 w-[calc(50%-0.125rem)] rounded-md bg-emerald-500/10 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/30 transition-transform duration-200 ease-out motion-reduce:transition-none ${
-          value === "grid" ? "translate-x-full" : "translate-x-0"
-        }`}
+        className={cn(
+          "pointer-events-none absolute bottom-0.5 left-0.5 top-0.5 w-[calc(50%-0.125rem)] rounded-md bg-emerald-500/10 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/30 transition-transform duration-200 ease-out motion-reduce:transition-none",
+          value === "grid" ? "translate-x-full" : "translate-x-0",
+        )}
       />
       {options.map((option) => {
         const Icon = option.icon;
@@ -1016,9 +1035,10 @@ function SshViewModeToggle(props: { value: SshViewMode; onChange: (value: SshVie
           <button
             key={option.value}
             type="button"
-            className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-reduce:transition-none ${
-              active ? "text-emerald-500" : "text-muted-foreground"
-            }`}
+            className={cn(
+              "relative z-10 flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background motion-reduce:transition-none",
+              active ? "text-emerald-500" : "text-muted-foreground",
+            )}
             title={option.label}
             aria-label={option.label}
             aria-pressed={active}

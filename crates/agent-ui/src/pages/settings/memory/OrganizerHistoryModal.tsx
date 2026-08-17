@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
 import {
   formatMemoryError,
@@ -307,7 +308,7 @@ export function OrganizerHistoryModal(props: {
                 onClick={() => reload()}
                 disabled={loading}
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
                 {t("settings.memoryRefresh")}
               </Button>
             </div>
@@ -325,15 +326,19 @@ export function OrganizerHistoryModal(props: {
                         key={run.runId}
                         type="button"
                         onClick={() => reload(run.runId)}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
                           active
                             ? "border-primary/50 bg-primary/5"
-                            : "border-border/50 bg-background/70 hover:bg-muted/35"
-                        }`}
+                            : "border-border/50 bg-background/70 hover:bg-muted/35",
+                        )}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span
-                            className={`rounded border px-1.5 py-0.5 text-[10px] ${organizerStatusClass(run.status)}`}
+                            className={cn(
+                              "rounded border px-1.5 py-0.5 text-[10px]",
+                              organizerStatusClass(run.status),
+                            )}
                           >
                             {organizerStatusLabel(run.status, t)}
                           </span>
@@ -374,7 +379,10 @@ export function OrganizerHistoryModal(props: {
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
-                        className={`rounded border px-2 py-1 text-xs ${organizerStatusClass(selectedRun.status)}`}
+                        className={cn(
+                          "rounded border px-2 py-1 text-xs",
+                          organizerStatusClass(selectedRun.status),
+                        )}
                       >
                         {organizerStatusLabel(selectedRun.status, t)}
                       </span>
@@ -501,7 +509,10 @@ export function OrganizerHistoryModal(props: {
                                   </span>
                                 ) : null}
                                 <span
-                                  className={`rounded border px-1.5 py-0.5 text-[10px] ${organizerRiskClass(decision.riskLevel)}`}
+                                  className={cn(
+                                    "rounded border px-1.5 py-0.5 text-[10px]",
+                                    organizerRiskClass(decision.riskLevel),
+                                  )}
                                 >
                                   {organizerRiskLabel(decision.riskLevel, t)}
                                 </span>
@@ -518,7 +529,10 @@ export function OrganizerHistoryModal(props: {
                                 ) : null}
                                 {decision.applyStatus ? (
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] ${organizerApplyStatusClass(decision.applyStatus)}`}
+                                    className={cn(
+                                      "rounded border px-1.5 py-0.5 text-[10px]",
+                                      organizerApplyStatusClass(decision.applyStatus),
+                                    )}
                                   >
                                     {organizerApplyStatusLabel(decision.applyStatus, t)}
                                   </span>
@@ -578,7 +592,10 @@ export function OrganizerHistoryModal(props: {
                         >
                           <div className="mb-1 flex flex-wrap items-center gap-2">
                             <span
-                              className={`rounded border px-1.5 py-0.5 text-[10px] ${organizerReviewItemClass(item)}`}
+                              className={cn(
+                                "rounded border px-1.5 py-0.5 text-[10px]",
+                                organizerReviewItemClass(item),
+                              )}
                             >
                               {organizerReviewItemLabel(item, t)}
                             </span>

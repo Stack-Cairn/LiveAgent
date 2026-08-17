@@ -18,6 +18,7 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import {
@@ -892,9 +893,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
           {settingsOpen ? (
             <div
-              className={`gateway-settings-overlay ${
-                overlay === "open" ? "gateway-settings-overlay-open" : ""
-              }`}
+              className={cn(
+                "gateway-settings-overlay",
+                overlay === "open" ? "gateway-settings-overlay-open" : "",
+              )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >
               <SettingsPage

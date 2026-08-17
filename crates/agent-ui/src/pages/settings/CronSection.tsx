@@ -21,6 +21,7 @@ import {
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type CronTaskFormData, CronTaskModal } from "@liveagent/ui/pages/settings/CronTaskModal";
 import { CronTaskViewModal } from "@liveagent/ui/pages/settings/CronTaskViewModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
@@ -210,16 +211,21 @@ export function CronSection(props: SettingsSectionProps) {
             return (
               <div
                 key={task.id}
-                className={`group rounded-xl border transition-all ${
+                className={cn(
+                  "group rounded-xl border transition-all",
                   task.enabled
                     ? "border-border/60 bg-card hover:border-border hover:shadow-sm"
-                    : "border-border/40 bg-muted/20 opacity-60 hover:opacity-80"
-                }`}
+                    : "border-border/40 bg-muted/20 opacity-60 hover:opacity-80",
+                )}
               >
                 <div className="settings-card-row flex items-center gap-3 px-4 py-3">
                   {/* Icon */}
                   <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone.bg} ${tone.text}`}
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                      tone.bg,
+                      tone.text,
+                    )}
                   >
                     <Icon className="h-4 w-4" />
                   </div>
@@ -231,7 +237,11 @@ export function CronSection(props: SettingsSectionProps) {
                         {task.name}
                       </span>
                       <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${tone.bg} ${tone.text}`}
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
+                          tone.bg,
+                          tone.text,
+                        )}
                       >
                         {t(tone.label)}
                       </span>
@@ -256,13 +266,14 @@ export function CronSection(props: SettingsSectionProps) {
                     <span className="font-mono">{task.cron}</span>
                   </div>
                   <div
-                    className={`hidden w-[74px] shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium md:flex ${
+                    className={cn(
+                      "hidden w-[74px] shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium md:flex",
                       exhausted
                         ? "bg-red-500/10 text-red-600 dark:text-red-400"
                         : task.remainingExecutions == null
                           ? "bg-muted text-muted-foreground"
-                          : "bg-sky-500/10 text-sky-600 dark:text-sky-400"
-                    }`}
+                          : "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                    )}
                     title={formatRemainingExecutionsLabel(t, task)}
                   >
                     <span className="tabular-nums">

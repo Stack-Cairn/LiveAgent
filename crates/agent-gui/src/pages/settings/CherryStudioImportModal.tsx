@@ -283,22 +283,24 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                       <button
                         key={itemKey(item)}
                         type="button"
-                        className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
                           item.importable
                             ? checked
                               ? "border-primary/45 bg-primary/[0.06]"
                               : "hover:bg-accent/40"
-                            : "cursor-not-allowed bg-muted/25 opacity-65"
-                        }`}
+                            : "cursor-not-allowed bg-muted/25 opacity-65",
+                        )}
                         onClick={() => toggleItem(item)}
                         disabled={!item.importable || importing}
                       >
                         <span
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                             checked && item.importable
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-muted-foreground/40"
-                          }`}
+                              : "border-muted-foreground/40",
+                          )}
                         >
                           {checked && item.importable ? <Check className="h-3 w-3" /> : null}
                         </span>

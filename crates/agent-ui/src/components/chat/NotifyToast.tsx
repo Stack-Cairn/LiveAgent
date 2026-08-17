@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useEffect, useRef } from "react";
 
 export type NotifyItem = {
@@ -57,13 +58,14 @@ const ToastEntry = memo(function ToastEntry(props: {
       role={item.type === "error" ? "alert" : "status"}
       aria-live={item.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
-      className={`notify-toast-enter pointer-events-auto flex w-[min(18rem,calc(100vw-2rem))] items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl ${
+      className={cn(
+        "notify-toast-enter pointer-events-auto flex w-[min(18rem,calc(100vw-2rem))] items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
         isWarning
           ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
           : isSuccess
             ? "border-emerald-500/30 bg-emerald-50/95 dark:bg-emerald-950/80 dark:border-emerald-500/25"
-            : "border-red-500/30 bg-red-50/95 dark:bg-red-950/80 dark:border-red-500/25"
-      }`}
+            : "border-red-500/30 bg-red-50/95 dark:bg-red-950/80 dark:border-red-500/25",
+      )}
     >
       {isWarning ? (
         <AlertTriangle
@@ -82,13 +84,14 @@ const ToastEntry = memo(function ToastEntry(props: {
         />
       )}
       <p
-        className={`min-w-0 flex-1 whitespace-pre-wrap break-words leading-relaxed ${
+        className={cn(
+          "min-w-0 flex-1 whitespace-pre-wrap break-words leading-relaxed",
           isWarning
             ? "text-amber-800 dark:text-amber-200"
             : isSuccess
               ? "text-emerald-800 dark:text-emerald-200"
-              : "text-red-800 dark:text-red-200"
-        }`}
+              : "text-red-800 dark:text-red-200",
+        )}
       >
         {item.message}
       </p>

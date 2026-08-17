@@ -32,6 +32,7 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
 import type { MemoryMeta } from "../../../lib/memory/api";
 import { MEMORY_TYPES, type MemoryType } from "../../../lib/memory/schema";
@@ -215,15 +216,15 @@ export function MemoryPanel(props: {
         key={entryKey(entry)}
         type="button"
         onClick={() => openEntry(entry)}
-        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-          nested ? "ml-3 w-[calc(100%-0.75rem)]" : ""
-        } ${
+        className={cn(
+          "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+          nested ? "ml-3 w-[calc(100%-0.75rem)]" : "",
           active
             ? "border-primary/50 bg-primary/5 shadow-xs"
             : entry.unreviewed
               ? "border-amber-500/20 bg-amber-500/[0.05] hover:bg-amber-500/[0.08]"
-              : "border-border/50 bg-background/70 hover:bg-muted/35"
-        }`}
+              : "border-border/50 bg-background/70 hover:bg-muted/35",
+        )}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 truncate text-xs font-semibold">{entryTitle(entry)}</div>
@@ -273,27 +274,31 @@ export function MemoryPanel(props: {
                 return (
                   <div
                     key={`${item.scope}:${item.workdirHash}`}
-                    className={`rounded-md border px-2.5 py-1.5 text-xs ${quotaPillClass(level)}`}
+                    className={cn("rounded-md border px-2.5 py-1.5 text-xs", quotaPillClass(level))}
                   >
                     {label} {item.used} / {item.limit}
                   </div>
                 );
               })}
               <div
-                className={`rounded-md border px-2.5 py-1.5 text-xs ${quotaStatusClass(quotaStatus)}`}
+                className={cn(
+                  "rounded-md border px-2.5 py-1.5 text-xs",
+                  quotaStatusClass(quotaStatus),
+                )}
               >
                 {t(quotaStatusLabelKey(quotaStatus))}
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                className={`min-w-[112px] disabled:opacity-100 ${
+                className={cn(
+                  "min-w-[112px] disabled:opacity-100",
                   refreshState === "success"
                     ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300"
                     : refreshState === "error"
                       ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
-                      : ""
-                }`}
+                      : "",
+                )}
                 onClick={() => void handleRefresh()}
                 disabled={loading || refreshState !== "idle"}
               >
@@ -303,7 +308,10 @@ export function MemoryPanel(props: {
                   <AlertTriangle className="h-3.5 w-3.5" />
                 ) : (
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${loading || refreshState === "refreshing" ? "animate-spin" : ""}`}
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      loading || refreshState === "refreshing" ? "animate-spin" : "",
+                    )}
                   />
                 )}
                 <span aria-live="polite">
@@ -370,7 +378,10 @@ export function MemoryPanel(props: {
                 <button
                   type="button"
                   onClick={() => setTab("global")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "global" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
+                  className={cn(
+                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
+                    tab === "global" ? "bg-background shadow-xs" : "text-muted-foreground",
+                  )}
                 >
                   <Globe2 className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
@@ -381,7 +392,10 @@ export function MemoryPanel(props: {
                 <button
                   type="button"
                   onClick={() => setTab("project")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "project" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
+                  className={cn(
+                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
+                    tab === "project" ? "bg-background shadow-xs" : "text-muted-foreground",
+                  )}
                 >
                   <Folder className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{t("settings.memoryCategoryProject")}</span>
@@ -392,7 +406,10 @@ export function MemoryPanel(props: {
                 <button
                   type="button"
                   onClick={() => setTab("journal")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "journal" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
+                  className={cn(
+                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
+                    tab === "journal" ? "bg-background shadow-xs" : "text-muted-foreground",
+                  )}
                 >
                   <BookOpen className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{t("settings.memoryCategoryJournal")}</span>

@@ -748,11 +748,12 @@ export function ProvidersSection(
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
                 activeTab === tab
                   ? "bg-background text-foreground shadow"
-                  : "hover:text-foreground/80"
-              }`}
+                  : "hover:text-foreground/80",
+              )}
             >
               <ProviderBrandIcon type={tab} />
               {getProviderLabel(tab)}

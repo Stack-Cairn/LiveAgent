@@ -23,6 +23,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   IndividualTreeViewState,
@@ -659,13 +660,14 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
 
           {statusLine ? (
             <div
-              className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs ${
+              className={cn(
+                "flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs",
                 statusLine.kind === "error"
                   ? "border-destructive/30 bg-destructive/5 text-destructive"
                   : statusLine.kind === "warn"
                     ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300"
-                    : "border-border/60 bg-background/70 text-muted-foreground"
-              }`}
+                    : "border-border/60 bg-background/70 text-muted-foreground",
+              )}
             >
               {statusLine.kind === "loading" ? (
                 <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />

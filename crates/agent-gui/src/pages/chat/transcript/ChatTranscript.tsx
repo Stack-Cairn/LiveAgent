@@ -304,7 +304,10 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           ) : null}
 
           <div
-            className={`select-text transition-opacity duration-150 ${isTranscriptSettling ? "opacity-0" : "opacity-100"}`}
+            className={cn(
+              "select-text transition-opacity duration-150",
+              isTranscriptSettling ? "opacity-0" : "opacity-100",
+            )}
           >
             <RowInteractionProvider value={rowInteractionStore}>
               {/* Keyed remount per conversation: per-conversation state

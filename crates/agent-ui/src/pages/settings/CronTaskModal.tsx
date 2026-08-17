@@ -27,6 +27,7 @@ import {
   validateCronExpression,
 } from "@liveagent/ui/lib/automation/index";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
@@ -491,24 +492,29 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("bash");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "bash"
                     ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "bash"
                       ? "bg-blue-500/15 text-blue-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Terminal className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "bash" ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "bash" ? "text-blue-600 dark:text-blue-400" : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypeBash")}
                   </div>
@@ -530,24 +536,31 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("http");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "http"
                     ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "http"
                       ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Globe className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "http" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "http"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypeHttp")}
                   </div>
@@ -569,24 +582,31 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("prompt");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "prompt"
                     ? "border-violet-500/50 bg-violet-500/5 shadow-sm shadow-violet-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "prompt"
                       ? "bg-violet-500/15 text-violet-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <MessageSquare className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${type === "prompt" ? "text-violet-600 dark:text-violet-400" : "text-foreground"}`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "prompt"
+                        ? "text-violet-600 dark:text-violet-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.cronTypePrompt")}
                   </div>
@@ -675,11 +695,12 @@ export function CronTaskModal({
                   <SelectTrigger className="h-10">
                     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors ${
+                        className={cn(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
                           customWorkdir || workdir
                             ? "bg-amber-500/10 text-amber-500"
-                            : "bg-muted/60 text-muted-foreground"
-                        }`}
+                            : "bg-muted/60 text-muted-foreground",
+                        )}
                       >
                         <Folder className="h-3.5 w-3.5" />
                       </span>

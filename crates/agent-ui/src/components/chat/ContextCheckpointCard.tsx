@@ -49,7 +49,10 @@ export function ContextCheckpointCard(props: {
           </div>
         </div>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200 ${expanded ? "rotate-0" : "-rotate-90"}`}
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
+            expanded ? "rotate-0" : "-rotate-90",
+          )}
         />
       </button>
       {expanded ? (

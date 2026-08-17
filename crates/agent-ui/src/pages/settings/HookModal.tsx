@@ -14,6 +14,7 @@ import {
   type HookEvent,
   type HookType,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
@@ -198,26 +199,29 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("command");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "command"
                     ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "command"
                       ? "bg-blue-500/15 text-blue-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Terminal className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${
-                      type === "command" ? "text-blue-600 dark:text-blue-400" : "text-foreground"
-                    }`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "command" ? "text-blue-600 dark:text-blue-400" : "text-foreground",
+                    )}
                   >
                     {t("settings.hooksTypeCommand")}
                   </div>
@@ -238,26 +242,31 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("http");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "http"
                     ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "http"
                       ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Globe className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${
-                      type === "http" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
-                    }`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "http"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.hooksTypeHttp")}
                   </div>

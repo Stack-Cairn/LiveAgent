@@ -28,6 +28,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -316,11 +317,12 @@ export function DevicesSection({
                   type="button"
                   disabled={loading}
                   onClick={() => handleStatusFilter(value)}
-                  className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50 ${
+                  className={cn(
+                    "inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
                     statusFilter === value
                       ? "bg-background text-foreground shadow"
-                      : "hover:text-foreground/80"
-                  }`}
+                      : "hover:text-foreground/80",
+                  )}
                 >
                   {t(labelKey)}
                 </button>
@@ -676,7 +678,7 @@ function DeviceRow(props: {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`truncate text-sm font-medium ${displayName ? "" : "font-mono"}`}
+              className={cn("truncate text-sm font-medium", displayName ? "" : "font-mono")}
               title={displayName || agent.agent_id}
             >
               {displayName || agent.agent_id}

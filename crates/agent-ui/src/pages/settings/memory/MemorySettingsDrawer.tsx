@@ -31,6 +31,7 @@ import {
   SheetTitle,
 } from "@liveagent/ui/components/ui/sheet";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -326,11 +327,12 @@ export function MemorySettingsDrawer(props: {
             quotaLadder.bannerKey &&
             quotaLadder.tightestScope ? (
               <div
-                className={`flex items-start gap-2 rounded-2xl border px-4 py-3 text-[11.5px] leading-relaxed ${
+                className={cn(
+                  "flex items-start gap-2 rounded-2xl border px-4 py-3 text-[11.5px] leading-relaxed",
                   quotaLadder.level === "critical" || quotaLadder.level === "exhausted"
                     ? "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300"
-                    : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300"
-                }`}
+                    : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300",
+                )}
               >
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
@@ -523,7 +525,7 @@ export function MemorySettingsDrawer(props: {
                   onClick={handleRunNow}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${organizerSubmitting ? "animate-spin" : ""}`}
+                    className={cn("h-3.5 w-3.5", organizerSubmitting ? "animate-spin" : "")}
                   />
                   {t("settings.memoryOrganizerRunNow")}
                 </Button>

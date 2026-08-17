@@ -1,7 +1,6 @@
 import { type AgentPromptTemplate, updateAgents } from "@liveagent/app/lib/settings/index";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { BookOpen, Eye, FileText, Pencil, Plus, Trash2 } from "@liveagent/ui/components/IconSet";
-
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -13,6 +12,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentPromptTemplateModal } from "@liveagent/ui/pages/settings/AgentPromptTemplateModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
 import { useState } from "react";
@@ -149,11 +149,12 @@ export function AgentsSection(props: SettingsSectionProps) {
               return (
                 <div
                   key={template.id}
-                  className={`group rounded-xl border transition-all ${
+                  className={cn(
+                    "group rounded-xl border transition-all",
                     template.enabled
                       ? "border-sky-500/30 bg-sky-500/[0.03] shadow-sm shadow-sky-500/5"
-                      : "border-border/60 bg-card hover:border-border"
-                  }`}
+                      : "border-border/60 bg-card hover:border-border",
+                  )}
                 >
                   <div className="settings-card-row flex items-center gap-3 px-4 py-3">
                     <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
@@ -277,14 +278,18 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
             </DialogDescription>
           </div>
           <span
-            className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:inline-flex ${
+            className={cn(
+              "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:inline-flex",
               template.enabled
                 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "border-border/60 bg-muted/40 text-muted-foreground"
-            }`}
+                : "border-border/60 bg-muted/40 text-muted-foreground",
+            )}
           >
             <span
-              className={`h-1.5 w-1.5 rounded-full ${template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
+              )}
             />
             {template.enabled ? t("settings.agentsActiveLabel") : t("settings.agentsInactiveLabel")}
           </span>
@@ -308,14 +313,18 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">{t("settings.agentsStatus")}</span>
                   <span
-                    className={`inline-flex items-center gap-1.5 font-medium ${
+                    className={cn(
+                      "inline-flex items-center gap-1.5 font-medium",
                       template.enabled
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground"
-                    }`}
+                        : "text-muted-foreground",
+                    )}
                   >
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
+                      )}
                     />
                     {template.enabled
                       ? t("settings.agentsActiveLabel")

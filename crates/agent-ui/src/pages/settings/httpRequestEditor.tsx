@@ -6,6 +6,7 @@ import {
   type HttpMethod,
   type HttpRequestSpec,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -196,12 +197,16 @@ export function HttpRequestListEditor({
                 <button
                   type="button"
                   onClick={() => onExpand(isExpanded ? null : request.id)}
-                  className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50 ${
-                    isExpanded ? "text-primary" : "text-muted-foreground"
-                  }`}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50",
+                    isExpanded ? "text-primary" : "text-muted-foreground",
+                  )}
                 >
                   <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      isExpanded ? "" : "-rotate-90",
+                    )}
                   />
                 </button>
                 <button

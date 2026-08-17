@@ -29,6 +29,7 @@ import {
   runCronNow,
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ConfirmActionPopover } from "./shared";
@@ -131,7 +132,7 @@ function LeftPanel({
     <>
       {/* ── Fixed hero header ── */}
       <div className="relative shrink-0 overflow-hidden">
-        <div className={`absolute inset-0 ${cfg.accentBg} opacity-40`} />
+        <div className={cn("absolute inset-0", cfg.accentBg, "opacity-40")} />
         <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-white/10 to-transparent blur-2xl" />
 
         <div className="relative px-5 pb-4 pt-5 max-[820px]:pr-14">
@@ -139,7 +140,12 @@ function LeftPanel({
               the meta/content area so pill wrapping never moves the button */}
           <div className="flex items-center justify-between gap-2">
             <div
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder}`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+                cfg.accent,
+                cfg.accentBg,
+                cfg.accentBorder,
+              )}
             >
               <TypeIcon className="h-3 w-3" />
               {t(cfg.label)}
@@ -155,7 +161,13 @@ function LeftPanel({
                 aria-label={
                   isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
                 }
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder} hover:brightness-110 disabled:cursor-wait disabled:opacity-60`}
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                  cfg.accent,
+                  cfg.accentBg,
+                  cfg.accentBorder,
+                  "hover:brightness-110 disabled:cursor-wait disabled:opacity-60",
+                )}
               >
                 {isRunningNow ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -181,27 +193,32 @@ function LeftPanel({
               <span className="font-mono">{task.cron}</span>
             </div>
             <div
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ${
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium",
                 task.enabled
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground"
-              }`}
+                  : "bg-muted text-muted-foreground",
+              )}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${task.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  task.enabled ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
               />
               {task.enabled
                 ? t("settings.cronViewStatusEnabled")
                 : t("settings.cronViewStatusDisabled")}
             </div>
             <div
-              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium ${
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium",
                 task.remainingExecutions === 0
                   ? "bg-red-500/10 text-red-600 dark:text-red-400"
                   : task.remainingExecutions == null
                     ? "bg-muted text-muted-foreground"
-                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400"
-              }`}
+                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+              )}
               title={
                 task.remainingExecutions == null
                   ? t("settings.cronRemainingExecutionsUnlimited")
@@ -535,13 +552,14 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
               return (
                 <div
                   key={log.id}
-                  className={`overflow-hidden rounded-xl border transition-colors ${
+                  className={cn(
+                    "overflow-hidden rounded-xl border transition-colors",
                     isRunning
                       ? "border-sky-500/20 bg-sky-500/[0.03]"
                       : log.success
                         ? "border-border/50 bg-muted/20"
-                        : "border-red-500/20 bg-red-500/[0.03]"
-                  }`}
+                        : "border-red-500/20 bg-red-500/[0.03]",
+                  )}
                 >
                   {/* Summary — fixed-width columns for vertical alignment */}
                   <button
@@ -563,13 +581,14 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                     </span>
                     {/* Status tag — fixed width for alignment */}
                     <span
-                      className={`w-[36px] shrink-0 text-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                      className={cn(
+                        "w-[36px] shrink-0 text-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                         isRunning
                           ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
                           : log.success
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-red-500/10 text-red-600 dark:text-red-400"
-                      }`}
+                            : "bg-red-500/10 text-red-600 dark:text-red-400",
+                      )}
                     >
                       {isRunning
                         ? t("settings.cronViewLogRunning")
@@ -585,9 +604,10 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                     </span>
                     {/* Chevron */}
                     <ChevronDown
-                      className={`h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform ${
-                        isExpanded ? "rotate-0" : "-rotate-90"
-                      }`}
+                      className={cn(
+                        "h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
+                        isExpanded ? "rotate-0" : "-rotate-90",
+                      )}
                     />
                   </button>
 
@@ -605,11 +625,12 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                           <span className="text-muted-foreground/60">
                             {t("settings.cronViewLogExit")}:{" "}
                             <span
-                              className={`font-mono font-medium ${
+                              className={cn(
+                                "font-mono font-medium",
                                 log.exitCode === 0
                                   ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }`}
+                                  : "text-red-600 dark:text-red-400",
+                              )}
                             >
                               {log.exitCode}
                             </span>
@@ -624,11 +645,12 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                               : t("settings.cronViewLogOutput")}
                           </div>
                           <pre
-                            className={`whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2 font-mono text-[11px] leading-relaxed ${
+                            className={cn(
+                              "whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2 font-mono text-[11px] leading-relaxed",
                               log.success
                                 ? "border-border/40 bg-background/60 text-foreground/70"
-                                : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300"
-                            }`}
+                                : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300",
+                            )}
                           >
                             {log.output}
                           </pre>

@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useState } from "react";
 import { useLocale } from "../../i18n/index";
 import type { RetryAttemptRecord } from "../../lib/chat/retryAttempts";
@@ -26,7 +27,10 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
         <RefreshCw className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
         <span>{t("chat.retryDetailsToggle").replace("{count}", String(attempts.length))}</span>
         <ChevronRight
-          className={`ml-auto h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out ${isOpen ? "rotate-90" : ""}`}
+          className={cn(
+            "ml-auto h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out",
+            isOpen ? "rotate-90" : "",
+          )}
         />
       </button>
       <LazyCollapse open={isOpen}>

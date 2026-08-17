@@ -9,6 +9,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type WorkspaceCloneTask = {
   id: string;
@@ -74,7 +75,10 @@ function CloneTaskCard({
             </span>
           </div>
           <p
-            className={`mt-1 truncate text-xs ${task.status === "failed" ? "text-destructive" : "text-muted-foreground"}`}
+            className={cn(
+              "mt-1 truncate text-xs",
+              task.status === "failed" ? "text-destructive" : "text-muted-foreground",
+            )}
           >
             {active ? t(`chat.workspaceCloneTaskPhase.${task.phase}`) : message}
           </p>

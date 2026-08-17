@@ -1,5 +1,6 @@
 import { Cable, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useRef, useState } from "react";
 import type {
   SshLocalForwardAction,
@@ -176,7 +177,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                     setError("");
                   }}
                   onBlur={handleLocalPortBlur}
-                  className={`${FIELD_CLASS} font-mono`}
+                  className={cn(FIELD_CLASS, "font-mono")}
                   placeholder={t("projectTools.sshLocalForwardAutoPort")}
                   disabled={submitting}
                 />
@@ -199,7 +200,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                     setRemotePort(value);
                     setError("");
                   }}
-                  className={`${FIELD_CLASS} font-mono`}
+                  className={cn(FIELD_CLASS, "font-mono")}
                   placeholder={t("projectTools.sshLocalForwardRemotePortLabel")}
                   disabled={submitting}
                 />

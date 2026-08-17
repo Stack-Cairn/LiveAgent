@@ -11,6 +11,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -642,9 +643,10 @@ export default function App() {
         </AppErrorBoundary>
         {visible && (
           <div
-            className={`absolute inset-0 z-50 transition-all duration-300 ease-out ${
-              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-            }`}
+            className={cn(
+              "absolute inset-0 z-50 transition-all duration-300 ease-out",
+              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+            )}
             onTransitionEnd={handleTransitionEnd}
           >
             <AppErrorBoundary>

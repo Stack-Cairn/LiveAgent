@@ -1,5 +1,6 @@
 import { AlertTriangle } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 import { Button } from "./button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "./popover";
@@ -57,12 +58,16 @@ export function ConfirmActionPopover(props: {
         <div className="p-3">
           <div className="flex items-start gap-2.5">
             <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                tone === "destructive" ? "bg-destructive/10" : "bg-primary/10"
-              }`}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                tone === "destructive" ? "bg-destructive/10" : "bg-primary/10",
+              )}
             >
               <AlertTriangle
-                className={`h-4 w-4 ${tone === "destructive" ? "text-destructive" : "text-primary"}`}
+                className={cn(
+                  "h-4 w-4",
+                  tone === "destructive" ? "text-destructive" : "text-primary",
+                )}
               />
             </div>
             <div className="min-w-0 flex-1">
