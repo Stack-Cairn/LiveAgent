@@ -1,3 +1,4 @@
+import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
 import type { AppSettings } from "../../lib/settings";
 import type { WebSettingsSaveState } from "../../lib/webSettings";
 
@@ -6,6 +7,7 @@ export type SetSettingsFn = (updater: (prev: AppSettings) => AppSettings) => voi
 export type SectionId =
   | "system"
   | "systemTools"
+  | "stt"
   | "providers"
   | "agents"
   | "ssh"
@@ -24,6 +26,7 @@ export type SettingsPageProps = {
   initialProviderId?: string;
   hiddenSections?: SectionId[];
   onAgentDirectoryChanged?: () => void | Promise<void>;
+  sttSettingsService: SttSettingsService;
 };
 
 export type SettingsSectionProps = {

@@ -100,6 +100,11 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             payload_json TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS stt_settings (
+            config_id TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS tunnel_settings (
             tunnel_id TEXT PRIMARY KEY,
             payload_json TEXT NOT NULL,

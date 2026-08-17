@@ -381,7 +381,11 @@ impl GatewayController {
             return Ok(());
         }
 
-        let envelope = build_settings_sync_envelope(snapshot)?;
+        // The cached/browser-visible snapshot remains redacted. Only the
+        // authenticated desktop-to-Gateway envelope receives the raw STT
+        // sidecar, which Gateway consumes before broadcasting the snapshot.
+        let outbound = attach_current_stt_secret_sync(snapshot).await?;
+        let envelope = build_settings_sync_envelope(outbound)?;
         self.send_agent_envelope(envelope).await
     }
 }

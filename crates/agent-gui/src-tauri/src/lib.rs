@@ -140,6 +140,14 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
             commands::settings::settings_save_model_failover,
+            commands::settings::settings_save_stt,
+            commands::settings::settings_reveal_stt_secret,
+            services::stt::settings_test_stt,
+            services::stt::stt_request_microphone_permission,
+            services::stt::stt_start,
+            services::stt::stt_send_audio,
+            services::stt::stt_stop,
+            services::stt::stt_cancel,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,
@@ -677,6 +685,7 @@ pub fn run() {
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
+    let stt_manager = Arc::new(services::stt::SttManager::default());
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -712,6 +721,7 @@ pub fn run() {
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
+        .manage(stt_manager)
         .setup({
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);

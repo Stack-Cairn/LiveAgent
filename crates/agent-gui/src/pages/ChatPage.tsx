@@ -79,6 +79,7 @@ import {
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
+import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -1846,6 +1847,13 @@ export function ChatPage(props: ChatPageProps) {
                   isSending={isSending}
                   isUploadingFiles={isUploadingFiles}
                   isInputDisabled={isComposerInputDisabled}
+                  sttProvider={
+                    settings.stt.provider &&
+                    settings.stt.providers[settings.stt.provider].configured
+                      ? settings.stt.provider
+                      : null
+                  }
+                  sttTransport={desktopSttTransport}
                   inputPlaceholder={composerPlaceholder}
                   workdir={displayedConversationWorkdir}
                   enabledSkills={enabledComposerSkills}

@@ -27,7 +27,9 @@
       "icons/icon.icns"
     ],
     "macOS": {
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist",
+      "infoPlist": "Info.plist"
     }
   }
 }

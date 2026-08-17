@@ -1,6 +1,7 @@
 export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.navSystem": "系统设置",
   "settings.navSystemTools": "系统工具",
+  "settings.navStt": "语音输入",
   "settings.toolPermissionsOverridden": "{count} 项已自定义",
   "settings.toolPolicy.allow": "允许",
   "settings.toolPolicy.ask": "询问",

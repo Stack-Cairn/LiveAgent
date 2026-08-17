@@ -2,6 +2,7 @@ import {
   type ChatRuntimeControls,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   type ReasoningLevel,
+  type SttProviderId,
 } from "@liveagent/app/lib/settings";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
 import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
@@ -22,6 +23,7 @@ import {
   LightbulbOff,
   Loader2,
   Maximize2,
+  Mic,
   Minimize2,
   Paperclip,
   Play,
@@ -43,6 +45,7 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { SttTransport } from "@liveagent/ui/lib/stt/types";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import {
   type MutableRefObject,
@@ -63,6 +66,7 @@ import {
   type UploadedImagePreviewLoader,
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
+import { useComposerStt } from "./useComposerStt";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   off: "settings.reasoning.off",
@@ -235,6 +239,8 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
+  sttProvider?: SttProviderId | null;
+  sttTransport?: SttTransport;
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
@@ -293,6 +299,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
+    sttProvider = null,
+    sttTransport,
     inputPlaceholder,
     workdir,
     enabledSkills,
@@ -333,6 +341,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
+  const stt = useComposerStt({
+    composerRef,
+    provider: sttProvider,
+    transport: sttTransport,
+    disabled: isInputDisabled,
+  });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const isComposerExpandedRef = useRef(false);
   const glassCardRef = useRef<HTMLDivElement | null>(null);
@@ -356,13 +370,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
-  const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
-  const controlsDisabled = isInputDisabled;
+  const uploadDisabled =
+    isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
+  const controlsDisabled = isInputDisabled || stt.active;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
   // 亮灯但开关与档位均不可操作；两者皆无才是真不支持。
   const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
-  const sendDisabled = isInputDisabled || isUploadingFiles || !hasSendableDraft;
+  const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   const primaryActionTitle = canQueueDraftWhileSending
     ? t("chat.queue.addToQueue")
@@ -902,7 +917,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   key={`${file.relativePath}-${file.absolutePath ?? file.fileName}`}
                   file={file}
                   workdir={workdir}
-                  disabled={isInputDisabled}
+                  disabled={controlsDisabled}
                   removeLabel={t("chat.upload.removeFile")}
                   previewLabel={t("chat.upload.previewImage")}
                   closePreviewLabel={t("chat.upload.closePreview")}
@@ -965,7 +980,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               onPasteFiles={onPasteFiles}
               loadHistoryPrompts={loadHistoryPrompts}
               placeholder={inputPlaceholder}
-              disabled={isInputDisabled}
+              disabled={isInputDisabled || stt.active}
               workdir={workdir}
               enabledSkills={enabledSkills}
               className={cn(
@@ -1017,6 +1032,37 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   ) : null}
                 </button>
               </RuntimeControlTooltip>
+
+              {stt.available ? (
+                <RuntimeControlTooltip
+                  label={stt.error ?? (stt.active ? "停止语音输入" : "开始语音输入")}
+                >
+                  <button
+                    type="button"
+                    disabled={isInputDisabled || stt.state === "stopping"}
+                    onClick={stt.toggle}
+                    aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
+                    aria-pressed={stt.active}
+                    className={cn(
+                      "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                      stt.active
+                        ? "bg-red-500/10 text-red-600"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {stt.state === "requesting-permission" ||
+                    stt.state === "buffering" ||
+                    stt.state === "stopping" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : stt.active ? (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </button>
+                </RuntimeControlTooltip>
+              ) : null}
 
               <RuntimeControlTooltip label={webSearchTooltip}>
                 <button
@@ -1207,6 +1253,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </Button>
             </div>
           </div>
+          {stt.error ? (
+            <div className="px-4 pb-2 text-xs text-destructive" role="status" aria-live="polite">
+              {stt.error}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

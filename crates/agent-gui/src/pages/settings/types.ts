@@ -1,3 +1,4 @@
+import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import type { AppSettings } from "../../lib/settings";
 import type { SettingsSaveState } from "../../lib/settings/storage";
@@ -8,6 +9,7 @@ export type SectionId =
   | "system"
   | "shortcuts"
   | "systemTools"
+  | "stt"
   | "providers"
   | "agents"
   | "ssh"
@@ -26,6 +28,7 @@ export type SettingsPageProps = {
   initialProviderId?: string;
   hiddenSections?: SectionId[];
   appUpdate: AppUpdateController;
+  sttSettingsService: SttSettingsService;
 };
 
 export type SettingsSectionProps = {

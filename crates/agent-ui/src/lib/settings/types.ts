@@ -492,6 +492,37 @@ export type RemoteSettings = {
   enableWebTunnels: boolean;
 };
 
+export type SttProviderId =
+  | "tencent_cloud"
+  | "volcengine_seed_v3"
+  | "aliyun_dashscope"
+  | "baidu_cloud";
+
+export type SttProviderSettings = {
+  id: SttProviderId;
+  configured: boolean;
+  websocketUrl: string;
+  model: string;
+  apiKey: string;
+  appId: string;
+  secretId: string;
+  secretKey: string;
+  accessToken: string;
+  cluster: string;
+  resourceId: string;
+  engineModelType: string;
+  baiduAppId: string;
+  baiduApiKey: string;
+  devPid: string;
+  /** 一次性清密钥指令；保存端消费后必须移除，不得进入公开快照。 */
+  clearSecrets?: boolean;
+};
+
+export type SttSettings = {
+  provider: SttProviderId | null;
+  providers: Record<SttProviderId, SttProviderSettings>;
+};
+
 export type AppSettings = {
   system: SystemSettings;
   customProviders: CustomProvider[];
@@ -499,6 +530,7 @@ export type AppSettings = {
   agents: AgentPromptTemplate[];
   ssh: SshSettings;
   remote: RemoteSettings;
+  stt: SttSettings;
   memory: MemorySettings;
   customSettings: CustomSettings;
   modelFailover: ModelFailoverSettings;

@@ -1,6 +1,7 @@
 export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.navSystem": "System",
   "settings.navSystemTools": "System Tools",
+  "settings.navStt": "Speech to Text",
   "settings.toolPermissionsOverridden": "{count} customized",
   "settings.toolPolicy.allow": "Allow",
   "settings.toolPolicy.ask": "Ask",

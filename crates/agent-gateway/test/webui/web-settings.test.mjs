@@ -28,6 +28,71 @@ async function withNavigator(value, task) {
   }
 }
 
+test("gateway settings sync publishes redacted STT state and enables WebUI STT", () => {
+  const desktop = settings.normalizeSettings({
+    stt: {
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          websocketUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/",
+          model: "paraformer-realtime-v2",
+          apiKey: "desktop-secret",
+        },
+      },
+    },
+  });
+
+  const payload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
+  assert.equal(payload.stt.provider, "aliyun_dashscope");
+  assert.equal(payload.stt.providers.aliyun_dashscope.configured, true);
+  assert.equal(payload.stt.providers.aliyun_dashscope.apiKey, "");
+
+  const web = settingsSync.applyGatewaySettingsSyncPayload(settings.normalizeSettings({}), payload);
+  assert.equal(web.stt.provider, "aliyun_dashscope");
+  assert.equal(web.stt.providers.aliyun_dashscope.configured, true);
+  assert.equal(web.stt.providers.aliyun_dashscope.apiKey, "");
+});
+
+test("WebUI STT secret sidecar reaches desktop state but never enters public payload", () => {
+  const current = settings.normalizeSettings({
+    stt: {
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          apiKey: "existing-desktop-secret",
+        },
+      },
+    },
+  });
+  const incoming = settings.normalizeSettings({
+    stt: {
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          apiKey: "",
+          clearSecrets: true,
+        },
+      },
+    },
+  }).stt;
+
+  const desktop = settingsSync.applyGatewaySettingsSyncPayload(current, {
+    sttSecretUpdate: incoming,
+  });
+  assert.equal(desktop.stt.providers.aliyun_dashscope.clearSecrets, true);
+  assert.equal(desktop.stt.providers.aliyun_dashscope.apiKey, "");
+
+  const publicPayload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
+  assert.equal(publicPayload.stt.providers.aliyun_dashscope.clearSecrets, undefined);
+  assert.equal(publicPayload.stt.providers.aliyun_dashscope.apiKey, "");
+});
+
 test("web settings normalize and preserve workspace project groups", () => {
   const normalized = settings.normalizeSettings({
     system: {

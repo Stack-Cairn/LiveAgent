@@ -26,6 +26,7 @@ const SSH_KNOWN_HOSTS_TABLE: &str = "ssh_known_hosts";
 const REMOTE_SETTINGS_TABLE: &str = "remote_settings";
 const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
 const MODEL_FAILOVER_SETTINGS_TABLE: &str = "model_failover_settings";
+const STT_SETTINGS_TABLE: &str = "stt_settings";
 
 const SYSTEM_EXECUTION_MODE_KEY: &str = "executionMode";
 const SYSTEM_WORKDIR_KEY: &str = "workdir";
@@ -48,6 +49,9 @@ pub(crate) const PROVIDER_USAGE_QUERY_SECRET_UPDATES_FIELD: &str =
 pub(crate) const SYSTEM_PROXY_PASSWORD_UPDATE_FIELD: &str = "systemProxyPasswordUpdate";
 pub(crate) const SSH_SECRET_UPDATES_FIELD: &str = "sshSecretUpdates";
 pub(crate) const SSH_PATCH_FIELD: &str = "sshPatch";
+/// 仅用于已认证桌面 Agent → Gateway 的后端同步；Gateway 必须在任何 Web 广播前移除。
+pub(crate) const STT_SECRET_SYNC_FIELD: &str = "sttSecretSync";
+pub(crate) const STT_SECRET_UPDATE_FIELD: &str = "sttSecretUpdate";
 const SSH_SYNC_CONFLICT_MESSAGE: &str = "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。";
 
 const PROVIDER_SETTINGS_SELECT_SQL: &str = "
@@ -164,6 +168,7 @@ include!("system.rs");
 include!("mcp.rs");
 include!("memory_settings.rs");
 include!("model_failover.rs");
+include!("stt.rs");
 include!("gateway_sync.rs");
 include!("ssh/mod.rs");
 include!("commands.rs");

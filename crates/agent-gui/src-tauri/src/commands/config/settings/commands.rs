@@ -10,6 +10,7 @@ pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
             agents: load_agents(&conn)?,
             ssh: load_ssh(&conn)?,
             remote: load_remote(&conn)?,
+            stt: load_stt_redacted(&conn)?,
             memory: load_memory(&conn)?,
             model_failover: load_model_failover(&conn)?,
             default_workdir,
@@ -90,6 +91,37 @@ pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> 
     })
     .await
     .map_err(|e| format!("settings_save_model_failover join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn settings_save_stt(
+    payload: Value,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<Value, String> {
+    let saved = tauri::async_runtime::spawn_blocking(move || {
+        let mut conn = open_db()?;
+        save_stt(&mut conn, payload)?;
+        load_stt_redacted(&conn).map(|value| value.unwrap_or_else(|| json!({})))
+    })
+    .await
+    .map_err(|e| format!("settings_save_stt join failed: {e}"))??;
+    if let Err(error) = gateway_controller.publish_current_settings_sync().await {
+        eprintln!("publish STT settings sync failed: {error}");
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+pub async fn settings_reveal_stt_secret(
+    provider: String,
+    field: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        load_stt_secret(&conn, &provider, &field)
+    })
+    .await
+    .map_err(|e| format!("settings_reveal_stt_secret join failed: {e}"))?
 }
 
 #[tauri::command]

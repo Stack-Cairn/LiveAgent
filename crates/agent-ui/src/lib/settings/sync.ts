@@ -47,6 +47,7 @@ export type GatewaySettingsSyncProvider = Omit<AppSettings["customProviders"][nu
   apiKeyConfigured?: boolean;
 };
 export type GatewaySettingsSyncCustomSettings = Partial<AppSettings["customSettings"]>;
+export type GatewaySttSecretUpdate = AppSettings["stt"];
 
 export type GatewaySettingsSyncPayload = {
   system: AppSettings["system"];
@@ -58,6 +59,8 @@ export type GatewaySettingsSyncPayload = {
     AppSettings["remote"],
     "enableWebTerminal" | "enableWebSshTerminal" | "enableWebGit" | "enableWebTunnels"
   >;
+  /** STT 元数据与 configured 标记；所有云厂商凭据在同步出口均为空串。 */
+  stt: AppSettings["stt"];
   memory: AppSettings["memory"];
   modelFailover: AppSettings["modelFailover"];
   customSettings: GatewaySettingsSyncCustomSettings;
@@ -73,6 +76,8 @@ export type GatewaySettingsSyncPayload = {
   // systemProxy 密码回传 sidecar（仿 providerApiKeyUpdates 的简化范式）：
   // system 字段本身出口必被脱敏，明文密码只经此通道回到桌面端落库。
   systemProxyPasswordUpdate?: string;
+  /** WebUI → 桌面端的一次性 STT 凭据更新；任何公开广播前必须移除。 */
+  sttSecretUpdate?: GatewaySttSecretUpdate;
 };
 export type GatewaySettingsSyncUpdatePayload = Partial<GatewaySettingsSyncPayload>;
 
@@ -83,6 +88,7 @@ const GATEWAY_SETTINGS_SYNC_FIELDS = [
   "agents",
   "ssh",
   "remote",
+  "stt",
   "memory",
   "modelFailover",
   "customSettings",
@@ -179,7 +185,30 @@ export function redactSettingsForWebStorage(settings: AppSettings): AppSettings 
     },
     customProviders: redactCustomProvidersForWebStorage(settings.customProviders),
     ssh: redactSshSettingsForWebStorage(settings.ssh),
+    stt: redactSttSettingsForWebStorage(settings.stt),
   });
+}
+
+export function redactSttSettingsForWebStorage(stt: AppSettings["stt"]): AppSettings["stt"] {
+  return {
+    provider: stt.provider,
+    providers: Object.fromEntries(
+      Object.entries(stt.providers).map(([id, provider]) => {
+        const { clearSecrets: _clearSecrets, ...publicProvider } = provider;
+        return [
+          id,
+          {
+            ...publicProvider,
+            apiKey: "",
+            secretId: "",
+            secretKey: "",
+            accessToken: "",
+            baiduApiKey: "",
+          },
+        ];
+      }),
+    ) as AppSettings["stt"]["providers"],
+  };
 }
 
 function redactSystemProxyConfig(
@@ -854,6 +883,35 @@ function mergeSyncedRemoteSettings(
   };
 }
 
+const STT_SECRET_FIELDS = [
+  "apiKey",
+  "secretId",
+  "secretKey",
+  "accessToken",
+  "baiduApiKey",
+] as const satisfies readonly (keyof AppSettings["stt"]["providers"][keyof AppSettings["stt"]["providers"]])[];
+
+/**
+ * 合并脱敏后的 STT 快照。configured 由权威端给出；空白秘密只表示“已脱敏”，
+ * 不能清除接收端可能持有的本地凭据。
+ */
+function mergeSyncedSttSettings(
+  current: AppSettings["stt"],
+  incoming: unknown,
+): AppSettings["stt"] {
+  const normalized = normalizeSettings({ stt: incoming as AppSettings["stt"] }).stt;
+  for (const [id, provider] of Object.entries(normalized.providers)) {
+    const currentProvider = current.providers[id as keyof typeof current.providers];
+    if (!currentProvider) continue;
+    for (const field of STT_SECRET_FIELDS) {
+      if (provider.clearSecrets !== true && !provider[field].trim()) {
+        provider[field] = currentProvider[field];
+      }
+    }
+  }
+  return normalized;
+}
+
 function mergeSyncedSshSettings(
   current: AppSettings["ssh"],
   incoming: unknown,
@@ -1114,6 +1172,7 @@ export function buildGatewaySettingsSyncPayload(
       enableWebGit: settings.remote.enableWebGit,
       enableWebTunnels: settings.remote.enableWebTunnels,
     },
+    stt: redactSttSettingsForWebStorage(settings.stt),
     memory: settings.memory,
     modelFailover: settings.modelFailover,
     customSettings: syncableCustomSettings(settings.customSettings),
@@ -1280,5 +1339,10 @@ export function applyGatewaySettingsSyncPayload(
     remote: Object.hasOwn(source, "remote")
       ? mergeSyncedRemoteSettings(current.remote, source.remote)
       : current.remote,
+    stt: Object.hasOwn(source, "sttSecretUpdate")
+      ? mergeSyncedSttSettings(current.stt, source.sttSecretUpdate)
+      : Object.hasOwn(source, "stt")
+        ? mergeSyncedSttSettings(current.stt, source.stt)
+        : current.stt,
   });
 }

@@ -374,6 +374,57 @@ mod tests {
     }
 
     #[test]
+    fn gateway_settings_snapshot_redacts_stt_and_private_sync_field() {
+        let mut conn = open_memory_db();
+        save_stt(
+            &mut conn,
+            json!({
+                "provider": "aliyun_dashscope",
+                "providers": {
+                    "aliyun_dashscope": {
+                        "id": "aliyun_dashscope",
+                        "websocketUrl": "wss://example.com/stt",
+                        "model": "paraformer-realtime-v2",
+                        "apiKey": "desktop-only-secret"
+                    }
+                }
+            }),
+        )
+        .expect("save STT settings");
+
+        let snapshot =
+            load_gateway_settings_sync_snapshot(&conn).expect("load gateway settings snapshot");
+        assert_eq!(snapshot["stt"]["provider"], "aliyun_dashscope");
+        assert_eq!(
+            snapshot["stt"]["providers"]["aliyun_dashscope"]["configured"],
+            true
+        );
+        assert_eq!(
+            snapshot["stt"]["providers"]["aliyun_dashscope"]["apiKey"],
+            ""
+        );
+        assert_eq!(
+            load_stt_secret(&conn, "aliyun_dashscope", "apiKey")
+                .expect("reveal local STT secret"),
+            "desktop-only-secret"
+        );
+        assert!(load_stt_secret(&conn, "aliyun_dashscope", "websocketUrl").is_err());
+
+        let redacted = redact_gateway_settings_sync_payload(json!({
+            "sttSecretSync": {
+                "providers": {"aliyun_dashscope": {"apiKey": "must-not-leak"}}
+            },
+            "stt": load_stt_raw(&conn).expect("load raw STT settings")
+        }))
+        .expect("redact gateway STT payload");
+        assert_eq!(redacted.get(STT_SECRET_SYNC_FIELD), None);
+        assert_eq!(
+            redacted["stt"]["providers"]["aliyun_dashscope"]["apiKey"],
+            ""
+        );
+    }
+
+    #[test]
     fn save_ssh_persists_hosts_and_redacts_sync_snapshot() {
         let mut conn = open_memory_db();
         save_ssh(

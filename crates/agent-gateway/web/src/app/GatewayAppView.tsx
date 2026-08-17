@@ -24,13 +24,15 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useMemo } from "react";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
   updateWorkspaceResourceSettings,
 } from "@/lib/settings";
+import { createWebSttSettingsService } from "@/lib/stt/webSttSettingsService";
+import { webSttTransport } from "@/lib/stt/webSttTransport";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { AgentSelector } from "./AgentSelector";
 import { asErrorMessage } from "./chatEventUtils";
@@ -299,6 +301,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const sttSettingsService = useMemo(
+    () =>
+      createWebSttSettingsService(async (sttSecretUpdate) => {
+        if (!api) throw new Error("桌面 Agent 未连接，无法同步 STT 配置");
+        await api.updateSettings({ sttSecretUpdate });
+      }),
+    [api],
+  );
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
@@ -616,6 +626,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           isSending={composerIsSending}
                           isUploadingFiles={isUploadingFiles}
                           isInputDisabled={composerInputDisabled}
+                          // WebUI 始终提供麦克风入口；供应商未配置或运行连接失败时，
+                          // 错误由点击后的 STT 会话直接反馈在 Composer 中。
+                          sttProvider={settings.stt.provider ?? "tencent_cloud"}
+                          sttTransport={webSttTransport}
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
@@ -895,6 +909,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialSection={settingsSection}
                 initialProviderId={settingsProviderId}
                 hiddenSections={["remote"]}
+                sttSettingsService={sttSettingsService}
                 onAgentDirectoryChanged={async () => {
                   if (!api) return;
                   await api.listAgents();
