@@ -6,7 +6,7 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import type { TerminalWorkbenchSurface } from "@liveagent/ui/lib/workbench/types";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import {
   ensureTerminalPaneSession,
@@ -30,6 +30,7 @@ export type TerminalPaneHostProps = {
 type TerminalPaneErrorState =
   | { kind: "ssh-prompt" }
   | { kind: "create-failed"; message: string }
+  | { kind: "session-closed" }
   | { kind: "lease"; message: string };
 
 const SSH_LATENCY_POLL_MS = 15_000;
@@ -61,6 +62,14 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     liveSession ?? (createdSession && createdSession.id === boundSessionId ? createdSession : null);
   const sessionId = session?.id ?? null;
 
+  // 本次挂载内出现在会话列表里过的 sessionId:用于区分"重启后的陈旧绑定"
+  // (从未见过,可按 launchSpec 重建)与"运行期被显式关闭"(见过又消失,
+  // 绝不能自动复活一个新 PTY)。
+  const seenLiveSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (liveSession) seenLiveSessionIdRef.current = liveSession.id;
+  }, [liveSession]);
+
   useEffect(() => {
     if (liveSession && createdSession) setCreatedSession(null);
   }, [createdSession, liveSession]);
@@ -68,6 +77,14 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   useEffect(() => {
     if (!sessionsLoaded || session || errorState) return;
     if (boundSessionId) {
+      if (seenLiveSessionIdRef.current === boundSessionId) {
+        // 会话生前在本次挂载中活过:这是 Right Dock 的显式关闭(或
+        // close_project/close_all),不是恢复期残留。停在关闭态等用户
+        // 决定重启或关 Pane;通常 ChatPage 的 closed 事件联动会先把
+        // Pane 收掉,这里只是事件丢失/竞态下的兜底。
+        setErrorState({ kind: "session-closed" });
+        return;
+      }
       // 完整应用重启后 Rust 注册表为空,但部分 WebView 实现仍可能留下
       // sessionStorage 绑定。清掉陈旧 sessionId,下一次 effect 自动按
       // launchSpec 重建,不要求用户手动介入。
@@ -184,9 +201,13 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     switch (state.kind) {
       case "ssh-prompt":
         return t("workbench.terminalSshPrompt");
+      case "session-closed":
+        return t("workbench.terminalSessionMissing");
       case "create-failed":
       case "lease":
         return state.message || t("workbench.terminalError");
+      default:
+        return t("workbench.terminalError");
     }
   };
 

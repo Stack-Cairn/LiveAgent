@@ -16,6 +16,23 @@
 
 **已裁决的冲突**:`view.compactChrome` 死分支已删除(`paneRendersCompact` 只按 rectWidth 判定);360px 自动 compact 保留。SSH `launchSpec.cwd` 语义统一为"本地 project 锚点(SFTP local root)",前端校验对两种终端 surface 一致生效,4 个测试夹具已修正。
 
+### 补丁(2026-08-18):dock 关闭租用会话的复活循环
+
+T-2 的"绑定失效即按 launchSpec 自动重建"漏判了运行期显式关闭:dock 关闭一个已拖入画板的
+终端后,`closed` 事件把会话从列表移除,宿主把它当成恢复期陈旧绑定,删绑定 → ensure 重建
+新 PTY → 新会话回到 dock 且再次 leased,表现为"终端关不掉"(每次点关闭实为杀旧进程+起新
+进程)。修复分三层(架构文档 §17 已写回语义):
+
+- `TerminalPaneHost`:`seenLiveSessionIdRef` 记录本次挂载中在会话列表出现过的 sessionId;
+  "见过又消失"停在新增的 `session-closed` 错误态(文案复用 `workbench.terminalSessionMissing`,
+  重试走 restartFromLaunchSpec),不再自动重建。恢复期(从未见过)行为不变。
+- `ChatPage`:订阅 `closed` 事件,经 `findTerminalPaneForSession`(按 Binding 而非 Lease,
+  覆盖 connecting 窗口)联动 `handleWorkbenchClosePane`——dock 关闭 = 终止进程 + 收 Pane。
+- `terminalAppExitGuard`:`app_confirmed_exit` 前置位,退出路径 `close_all` 的 closed 风暴
+  不触发关 Pane,布局落盘保留终端 Pane 供重启恢复;invoke 失败复位。
+- 测试:`terminal-session-closed-sync.test.mjs` 12 例(查找命中/落空/connecting 窗口/迟到
+  closed 与重启竞态/退出护栏/宿主停驻断言/ChatPage 接线断言)。
+
 ### Permission-Changed blocked 态:调研结论(不实现)
 
 设计文档 §7.4 要求 Pane blocked 有 Missing / Archived / **Permission Changed** 三态。

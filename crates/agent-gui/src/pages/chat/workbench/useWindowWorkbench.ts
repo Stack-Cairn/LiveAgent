@@ -24,8 +24,10 @@ import {
   type TerminalWorkbenchSurface,
 } from "@liveagent/ui/lib/workbench/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readRestorableWorkbenchLayoutCrashShadow } from "./layoutStorage";
 
-export const WORKBENCH_LAYOUT_STORAGE_KEY = "liveagent.sessionWorkbench.layout.v1";
+export { WORKBENCH_LAYOUT_STORAGE_KEY } from "./layoutStorage";
+
 const PERSIST_DEBOUNCE_MS = 250;
 export const ROOT_CONVERSATION_PANE_ID = "root-conversation-pane";
 
@@ -198,6 +200,8 @@ export type WorkbenchOpenConversationInput = {
 export type WindowWorkbench = {
   layout: WorkbenchLayout;
   layoutRef: React.MutableRefObject<WorkbenchLayout>;
+  /** Layout geometry is visible, but surfaces stay inert until validation finishes. */
+  restoreReady: boolean;
   paneIdForConversation(conversationId: string): string | null;
   /** Raw transaction entry point (drag commits pass their frozen revision). */
   dispatch(command: WorkbenchCommand): WorkbenchCommandResult;
@@ -243,11 +247,14 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     onCommandError,
   } = params;
 
-  const [layout, setLayout] = useState<WorkbenchLayout>(() =>
-    singlePaneLayout(initialConversationId, initialProject),
-  );
+  const bootLayoutRef = useRef(singlePaneLayout(initialConversationId, initialProject));
+  const [layout, setLayout] = useState<WorkbenchLayout>(() => {
+    if (!enabled || !persistence) return bootLayoutRef.current;
+    return readRestorableWorkbenchLayoutCrashShadow() ?? bootLayoutRef.current;
+  });
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  const [restoreReady, setRestoreReady] = useState(!enabled || !persistence);
   const restoreAttemptedRef = useRef(false);
   // Writes stay disabled until the restore round-trip finished, so a fresh
   // boot layout cannot clobber a stored multi-pane layout mid-load.
@@ -548,26 +555,44 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       restoreAttemptedRef.current = true;
       try {
         const adapter = persistenceRef.current;
-        if (!enabled || !adapter) return null;
+        if (!enabled || !adapter) {
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
+          return null;
+        }
         let raw: string | null = null;
         try {
           raw = await adapter.load();
         } catch {
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
           return null;
         }
-        if (!raw) return null;
+        if (!raw) {
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
+          return null;
+        }
         const decoded = decodeWorkbenchLayout(raw);
         if (!decoded.ok) {
           // Keep a diagnostic copy of the corrupted payload, then fall back.
           adapter.saveCorrupted(raw);
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
           return null;
         }
         const filtered = filterLayoutToLiveSurfaces(decoded.layout, live);
         if (!filtered.root || !filtered.focusedPaneId || !isWorkbenchLayoutValid(filtered)) {
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
           return null;
         }
         // Nothing to restore beyond what boot already shows.
-        if (Object.keys(filtered.panes).length < 2) return null;
+        if (Object.keys(filtered.panes).length < 2) {
+          setLayout(bootLayoutRef.current);
+          layoutRef.current = bootLayoutRef.current;
+          return null;
+        }
         // Keep revisions monotonic across sessions so persisted records keep
         // increasing rather than restarting from the boot layout's zero.
         const next = {
@@ -587,6 +612,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
         };
       } finally {
         restoreCompletedRef.current = true;
+        setRestoreReady(true);
       }
     },
     [enabled],
@@ -596,6 +622,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     () => ({
       layout,
       layoutRef,
+      restoreReady,
       paneIdForConversation,
       dispatch,
       focusPane,
@@ -610,6 +637,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     }),
     [
       layout,
+      restoreReady,
       paneIdForConversation,
       dispatch,
       focusPane,

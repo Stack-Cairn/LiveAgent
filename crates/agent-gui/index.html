@@ -3,6 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (() => {
+        let theme = "system";
+        try {
+          const saved = JSON.parse(localStorage.getItem("liveagent.ui-settings.v1") || "null");
+          if (saved?.theme === "light" || saved?.theme === "dark" || saved?.theme === "system") {
+            theme = saved.theme;
+          }
+        } catch {}
+        const dark =
+          theme === "dark" ||
+          (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.style.setProperty(
+          "--liveagent-boot-background",
+          dark ? "#12141c" : "#ffffff",
+        );
+      })();
+    </script>
+    <style>
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: var(--liveagent-boot-background, #ffffff);
+      }
+    </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>LiveAgent</title>
   </head>

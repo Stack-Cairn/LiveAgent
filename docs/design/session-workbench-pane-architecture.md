@@ -602,6 +602,8 @@ TerminalPaneSurface
 
 终止进程树和断开 SSH 不在 Pane 关闭路径上：两者统一从 Right Dock 的终端会话管理入口执行，Pane 内不再叠加文字按钮。
 
+反向联动（dock → Pane）：Right Dock 关闭一个被 Pane 租用的 Session 意味着终止进程 **并连带关闭该 Pane**（`closed` 事件驱动，按 Runtime Binding 而非 Lease 查找，覆盖宿主尚未取得租约的 connecting 窗口）。宿主对「本次挂载见过、随后从会话列表消失」的绑定停在 `session-closed` 占位（可显式重启），**绝不按 launchSpec 自动重建**——launchSpec 自动重建只属于应用重启后的恢复路径（从未见过该 sessionId 存活）。否则 dock 关闭会触发「杀旧进程 + 复活新进程」循环，表现为终端关不掉。应用退出的 `close_all` 经退出护栏豁免此联动，布局落盘保留全部终端 Pane 供重启恢复。
+
 关闭 Conversation Pane 绝不等于删除会话。会话仍在左侧，可再次拖入复用；后台运行状态继续显示。删除会话时若 Pane 可见，必须确认并原子关闭 View/Runtime，再删除历史。
 
 删除/归档工作区时阻止新建会话/终端；所属 Pane 显示 blocked，不自动改绑。删除前列出运行会话和终端影响，确认后再清理 Pane 或保留无权限占位。

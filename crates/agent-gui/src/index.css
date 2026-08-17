@@ -24,6 +24,48 @@
 
 /* Streamdown content styling via data-streamdown selectors */
 @layer components {
+  .workbench-pane-restoring::after {
+    position: absolute;
+    inset-inline: 8%;
+    top: 0;
+    height: 1px;
+    content: "";
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--foreground) / 0.16) 42%,
+      hsl(var(--foreground) / 0.28) 50%,
+      hsl(var(--foreground) / 0.16) 58%,
+      transparent
+    );
+    animation: workbenchRestoreThread 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes workbenchRestoreThread {
+    0% {
+      opacity: 0;
+      transform: translateY(42px);
+    }
+    18% {
+      opacity: 1;
+    }
+    82% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(min(48vh, 420px));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .workbench-pane-restoring::after {
+      animation: none;
+      opacity: 0.35;
+      transform: translateY(42px);
+    }
+  }
+
   .release-notes-markdown {
     @apply text-xs leading-relaxed text-muted-foreground;
   }

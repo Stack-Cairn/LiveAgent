@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { PaneLoadingSkeleton } from "../../../components/app/PaneLoadingSkeleton";
 import { CurrentTaskProgress } from "../components/CurrentTaskProgress";
 import { PendingToolApprovalBar } from "../components/PendingToolApprovalBar";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
@@ -55,16 +56,18 @@ export const RestorableConversationPaneHost = forwardRef<
 
   if (!snapshot.runtime) {
     const loading = snapshot.lifecycle.hydrating;
+    if (loading) {
+      return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
+    }
     return (
       <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{title || t("chat.pendingTitle")}</p>
         <button
           type="button"
-          disabled={loading}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
           onClick={() => void controller.retry().catch(() => undefined)}
         >
-          {loading ? t("chat.loadingConversation") : t("workbench.loadConversation")}
+          {t("workbench.loadConversation")}
         </button>
       </div>
     );

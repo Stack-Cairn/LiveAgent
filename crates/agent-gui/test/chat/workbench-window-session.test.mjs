@@ -8,6 +8,10 @@ const workbench = loader.loadModule("@liveagent/ui/lib/workbench/index.ts");
 const { filterLayoutToLiveSurfaces, WORKBENCH_LAYOUT_STORAGE_KEY } = loader.loadModule(
   "src/pages/chat/workbench/useWindowWorkbench.ts",
 );
+const {
+  readRestorableWorkbenchLayoutCrashShadow,
+  readWorkbenchLayoutCrashShadow,
+} = loader.loadModule("src/pages/chat/workbench/layoutStorage.ts");
 
 function pane(paneId, conversationId) {
   return {
@@ -175,6 +179,38 @@ test("persisted layout round-trips through the codec", () => {
   assert.equal(typeof WORKBENCH_LAYOUT_STORAGE_KEY, "string");
 });
 
+test("startup accepts only a valid multi-pane crash shadow", () => {
+  const previousWindow = globalThis.window;
+  const layout = threePaneLayout();
+  globalThis.window = {
+    localStorage: {
+      getItem(key) {
+        assert.equal(key, WORKBENCH_LAYOUT_STORAGE_KEY);
+        return workbench.encodeWorkbenchLayout(layout);
+      },
+    },
+  };
+  try {
+    assert.equal(readWorkbenchLayoutCrashShadow(), workbench.encodeWorkbenchLayout(layout));
+    assert.deepEqual(readRestorableWorkbenchLayoutCrashShadow(), layout);
+
+    const singlePane = {
+      ...layout,
+      root: { type: "leaf", paneId: "pane-a" },
+      panes: { "pane-a": layout.panes["pane-a"] },
+      focusedPaneId: "pane-a",
+    };
+    globalThis.window.localStorage.getItem = () => workbench.encodeWorkbenchLayout(singlePane);
+    assert.equal(readRestorableWorkbenchLayoutCrashShadow(), null);
+
+    globalThis.window.localStorage.getItem = () => "{broken";
+    assert.equal(readRestorableWorkbenchLayoutCrashShadow(), null);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test("layout changes write a synchronous crash shadow before the debounce", () => {
   const hookSource = readFileSync(
     new URL("../../src/pages/chat/workbench/useWindowWorkbench.ts", import.meta.url),
@@ -204,4 +240,28 @@ test("native restore chooses a newer crash shadow over sqlite", () => {
     /payloadRevision\(localPayload\) > record\.revision\s*\? localPayload\s*: record\.payloadJson/,
   );
   assert.match(persistenceSource, /saveCrashShadow\(payloadJson\)[\s\S]{0,80}writeLocalStorage/);
+});
+
+test("startup paints theme and shell before progressively hydrating pane contents", () => {
+  const htmlSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const chatSource = readFileSync(
+    new URL("../../src/pages/ChatPage.tsx", import.meta.url),
+    "utf8",
+  );
+  const transcriptLoadingSource = readFileSync(
+    new URL("../../src/pages/chat/transcript/TranscriptLoadingStates.tsx", import.meta.url),
+    "utf8",
+  );
+
+  const themeScript = htmlSource.indexOf('localStorage.getItem("liveagent.ui-settings.v1")');
+  const appScript = htmlSource.indexOf('src="/src/main.tsx"');
+  assert.ok(themeScript >= 0 && themeScript < appScript);
+  assert.match(htmlSource, /--liveagent-boot-background/);
+  assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
+  assert.match(chatSource, /if \(!workbench\.restoreReady\)[\s\S]{0,180}<PaneLoadingSkeleton/);
+  assert.match(chatSource, /void resolveLiveTerminalSurfaceIds\([\s\S]{0,260}attemptRestore/);
+  assert.doesNotMatch(chatSource, /await resolveLiveTerminalSurfaceIds/);
+  assert.match(transcriptLoadingSource, /<PaneLoadingSkeleton/);
+  assert.doesNotMatch(transcriptLoadingSource, /LoaderCircle/);
 });

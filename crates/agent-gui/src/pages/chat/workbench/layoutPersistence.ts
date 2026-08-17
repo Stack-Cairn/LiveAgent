@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { WORKBENCH_LAYOUT_STORAGE_KEY } from "./useWindowWorkbench";
+import { readWorkbenchLayoutCrashShadow, WORKBENCH_LAYOUT_STORAGE_KEY } from "./layoutStorage";
 
 const WORKBENCH_LAYOUT_SCOPE_ID = "main-window";
 
@@ -21,11 +21,7 @@ export type WorkbenchLayoutPersistence = {
 };
 
 function readLocalStorage(): string | null {
-  try {
-    return window.localStorage.getItem(WORKBENCH_LAYOUT_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  return readWorkbenchLayoutCrashShadow();
 }
 
 function writeLocalStorage(payloadJson: string): void {

@@ -15,6 +15,7 @@ import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppBootShell } from "./components/app/AppBootShell";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
@@ -610,9 +611,7 @@ export default function App() {
     return (
       <LocaleContext.Provider value={localeContextValue}>
         <AppChrome>
-          <div className="flex h-full w-full items-center justify-center bg-background text-sm text-muted-foreground">
-            {translate("chat.loading", settings.locale)}
-          </div>
+          <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
         </AppChrome>
       </LocaleContext.Provider>
     );

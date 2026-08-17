@@ -73,6 +73,7 @@ import {
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
+import { PaneLoadingSkeleton } from "../components/app/PaneLoadingSkeleton";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
@@ -186,7 +187,9 @@ import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
 import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
 import {
   createTerminalSurfaceId,
+  findTerminalPaneForSession,
   resolveLiveTerminalSurfaceIds,
+  terminalAppExitGuard,
   terminalPaneAutoLaunch,
   terminalPaneBindings,
   terminalPaneLease,
@@ -336,6 +339,7 @@ export function ChatPage(props: ChatPageProps) {
   // render needs (draft detection, pending-item effect, workspace root).
   const historyItems = useSidebarSelector(sidebarStore, selectConversations);
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
+  const sidebarListStatus = useSidebarSelector(sidebarStore, (s) => s.listStatus);
   const {
     canShareHistory,
     shareConversation,
@@ -2201,6 +2205,28 @@ export function ChatPage(props: ChatPageProps) {
     [handleWorkbenchFocusPane, workbench],
   );
 
+  // Right Dock 是终止进程的唯一入口(Detach-first 裁决):会话被显式关闭
+  // (`closed` 事件)时,持有它的 Pane 一并关闭。缺了这一环,宿主会把
+  // "绑定的会话消失"当作恢复期陈旧绑定,按 launchSpec 复活一个新 PTY,
+  // 表现为 dock 上的终端"关不掉"。按绑定而非租约查找,覆盖宿主取得租约
+  // 前的 connecting 窗口。
+  useEffect(() => {
+    if (!sessionWorkbench.enabled) return;
+    return tauriTerminalClient.subscribe((event) => {
+      if (event.kind !== "closed") return;
+      // 应用退出的 close_all 不是用户关闭单个终端:保住布局里的终端 Pane,
+      // 重启后按 launchSpec 恢复。
+      if (terminalAppExitGuard.isExiting()) return;
+      const closedSessionId = event.sessionId?.trim() || event.session?.id || "";
+      if (!closedSessionId) return;
+      const paneId = findTerminalPaneForSession(closedSessionId, {
+        bindings: terminalPaneBindings,
+        layout: workbench.layoutRef.current,
+      });
+      if (paneId) handleWorkbenchClosePane(paneId);
+    });
+  }, [handleWorkbenchClosePane, workbench]);
+
   const handleProjectWorkbenchDragIntent = useCallback(
     (project: WorkspaceProject, event: { pointerId: number; clientX: number; clientY: number }) => {
       beginWorkbenchDrag(
@@ -2353,6 +2379,7 @@ export function ChatPage(props: ChatPageProps) {
   const lastWorkbenchSyncedConversationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
+    if (!workbench.restoreReady) return;
     const pending = workbenchPendingSelectRef.current;
     if (
       pending &&
@@ -2402,13 +2429,12 @@ export function ChatPage(props: ChatPageProps) {
   const workbenchRestoreRequestedRef = useRef(false);
   useEffect(() => {
     if (!sessionWorkbench.enabled || workbenchRestoreRequestedRef.current) return;
-    if (sidebarConversationsById.size === 0) return;
+    if (sidebarListStatus === "initial" || sidebarListStatus === "loading") return;
     workbenchRestoreRequestedRef.current = true;
     void (async () => {
-      // 终端对账:webview reload 后 Rust 注册表仍存活,绑定命中的终端 Pane 直接
-      // 重挂会话;绑定被清掉或 list 失败的 Pane 恢复为休眠占位(不自动建 PTY,
-      // 用户点重启才重建),绝不阻塞会话恢复。
-      await resolveLiveTerminalSurfaceIds({
+      // 终端对账与布局验证并行。布局壳已经可见,终端 Pane 自己负责 connecting
+      // 与 stale binding 清理,所以 terminal_list 绝不能阻塞对话 Pane 水合。
+      void resolveLiveTerminalSurfaceIds({
         client: tauriTerminalClient,
         bindings: terminalPaneBindings,
       });
@@ -2419,12 +2445,13 @@ export function ChatPage(props: ChatPageProps) {
         selectWorkbenchConversation(restored.focusConversationId);
       }
     })();
-  }, [selectWorkbenchConversation, sidebarConversationsById, workbench]);
+  }, [selectWorkbenchConversation, sidebarConversationsById, sidebarListStatus, workbench]);
 
   // Close panes whose conversation was deleted from history (the focused
   // pane already falls back through the legacy new-conversation path).
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
+    if (!workbench.restoreReady) return;
     const layout = workbench.layoutRef.current;
     for (const pane of Object.values(layout.panes)) {
       if (pane.surface.kind !== "conversation") continue;
@@ -2447,7 +2474,7 @@ export function ChatPage(props: ChatPageProps) {
   // W closes it, and =/+ equalizes its parent split. Every command needs at
   // least two panes; with one pane the workbench has nothing to navigate.
   useEffect(() => {
-    if (!sessionWorkbench.enabled) return;
+    if (!sessionWorkbench.enabled || !workbench.restoreReady) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
       const layout = workbench.layoutRef.current;
@@ -2737,6 +2764,7 @@ export function ChatPage(props: ChatPageProps) {
     pane: PaneRecord,
     context: { isFocused: boolean; paneCount: number; isCompact: boolean },
   ) => {
+    if (!workbench.restoreReady) return null;
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
     const title = workbenchPaneTitle(surface);
@@ -2769,6 +2797,18 @@ export function ChatPage(props: ChatPageProps) {
         }}
         renderPaneContent={(pane, paneContext) => {
           const surface = pane.surface;
+          if (!workbench.restoreReady) {
+            return (
+              <PaneLoadingSkeleton
+                label={t("app.loading")}
+                variant={
+                  surface.kind === "localTerminal" || surface.kind === "sshTerminal"
+                    ? "terminal"
+                    : "conversation"
+                }
+              />
+            );
+          }
           if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
             return (
               <TerminalPaneHost
@@ -2823,9 +2863,9 @@ export function ChatPage(props: ChatPageProps) {
           );
         }}
         renderPaneChrome={renderWorkbenchPaneChrome}
-        onResizeSplit={workbench.resizeSplit}
-        onEqualizeSplit={workbench.equalizeSplit}
-        onFocusPane={handleWorkbenchFocusPane}
+        onResizeSplit={workbench.restoreReady ? workbench.resizeSplit : undefined}
+        onEqualizeSplit={workbench.restoreReady ? workbench.equalizeSplit : undefined}
+        onFocusPane={workbench.restoreReady ? handleWorkbenchFocusPane : undefined}
         onGeometryChange={handleWorkbenchGeometryChange}
         dropPreview={
           workbenchDragState?.previewRect

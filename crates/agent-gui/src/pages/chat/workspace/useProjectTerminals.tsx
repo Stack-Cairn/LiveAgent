@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
+import { terminalAppExitGuard } from "../workbench/terminalPaneRuntime";
 
 type UseProjectTerminalsParams = {
   terminalProjectPathKey: string;
@@ -108,9 +109,13 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
           tone: "warning",
         }));
       if (!confirmed || cancelled) return;
+      // 退出路径的 close_all 会广播 closed;先置位护栏,ChatPage 的
+      // closed→关 Pane 联动停摆,布局落盘保住全部终端 Pane。
+      terminalAppExitGuard.mark();
       try {
         await invoke("app_confirmed_exit");
       } catch (error) {
+        terminalAppExitGuard.reset();
         if (!cancelled) {
           setErrorMessage(asErrorMessage(error, "退出 LiveAgent 失败"));
         }

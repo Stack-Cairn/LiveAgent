@@ -1,5 +1,5 @@
 import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
-import type { TerminalWorkbenchSurface } from "@liveagent/ui/lib/workbench/types";
+import type { TerminalWorkbenchSurface, WorkbenchLayout } from "@liveagent/ui/lib/workbench/types";
 import {
   createTerminalPaneBindingStore,
   type TerminalPaneBindingStore,
@@ -52,6 +52,30 @@ export type TerminalPaneAutoLaunchRegistry = ReturnType<
 >;
 
 export const terminalPaneAutoLaunch = createTerminalPaneAutoLaunchRegistry();
+
+/**
+ * 应用退出护栏:`app_confirmed_exit` 会先 `close_all()` 再退出进程,期间
+ * 广播的 `closed` 事件不代表用户关闭了单个终端。若照常联动关 Pane,
+ * pagehide 的布局落盘会把所有终端 Pane 剔除,重启后无法按 launchSpec
+ * 恢复。退出确认后置位,closed→关 Pane 的联动随之停摆;invoke 失败时
+ * 复位,应用继续可用。
+ */
+export function createTerminalAppExitGuard() {
+  let exiting = false;
+  return {
+    mark(): void {
+      exiting = true;
+    },
+    reset(): void {
+      exiting = false;
+    },
+    isExiting(): boolean {
+      return exiting;
+    },
+  };
+}
+
+export const terminalAppExitGuard = createTerminalAppExitGuard();
 
 export type EnsureTerminalPaneSessionDeps = {
   client: TerminalClient;
@@ -109,6 +133,31 @@ export function ensureTerminalPaneSession(
   });
   inflight.set(surfaceId, tracked);
   return tracked;
+}
+
+export type FindTerminalPaneForSessionDeps = {
+  bindings: Pick<TerminalPaneBindingStore, "get">;
+  layout: Pick<WorkbenchLayout, "panes">;
+};
+
+/**
+ * 会话被显式关闭(registry `closed` 事件)时定位持有它的终端 Pane。
+ * 用绑定而非租约查找:拖入事务先写绑定后开 Pane,宿主取得租约前的
+ * "connecting" 窗口也必须命中,否则该窗口内的关闭会留下一个按
+ * launchSpec 复活新 PTY 的孤儿 Pane。
+ */
+export function findTerminalPaneForSession(
+  sessionId: string,
+  deps: FindTerminalPaneForSessionDeps,
+): string | null {
+  const key = sessionId.trim();
+  if (!key) return null;
+  for (const pane of Object.values(deps.layout.panes)) {
+    const surface = pane.surface;
+    if (surface.kind !== "localTerminal" && surface.kind !== "sshTerminal") continue;
+    if (deps.bindings.get(surface.surfaceId) === key) return pane.paneId;
+  }
+  return null;
 }
 
 export type ResolveLiveTerminalSurfaceIdsDeps = {
