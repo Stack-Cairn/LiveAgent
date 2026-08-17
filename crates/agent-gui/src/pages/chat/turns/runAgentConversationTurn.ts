@@ -247,6 +247,7 @@ export type RunAgentConversationTurnParams = {
   /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
   taskStateStore: TaskStateStore;
   conversationId: string;
+  checkpointTurnId?: string;
   conversationCwd?: string;
   fallbackTitle: string;
   createdAt: number;
@@ -317,6 +318,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sessionId,
     taskStateStore,
     conversationId,
+    checkpointTurnId,
     conversationCwd,
     fallbackTitle,
     createdAt,
@@ -497,9 +499,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     fileState,
     taskStateStore,
     askUserQuestionConversationId: conversationId,
-    // 检查点粒度=一次注册表构建(每用户轮重建)。turnId 用随机 UUID 保证
-    // 时钟无关的稳定标识,轮内序号由 Rust 侧按 turnId 分配。
-    checkpoint: { conversationId, turnId: crypto.randomUUID() },
+    checkpoint: {
+      conversationId,
+      turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
+    },
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
     skillAccessPolicy,

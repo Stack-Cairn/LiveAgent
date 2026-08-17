@@ -17,7 +17,7 @@
 //!   后两类不接受调用方传入,所以不构成新的授权入口;仓库根的向上推导在
 //!   主目录与文件系统根处封顶,避免"主目录本身是 dotfiles 仓库"时把整个
 //!   主目录变成可写的回退目标。
-//! - turn 身份:TS 侧只传稳定的 turnId(每轮唯一的随机 ID),turn_seq 由
+//! - turn 身份:TS 侧只传稳定的 turnId(用户消息 ID),turn_seq 由
 //!   本模块在 INDEX_LOCK 下按会话单调分配——时钟回拨/重复 ID 都不会打乱
 //!   回退顺序。UI 展示时间用 firstCapturedAt,不再复用序号。
 //! - blob 是原始字节拷贝(不内嵌 JSON),索引是追加式 index.jsonl;
@@ -53,7 +53,7 @@ const MAX_RECORDS_PER_CONVERSATION: usize = 10_000;
 const RECORD_CAP_ERROR_RESERVE: usize = 64;
 
 /// TS 侧随 fs 变更命令附带的检查点上下文;缺省(None)表示该调用不捕获。
-/// turnId 是每轮唯一的稳定 ID(与时钟无关),序号由 Rust 侧分配。
+/// turnId 是用户消息的稳定 ID(与时钟无关),序号由 Rust 侧分配。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointCtx {
@@ -62,7 +62,7 @@ pub struct CheckpointCtx {
 }
 
 /// index.jsonl 里的一条记录(schema v2)。
-/// kind:"file" | "dir" | "error"(捕获失败标记) | "rewind"(回退审计标记)。
+/// kind:"turn" | "file" | "dir" | "error"(捕获失败标记) | "rewind"(回退审计标记)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointRecord {
@@ -150,7 +150,8 @@ fn sanitize_conversation_id(id: &str) -> Option<String> {
 }
 
 fn checkpoints_root() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
+    let home =
+        dirs::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
     Ok(home.join(".liveagent").join("checkpoints"))
 }
 
@@ -533,6 +534,53 @@ fn record_capture_skip(ctx: &CheckpointCtx, root: &Path, rel_path: &Path, reason
     );
 }
 
+fn begin_turn_at(dir: &Path, turn_id: &str) -> Result<(), String> {
+    let turn_id = turn_id.trim();
+    if turn_id.is_empty() {
+        return Err("checkpoint turnId is empty".to_string());
+    }
+    ensure_conversation_dirs(dir)?;
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let existing = read_index(dir);
+    if existing.iter().any(|record| record.turn_id == turn_id) {
+        return Ok(());
+    }
+    if existing.len() + RECORD_CAP_ERROR_RESERVE >= MAX_RECORDS_PER_CONVERSATION {
+        return Err(format!(
+            "checkpoint record cap reached ({MAX_RECORDS_PER_CONVERSATION})"
+        ));
+    }
+    let turn_seq = resolve_turn_seq(&existing, turn_id);
+    append_record(
+        dir,
+        &CheckpointRecord {
+            schema: 2,
+            turn_seq,
+            turn_id: turn_id.to_string(),
+            root: String::new(),
+            rel_path: String::new(),
+            kind: "turn".to_string(),
+            existed_before: false,
+            blob: None,
+            size: 0,
+            mtime_ms: 0,
+            captured_at: now_ms(),
+            note: None,
+            mode: None,
+        },
+    )
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn checkpoint_begin_turn(conversation_id: String, turn_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = conversation_dir(&conversation_id)?;
+        begin_turn_at(&dir, &turn_id)
+    })
+    .await
+    .map_err(|e| format!("checkpoint_begin_turn join failed: {e}"))?
+}
+
 /// fs 变更命令的捕获入口:尽力而为,失败追加 error 记录 + 日志,
 /// 绝不阻断文件写入本身。
 pub fn capture_pre_image(
@@ -590,9 +638,8 @@ fn live_records(records: Vec<CheckpointRecord>) -> Vec<CheckpointRecord> {
 
 /// 会话内可回退的轮列表,按 turn_seq 升序。error 记录不计入文件数,
 /// 但使该轮标记 incomplete;被回退作废的陈旧轮已由 live_records 剔除。
-fn checkpoint_list_sync(conversation_id: String) -> Result<Vec<CheckpointTurnSummary>, String> {
-    let dir = conversation_dir(&conversation_id)?;
-    let records = live_records(read_index(&dir));
+fn checkpoint_turn_summaries(records: Vec<CheckpointRecord>) -> Vec<CheckpointTurnSummary> {
+    let records = live_records(records);
     let mut turns: Vec<CheckpointTurnSummary> = Vec::new();
     for record in records {
         let summary = match turns.iter_mut().find(|t| t.turn_seq == record.turn_seq) {
@@ -612,15 +659,22 @@ fn checkpoint_list_sync(conversation_id: String) -> Result<Vec<CheckpointTurnSum
         match record.kind.as_str() {
             "dir" => summary.dir_count += 1,
             "error" => summary.incomplete = true,
-            _ => summary.file_count += 1,
+            "file" => summary.file_count += 1,
+            // "turn" 边界记录与未知类型都不计数,只把该轮钉进列表:
+            // 零文件轮也要成为合法回退点(回退=撤销该轮及之后的一切改动)。
+            _ => {}
         }
         if record.captured_at < summary.first_captured_at {
             summary.first_captured_at = record.captured_at;
         }
     }
-    turns.retain(|t| t.file_count > 0 || t.dir_count > 0 || t.incomplete);
     turns.sort_by_key(|t| t.turn_seq);
-    Ok(turns)
+    turns
+}
+
+fn checkpoint_list_sync(conversation_id: String) -> Result<Vec<CheckpointTurnSummary>, String> {
+    let dir = conversation_dir(&conversation_id)?;
+    Ok(checkpoint_turn_summaries(read_index(&dir)))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -677,6 +731,9 @@ fn earliest_records_since(dir: &Path, turn_seq: u64) -> (Vec<CheckpointRecord>, 
         }
         if record.kind == "error" {
             errors += 1;
+            continue;
+        }
+        if record.kind == "turn" {
             continue;
         }
         let key = record_key(&record.root, &record.rel_path);
@@ -1007,11 +1064,7 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
         .parent()
         .ok_or_else(|| "target has no parent".to_string())?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let tmp = parent.join(format!(
-        ".ckpt-tmp-{}-{}",
-        std::process::id(),
-        now_ms()
-    ));
+    let tmp = parent.join(format!(".ckpt-tmp-{}-{}", std::process::id(), now_ms()));
     fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     match fs::rename(&tmp, target) {
         Ok(()) => Ok(()),
@@ -1063,7 +1116,12 @@ fn checkpoint_rewind_code_sync(
     // 的改动一并当作"陈旧未来"埋掉,前像就再也找不回来了。锁守的是 `()`,
     // 中毒不代表数据不一致,直接取回内部值,不因此让回退失败。
     let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    Ok(rewind_and_mark_at(&dir, turn_seq, &authorized, Some(&expected)))
+    Ok(rewind_and_mark_at(
+        &dir,
+        turn_seq,
+        &authorized,
+        Some(&expected),
+    ))
 }
 
 /// 锁内的"回退 + 写审计/剪枝标记":目录可注入,便于单测覆盖完整/部分
@@ -1173,9 +1231,7 @@ fn rewind_at(
                 Err(e) => result.failed.push(format!("{display}: {e}")),
                 Ok(md) => {
                     if !md.is_file() {
-                        result
-                            .failed
-                            .push(format!("{display}: not a regular file"));
+                        result.failed.push(format!("{display}: not a regular file"));
                         continue;
                     }
                     if let Err(e) = reject_multi_hardlink(&md) {
@@ -1296,9 +1352,7 @@ fn classify_worktree_pre_image(abs: &Path) -> Result<PreImage<'static>, String> 
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PreImage::Missing),
         Err(e) => Err(format!("pre-image stat failed: {e}")),
         // 符号链接不做前像捕获,与 fs_delete 的语义保持一致。
-        Ok(md) if md.file_type().is_symlink() => {
-            Err("symlink pre-image not captured".to_string())
-        }
+        Ok(md) if md.file_type().is_symlink() => Err("symlink pre-image not captured".to_string()),
         Ok(md) if md.is_file() => Ok(PreImage::File(None)),
         Ok(md) if md.is_dir() => Ok(PreImage::Dir),
         Ok(_) => Err("unsupported file type; pre-image not captured".to_string()),
@@ -1393,8 +1447,14 @@ mod tests {
         fs::write(&file, "v1").unwrap();
 
         // 第 1 轮改写:先捕获前像再改。
-        let seq = capture_at(&ckpt, "turn-1", &root, &rel(&file, &root), PreImage::File(None))
-            .unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&file, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
         fs::write(&file, "v2").unwrap();
 
         // 回退到第 1 轮之前应恢复 v1。
@@ -1410,8 +1470,14 @@ mod tests {
         let ckpt = root.join("ckpt");
         let file = root.join("new.txt");
 
-        let seq =
-            capture_at(&ckpt, "turn-1", &root, &rel(&file, &root), PreImage::Missing).unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&file, &root),
+            PreImage::Missing,
+        )
+        .unwrap();
         fs::write(&file, "created").unwrap();
 
         let result = rewind_at(&ckpt, seq, &roots(&root), None);
@@ -1499,6 +1565,84 @@ mod tests {
     }
 
     #[test]
+    fn begin_turn_creates_stable_zero_file_boundary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("a.txt");
+
+        begin_turn_at(&ckpt, "turn-1").unwrap();
+        let records = read_index(&ckpt);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].kind, "turn");
+        assert_eq!(records[0].turn_seq, 1);
+
+        // 文件捕获发生在轮次开始标记之后时，仍必须绑定同一条用户消息。
+        fs::write(&file, "created").unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&file, &root),
+            PreImage::Missing,
+        )
+        .unwrap();
+        assert_eq!(seq, records[0].turn_seq);
+        let records = read_index(&ckpt);
+        assert!(records.iter().any(|record| record.kind == "turn"));
+        assert!(records
+            .iter()
+            .any(|record| record.kind == "file" && record.turn_seq == seq));
+    }
+
+    #[test]
+    fn rewind_from_zero_file_turn_rewinds_later_file_changes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+        let file = root.join("later.txt");
+
+        begin_turn_at(&ckpt, "turn-without-files").unwrap();
+        let later_seq = capture_at(
+            &ckpt,
+            "later-turn",
+            &root,
+            &rel(&file, &root),
+            PreImage::Missing,
+        )
+        .unwrap();
+        fs::write(&file, "created later").unwrap();
+
+        let result = rewind_at(&ckpt, 1, &roots(&root), None);
+        assert_eq!(later_seq, 2);
+        assert_eq!(result.deleted_files, 1);
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn turn_boundary_is_not_a_file_rewind_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let ckpt = root.join("ckpt");
+
+        begin_turn_at(&ckpt, "turn-only").unwrap();
+        let (records, errors) = earliest_records_since(&ckpt, 1);
+        assert!(records.is_empty());
+        assert_eq!(errors, 0);
+        let summaries = checkpoint_turn_summaries(read_index(&ckpt));
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].turn_id, "turn-only");
+        assert_eq!(summaries[0].file_count, 0);
+        assert_eq!(summaries[0].dir_count, 0);
+
+        let result = rewind_at(&ckpt, 1, &roots(&root), None);
+        assert_eq!(result.restored_files, 0);
+        assert_eq!(result.deleted_files, 0);
+        assert_eq!(result.clean_files, 0);
+        assert!(result.failed.is_empty());
+    }
+
+    #[test]
     fn rewind_marker_is_never_reused_as_a_turn_seq() {
         let tmp = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(tmp.path()).unwrap();
@@ -1522,8 +1666,14 @@ mod tests {
         let dir_path = root.join("subdir");
         fs::create_dir_all(&dir_path).unwrap();
 
-        let seq =
-            capture_at(&ckpt, "turn-1", &root, &rel(&dir_path, &root), PreImage::Dir).unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&dir_path, &root),
+            PreImage::Dir,
+        )
+        .unwrap();
         fs::remove_dir_all(&dir_path).unwrap();
 
         let result = rewind_at(&ckpt, seq, &roots(&root), None);
@@ -1540,8 +1690,14 @@ mod tests {
         fs::create_dir_all(nested.parent().unwrap()).unwrap();
         fs::write(&nested, "v1").unwrap();
 
-        let seq = capture_at(&ckpt, "turn-1", &root, &rel(&nested, &root), PreImage::File(None))
-            .unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&nested, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
         fs::remove_dir_all(root.join("x")).unwrap();
 
         let result = rewind_at(&ckpt, seq, &roots(&root), None);
@@ -1617,8 +1773,14 @@ mod tests {
         let file = sub.join("a.txt");
         fs::write(&file, "v1").unwrap();
 
-        let seq = capture_at(&ckpt, "turn-1", &root, &rel(&file, &root), PreImage::File(None))
-            .unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&file, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
         // 捕获后把父目录整个换成指向别处的符号链接。
         let elsewhere = root.join("elsewhere");
         fs::create_dir_all(&elsewhere).unwrap();
@@ -1775,10 +1937,26 @@ mod tests {
         fs::write(&a, "aaaa").unwrap();
         fs::write(&b, "bbbb").unwrap();
 
-        capture_at_with_limits(&ckpt, "t-1", &root, &rel(&a, &root), PreImage::File(None), 64, 6)
-            .unwrap();
-        capture_at_with_limits(&ckpt, "t-2", &root, &rel(&b, &root), PreImage::File(None), 64, 6)
-            .unwrap();
+        capture_at_with_limits(
+            &ckpt,
+            "t-1",
+            &root,
+            &rel(&a, &root),
+            PreImage::File(None),
+            64,
+            6,
+        )
+        .unwrap();
+        capture_at_with_limits(
+            &ckpt,
+            "t-2",
+            &root,
+            &rel(&b, &root),
+            PreImage::File(None),
+            64,
+            6,
+        )
+        .unwrap();
 
         let records = read_index(&ckpt);
         assert_eq!(records.len(), 2);
@@ -1903,12 +2081,29 @@ mod tests {
         fs::write(&dirty, "v1").unwrap();
         fs::write(&clean, "same").unwrap();
 
-        capture_at(&ckpt, "turn-1", &root, &rel(&dirty, &root), PreImage::File(None)).unwrap();
-        capture_at(&ckpt, "turn-1", &root, &rel(&clean, &root), PreImage::File(None)).unwrap();
+        capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&dirty, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
+        capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&clean, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
         fs::write(&dirty, "v2").unwrap();
 
         let (records, _) = earliest_records_since(&ckpt, 1);
-        let entries: Vec<_> = records.iter().map(|r| classify_entry(&ckpt, r, &roots(&root))).collect();
+        let entries: Vec<_> = records
+            .iter()
+            .map(|r| classify_entry(&ckpt, r, &roots(&root)))
+            .collect();
         let dirty_entry = entries
             .iter()
             .find(|e| e.path.ends_with("dirty.txt"))
@@ -2057,8 +2252,14 @@ mod tests {
         fs::write(&dirty, "v1").unwrap();
         fs::write(&untouched, "same").unwrap();
 
-        let seq =
-            capture_at(&ckpt, "turn-1", &root, &rel(&dirty, &root), PreImage::File(None)).unwrap();
+        let seq = capture_at(
+            &ckpt,
+            "turn-1",
+            &root,
+            &rel(&dirty, &root),
+            PreImage::File(None),
+        )
+        .unwrap();
         capture_at(
             &ckpt,
             "turn-1",

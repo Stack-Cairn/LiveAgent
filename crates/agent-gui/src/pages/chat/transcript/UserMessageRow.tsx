@@ -89,6 +89,7 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
         text={item.text}
         timestamp={item.timestamp}
         hasStableRef={!!effectiveMessageRef}
+        messageId={effectiveMessageRef?.messageId}
         onStartEdit={onStartEdit}
       />
     </div>

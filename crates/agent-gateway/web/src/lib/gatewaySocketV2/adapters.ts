@@ -39,6 +39,8 @@ import {
   ChatRuntimeControlsSchema,
   ChatSelectedModelSchema,
   ChatUploadedFileSchema,
+  CheckpointExpectedEntrySchema,
+  CheckpointRequestSchema,
   CronManageRequestSchema,
   FileMentionListRequestSchema,
   FsCreateDirRequestSchema,
@@ -814,6 +816,29 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           openInFileManager: bool(body.open_in_file_manager),
         }),
       };
+    case "checkpoint.list":
+    case "checkpoint.diff":
+    case "checkpoint.rewind": {
+      const expected = Array.isArray(body.expected) ? body.expected : [];
+      return {
+        case: "checkpoint",
+        value: create(CheckpointRequestSchema, {
+          action: type.slice("checkpoint.".length),
+          conversationId: trimStr(body.conversation_id),
+          turnSeq: toI64(body.turn_seq),
+          authorizedRoots: Array.isArray(body.authorized_roots)
+            ? body.authorized_roots.filter((root): root is string => typeof root === "string")
+            : [],
+          expected: expected.map((entry) => {
+            const value = rec(entry);
+            return create(CheckpointExpectedEntrySchema, {
+              key: trimStr(value.key),
+              currentHash: trimStr(value.current_hash),
+            });
+          }),
+        }),
+      };
+    }
     default:
       throw new Error(`unsupported gateway request type: ${type}`);
   }
@@ -1190,6 +1215,8 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           updatedAt: num(grant.updatedAt),
         })),
       };
+    case "checkpointResp":
+      return unmarshalJsonPayload(payload.value.resultJson);
     case "fsListDirsResp":
       return {
         path: payload.value.path.trim(),

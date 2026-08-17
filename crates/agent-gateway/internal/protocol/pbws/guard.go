@@ -70,6 +70,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		return vetChatFileOpen(payload.ChatFileOpen)
 	case *gatewayv2.GatewayEnvelope_WorkspaceRootGrants:
 		return vetWorkspaceRootGrants(payload.WorkspaceRootGrants)
+	case *gatewayv2.GatewayEnvelope_Checkpoint:
+		return vetCheckpoint(payload.Checkpoint)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -109,6 +111,45 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		// （走 HTTP 上传）、history_share_resolve（公共分享端点专用）及网关内部推送臂。
 		return errors.New("unsupported agent_request payload")
 	}
+}
+
+func vetCheckpoint(req *gatewayv2.CheckpointRequest) error {
+	if req == nil || strings.TrimSpace(req.GetConversationId()) == "" || len(req.GetConversationId()) > 256 {
+		return errors.New("checkpoint conversation_id is invalid")
+	}
+	switch strings.TrimSpace(req.GetAction()) {
+	case "list":
+		if req.GetTurnSeq() != 0 || len(req.GetAuthorizedRoots()) != 0 || len(req.GetExpected()) != 0 {
+			return errors.New("checkpoint list payload is invalid")
+		}
+	case "diff":
+		if req.GetTurnSeq() == 0 || len(req.GetExpected()) != 0 {
+			return errors.New("checkpoint diff payload is invalid")
+		}
+	case "rewind":
+		if req.GetTurnSeq() == 0 {
+			return errors.New("checkpoint rewind turn_seq is required")
+		}
+	default:
+		return errors.New("checkpoint action is invalid")
+	}
+	if len(req.GetAuthorizedRoots()) > 64 {
+		return errors.New("too many checkpoint authorized roots")
+	}
+	for _, root := range req.GetAuthorizedRoots() {
+		if strings.TrimSpace(root) == "" || len(root) > 32768 {
+			return errors.New("checkpoint authorized root is invalid")
+		}
+	}
+	if len(req.GetExpected()) > 10_000 {
+		return errors.New("too many checkpoint expected entries")
+	}
+	for _, entry := range req.GetExpected() {
+		if entry == nil || strings.TrimSpace(entry.GetKey()) == "" || len(entry.GetKey()) > 65536 || len(entry.GetCurrentHash()) > 256 {
+			return errors.New("checkpoint expected entry is invalid")
+		}
+	}
+	return nil
 }
 
 func vetWorkspaceRootGrants(req *gatewayv2.WorkspaceRootGrantsRequest) error {

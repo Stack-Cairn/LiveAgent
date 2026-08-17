@@ -86,6 +86,7 @@ macro_rules! app_invoke_handler {
             commands::fs::fs_grep,
             commands::fs::fs_mention_list,
             // 会话检查点(rewind)
+            commands::checkpoint::checkpoint_begin_turn,
             commands::checkpoint::checkpoint_list,
             commands::checkpoint::checkpoint_diff_stats,
             commands::checkpoint::checkpoint_rewind_code,

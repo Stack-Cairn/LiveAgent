@@ -240,6 +240,76 @@ test("workspace root grants round-trip through the agent-scoped gateway protocol
   );
 });
 
+test("checkpoint requests and responses round-trip through the agent-scoped gateway protocol", () => {
+  const common = {
+    conversation_id: "conversation-1",
+    turn_seq: 7,
+    authorized_roots: ["C:/work/project", "C:/work/shared"],
+  };
+  for (const [type, expectedCount] of [
+    ["checkpoint.list", 0],
+    ["checkpoint.diff", 0],
+    ["checkpoint.rewind", 1],
+  ]) {
+    const encoded = encodeRequestFrame(
+      `checkpoint-${type}`,
+      type,
+      {
+        ...common,
+        expected:
+          expectedCount > 0
+            ? [{ key: "C:/work/project\u0001src/a.ts", current_hash: "hash-at-preview" }]
+            : undefined,
+      },
+      "agent-1",
+    );
+    const frame = decodeClientFrame(encoded);
+    assert.equal(frame.agentId, "agent-1");
+    assert.equal(frame.payload.value.payload.case, "checkpoint");
+    assert.equal(frame.payload.value.payload.value.action, type.slice("checkpoint.".length));
+    assert.equal(frame.payload.value.payload.value.conversationId, common.conversation_id);
+    assert.equal(Number(frame.payload.value.payload.value.turnSeq), common.turn_seq);
+    assert.deepEqual(frame.payload.value.payload.value.authorizedRoots, common.authorized_roots);
+    assert.equal(frame.payload.value.payload.value.expected.length, expectedCount);
+  }
+
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "checkpoint-list",
+        agent_id: "agent-1",
+        agent_response: {
+          checkpoint_resp: {
+            action: "list",
+            result_json: JSON.stringify([
+              {
+                turnSeq: 7,
+                turnId: "message-7",
+                fileCount: 1,
+                dirCount: 0,
+                incomplete: false,
+                firstCapturedAt: 1700000000000,
+              },
+            ]),
+          },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload, [
+    {
+      turnSeq: 7,
+      turnId: "message-7",
+      fileCount: 1,
+      dirCount: 0,
+      incomplete: false,
+      firstCapturedAt: 1700000000000,
+    },
+  ]);
+});
+
 test("adapters convert int64/uint64 fields to Number at realistic maxima", () => {
   // 毫秒时间戳（2100 年）与 MAX_SAFE_INTEGER 边界都必须无损转换。
   const year2100Ms = 4102444800000;

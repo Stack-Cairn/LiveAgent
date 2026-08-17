@@ -5,8 +5,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "app.errorBoundaryTitle": "页面出现异常",
   "app.loading": "正在加载设置...",
   "app.name": "LiveAgent",
-  "app.settingsSshSettingsChanged":
-    "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。",
+  "app.settingsSshSettingsChanged": "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。",
   "common.currentUser": "当前用户",
   "common.dismissNotification": "关闭通知",
   "common.logout": "退出登录",
@@ -296,6 +295,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.composer.noMatchingEnabledSkills": "未找到匹配的已启用 Skills",
   "chat.copy": "复制",
   "chat.edit": "编辑",
+  "chat.rewindCode": "回退本轮代码改动",
+  "chat.rewindUnavailable": "本轮没有可用的代码检查点",
   "chat.retry": "重试",
   "chat.retryConfirmTitle": "重试该回复？",
   "chat.retryConfirmDescription": "将以原始提问重新发送，该回复及之后的对话内容将被删除。",
