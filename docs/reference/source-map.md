@@ -36,7 +36,7 @@
 | Gateway bridge hooks | `crates/agent-gui/src/pages/chat/gateway/useGatewayBridgeListeners.ts`、`useGatewayBridgeReadiness.ts` |
 | Context builders | `crates/agent-gui/src/pages/chat/runtime/conversationContextBuilders.ts` |
 | GUI Settings 扩展 | `crates/agent-gui/src/pages/settings/*` |
-| 备份与同步设置分区 | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx` |
+| 备份与同步设置分区 | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx`、`backupSyncForm.ts` |
 | 共享 UI 适配器 | `crates/agent-gui/src/agent-ui-adapters/*` |
 | i18n | `crates/agent-gui/src/i18n/*` |
 

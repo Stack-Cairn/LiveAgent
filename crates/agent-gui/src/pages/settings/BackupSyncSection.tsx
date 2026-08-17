@@ -149,15 +149,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     void listen<BackupSyncStatusEvent>(BACKUP_SYNC_STATUS_EVENT, (event) => {
-      const { lastSyncAt, lastError } = event.payload;
-      if (lastError) {
-        // 后端已把它落库，这里同步更新视图让常驻横幅立刻反映最新状态 ——
-        // 不然要等下次重新进入设置页才看得到。
-        setSyncView((prev) => (prev ? { ...prev, lastError } : prev));
-        return;
-      }
-      if (lastSyncAt !== null) {
-        setSyncView((prev) => (prev ? { ...prev, lastSyncAt, lastError: null } : prev));
+      setSyncView((prev) => applySyncStatusEvent(prev, event.payload));
+      if (isAutoSyncSuccess(event.payload)) {
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncAutoDone") });
       }
     }).then((fn) => {
@@ -231,7 +224,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       setPreset(detectPreset(view.url));
 
       // 凭据不全时没什么可测的，直接报保存成功即可。
-      if (!view.url || !view.username || !view.hasPassword) {
+      if (!canTestSyncConnection(view)) {
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveDone") });
         return;
       }
