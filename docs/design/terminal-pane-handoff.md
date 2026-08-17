@@ -28,15 +28,15 @@
 2. **Right Dock 懒挂载**:非活跃终端 tab 不再挂 `XTermViewport`(原为全挂 + CSS hidden),attach 流随卸载释放,切回走 offset 快照重建。
 3. **resize 两级节流**:divider 拖动中视觉 fit 80ms 节流跟手,PTY resize 独立 100ms 尾沿去抖,拖动结束保证最终尺寸提交。
 4. **流事件分桶**:新增 `agent-ui/src/lib/terminal/streamHandleRegistry.ts`,output 事件按 sessionId Map 分桶 O(1) 派发(原 O(N) 遍历)。
-5. **重启占位恢复(语义变化)**:死终端 Pane 从"恢复时丢弃"改为**保留为已退出占位**,点"重新启动"按 launchSpec 重建。区分机制:窗口级 auto-launch 授权集(`terminalPaneRuntime.ts` 的 `createTerminalPaneAutoLaunchRegistry`)——本会话内显式创建的 surfaceId 才自动 ensure,恢复的进入 dormant 占位;`filterLayoutToLiveSurfaces` 不再删终端 Pane,`attemptRestore` 的 `liveTerminalSurfaceIds` 参数已移除。
+5. **重启自动恢复(语义变化)**:终端 Pane 不再在恢复时丢弃或等待手动重启。布局恢复后,有存活绑定的 WebView reload 直接重挂;完整应用重启则清理陈旧绑定,按持久化 launchSpec 自动新建 PTY/SSH。旧进程与其内存输出无法跨进程复活,但 Pane 位置、cwd、shell/SSH 目标和交互入口会恢复。
 6. **SSH 延迟显示**:`SshTerminalPaneSurface` 状态行显示 ms(<100 绿 / <300 黄 / 其余红),`TerminalPaneHost` 仅聚焦+running 时 15s 轮询 `sshLatency`,失败静默置 null。
 7. **租约竞态测试**:`terminal-pane-lease-transfer.test.mjs` 7 例覆盖拖入链路、陈旧 release 令牌重放、detach 后再拖入、冲突 acquire。
-8. **按 kind 最小尺寸预检**:内核 `surfaceMinSize()`(终端 220×140,按 20 cols×6 rows 折算;conversation 320×220 不变),接入 reducer OPEN/MOVE 预检、drop 四类 target 预检、DividerLayer 双侧子树 clamp(递归求和,超小窗口退化为对称 clamp 不崩溃)。注:`useWindowWorkbench.resizeSplit` 未传 context,内核 RESIZE clamp 能力就绪,交互层 clamp 由 DividerLayer 承担;日后补传 context 一行即启用。
+8. **按 kind 最小尺寸预检**:内核 `surfaceMinSize()`(终端 220×140,按 20 cols×6 rows 折算;conversation 320×220 不变),接入 reducer OPEN/MOVE 预检、drop 四类 target 预检、DividerLayer 双侧子树 clamp(递归求和,超小窗口退化为对称 clamp 不崩溃)。注:内核 RESIZE clamp 已随 T-7 生效——`useWindowWorkbench.dispatch` 统一注入几何 context,`resizeSplit` 一并覆盖(`workbench-command-context.test.mjs` 有 resize clamp 用例)。
 9. **极窄 Pane 自动 compact**:阈值 360px,`PaneSurfaceLayer` 渲染期由 rect 派生 `isCompact`(不写回 layout state,零 revision 开销),`view.compactChrome` 语义变为"强制紧凑"覆盖位;紧凑时 PaneChrome 收窄、SSH 状态行隐藏端点标签。
 
 ### 刻意保留的设计边界(不要"修复")
 
-1. `session-missing` 不自动重建——绑定指向已消失会话时进错误态,用户手动重试才按 launchSpec 新建(避免静默新建 PTY)。
+1. 陈旧 session 绑定自动清理并按 launchSpec 重建;创建失败或 SSH 需要交互输入时仍进入可重试错误态。
 2. SFTP tab 留在 overlay、不参与互斥(独立通道,不争夺输出流)。
 3. 绑定只走 sessionStorage,不落 SQLite。
 4. 拖出手势仅鼠标/笔主键,触控保留原滚动/点击。
@@ -47,7 +47,7 @@
 
 ## 请你继续
 
-1. **编译/构建问题**:前端 `tsc`/`test:gui`/`build:gui` 已由 shell 会话验证通过,但 **`cargo check` / 完整 tauri build 未跑**;跑通后以 `VITE_LIVEAGENT_SESSION_WORKBENCH=1` 实机验证一轮(dock 拖出 → 移动 Pane 确认输出不闪 → divider 压到终端最小宽度 → 关闭回 dock → 应用重启确认占位恢复+重新启动 → SSH 拖入/重连/延迟显示/互斥)。
+1. **编译/构建问题**:前端 `tsc`/`test:gui`/`build:gui` 已由 shell 会话验证通过,但 **`cargo check` / 完整 tauri build 未跑**;跑通后以 `VITE_LIVEAGENT_SESSION_WORKBENCH=1` 实机验证一轮(dock 拖出 → 移动 Pane 确认输出不闪 → divider 压到终端最小宽度 → 关闭回 dock → 应用重启确认布局与终端自动重建 → SSH 拖入/重连/延迟显示/互斥)。
 2. **后续详细设计**:设计文档 Phase 5+ 剩余项——三平台硬化矩阵、`useWindowWorkbench.resizeSplit` 补传 context 启用内核 RESIZE clamp、SSH Pane 内 SFTP(如需)、以及你原有的待完善内容。
 3. 改动未提交,commit 边界建议:内核泛化 / store+组件 / 集成收尾 / 性能与健壮性优化,四个 commit 很干净。
 

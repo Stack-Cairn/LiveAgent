@@ -309,12 +309,12 @@ crates/agent-gui/src/pages/chat/conversations/
 #### 工作项
 
 - [x] 将 `ConversationRuntimeEntry` 扩展或拆分为可订阅 Store（`createConversationRuntimeRegistry.ts` per-id 精确通知 + `useSyncExternalStore`）。
-- [ ] 将 Hydration、分页和错误状态按 ID 分桶（分页/错误已分桶；Hydration 仍为页面级单槽位，见 `session-workbench-remaining-work.md` R-3）。
+- [x] 将 Hydration、分页和错误状态按 ID 分桶（分页/错误已分桶；Hydration 已分桶：`ConversationHydrationStore` 挂 registry.hydration，Controller 快照暴露 `lifecycle.hydrating|hydrationFailed`，见 remaining-work R-3 落地记录）。
 - [x] 保留并接入现有 Live Transcript per-conversation Store（两条渲染路径均按 id 取）。
-- [ ] 将 Composer Draft 从“单 Ref + 切换时缓存”改为 Controller 持有 Draft，Composer 实例只编辑所属 Draft（稳定期重构，见 remaining-work R-2）。
-- [ ] 将 Pending Upload、Queue、Approval、Compaction、Model、Runtime Controls 暴露为 Controller Slice（部分已是 Slice；Runtime Controls 未拆，见 remaining-work R-2）。
-- [ ] 将 Send/Stop/Retry/Compact API 改为显式接收 `conversationId`，不得依赖全局 current ref（当前以 focusGuard 先聚焦再执行近似，见 remaining-work R-2）。
-- [ ] 删除或限制 `syncVisibleConversationRuntime` 的唯一槽位职责（稳定期重构，见 remaining-work R-2）。
+- [ ] 将 Composer Draft 从“单 Ref + 切换时缓存”改为 Controller 持有 Draft，Composer 实例只编辑所属 Draft（草稿数据已在 `conversationDraftStore` 分桶且 Controller 有 `setDraft/clearDraft`；仅编辑器 DOM 实例仍单例，牵涉 IME/焦点，保留，见 remaining-work R-2 裁决）。
+- [ ] 将 Pending Upload、Queue、Approval、Compaction、Model、Runtime Controls 暴露为 Controller Slice（Model 已收敛为 registry-owned + 快照 slice；Runtime Controls 仍全局派生，见 remaining-work R-2）。
+- [x] 将 Send/Stop/Retry/Compact API 改为显式接收 `conversationId`，不得依赖全局 current ref（`conversationControllerActions` 全部显式 id 路由，send 管线优先 `conversationIdOverride`；防回潮断言见 `runtime-slot-convergence.test.mjs`）。
+- [x] 删除或限制 `syncVisibleConversationRuntime` 的唯一槽位职责（已收窄：sessionId/createdAt/selectedModel 三镜像删除、改经 `useConversationRuntimeEntrySnapshot` 从 registry 派生；仅余 5 个瞬态字段镜像，保留理由见 remaining-work R-2）。
 - [x] 保留运行会话在 Pane 关闭后的后台生命周期（关闭仅 closePane + 转焦点，不 abort；LRU 保护有测试）。
 
 #### 验收
@@ -549,7 +549,7 @@ type FocusedSurfaceContext = {
 
 - [x] 本机保存窗口级 Layout：SQLite `workbench_layout` 表（`scope_id='main-window'`，250ms 防抖，Payload 上限 96 KiB，不参与 Gateway Settings Sync），自动迁移早期 localStorage Payload；非 Tauri 开发环境回退 localStorage。跨会话 revision 保持单调递增。
 - [x] 恢复时先经 Codec 校验/修复 Tree/Pane/ProjectRef，再对照未过滤会话表丢弃已不存在的 Conversation，然后才挂载 Surface。
-- [x] 无 Runtime 状态的恢复 Pane 显示 stale 占位（标题 + “加载会话”按钮），聚焦后经正常管线 Hydrate；可直接关闭。
+- [x] 无 Runtime 状态的恢复 Pane 按 conversationId 后台自动 Hydrate,不抢占全局焦点;加载失败保留标题与重试入口,成功后直接渲染原对话。
 - [x] 损坏 JSON 保存 `.corrupted` 诊断副本后回退到单 Root Conversation。
 - [x] Native File Drop 按坐标命中路由到任意 Pane：文件悬停在某 Pane 上时该 Pane 自动聚焦（其会话成为投放目标），Drop Overlay 与附件都落在悬停 Pane 的 `conversationId`。
 - [x] 文件 Drop 只准备附件，不自动发送（沿用既有行为）。
@@ -565,7 +565,7 @@ type FocusedSurfaceContext = {
 - [ ] 完成 macOS Retina、Windows 混合 DPI、Linux X11/Wayland 实机验证（未做，需实机矩阵）。
 - [ ] 验证 IME、Keyboard、Reduced Motion、Forced Colors 和屏幕阅读器标签（Divider/Pane 已带 ARIA 与 IME 组合键守卫，完整验证未做）。
 - [ ] 监测双流式 Conversation 的渲染频率、内存和 Long Task（未做）。
-- [ ] 稳定后删除 `ChatPage` 中已被 Controller 取代的 current-visible 镜像状态（未做，属稳定期清理）。
+- [ ] 稳定后删除 `ChatPage` 中已被 Controller 取代的 current-visible 镜像状态（部分完成：sessionId/createdAt/selectedModel 三镜像已删、registry 派生；余 5 个瞬态镜像的保留理由见 remaining-work R-2）。
 
 ## 6. 推荐 PR 拆分
 
@@ -586,7 +586,7 @@ type FocusedSurfaceContext = {
 
 ### 7.1 Controller 隔离
 
-- [ ] A/B 同时 Hydrate（受 Hydration 单槽位约束，见 remaining-work R-3）。
+- [x] A/B 同时 Hydrate（`hydration-bucketing.test.mjs` 9 例：并发互不覆盖、失败按 ID 隔离、重试只清本会话）。
 - [x] A/B 同时 Streaming（交错时序隔离测试）。
 - [x] A Sending 时 B 发送或编辑 Draft。
 - [x] A/B 独立 Queue、Approval、Upload、Model、Compaction（`session-workbench-contracts.test.mjs`）。
@@ -604,18 +604,18 @@ type FocusedSurfaceContext = {
 
 ### 7.3 组件与交互
 
-- [ ] 单 Pane 视觉回归（无 DOM 测试基建，见 remaining-work R-1）。
+- [ ] 单 Pane 视觉回归（DOM 测试基建已就绪 `test/helpers/dom-test-env.mjs`，视觉级回归仍未做）。
 - [x] 历史会话拖到四个方向（模型层）。
 - [x] 已打开会话移动而不复制。
 - [x] Pointer Threshold、Esc、Cancel、Window Blur（拖拽状态机纯函数化 + `workbench-drag-session.test.mjs`）。
 - [x] Divider Resize 与最小尺寸。
-- [ ] Pane 移动不重挂 DOM（仅源码断言保护，DOM 级验证见 remaining-work R-1）。
+- [x] Pane 移动不重挂 DOM（DOM 级验证 `workbench-pane-dom-stability.test.mjs`：jsdom + 真实 react-dom 渲染 PaneSurfaceLayer，MOVE/RESIZE 后 `Object.is` 比对节点实例、CLOSE 只移除被关 Pane；源码断言保留为第二道防线）。
 - [x] App Chrome 和 Right Dock 不被 Drop Target 覆盖（hit-test 限于画布坐标系）。
 
 ### 7.4 跨项目与 Right Dock
 
 - [x] 两个不同 ProjectRef 的 Conversation 并列（codec round-trip 层）。
-- [ ] Focus A/B 时 File、Git、Connection、Task 上下文正确（见 remaining-work §四）。
+- [x] Focus A/B 时 File、Git、Connection、Task 上下文正确（「focusedPane → activeProject → dock 数据源」解析已抽成纯函数 `resolveWorkbenchPaneProject` 并做模型测试 `workbench-pane-project-context.test.mjs` 7 例：archived/missing 不激活、陈旧 key 不回退、规范化 key 匹配；实机矩阵验证仍在 §三）。
 - [x] Dock 操作不改变 focusedPaneId（`workbench-dock-focus.test.mjs` 11 例：源码断言 dock 组件零布局命令 + reducer 模型断言 RESIZE/EQUALIZE/失败命令不改焦点；「聚焦工作台面板」为白名单显式跳转）。
 - [ ] Missing/Archived/Permission Changed 项目进入 blocked（archived/missing 已实现并有断言；Permission Changed 数据层无信号，需后端先提供一等状态并推送事件，调研证据见 remaining-work §〇）。
 

@@ -1,13 +1,13 @@
 # Session Workbench 剩余工作记录
 
-> 更新日期:2026-08-17(三轮实现后)。T-1~T-7 与文档更新已全部完成;剩余项见 §二/§三。
+> 更新日期:2026-08-17(四轮实现后)。T-1~T-7、§四测试补齐与文档更新已全部完成;剩余项仅 §二(单独立项重构)与 §三(实机矩阵)。
 
 ## 〇、T 项最终状态(全部完成)
 
 | 项 | 状态 | 落地方式 |
 |---|---|---|
 | T-1 cwd 范围校验 | ✅ | Rust `canonicalize_workdir_within`(registry.create / create_ssh 双路径强制,删除 cwd 反推)+ 前端 `projectScope.ts` 词法护栏(drop / restore / invariants 三道);cargo 测试 9 例 + 前端 6 例 |
-| T-2 stale 恢复 | ✅ | dormant 占位 + auto-launch 授权集(终端线完成);TerminalPaneHost 纯逻辑测试 15 例已补(`terminal-pane-host-logic.test.mjs`) |
+| T-2 stale 恢复 | ✅ | 保留 Pane + stale binding 自动清理 + launchSpec 自动重建;TerminalPaneHost 纯逻辑测试覆盖恢复、去重与 kill 防自启 |
 | T-3 newTerminal 拖入 | ✅ | 拖柄接到 RightDockLauncher 终端 tile(真实渲染路径),RightDockContent 不可达死代码已删 |
 | T-4 关闭语义 | ✅ | Detach-first 裁决写回架构文档(§15/§17/§28 + §16/§27 两处附带);SSH 专属"断开连接"两态文案 |
 | T-5 Right Dock 互斥 | ✅ | 本地会话改"保留+leased 标记"(视口层互斥,与 SSH overlay 同构);SSH hook 层对称;tab 右键/键盘菜单「在工作台打开/聚焦工作台面板」 |
@@ -67,13 +67,13 @@ ChatPage 的 `blockedMessage` 目前只有前两个来源。调研后的结论�
   改成项目内路径,校验现在对两种终端 surface 一致生效(`surfaceIsLive` 与 invariants 的
   `terminal-cwd-outside-project` 一并覆盖)。
 
-### T-2 · 终端 stale 恢复语义(实现与设计相反)🔴
+### T-2 · 终端 stale 恢复语义(历史缺口,现已修复)✅
 - **缺口**:binding 存活 → 自动 ensure 建 PTY(设计要求不自动启动);binding 失效 →
   静默删除 pane 并塌缩 split(设计要求 stale 占位)。binding 存 sessionStorage,
   **应用重启必然清空 → 重启后所有终端 pane 无声消失**。
-- **方案**:`surfaceIsLive` 对 terminal 改为保留 pane 标记 `stale`;
-  `LocalTerminalPaneSurface` 加 stale 分支(launchSpec 摘要 + "启动终端"按钮,
-  复用已有 `restartFromLaunchSpec`);auto-ensure 收紧为仅拖入新建时。
+- **最终实现**:`surfaceIsLive` 保留 terminal Pane;WebView reload 优先重挂现存绑定,
+  完整应用重启或 stale binding 则自动清理旧 sessionId,再由 `TerminalPaneHost`
+  按 launchSpec 创建新会话。显式 kill 会临时撤销启动资格并立即关闭 Pane,避免自启竞态。
 
 ### T-3 · `newTerminal` / SSH 拖拽入口缺失
 - 类型、提交分支、terminalDropCommit、测试全部就绪,但全仓无
@@ -114,24 +114,61 @@ ChatPage 的 `blockedMessage` 目前只有前两个来源。调研后的结论�
 
 ## 二、单独立项(改动面大,不与其他项混做)
 
-### R-1 · DOM 级「Pane 移动不重挂」测试(需引入 jsdom 基建)
-- `crates/agent-gui/test/` 无任何 DOM 测试基建;当前仅靠源码正则保护此核心验收项。
-- **方案**:引入 jsdom + react-dom 测试渲染,MOVE_PANE 后 `Object.is` 比对 DOM 节点实例。
-  属测试基建立项,单独 PR。
+### R-1 · DOM 级「Pane 移动不重挂」测试 ✅(2026-08-17 第四轮)
+- 已落地:jsdom 基建 `test/helpers/dom-test-env.mjs`(jsdom 全局 + 真实 react/react-dom
+  覆盖 loader 的 jsx-runtime mock,`Object.defineProperty` 安装以兼容 Node 22 getter-only
+  globals;node:test 每文件独立进程,不影响既有 2128 例的纯对象 mock)。
+- 测试 `test/chat/workbench-pane-dom-stability.test.mjs` 3 例:真实渲染 PaneSurfaceLayer,
+  MOVE_PANE / RESIZE_SPLIT 后 `Object.is` 比对内容与 frame 节点实例不变(且断言 rect 确实
+  更新,排除假阳性),CLOSE_PANE 只移除被关 Pane。jsdom 为 devDependency。
 
-### R-2 · `syncVisibleConversationRuntime` 单槽位收敛(稳定期重构)
-- 页面级 8 个 state 的唯一可见槽位写入器仍在(`useChatPageRuntimeStore.ts`),是
-  「聚焦 Pane = 页面当前会话」近似架构的根因,连带 Composer 单 Ref(L313)、
-  Runtime Controls 非 slice(L314)、focusGuard(L315)三项。
-- **方案**:Hydration 分桶(见 R-3)完成后,将 8 个镜像 state 逐一改为按 conversationId
-  订阅 Controller slice,最后删除镜像。改动面大、回归风险高,单独 PR。
+### R-2 · `syncVisibleConversationRuntime` 单槽位收敛(分层交付,2026-08-18 第六轮)
 
-### R-3 · Hydration 全局单槽位分桶
-- `hydratingConversationId` / `hydrationFailedConversationId` 是页面级 `string | null`,
-  两 Pane 同时 hydrate 会互相覆盖。
-- **方案**:改 `Map<string, HydrationState>` 入 runtime entry,Controller 快照暴露
-  `lifecycle.hydrating|hydrationFailed`。是 R-2 的前置。
-- **注**:本项虽不在终端文件里,但与 R-2 同属 runtime registry 重构簇,一并推迟。
+**已完成(本轮)**:
+- **会话身份 + 模型选择收敛** ✅:`currentConversationSessionId` / `currentConversationCreatedAt` /
+  `currentConversationSelectedModel` 三个页面级镜像 state 已删除。registry entry 是唯一事实
+  来源,页面值经新增的 `useConversationRuntimeEntrySnapshot`(useSyncExternalStore 按
+  conversationId 订阅 registry)派生。`syncVisibleConversationRuntime` 从同步 8 个 state 收窄
+  到 5 个(state/compaction/isSending/errorMessage/hookWarning);
+  `buildRuntimeEntryFromVisibleState` 与镜像→cache 写回 effect 改为从 cache 保留
+  registry-owned 字段(identity/workdir/selectedModel),registry-first 更新不再被写回覆盖。
+- **Send/Stop/Compact/Retry 显式 conversationId** ✅(核实为既有事实并加防回潮测试):
+  `conversationControllerActions` 全部按显式 id 路由(send 走 `conversationIdOverride`,stop 走
+  `stopConversationActionRef(conversationId)`,compact 走 `manualCompactActionRef({conversationId})`),
+  send 管线 `overrideConversationId || currentConversationIdRef.current` 优先显式值。
+- 测试:`runtime-slot-convergence.test.mjs` 5 例(registry-first 模型更新保身份且只触发 5 个
+  瞬态 setter、后台会话更新零可见 state 写入、stop 按 id 隔离不误伤他会话、三镜像不回潮源码
+  断言、action 显式 id 路由断言);`chat-stop-timing.test.mjs` 同步收窄参数。
+
+**保留(理由与剩余步骤)**:
+- 5 个瞬态镜像(conversationState/compactionStatus/isSending/errorMessage/hookWarning):
+  它们是聚焦 Pane 完整管线(transcript 渲染、toast、发送闸门)的直接输入,消费面横跨
+  useSendChatTurn/useManualCompaction/useChatTurnQueue/useNotifyToasts 等十余处;收敛需先把
+  这些 hook 的读路径全部改为按 id 订阅 Controller slice,属独立大改造。当前语义安全:写入
+  经 `updateConversationRuntimeEntry` 分桶,仅当前会话回镜像,后台会话零可见写入(有测试)。
+- Composer 单 Ref(§314):牵涉 IME 组合、焦点返还与 DOM 生命周期,且草稿数据已在
+  `conversationDraftStore` 分桶(Controller `setDraft/clearDraft`),仅编辑器 DOM 实例是单例;
+  双 Pane 下非聚焦 Pane 经 focusGuard 先聚焦再输入,无数据丢失路径。保留。
+- focusGuard(§316 的 UI 侧):对 Send/Model/RuntimeControls 等聚焦 Pane 语义的入口仍保留
+  ——它们读取的瞬态镜像仍是单槽位,先聚焦再执行是正确语义;数据层 API 已全部显式 id 化。
+
+### R-3 · Hydration 全局单槽位分桶 ✅(2026-08-17 第五轮)
+- 已落地:`conversationHydrationStore.ts`(`ConversationHydrationStore`,按 conversationId 分桶
+  的 `hydrating | failed` 相位,同一会话两相位互斥,与 draft store 同款订阅模型),挂进
+  `ConversationRuntimeRegistry.hydration`(registry.delete/clear 一并回收桶)。
+- 生产者改造:`useConversationHistoryActions.openInitial` 走 `markHydrating/clearHydrating/
+  markFailed`(重试自动清本会话 fail 标记);`useGatewayBridgeReadiness` 按 id 清两相位;
+  `useSendChatTurn` 发送闸门改 `hydration.isHydrating/isFailed(conversationId)`;
+  `cancelConversationLoad` 改 `clearAllHydrating()`(序列失效只清 hydrating,fail 标记
+  按 id 保留待重试清除)。
+- 页面级派生:`useConversationHydrationPhase`(useSyncExternalStore)只读当前会话相位,
+  `isConversationHydrating/Failed` 语义不变;`useMirroredNullableState` 已无消费者,删除。
+- Controller 快照新增 `lifecycle: { hydrating, hydrationFailed }` slice(常量对象引用,
+  refresh 按引用比较零开销),controller 订阅 hydration 桶。
+- 测试 `hydration-bucketing.test.mjs` 9 例:A/B 并发互不覆盖、失败按 ID 隔离、重试只清
+  本会话、clearAllHydrating 保留 fail、按会话通知、registry 回收、controller lifecycle
+  slice、ChatPage 单槽位不回潮。
+- R-2(8 个镜像 state / focusGuard / syncVisibleConversationRuntime 收敛)保持原状,未动。
 
 ## 三、无法本地完成(记录)
 
@@ -140,10 +177,21 @@ ChatPage 的 `blockedMessage` 目前只有前两个来源。调研后的结论�
 - VoiceOver/NVDA/Narrator + CJK IME 人工实测(ARIA 与 IME 守卫已就位)。
 - 双流式会话渲染频率 / 内存 / Long Task profiler 实测(架构文档 §24 性能预算)。
 
-## 四、后续测试补齐(部分本轮已做,见任务文档勾选)
+## 四、后续测试补齐(§四两项已完成,2026-08-17 第四轮)
 
-- 7.4 跨项目与 Right Dock:Focus A/B 时 File/Git/Connection/Task 上下文、
-  Dock 操作不改 focusedPaneId、Permission-Changed blocked 态——建议把
-  「focusedPane → activeProject → dock 数据源」解析抽成纯函数后做模型测试。
-- 窄 pane 下转录区/空态未接容器查询(`transcript/`、`WorkbenchEmptyState.tsx`
-  无 `@container`),表格/代码块/FloorNavRail 退化未验证。
+- ✅ 7.4 跨项目与 Right Dock:「focusedPane → activeProject → dock 数据源」解析已抽成纯函数
+  `resolveWorkbenchPaneProject`(`crates/agent-gui/src/pages/chat/workbench/paneProjectContext.ts`),
+  ChatPage 的 `activateWorkbenchPaneProject` 只负责调它并 activate;模型测试
+  `workbench-pane-project-context.test.mjs` 7 例(archived/missing 不激活、陈旧 key 不回退、
+  规范化 key 匹配、ChatPage 接线断言)。Permission-Changed blocked 态维持不实现(见 §〇)。
+- ✅ 窄 pane 容器退化:桌面转录根(`ChatTranscript.tsx`)加 `@container`,FloorNavRail 展开
+  面板 `max-w` 从 100vw 改 100cqw(分屏窄 Pane 内不再按视口钳宽),极窄容器(<280px)整条
+  rail 隐藏;gateway `.gateway-transcript-stage` 声明 `container-type: inline-size` 保持两端
+  语义一致。TranscriptWidthControls 无需改——其 maxWidth 本就按转录根实测宽度计算,
+  `areWidthControlsUsable` 在窄 Pane 下已自然隐藏手柄。测试
+  `workbench-narrow-pane-transcript.test.mjs` 3 例。表格/代码块本就 `overflow-x-auto` 且按
+  容器宽度收缩,无额外改动。
+- 另:`cargo check` 已在本轮跑通(交接文档「请你继续」第 1 项的编译部分);
+  `useWindowWorkbench.resizeSplit` 的内核 clamp 自 T-7 统一注入 context 后即已生效
+  (`workbench-command-context.test.mjs` 有 resize clamp 用例),交接文档中
+  "resizeSplit 未传 context" 为过时描述。
