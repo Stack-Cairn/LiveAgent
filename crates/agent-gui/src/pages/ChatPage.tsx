@@ -106,8 +106,8 @@ import {
   usePendingUploads,
 } from "./chat";
 import type { ChatPageProps } from "./chat/chatPageTypes";
-import { DesktopCheckpointRewindProvider } from "./chat/components/DesktopCheckpointRewindProvider";
 import { CurrentTaskProgress } from "./chat/components/CurrentTaskProgress";
+import { DesktopCheckpointRewindProvider } from "./chat/components/DesktopCheckpointRewindProvider";
 import { PendingToolApprovalBar } from "./chat/components/PendingToolApprovalBar";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
