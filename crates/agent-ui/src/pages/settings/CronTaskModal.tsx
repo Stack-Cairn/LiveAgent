@@ -23,8 +23,8 @@ import {
   type CronTask,
   type CronTaskType,
   DEFAULT_CRON_TIMEOUT_SECONDS,
-  MAX_CRON_TIMEOUT_SECONDS,
   MIN_CRON_TIMEOUT_SECONDS,
+  maxCronTimeoutSeconds,
   validateCronExpression,
 } from "@liveagent/ui/lib/automation/index";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
@@ -279,12 +279,17 @@ export function CronTaskModal({
       const parsedTimeoutSeconds = trimmedTimeoutSeconds
         ? Number(trimmedTimeoutSeconds)
         : DEFAULT_CRON_TIMEOUT_SECONDS;
+      const timeoutMax = maxCronTimeoutSeconds(type);
       if (
         !Number.isSafeInteger(parsedTimeoutSeconds) ||
         parsedTimeoutSeconds < MIN_CRON_TIMEOUT_SECONDS ||
-        parsedTimeoutSeconds > MAX_CRON_TIMEOUT_SECONDS
+        parsedTimeoutSeconds > timeoutMax
       ) {
-        throw new Error(t("settings.cronTimeoutSecondsInvalid"));
+        throw new Error(
+          t("settings.cronTimeoutSecondsInvalid")
+            .replace("{min}", String(MIN_CRON_TIMEOUT_SECONDS))
+            .replace("{max}", String(timeoutMax)),
+        );
       }
 
       await validateCronExpression(cron.trim());
@@ -460,6 +465,12 @@ export function CronTaskModal({
                       setTimeoutSeconds(next);
                     }}
                   />
+                  <p className="text-[11px] text-muted-foreground/70">
+                    {t("settings.cronTimeoutSecondsMaxHint").replace(
+                      "{max}",
+                      String(maxCronTimeoutSeconds(type)),
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
