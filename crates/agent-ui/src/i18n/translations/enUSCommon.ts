@@ -1285,16 +1285,12 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.terminalSessionMissing": "This terminal session is no longer available",
   "workbench.terminalSshPrompt":
     "SSH authentication is required — open this host from the project tools panel first",
-  "workbench.terminalKill": "End session",
-  "workbench.terminalKillConfirm": "Confirm end",
   "workbench.terminalLeasedPlaceholder": "This terminal is open in a workbench pane",
   "workbench.focusPane": "Focus workbench pane",
   "workbench.sshStatusConnected": "Connected",
   "workbench.sshStatusReconnecting": "Reconnecting",
   "workbench.sshStatusDisconnected": "Disconnected",
   "workbench.sshReconnect": "Reconnect",
-  "workbench.sshDisconnect": "Disconnect",
-  "workbench.sshDisconnectConfirm": "Click again to disconnect",
   "workbench.sshLatency": "Round-trip latency",
   "workbench.unsupportedPane":
     "This layout item was created by a newer version and cannot be displayed here.",

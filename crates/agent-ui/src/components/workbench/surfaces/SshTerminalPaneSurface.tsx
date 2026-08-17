@@ -27,8 +27,6 @@ export type SshTerminalPaneSurfaceProps = {
   latencyMs?: number | null;
   /** 极窄 Pane:状态行隐藏端点标签,只留状态点+延迟+重连。 */
   isCompact?: boolean;
-  /** 透传给 LocalTerminalPaneSurface 的显式结束入口(SSH 文案为"断开连接")。 */
-  onKillSession?: () => void;
 };
 
 /**
@@ -51,7 +49,6 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
     isReconnecting,
     latencyMs,
     isCompact,
-    onKillSession,
   } = props;
   const { t } = useLocale();
 
@@ -140,9 +137,6 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
         errorMessage={errorMessage}
         onRetry={onRetry}
         onError={onError}
-        onKillSession={onKillSession}
-        killLabel={t("workbench.sshDisconnect")}
-        killConfirmLabel={t("workbench.sshDisconnectConfirm")}
       />
     </div>
   );

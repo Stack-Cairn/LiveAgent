@@ -2779,7 +2779,6 @@ export function ChatPage(props: ChatPageProps) {
                 theme={effectiveTheme}
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
-                onSessionKilled={() => handleWorkbenchClosePane(pane.paneId)}
               />
             );
           }

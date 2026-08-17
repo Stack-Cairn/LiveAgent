@@ -11,7 +11,6 @@ import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import {
   ensureTerminalPaneSession,
   TerminalPaneSshPromptError,
-  terminalPaneAutoLaunch,
   terminalPaneBindings,
   terminalPaneLease,
 } from "../workbench/terminalPaneRuntime";
@@ -26,8 +25,6 @@ export type TerminalPaneHostProps = {
   /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
   sessions: readonly TerminalSession[];
   sessionsLoaded: boolean;
-  /** 显式 kill(结束进程)后的布局收尾:由页面注入 closePane。 */
-  onSessionKilled?: () => void;
 };
 
 type TerminalPaneErrorState =
@@ -45,16 +42,7 @@ const SSH_LATENCY_POLL_MS = 15_000;
  * 输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
-  const {
-    paneId,
-    surface,
-    isFocused,
-    isCompact,
-    theme,
-    sessions,
-    sessionsLoaded,
-    onSessionKilled,
-  } = props;
+  const { paneId, surface, isFocused, isCompact, theme, sessions, sessionsLoaded } = props;
   const { t } = useLocale();
 
   const boundSessionId = useSyncExternalStore(terminalPaneBindings.subscribe, () =>
@@ -65,9 +53,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const [errorState, setErrorState] = useState<TerminalPaneErrorState | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const [leasedSessionId, setLeasedSessionId] = useState<string | null>(null);
-  // 恢复 Pane 默认自动按 launchSpec 重建。显式 kill 会置 false 并关闭 Pane,
-  // 防止关闭收尾前的同一宿主瞬间重建进程。
-  const [launchRequested, setLaunchRequested] = useState(true);
 
   const liveSession = boundSessionId
     ? (sessions.find((entry) => entry.id === boundSessionId) ?? null)
@@ -80,18 +65,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     if (liveSession && createdSession) setCreatedSession(null);
   }, [createdSession, liveSession]);
 
-  // 绑定命中即视为授权:后续会话退出/消失时的"重新启动"不再回到休眠占位。
   useEffect(() => {
-    if (!boundSessionId) return;
-    terminalPaneAutoLaunch.authorize(surface.surfaceId);
-    setLaunchRequested(true);
-  }, [boundSessionId, surface.surfaceId]);
-
-  // 仅显式 kill 的短暂收尾阶段会休眠;正常恢复始终自动重建。
-  const dormant = !boundSessionId && !launchRequested;
-
-  useEffect(() => {
-    if (!sessionsLoaded || session || errorState || dormant) return;
+    if (!sessionsLoaded || session || errorState) return;
     if (boundSessionId) {
       // 完整应用重启后 Rust 注册表为空,但部分 WebView 实现仍可能留下
       // sessionStorage 绑定。清掉陈旧 sessionId,下一次 effect 自动按
@@ -122,7 +97,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     return () => {
       cancelled = true;
     };
-  }, [boundSessionId, dormant, errorState, session, sessionsLoaded, surface]);
+  }, [boundSessionId, errorState, session, sessionsLoaded, surface]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -146,28 +121,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const handleViewportError = useCallback((_sessionId: string, message: string | null) => {
     setViewportError(message);
   }, []);
-
-  // 显式 kill:结束进程 → 回收绑定(租约随 Pane 关闭卸载释放)→ 页面收尾关 Pane。
-  // 与 Detach(Pane 关闭,进程保留回 dock)语义分离。
-  const [killPending, setKillPending] = useState(false);
-  const killSession = useCallback(() => {
-    const targetSessionId = terminalPaneBindings.get(surface.surfaceId);
-    if (!targetSessionId || killPending) return;
-    setKillPending(true);
-    void tauriTerminalClient
-      .close(targetSessionId)
-      .catch(() => {
-        // 进程可能已自行退出;绑定与 Pane 仍按 kill 语义收尾。
-      })
-      .finally(() => {
-        terminalPaneBindings.delete(surface.surfaceId);
-        // 撤销启动资格,防止仍挂载的宿主把 kill 立刻变成一次静默重启;
-        // 正常路径下 onSessionKilled 会关闭 Pane,这里是宿主未关 Pane 时的兜底。
-        setLaunchRequested(false);
-        setKillPending(false);
-        onSessionKilled?.();
-      });
-  }, [killPending, onSessionKilled, surface.surfaceId]);
 
   // SSH 重连:错误按提示条展示;"already in progress" 表示自动重连循环已接管。
   const [reconnectPending, setReconnectPending] = useState(false);
@@ -222,9 +175,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       void tauriTerminalClient.close(staleSessionId).catch(() => {});
     }
     terminalPaneBindings.delete(surface.surfaceId);
-    // 手动重试重新授权,此后进入常规 ensure 流程。
-    terminalPaneAutoLaunch.authorize(surface.surfaceId);
-    setLaunchRequested(true);
     setCreatedSession(null);
     setViewportError(null);
     setErrorState(null);
@@ -245,10 +195,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   let renderSession: TerminalSession | null = null;
   let errorMessage: string | null = null;
   let onRetry: (() => void) | undefined = restartFromLaunchSpec;
-  if (dormant) {
-    // 显式 kill 收尾兜底;正常恢复不会进入该分支。
-    phase = "exited";
-  } else if (errorState) {
+  if (errorState) {
     phase = "error";
     errorMessage = errorMessageFor(errorState);
   } else if (leased && session) {
@@ -266,7 +213,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     onRetry = undefined;
   }
 
-  const killAvailable = Boolean(session && boundSessionId);
   const commonProps = {
     paneId,
     client: tauriTerminalClient,
@@ -277,7 +223,6 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     errorMessage,
     onRetry,
     onError: handleViewportError,
-    onKillSession: killAvailable && !killPending ? killSession : undefined,
   };
   if (surface.kind === "sshTerminal") {
     return (

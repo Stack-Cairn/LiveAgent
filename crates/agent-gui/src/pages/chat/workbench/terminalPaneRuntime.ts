@@ -30,10 +30,9 @@ export class TerminalPaneSshPromptError extends Error {
 }
 
 /**
- * 自动建会话授权集(窗口级内存):记录本窗口已经显式创建/重启或成功绑定过的
- * surfaceId。恢复 Pane 现在默认按 launchSpec 自动重建;该集合仍用于手动重试、
- * StrictMode 双挂载和显式 kill 收尾期间的启动资格协调。
- * 不做消费式清除:StrictMode 双挂载会重跑同一 effect,一次性令牌会误判休眠。
+ * 自动建会话授权集(窗口级内存):记录本窗口已经显式创建或重启过的
+ * surfaceId。当前恢复路径默认按 launchSpec 自动重建;该集合仍由拖入事务
+ * 写入并供窗口级运行时协调使用。
  */
 export function createTerminalPaneAutoLaunchRegistry() {
   const authorized = new Set<string>();

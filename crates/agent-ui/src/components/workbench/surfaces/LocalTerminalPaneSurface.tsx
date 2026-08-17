@@ -1,6 +1,5 @@
 import { Loader2, Terminal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useEffect, useRef, useState } from "react";
 import { cn } from "../../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../../lib/terminal/types";
 import { XTermViewport } from "../../project-tools/XTermViewport";
@@ -19,17 +18,7 @@ export type LocalTerminalPaneSurfaceProps = {
   errorMessage?: string | null;
   onRetry?: () => void;
   onError: (sessionId: string, message: string | null) => void;
-  /**
-   * 显式结束会话(kill 进程)。与 Pane 关闭(Detach,进程保留回 dock)语义
-   * 分离;入口为悬停显示的两态确认按钮。省略时无 kill 入口。
-   */
-  onKillSession?: () => void;
-  /** 覆盖 kill 按钮文案(SSH Pane 用"断开连接"而非"结束会话")。 */
-  killLabel?: string;
-  killConfirmLabel?: string;
 };
-
-const KILL_CONFIRM_RESET_MS = 3_000;
 
 /**
  * 终端 Pane 的纯受控展示层:本地与 SSH 首期共用。会话存在时始终渲染
@@ -37,48 +26,8 @@ const KILL_CONFIRM_RESET_MS = 3_000;
  * 才使用居中占位,保证 phase 切换不重挂视口。
  */
 export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
-  const {
-    paneId,
-    client,
-    session,
-    phase,
-    theme,
-    isActive,
-    errorMessage,
-    onRetry,
-    onError,
-    onKillSession,
-    killLabel,
-    killConfirmLabel,
-  } = props;
+  const { paneId, client, session, phase, theme, isActive, errorMessage, onRetry, onError } = props;
   const { t } = useLocale();
-  const killText = killLabel ?? t("workbench.terminalKill");
-  const killConfirmText = killConfirmLabel ?? t("workbench.terminalKillConfirm");
-  // 两态确认(点一次武装、再点执行),超时自动复位;纯视图态,不进入宿主。
-  const [killArmed, setKillArmed] = useState(false);
-  const killResetTimerRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (killResetTimerRef.current !== null) window.clearTimeout(killResetTimerRef.current);
-    },
-    [],
-  );
-  const handleKillClick = () => {
-    if (killResetTimerRef.current !== null) {
-      window.clearTimeout(killResetTimerRef.current);
-      killResetTimerRef.current = null;
-    }
-    if (killArmed) {
-      setKillArmed(false);
-      onKillSession?.();
-      return;
-    }
-    setKillArmed(true);
-    killResetTimerRef.current = window.setTimeout(() => {
-      killResetTimerRef.current = null;
-      setKillArmed(false);
-    }, KILL_CONFIRM_RESET_MS);
-  };
 
   const banner =
     session && phase === "error" ? (
@@ -114,27 +63,6 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
       </div>
     ) : null;
 
-  const killButton =
-    session && onKillSession && phase !== "connecting" ? (
-      <button
-        type="button"
-        data-terminal-pane-kill={killArmed ? "armed" : "idle"}
-        title={killArmed ? killConfirmText : killText}
-        aria-label={killArmed ? killConfirmText : killText}
-        onClick={handleKillClick}
-        onBlur={() => setKillArmed(false)}
-        className={cn(
-          "absolute right-2 top-7 z-20 rounded-md border px-2 py-0.5 text-[11px] shadow-sm transition-all",
-          "opacity-0 focus-visible:opacity-100 group-hover/workbench-pane:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-          killArmed
-            ? "border-destructive/40 bg-destructive/15 text-destructive"
-            : "border-border/70 bg-background/90 text-muted-foreground hover:text-destructive",
-        )}
-      >
-        {killArmed ? killConfirmText : killText}
-      </button>
-    ) : null;
-
   return (
     <div
       data-workbench-pane-id={paneId}
@@ -143,7 +71,6 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
       data-terminal-phase={phase}
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
-      {killButton}
       {banner}
       {session ? (
         <div className="relative min-h-0 flex-1">
