@@ -1988,4 +1988,179 @@ mod tests {
             assert!(err.contains(expected), "错误信息应含 {expected}：{err}");
         }
     }
+
+    // ===== WebDAV 同步：配置解析 / 远端路径 / 完整性校验 =====
+
+    fn sample_sync_config() -> BackupSyncConfig {
+        BackupSyncConfig {
+            url: "https://dav.example.com/dav".to_string(),
+            username: "alice".to_string(),
+            password: "stored-secret".to_string(),
+            remote_dir: "liveagent".to_string(),
+            profile: "work".to_string(),
+            auto_sync: false,
+            last_sync_at: Some(1_700_000_000_000),
+        }
+    }
+
+    fn sync_request(password: &str, password_touched: bool) -> BackupSyncConfigRequest {
+        BackupSyncConfigRequest {
+            url: "https://dav.example.com/dav".to_string(),
+            username: "alice".to_string(),
+            password: password.to_string(),
+            password_touched,
+            remote_dir: "liveagent".to_string(),
+            profile: "work".to_string(),
+            auto_sync: true,
+        }
+    }
+
+    #[test]
+    fn sync_config_keeps_stored_password_when_untouched() {
+        let persisted = sample_sync_config();
+        // UI 用掩码占位符回填密码框；用户没动它时不能当成新密码写库。
+        let resolved = resolve_backup_sync_config(sync_request("••••••••", false), &persisted);
+        assert_eq!(resolved.password, "stored-secret");
+        assert!(resolved.auto_sync);
+        // 保存配置不应改动同步时间。
+        assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
+    }
+
+    #[test]
+    fn sync_config_takes_new_password_when_touched() {
+        let persisted = sample_sync_config();
+        let resolved = resolve_backup_sync_config(sync_request("fresh-secret", true), &persisted);
+        assert_eq!(resolved.password, "fresh-secret");
+    }
+
+    #[test]
+    fn sync_config_clearing_password_is_honored() {
+        let persisted = sample_sync_config();
+        // 用户主动清空密码框 —— 必须真的清掉，不能回退到旧值，否则无法换账号。
+        let resolved = resolve_backup_sync_config(sync_request("", true), &persisted);
+        assert!(resolved.password.is_empty());
+    }
+
+    #[test]
+    fn sync_config_normalizes_paths_and_falls_back_to_defaults() {
+        let persisted = BackupSyncConfig::default();
+        let mut request = sync_request("x", true);
+        request.url = "  https://dav.example.com/dav/  ".to_string();
+        request.remote_dir = "  /backups/  ".to_string();
+        request.profile = "   ".to_string();
+
+        let resolved = resolve_backup_sync_config(request, &persisted);
+        assert_eq!(resolved.url, "https://dav.example.com/dav");
+        assert_eq!(resolved.remote_dir, "backups");
+        // 空 profile 回落默认值，否则远端路径会出现空段。
+        assert_eq!(resolved.profile, "default");
+    }
+
+    #[test]
+    fn remote_segments_are_versioned_and_profile_scoped() {
+        let config = sample_sync_config();
+        assert_eq!(
+            backup_remote_segments(&config),
+            vec!["liveagent", "v1", "work"]
+        );
+        assert_eq!(
+            backup_remote_file_segments(&config, "config.json"),
+            vec!["liveagent", "v1", "work", "config.json"]
+        );
+        // 不同 profile 必须落在不同远端目录，否则两套配置会互相覆盖。
+        let mut other = sample_sync_config();
+        other.profile = "personal".to_string();
+        assert_ne!(
+            backup_remote_segments(&config),
+            backup_remote_segments(&other)
+        );
+    }
+
+    #[test]
+    fn verify_payload_accepts_matching_size_and_hash() {
+        let body = b"{\"providers\":[]}";
+        let sha = backup_sha256_hex(body);
+        assert!(verify_backup_payload(body, body.len(), &sha).is_ok());
+    }
+
+    #[test]
+    fn verify_payload_rejects_truncated_or_corrupted_body() {
+        let body = b"{\"providers\":[]}";
+        let sha = backup_sha256_hex(body);
+
+        // PUT 中断留下的截断文件。
+        let truncated = verify_backup_payload(body, body.len() + 8, &sha)
+            .expect_err("size mismatch must be rejected");
+        assert!(truncated.contains("大小校验失败"), "{truncated}");
+
+        let corrupted = verify_backup_payload(body, body.len(), &"0".repeat(64))
+            .expect_err("hash mismatch must be rejected");
+        assert!(corrupted.contains("校验和不匹配"), "{corrupted}");
+    }
+
+    #[test]
+    fn verify_payload_skips_checks_when_manifest_omits_them() {
+        // 旧版本写的 manifest 没有 size/sha256 字段，此时只能放行，
+        // 否则升级后所有既有远端备份都下载不了。
+        assert!(verify_backup_payload(b"anything", 0, "").is_ok());
+    }
+
+    #[test]
+    fn remote_manifest_carries_size_and_hash_and_validates_version() {
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1" }])),
+            ..Default::default()
+        };
+        let manifest = build_backup_manifest(&snapshot);
+        let body = json!({
+            "protocolVersion": manifest.protocol_version,
+            "schemaVersion": manifest.schema_version,
+            "snapshotId": manifest.snapshot_id,
+            "createdAt": manifest.created_at,
+            "deviceName": "box-a",
+            "appVersion": manifest.app_version,
+            "encryption": "none",
+            "domains": { "providers": 1, "mcp": 0, "system": 0, "skills": 0 },
+            "size": 42,
+            "sha256": "abc123",
+        })
+        .to_string();
+
+        let parsed = parse_backup_remote_manifest(body.as_bytes()).expect("parse remote manifest");
+        assert_eq!(parsed.size, 42);
+        assert_eq!(parsed.sha256, "abc123");
+        assert_eq!(parsed.manifest.device_name, "box-a");
+    }
+
+    #[test]
+    fn remote_manifest_rejects_future_protocol_version() {
+        let body = json!({
+            "protocolVersion": 99,
+            "schemaVersion": 1,
+            "snapshotId": "s-1",
+            "createdAt": "2026-08-17T00:00:00Z",
+            "deviceName": "box-a",
+            "appVersion": "1.0.0",
+            "encryption": "none",
+            "size": 1,
+            "sha256": "ab",
+        })
+        .to_string();
+
+        let err = parse_backup_remote_manifest(body.as_bytes())
+            .expect_err("future protocol version must be rejected");
+        assert!(err.contains("升级应用"), "{err}");
+    }
+
+    #[test]
+    fn sync_config_view_never_exposes_password() {
+        let view: BackupSyncConfigView = sample_sync_config().into();
+        let serialized = serde_json::to_string(&view).expect("serialize view");
+        assert!(!serialized.contains("stored-secret"), "{serialized}");
+        assert!(!serialized.contains("password\":"), "{serialized}");
+        assert!(view.has_password);
+
+        let empty = BackupSyncConfigView::from(BackupSyncConfig::default());
+        assert!(!empty.has_password);
+    }
 }

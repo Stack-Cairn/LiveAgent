@@ -61,3 +61,69 @@ export async function peekBackupImport(): Promise<BackupImportPreview | null> {
 export async function applyBackupImport(path: string): Promise<BackupApplyOutcome> {
   return await invoke<BackupApplyOutcome>("settings_backup_apply_import", { path });
 }
+
+// ===== WebDAV 同步 =====
+
+/** 后端回传的同步配置视图：**不含密码**，只告知是否已设置。 */
+export type BackupSyncConfigView = {
+  url: string;
+  username: string;
+  hasPassword: boolean;
+  remoteDir: string;
+  profile: string;
+  autoSync: boolean;
+  /** 毫秒时间戳。 */
+  lastSyncAt: number | null;
+};
+
+/**
+ * 保存请求。
+ *
+ * `passwordTouched` 为 false 时后端沿用库里的旧密码 —— UI 用掩码占位符填充
+ * 密码框，若原样提交会把占位符写成真密码。
+ */
+export type BackupSyncConfigRequest = {
+  url: string;
+  username: string;
+  password: string;
+  passwordTouched: boolean;
+  remoteDir: string;
+  profile: string;
+  autoSync: boolean;
+};
+
+export type BackupRemoteInfo = {
+  manifest: BackupManifest;
+  size: number;
+  sha256: string;
+};
+
+export async function loadSyncConfig(): Promise<BackupSyncConfigView> {
+  return await invoke<BackupSyncConfigView>("settings_backup_load_sync_config");
+}
+
+export async function saveSyncConfig(
+  config: BackupSyncConfigRequest,
+): Promise<BackupSyncConfigView> {
+  return await invoke<BackupSyncConfigView>("settings_backup_save_sync_config", { config });
+}
+
+/** 测试连接。用库中已保存的配置，因此需先保存再测试。 */
+export async function testSyncConnection(): Promise<void> {
+  await invoke("settings_backup_test_sync_connection");
+}
+
+/** 拉取远端摘要。远端还没有备份时返回 null。 */
+export async function fetchRemoteInfo(): Promise<BackupRemoteInfo | null> {
+  return await invoke<BackupRemoteInfo | null>("settings_backup_fetch_remote_info");
+}
+
+/** 上传当前配置。返回本次同步的毫秒时间戳。 */
+export async function uploadBackup(skills: SkillsSettings): Promise<number> {
+  return await invoke<number>("settings_backup_upload", { skills });
+}
+
+/** 下载并应用远端配置。 */
+export async function downloadBackup(): Promise<BackupApplyOutcome> {
+  return await invoke<BackupApplyOutcome>("settings_backup_download");
+}
