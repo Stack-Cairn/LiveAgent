@@ -866,3 +866,106 @@ test("compactManually reports aborted=true when the user stops mid-compaction", 
   assert.equal(recorder.byKind("persistRollback").length, 1);
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
 });
+
+// —— revision 盖章：persist sink 返回带 revision 的持久化状态时，落地（apply/
+// queueCheckpoint）的必须是那份盖章状态。压缩 checkpoint 状态出自
+// appendMessagesToConversation（revision 恒 null），若照原样 apply，运行时缓存
+// 失去 replace/分页的 CAS 令牌，压缩后 edit-resend 报"历史会话缺少 revision"。
+
+function stampingPersist(recorder, revision) {
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    return {
+      ...state,
+      transcript: { ...state.transcript, revision },
+    };
+  };
+}
+
+test("during-run compaction applies the revision-stamped state returned by persist", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  stampingPersist(recorder, "conv:100:1:2:4");
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.ok(result.context);
+  const [, persistedState] = recorder.byKind("persist")[0];
+  assert.equal(persistedState.transcript.revision, null);
+  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
+  assert.equal(appliedState.transcript.revision, "conv:100:1:2:4");
+  const [, checkpointState] = recorder.byKind("queueCheckpoint")[0];
+  assert.equal(checkpointState.transcript.revision, "conv:100:1:2:4");
+});
+
+test("pre-send compaction re-stamps the revision after composeAppliedState clears it", async () => {
+  const controller = new CompactionController();
+  const pendingUserMessage = user("next question", 9);
+  const baseState = bigState();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+    presend: {
+      baseState,
+      pendingUserText: "next question",
+      composeAppliedState: (state) =>
+        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
+    },
+  });
+  stampingPersist(recorder, "conv:200:1:2:4");
+
+  const applied = await controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(baseState),
+  });
+
+  assert.equal(applied, true);
+  const [, appliedState] = recorder.byKind("applyState")[0];
+  // compose 补回了用户消息（内存追加，DB 仍是 checkpoint 版本），revision 保留。
+  assert.equal(appliedState.segments.at(-1).messages.at(-1).content, "next question");
+  assert.equal(appliedState.transcript.revision, "conv:200:1:2:4");
+});
+
+test("boolean persist keeps the legacy pass-through contract", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.ok(result.context);
+  const [, persistedState] = recorder.byKind("persist")[0];
+  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
+  assert.equal(appliedState, persistedState);
+});
+
+test("a null persist result aborts the checkpoint like false", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    return null;
+  };
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.equal(result.context, null);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+  assert.ok(
+    recorder
+      .byKind("applyStateMidRun")
+      .every(([, state]) => state.meta.activeSegmentIndex === 0),
+  );
+});
