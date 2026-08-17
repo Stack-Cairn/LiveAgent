@@ -30,8 +30,11 @@ const MAX_COLLAPSED_MARKERS = 40;
  * 居中布局只占屏幕中段一小截。楼层再多也只是采样更稀，首尾仍然保留。
  */
 const MAX_COLLAPSED_MARKERS_TOUCH = 12;
-/** 单根短横线（2.5px）+ 间距（7px）的占位高度。 */
+/** 单根短横线（2px）+ 间距（7.5px）的占位高度。 */
 const MARKER_SLOT_PX = 9.5;
+const BASE_MARKER_WIDTH_PX = 6;
+const WAVE_MARKER_WIDTHS_PX = [26, 20, 14, 10] as const;
+const PREVIEW_CARD_HALF_HEIGHT_PX = 56;
 /** 鼠标移出后延迟收起，避免指针在轨道与面板间移动时闪烁。 */
 const COLLAPSE_DELAY_MS = 160;
 /** 触屏端：滚动停止后导航栏保持可见的时长，随后淡出避免遮挡内容。 */
@@ -40,6 +43,11 @@ const TOUCH_SCROLL_REVEAL_MS = 1400;
 function useFloorBookmarks(conversationId: string): ReadonlySet<string> {
   const getSnapshot = useCallback(() => getFloorBookmarks(conversationId), [conversationId]);
   return useSyncExternalStore(subscribeFloorBookmarks, getSnapshot, getSnapshot);
+}
+
+function resolveMarkerWidth(markerIndex: number, hoveredMarkerIndex: number): number {
+  if (hoveredMarkerIndex < 0) return BASE_MARKER_WIDTH_PX;
+  return WAVE_MARKER_WIDTHS_PX[Math.abs(markerIndex - hoveredMarkerIndex)] ?? BASE_MARKER_WIDTH_PX;
 }
 
 export function FloorNavRail(props: {
@@ -69,7 +77,8 @@ export function FloorNavRail(props: {
   const { locale } = useLocale();
   const isEn = locale === "en-US";
   const bookmarks = useFloorBookmarks(conversationId);
-  const [expanded, setExpanded] = useState(false);
+  const [touchPanelOpen, setTouchPanelOpen] = useState(false);
+  const [hoveredMarkerKey, setHoveredMarkerKey] = useState<string | null>(null);
   const collapseTimerRef = useRef<number | null>(null);
   const panelScrollRef = useRef<HTMLDivElement | null>(null);
   // nav 元素走 callback ref → state（与 ChatTranscript 绑定 scrollViewport 同一
@@ -90,7 +99,7 @@ export function FloorNavRail(props: {
   // 面板展开期间不淡出（用户正在交互）；隐藏态关闭指针事件，透传给转写区。
   const [touchRevealed, setTouchRevealed] = useState(false);
   const revealTimerRef = useRef<number | null>(null);
-  const expandedRef = useRef(false);
+  const touchPanelOpenRef = useRef(false);
   useEffect(() => {
     if (!isCoarsePointer || !scrollViewport) return;
     const handleScroll = () => {
@@ -101,7 +110,7 @@ export function FloorNavRail(props: {
       revealTimerRef.current = window.setTimeout(() => {
         revealTimerRef.current = null;
         // 面板展开中不淡出；面板收起时（handleLeave/外点）会重新走到这里。
-        if (!expandedRef.current) setTouchRevealed(false);
+        if (!touchPanelOpenRef.current) setTouchRevealed(false);
       }, TOUCH_SCROLL_REVEAL_MS);
     };
     scrollViewport.addEventListener("scroll", handleScroll, { passive: true });
@@ -132,20 +141,20 @@ export function FloorNavRail(props: {
 
   // 展开时把当前楼层滚到面板中间，楼层很多时不必从头找。
   useLayoutEffect(() => {
-    if (!expanded) return;
+    if (!touchPanelOpen) return;
     panelScrollRef.current
       ?.querySelector('[data-floor-active="true"]')
       ?.scrollIntoView({ block: "center" });
-  }, [expanded]);
+  }, [touchPanelOpen]);
 
   // 触屏自动隐藏仅在提供了滚动视口时启用。
   const touchAutoHide = isCoarsePointer && scrollViewport !== null;
 
   // 面板展开期间强制可见并挂起淡出计时；收起后重新计时淡出。
   useEffect(() => {
-    expandedRef.current = expanded;
+    touchPanelOpenRef.current = touchPanelOpen;
     if (!touchAutoHide) return;
-    if (expanded) {
+    if (touchPanelOpen) {
       setTouchRevealed(true);
       if (revealTimerRef.current !== null) {
         window.clearTimeout(revealTimerRef.current);
@@ -163,7 +172,7 @@ export function FloorNavRail(props: {
         revealTimerRef.current = null;
       }
     };
-  }, [expanded, touchAutoHide]);
+  }, [touchPanelOpen, touchAutoHide]);
 
   const railVisible = !touchAutoHide || touchRevealed;
 
@@ -188,6 +197,18 @@ export function FloorNavRail(props: {
     () => resolveNearestSampledRowKey(floors, collapsedMarkers, activeRowKey),
     [floors, collapsedMarkers, activeRowKey],
   );
+  const hoveredMarkerIndex = collapsedMarkers.findIndex(
+    (floor) => floor.rowKey === hoveredMarkerKey,
+  );
+  const hoveredFloor = hoveredMarkerIndex >= 0 ? collapsedMarkers[hoveredMarkerIndex] : null;
+  const previewCardOffset =
+    hoveredMarkerIndex >= 0
+      ? (hoveredMarkerIndex - (collapsedMarkers.length - 1) / 2) * MARKER_SLOT_PX
+      : 0;
+  const previewCardTop =
+    hoveredMarkerIndex >= 0
+      ? `clamp(${PREVIEW_CARD_HALF_HEIGHT_PX}px, calc(50% ${previewCardOffset < 0 ? "-" : "+"} ${Math.abs(previewCardOffset)}px), calc(100% - ${PREVIEW_CARD_HALF_HEIGHT_PX}px))`
+      : "50%";
 
   const cancelCollapse = useCallback(() => {
     if (collapseTimerRef.current !== null) {
@@ -196,31 +217,41 @@ export function FloorNavRail(props: {
     }
   }, []);
 
-  const handleEnter = useCallback(() => {
+  const handleMarkerEnter = useCallback(
+    (rowKey: string) => {
+      if (isCoarsePointer) return;
+      cancelCollapse();
+      setHoveredMarkerKey(rowKey);
+    },
+    [cancelCollapse, isCoarsePointer],
+  );
+
+  const handlePreviewEnter = useCallback(() => {
     cancelCollapse();
-    setExpanded(true);
   }, [cancelCollapse]);
 
-  const handleLeave = useCallback(() => {
+  const handlePreviewLeave = useCallback(() => {
+    if (isCoarsePointer) return;
     cancelCollapse();
     collapseTimerRef.current = window.setTimeout(() => {
       collapseTimerRef.current = null;
-      setExpanded(false);
+      setHoveredMarkerKey(null);
     }, COLLAPSE_DELAY_MS);
-  }, [cancelCollapse]);
+  }, [cancelCollapse, isCoarsePointer]);
 
-  // 触屏没有 mouseleave：面板展开期间点按导航栏以外任意位置立即收起。桌面端
-  // 该监听与 mouseleave 收起并存，行为不冲突。
+  useEffect(() => () => cancelCollapse(), [cancelCollapse]);
+
+  // 触屏没有 mouseleave：面板展开期间点按导航栏以外任意位置立即收起。
   useEffect(() => {
-    if (!expanded || !navEl) return;
+    if (!touchPanelOpen || !navEl) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && navEl.contains(event.target)) return;
       cancelCollapse();
-      setExpanded(false);
+      setTouchPanelOpen(false);
     };
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, [expanded, navEl, cancelCollapse]);
+  }, [touchPanelOpen, navEl, cancelCollapse]);
 
   const handleJump = useCallback(
     (rowKey: string) => {
@@ -228,18 +259,11 @@ export function FloorNavRail(props: {
       // 触屏跳转后面板不会因指针移出而收起，这里主动收；桌面保持展开便于连跳。
       if (isCoarsePointer) {
         cancelCollapse();
-        setExpanded(false);
+        setTouchPanelOpen(false);
       }
     },
     [onJump, isCoarsePointer, cancelCollapse],
   );
-
-  // 悬停展开是纯鼠标增强；不挂 onFocus——聚焦即展开会把刚聚焦的短横线按钮
-  // 卸载掉（焦点静默掉到 body）。键盘用户直接 Tab 到短横线回车跳转。
-  const hoverHandlers = {
-    onMouseEnter: handleEnter,
-    onMouseLeave: handleLeave,
-  };
 
   if (floors.length < 2) return null;
 
@@ -260,7 +284,7 @@ export function FloorNavRail(props: {
           type="button"
           onClick={() => handleJump(floor.rowKey)}
           className={cn(
-            "min-w-0 flex-1 truncate px-2 py-1.5 text-left text-[12px] leading-tight",
+            "min-h-11 min-w-0 flex-1 truncate px-2 py-2 text-left text-[12px] leading-tight",
             isActive ? "font-medium text-foreground" : "text-muted-foreground",
           )}
           title={floor.preview}
@@ -273,7 +297,7 @@ export function FloorNavRail(props: {
           title={isBookmarked ? unpinLabel : pinLabel}
           onClick={() => toggleFloorBookmark(conversationId, floor.messageId)}
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-all",
             isBookmarked
               ? "text-amber-500 hover:text-amber-600"
               : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
@@ -299,8 +323,24 @@ export function FloorNavRail(props: {
         railVisible ? "opacity-100" : "opacity-0",
       )}
       style={{ bottom: bottomOffset }}
+      onMouseEnter={handlePreviewEnter}
+      onMouseLeave={handlePreviewLeave}
+      onBlur={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        handlePreviewLeave();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        cancelCollapse();
+        setHoveredMarkerKey(null);
+      }}
     >
-      {expanded ? (
+      {isCoarsePointer && touchPanelOpen ? (
         <div
           className={cn(
             // 宽度按容器(转录区/Pane)钳制而非视口:分屏窄 Pane 下面板不得
@@ -309,7 +349,6 @@ export function FloorNavRail(props: {
             // 隐藏态不吃指针事件：触摸透传给转写区，不会点到看不见的控件。
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
-          {...hoverHandlers}
         >
           <div ref={panelScrollRef} className="min-h-0 overflow-y-auto p-1.5">
             {bookmarkedFloors.length > 0 ? (
@@ -327,47 +366,97 @@ export function FloorNavRail(props: {
       ) : (
         <div
           className={cn(
-            "flex max-h-full touch-manipulation flex-col items-end gap-[7px] overflow-hidden py-2 pl-3 pr-0.5",
+            "flex max-h-full touch-manipulation flex-col items-end gap-[7.5px] overflow-visible py-2 pl-2 pr-0.5",
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
-          {...hoverHandlers}
-          // 触屏收起态：2.5px 的短横线没法精确点按，整列点按一律先展开面板，
+          // 触屏收起态：2px 的短横线没法精确点按，整列点按一律先展开面板，
           // 跳转都发生在面板行上。preventDefault 掐掉后续合成 mouse/click，
           // 避免展开瞬间面板行吃到同一次点按误触跳转。
           onTouchEnd={
             isCoarsePointer
               ? (event) => {
                   event.preventDefault();
-                  handleEnter();
+                  cancelCollapse();
+                  setTouchPanelOpen(true);
                 }
               : undefined
           }
         >
-          {collapsedMarkers.map((floor) => {
+          {collapsedMarkers.map((floor, markerIndex) => {
             const isActive = floor.rowKey === activeMarkerKey;
             const isBookmarked = bookmarks.has(floor.messageId);
+            const isHovered = markerIndex === hoveredMarkerIndex;
             return (
               <button
                 key={floor.rowKey}
                 type="button"
                 aria-label={floor.preview}
-                title={floor.preview}
+                aria-current={isActive ? "location" : undefined}
                 onClick={() => handleJump(floor.rowKey)}
+                onMouseEnter={() => handleMarkerEnter(floor.rowKey)}
+                onFocus={() => handleMarkerEnter(floor.rowKey)}
                 className={cn(
-                  // after 伪元素把命中区扩到整条槽位高度，覆盖标记间 7px 间隙。
-                  "relative h-[2.5px] rounded-full transition-all duration-150 after:absolute after:-inset-x-2 after:-inset-y-1 after:content-['']",
-                  isActive ? "w-[18px]" : "w-3 hover:w-[18px]",
+                  // after 伪元素把命中区扩到整条槽位高度，覆盖标记间 7.5px 间隙。
+                  "relative h-0.5 rounded-full outline-none transition-[width,background-color,opacity] duration-150 ease-out after:absolute after:-inset-x-2 after:-inset-y-1 after:content-[''] motion-reduce:transition-none",
                   isBookmarked
                     ? "bg-amber-500/90"
-                    : isActive
-                      ? "bg-foreground/75"
-                      : "bg-foreground/[0.18] hover:bg-foreground/45",
+                    : isHovered
+                      ? "bg-foreground/90"
+                      : isActive
+                        ? "bg-foreground/60"
+                        : "bg-foreground/[0.18]",
                 )}
+                style={{ width: resolveMarkerWidth(markerIndex, hoveredMarkerIndex) }}
               />
             );
           })}
         </div>
       )}
+      {!isCoarsePointer && hoveredFloor ? (
+        <div
+          className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100cqw-5rem)] -translate-y-1/2 rounded-[14px] border border-border/60 bg-background/92 p-2 shadow-[0_14px_40px_-20px_rgba(15,23,42,0.48)] backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none dark:border-white/[0.1] dark:bg-[#2a2a2a]/95"
+          style={{
+            top: previewCardTop,
+            right: "calc(100% - 2px)",
+          }}
+        >
+          <div className="group/preview flex min-w-0 items-start gap-1 rounded-[10px]">
+            <button
+              type="button"
+              onClick={() => handleJump(hoveredFloor.rowKey)}
+              className="min-w-0 flex-1 rounded-[9px] px-2 py-1.5 text-left outline-none transition-colors hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]"
+            >
+              <span className="block truncate text-[13px] font-medium leading-5 text-foreground">
+                {hoveredFloor.preview}
+              </span>
+              {hoveredFloor.responsePreview ? (
+                <span className="mt-1 block line-clamp-3 text-[12px] leading-[1.55] text-muted-foreground">
+                  {hoveredFloor.responsePreview}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              aria-label={bookmarks.has(hoveredFloor.messageId) ? unpinLabel : pinLabel}
+              title={bookmarks.has(hoveredFloor.messageId) ? unpinLabel : pinLabel}
+              onClick={() => toggleFloorBookmark(conversationId, hoveredFloor.messageId)}
+              className={cn(
+                "mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+                bookmarks.has(hoveredFloor.messageId)
+                  ? "text-amber-500 hover:bg-amber-500/10"
+                  : "text-muted-foreground/50 hover:bg-foreground/[0.05] hover:text-foreground",
+              )}
+            >
+              <Pin
+                className={cn(
+                  "h-3.5 w-3.5",
+                  bookmarks.has(hoveredFloor.messageId) && "fill-current",
+                )}
+              />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </nav>
   );
 }

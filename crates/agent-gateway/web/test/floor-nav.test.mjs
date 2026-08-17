@@ -34,11 +34,28 @@ function userRow(key, text, messageId) {
   };
 }
 
+function assistantRow(key, text) {
+  return {
+    key,
+    origin: "history",
+    kind: "assistant",
+    rounds: [
+      {
+        blocks: [
+          { kind: "thinking", text: "不会进入预览" },
+          { kind: "text", text },
+          { kind: "tool", item: {} },
+        ],
+      },
+    ],
+  };
+}
+
 test("buildFloorEntries keeps only user rows and builds previews", () => {
   const rows = [
     { key: "c1", origin: "history", kind: "checkpoint" },
     userRow("u1", "  帮我看看\n这个 bug   在哪 ", "user-aaa"),
-    { key: "a1", origin: "history", kind: "assistant", rounds: [] },
+    assistantRow("a1", " 已完成第一阶段，\n验证通过。 "),
     userRow("u2", "x".repeat(60), "user-bbb"),
     userRow("u3", "   ", undefined),
   ];
@@ -49,9 +66,11 @@ test("buildFloorEntries keeps only user rows and builds previews", () => {
     ["u1", "u2", "u3"],
   );
   assert.equal(floors[0].preview, "帮我看看 这个 bug 在哪");
+  assert.equal(floors[0].responsePreview, "已完成第一阶段， 验证通过。");
   assert.equal(floors[0].messageId, "user-aaa");
   assert.ok(floors[1].preview.endsWith("…"));
-  assert.equal(floors[1].preview.length, 25);
+  assert.equal(floors[1].preview.length, 49);
+  assert.equal(floors[1].responsePreview, null);
   assert.equal(floors[2].preview, "…");
   // 无 messageRef 时回退到行 key，收藏仍可用
   assert.equal(floors[2].messageId, "u3");
@@ -90,11 +109,11 @@ test("resolveNearestSampledRowKey maps active floor to nearest marker", () => {
 });
 
 test("buildFloorPreview truncates on code points without splitting surrogates", () => {
-  const emoji = "😀".repeat(30);
+  const emoji = "😀".repeat(60);
   const preview = floorModel.buildFloorPreview(emoji);
   assert.ok(preview.endsWith("…"));
   const chars = Array.from(preview);
-  assert.equal(chars.length, 25);
+  assert.equal(chars.length, 49);
   for (const ch of chars.slice(0, -1)) {
     assert.equal(ch, "😀", `expected intact emoji, got ${JSON.stringify(ch)}`);
   }
