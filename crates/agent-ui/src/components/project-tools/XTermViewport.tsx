@@ -45,7 +45,11 @@ function terminalTheme(theme: "light" | "dark") {
       scrollbarSliderBackground: "rgba(148, 163, 184, 0.18)",
       scrollbarSliderHoverBackground: "rgba(148, 163, 184, 0.3)",
       scrollbarSliderActiveBackground: "rgba(148, 163, 184, 0.42)",
-      overviewRulerBorder: "transparent",
+      // xterm 的 css.toColor 不认关键字 "transparent"(canvas 回退路径遇到
+      // alpha<255 直接 throw),解析失败会静默落回默认色 #ffffff——overview
+      // ruler 每帧都会用该色画一条 1px 竖线(_renderRulerOutline),即终端右缘
+      // 的白线。8 位 hex 走独立分支不校验 alpha,才是真正的透明写法。
+      overviewRulerBorder: "#00000000",
       black: "#1b2733",
       red: "#ef4444",
       green: "#22c55e",
@@ -74,7 +78,8 @@ function terminalTheme(theme: "light" | "dark") {
     scrollbarSliderBackground: "rgba(100, 116, 139, 0.16)",
     scrollbarSliderHoverBackground: "rgba(100, 116, 139, 0.26)",
     scrollbarSliderActiveBackground: "rgba(100, 116, 139, 0.36)",
-    overviewRulerBorder: "transparent",
+    // 同暗色主题:8 位 hex 透明,勿改回 "transparent"(见上)。
+    overviewRulerBorder: "#00000000",
     black: "#1f2933",
     red: "#dc2626",
     green: "#16a34a",
