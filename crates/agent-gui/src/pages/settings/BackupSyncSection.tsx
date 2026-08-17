@@ -24,12 +24,15 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import {
   applyBackupImport,
+  BACKUP_SYNC_STATUS_EVENT,
   type BackupDomainCounts,
   type BackupManifest,
   type BackupSyncConfigView,
+  type BackupSyncStatusEvent,
   downloadBackup,
   exportBackup,
   fetchRemoteInfo,
@@ -209,6 +212,32 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       cancelled = true;
     };
   }, []);
+
+  // 后台自动同步的结果。手动同步的成败由命令返回值就地反馈，不经过这个事件，
+  // 所以这里收到的一定是「用户没主动点按钮时发生的同步」。
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void listen<BackupSyncStatusEvent>(BACKUP_SYNC_STATUS_EVENT, (event) => {
+      const { lastSyncAt, lastError } = event.payload;
+      if (lastError) {
+        setSyncStatus({ kind: "error", text: lastError });
+        return;
+      }
+      if (lastSyncAt !== null) {
+        setSyncView((prev) => (prev ? { ...prev, lastSyncAt } : prev));
+        setSyncStatus({ kind: "ok", text: t("settings.backupSyncAutoDone") });
+      }
+    }).then((fn) => {
+      // 组件在 listen resolve 前就卸载时，拿到句柄立刻注销，避免泄漏。
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [t]);
 
   const patchForm = useCallback((patch: Partial<SyncForm>) => {
     setSyncStatus(null);

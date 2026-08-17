@@ -154,6 +154,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAuto": "自动同步",
     "settings.backupSyncAutoHint":
       "配置变更后自动上传到远端。自动同步只上传，不会自动覆盖本机配置。",
+    "settings.backupSyncAutoDone": "已自动同步到远端",
     "settings.backupSyncSave": "保存",
     "settings.backupSyncSaveDone": "同步配置已保存",
     "settings.backupSyncSaveFailed": "保存同步配置失败",
@@ -398,6 +399,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAuto": "Auto Sync",
     "settings.backupSyncAutoHint":
       "Upload automatically after configuration changes. Auto sync only uploads and never overwrites this machine.",
+    "settings.backupSyncAutoDone": "Auto-synced to remote",
     "settings.backupSyncSave": "Save",
     "settings.backupSyncSaveDone": "Sync settings saved",
     "settings.backupSyncSaveFailed": "Failed to save sync settings",

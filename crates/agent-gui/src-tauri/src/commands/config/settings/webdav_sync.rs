@@ -111,7 +111,7 @@ pub struct BackupRemoteInfo {
 /// 用于下载后校验完整性（PUT 可能被中断，留下截断的 config.json）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BackupRemoteManifest {
+pub(crate) struct BackupRemoteManifest {
     #[serde(flatten)]
     manifest: BackupManifest,
     #[serde(default)]
@@ -394,8 +394,7 @@ pub(crate) fn parse_backup_remote_manifest(body: &[u8]) -> Result<BackupRemoteMa
 /// 顺序是有意的。manifest 是「这份备份可用」的信号，最后写入，
 /// 中途失败时远端留下的是旧 manifest + 新 config，下载侧的 sha256 校验
 /// 会拦下这个不一致，而不会当成合法数据应用。
-#[tauri::command]
-pub async fn settings_backup_upload(skills: Option<Value>) -> Result<i64, String> {
+async fn upload_backup_snapshot(skills: Option<Value>) -> Result<i64, String> {
     let (config, document) = tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         let config = load_backup_sync_config(&conn)?;
@@ -439,6 +438,37 @@ pub async fn settings_backup_upload(skills: Option<Value>) -> Result<i64, String
     tauri::async_runtime::spawn_blocking(touch_backup_last_sync_at)
         .await
         .map_err(|e| format!("settings_backup_upload join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn settings_backup_upload(skills: Option<Value>) -> Result<i64, String> {
+    upload_backup_snapshot(skills).await
+}
+
+/// 前端在写入设置后调用：缓存技能启用态并标脏。
+///
+/// 技能启用态存在 webview localStorage，后端侧的标脏（`save_providers` 等）
+/// 看不到它，只能由前端显式通知。
+#[tauri::command]
+pub fn settings_backup_mark_dirty(skills: Option<Value>) {
+    crate::services::webdav_auto_sync::cache_skills(skills);
+    crate::services::webdav_auto_sync::mark_dirty();
+}
+
+/// 自动同步的上传入口。
+///
+/// 与手动上传的唯一区别是「没开开关或凭据不全就静默跳过」——自动路径不该
+/// 因为用户没配 WebDAV 就反复弹错误。
+pub(crate) async fn auto_upload_backup_snapshot(
+    skills: Option<Value>,
+) -> Result<Option<i64>, String> {
+    let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
+        .await
+        .map_err(|e| format!("auto_upload_backup_snapshot join 失败：{e}"))??;
+    if !config.auto_sync || backup_credentials(&config).is_err() {
+        return Ok(None);
+    }
+    upload_backup_snapshot(skills).await.map(Some)
 }
 
 /// 下载：拉 manifest → 拉 config → 校验 size+sha256 → 应用快照。
@@ -485,6 +515,9 @@ pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
     let _ = &remote.manifest;
 
     tauri::async_runtime::spawn_blocking(move || {
+        // 应用快照会走 save_providers / save_mcp / save_system，它们都会标脏。
+        // 不抑制就会把刚拉下来的远端数据原样推回去。
+        let _suppression = crate::services::webdav_auto_sync::suppress();
         let (snapshot, _) = parse_backup_document(&document)?;
         let mut conn = open_db()?;
         let outcome = apply_backup_snapshot(&mut conn, snapshot)?;

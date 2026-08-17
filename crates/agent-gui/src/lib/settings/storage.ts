@@ -4,6 +4,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
+import { markBackupDirty } from "../backup";
 import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
 import {
   type AppSettings,
@@ -383,6 +384,18 @@ export async function persistSettings(
       locale: next.locale,
       closeWindowBehavior: next.closeWindowBehavior,
     });
+  }
+
+  // 备份快照只覆盖 providers / mcp / system / skills 四域，其余域的变更不该
+  // 触发同步。skills 存在 localStorage，后端感知不到，所以四域统一在这里通知
+  // ——providers/mcp/system 侧后端也会各自标脏，重复标脏被防抖窗口合并掉，无害。
+  if (
+    hasChanged(prev.customProviders, next.customProviders) ||
+    hasChanged(prev.system, next.system) ||
+    hasChanged(prev.mcp, next.mcp) ||
+    hasChanged(prev.skills, next.skills)
+  ) {
+    markBackupDirty(next.skills);
   }
 
   await Promise.all(tasks);

@@ -127,3 +127,26 @@ export async function uploadBackup(skills: SkillsSettings): Promise<number> {
 export async function downloadBackup(): Promise<BackupApplyOutcome> {
   return await invoke<BackupApplyOutcome>("settings_backup_download");
 }
+
+/**
+ * 通知后端「配置已变更」，触发自动同步的防抖上传。
+ *
+ * providers / mcp / system 三域后端自己就能感知；skills 存在 localStorage，
+ * 后端读不到，所以每次都把最新的 skills 一并送过去缓存起来，供后台上传使用。
+ *
+ * 自动同步是尽力而为的后台行为：失败绝不能冒泡成「保存失败」，
+ * 因此调用方一律 fire-and-forget。
+ */
+export function markBackupDirty(skills: SkillsSettings): void {
+  void invoke("settings_backup_mark_dirty", { skills }).catch(() => {
+    // 忽略：自动同步的失败通过 backup-sync-status-updated 事件呈现。
+  });
+}
+
+/** 后台自动同步的结果事件载荷。手动同步的成败由命令返回值直接告知，不走此事件。 */
+export type BackupSyncStatusEvent = {
+  lastSyncAt: number | null;
+  lastError: string | null;
+};
+
+export const BACKUP_SYNC_STATUS_EVENT = "backup-sync-status-updated";
