@@ -2,12 +2,13 @@ import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState
 import { cn } from "../../lib/shared/utils";
 import {
   computeWorkbenchGeometry,
+  subtreeMinSizeForAxis,
   type WorkbenchGeometry,
   type WorkbenchRect,
 } from "../../lib/workbench/geometry";
 
 import type { PaneNode, PaneRecord, WorkbenchLayout } from "../../lib/workbench/types";
-import { DividerLayer } from "./DividerLayer";
+import { DividerLayer, type DividerSideMinSizes } from "./DividerLayer";
 import { DockIntentOverlay } from "./DockIntentOverlay";
 import { PaneSurfaceLayer, type PaneSurfaceRenderContext } from "./PaneSurfaceLayer";
 
@@ -50,6 +51,15 @@ function withRatioOverride(node: PaneNode | null, splitId: string, ratio: number
     first: withRatioOverride(node.first, splitId, ratio) as PaneNode,
     second: withRatioOverride(node.second, splitId, ratio) as PaneNode,
   };
+}
+
+function findSplitNode(
+  node: PaneNode | null,
+  splitId: string,
+): Extract<PaneNode, { type: "split" }> | null {
+  if (!node || node.type === "leaf") return null;
+  if (node.splitId === splitId) return node;
+  return findSplitNode(node.first, splitId) ?? findSplitNode(node.second, splitId);
 }
 
 /**
@@ -142,6 +152,20 @@ export function WorkbenchCanvas(props: WorkbenchCanvasProps) {
 
   const getPaneRegionLabel = useCallback((pane: PaneRecord) => labels.paneRegion(pane), [labels]);
 
+  // Per-split side minimums (per-kind subtree sums) for the divider clamp: a
+  // terminal side may compress further than a conversation side.
+  const minSizesForSplit = useCallback(
+    (splitId: string): DividerSideMinSizes | null => {
+      const split = findSplitNode(layout.root, splitId);
+      if (!split) return null;
+      return {
+        firstMin: subtreeMinSizeForAxis(split.first, layout.panes, split.axis, dividerSize),
+        secondMin: subtreeMinSizeForAxis(split.second, layout.panes, split.axis, dividerSize),
+      };
+    },
+    [layout.root, layout.panes, dividerSize],
+  );
+
   return (
     <div
       ref={containerRef}
@@ -169,6 +193,7 @@ export function WorkbenchCanvas(props: WorkbenchCanvasProps) {
             separatorLabel={labels.separator}
             minPaneWidth={minPaneWidth}
             minPaneHeight={minPaneHeight}
+            minSizesForSplit={minSizesForSplit}
             onResizePreview={handleResizePreview}
             onResizeCommit={handleResizeCommit}
             onEqualize={onEqualizeSplit}

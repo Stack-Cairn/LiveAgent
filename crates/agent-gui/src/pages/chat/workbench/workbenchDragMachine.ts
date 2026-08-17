@@ -3,7 +3,11 @@ import {
   hitTestWorkbenchDrop,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
+  MIN_TERMINAL_PANE_HEIGHT,
+  MIN_TERMINAL_PANE_WIDTH,
   previewRectForDropTarget,
+  subtreeMinSizeForAxis,
+  surfaceMinSize,
   type WorkbenchDropTarget,
   type WorkbenchEdge,
   type WorkbenchGeometry,
@@ -23,11 +27,64 @@ const NARROW_CANVAS_WIDTH_FOR_AUTO_DOCK = 680;
 
 /** Both halves of a split must keep the conversation hard minimum size. */
 export function canSplitRectAtEdge(rect: WorkbenchRect, edge: WorkbenchEdge): boolean {
+  const min =
+    edge === "left" || edge === "right"
+      ? MIN_CONVERSATION_PANE_WIDTH
+      : MIN_CONVERSATION_PANE_HEIGHT;
+  return canSplitRectWithMins(rect, edge, min, min);
+}
+
+/**
+ * Both halves of a split must keep their own hard minimums: the incoming
+ * surface's on one side and the displaced content's on the other.
+ */
+export function canSplitRectWithMins(
+  rect: WorkbenchRect,
+  edge: WorkbenchEdge,
+  incomingMin: number,
+  existingMin: number,
+): boolean {
   const divider = CANVAS_DIVIDER_SIZE;
-  if (edge === "left" || edge === "right") {
-    return (rect.width - divider) / 2 >= MIN_CONVERSATION_PANE_WIDTH;
+  const half =
+    edge === "left" || edge === "right" ? (rect.width - divider) / 2 : (rect.height - divider) / 2;
+  return half >= incomingMin && half >= existingMin;
+}
+
+/** The incoming payload's hard minimum along the split axis of `edge`. */
+function payloadMinForEdge(
+  payload: WorkbenchDragPayload,
+  layout: WorkbenchLayout,
+  edge: WorkbenchEdge,
+): number {
+  const horizontal = edge === "left" || edge === "right";
+  if (payload.kind === "terminalSession" || payload.kind === "newTerminal") {
+    return horizontal ? MIN_TERMINAL_PANE_WIDTH : MIN_TERMINAL_PANE_HEIGHT;
   }
-  return (rect.height - divider) / 2 >= MIN_CONVERSATION_PANE_HEIGHT;
+  if (payload.kind === "pane") {
+    const pane = layout.panes[payload.paneId];
+    if (pane) {
+      const min = surfaceMinSize(pane.surface);
+      return horizontal ? min.minWidth : min.minHeight;
+    }
+  }
+  // conversation / workspace payloads (and unknown panes) use the
+  // conversation minimum.
+  return horizontal ? MIN_CONVERSATION_PANE_WIDTH : MIN_CONVERSATION_PANE_HEIGHT;
+}
+
+/** The displaced pane's hard minimum along the split axis of `edge`. */
+function existingPaneMinForEdge(
+  layout: WorkbenchLayout,
+  paneId: string,
+  edge: WorkbenchEdge,
+): number {
+  const horizontal = edge === "left" || edge === "right";
+  const pane = layout.panes[paneId];
+  if (!pane) {
+    return horizontal ? MIN_CONVERSATION_PANE_WIDTH : MIN_CONVERSATION_PANE_HEIGHT;
+  }
+  const min = surfaceMinSize(pane.surface);
+  return horizontal ? min.minWidth : min.minHeight;
 }
 
 /** A drag arms on pointer-down and only activates once it clears this radius. */
@@ -125,9 +182,10 @@ function dividerInsertionRegion(
  * - own-pane hits become focus/no-op (pane-center on itself);
  * - sidebar payloads never overwrite a pane center — they auto-dock
  *   (bottom-first on narrow canvases, else right, then the other axis);
- * - every split target is rejected when either half would fall below the
- *   conversation hard minimum size, so drops with insufficient space show
- *   no preview and commit nothing.
+ * - every split target is rejected when either half would fall below its
+ *   surface's hard minimum size (per kind — terminals accept tighter spots
+ *   than conversations), so drops with insufficient space show no preview
+ *   and commit nothing.
  */
 export function resolveWorkbenchDropTarget(
   raw: WorkbenchDropTarget | null,
@@ -139,6 +197,13 @@ export function resolveWorkbenchDropTarget(
   const ownPaneId = ownPaneIdForPayload(payload, layout);
   const paneRect = (paneId: string): WorkbenchRect | null =>
     geometry.panes.find((pane) => pane.paneId === paneId)?.rect ?? null;
+  const canSplitPaneAtEdge = (paneId: string, rect: WorkbenchRect, edge: WorkbenchEdge) =>
+    canSplitRectWithMins(
+      rect,
+      edge,
+      payloadMinForEdge(payload, layout, edge),
+      existingPaneMinForEdge(layout, paneId, edge),
+    );
 
   if (raw.kind === "pane-center") {
     if (ownPaneId && raw.paneId === ownPaneId) {
@@ -151,7 +216,7 @@ export function resolveWorkbenchDropTarget(
       const preferVertical = geometry.canvas.width < NARROW_CANVAS_WIDTH_FOR_AUTO_DOCK;
       const edges: WorkbenchEdge[] = preferVertical ? ["bottom", "right"] : ["right", "bottom"];
       for (const edge of edges) {
-        if (canSplitRectAtEdge(rect, edge)) {
+        if (canSplitPaneAtEdge(raw.paneId, rect, edge)) {
           return { kind: "pane-edge", paneId: raw.paneId, edge };
         }
       }
@@ -164,17 +229,47 @@ export function resolveWorkbenchDropTarget(
       return { kind: "pane-center", paneId: ownPaneId };
     }
     const rect = paneRect(raw.paneId);
-    if (!rect || !canSplitRectAtEdge(rect, raw.edge)) return null;
+    if (!rect || !canSplitPaneAtEdge(raw.paneId, rect, raw.edge)) return null;
     return raw;
   }
   if (raw.kind === "canvas-edge") {
-    return canSplitRectAtEdge(geometry.canvas, raw.edge) ? raw : null;
+    // A canvas-edge split pushes the entire existing tree into one half.
+    const axisEdge = raw.edge;
+    const horizontal = axisEdge === "left" || axisEdge === "right";
+    const treeMin = subtreeMinSizeForAxis(
+      layout.root,
+      layout.panes,
+      horizontal ? "horizontal" : "vertical",
+      CANVAS_DIVIDER_SIZE,
+    );
+    return canSplitRectWithMins(
+      geometry.canvas,
+      axisEdge,
+      payloadMinForEdge(payload, layout, axisEdge),
+      treeMin,
+    )
+      ? raw
+      : null;
   }
   if (raw.kind === "divider") {
     const divider = geometry.dividers.find((entry) => entry.splitId === raw.splitId);
     if (!divider) return null;
     const region = dividerInsertionRegion(divider, raw.edge);
-    if (!canSplitRectAtEdge(region, divider.axis === "horizontal" ? "right" : "bottom")) {
+    const splitEdge: WorkbenchEdge = divider.axis === "horizontal" ? "right" : "bottom";
+    // The insert halves the chosen side between its current subtree and the
+    // incoming pane.
+    const sideNode = dividerSideNode(layout.root, raw.splitId, raw.edge);
+    const existingMin = sideNode
+      ? subtreeMinSizeForAxis(sideNode, layout.panes, divider.axis, CANVAS_DIVIDER_SIZE)
+      : payloadMinForEdge(payload, layout, splitEdge);
+    if (
+      !canSplitRectWithMins(
+        region,
+        splitEdge,
+        payloadMinForEdge(payload, layout, splitEdge),
+        existingMin,
+      )
+    ) {
       return null;
     }
     return raw;
@@ -183,6 +278,17 @@ export function resolveWorkbenchDropTarget(
     return null;
   }
   return raw;
+}
+
+type LayoutNode = WorkbenchLayout["root"];
+
+/** The subtree on the chosen side of a divider, or null when the split is gone. */
+function dividerSideNode(root: LayoutNode, splitId: string, edge: WorkbenchEdge): LayoutNode {
+  if (!root || root.type === "leaf") return null;
+  if (root.splitId === splitId) {
+    return edge === "left" || edge === "top" ? root.first : root.second;
+  }
+  return dividerSideNode(root.first, splitId, edge) ?? dividerSideNode(root.second, splitId, edge);
 }
 
 /** Canvas-relative snapshot frozen when a drag activates. */

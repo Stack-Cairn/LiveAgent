@@ -1,11 +1,13 @@
 import { useCallback, useRef } from "react";
 import { cn } from "../../lib/shared/utils";
 import {
-  clampRatioToMinSize,
+  clampRatioToSideMinSizes,
   type DividerGeometry,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
 } from "../../lib/workbench/geometry";
+
+export type DividerSideMinSizes = { firstMin: number; secondMin: number };
 
 export type DividerLayerProps = {
   dividers: readonly DividerGeometry[];
@@ -13,6 +15,11 @@ export type DividerLayerProps = {
   separatorLabel: string;
   minPaneWidth?: number;
   minPaneHeight?: number;
+  /**
+   * Per-split minimum extents along the split axis (per-kind subtree sums).
+   * Falls back to the symmetric minPaneWidth/Height when absent for a split.
+   */
+  minSizesForSplit?: (splitId: string) => DividerSideMinSizes | null;
   /** Live ratio preview while dragging; at most one call per frame. */
   onResizePreview: (splitId: string, ratio: number) => void;
   /** Final ratio on pointer-up / keyboard commit. */
@@ -55,6 +62,7 @@ export function DividerLayer(props: DividerLayerProps) {
     separatorLabel,
     minPaneWidth = MIN_CONVERSATION_PANE_WIDTH,
     minPaneHeight = MIN_CONVERSATION_PANE_HEIGHT,
+    minSizesForSplit,
     onResizePreview,
     onResizeCommit,
     onEqualize,
@@ -67,15 +75,19 @@ export function DividerLayer(props: DividerLayerProps) {
   } | null>(null);
 
   const clampFor = useCallback(
-    (divider: DividerGeometry, ratio: number) =>
-      clampRatioToMinSize({
+    (divider: DividerGeometry, ratio: number) => {
+      const fallbackMin = divider.axis === "horizontal" ? minPaneWidth : minPaneHeight;
+      const sides = minSizesForSplit?.(divider.splitId);
+      return clampRatioToSideMinSizes({
         ratio,
         axis: divider.axis,
         splitArea: divider.splitArea,
-        minSize: divider.axis === "horizontal" ? minPaneWidth : minPaneHeight,
+        firstMin: sides?.firstMin ?? fallbackMin,
+        secondMin: sides?.secondMin ?? fallbackMin,
         dividerSize,
-      }),
-    [dividerSize, minPaneHeight, minPaneWidth],
+      });
+    },
+    [dividerSize, minPaneHeight, minPaneWidth, minSizesForSplit],
   );
 
   return (
