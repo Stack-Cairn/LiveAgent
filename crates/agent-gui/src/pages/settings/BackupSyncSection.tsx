@@ -400,13 +400,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
           {t("settings.backupLocalDesc")}
         </p>
 
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
-          <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-            {t("settings.backupPlaintextWarning")}
-          </p>
-        </div>
-
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"

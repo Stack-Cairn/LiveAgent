@@ -111,8 +111,6 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupLocalTitle": "本地备份",
     "settings.backupLocalDesc":
       "把服务商、MCP、系统设置和技能启用状态导出为单个 JSON 文件；导入会整域覆盖对应配置。",
-    "settings.backupPlaintextWarning":
-      "导出文件包含服务商 API 密钥的明文，请像对待密码一样保管，勿放入公共仓库或聊天工具。",
     "settings.backupExport": "导出配置",
     "settings.backupImport": "导入配置",
     "settings.backupExportDone": "已导出到：",
@@ -158,7 +156,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAutoConfirmTitle": "开启自动同步？",
     "settings.backupSyncAutoConfirmSubtitle": "此后每次配置变更都会自动上传到远端，不再逐次询问。",
     "settings.backupSyncAutoConfirmDesc":
-      "上传的配置包含明文的服务商 API Key。请确认该 WebDAV 账号只有你自己能访问。自动同步只上传，不会自动下载覆盖本机配置。",
+      "开启后每次配置变更都会自动上传到远端。这可能产生较高的网络流量消耗，请确保你的网络环境与 WebDAV 服务支持频繁的数据传输。自动同步只上传，不会自动下载覆盖本机配置。",
     "settings.backupSyncAutoConfirmAction": "开启",
     "settings.backupSyncAutoErrorTitle": "上次自动同步失败",
     "settings.backupSyncSave": "保存",
@@ -363,8 +361,6 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupLocalTitle": "Local backup",
     "settings.backupLocalDesc":
       "Export providers, MCP, system settings and skill activation to a single JSON file. Importing replaces each included domain wholesale.",
-    "settings.backupPlaintextWarning":
-      "The exported file contains provider API keys in plaintext. Treat it like a password — keep it out of public repos and chat tools.",
     "settings.backupExport": "Export config",
     "settings.backupImport": "Import config",
     "settings.backupExportDone": "Exported to: ",
@@ -412,7 +408,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAutoConfirmSubtitle":
       "Every configuration change will be uploaded to the remote from now on, without further prompts.",
     "settings.backupSyncAutoConfirmDesc":
-      "The uploaded configuration contains provider API keys in plaintext. Make sure this WebDAV account is accessible only by you. Auto sync only uploads — it never downloads over this machine's configuration.",
+      "Every configuration change will be uploaded to the remote automatically. This may consume significant network traffic — make sure your network and WebDAV service can handle frequent transfers. Auto sync only uploads; it never downloads over this machine's configuration.",
     "settings.backupSyncAutoConfirmAction": "Enable",
     "settings.backupSyncAutoErrorTitle": "Last auto sync failed",
     "settings.backupSyncSave": "Save",
