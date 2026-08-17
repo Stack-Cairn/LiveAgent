@@ -190,7 +190,7 @@ export function DividerLayer(props: DividerLayerProps) {
                 "group-hover/divider:forced-colors:bg-[Highlight] group-focus-visible/divider:forced-colors:bg-[Highlight]",
                 divider.axis === "horizontal"
                   ? "h-full w-px group-hover/divider:w-[3px] group-focus-visible/divider:w-[3px]"
-                  : "h-px w-full group-hover/divider:h-[3px] group-focus-visible/divider:h-[3px]",
+                  : "h-px w-full -translate-y-px group-hover/divider:h-[3px] group-focus-visible/divider:h-[3px]",
               )}
             />
           </div>

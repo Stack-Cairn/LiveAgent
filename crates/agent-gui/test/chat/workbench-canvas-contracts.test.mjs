@@ -20,6 +20,9 @@ const workbenchCanvasSource = readSource(
   "../../../agent-ui/src/components/workbench/WorkbenchCanvas.tsx",
 );
 const chatPageSource = readSource("../../src/pages/ChatPage.tsx");
+const localTerminalPaneSource = readSource(
+  "../../../agent-ui/src/components/workbench/surfaces/LocalTerminalPaneSurface.tsx",
+);
 
 test("pane chrome never carries the native window drag region", () => {
   // A pane drag handle marked as a Tauri drag region would turn pane moves
@@ -43,6 +46,7 @@ test("dividers use pointer capture and commit once per gesture", () => {
   assert.match(dividerLayerSource, /requestAnimationFrame/);
   assert.match(dividerLayerSource, /role="separator"/);
   assert.match(dividerLayerSource, /onResizeCommit/);
+  assert.match(dividerLayerSource, /h-px w-full -translate-y-px/);
 });
 
 test("workbench canvas separates preview geometry from committed geometry", () => {
@@ -106,4 +110,9 @@ test("pane chrome is a minimal strip: grab pill plus close, no title text or bor
   assert.equal(paneChromeSource.includes("{title}"), false);
   assert.match(paneChromeSource, /data-workbench-pane-close/);
   assert.match(paneChromeSource, /rounded-full/);
+});
+
+test("terminal panes do not overlay a text termination control", () => {
+  assert.equal(localTerminalPaneSource.includes("data-terminal-pane-kill"), false);
+  assert.equal(localTerminalPaneSource.includes("workbench.terminalKill"), false);
 });
