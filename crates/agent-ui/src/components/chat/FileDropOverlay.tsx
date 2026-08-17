@@ -13,7 +13,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
   if (variant === "composer") {
     return (
       <div
-        className={`file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-[24px] border border-dashed px-5 py-3 backdrop-blur-xl ${
+        className={`file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-3xl border border-dashed px-5 py-3 backdrop-blur-xl ${
           canDropUpload
             ? "border-foreground/25 bg-background/92 dark:border-white/20 dark:bg-zinc-950/90"
             : "border-destructive/40 bg-background/94 dark:bg-zinc-950/92"
