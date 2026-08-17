@@ -103,6 +103,11 @@ type RightDockPanelProps = {
   onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  /**
+   * dock 视口报错时上抛 sessionId,由宿主按后端权威列表校验:会话确认
+   * 消失(幽灵记录)则整表刷新,坏 tab 自动退场;仍存活的瞬时错误不动列表。
+   */
+  onSessionGhost?: (sessionId: string) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
   onInsertCodeReviewSkill?: () => void;
@@ -387,6 +392,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onTerminalTabDragStart,
     onNewTerminalDragStart,
     onOpenTerminalInWorkbench,
+    onSessionGhost,
     onInsertFileMention,
     onOpenFile,
     onInsertCodeReviewSkill,
@@ -453,21 +459,27 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   // hook-level `error` stays reserved for list/create failures.
   const [terminalErrors, setTerminalErrors] = useState<ReadonlyMap<string, string>>(new Map());
 
-  const handleTerminalError = useCallback((sessionId: string, message: string | null) => {
-    setTerminalErrors((current) => {
-      const existing = current.get(sessionId);
-      if (message === null) {
-        if (existing === undefined) return current;
+  const handleTerminalError = useCallback(
+    (sessionId: string, message: string | null) => {
+      setTerminalErrors((current) => {
+        const existing = current.get(sessionId);
+        if (message === null) {
+          if (existing === undefined) return current;
+          const next = new Map(current);
+          next.delete(sessionId);
+          return next;
+        }
+        if (existing === message) return current;
         const next = new Map(current);
-        next.delete(sessionId);
+        next.set(sessionId, message);
         return next;
-      }
-      if (existing === message) return current;
-      const next = new Map(current);
-      next.set(sessionId, message);
-      return next;
-    });
-  }, []);
+      });
+      // attach 持续失败最常见的根因是幽灵会话(后端已丢、前端列表还在)。
+      // 上抛给宿主做权威校验;瞬时错误在校验中会被识别为仍存活而不动列表。
+      if (message) onSessionGhost?.(sessionId);
+    },
+    [onSessionGhost],
+  );
 
   useEffect(() => {
     // Closed/forgotten sessions leave the live list; drop their error buckets.

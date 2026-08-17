@@ -3166,6 +3166,7 @@ export function ChatPage(props: ChatPageProps) {
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
         }
+        onSessionGhost={verifyTerminalSessionAlive}
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
         gitReviewFocusRequest={gitReviewFocusRequest}

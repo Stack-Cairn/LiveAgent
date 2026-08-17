@@ -262,3 +262,16 @@ test("viewport errors escalate to an authoritative session-alive check", () => {
 test("ChatPage wires the ghost check into every terminal pane host", () => {
   assert.match(chatPageSource, /onSessionGhost=\{verifyTerminalSessionAlive\}/);
 });
+
+test("dock viewport errors escalate to the same ghost check as pane hosts", () => {
+  const dockSource = readFileSync(
+    new URL(
+      "../../../agent-ui/src/components/project-tools/RightDockPanel.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  // dock 侧错误分桶后同样上抛 onSessionGhost;ChatPage 接 verifyTerminalSessionAlive。
+  assert.match(dockSource, /if \(message\) onSessionGhost\?\.\(sessionId\);/);
+  assert.match(chatPageSource, /onSessionGhost=\{verifyTerminalSessionAlive\}/);
+});

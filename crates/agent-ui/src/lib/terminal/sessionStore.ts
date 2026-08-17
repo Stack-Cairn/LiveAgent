@@ -51,7 +51,11 @@ export function applyTerminalEventToSessions(
     return sortTerminalSessions(next);
   }
 
-  if (event.kind !== "output") {
+  // 只有 created 才把未知会话加入列表。其他 kind(exit/resized/renamed/
+  // reconnecting…)对未知 id 一律忽略:close 与 PTY reader 线程存在竞态,
+  // 迟到的 exit 可能在 closed 之后送达,若照单追加会把刚关闭的会话复活成
+  // 幽灵(dock 冒出 attach 必败的 tab)。
+  if (event.kind === "created") {
     return sortTerminalSessions([...current, session]);
   }
 
