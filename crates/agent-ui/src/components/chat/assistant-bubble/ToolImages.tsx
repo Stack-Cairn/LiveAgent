@@ -1,5 +1,10 @@
 import { deferLargeToolImages } from "@liveagent/adapters/assistantBubble";
-import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import {
+  ImagePreview,
+  ImagePreviewActionFeedback,
+  ImagePreviewContextMenu,
+  type ImagePreviewSlide,
+} from "@liveagent/ui/components/chat/ImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type {
   DisplayImageItemDetails,
@@ -38,6 +43,33 @@ type ToolImageLoadState = "loading" | "loaded" | "error";
 
 function getImageDataUrl(image: ImageContent) {
   return `data:${image.mimeType};base64,${image.data}`;
+}
+
+function imageFileExtension(mimeType: string | undefined) {
+  switch (mimeType?.split(";", 1)[0]?.trim().toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    case "image/svg+xml":
+      return "svg";
+    case "image/bmp":
+      return "bmp";
+    case "image/x-icon":
+      return "ico";
+    default:
+      return "image";
+  }
+}
+
+function displayImageFileName(detail: DisplayImageItemDetails, index: number, mimeType: string) {
+  const path = detail.path?.trim() ?? "";
+  const baseName = path.replace(/\\/g, "/").split("/").pop()?.trim() ?? "";
+  return baseName || `image-${index + 1}.${imageFileExtension(mimeType)}`;
 }
 
 function isDisplayImageItemDetails(value: unknown): value is DisplayImageItemDetails {
@@ -199,9 +231,12 @@ function formatToolResultBytes(sizeBytes: number) {
   return `${sizeBytes} B`;
 }
 
-function getInitialImageLoadState(source: NativeDisplayImageSourceState): ToolImageLoadState {
-  if (source.status === "error") return "error";
-  if (source.status === "ready" && !source.src) return "error";
+function getInitialImageLoadState(
+  status: NativeDisplayImageSourceState["status"],
+  src: string,
+): ToolImageLoadState {
+  if (status === "error") return "error";
+  if (status === "ready" && !src) return "error";
   return "loading";
 }
 
@@ -288,6 +323,8 @@ export function ToolResultImagePreview(props: {
     deferLargeToolImages && estimatedBytes > LARGE_TOOL_IMAGE_INLINE_THRESHOLD_BYTES;
   const [shouldLoad, setShouldLoad] = useState(readOnly ? true : !shouldDeferImage);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>("loading");
   const imageRef = useRef<HTMLImageElement | null>(null);
   const src = getImageDataUrl(image);
@@ -298,9 +335,13 @@ export function ToolResultImagePreview(props: {
         src,
         alt,
         title: alt,
+        dataBase64: image.data,
+        mimeType: image.mimeType,
+        sizeBytes: estimatedBytes,
+        fileName: `tool-image-${id}.${imageFileExtension(image.mimeType)}`,
       },
     ],
-    [alt, src],
+    [alt, estimatedBytes, id, image.data, image.mimeType, src],
   );
 
   useEffect(() => {
@@ -364,7 +405,7 @@ export function ToolResultImagePreview(props: {
           loading="lazy"
           decoding="async"
           className={cn(
-            "max-h-[32rem] w-full rounded-md object-contain transition-opacity duration-200",
+            "block max-h-[32rem] w-full rounded-md object-contain transition-opacity duration-200",
             imageStatus === "loaded"
               ? "opacity-100"
               : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
@@ -388,6 +429,11 @@ export function ToolResultImagePreview(props: {
         onClick={() => {
           if (canPreview) setPreviewOpen(true);
         }}
+        onContextMenu={(event) => {
+          if (!canPreview) return;
+          event.preventDefault();
+          setContextMenu({ x: event.clientX, y: event.clientY });
+        }}
         title={alt}
         aria-label={
           canPreview ? `${t("chat.image.preview")} ${alt}` : `${t("chat.image.loading")} ${alt}`
@@ -398,6 +444,16 @@ export function ToolResultImagePreview(props: {
       {previewOpen ? (
         <ImagePreview open={previewOpen} slides={slides} onClose={() => setPreviewOpen(false)} />
       ) : null}
+      {contextMenu && slides[0] ? (
+        <ImagePreviewContextMenu
+          slide={slides[0]}
+          position={contextMenu}
+          onOpen={() => setPreviewOpen(true)}
+          onClose={() => setContextMenu(null)}
+          onActionError={setActionError}
+        />
+      ) : null}
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }
@@ -450,17 +506,18 @@ function NativeDisplayImageTile(props: {
   isSvgImage: boolean;
   loading: "lazy" | "eager";
   onPreview: () => void;
+  onContextMenu?: (position: { x: number; y: number }) => void;
   readOnly?: boolean;
 }) {
-  const { source, alt, isGallery, isSvgImage, loading, onPreview } = props;
+  const { source, alt, isGallery, isSvgImage, loading, onPreview, onContextMenu } = props;
   const { t } = useLocale();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>(() =>
-    getInitialImageLoadState(source),
+    getInitialImageLoadState(source.status, source.src),
   );
 
   useEffect(() => {
-    setImageStatus(getInitialImageLoadState(source));
+    setImageStatus(getInitialImageLoadState(source.status, source.src));
   }, [source.src, source.status]);
 
   useEffect(() => {
@@ -535,6 +592,11 @@ function NativeDisplayImageTile(props: {
       onClick={() => {
         if (canPreview) onPreview();
       }}
+      onContextMenu={(event) => {
+        if (!canPreview) return;
+        event.preventDefault();
+        onContextMenu?.({ x: event.clientX, y: event.clientY });
+      }}
     >
       {content}
     </button>
@@ -549,14 +611,25 @@ export function NativeDisplayImageBlock(props: {
   const { t } = useLocale();
   const isGallery = payload.entries.length > 1;
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ index: number; x: number; y: number } | null>(
+    null,
+  );
   const imageSources = useNativeDisplayImageSources(payload.entries);
   const slides = useMemo<ImagePreviewSlide[]>(
     () =>
-      payload.entries.map((_entry, index) => ({
-        src: imageSources[index]?.src ?? "",
-        alt: formatDisplayImageLabel(t, payload.entries.length, index),
-        title: formatDisplayImageLabel(t, payload.entries.length, index),
-      })),
+      payload.entries.map((entry, index) => {
+        const mimeType = entry.image?.mimeType ?? entry.detail.mimeType ?? "";
+        return {
+          src: imageSources[index]?.src ?? "",
+          alt: formatDisplayImageLabel(t, payload.entries.length, index),
+          title: formatDisplayImageLabel(t, payload.entries.length, index),
+          dataBase64: entry.image?.data,
+          mimeType,
+          sizeBytes: entry.image ? estimateBase64Bytes(entry.image.data) : entry.detail.sizeBytes,
+          fileName: displayImageFileName(entry.detail, index, mimeType),
+        };
+      }),
     [imageSources, payload.entries, t],
   );
 
@@ -579,6 +652,7 @@ export function NativeDisplayImageBlock(props: {
               isSvgImage={isSvgImage}
               loading={isGallery ? "eager" : "lazy"}
               onPreview={() => setPreviewIndex(index)}
+              onContextMenu={({ x, y }) => setContextMenu({ index, x, y })}
               readOnly={readOnly}
             />
           );
@@ -592,6 +666,16 @@ export function NativeDisplayImageBlock(props: {
           onClose={() => setPreviewIndex(null)}
         />
       ) : null}
+      {contextMenu && slides[contextMenu.index] ? (
+        <ImagePreviewContextMenu
+          slide={slides[contextMenu.index]}
+          position={contextMenu}
+          onOpen={() => setPreviewIndex(contextMenu.index)}
+          onClose={() => setContextMenu(null)}
+          onActionError={setActionError}
+        />
+      ) : null}
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }

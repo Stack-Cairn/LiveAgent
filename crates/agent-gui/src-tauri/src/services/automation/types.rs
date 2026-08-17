@@ -18,7 +18,9 @@ pub const CRON_TASK_KINDS: &[&str] = &["bash", "http", "prompt"];
 pub const CRON_REASONING_LEVELS: &[&str] =
     &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 /// Per-task execution timeout applied to bash scripts, each http request and
-/// the prompt run lease. Tasks stored before the field existed resolve to it.
+/// the prompt run execution lease (stamped when a runner claims the run).
+/// Tasks stored before the field existed resolve to it. Upper bounds are
+/// per-kind — see validate.rs.
 pub const DEFAULT_CRON_TIMEOUT_SECONDS: u64 = 300;
 
 pub fn default_cron_timeout_seconds() -> u64 {
@@ -247,7 +249,15 @@ pub struct PromptRunRequest {
     pub provider_id: String,
     pub model: String,
     pub started_at: i64,
+    /// Deadline enforced by the expiry sweep. Stamped as a fixed claim window
+    /// at queue time, then re-stamped to `claim_now + timeout_seconds` when a
+    /// runner claims the row (see store.rs).
     pub lease_expires_at: i64,
+    /// Task timeout snapshot taken at queue time (like workdir/reasoning), so
+    /// the claim-time lease re-stamp survives task edits/deletion. Rows queued
+    /// before this field existed resolve to the default.
+    #[serde(default = "default_cron_timeout_seconds")]
+    pub timeout_seconds: u64,
     #[serde(default = "default_true")]
     pub counted: bool,
     /// Resolved at queue time (task pin or global workdir). Empty on rows

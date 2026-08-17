@@ -5,10 +5,63 @@ type FileDropOverlayProps = {
   title: string;
   description: string;
   limitHint: string;
+  variant?: "panel" | "composer";
 };
 
 export function FileDropOverlay(props: FileDropOverlayProps) {
-  const { canDropUpload, title, description, limitHint } = props;
+  const { canDropUpload, title, description, limitHint, variant = "panel" } = props;
+  if (variant === "composer") {
+    return (
+      <div
+        className={`file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-[24px] border border-dashed px-5 py-3 backdrop-blur-xl ${
+          canDropUpload
+            ? "border-foreground/25 bg-background/92 dark:border-white/20 dark:bg-zinc-950/90"
+            : "border-destructive/40 bg-background/94 dark:bg-zinc-950/92"
+        }`}
+        aria-hidden="true"
+      >
+        <div className="file-drop-overlay-card flex min-w-0 items-center gap-3 text-left">
+          <div
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${
+              canDropUpload
+                ? "bg-foreground/[0.05] text-foreground/85 ring-foreground/10 dark:bg-white/[0.07] dark:text-white/90 dark:ring-white/10"
+                : "bg-destructive/[0.08] text-destructive/90 ring-destructive/15"
+            }`}
+          >
+            {canDropUpload ? (
+              <Upload className="h-5 w-5" strokeWidth={1.75} />
+            ) : (
+              <Ban className="h-5 w-5" strokeWidth={1.75} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[calc(14px*var(--zone-font-scale,1))] font-semibold leading-5 text-foreground">
+              {title}
+            </div>
+            <div className="hidden max-w-[420px] truncate text-xs leading-5 text-muted-foreground sm:block">
+              {description}
+            </div>
+          </div>
+          <div
+            className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium md:inline-flex ${
+              canDropUpload
+                ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
+                : "border-destructive/20 bg-destructive/[0.05] text-destructive/80"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`inline-flex h-1.5 w-1.5 rounded-full ${
+                canDropUpload ? "bg-foreground/35 dark:bg-white/50" : "bg-destructive/55"
+              }`}
+            />
+            {limitHint}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"

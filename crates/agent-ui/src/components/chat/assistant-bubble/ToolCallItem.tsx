@@ -31,6 +31,7 @@ import { ChevronRight } from "../../IconSet";
 import {
   areStableValuesEqual,
   getBuiltinResultKind,
+  getShellSessionDisplayDetails,
   getSubagentInlineSummary,
   getToolDisplayName,
   getToolDisplayTitle,
@@ -65,6 +66,14 @@ function ToolCallItem({
   const { t } = useLocale();
   const result = item.toolResult;
   const builtinResultKind = getBuiltinResultKind(result);
+  const isBash = item.toolCall.name === "Bash";
+  const isShellSessionControl =
+    item.toolCall.name === "ProcessWait" || item.toolCall.name === "ProcessStop";
+  const isShellSessionTool = isBash || isShellSessionControl;
+  const shellSessionDetails = isShellSessionTool ? getShellSessionDisplayDetails(result) : null;
+  const shellSessionStatus = shellSessionDetails?.status;
+  const shellSessionFailed = shellSessionStatus === "failed" || shellSessionStatus === "timed_out";
+  const displayIsRunning = Boolean(isRunning);
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
   const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
@@ -104,7 +113,6 @@ function ToolCallItem({
     !isAskUser &&
     (!isSubagentCard || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
-  const isBash = item.toolCall.name === "Bash";
   const isManagedProcess = item.toolCall.name === "ManagedProcess";
   const inlineCommand =
     !isRedactedToolContent &&
@@ -149,15 +157,24 @@ function ToolCallItem({
           ? t("chat.askUser.waiting")
           : t("chat.askUser.preparing")
         : t("chat.tool.running")
-      : result
-        ? result.isError
-          ? t("chat.tool.failed")
-          : t("chat.tool.success")
-        : t("chat.tool.waiting");
+      : shellSessionStatus === "running"
+        ? t("chat.tool.running")
+        : shellSessionStatus === "cancelled"
+          ? t("chat.tool.stopped")
+          : shellSessionStatus === "completed"
+            ? t("chat.tool.success")
+            : shellSessionFailed
+              ? t("chat.tool.failed")
+              : result
+                ? result.isError
+                  ? t("chat.tool.failed")
+                  : t("chat.tool.success")
+                : t("chat.tool.waiting");
 
-  const statusTextClass = result?.isError
-    ? "text-[hsl(var(--chat-error))]"
-    : "text-muted-foreground/60";
+  const statusTextClass =
+    result?.isError || shellSessionFailed
+      ? "text-[hsl(var(--chat-error))]"
+      : "text-muted-foreground/60";
 
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
@@ -218,7 +235,7 @@ function ToolCallItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {isRunning ? (
+        {displayIsRunning ? (
           <AssistantStatus
             className="min-h-0 gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/60"
             iconClassName="h-3 w-3"
@@ -244,7 +261,7 @@ function ToolCallItem({
   const body = (
     <LazyCollapse
       open={effectiveOpen}
-      retainWhileClosed={retainRunningToolContent && Boolean(isRunning)}
+      retainWhileClosed={retainRunningToolContent && displayIsRunning}
     >
       {() => (
         <div className="space-y-3 pb-2 pl-[22px] pt-1">
@@ -288,12 +305,12 @@ function ToolCallItem({
                   if (!/\S/.test(resultText)) return null;
                   if (builtinResultKind && builtinResultKind !== "read_image") return null;
 
-                  if (isBash || readOnly) {
+                  if (isShellSessionTool || readOnly) {
                     return (
                       <ToolScrollablePre
                         className={cn(
                           "max-h-56",
-                          isBash
+                          isShellSessionTool
                             ? "bg-zinc-950/85 text-zinc-300/90 dark:bg-zinc-900/80"
                             : "bg-black/[0.02] dark:bg-white/[0.03]",
                         )}

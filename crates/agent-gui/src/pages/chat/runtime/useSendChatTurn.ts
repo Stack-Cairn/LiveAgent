@@ -15,6 +15,7 @@ import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScroll
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import {
   buildSkillsSystemPrompt,
+  formatExplicitSkillMentions,
   resolveExplicitSkillMentions,
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
@@ -42,6 +43,7 @@ import {
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { MemoryExtractionStatusKey } from "../../../lib/chat/memory/extractionEngine";
+import { memoryTurnInjection } from "../../../lib/chat/memory/injectionController";
 import {
   BRANCH_CONVERSATION_DEFAULT_TITLE,
   buildFallbackConversationTitle,
@@ -49,6 +51,7 @@ import {
   getFirstUserMessageText,
   isAbortLikeError,
 } from "../../../lib/chat/page/chatPageHelpers";
+import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { buildMemoryOverviewSection } from "../../../lib/memory/prompts/injection";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
@@ -1162,6 +1165,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     acknowledgeGatewayRunStarted();
     let skillsPrompt = "";
     let memoryPrompt = "";
+    /** 本轮 `/skill-name` 显式提及块;没有提及时恒为空串,不会挂出任何内容。 */
+    let explicitSkillMentionBlock = "";
     let skillsRootDirForTools = skillsRootDir;
     let skillAccessPolicyForTools: SkillAccessPolicy | undefined = effectiveSkillsEnabled
       ? {
@@ -1176,7 +1181,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     function buildPreparedContext(
       state: ConversationViewState,
       tools?: Context["tools"],
-      options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
+      options?: {
+        includeAbortedMessages?: boolean;
+        includeUploadedFilesMetadata?: boolean;
+        includeMemoryTurnUpdates?: boolean;
+      },
     ): Context {
       return buildPreparedConversationContext({
         state,
@@ -1184,6 +1193,20 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         activeAgentPrompt,
         skillsPrompt,
         memoryPrompt,
+        // 每次组装都现取:增量块按消息 id 绑定,已挂上的块在后续轮次原样重放,
+        // 历史区间的字节因此保持稳定。
+        // 只有发给主模型的上下文才需要增量块;记忆抽取这类复用同一份消息的旁路
+        // 必须显式关掉,否则块里的索引行会被当成用户说的话再抽一遍。
+        memoryTurnUpdates:
+          options?.includeMemoryTurnUpdates === false
+            ? null
+            : memoryTurnInjection.getMessageUpdates(conversationId),
+        // 显式提及块与 memory 增量同一个口径:同样是合成出来的上下文,不能被
+        // 记忆抽取这类旁路当成用户说的话再抽一遍。
+        skillMentionUpdates:
+          options?.includeMemoryTurnUpdates === false
+            ? null
+            : skillMentionInjection.getMessageUpdates(conversationId),
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
       });
@@ -1202,6 +1225,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         activeAgentPrompt,
         skillsPrompt,
         memoryPrompt,
+        memoryTurnUpdates: memoryTurnInjection.getMessageUpdates(conversationId),
+        skillMentionUpdates: skillMentionInjection.getMessageUpdates(conversationId),
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
       });
@@ -1268,6 +1293,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             titlePromise,
           });
         },
+        // 压缩把携带 memory 增量块的 user 消息移出 active segment,增量对模型
+        // 永久不可见;丢弃注入状态,下一轮把 fresh 快照重冻结进 system 段 ——
+        // 压缩本来就要重建前缀,这次重冻结免费。
+        onCompacted: () => memoryTurnInjection.invalidate(conversationId),
       },
     });
     compactionBound = true;
@@ -1334,22 +1363,48 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         structured: composerDraft?.skillMentions ?? [],
         enabledSkills: selectedSkills,
       });
+      // 显式提及只对当轮有效:留在 system prompt 里会让它这轮多一段、下轮撤回去,
+      // 一次 `/skill-name` 连废两次缓存前缀。这里只算出块,挂载推迟到停止检查之后。
+      explicitSkillMentionBlock = formatExplicitSkillMentions(explicitSkills);
       skillsPrompt = buildSkillsSystemPrompt({
         rootDir,
         selected: selectedSkills,
-        explicit: explicitSkills,
       });
     }
 
+    // memory 索引每轮都可能变(模型刚写完一条,下一轮索引就跟着变)。整块塞进
+    // system prompt 会让 system 段跟着漂,把整条缓存前缀连同全部历史一起顶掉。
+    // 因此只有首轮走 system prompt(那时它本就是稳定前缀的一部分),之后 system
+    // 段冻结,变化改挂到当轮 user 消息尾部 —— 复用 pi-ai 已经打在最后一条 user
+    // 消息上的那个断点,不额外占用 Anthropic 的 4 个 cache_control 名额。
+    let memoryOverview: string | null = null;
     try {
-      memoryPrompt = await buildMemoryOverviewSection(effectiveWorkdir);
+      memoryOverview = await buildMemoryOverviewSection(effectiveWorkdir);
     } catch (error) {
       console.warn("Failed to build memory overview prompt", error);
-      memoryPrompt = "";
+      // null 表示这轮没读到,基线维持原样;空串是「一条记忆都没有」,属于正常内容。
+      memoryOverview = null;
     }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
+    // 放在停止检查之后:这一轮被停掉时请求根本没发出去,提前推进基线会让下一轮
+    // 漏报这次变化。
+    memoryPrompt = memoryTurnInjection.planTurn({
+      conversationId,
+      messageId: pendingUserMessage.id,
+      overview: memoryOverview,
+      // project 段随 workdir 换血,增量 diff 无法保真表达;基线记录冻结时的
+      // workdir,切换时由 planTurn 触发重冻结。
+      workdir: effectiveWorkdir,
+    }).systemText;
+    // 同样放在停止检查之后:这一轮被停掉时消息根本没发出去,提前记账只会给一个
+    // 永远对不上的消息 id 留下垃圾块。空块不会创建任何状态。
+    skillMentionInjection.record({
+      conversationId,
+      messageId: pendingUserMessage.id,
+      block: explicitSkillMentionBlock,
+    });
 
     const hookScope = createHookRunScope({
       hooks: getAutomationState().hooks.hooks,

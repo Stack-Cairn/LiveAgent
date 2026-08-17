@@ -13,7 +13,7 @@ export { MODEL_CATALOG, MODEL_CATALOG_SNAPSHOT_DATE } from "./catalog.generated"
 export type { CatalogModelEntry, CatalogProviderId };
 
 // 与 settings 的 ProviderId 结构相同；本模块不 import settings（避免环）。
-export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai";
+export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai" | "deepseek";
 
 export type ModelLimits = { contextWindow: number; maxOutputToken: number };
 
@@ -23,6 +23,7 @@ export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, Cata
   codex: "openai",
   gemini: "google",
   xai: "xai",
+  deepseek: "deepseek",
 };
 
 /** 目录未命中时的供应商兜底限额（xai 与 codex 同为 OpenAI 兼容生态，共用兜底值）。 */
@@ -31,6 +32,7 @@ export const PROVIDER_FALLBACK_LIMITS: Record<CatalogAppProviderId, ModelLimits>
   codex: { contextWindow: 258_000, maxOutputToken: 142_000 },
   gemini: { contextWindow: 1_048_576, maxOutputToken: 65_536 },
   xai: { contextWindow: 258_000, maxOutputToken: 142_000 },
+  deepseek: { contextWindow: 128_000, maxOutputToken: 32_000 },
 };
 
 // 唯一的目录数据语义规则：社区目录对不公布独立输出上限的供应商一律记
@@ -115,7 +117,8 @@ export function findCatalogModel(
 // 真实限额被本供应商兜底值顶掉。国内厂商分区（deepseek/zhipuai/alibaba 等）
 // 没有对应的应用供应商类型，只经这里消费。目录 id 全局小写唯一（生成期跨
 // 分区去重+目录不变量测试锁死）；候选链放外层——更精确的 id 形态优先于
-// 供应商声明序。
+// 供应商声明序。已有正式应用供应商的模型也允许出现在通用中转端点中，因此仍可
+// 经这条协议无关的元数据回查路径命中。
 const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
 
 export function findCatalogModelAcrossProviders(

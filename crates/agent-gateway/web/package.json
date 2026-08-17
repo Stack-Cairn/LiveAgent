@@ -29,15 +29,14 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "katex": "^0.17.0",
-    "monaco-editor": "^0.55.1",
+    "katex": "^0.18.4",
+    "monaco-editor": "^0.56.0",
     "react": "^19.2.4",
     "react-complex-tree": "^2.6.1",
     "react-dom": "^19.2.4",
     "remark-breaks": "^4.0.0",
     "streamdown": "^2.5.0",
-    "tailwind-merge": "^3.5.0",
-    "yet-another-react-lightbox": "^3.31.0"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

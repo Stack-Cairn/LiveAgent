@@ -415,6 +415,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 
@@ -457,9 +458,8 @@ test("web chat runtime controls default and follow model-aware reasoning support
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // 中转挂载的国产厂商模型走跨供应商回查命中真实形态：glm-4.7 纯 toggle
-  //（单 "high" 档），deepseek-reasoner 恒开不可调（无档位），deepseek-chat
-  // 非思考模型（思考控件整组隐藏）。
+  // 中转挂载的国产厂商模型走跨供应商回查命中真实形态；DeepSeek 正式供应商
+  // 直接读取自己的目录。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -470,15 +470,15 @@ test("web chat runtime controls default and follow model-aware reasoning support
   );
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "claude_code",
+      providerId: "deepseek",
       modelId: "deepseek-reasoner",
     }),
     [],
   );
-  assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "deepseek-reasoner"), true);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "codex",
+      providerId: "deepseek",
       modelId: "deepseek-chat",
     }),
     [],
@@ -551,6 +551,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_completions: "xhigh",
         gemini: "high",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -578,6 +579,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -598,6 +600,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
+        deepseek: "high",
       },
     },
   );

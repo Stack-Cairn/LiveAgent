@@ -5,6 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const bus = loader.loadModule("src/lib/subagents/bus.ts");
 const roster = loader.loadModule("src/lib/subagents/roster.ts");
+const tailBlock = loader.loadModule("src/lib/chat/context/contextTailBlock.ts");
 
 let nextSeq = 0;
 function makeMessage(overrides = {}) {
@@ -31,7 +32,7 @@ function render(messages, overrides = {}) {
     currentAgentName: overrides.currentAgentName,
     maxMessages: overrides.maxMessages,
     maxBodyChars: overrides.maxBodyChars,
-  });
+  }).text;
 }
 
 test("snapshot buckets messages into direct inbox, shared decisions, open questions, and recent", () => {
@@ -169,80 +170,213 @@ test("formatRoster and formatTemplates render bounded description blocks", () =>
   );
 });
 
-test("buildRosterReminder lists agents with latest-run fields and truncates long values", () => {
+function makeIdentity(agentId, overrides = {}) {
+  return {
+    parentConversationId: "conversation-1",
+    agentId,
+    name: overrides.name ?? `Agent ${agentId}`,
+    role: overrides.role ?? "R",
+    identityPrompt: "",
+    lastMode: overrides.lastMode ?? "readonly",
+    createdAt: 1,
+    updatedAt: overrides.updatedAt ?? 2,
+  };
+}
+
+function makeRun(agentId, overrides = {}) {
+  return {
+    id: `run-${agentId}`,
+    agentId,
+    status: overrides.status ?? "completed",
+    prompt: overrides.prompt ?? `task for ${agentId}`,
+    summary: overrides.summary,
+  };
+}
+
+test("identity section carries only stable fields and truncates long values", () => {
+  assert.equal(roster.buildRosterIdentitySection({ identities: [] }), "");
+
+  const longRole = "very long role ".repeat(30);
+  const section = roster.buildRosterIdentitySection({
+    identities: [makeIdentity("agent-a", { name: "Agent A", role: longRole })],
+  });
+  assert.match(section, /Existing delegated agents in this parent conversation:/);
+  assert.match(section, /- id=agent-a name=Agent A role=very long role/);
+  // 160-char cap on role, whitespace collapsed, ellipsis appended.
+  assert.ok(/role=[^\n]*\.\.\./.test(section));
+  assert.match(section, /call Agent again with an `agents` entry per existing id/);
+  // 易变字段一律不得出现在 systemPrompt 段里。
+  assert.doesNotMatch(section, /status=/);
+  assert.doesNotMatch(section, /last_task=/);
+  assert.doesNotMatch(section, /last_summary=/);
+  // mode 随每次 Agent 调用变化（lastMode），属于易变字段，同样不得进稳定段。
+  assert.doesNotMatch(section, /mode=/);
+});
+
+test("identity section bytes survive listIdentities() reordering", () => {
+  // listIdentities() 按 updatedAt 倒序返回，任一身份被更新都会改变顺序。
+  const ordered = [
+    makeIdentity("agent-a", { updatedAt: 30 }),
+    makeIdentity("agent-b", { updatedAt: 20 }),
+    makeIdentity("agent-c", { updatedAt: 10 }),
+  ];
+  const reordered = [ordered[2], ordered[0], ordered[1]];
+  const reversed = [...ordered].reverse();
+
+  const baseline = roster.buildRosterIdentitySection({ identities: ordered });
+  assert.equal(roster.buildRosterIdentitySection({ identities: reordered }), baseline);
+  assert.equal(roster.buildRosterIdentitySection({ identities: reversed }), baseline);
+  // 归一化后恒为 agentId 升序。
+  assert.ok(baseline.indexOf("id=agent-a") < baseline.indexOf("id=agent-b"));
+  assert.ok(baseline.indexOf("id=agent-b") < baseline.indexOf("id=agent-c"));
+});
+
+test("run-status advancing leaves the identity section byte-identical", () => {
+  // run 推进会 bump 对应身份的 updatedAt，listIdentities() 随之把它排到最前，
+  // 于是稳定段拿到的入参顺序也变了——字节仍必须一致。
+  const agentA = makeIdentity("agent-a", { updatedAt: 10 });
+  const agentB = makeIdentity("agent-b", { updatedAt: 20 });
+  const identitiesBefore = [agentB, agentA];
+  const before = new Map([["agent-a", makeRun("agent-a", { status: "running" })]]);
+
+  const advancedA = { ...agentA, updatedAt: 30 };
+  const identitiesAfter = [advancedA, agentB];
+  const after = new Map([
+    ["agent-a", makeRun("agent-a", { status: "completed", summary: "found three issues" })],
+    ["agent-b", makeRun("agent-b", { status: "running" })],
+  ]);
+
+  const identityBefore = roster.buildRosterIdentitySection({ identities: identitiesBefore });
+  const identityAfter = roster.buildRosterIdentitySection({ identities: identitiesAfter });
+  assert.equal(identityAfter, identityBefore);
+
+  const statusBefore = roster.buildRosterRunStatusSection({
+    identities: identitiesBefore,
+    latestRunsByAgent: before,
+  });
+  const statusAfter = roster.buildRosterRunStatusSection({
+    identities: identitiesAfter,
+    latestRunsByAgent: after,
+  });
+  assert.match(statusBefore, /Latest run state of the delegated agents/);
+  // mode 从身份段移到易变段，随每条 run 状态一起投递。
+  assert.match(statusBefore, /- id=agent-a status=running mode=readonly last_task=task for agent-a/);
+  // 没有历史 run 的身份不出现在易变段里。
+  assert.doesNotMatch(statusBefore, /id=agent-b/);
+  assert.notEqual(statusAfter, statusBefore);
+  assert.match(statusAfter, /- id=agent-a status=completed .*last_summary=found three issues/);
+  assert.match(statusAfter, /- id=agent-b status=running/);
+});
+
+test("run-status section truncates long values and stays empty without runs", () => {
+  const identities = [makeIdentity("agent-a")];
   assert.equal(
-    roster.buildRosterReminder({ identities: [], latestRunsByAgent: new Map() }),
+    roster.buildRosterRunStatusSection({ identities, latestRunsByAgent: new Map() }),
     "",
   );
 
-  const longRole = "very long role ".repeat(30);
-  const identities = [
-    {
-      parentConversationId: "conversation-1",
-      agentId: "agent-a",
-      name: "Agent A",
-      role: longRole,
-      identityPrompt: "",
-      lastMode: "readonly",
-      createdAt: 1,
-      updatedAt: 2,
-    },
-  ];
-  const latestRunsByAgent = new Map([
-    [
-      "agent-a",
-      {
-        id: "run-1",
-        agentId: "agent-a",
-        status: "completed",
-        prompt: "multi\nline   prompt " + "p".repeat(500),
-        summary: "s".repeat(500),
-      },
-    ],
-  ]);
-  const reminder = roster.buildRosterReminder({ identities, latestRunsByAgent });
-  assert.match(reminder, /Existing delegated agents in this parent conversation:/);
-  assert.match(reminder, /- id=agent-a name=Agent A role=very long role/);
-  // 160-char cap on role, 360 default cap on prompt/summary, whitespace collapsed.
-  assert.match(reminder, new RegExp(`role=${"very long role ".repeat(10).slice(0, 160).trim().slice(0, 20)}`));
-  assert.ok(/role=[^\n]*\.\.\./.test(reminder));
-  assert.match(reminder, /status=completed/);
-  // Newlines and repeated whitespace collapse to single spaces.
-  assert.match(reminder, /last_task=multi line prompt/);
-  assert.ok(/last_task=[^\n]*\.\.\./.test(reminder));
-  assert.ok(/last_summary=[^\n]*\.\.\./.test(reminder));
-  assert.match(reminder, /call Agent again with an `agents` entry per existing id/);
+  const section = roster.buildRosterRunStatusSection({
+    identities,
+    latestRunsByAgent: new Map([
+      [
+        "agent-a",
+        makeRun("agent-a", {
+          prompt: `multi\nline   prompt ${"p".repeat(500)}`,
+          summary: "s".repeat(500),
+        }),
+      ],
+    ]),
+  });
+  // Newlines and repeated whitespace collapse to single spaces; 360-char cap.
+  assert.match(section, /last_task=multi line prompt/);
+  assert.ok(/last_task=[^\n]*\.\.\./.test(section));
+  assert.ok(/last_summary=[^\n]*\.\.\./.test(section));
 });
 
-test("buildRosterReminder omits entries beyond the cap with an omitted-count line", () => {
-  const identities = Array.from({ length: 15 }, (_, index) => ({
-    parentConversationId: "conversation-1",
-    agentId: `agent-${index}`,
-    name: `Agent ${index}`,
-    role: "R",
-    identityPrompt: "",
-    lastMode: "readonly",
-    createdAt: 1,
-    updatedAt: 2,
-  }));
+test("both sections truncate on the same set so no agent is listed in only one", () => {
+  // 数组顺序与 agentId 顺序相反：任一段若按“到手顺序”截断，选出的 12 个会是
+  // agent-14..agent-03，与归一化后的 agent-00..agent-11 完全错位。
+  const identities = Array.from({ length: 15 }, (_, index) =>
+    makeIdentity(`agent-${String(14 - index).padStart(2, "0")}`, { updatedAt: 100 + index }),
+  );
   // Blank ids/names are filtered before counting.
-  identities.push({
-    parentConversationId: "conversation-1",
-    agentId: "  ",
-    name: "Ghost",
-    role: "R",
-    identityPrompt: "",
-    lastMode: "readonly",
-    createdAt: 1,
-    updatedAt: 2,
-  });
-  const reminder = roster.buildRosterReminder({
+  identities.push(makeIdentity("  ", { name: "Ghost" }));
+  const latestRunsByAgent = new Map(
+    identities
+      .filter((identity) => identity.agentId.trim())
+      .map((identity) => [identity.agentId, makeRun(identity.agentId)]),
+  );
+
+  const identitySection = roster.buildRosterIdentitySection({ identities });
+  const statusSection = roster.buildRosterRunStatusSection({ identities, latestRunsByAgent });
+  const idsOf = (text) =>
+    text
+      .split("\n")
+      .filter((line) => line.startsWith("- id="))
+      .map((line) => line.slice("- id=".length).split(" ")[0]);
+
+  const identityIds = idsOf(identitySection);
+  assert.equal(identityIds.length, 12);
+  assert.equal(identityIds[0], "agent-00");
+  assert.equal(identityIds[11], "agent-11");
+  assert.deepEqual(idsOf(statusSection), identityIds);
+  // 溢出计数只归稳定段（它是身份列表的一部分），且不重复出现在易变段里。
+  assert.match(identitySection, /- \.\.\. 3 more omitted/);
+  assert.doesNotMatch(statusSection, /more omitted/);
+});
+
+test("unchanged run state renders identical bytes so the turn attaches nothing", () => {
+  const identities = [makeIdentity("agent-a"), makeIdentity("agent-b")];
+  const runs = [makeRun("agent-a", { summary: "done" }), makeRun("agent-b", { status: "running" })];
+
+  const previous = roster.buildRosterRunStatusSection({
     identities,
-    latestRunsByAgent: new Map(),
+    latestRunsByAgent: new Map([
+      [runs[0].agentId, runs[0]],
+      [runs[1].agentId, runs[1]],
+    ]),
   });
-  const agentLines = reminder.split("\n").filter((line) => line.startsWith("- id="));
-  assert.equal(agentLines.length, 12);
-  assert.match(reminder, /- \.\.\. 3 more omitted/);
+  // 同一状态，但身份顺序与 Map 插入顺序都不同——渲染结果必须字节相同，
+  // 否则调用方的「内容没变就不投递」判据失效，每轮都会挂一个新块。
+  const current = roster.buildRosterRunStatusSection({
+    identities: [identities[1], identities[0]],
+    latestRunsByAgent: new Map([
+      [runs[1].agentId, runs[1]],
+      [runs[0].agentId, runs[0]],
+    ]),
+  });
+  assert.equal(current, previous);
+
+  // 调用方的投递判据：与上次投递内容相同 → 本轮不产生任何额外内容。
+  const delta = current === previous ? "" : current;
+  const messages = [
+    { role: "user", content: "hi", timestamp: 1 },
+    {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "call-1", name: "Read", arguments: {} }],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: "m",
+      usage: {},
+      stopReason: "toolUse",
+      timestamp: 1,
+    },
+    {
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "Read",
+      content: [{ type: "text", text: "result" }],
+      isError: false,
+      timestamp: 1,
+    },
+  ];
+  assert.equal(
+    tailBlock.attachPinnedTailBlocks(
+      messages,
+      delta ? [{ anchorToolCallId: "call-1", text: delta }] : [],
+    ),
+    messages,
+  );
 });
 
 test("titleizeStableId and createSubagentIdentity derive names mechanically", () => {

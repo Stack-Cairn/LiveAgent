@@ -15,6 +15,8 @@ import {
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { PreparedProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
+import { capturePrefixShape, comparePrefixShape } from "../../debug/prefixCacheShape";
+import { readPreviousPrefixShape, recordPrefixShape } from "../../debug/prefixShapeStore";
 import {
   createHostedSearchEventAggregator,
   createHostedSearchProbeId,
@@ -25,6 +27,7 @@ import {
   buildProviderRequestMetadata,
   createModelFromConfig,
   createStreamingTextReconciler,
+  describeProviderCacheShape,
   finalizeProviderStreamOptions,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
@@ -54,14 +57,22 @@ import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
+import {
+  attachPinnedTailBlocks,
+  type PinnedTailBlock,
+  resolveTailBlockAnchorId,
+} from "../context/contextTailBlock";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
   createDeferredProviderNativeWebSearchStatus,
   resolveProviderNativeWebSearchStatus,
 } from "../search/providerNativeSearchStatus";
-import { comparableToolCall } from "./flattenedToolCallText";
-import { recoverAssistantSeedToolCalls, stripSeedToolCallMarkup } from "./seedToolCalls";
+import {
+  comparableToolCall,
+  recoverAssistantSeedToolCalls,
+  stripSeedToolCallMarkup,
+} from "./seedToolCalls";
 import { wrapStreamWithToolCallArgumentGuard } from "./toolCallArgumentGuard";
 import { buildToolsSuffix } from "./toolExecutionPrompt";
 
@@ -344,6 +355,12 @@ function toMessageToolResult(message: Message, toolCall: ToolCall): ToolResultMe
 type TurnContextOverride = {
   context: Context;
   emittedMessages: Message[];
+  /**
+   * 只随出站请求投递的尾部文本（bus 增量、roster 运行状态等易变内容）。
+   * 不写入 agent.state.messages：写进去会经 emittedMessages 泄漏到持久化、
+   * UI 与记忆抽取。runner 逐次累积并在每次出站请求上重挂。
+   */
+  wireTailText?: string;
 } | null;
 
 type ToolExecutionEventContext = {
@@ -438,6 +455,7 @@ export async function runAssistantWithTools(params: {
   }) => Promise<{
     context: Context;
     emittedMessages: Message[];
+    wireTailText?: string;
   } | null>;
   onToolStatus?: (status: string | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
@@ -783,7 +801,6 @@ export async function runAssistantWithTools(params: {
         assistant.content
           .flatMap((block) => (block.type === "text" ? [block.text] : []))
           .join("\n"),
-        { recoverFlattenedText: true },
       ).trim();
 
     // Relays that execute Anthropic server tools in-band can leak the original
@@ -826,6 +843,13 @@ export async function runAssistantWithTools(params: {
     let currentSystemPrompt = params.context.systemPrompt;
     let emittedBaselineIndex = params.context.messages.length;
     let latestAgentEndMessages: Message[] = [];
+    // 尾部投递内容的累积器：只进出站请求，永不进 agent.state.messages。
+    // 每个块连同它首次挂上的锚点 toolCallId 一起记住——锚点必须钉死，重新搜索
+    // 会让块随工具循环推进从旧消息搬到新消息，旧消息字节变回去、前缀就断了。
+    // 语义：带 wireTailText 的 override 追加（按到达顺序）；不带 wireTailText 的
+    // override 清空——不带的只有压缩/重冻结分支，此时快照已重算进 systemPrompt，
+    // 旧尾部内容已被快照覆盖，继续挂只会重复投递。
+    let accumulatedWireTailBlocks: PinnedTailBlock[] = [];
     let agentTools: AgentTool<any>[] = [];
     const pendingRecoveredSeedTurnRef: {
       current: {
@@ -1020,6 +1044,23 @@ export async function runAssistantWithTools(params: {
       override: Exclude<TurnContextOverride, null>,
     ): AgentContext | undefined {
       if (!agent) return undefined;
+      if (override.wireTailText) {
+        // 锚点在这里解析一次就钉死：override.context.messages 是本轮出站请求
+        // 的消息列表，此刻的“最后一条安全工具结果”就是这个块该长期附着的位置。
+        // 解析不出锚点时丢弃本块——调用方在探锚阶段已确认过可挂，走到这里为空
+        // 只可能是压缩改写了消息列表，此时游标也不会推进，下一轮重投。
+        const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
+        if (anchorToolCallId) {
+          accumulatedWireTailBlocks = [
+            ...accumulatedWireTailBlocks,
+            { anchorToolCallId, text: override.wireTailText },
+          ];
+        }
+      } else {
+        // 见 accumulatedWireTailBlocks 声明处的语义说明：压缩/重冻结分支不带
+        // wireTailText，旧尾部内容已并入重算后的快照，累积必须清空。
+        accumulatedWireTailBlocks = [];
+      }
       currentSystemPrompt = override.context.systemPrompt;
       agent.state.systemPrompt = buildSystemPrompt(currentSystemPrompt, toolsSuffix);
       agent.state.messages = override.context.messages.slice();
@@ -1130,12 +1171,20 @@ export async function runAssistantWithTools(params: {
       params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
+      // 尾部投递内容只存在于出站请求：每次请求在此重挂到各自钉死的锚点（与记忆
+      // 增量的逐请求重建同口径），agent.state.messages 始终不含它。挂在 sanitize
+      // 之前、capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实
+      // 出站字节。
+      const outboundMessages =
+        accumulatedWireTailBlocks.length > 0
+          ? attachPinnedTailBlocks(streamContext.messages.slice(), accumulatedWireTailBlocks)
+          : streamContext.messages.slice();
       const effectiveContext = sanitizeContextForModelRequest({
         ...streamContext,
         // Keep the runtime-only tool rules out of compaction and persistence,
         // then reattach them at the provider boundary on every model round.
         systemPrompt: buildSystemPrompt(currentSystemPrompt, toolsSuffix),
-        messages: streamContext.messages.slice(),
+        messages: outboundMessages,
         tools: filterRequestTools(streamTools),
       });
 
@@ -1144,14 +1193,57 @@ export async function runAssistantWithTools(params: {
       const primaryRoundTarget: PreparedFailoverTarget =
         streamModel === model ? primaryTarget : { ...primaryTarget, model: streamModel };
 
+      // 哈希只在请求边界算一次:同一轮内的 failover / 重试复用同一份归因,
+      // 更不能进流式回调 —— 那会让开销随 token 数放大。
+      //
+      // 缓存参数按主目标口径入账:TTL 或断点策略变化会真实作废缓存,而 system 与
+      // tools 的字节可以一模一样,不单独记这一维就会在真出事时报 unchanged。
+      // 协议族分发在 providers 层的 describeProviderCacheShape 里收敛,这里只
+      // 负责把与注入侧同源的输入(含请求头,x-session-id 已有则以头值为准)递进去。
+      const roundCacheRetention =
+        options?.cacheRetention ??
+        resolveProviderCacheRetention(
+          primaryRoundTarget.providerId,
+          primaryRoundTarget.runtime.promptCachingEnabled,
+          undefined,
+          primaryRoundTarget.runtime.promptCacheRetention,
+        );
+      const roundSessionId = options?.sessionId ?? params.sessionId;
+      const prefixShape = capturePrefixShape({
+        systemPrompt: effectiveContext.systemPrompt,
+        tools: effectiveContext.tools,
+        cacheControl: describeProviderCacheShape({
+          providerId: primaryRoundTarget.providerId,
+          baseUrl: primaryRoundTarget.runtime.baseUrl,
+          promptCacheHintMode:
+            primaryRoundTarget.runtime.modelConfig?.promptCacheHintMode ??
+            primaryRoundTarget.runtime.promptCacheHintMode,
+          modelApi: primaryRoundTarget.model.api,
+          sessionId: roundSessionId,
+          cacheRetention: roundCacheRetention,
+          // 与下方 streamOptions 的 headers 合并口径一致:注入侧看到的就是这份。
+          headers: {
+            ...(options?.headers ?? {}),
+            ...primaryRoundTarget.proxyRequest.headers,
+          },
+        }),
+      });
+      const prefixCacheDiagnostics = comparePrefixShape(
+        readPreviousPrefixShape(roundSessionId),
+        prefixShape,
+      );
+      recordPrefixShape(roundSessionId, prefixShape);
+
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
         const fallbackReasoning =
-          target.providerId === "claude_code" || target.providerId === "gemini"
+          target.providerId === "claude_code" ||
+          target.providerId === "gemini" ||
+          target.providerId === "deepseek" ||
+          targetModel.api === "openai-responses" ||
+          targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
-            : targetModel.api === "openai-responses" || targetModel.api === "openai-completions"
-              ? toSimpleStreamReasoning(target.runtime.reasoning)
-              : undefined;
+            : undefined;
         const targetNativeWebSearchStatus =
           target.index === 0
             ? nativeWebSearchStatus
@@ -1189,6 +1281,7 @@ export async function runAssistantWithTools(params: {
           metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
           toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+          workdir: params.workdir,
           streamRetry: {
             onRetry: (attempt, maxAttempts, errorMessage) => {
               params.onToolStatus?.(
@@ -1267,6 +1360,7 @@ export async function runAssistantWithTools(params: {
             context: effectiveContext,
             options: streamOptions,
             round,
+            prefixCache: prefixCacheDiagnostics,
           }),
         );
 

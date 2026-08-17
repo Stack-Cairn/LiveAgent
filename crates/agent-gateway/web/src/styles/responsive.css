@@ -915,7 +915,7 @@
     --gateway-chat-composer-overlay-height: 168px;
   }
 
-  .gateway-chat-frame > header {
+  .gateway-main-shell [data-app-workbench-chrome] > header {
     gap: 6px;
     padding: 8px 10px;
   }
@@ -1168,18 +1168,6 @@
     padding: 7px 9px;
   }
 
-  html[data-liveagent-webui="gateway"] .model-selector-trigger {
-    width: clamp(7rem, calc(100vw - 13rem), 15rem);
-    max-width: clamp(7rem, calc(100vw - 13rem), 15rem) !important;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  html[data-liveagent-webui="gateway"] .model-selector-trigger,
-  html[data-liveagent-webui="gateway"] .model-selector-current-label {
-    font-size: 13px;
-  }
-
   html[data-liveagent-webui="gateway"] .gateway-project-tools-panel-toggle {
     margin-right: 8px;
   }
@@ -1190,14 +1178,9 @@
     --gateway-chat-column-gutter: 8px;
   }
 
-  .gateway-chat-frame > header {
+  .gateway-main-shell [data-app-workbench-chrome] > header {
     padding-left: 8px;
     padding-right: 8px;
-  }
-
-  html[data-liveagent-webui="gateway"] .model-selector-trigger {
-    width: clamp(6.25rem, calc(100vw - 12.5rem), 13rem);
-    max-width: clamp(6.25rem, calc(100vw - 12.5rem), 13rem) !important;
   }
 
   html[data-liveagent-webui="gateway"] .project-tools-panel-tab {

@@ -101,11 +101,10 @@ test("长上下文 beta：忽略已有值，仅使用 pi-ai 动态 beta 与 cont
   assert.equal(next.headers.Authorization, "Bearer sk-relay-key");
 });
 
-test("长上下文 beta：官方、Vertex、DeepSeek 端点不注入 HTTP 1M beta 头", () => {
+test("长上下文 beta：Anthropic 官方与 Vertex 端点不注入 HTTP 1M beta 头", () => {
   for (const baseUrl of [
     "https://api.anthropic.com/v1",
     "https://us-central1-aiplatform.googleapis.com/v1",
-    "https://api.deepseek.com/anthropic",
   ]) {
     const options = { apiKey: "sk-relay-key", headers: {} };
     assert.equal(

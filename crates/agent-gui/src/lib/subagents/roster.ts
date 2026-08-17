@@ -110,41 +110,52 @@ function truncateReminderField(value: string, maxChars = MAX_REMINDER_FIELD_CHAR
 }
 
 /**
+ * 归一化身份列表：过滤空 id/name、按 agentId 排序、按上限截断。
+ * 稳定段与易变段共用同一份选择结果，保证两段的截断口径一致——否则会出现
+ * “稳定段列了某个 agent、易变段却没有它”的错位。
+ *
+ * 排序**不用 `localeCompare`**：它依赖 locale 与 ICU 版本，同样输入在不同环境下
+ * 可能给出不同顺序，等于凭空制造前缀差异
+ * （见 spec/liveagent/frontend/prompt-cache-stability.md 的 Common Mistake 一节）。
+ * 归一化本身也是必需的：`listIdentities()` 按 `updatedAt` 倒序返回，任一身份被更新
+ * 都会改变返回顺序，而稳定段要求“身份集合不变则字节不变”。
+ * 代价是超过上限时列出的不再是最近更新的 12 个，而是 id 序最靠前的 12 个。
+ */
+function selectListedIdentities(identities: SubagentIdentity[]) {
+  const usable = identities
+    .filter((identity) => identity.agentId.trim() && identity.name.trim())
+    .sort((a, b) => (a.agentId < b.agentId ? -1 : a.agentId > b.agentId ? 1 : 0));
+  return {
+    listed: usable.slice(0, MAX_LISTED_AGENTS),
+    omittedCount: Math.max(0, usable.length - MAX_LISTED_AGENTS),
+  };
+}
+
+/**
  * System-prompt reminder for the parent agent listing existing subagents,
  * so follow-up user requests are routed to the stable ids instead of the
  * parent impersonating them.
+ *
+ * 只含身份字段（id / name / role）：身份集合不变则字节不变，可以安全地待在
+ * systemPrompt 里。mode 不属于身份——它随每次 Agent 调用变化（lastMode），
+ * 放这里会破坏稳定段的字节稳定性，因此与运行状态（status / last_task /
+ * last_summary）一样由 buildRosterRunStatusSection 单独渲染并后置到消息尾部。
  */
-export function buildRosterReminder(params: {
-  identities: SubagentIdentity[];
-  latestRunsByAgent: Map<string, SubagentRunSummary>;
-}) {
-  const identities = params.identities.filter(
-    (identity) => identity.agentId.trim() && identity.name.trim(),
-  );
-  if (identities.length === 0) return "";
+export function buildRosterIdentitySection(params: { identities: SubagentIdentity[] }) {
+  const { listed, omittedCount } = selectListedIdentities(params.identities);
+  if (listed.length === 0) return "";
 
-  const agentLines = identities.slice(0, MAX_LISTED_AGENTS).map((identity) => {
-    const latestRun = params.latestRunsByAgent.get(identity.agentId);
+  const agentLines = listed.map((identity) => {
     const fields = [
       `id=${identity.agentId}`,
       `name=${truncateReminderField(identity.name, 120)}`,
       `role=${truncateReminderField(identity.role, 160)}`,
-      `mode=${identity.lastMode}`,
     ];
-    if (latestRun) {
-      fields.push(
-        `status=${latestRun.status}`,
-        `last_task=${truncateReminderField(latestRun.prompt)}`,
-      );
-      if (latestRun.summary) {
-        fields.push(`last_summary=${truncateReminderField(latestRun.summary)}`);
-      }
-    }
     return `- ${fields.join(" ")}`;
   });
 
-  if (identities.length > MAX_LISTED_AGENTS) {
-    agentLines.push(`- ... ${identities.length - MAX_LISTED_AGENTS} more omitted`);
+  if (omittedCount > 0) {
+    agentLines.push(`- ... ${omittedCount} more omitted`);
   }
 
   return [
@@ -154,5 +165,44 @@ export function buildRosterReminder(params: {
     "If the latest user message is addressed to these existing agents, experts, or the previous team — or asks them to continue, revise, compare, or discuss a follow-up — call Agent again with an `agents` entry per existing id. Do not impersonate those agents from the parent transcript.",
     "Agent resumes each id's previous private context by default, so put only the new user request and any necessary parent-visible context in each resumed agent's prompt. Do not restate name, role, or identity for an existing id. Set resume=false only when the user asks to replace, rebuild, or start fresh.",
     "For simple parent-level summaries of already returned reports, you may answer directly without calling Agent.",
+  ].join("\n");
+}
+
+/**
+ * roster 的易变段：只含随子代理 run 推进而变的字段。
+ *
+ * 与稳定段共用 selectListedIdentities 的选择结果，所以列出的 id 必定是稳定段的子集；
+ * 没有历史 run 的身份不出现（与拆分前“无 latestRun 就不带这些字段”同口径）。
+ *
+ * 纯函数：不含时间量、不含随机量，同样输入恒等输出——调用方据此用“输出是否与上次
+ * 相同”判定要不要投递。
+ */
+export function buildRosterRunStatusSection(params: {
+  identities: SubagentIdentity[];
+  latestRunsByAgent: Map<string, SubagentRunSummary>;
+}) {
+  const { listed } = selectListedIdentities(params.identities);
+
+  const agentLines: string[] = [];
+  for (const identity of listed) {
+    const latestRun = params.latestRunsByAgent.get(identity.agentId);
+    if (!latestRun) continue;
+    const fields = [
+      `id=${identity.agentId}`,
+      `status=${latestRun.status}`,
+      // mode 随每次 Agent 调用变化，从身份段移到这里；仍是确定性字段，不破坏纯函数约定。
+      `mode=${identity.lastMode}`,
+      `last_task=${truncateReminderField(latestRun.prompt)}`,
+    ];
+    if (latestRun.summary) {
+      fields.push(`last_summary=${truncateReminderField(latestRun.summary)}`);
+    }
+    agentLines.push(`- ${fields.join(" ")}`);
+  }
+  if (agentLines.length === 0) return "";
+
+  return [
+    "Latest run state of the delegated agents listed in the system prompt:",
+    ...agentLines,
   ].join("\n");
 }

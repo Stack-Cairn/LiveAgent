@@ -46,6 +46,8 @@ export function getToolMeta(name: string): {
   switch (name) {
     case "Bash":
     case "ManagedProcess":
+    case "ProcessWait":
+    case "ProcessStop":
       return { Icon: Terminal, accent: "var(--tool-bash-accent)", category: "terminal" };
     case "Read":
       return { Icon: Eye, accent: "var(--tool-file-accent)", category: "file" };
@@ -208,6 +210,30 @@ export function getToolDisplayName(name: string) {
   return name;
 }
 
+type ShellSessionDisplayDetails = {
+  sessionId: string;
+  status: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function getShellSessionDisplayDetails(
+  result?: ToolResultMessage,
+): ShellSessionDisplayDetails | null {
+  const details = asRecord(result?.details);
+  const sessionId = typeof details?.session_id === "string" ? details.session_id.trim() : "";
+  const status = typeof details?.status === "string" ? details.status.trim() : "";
+  if (!sessionId || !status) return null;
+  return {
+    sessionId,
+    status,
+  };
+}
+
 const TOOL_CARD_ACTION_NAMES = new Set([
   "SkillsManager",
   "CronTaskManager",
@@ -284,6 +310,8 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
         block.item.toolCall.name === "Image" ||
         isTaskToolName(block.item.toolCall.name) ||
         block.item.toolCall.name === "AskUserQuestion" ||
+        block.item.toolCall.name === "ProcessWait" ||
+        block.item.toolCall.name === "ProcessStop" ||
         isAgentToolName(block.item.toolCall.name)
       ) {
         flushPendingTools();
@@ -348,6 +376,8 @@ export function isBuiltinShareToolName(name: string) {
     "Image",
     "List",
     "ManagedProcess",
+    "ProcessStop",
+    "ProcessWait",
     "McpManager",
     "MemoryManager",
     "Read",

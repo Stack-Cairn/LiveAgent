@@ -45,14 +45,28 @@ export const MASKED_HEADER_VALUE = "__liveagent-masked__";
 
 /**
  * Per-task execution timeout (seconds) applied to bash scripts, each http
- * request and the prompt run lease. Bounds mirror the Rust validator
- * (`MIN/MAX_CRON_TIMEOUT_SECONDS`); the max matches the shell runner's hard
- * ten-minute cap. Snapshots from desktops older than this field omit it —
- * resolve absent values to the default for display.
+ * request and the prompt run execution lease. Bounds mirror the Rust
+ * validator (`MIN_CRON_TIMEOUT_SECONDS` / `max_cron_timeout_seconds`); the
+ * bash/http max matches the shell runner's hard ten-minute cap, while prompt
+ * runs execute in the frontend and get a higher ceiling. Snapshots from
+ * desktops older than this field omit it — resolve absent values to the
+ * default for display.
  */
 export const DEFAULT_CRON_TIMEOUT_SECONDS = 300;
 export const MIN_CRON_TIMEOUT_SECONDS = 1;
-export const MAX_CRON_TIMEOUT_SECONDS = 600;
+export const MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS = 600;
+export const MAX_PROMPT_CRON_TIMEOUT_SECONDS = 3600;
+
+export function maxCronTimeoutSeconds(type: CronTaskType): number {
+  return type === "prompt" ? MAX_PROMPT_CRON_TIMEOUT_SECONDS : MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS;
+}
+
+/**
+ * How long a queued prompt run may wait unclaimed before the Rust sweep
+ * expires it (mirrors `PROMPT_PENDING_CLAIM_WINDOW_MS` in store.rs). The
+ * task's own timeout only starts counting at claim time.
+ */
+export const PROMPT_PENDING_CLAIM_WINDOW_MS = 600_000;
 
 export function canHttpMethodHaveBody(method: HttpMethod): boolean {
   return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
@@ -171,7 +185,11 @@ export type PromptRunRequest = {
   providerId: string;
   model: string;
   startedAt: number;
+  /** Claim window while pending; re-stamped to claim time + timeoutSeconds
+   * when the runner claims the row, so it always reflects the live deadline. */
   leaseExpiresAt: number;
+  /** Task timeout snapshot taken at queue time. */
+  timeoutSeconds: number;
   counted: boolean;
   /** Resolved at queue time (task pin or global workdir). Empty on rows
    * queued before this field existed; the runner falls back to the global

@@ -25,6 +25,7 @@ import {
   listCronRuns,
   MANUAL_CRON_RUN_POLL_INTERVAL_MS,
   MANUAL_CRON_RUN_TIMEOUT_MS,
+  PROMPT_PENDING_CLAIM_WINDOW_MS,
   runCronNow,
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
@@ -668,10 +669,13 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   const [runNowError, setRunNowError] = useState<string | null>(null);
   const runNowLockRef = useRef(false);
   // Manual runs are watched for at least the legacy six-minute window, and
-  // longer when the task timeout exceeds it (plus scheduler/completion slack).
+  // longer when the task timeout exceeds it (plus scheduler/completion
+  // slack). Prompt runs may additionally sit in the pending claim window
+  // before their execution lease starts.
   const manualRunWatchTimeoutMs = Math.max(
     MANUAL_CRON_RUN_TIMEOUT_MS,
-    ((task?.timeoutSeconds ?? DEFAULT_CRON_TIMEOUT_SECONDS) + 60) * 1_000,
+    (task?.type === "prompt" ? PROMPT_PENDING_CLAIM_WINDOW_MS : 0) +
+      ((task?.timeoutSeconds ?? DEFAULT_CRON_TIMEOUT_SECONDS) + 60) * 1_000,
   );
 
   useEffect(() => {

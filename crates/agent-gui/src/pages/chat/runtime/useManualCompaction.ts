@@ -14,6 +14,8 @@ import { getActiveSegment } from "../../../lib/chat/conversation/conversationSta
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { createGatewayBridgeEventController } from "../../../lib/chat/conversation/run/gatewayBridgeEvents";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
+import { memoryTurnInjection } from "../../../lib/chat/memory/injectionController";
+import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import type { AppSettings } from "../../../lib/settings";
 import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
@@ -297,10 +299,20 @@ export function useManualCompaction(params: {
         // 与发送链路同源的检查点上下文：注入 agent/skills/memory 提示词与 tools，
         // 使 checkpoint contextTokensAfter（两端环的权威锚点）计入系统提示词与
         // 工具重量，否则少算导致压缩后两端环读数偏低。
-        const { skillsPrompt, memoryPrompt } = await resolveManualCompactionPromptInputs({
-          isCurrentConversation: isCurrentConversation(),
-          workdir: runtimeEntry.workdir,
-        });
+        const { skillsPrompt, memoryPrompt: freshMemoryPrompt } =
+          await resolveManualCompactionPromptInputs({
+            isCurrentConversation: isCurrentConversation(),
+            workdir: runtimeEntry.workdir,
+          });
+        // memory 段已在首轮冻结进 system prompt，这里必须沿用同一份快照与同一批
+        // 增量块：否则压缩轮用新读的快照、下一轮发送又翻回冻结的那份，system 段
+        // 白翻两次，保留下来的 user 消息字节也对不上。还没有基线时（例如后台会话）
+        // 退回原来现读的结果。
+        const memoryPrompt = memoryTurnInjection.getSystemText(conversationId) ?? freshMemoryPrompt;
+        const memoryTurnUpdates = memoryTurnInjection.getMessageUpdates(conversationId);
+        // 压缩后保留下来的 user 消息必须连同已挂上的显式提及块一起重放,否则那几条
+        // 消息的字节与发出去时对不上,压缩省下的前缀又被自己废掉。
+        const skillMentionUpdates = skillMentionInjection.getMessageUpdates(conversationId);
 
         let compactionFailureMessage = "";
         const sinks: CompactionSinks = {
@@ -336,6 +348,9 @@ export function useManualCompaction(params: {
               createdAt: runtimeEntry.createdAt,
               titlePromise: null,
             }),
+          // 压缩把携带 memory 增量块的 user 消息移出 active segment;丢弃注入
+          // 状态后,下一轮发送的 getSystemText 回退到现读快照并重新冻结。
+          onCompacted: () => memoryTurnInjection.invalidate(conversationId),
         };
 
         const compactionController = getCompactionController(conversationId);
@@ -353,6 +368,8 @@ export function useManualCompaction(params: {
                 activeAgentPrompt,
                 skillsPrompt,
                 memoryPrompt,
+                memoryTurnUpdates,
+                skillMentionUpdates,
                 includeAbortedMessages: options?.includeAbortedMessages,
                 includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
               }),
@@ -364,6 +381,8 @@ export function useManualCompaction(params: {
                 activeAgentPrompt,
                 skillsPrompt,
                 memoryPrompt,
+                memoryTurnUpdates,
+                skillMentionUpdates,
                 includeAbortedMessages: options?.includeAbortedMessages,
                 includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
               }),

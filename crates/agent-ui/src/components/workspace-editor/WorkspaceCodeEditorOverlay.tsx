@@ -39,14 +39,14 @@ import {
   type CodeMentionReference,
   createCodeMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import * as monaco from "@liveagent/ui/lib/monacoEditor";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import * as monaco from "monaco-editor";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import CssWorker from "monaco-editor/languages/features/css/css.worker.js?worker";
+import HtmlWorker from "monaco-editor/languages/features/html/html.worker.js?worker";
+import JsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
+import TsWorker from "monaco-editor/languages/features/typescript/ts.worker.js?worker";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -169,88 +169,6 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function languageForPath(path: string) {
-  const name = basename(path).toLowerCase();
-  if (name === "dockerfile") return "dockerfile";
-  if (name === "makefile") return "makefile";
-  if (name === "cargo.lock") return "toml";
-  if (name.endsWith(".d.ts")) return "typescript";
-
-  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
-  switch (ext) {
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-      return "javascript";
-    case "ts":
-    case "tsx":
-      return "typescript";
-    case "json":
-    case "jsonc":
-      return "json";
-    case "css":
-      return "css";
-    case "scss":
-    case "sass":
-      return "scss";
-    case "less":
-      return "less";
-    case "html":
-    case "htm":
-      return "html";
-    case "md":
-    case "mdx":
-      return "markdown";
-    case "rs":
-      return "rust";
-    case "go":
-      return "go";
-    case "py":
-      return "python";
-    case "java":
-      return "java";
-    case "kt":
-    case "kts":
-      return "kotlin";
-    case "c":
-    case "h":
-      return "c";
-    case "cc":
-    case "cpp":
-    case "cxx":
-    case "hpp":
-      return "cpp";
-    case "cs":
-      return "csharp";
-    case "php":
-      return "php";
-    case "rb":
-      return "ruby";
-    case "swift":
-      return "swift";
-    case "sh":
-    case "bash":
-    case "zsh":
-      return "shell";
-    case "yml":
-    case "yaml":
-      return "yaml";
-    case "toml":
-      return "toml";
-    case "xml":
-    case "svg":
-      return "xml";
-    case "sql":
-      return "sql";
-    case "graphql":
-    case "gql":
-      return "graphql";
-    default:
-      return "plaintext";
-  }
 }
 
 function toMessage(error: unknown, fallback: string) {
@@ -514,7 +432,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           contentHash: response.contentHash,
           sizeBytes: response.sizeBytes,
           totalLines: response.totalLines,
-          language: languageForPath(response.path),
+          language: monaco.languageForPath(response.path),
           status: "ready",
           error: null,
           remote: request.remote,
@@ -558,7 +476,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           contentHash: response.contentHash,
           sizeBytes: response.sizeBytes,
           totalLines: response.totalLines,
-          language: languageForPath(response.path),
+          language: monaco.languageForPath(response.path),
           status: "ready",
           error: null,
         }));

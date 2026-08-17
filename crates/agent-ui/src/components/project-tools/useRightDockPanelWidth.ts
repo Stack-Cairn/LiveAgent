@@ -143,9 +143,9 @@ export function useRightDockPanelWidth(options: UseRightDockPanelWidthOptions) {
       setWidthCollapsed(true);
       return;
     }
+    setWidthCollapsed(true);
     const timer = window.setTimeout(() => {
       setShouldRenderContent(false);
-      setWidthCollapsed(true);
     }, 220);
     return () => window.clearTimeout(timer);
   }, [collapseImmediately, isOpen]);

@@ -153,7 +153,10 @@ fn values_equal(left: Option<&Value>, right: Option<&Value>) -> bool {
     left.unwrap_or(&Value::Null) == right.unwrap_or(&Value::Null)
 }
 
-fn apply_ssh_host_change(hosts: &mut Vec<Value>, change: Value) -> Result<Option<String>, String> {
+fn apply_ssh_host_change(
+    hosts: &mut Vec<Value>,
+    change: Value,
+) -> Result<Option<SshPatchConflictCode>, String> {
     let change = expect_object(change, "sshPatch.hostChanges[]")?;
     let host_id = normalize_ssh_patch_host_id(&change)?;
     let before = normalize_ssh_patch_host_endpoint(&change, "before")?;
@@ -180,7 +183,7 @@ fn apply_ssh_host_change(hosts: &mut Vec<Value>, change: Value) -> Result<Option
             if public_ssh_host(&hosts[index])? == public_ssh_host(&after)? {
                 Ok(None)
             } else {
-                Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()))
+                Ok(Some(SshPatchConflictCode::SettingsChanged))
             }
         }
         (Some(before), None, Some(index)) => {
@@ -190,7 +193,7 @@ fn apply_ssh_host_change(hosts: &mut Vec<Value>, change: Value) -> Result<Option
                 hosts.remove(index);
                 Ok(None)
             } else {
-                Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()))
+                Ok(Some(SshPatchConflictCode::SettingsChanged))
             }
         }
         (Some(_), None, None) => Ok(None),
@@ -217,14 +220,14 @@ fn apply_ssh_host_change(hosts: &mut Vec<Value>, change: Value) -> Result<Option
                 let before_value = value_at_path(&before_public, &path);
                 let after_value = value_at_path(&after_public, &path);
                 if current_value != before_value && current_value != after_value {
-                    return Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()));
+                    return Ok(Some(SshPatchConflictCode::SettingsChanged));
                 }
                 set_value_at_path(&mut current_host, &path, after_value.clone());
             }
             hosts[index] = normalize_ssh_host_value(current_host, "sshPatch.hostChanges[].after")?;
             Ok(None)
         }
-        (Some(_), Some(_), None) => Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string())),
+        (Some(_), Some(_), None) => Ok(Some(SshPatchConflictCode::SettingsChanged)),
         (None, None, _) => Err("sshPatch.hostChanges[] before/after 不能同时为空".to_string()),
     }
 }
@@ -232,7 +235,7 @@ fn apply_ssh_host_change(hosts: &mut Vec<Value>, change: Value) -> Result<Option
 fn apply_ssh_secret_updates(
     hosts: &mut [Value],
     secret_updates: Value,
-) -> Result<Option<String>, String> {
+) -> Result<Option<SshPatchConflictCode>, String> {
     let updates = match secret_updates {
         Value::Object(map) => map,
         Value::Null => return Ok(None),
@@ -240,7 +243,7 @@ fn apply_ssh_secret_updates(
     };
     for (host_id, update) in updates {
         let Some(index) = find_ssh_host_index(hosts, host_id.trim()) else {
-            return Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()));
+            return Ok(Some(SshPatchConflictCode::SettingsChanged));
         };
         let update = expect_object(update, "sshSecretUpdates[]")?;
         let auth_type = hosts[index]
@@ -260,7 +263,7 @@ fn apply_ssh_secret_updates(
             || ((has_private_key_update || has_private_key_passphrase_update)
                 && auth_type != "privateKey")
         {
-            return Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()));
+            return Ok(Some(SshPatchConflictCode::SettingsChanged));
         }
         let Some(host) = hosts[index].as_object_mut() else {
             return Err("ssh host 必须是对象".to_string());
@@ -314,7 +317,7 @@ fn apply_ssh_project_association_change(
     associations: &mut Map<String, Value>,
     available_host_ids: &HashSet<String>,
     change: Value,
-) -> Result<Option<String>, String> {
+) -> Result<Option<SshPatchConflictCode>, String> {
     let change = expect_object(change, "sshPatch.projectAssociationChanges[]")?;
     let raw_path_key =
         extract_non_empty_string(&change, "pathKey", "sshPatch.projectAssociationChanges[]")?;
@@ -347,7 +350,7 @@ fn apply_ssh_project_association_change(
         return Ok(None);
     }
     if !values_equal(Some(&current), Some(&Value::Array(before))) {
-        return Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()));
+        return Ok(Some(SshPatchConflictCode::SettingsChanged));
     }
     if after.is_empty() {
         associations.remove(&path_key);
@@ -360,7 +363,7 @@ fn apply_ssh_project_association_change(
 fn apply_ssh_host_order_change(
     hosts: &mut Vec<Value>,
     order_change: Value,
-) -> Result<Option<String>, String> {
+) -> Result<Option<SshPatchConflictCode>, String> {
     let order_change = expect_object(order_change, "sshPatch.hostOrderChange")?;
     let before = expect_array(
         order_change
@@ -389,7 +392,7 @@ fn apply_ssh_host_order_change(
         return Ok(None);
     }
     if current_order != before {
-        return Ok(Some(SSH_SYNC_CONFLICT_MESSAGE.to_string()));
+        return Ok(Some(SshPatchConflictCode::SettingsChanged));
     }
     let mut by_id = hosts
         .drain(..)
@@ -411,7 +414,7 @@ fn apply_ssh_host_order_change(
 fn apply_ssh_patch_to_value(
     current: Value,
     payload: Value,
-) -> Result<Result<Value, String>, String> {
+) -> Result<Result<Value, SshPatchConflictCode>, String> {
     let mut payload = expect_object(payload, "settings_apply_ssh_patch payload")?;
     let ssh_patch = payload
         .remove(SSH_PATCH_FIELD)

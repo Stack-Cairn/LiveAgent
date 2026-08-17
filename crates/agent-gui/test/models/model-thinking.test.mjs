@@ -33,7 +33,7 @@ test("non-reasoning models expose no thinking controls", () => {
 });
 
 test("always-on non-tunable models: reasoning with empty levels", () => {
-  const reasoner = resolveModelThinking("claude_code", "deepseek-reasoner");
+  const reasoner = resolveModelThinking("deepseek", "deepseek-reasoner");
   assert.equal(reasoner.reasoning, true);
   assert.deepEqual(reasoner.levels, []);
   assert.equal(reasoner.alwaysOn, true);

@@ -25,19 +25,12 @@ html[data-liveagent-webui="gateway"] button {
   line-height: 1.2;
 }
 
-html[data-liveagent-webui="gateway"] .model-selector-trigger,
-html[data-liveagent-webui="gateway"] .model-selector-current-label,
+html[data-liveagent-webui="gateway"] .composer-model-trigger,
+html[data-liveagent-webui="gateway"] .composer-model-label,
 html[data-liveagent-webui="gateway"] .model-selector-dropdown,
-html[data-liveagent-webui="gateway"] .model-selector-menu-title,
 html[data-liveagent-webui="gateway"] .model-selector-group-label,
 html[data-liveagent-webui="gateway"] .model-selector-item {
   font-family: var(--app-font-family);
-}
-
-html[data-liveagent-webui="gateway"] .model-selector-trigger,
-html[data-liveagent-webui="gateway"] .model-selector-current-label {
-  font-size: 15px;
-  line-height: 1.3;
 }
 
 html[data-liveagent-webui="gateway"] .model-selector-dropdown,
@@ -46,7 +39,6 @@ html[data-liveagent-webui="gateway"] .model-selector-item {
   line-height: 1.3;
 }
 
-html[data-liveagent-webui="gateway"] .model-selector-menu-title,
 html[data-liveagent-webui="gateway"] .model-selector-group-label {
   font-size: 14px;
   line-height: 1.3;
@@ -544,6 +536,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 .gateway-main-shell {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   min-width: 0;
   flex: 1;
