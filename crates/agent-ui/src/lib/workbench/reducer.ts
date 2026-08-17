@@ -9,11 +9,12 @@ import {
   type WorkbenchOpenTarget,
 } from "./commands";
 import {
-  canSplitRectOnAxis,
+  canSplitRectForMinSizes,
   clampSplitRatio,
   computeWorkbenchGeometry,
-  minPaneSizeForAxis,
   splitRegionForTarget,
+  subtreeMinSizeForAxis,
+  surfaceMinSizeForAxis,
   WORKBENCH_DIVIDER_SIZE,
 } from "./geometry";
 import { collectWorkbenchLayoutIssues, findPaneIdBySurfaceKey } from "./invariants";
@@ -199,7 +200,10 @@ function graftAtTarget(
 }
 
 /**
- * Reject a split whose two halves cannot both hold the hard minimum pane size.
+ * Reject a split whose two halves cannot both hold their hard minimum pane
+ * sizes: the incoming surface's own minimum on one side, and the minimum of
+ * the subtree already occupying the halved region on the other (per-kind, so
+ * a terminal pane may fit where a conversation would not).
  *
  * Only runs when the caller supplied pixel `context`; without it the reducer
  * has no geometry to judge against and stays permissive. The target rect is
@@ -208,6 +212,8 @@ function graftAtTarget(
  */
 function insufficientSpaceError(
   tree: PaneNode | null,
+  panes: Record<string, PaneRecord>,
+  incoming: PaneRecord,
   target: WorkbenchOpenTarget | WorkbenchMoveTarget,
   context: WorkbenchCommandContext | undefined,
   currentRevision: number,
@@ -226,13 +232,58 @@ function insufficientSpaceError(
   // A target absent from the geometry is a missing target, not a space
   // failure; the graft below reports it as `target-not-found`.
   if (!region) return null;
-  if (canSplitRectOnAxis(region.rect, region.axis, dividerSize)) return null;
+  const incomingMin = surfaceMinSizeForAxis(incoming.surface, region.axis);
+  const existingMin = existingRegionMinSize(tree, panes, target, region.axis, dividerSize);
+  if (
+    canSplitRectForMinSizes({
+      rect: region.rect,
+      axis: region.axis,
+      incomingMin,
+      existingMin,
+      dividerSize,
+    })
+  ) {
+    return null;
+  }
   const available = region.axis === "horizontal" ? region.rect.width : region.rect.height;
   return commandError(
     "insufficient-space",
-    `Splitting this region ${region.axis === "horizontal" ? "horizontally" : "vertically"} would leave panes under the ${minPaneSizeForAxis(region.axis)}px minimum (region is ${available}px).`,
+    `Splitting this region ${region.axis === "horizontal" ? "horizontally" : "vertically"} would leave panes under the ${Math.max(incomingMin, existingMin)}px minimum (region is ${available}px).`,
     currentRevision,
   );
+}
+
+/**
+ * The minimum extent the content already occupying a split target's region
+ * needs along `axis`. Canvas-edge splits push the whole tree aside; pane-edge
+ * splits push one leaf; divider inserts push the subtree on the chosen side.
+ */
+function existingRegionMinSize(
+  tree: PaneNode,
+  panes: Record<string, PaneRecord>,
+  target: Exclude<
+    WorkbenchOpenTarget | WorkbenchMoveTarget,
+    { kind: "canvas-empty" | "pane-center" }
+  >,
+  axis: WorkbenchAxis,
+  dividerSize: number,
+): number {
+  switch (target.kind) {
+    case "canvas-edge":
+      return subtreeMinSizeForAxis(tree, panes, axis, dividerSize);
+    case "pane-edge": {
+      const pane = panes[target.paneId];
+      return pane
+        ? surfaceMinSizeForAxis(pane.surface, axis)
+        : subtreeMinSizeForAxis(tree, panes, axis, dividerSize);
+    }
+    case "divider": {
+      const split = findSplit(tree, target.splitId);
+      if (!split) return 0;
+      const side = edgeIsBefore(target.edge) ? split.first : split.second;
+      return subtreeMinSizeForAxis(side, panes, axis, dividerSize);
+    }
+  }
 }
 
 function swapLeaves(node: PaneNode, firstPaneId: string, secondPaneId: string): PaneNode {
@@ -281,6 +332,40 @@ function setSplitRatio(node: PaneNode, splitId: string, ratio: number): PaneNode
   const second = setSplitRatio(node.second, splitId, ratio);
   if (second) return { ...node, second };
   return null;
+}
+
+/**
+ * Clamp a resize so neither side of the split drops below its subtree's
+ * per-kind minimum. Needs pixel `context` to know the split's actual extent;
+ * without it (or when the region is too small to honour both minimums, e.g.
+ * a tiny window) this falls back to the plain 0.05–0.95 ratio clamp.
+ */
+function clampResizeRatio(
+  layout: WorkbenchLayout,
+  split: Extract<PaneNode, { type: "split" }>,
+  ratio: number,
+  context: WorkbenchCommandContext | undefined,
+): number {
+  const base = clampSplitRatio(ratio);
+  if (!context || !layout.root) return base;
+  const dividerSize = context.dividerSize ?? WORKBENCH_DIVIDER_SIZE;
+  const geometry = computeWorkbenchGeometry(
+    layout.root,
+    { left: 0, top: 0, width: context.canvasSize.width, height: context.canvasSize.height },
+    { dividerSize },
+  );
+  const divider = geometry.dividers.find((entry) => entry.splitId === split.splitId);
+  if (!divider) return base;
+  const usable =
+    (split.axis === "horizontal" ? divider.splitArea.width : divider.splitArea.height) -
+    dividerSize;
+  if (usable <= 0) return base;
+  const firstMin = subtreeMinSizeForAxis(split.first, layout.panes, split.axis, dividerSize);
+  const secondMin = subtreeMinSizeForAxis(split.second, layout.panes, split.axis, dividerSize);
+  if (firstMin + secondMin > usable) return base;
+  const lower = firstMin / usable;
+  const upper = 1 - secondMin / usable;
+  return Math.min(upper, Math.max(lower, base));
 }
 
 type PaneRecordIssue = {
@@ -393,6 +478,8 @@ export function applyWorkbenchCommand(
           : command.target;
       const spaceError = insufficientSpaceError(
         layout.root,
+        layout.panes,
+        pane,
         target,
         command.context,
         layout.revision,
@@ -469,6 +556,8 @@ export function applyWorkbenchCommand(
       // own room is reflected before the split is judged.
       const spaceError = insufficientSpaceError(
         removal.node,
+        layout.panes,
+        layout.panes[command.paneId],
         command.target,
         command.context,
         layout.revision,
@@ -557,14 +646,19 @@ export function applyWorkbenchCommand(
       if (!Number.isFinite(command.ratio)) {
         return commandError("invalid-layout", "Split ratio must be finite.", layout.revision);
       }
-      if (!layout.root || !findSplit(layout.root, command.splitId)) {
+      const split = layout.root ? findSplit(layout.root, command.splitId) : null;
+      if (!layout.root || !split) {
         return commandError(
           "target-not-found",
           `Split '${command.splitId}' does not exist.`,
           layout.revision,
         );
       }
-      const nextRoot = setSplitRatio(layout.root, command.splitId, clampSplitRatio(command.ratio));
+      const nextRoot = setSplitRatio(
+        layout.root,
+        command.splitId,
+        clampResizeRatio(layout, split, command.ratio, command.context),
+      );
       if (!nextRoot) {
         return commandError(
           "target-not-found",

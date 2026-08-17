@@ -1,4 +1,10 @@
-import type { PaneNode, WorkbenchAxis, WorkbenchEdge } from "./types";
+import type {
+  PaneNode,
+  PaneRecord,
+  WorkbenchAxis,
+  WorkbenchEdge,
+  WorkbenchSurfaceSpec,
+} from "./types";
 
 /** Integer CSS-pixel rectangle relative to the workbench canvas origin. */
 export type WorkbenchRect = {
@@ -33,14 +39,93 @@ export const WORKBENCH_MIN_SPLIT_RATIO = 0.05;
 export const WORKBENCH_MAX_SPLIT_RATIO = 0.95;
 export const MIN_CONVERSATION_PANE_WIDTH = 320;
 export const MIN_CONVERSATION_PANE_HEIGHT = 220;
+// Terminal panes: xterm renders at fontSize 13 / lineHeight 1.3, i.e. cells of
+// ~8px × 17px. A terminal stops being usable below ~20 cols × 6 rows, so with
+// horizontal padding and the chrome strip that folds to 220×140 CSS pixels.
+export const MIN_TERMINAL_PANE_WIDTH = 220;
+export const MIN_TERMINAL_PANE_HEIGHT = 140;
+// Unsupported placeholders only show a short message; keep them small enough
+// to never block a restore.
+export const MIN_UNSUPPORTED_PANE_WIDTH = 160;
+export const MIN_UNSUPPORTED_PANE_HEIGHT = 120;
+/** Below this pane width the chrome and surfaces switch to compact rendering. */
+export const WORKBENCH_COMPACT_PANE_WIDTH = 360;
+
+export type SurfaceMinSize = { minWidth: number; minHeight: number };
+
+/** Hard minimum CSS-pixel size a pane must keep, resolved per surface kind. */
+export function surfaceMinSize(surface: WorkbenchSurfaceSpec): SurfaceMinSize {
+  switch (surface.kind) {
+    case "localTerminal":
+    case "sshTerminal":
+      return { minWidth: MIN_TERMINAL_PANE_WIDTH, minHeight: MIN_TERMINAL_PANE_HEIGHT };
+    case "unsupported":
+      return { minWidth: MIN_UNSUPPORTED_PANE_WIDTH, minHeight: MIN_UNSUPPORTED_PANE_HEIGHT };
+    default:
+      return { minWidth: MIN_CONVERSATION_PANE_WIDTH, minHeight: MIN_CONVERSATION_PANE_HEIGHT };
+  }
+}
+
+export function surfaceMinSizeForAxis(surface: WorkbenchSurfaceSpec, axis: WorkbenchAxis): number {
+  const size = surfaceMinSize(surface);
+  return axis === "horizontal" ? size.minWidth : size.minHeight;
+}
+
+/**
+ * Minimum extent a subtree needs along `axis`: leaves resolve their surface's
+ * hard minimum, same-axis splits sum both sides plus the divider, cross-axis
+ * splits take the larger side. Panes missing from `panes` (corrupt layouts)
+ * fall back to the conversation minimum — the strictest default.
+ */
+export function subtreeMinSizeForAxis(
+  node: PaneNode | null,
+  panes: Record<string, PaneRecord>,
+  axis: WorkbenchAxis,
+  dividerSize: number = WORKBENCH_DIVIDER_SIZE,
+): number {
+  if (!node) return 0;
+  if (node.type === "leaf") {
+    const pane = panes[node.paneId];
+    return pane ? surfaceMinSizeForAxis(pane.surface, axis) : minPaneSizeForAxis(axis);
+  }
+  const first = subtreeMinSizeForAxis(node.first, panes, axis, dividerSize);
+  const second = subtreeMinSizeForAxis(node.second, panes, axis, dividerSize);
+  return node.axis === axis ? first + dividerSize + second : Math.max(first, second);
+}
+
+/** Whether a pane rect is narrow enough for compact chrome/surface rendering. */
+export function paneRendersCompact(rectWidth: number, view?: { compactChrome?: boolean }): boolean {
+  return view?.compactChrome === true || rectWidth < WORKBENCH_COMPACT_PANE_WIDTH;
+}
 
 export function workbenchEdgeAxis(edge: WorkbenchEdge): WorkbenchAxis {
   return edge === "left" || edge === "right" ? "horizontal" : "vertical";
 }
 
-/** Hard minimum a pane must keep along `axis` for the layout to stay usable. */
+/**
+ * Hard minimum a pane must keep along `axis` for the layout to stay usable.
+ * Conversation-sized: the historical default when no surface is in scope.
+ */
 export function minPaneSizeForAxis(axis: WorkbenchAxis): number {
   return axis === "horizontal" ? MIN_CONVERSATION_PANE_WIDTH : MIN_CONVERSATION_PANE_HEIGHT;
+}
+
+/**
+ * Whether halving `rect` along `axis` leaves room for an incoming surface on
+ * one side and the region's existing content on the other. Splits always
+ * start at ratio 0.5, so each side gets exactly half the usable extent.
+ */
+export function canSplitRectForMinSizes(input: {
+  rect: WorkbenchRect;
+  axis: WorkbenchAxis;
+  incomingMin: number;
+  existingMin: number;
+  dividerSize?: number;
+}): boolean {
+  const dividerSize = input.dividerSize ?? WORKBENCH_DIVIDER_SIZE;
+  const total = (input.axis === "horizontal" ? input.rect.width : input.rect.height) - dividerSize;
+  const half = total / 2;
+  return half >= input.incomingMin && half >= input.existingMin;
 }
 
 /**
@@ -53,8 +138,8 @@ export function canSplitRectOnAxis(
   axis: WorkbenchAxis,
   dividerSize: number = WORKBENCH_DIVIDER_SIZE,
 ): boolean {
-  const total = (axis === "horizontal" ? rect.width : rect.height) - dividerSize;
-  return total / 2 >= minPaneSizeForAxis(axis);
+  const min = minPaneSizeForAxis(axis);
+  return canSplitRectForMinSizes({ rect, axis, incomingMin: min, existingMin: min, dividerSize });
 }
 
 /** Drop targets that insert a new pane by splitting an existing region. */
@@ -121,14 +206,45 @@ export function clampRatioToMinSize(input: {
   minSize: number;
   dividerSize?: number;
 }): number {
+  return clampRatioToSideMinSizes({
+    ratio: input.ratio,
+    axis: input.axis,
+    splitArea: input.splitArea,
+    firstMin: input.minSize,
+    secondMin: input.minSize,
+    dividerSize: input.dividerSize,
+  });
+}
+
+/**
+ * Clamp a proposed split ratio so each side keeps its own minimum extent —
+ * the per-kind divider clamp (a terminal side may compress further than a
+ * conversation side). Falls back to the plain 0.05–0.95 clamp when the region
+ * cannot honour both minimums (e.g. a very small window).
+ */
+export function clampRatioToSideMinSizes(input: {
+  ratio: number;
+  axis: WorkbenchAxis;
+  splitArea: WorkbenchRect;
+  firstMin: number;
+  secondMin: number;
+  dividerSize?: number;
+}): number {
   const dividerSize = input.dividerSize ?? WORKBENCH_DIVIDER_SIZE;
   const total =
     (input.axis === "horizontal" ? input.splitArea.width : input.splitArea.height) - dividerSize;
   const base = clampSplitRatio(input.ratio);
   if (total <= 0) return base;
-  const minRatio = input.minSize / total;
-  if (minRatio * 2 >= 1) return 0.5;
-  return Math.min(1 - minRatio, Math.max(minRatio, base));
+  if (input.firstMin + input.secondMin >= total) {
+    // Degenerate region: fall back to the symmetric behaviour so tiny
+    // windows still resize instead of pinning the divider.
+    const minRatio = Math.max(input.firstMin, input.secondMin) / total;
+    if (minRatio * 2 >= 1) return 0.5;
+    return Math.min(1 - minRatio, Math.max(minRatio, base));
+  }
+  const lower = input.firstMin / total;
+  const upper = 1 - input.secondMin / total;
+  return Math.min(upper, Math.max(lower, base));
 }
 
 export function roundWorkbenchRect(rect: WorkbenchRect): WorkbenchRect {
