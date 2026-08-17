@@ -24,6 +24,7 @@ import {
 } from "../../lib/settings";
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
+import { resolveShellSandboxSettings } from "../../lib/tools/sandboxPolicy";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";
 import { appendSystemPrompt } from "../../pages/chat";
 import {
@@ -174,6 +175,7 @@ async function executeCronPromptRun(
     skillsEnabled: skillsContext.enabled,
     skillsRootDir: skillsContext.rootDir,
     skillAccessPolicy: skillsContext.accessPolicy,
+    sandbox: resolveShellSandboxSettings(settings.system.commandSafetyMode),
     runtimeScope: "cron_auto_prompt",
     currentChatModel: {
       customProviderId: request.providerId,

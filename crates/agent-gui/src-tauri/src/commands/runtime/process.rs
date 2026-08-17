@@ -17,11 +17,11 @@ pub fn managed_process_start(
     cwd: Option<String>,
     label: Option<String>,
     isolated: Option<bool>,
-    sandbox: Option<bool>,
-    sandbox_allow_network: Option<bool>,
+    sandbox: bool,
+    sandbox_allow_network: bool,
 ) -> Result<ManagedProcessStartResponse, String> {
-    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
-        allow_network: sandbox_allow_network.unwrap_or(true),
+    let sandbox_options = sandbox.then_some(SandboxOptions {
+        allow_network: sandbox_allow_network,
     });
     registry.start(
         workdir,

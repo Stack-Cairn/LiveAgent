@@ -30,9 +30,10 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 			ChatCommand: &gatewayv2.ChatCommandRequest{
 				Type: "chat.submit",
 				Request: &gatewayv2.ChatRequest{
-					ConversationId:  "conv-cmd",
-					ClientRequestId: "client-cmd-1",
-					Message:         "hello v2",
+					ConversationId:    "conv-cmd",
+					ClientRequestId:   "client-cmd-1",
+					Message:           "hello v2",
+					CommandSafetyMode: "sandboxOffline",
 				},
 			},
 		},
@@ -52,6 +53,9 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 	command := outbound.GetChatCommand()
 	if command.GetType() != "chat.submit" || command.GetRequest().GetMessage() != "hello v2" {
 		t.Fatalf("agent chat command = %#v, want chat.submit hello v2", command)
+	}
+	if got := command.GetRequest().GetCommandSafetyMode(); got != "sandboxOffline" {
+		t.Fatalf("agent command_safety_mode = %q, want sandboxOffline", got)
 	}
 }
 

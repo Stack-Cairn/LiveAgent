@@ -1301,8 +1301,9 @@ test("GatewayWebSocketClient chatCommand sends the command frame and parses the 
     clientRequestId: "req-1",
     queuePolicy: "append",
     systemSettings: {
-      executionMode: "agent",
+      executionMode: "tools",
       workdir: "/workspace/project",
+      commandSafetyMode: "sandboxOffline",
     },
   });
   const socket = await connectAndAuth(codec);
@@ -1314,6 +1315,11 @@ test("GatewayWebSocketClient chatCommand sends the command frame and parses the 
   assert.equal(command.json.chat_command.request.client_request_id, "req-1");
   assert.equal(command.json.chat_command.request.queue_policy, "append");
   assert.equal(command.json.chat_command.request.workdir, "/workspace/project");
+  assert.equal(
+    command.json.chat_command.request.command_safety_mode,
+    "sandboxOffline",
+    "the WebUI must serialize the selected sandbox mode into chat_command",
+  );
 
   socket.receiveBinary(
     codec.encodeServerFrame({

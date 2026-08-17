@@ -77,6 +77,7 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
@@ -495,16 +496,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   const runtimePlatform = await resolveRuntimePlatform();
   const buildRegistryStartedAt = perfNowMs();
   const safetyMode = commandSafetyMode ?? "auto";
-  const sandboxActive = safetyMode === "sandbox" || safetyMode === "sandboxOffline";
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir: effectiveWorkdir,
     additionalRoots,
     providerId,
     runtimePlatform,
     fileState,
-    sandbox: sandboxActive
-      ? { enabled: true, allowNetwork: safetyMode !== "sandboxOffline" }
-      : undefined,
+    sandbox: resolveShellSandboxSettings(safetyMode),
     taskStateStore,
     askUserQuestionConversationId: conversationId,
     checkpoint: {

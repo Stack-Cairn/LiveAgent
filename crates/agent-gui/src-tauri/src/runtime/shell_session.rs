@@ -1031,6 +1031,88 @@ mod tests {
         assert_eq!(response.sandbox.as_deref(), Some("restricted-token"));
     }
 
+    /// Exercise the production session manager with an explicit sandbox option.
+    /// The sibling directory deliberately lives outside the workspace but outside
+    /// the platform-approved temp roots as well, so a successful write there
+    /// would prove that the session lost its fence.
+    #[cfg(unix)]
+    #[test]
+    fn sandboxed_session_enforces_workspace_write_fence() {
+        use crate::runtime::sandbox::{self, SandboxOptions};
+
+        let capability = sandbox::capability();
+        if !capability.supported {
+            let error = ShellSessionManager::default()
+                .start(
+                    "sandbox-unavailable".to_string(),
+                    workdir(),
+                    "printf should-not-run".to_string(),
+                    None,
+                    Some(2_000),
+                    None,
+                    Some(30_000),
+                    Some(SandboxOptions {
+                        allow_network: true,
+                    }),
+                )
+                .expect_err("sandbox startup must fail closed when the backend is unavailable");
+            assert!(
+                error.contains("Sandbox mode is enabled but unavailable")
+                    || error.contains("sandbox")
+                    || error.contains("bubblewrap"),
+                "unexpected fail-closed error: {error}"
+            );
+            return;
+        }
+
+        let home = dirs::home_dir().expect("home directory");
+        let outer = tempfile::Builder::new()
+            .prefix(".liveagent-sandbox-session-")
+            .tempdir_in(home)
+            .expect("temporary sandbox parent");
+        let workspace = outer.path().join("workspace");
+        let sibling = outer.path().join("sibling");
+        std::fs::create_dir(&workspace).expect("workspace directory");
+        std::fs::create_dir(&sibling).expect("sibling directory");
+
+        let manager = ShellSessionManager::default();
+        let first = manager
+            .start(
+                "sandbox-fence".to_string(),
+                workspace.display().to_string(),
+                "set -e; printf inside > inside.txt; printf outside > ../sibling/outside.txt"
+                    .to_string(),
+                None,
+                Some(2_000),
+                None,
+                Some(30_000),
+                Some(SandboxOptions {
+                    allow_network: true,
+                }),
+            )
+            .expect("sandboxed session should start");
+        let response = if first.status == ShellSessionStatus::Running {
+            manager
+                .wait("sandbox-fence", Some(first.cursor), Some(5_000))
+                .expect("sandboxed session should remain waitable")
+        } else {
+            first
+        };
+
+        assert_eq!(response.sandbox.as_deref(), Some(capability.mechanism));
+        assert_eq!(response.status, ShellSessionStatus::Failed);
+        assert_ne!(response.exit_code, Some(0), "sibling write unexpectedly succeeded");
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("inside.txt")).expect("workspace write"),
+            "inside"
+        );
+        assert!(
+            !sibling.join("outside.txt").exists(),
+            "sandboxed session wrote outside its workspace"
+        );
+        manager.shutdown_cleanup();
+    }
+
     #[test]
     fn explicit_timeout_terminates_the_session() {
         let manager = ShellSessionManager::default();

@@ -1092,8 +1092,8 @@ export function createShellTools(params: {
             isolated: isolated || undefined,
             // 跟随所选模式:sandboxOffline 下常驻进程同样断网(无法对外提供服务,
             // 需要 dev server 时应切回"沙箱"模式)。
-            sandbox: sandboxEnabled || undefined,
-            sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
+            sandbox: sandboxEnabled,
+            sandbox_allow_network: sandboxAllowNetwork,
           },
           signal,
           {
@@ -1366,8 +1366,8 @@ export function createShellTools(params: {
             yield_time_ms,
             timeout_ms,
             max_timeout_ms: GLOBAL_BASH_MAX_TIMEOUT_MS,
-            sandbox: sandboxEnabled || undefined,
-            sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
+            sandbox: sandboxEnabled,
+            sandbox_allow_network: sandboxAllowNetwork,
           },
           signal,
           {
@@ -1445,8 +1445,8 @@ export function createShellTools(params: {
         max_timeout_ms: timeoutPolicy.maxTimeoutMs,
         provider_id: params.providerId,
         run_id,
-        sandbox: sandboxEnabled || undefined,
-        sandbox_allow_network: sandboxEnabled ? sandboxAllowNetwork : undefined,
+        sandbox: sandboxEnabled,
+        sandbox_allow_network: sandboxAllowNetwork,
       } as any);
 
       const header = [

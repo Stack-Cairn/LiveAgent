@@ -67,6 +67,8 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.provider_id, "claude_code");
   assert.equal(calls[0].args.max_timeout_ms, 600_000);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
   assert.match(result.content[0].text, /platform: windows/);
   assert.match(result.content[0].text, /profile: windows-git-bash/);
 });
@@ -116,6 +118,56 @@ test("Bash tool uses the same Git Bash-first policy for Codex", async () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.provider_id, "codex");
   assert.equal(calls[0].args.max_timeout_ms, 30_000);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+});
+
+test("sandboxed one-shot Bash forwards the offline sandbox contract", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "shell_run");
+          return {
+            exit_code: 0,
+            shell: "zsh",
+            platform: "macos",
+            profile: "posix-zsh",
+            shell_family: "posix",
+            sandbox: "seatbelt",
+            stdout: "ready\n",
+            stderr: "",
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: false,
+            cancelled: false,
+            effective_timeout_ms: args.timeout_ms,
+            duration_ms: 12,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "macos",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+
+  const result = await bundle.executeToolCall(createBashCall());
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, false);
+  assert.match(result.content[0].text, /sandbox: seatbelt/);
 });
 
 test("Bash tool schema allows larger timeout values but clamps for Codex", async () => {
@@ -539,6 +591,56 @@ test("ManagedProcess starts foreground commands through process manager", async 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.workdir, "/repo");
   assert.equal(calls[0].args.cwd, "app");
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+});
+
+test("sandboxed ManagedProcess forwards the offline sandbox contract", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "managed_process_start");
+          return {
+            process: {
+              id: "proc-sandboxed",
+              label: null,
+              command: args.command,
+              cwd: "/repo",
+              shell: "zsh",
+              pid: 124,
+              log_path: "/tmp/proc-sandboxed.log",
+              started_at: 10,
+              finished_at: null,
+              exit_code: null,
+              running: true,
+            },
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-sandboxed",
+    name: "ManagedProcess",
+    arguments: { action: "start", command: "pnpm dev" },
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, false);
 });
 
 test("ManagedProcess abort stops a process returned after cancellation", async () => {
@@ -1054,6 +1156,8 @@ test("resumable Bash yields a session without applying an implicit hard timeout"
   // 都按全局上限（600s）收敛，避免 codex 系 30s cap 误杀长任务。
   assert.equal(calls[0].args.max_timeout_ms, 600_000);
   assert.equal(calls[0].args.provider_id, undefined);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
   assert.match(result.content[0].text, /status: running/);
   assert.match(result.content[0].text, /session_duration_ms: 10003/);
   assert.doesNotMatch(result.content[0].text, /^duration_ms:/m);

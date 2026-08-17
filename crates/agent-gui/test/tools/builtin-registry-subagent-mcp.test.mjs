@@ -33,16 +33,18 @@ const DOCS_SERVER = {
   env: {},
 };
 
-function createRegistryHarness() {
+function createRegistryHarness({ onRun } = {}) {
   const runnerCalls = [];
   const listedServerIds = [];
   const listedServerCommands = [];
+  const invokeCalls = [];
   const loader = createTsModuleLoader({
     mocks: {
       [agentRunnerModulePath]: {
         async runAssistantWithTools(params) {
           runnerCalls.push(params);
           params.onTurnStart?.(1);
+          if (onRun) return onRun(params);
           const assistant = createAssistant("subagent done");
           return { assistant, messages: [assistant], emittedMessages: [assistant] };
         },
@@ -54,6 +56,7 @@ function createRegistryHarness() {
       },
       "@tauri-apps/api/core": {
         async invoke(command, args) {
+          invokeCalls.push({ command, args });
           if (command === "mcp_list_tools") {
             listedServerIds.push((args.servers ?? []).map((server) => server.id));
             listedServerCommands.push((args.servers ?? []).map((server) => server.command));
@@ -93,15 +96,33 @@ function createRegistryHarness() {
               branchDeleted: true,
             };
           }
+          if (command === "shell_session_start") {
+            return {
+              status: "completed",
+              session_id: args.session_id,
+              cursor: 0,
+              output: [],
+              output_truncated: false,
+              has_more: false,
+              exit_code: 0,
+              duration_ms: 1,
+              shell: "bash",
+              platform: "linux",
+              profile: "posix-bash",
+              shell_family: "posix",
+              sandbox: "bubblewrap",
+              timeout_ms: null,
+            };
+          }
           throw new Error(`Unexpected invoke: ${command}`);
         },
       },
     },
   });
-  return { loader, runnerCalls, listedServerIds, listedServerCommands };
+  return { loader, runnerCalls, listedServerIds, listedServerCommands, invokeCalls };
 }
 
-async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
+async function buildRegistry(harness, { withSubagentRuntime, storeIpc, sandbox } = {}) {
   const { loader } = harness;
   const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
   const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
@@ -113,6 +134,7 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
     skillsEnabled: true,
     runtimeScope: "chat",
     getMcpSettings: () => mcpSettingsHolder.value,
+    sandbox,
   };
   if (!withSubagentRuntime) {
     return { registry: await buildBuiltinToolRegistry(baseParams), mcpSettingsHolder };
@@ -264,6 +286,50 @@ test("worktree children get fs/shell/ro-memory/MCP tools but no skills, system, 
 
   // The child executed inside the isolated worktree workdir.
   assert.equal(harness.runnerCalls[0].workdir, "/tmp/liveagent-subagents/agent-a");
+});
+
+test("worktree children inherit the parent offline sandbox when Bash executes", async () => {
+  const harness = createRegistryHarness({
+    onRun: async (params) => {
+      const toolCall = {
+        type: "toolCall",
+        id: "child-bash",
+        name: "Bash",
+        arguments: { command: "printf child" },
+      };
+      params.onToolExecutionStart?.(toolCall);
+      const toolResult = await params.executeToolCall(toolCall);
+      assert.equal(toolResult.isError, false);
+      const assistant = createAssistant("subagent done");
+      return {
+        assistant,
+        messages: [toolCall, toolResult, assistant],
+        emittedMessages: [toolCall, toolResult, assistant],
+      };
+    },
+  });
+  const { registry } = await buildRegistry(harness, {
+    withSubagentRuntime: true,
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+
+  const bash = registry.tools.find((tool) => tool.name === "Bash");
+  assert.match(bash.description, /Sandbox mode is ON/);
+
+  const result = await registry.executeToolCall(
+    createAgentToolCall({
+      agents: [{ id: "agent-a", prompt: "Run the probe.", mode: "worktree" }],
+    }),
+  );
+  assert.equal(result.isError, false);
+  assert.equal(harness.runnerCalls.length, 1);
+  assert.equal(harness.runnerCalls[0].workdir, "/tmp/liveagent-subagents/agent-a");
+
+  const sessionStart = harness.invokeCalls.find((call) => call.command === "shell_session_start");
+  assert.ok(sessionStart);
+  assert.equal(sessionStart.args.workdir, "/tmp/liveagent-subagents/agent-a");
+  assert.equal(sessionStart.args.sandbox, true);
+  assert.equal(sessionStart.args.sandbox_allow_network, false);
 });
 
 test("subagent registries list MCP servers from live settings, not turn-start snapshots", async () => {

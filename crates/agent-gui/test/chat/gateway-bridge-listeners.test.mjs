@@ -274,3 +274,150 @@ test("gateway bridge listener keeps one worker across renders and handles native
     else globalThis.document = previousDocument;
   }
 });
+
+test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", async () => {
+  const hookHarness = createHookHarness();
+  const invokeCalls = [];
+  const sendCalls = [];
+  const windowEvents = createEventTarget();
+  const documentEvents = createEventTarget();
+  let nextTimerId = 1;
+  const timers = new Map();
+  const claimed = {
+    requestId: "request-sandbox-direct",
+    clientRequestId: "client-sandbox-direct",
+    conversationId: "conversation-sandbox-direct",
+    state: "claimed",
+    attempt: 1,
+    leaseMs: 15_000,
+    request: {
+      requestId: "request-sandbox-direct",
+      clientRequestId: "client-sandbox-direct",
+      conversationId: "conversation-sandbox-direct",
+      message: "run inside the offline sandbox",
+      executionMode: "tools",
+      workdir: "/workspace/project",
+      commandSafetyMode: "sandboxOffline",
+      queuePolicy: "auto",
+    },
+  };
+  const claims = [claimed, null];
+
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  globalThis.window = {
+    ...windowEvents,
+    setInterval(callback) {
+      const id = nextTimerId++;
+      timers.set(id, callback);
+      return id;
+    },
+    clearInterval(id) {
+      timers.delete(id);
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  globalThis.document = {
+    ...documentEvents,
+    visibilityState: "visible",
+  };
+
+  try {
+    const registry = globalThis.__LIVEAGENT_GATEWAY_BRIDGE_REQUESTS__;
+    registry?.activeRequests?.clear();
+    registry?.pendingRequestIds?.clear();
+    registry?.pendingClientRequestIds?.clear();
+    registry?.pendingConversationIds?.clear();
+
+    const loader = createTsModuleLoader({
+      mocks: {
+        react: hookHarness.react,
+        "@tauri-apps/api/core": {
+          async invoke(command, payload) {
+            invokeCalls.push({ command, payload });
+            if (command === "gateway_chat_claim_next") {
+              return claims.shift() ?? null;
+            }
+            return undefined;
+          },
+        },
+        "@tauri-apps/api/event": {
+          async listen() {
+            return () => undefined;
+          },
+        },
+        "../../../lib/settings": {
+          normalizeChatRuntimeControls(value) {
+            return value;
+          },
+        },
+      },
+    });
+    const { useGatewayBridgeListeners } = loader.loadModule(
+      "src/pages/chat/gateway/useGatewayBridgeListeners.ts",
+    );
+
+    hookHarness.render(() =>
+      useGatewayBridgeListeners({
+        currentConversationIdRef: { current: "conversation-sandbox-direct" },
+        conversationRuntimeCacheRef: { current: new Map() },
+        ensureGatewayBridgeConversationReadyRef: {
+          current: async (conversationId) => conversationId,
+        },
+        sendActionRef: {
+          current: async (overrides) => {
+            sendCalls.push(overrides);
+            return true;
+          },
+        },
+        queueGatewayBridgeEventForRequest() {},
+        shouldQueueGatewayChatRequest() {
+          return false;
+        },
+        async enqueueGatewayChatRequest() {
+          return false;
+        },
+        isConversationRunning() {
+          return false;
+        },
+        getConversationAbortController() {
+          return null;
+        },
+        requestConversationStop() {
+          return false;
+        },
+        requestActiveConversationStop() {
+          return false;
+        },
+        consumeConversationStop() {
+          return false;
+        },
+      }),
+    );
+
+    for (let attempt = 0; attempt < 8 && sendCalls.length === 0; attempt += 1) {
+      await flushPromises();
+    }
+
+    assert.equal(sendCalls.length, 1);
+    const overrides = sendCalls[0];
+    assert.equal(overrides.commandSafetyModeOverride, "sandboxOffline");
+    assert.equal(
+      overrides.gatewayBridgeRequestOverride.commandSafetyModeOverride,
+      "sandboxOffline",
+    );
+    assert.equal(overrides.executionModeOverride, "tools");
+    assert.equal(overrides.workdirOverride, "/workspace/project");
+    assert.ok(
+      invokeCalls.some((call) => call.command === "gateway_chat_complete"),
+      "the directly claimed request should complete after the sandbox mode is forwarded",
+    );
+    hookHarness.cleanup();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});

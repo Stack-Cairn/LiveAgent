@@ -25,16 +25,16 @@ pub async fn shell_run(
     max_timeout_ms: Option<u64>,
     provider_id: Option<String>,
     run_id: Option<String>,
-    sandbox: Option<bool>,
-    sandbox_allow_network: Option<bool>,
+    sandbox: bool,
+    sandbox_allow_network: bool,
 ) -> Result<ShellRunResponse, String> {
     let normalized_run_id = run_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let cancel_token = normalized_run_id.as_deref().map(|id| registry.register(id));
     let registered_token = cancel_token.clone();
-    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
-        allow_network: sandbox_allow_network.unwrap_or(true),
+    let sandbox_options = sandbox.then_some(SandboxOptions {
+        allow_network: sandbox_allow_network,
     });
 
     let join_result = tauri::async_runtime::spawn_blocking(move || {
@@ -82,12 +82,12 @@ pub async fn shell_session_start(
     yield_time_ms: Option<u64>,
     timeout_ms: Option<u64>,
     max_timeout_ms: Option<u64>,
-    sandbox: Option<bool>,
-    sandbox_allow_network: Option<bool>,
+    sandbox: bool,
+    sandbox_allow_network: bool,
 ) -> Result<ShellSessionResponse, String> {
     let manager = Arc::clone(manager.inner());
-    let sandbox_options = (sandbox == Some(true)).then(|| SandboxOptions {
-        allow_network: sandbox_allow_network.unwrap_or(true),
+    let sandbox_options = sandbox.then_some(SandboxOptions {
+        allow_network: sandbox_allow_network,
     });
     tauri::async_runtime::spawn_blocking(move || {
         manager.start(

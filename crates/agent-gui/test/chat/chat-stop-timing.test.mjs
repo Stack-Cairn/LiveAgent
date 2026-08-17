@@ -229,6 +229,9 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         },
       },
       "../gateway/gatewayBridgeTypes": {
+        normalizeGatewayCommandSafetyMode(value) {
+          return value === "sandboxOffline" ? value : undefined;
+        },
         normalizeGatewayExecutionMode(value) {
           return value;
         },
@@ -248,6 +251,7 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         system: {
           executionMode: "chat",
           workdir: "",
+          commandSafetyMode: "sandboxOffline",
         },
         chatRuntimeControls: {},
       },
@@ -314,6 +318,11 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   queue.requestQueuedChatTurnProcessing("conversation-1");
   await flushPromises();
   assert.equal(sendCalls.length, 1);
+  assert.equal(
+    sendCalls[0].commandSafetyModeOverride,
+    "sandboxOffline",
+    "a queued local turn must snapshot the selected sandbox mode",
+  );
 
   queue.stopConversation("conversation-1");
   queue.stopConversation("conversation-1");
@@ -336,7 +345,39 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   await flushPromises();
 
   assert.equal(sendCalls.length, 2, "composer Stop must continue with the queued turn");
+  assert.equal(sendCalls[1].commandSafetyModeOverride, "sandboxOffline");
   assert.equal(queue.queuedChatTurnsRef.current.length, 0);
+
+  // A gateway request parked in the GUI queue must retain the remote mode on
+  // both the queued send and the reconstructed bridge request.
+  assert.equal(
+    await queue.enqueueGatewayChatRequest(
+      {
+        requestId: "gateway-request-sandbox",
+        clientRequestId: "gateway-client-sandbox",
+        request: {
+          requestId: "gateway-request-sandbox",
+          clientRequestId: "gateway-client-sandbox",
+          conversationId: "conversation-1",
+          message: "remote queued turn",
+          executionMode: "tools",
+          commandSafetyMode: "sandboxOffline",
+          queuePolicy: "append",
+        },
+      },
+      "conversation-1",
+    ),
+    true,
+  );
+  queue.requestQueuedChatTurnProcessing("conversation-1");
+  await flushPromises();
+  await flushPromises();
+  const gatewaySend = sendCalls.at(-1);
+  assert.equal(gatewaySend.commandSafetyModeOverride, "sandboxOffline");
+  assert.equal(
+    gatewaySend.gatewayBridgeRequestOverride.commandSafetyModeOverride,
+    "sandboxOffline",
+  );
   hookHarness.cleanup();
 });
 
