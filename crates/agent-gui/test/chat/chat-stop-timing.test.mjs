@@ -80,6 +80,23 @@ async function flushPromises() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+/**
+ * Per-conversation live transcript stores, matching
+ * useLiveTranscriptController: every conversation owns its own store, so a
+ * stub returning one shared object would hide cross-conversation leakage.
+ */
+function createLiveTranscriptStoreStub() {
+  const stores = new Map();
+  return (conversationId) => {
+    const key = String(conversationId ?? "").trim();
+    const existing = stores.get(key);
+    if (existing) return existing;
+    const created = { conversationId: key };
+    stores.set(key, created);
+    return created;
+  };
+}
+
 test("a stop intent aborts a controller and handler registered later", () => {
   const hookHarness = createHookHarness();
   const loader = createTsModuleLoader({
@@ -183,6 +200,8 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   const activeStopOptions = [];
   const controllerWrites = [];
   const sendingStateWrites = [];
+  const toolStatusWrites = [];
+  const liveTranscriptStores = createLiveTranscriptStoreStub();
   let stopRequestVersion = 0;
   let draftText = "first queued turn";
   const composer = {
@@ -292,11 +311,11 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         activeStopOptions.push(options);
         return true;
       },
-      getConversationLiveTranscriptStore() {
-        return {};
-      },
+      getConversationLiveTranscriptStore: liveTranscriptStores,
       captureAbortSnapshot() {},
-      updateToolStatus() {},
+      updateToolStatus(status, store) {
+        toolStatusWrites.push({ status, conversationId: store?.conversationId });
+      },
       composerRef: { current: composer },
       pendingUploadedFiles: [],
       setPendingUploadsForConversation() {},
@@ -327,6 +346,12 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   assert.deepEqual(sendingStateWrites, [
     { conversationId: "conversation-1", value: false },
   ]);
+  // Stop-side tool status must be written to the stopping conversation's own
+  // transcript store, never a shared one.
+  assert.ok(toolStatusWrites.length > 0);
+  for (const write of toolStatusWrites) {
+    assert.equal(write.conversationId, "conversation-1");
+  }
   stopRequests.delete("conversation-1");
   sendGate.resolve(true);
   await flushPromises();
@@ -440,9 +465,7 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
       requestActiveConversationStop() {
         return false;
       },
-      getConversationLiveTranscriptStore() {
-        return {};
-      },
+      getConversationLiveTranscriptStore: createLiveTranscriptStoreStub(),
       captureAbortSnapshot() {},
       updateToolStatus() {},
       composerRef: { current: null },
