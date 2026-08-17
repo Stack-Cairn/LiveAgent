@@ -46,6 +46,21 @@ test("keyboard width controls do not detach transcript scroll follow", () => {
   assert.ok(transcriptWidthControlsSource.includes(SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE));
 });
 
+test("width handle hit targets stay localized around the visible grip", () => {
+  const handleClass = transcriptWidthControlsSource.match(
+    /group pointer-events-auto absolute ([^"]+) touch-none cursor-col-resize/,
+  );
+  assert.ok(handleClass, "transcript width handle class not found");
+  assert.match(handleClass[1], /top-1\/2/);
+  assert.match(handleClass[1], /h-24/);
+  assert.match(handleClass[1], /-translate-y-1\/2/);
+  assert.equal(
+    handleClass[1].includes("inset-y-0"),
+    false,
+    "a transparent width handle must not intercept the full transcript height",
+  );
+});
+
 test("preferred widths round and clamp to the persisted bounds", () => {
   assert.equal(width.normalizePreferredWidth(920.4), 920);
   assert.equal(width.normalizePreferredWidth(100), width.MIN_CHAT_TRANSCRIPT_WIDTH);

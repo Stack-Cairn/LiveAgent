@@ -16,6 +16,10 @@ const composerSource = readFileSync(
   new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
   "utf8",
 );
+const composerControlStylesSource = readFileSync(
+  new URL("../../../agent-ui/src/lib/chat/composerControlStyles.ts", import.meta.url),
+  "utf8",
+);
 const branchSelectorSource = readFileSync(
   new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url),
   "utf8",
@@ -116,6 +120,15 @@ test("branch selector reuses the model trigger visual language", () => {
   assert.match(branchSelectorSource, /data-\[popup-open\]:bg-muted\/60/);
   assert.match(branchSelectorSource, /menuOpen && "rotate-180"/);
   assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald/);
+});
+
+test("compact composer controls remain equal-width centered icon buttons", () => {
+  assert.match(composerSource, /composer-glass-card @container/);
+  assert.match(composerControlStylesSource, /@max-\[480px\]:w-8/);
+  assert.match(composerControlStylesSource, /@max-\[480px\]:justify-center/);
+  assert.match(composerControlStylesSource, /@max-\[480px\]:gap-0/);
+  assert.match(composerControlStylesSource, /@max-\[480px\]:px-0/);
+  assert.match(composerControlStylesSource, /@max-\[480px\]:hidden/);
 });
 
 test("DeepSeek provider icon uses the logo-only mark", () => {

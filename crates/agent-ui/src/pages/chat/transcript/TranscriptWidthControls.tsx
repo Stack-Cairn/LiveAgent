@@ -251,7 +251,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
         onPointerDown={(event) => handleResizeStart(side, event)}
         onDoubleClick={resetWidth}
         className={cn(
-          "group pointer-events-auto absolute inset-y-0 z-10 w-3 touch-none cursor-col-resize border-0 bg-transparent p-0 focus-visible:outline-none",
+          "group pointer-events-auto absolute top-1/2 z-10 h-24 max-h-full w-3 -translate-y-1/2 touch-none cursor-col-resize border-0 bg-transparent p-0 focus-visible:outline-none",
           isPrimary ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
         )}
       >
