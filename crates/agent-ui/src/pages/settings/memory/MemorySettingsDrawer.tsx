@@ -24,8 +24,10 @@ import {
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetTitle,
@@ -305,15 +307,19 @@ export function MemorySettingsDrawer(props: {
               {t("settings.memorySettingsLocalOnly")}
             </SheetDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.05] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.1] hover:text-foreground"
+          <SheetClose
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 rounded-full bg-foreground/[0.05] text-muted-foreground/80 hover:bg-foreground/[0.1] hover:text-foreground"
+              />
+            }
             title={t("settings.memorySettingsClose")}
             aria-label={t("settings.memorySettingsClose")}
           >
             <X className="h-3.5 w-3.5" />
-          </button>
+          </SheetClose>
         </div>
 
         <div
@@ -417,19 +423,14 @@ export function MemorySettingsDrawer(props: {
                     <span className="text-[11.5px] text-muted-foreground/90">
                       {t("settings.memoryOrganizerTime")}
                     </span>
-                    <input
+                    <Input
                       type="time"
                       aria-label={t("settings.memoryOrganizerTime")}
                       value={timeLocalDraft}
                       disabled={organizerTimingDisabled}
                       onChange={(event) => setTimeLocalDraft(event.currentTarget.value)}
                       onBlur={flushOrganizerTimeLocal}
-                      className={[
-                        "h-9 w-full rounded-md border border-input bg-background px-3 text-[13px] leading-none text-foreground/90 shadow-xs",
-                        "outline-none transition-colors focus:border-input",
-                        "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-                        "disabled:cursor-not-allowed disabled:opacity-50",
-                      ].join(" ")}
+                      className="text-[13px] leading-none text-foreground/90"
                     />
                   </div>
                 </div>

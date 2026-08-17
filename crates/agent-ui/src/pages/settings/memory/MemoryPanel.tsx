@@ -30,6 +30,15 @@ import {
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";
+import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -212,12 +221,13 @@ export function MemoryPanel(props: {
   function renderEntryButton(entry: MemoryMeta, nested = false) {
     const active = activeEntryKey === entryKey(entry);
     return (
-      <button
+      <Button
         key={entryKey(entry)}
-        type="button"
+        variant="outline"
+        aria-pressed={active}
         onClick={() => openEntry(entry)}
         className={cn(
-          "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
           nested ? "ml-3 w-[calc(100%-0.75rem)]" : "",
           active
             ? "border-primary/50 bg-primary/5 shadow-xs"
@@ -235,7 +245,7 @@ export function MemoryPanel(props: {
         <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/70">
           id: {entry.slug}
         </div>
-      </button>
+      </Button>
     );
   }
 
@@ -374,50 +384,50 @@ export function MemoryPanel(props: {
         <div className="settings-memory-layout grid min-h-0 flex-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
           <section className="settings-memory-list-section flex min-h-0 flex-col rounded-xl border border-border/60 bg-card">
             <div className="shrink-0 space-y-3 border-b border-border/40 p-3">
-              <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted/50 p-1">
-                <button
-                  type="button"
-                  onClick={() => setTab("global")}
-                  className={cn(
-                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
-                    tab === "global" ? "bg-background shadow-xs" : "text-muted-foreground",
-                  )}
+              <Tabs
+                value={tab}
+                onValueChange={(value) => {
+                  if (value === "global" || value === "project" || value === "journal") {
+                    setTab(value);
+                  }
+                }}
+              >
+                <TabsList
+                  aria-label={t("settings.memoryTitle")}
+                  className="grid h-auto w-full grid-cols-3 gap-1 rounded-lg bg-muted/50 p-1"
                 >
-                  <Globe2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {globalEntryCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("project")}
-                  className={cn(
-                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
-                    tab === "project" ? "bg-background shadow-xs" : "text-muted-foreground",
-                  )}
-                >
-                  <Folder className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryProject")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {projectEntryCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("journal")}
-                  className={cn(
-                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium",
-                    tab === "journal" ? "bg-background shadow-xs" : "text-muted-foreground",
-                  )}
-                >
-                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryJournal")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {dailyEntryCount}
-                  </span>
-                </button>
-              </div>
+                  <TabsTrigger
+                    value="global"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {globalEntryCount}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="project"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <Folder className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryProject")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {projectEntryCount}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="journal"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryJournal")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {dailyEntryCount}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -491,35 +501,43 @@ export function MemoryPanel(props: {
                     }
                     placeholder={t("settings.memorySlugPlaceholder")}
                   />
-                  <select
+                  <Select
                     value={draft.memoryType}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setDraft((prev) => ({
                         ...prev,
-                        memoryType: event.target.value as MemoryType,
+                        memoryType: value as MemoryType,
                       }))
                     }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    {MEMORY_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {memoryTypeLabel(type, t)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
+                    <SelectTrigger aria-label={t("settings.memoryType")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEMORY_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {memoryTypeLabel(type, t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
                     value={draft.scope}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setDraft((prev) => ({
                         ...prev,
-                        scope: event.target.value as "global" | "project",
+                        scope: value as "global" | "project",
                       }))
                     }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    <option value="global">{t("settings.memoryScopeGlobal")}</option>
-                    <option value="project">{t("settings.memoryScopeProject")}</option>
-                  </select>
+                    <SelectTrigger aria-label={t("settings.memoryScope")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">{t("settings.memoryScopeGlobal")}</SelectItem>
+                      <SelectItem value="project">{t("settings.memoryScopeProject")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Input
                     value={draft.description}
                     onChange={(event) =>
@@ -531,10 +549,10 @@ export function MemoryPanel(props: {
                     placeholder={t("settings.memoryDescriptionPlaceholder")}
                   />
                 </div>
-                <textarea
+                <Textarea
                   value={draft.body}
                   onChange={(event) => setDraft((prev) => ({ ...prev, body: event.target.value }))}
-                  className="mt-3 min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="mt-3 min-h-28 resize-y"
                   placeholder={t("settings.memoryBodyPlaceholder")}
                 />
                 <div className="mt-3 flex justify-end gap-2">
@@ -609,7 +627,7 @@ export function MemoryPanel(props: {
                 <div className="settings-memory-detail-body min-h-0 flex-1 overflow-auto p-4">
                   {selected.memoryType === "daily" ? (
                     <div className="space-y-3">
-                      <textarea
+                      <Textarea
                         value={editDraft.appendBody}
                         onChange={(event) =>
                           setEditDraft((prev) => ({
@@ -617,7 +635,7 @@ export function MemoryPanel(props: {
                             appendBody: event.target.value,
                           }))
                         }
-                        className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="min-h-24 resize-y"
                         placeholder={t("settings.memoryAppendBlockPlaceholder")}
                       />
                       <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
@@ -638,7 +656,7 @@ export function MemoryPanel(props: {
                         }
                         placeholder={t("settings.memoryDescriptionPlaceholder")}
                       />
-                      <textarea
+                      <Textarea
                         value={editDraft.body}
                         onChange={(event) =>
                           setEditDraft((prev) => ({
@@ -646,7 +664,7 @@ export function MemoryPanel(props: {
                             body: event.target.value,
                           }))
                         }
-                        className="min-h-[360px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+                        className="min-h-[360px] resize-y font-mono text-xs leading-relaxed"
                       />
                     </div>
                   )}

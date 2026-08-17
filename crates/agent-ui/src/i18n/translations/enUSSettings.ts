@@ -181,6 +181,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "Journal",
   "settings.memoryScopeGlobal": "Global",
   "settings.memoryScopeProject": "Project",
+  "settings.memoryScope": "Memory scope",
+  "settings.memoryType": "Memory type",
   "settings.memoryTypeUser": "User",
   "settings.memoryTypeFeedback": "Preference",
   "settings.memoryTypeProject": "Project",

@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { Checkbox } from "@liveagent/ui/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -322,12 +323,13 @@ export function OrganizerHistoryModal(props: {
                   {runs.map((run) => {
                     const active = selectedRun?.runId === run.runId;
                     return (
-                      <button
+                      <Button
                         key={run.runId}
-                        type="button"
+                        variant="outline"
+                        aria-pressed={active}
                         onClick={() => reload(run.runId)}
                         className={cn(
-                          "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+                          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
                           active
                             ? "border-primary/50 bg-primary/5"
                             : "border-border/50 bg-background/70 hover:bg-muted/35",
@@ -354,7 +356,7 @@ export function OrganizerHistoryModal(props: {
                         <div className="mt-1 truncate text-[11px] text-muted-foreground">
                           {formatTime(run.startedAt || run.createdAt)} · {modelNameFromRun(run)}
                         </div>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -483,18 +485,21 @@ export function OrganizerHistoryModal(props: {
                               : manualApplyDisplay.appliedDecisionKeys.has(key)
                             : selectedDecisionKeys.has(key);
                         return (
-                          <label
+                          <div
                             key={key}
                             className="flex gap-3 rounded-md border border-border/50 bg-background/70 p-3 text-xs"
                           >
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-4 w-4 shrink-0"
+                            <Checkbox
+                              id={`memory-organizer-decision-${index}`}
+                              className="mt-0.5"
                               checked={checked}
                               disabled={!canApplyManualPreview || applyingPreview}
-                              onChange={() => togglePreviewDecision(key)}
+                              onCheckedChange={() => togglePreviewDecision(key)}
                             />
-                            <span className="min-w-0 flex-1">
+                            <label
+                              htmlFor={`memory-organizer-decision-${index}`}
+                              className="min-w-0 flex-1"
+                            >
                               <span className="flex flex-wrap items-center gap-2">
                                 <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
                                   {decision.op === "delete"
@@ -552,8 +557,8 @@ export function OrganizerHistoryModal(props: {
                                   {decision.sourceSlugs.join(", ")}
                                 </span>
                               ) : null}
-                            </span>
-                          </label>
+                            </label>
+                          </div>
                         );
                       })}
                     </div>

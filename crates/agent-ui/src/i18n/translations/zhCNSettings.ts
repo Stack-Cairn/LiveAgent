@@ -172,6 +172,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "日志",
   "settings.memoryScopeGlobal": "全局",
   "settings.memoryScopeProject": "项目",
+  "settings.memoryScope": "记忆范围",
+  "settings.memoryType": "记忆类型",
   "settings.memoryTypeUser": "用户",
   "settings.memoryTypeFeedback": "偏好",
   "settings.memoryTypeProject": "项目",
