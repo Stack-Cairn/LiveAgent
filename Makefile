@@ -27,6 +27,7 @@ DESKTOP_RELEASE_TAURI_CONFIG_FLAGS ?= --config $(DESKTOP_RELEASE_TAURI_CONFIG) $
 DEV_GATEWAY_TOKEN ?= dev-token
 DEV_GATEWAY_HTTP_ADDR ?= :50052
 DEV_WEBUI_PROXY_API ?= http://localhost:50052
+DEV_SESSION_WORKBENCH ?= 1
 GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 RELEASE_TAG ?=
 
@@ -39,7 +40,7 @@ all: build gateway-build
 
 ## Desktop app
 dev:
-	pnpm --dir $(AGENT_GUI_DIR) tauri dev
+	VITE_LIVEAGENT_SESSION_WORKBENCH=$(DEV_SESSION_WORKBENCH) pnpm --dir $(AGENT_GUI_DIR) tauri dev
 
 build:
 	pnpm --dir $(AGENT_GUI_DIR) tauri build
@@ -229,7 +230,8 @@ desktop-verify-macos:
 
 help:
 	@printf "\n%s\n" "Desktop"
-	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境"
+	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（默认启用 Session Workbench）"
+	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "使用旧单会话布局启动 Tauri"
 	@printf "  %-34s %s\n" "make build" "构建当前平台 Tauri 应用"
 	@printf "  %-34s %s\n" "make desktop-build-macos" "构建当前 Mac 芯片架构"
 	@printf "  %-34s %s\n" "make desktop-build-macos-release" "签名、公证并验证 macOS DMG"

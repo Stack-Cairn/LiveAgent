@@ -292,7 +292,7 @@ location / {
 
 | 命令 | 说明 |
 |---|---|
-| `make dev` | 启动 Tauri 开发环境 |
+| `make dev` | 启动 Tauri 开发环境并默认启用 Session Workbench（`DEV_SESSION_WORKBENCH=0` 可回退旧单会话布局） |
 | `make build` | 构建桌面应用 |
 | `make dev-gateway` | 启动 Gateway 开发服务 |
 | `make dev-webui` | 启动 WebUI 开发服务 |

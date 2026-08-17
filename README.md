@@ -292,7 +292,7 @@ Expand the Development Guide below for the full set of Make commands.
 
 | Command | Description |
 |---|---|
-| `make dev` | Start the Tauri development environment |
+| `make dev` | Start Tauri development with Session Workbench enabled (`DEV_SESSION_WORKBENCH=0` restores the legacy single-conversation layout) |
 | `make build` | Build the desktop app |
 | `make dev-gateway` | Start the Gateway dev server |
 | `make dev-webui` | Start the WebUI dev server |
