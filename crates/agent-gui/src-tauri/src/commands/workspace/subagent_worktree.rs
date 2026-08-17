@@ -810,30 +810,45 @@ fn apply_worktree_changes_blocking(
     // 必须放在 empty_patch 提前返回之后:那条路径下父仓库一个字节都没动,
     // 提前捕获会给未来的回退留下一批 existed_before=false 的记录,回退时
     // 反而把父工作区里本来就存在的文件删掉。
-    super::checkpoint::capture_worktree_apply_pre_images(
+    // 捕获缺口先攒着,不立刻记账:此刻还不知道 apply 会不会真的改动父工作
+    // 区。already_applied / fallback_noop 下父仓库一个字节没动,那时把缺口
+    // 写成 error 记录,会让一个什么都没发生的轮次在 UI 上标 ⚠"回退可能不
+    // 完整"。所以只在确认 apply 生效的分支上落账。
+    let capture_skips = super::checkpoint::capture_worktree_apply_pre_images(
         checkpoint.as_ref(),
         &parent_repo_root,
         &apply_paths,
     );
+    let record_skips = || {
+        super::checkpoint::record_worktree_capture_skips(
+            checkpoint.as_ref(),
+            &parent_repo_root,
+            &capture_skips,
+        );
+    };
 
     let direct_apply_result = run_git_apply_with_options(&parent_repo_root, &patch, &[]);
 
     match direct_apply_result {
-        Ok(_) => Ok(SubagentWorktreeApplyResponse {
-            applied: true,
-            changed: true,
-            status,
-            patch_bytes,
-            skipped_reason: None,
-            apply_method: Some("git_apply".to_string()),
-            fallback_reason: None,
-            copied_files: Vec::new(),
-            deleted_files: Vec::new(),
-            conflict_files: Vec::new(),
-        }),
+        Ok(_) => {
+            record_skips();
+            Ok(SubagentWorktreeApplyResponse {
+                applied: true,
+                changed: true,
+                status,
+                patch_bytes,
+                skipped_reason: None,
+                apply_method: Some("git_apply".to_string()),
+                fallback_reason: None,
+                copied_files: Vec::new(),
+                deleted_files: Vec::new(),
+                conflict_files: Vec::new(),
+            })
+        }
         Err(apply_error) => {
             let three_way_apply_result = run_git_apply_3way(&parent_repo_root, &patch);
             if three_way_apply_result.is_ok() {
+                record_skips();
                 return Ok(SubagentWorktreeApplyResponse {
                     applied: true,
                     changed: true,
@@ -855,6 +870,11 @@ fn apply_worktree_changes_blocking(
                 &worktree_root,
                 &apply_paths,
             )
+            .inspect_err(|_| {
+                // 兜底中途失败:已拷/已删的路径是真改过的,缺口必须落账,
+                // 否则那一轮会显示成"完整"。
+                record_skips();
+            })
             .map_err(|fallback_error| {
                 format!(
                     "git apply failed: {apply_error}; git apply --3way failed: {three_way_error}; file copy fallback failed:\n{fallback_error}"
@@ -862,6 +882,11 @@ fn apply_worktree_changes_blocking(
             })?;
             let copied_or_deleted =
                 !fallback.copied_files.is_empty() || !fallback.deleted_files.is_empty();
+            // 只有真改过父工作区才记捕获缺口;already_applied / fallback_noop
+            // 什么都没动,记了就是误报。
+            if copied_or_deleted {
+                record_skips();
+            }
             Ok(SubagentWorktreeApplyResponse {
                 applied: copied_or_deleted,
                 changed: true,

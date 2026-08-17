@@ -1307,14 +1307,25 @@ fn classify_worktree_pre_image(abs: &Path) -> Result<PreImage<'static>, String> 
 
 /// 在 worktree.apply 修改父工作区之前,对将被覆盖/删除的路径捕获父工作区
 /// 前像。路径来自 collect_apply_paths(git 相对路径),root 为父仓库根。
-/// 尽力而为:单个路径失败或被跳过都记 error 记录(该轮在 UI 上显示 ⚠),
-/// 不阻断合并。
+///
+/// 返回没能拿到前像的路径及原因:这些是捕获缺口,但此刻还不知道 apply 会
+/// 不会真的改动父工作区。若最终是 already_applied / fallback_noop,父仓库
+/// 一个字节都没动,把缺口记成 error 会让一个什么都没发生的轮次在 UI 上标
+/// ⚠"回退可能不完整"。所以缺口交由调用方在确认 apply 生效后再落账
+/// (见 record_worktree_capture_skips)。
+///
+/// 成功的前像仍然必须在这里立刻落盘——它们是内容备份,过了这一行父工作区
+/// 就要被覆盖了,延后就没得捕获了。
+#[must_use = "捕获缺口必须由调用方按 apply 结果决定是否落账"]
 pub fn capture_worktree_apply_pre_images(
     ctx: Option<&CheckpointCtx>,
     parent_repo_root: &Path,
     rel_paths: &[String],
-) {
-    let Some(ctx) = ctx else { return };
+) -> Vec<(PathBuf, String)> {
+    let Some(ctx) = ctx else {
+        return Vec::new();
+    };
+    let mut skipped = Vec::new();
     for rel in rel_paths {
         let rel_path = PathBuf::from(rel);
         let abs = parent_repo_root.join(&rel_path);
@@ -1325,9 +1336,24 @@ pub fn capture_worktree_apply_pre_images(
                     "checkpoint worktree pre-image skipped for {}: {reason}",
                     abs.display()
                 );
-                record_capture_skip(ctx, parent_repo_root, &rel_path, &reason);
+                skipped.push((rel_path, reason));
             }
         }
+    }
+    skipped
+}
+
+/// 把 capture_worktree_apply_pre_images 攒下的捕获缺口写成 error 记录。
+/// 只在 apply 真的改动了父工作区时调用:轮次被标成不完整,前提是这一轮
+/// 确实动过东西。
+pub fn record_worktree_capture_skips(
+    ctx: Option<&CheckpointCtx>,
+    parent_repo_root: &Path,
+    skipped: &[(PathBuf, String)],
+) {
+    let Some(ctx) = ctx else { return };
+    for (rel_path, reason) in skipped {
+        record_capture_skip(ctx, parent_repo_root, rel_path, reason);
     }
 }
 
@@ -1813,6 +1839,58 @@ mod tests {
         assert_eq!(result.deleted_files, 1);
         assert_eq!(fs::read_to_string(&existing).unwrap(), "parent-v1");
         assert!(!parent.join("new.txt").exists());
+    }
+
+    /// worktree.apply 的前像捕获发生在任何 apply 分支之前,所以 fallback 判定
+    /// already_applied / fallback_noop(父仓库一个字节没动)时,这些记录已经落库
+    /// 了。契约是:它们不会造成错误回退——前像等于当前内容,一律判 clean。
+    ///
+    /// 锁住这个契约,后续若有人改动 classify_entry 的相等判定或捕获时机,
+    /// 冗余记录就会立刻升级成"回退删掉用户没碰过的文件"。
+    #[test]
+    fn worktree_noop_apply_records_rewind_as_clean() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let parent = root.join("parent");
+        fs::create_dir_all(&parent).unwrap();
+        let ckpt = root.join("ckpt");
+
+        // 父仓库里已存在、且内容已等于 worktree 目标内容(already_applied)。
+        let already = parent.join("same.txt");
+        fs::write(&already, "identical").unwrap();
+        capture_at(
+            &ckpt,
+            "turn-1",
+            &parent,
+            &PathBuf::from("same.txt"),
+            PreImage::File(None),
+        )
+        .unwrap();
+
+        // 父仓库里不存在的路径:捕获记 Missing。fallback 若什么都没拷,
+        // 这个文件始终不会出现,回退不该把它当成"本轮新建"去删。
+        capture_at(
+            &ckpt,
+            "turn-1",
+            &parent,
+            &PathBuf::from("never-created.txt"),
+            PreImage::Missing,
+        )
+        .unwrap();
+
+        // apply 是 noop:父工作区不做任何改动。
+        let result = rewind_at(&ckpt, 1, &roots(&parent), None);
+        assert_eq!(result.restored_files, 0, "内容未变不该被当成 restore 写回");
+        assert_eq!(
+            result.deleted_files, 0,
+            "本轮没创建过文件,不该被当成新建去删"
+        );
+        assert_eq!(result.clean_files, 2);
+        assert!(result.failed.is_empty());
+        assert!(result.conflicts.is_empty());
+        // 最关键的一条:noop 轮次回退后,父工作区必须原样不动。
+        assert_eq!(fs::read_to_string(&already).unwrap(), "identical");
+        assert!(!parent.join("never-created.txt").exists());
     }
 
     #[test]

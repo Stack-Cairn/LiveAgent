@@ -93,8 +93,12 @@ export function CheckpointRewindMenu(props: {
     }
   };
 
-  // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 的额外授权根。
+  // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 且可写的额外授权根。
   // 后端只认这个集合里的 root，记录里存的绝对路径本身不构成授权。
+  //
+  // access 必须一并过滤：回退是写操作（覆盖/删除），只读根不该被写。普通
+  // 文件工具把 access 一路带到 pathUtils 的 canMutate 门禁上拦，而这里只往
+  // 后端传路径、access 当场就丢了，所以这道门只能在这一步补上。
   const resolveAuthorizedRoots = async () => {
     const roots: string[] = [];
     const push = (raw?: string | null) => {
@@ -106,7 +110,8 @@ export function CheckpointRewindMenu(props: {
       try {
         const grants = await listWorkspaceRootGrants(project);
         for (const grant of grants) {
-          if (grant.state === "active") push(grant.canonicalPath);
+          if (grant.state === "active" && grant.access === "write")
+            push(grant.canonicalPath);
         }
       } catch {
         // 取不到额外授权根时只保留工作区根：宁可少回退，不可越权写入。
