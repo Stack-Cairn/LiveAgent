@@ -5,13 +5,19 @@ package pbws
 // 有界拷贝，防止 Go 子切片保留整帧缓冲区（接近 1 MiB 的空白前缀 + 短 ID）。
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/liveagent/agent-gateway/internal/config"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
 func newTestTerminalBrowserConn(sm *session.Manager) *terminalBrowserConn {
@@ -206,5 +212,243 @@ func TestTerminalBrowserHandleFrameRejectsFullTrackingTable(t *testing.T) {
 	}
 	if c.isAttached("session-overflow") {
 		t.Fatal("overflow attach tracked despite full table")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 入站限速绑定回归：文本帧计数 + 限速先于反序列化 + 握手边界（websocket 级）
+// ---------------------------------------------------------------------------
+
+// frameReadResult 记录一次 readTerminalFrame / readFrame 调用的三态结果。
+type frameReadResult struct {
+	gotFrame bool
+	denied   bool
+	ok       bool
+}
+
+// wsTestPair 建立一个仅升级的测试服务：服务端 conn 交给 serve（handler 内
+// 同步执行），返回客户端 conn。清理顺序：先关客户端（服务端读循环随之出错
+// 返回），再关 httptest server，避免 Close 等待挂起的 handler。
+func wsTestPair(t *testing.T, serve func(*websocket.Conn)) *websocket.Conn {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		serve(conn)
+	}))
+	t.Cleanup(ts.Close)
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+	client, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial test ws: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
+func mustMarshalTerminalClientFrame(t *testing.T) []byte {
+	t.Helper()
+	data, err := proto.Marshal(&gatewayv2.TerminalClientFrame{
+		Payload: &gatewayv2.TerminalClientFrame_Frame{
+			Frame: &gatewayv2.TerminalStreamFrame{Kind: "input"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal terminal client frame: %v", err)
+	}
+	return data
+}
+
+// 文本帧必须与二进制帧同罪计入限速：旧实现中文本帧直接 continue，洪泛零成本。
+func TestReadTerminalFrameCountsTextFramesAgainstRateLimit(t *testing.T) {
+	results := make(chan frameReadResult, 3)
+	// 突发 2、几乎不回填、3 次连续违规判死：两帧文本即耗尽全部预算。
+	limiter := wscore.NewInboundRateLimiter(0.0001, 2, 3)
+	client := wsTestPair(t, func(conn *websocket.Conn) {
+		defer func() { _ = conn.Close() }()
+		for i := 0; i < 3; i++ {
+			frame, denied, ok := readTerminalFrame(conn, limiter)
+			results <- frameReadResult{gotFrame: frame != nil, denied: denied, ok: ok}
+			if !ok {
+				return
+			}
+		}
+	})
+
+	valid := mustMarshalTerminalClientFrame(t)
+	writes := []struct {
+		messageType int
+		data        []byte
+	}{
+		{websocket.TextMessage, []byte("junk-one")},
+		{websocket.TextMessage, []byte("junk-two")},
+		{websocket.BinaryMessage, valid},
+		{websocket.BinaryMessage, valid},
+		{websocket.BinaryMessage, valid},
+	}
+	for _, write := range writes {
+		if err := client.WriteMessage(write.messageType, write.data); err != nil {
+			t.Fatalf("write frame: %v", err)
+		}
+	}
+
+	// 两帧文本耗尽突发额度后：第 3 帧（合法二进制）必须被限速丢弃——
+	// 旧实现中文本帧不计数，此帧会被放行。
+	first := <-results
+	if !first.denied || !first.ok || first.gotFrame {
+		t.Fatalf("first read = %+v, want denied-but-alive (text frames must consume budget)", first)
+	}
+	second := <-results
+	if !second.denied || !second.ok || second.gotFrame {
+		t.Fatalf("second read = %+v, want denied-but-alive", second)
+	}
+	// 3 次连续违规判死。
+	third := <-results
+	if third.ok {
+		t.Fatalf("third read = %+v, want connection closed after 3 consecutive violations", third)
+	}
+}
+
+// 限速必须发生在 proto 反序列化之前：超限的非法帧在解析前即被丢弃，连接存活；
+// 旧顺序（先解析后限速）下非法帧直接破坏帧流、关闭连接。
+func TestReadTerminalFrameLimitsBeforeUnmarshal(t *testing.T) {
+	results := make(chan frameReadResult, 3)
+	// 突发 1、100 帧/秒回填（10ms 一令牌）、违规阈值放宽，隔离限速与判死。
+	limiter := wscore.NewInboundRateLimiter(100, 1, 10)
+	client := wsTestPair(t, func(conn *websocket.Conn) {
+		defer func() { _ = conn.Close() }()
+		for i := 0; i < 3; i++ {
+			frame, denied, ok := readTerminalFrame(conn, limiter)
+			results <- frameReadResult{gotFrame: frame != nil, denied: denied, ok: ok}
+			if !ok {
+				return
+			}
+		}
+	})
+
+	valid := mustMarshalTerminalClientFrame(t)
+	// 帧 1：合法，消耗唯一令牌。
+	if err := client.WriteMessage(websocket.BinaryMessage, valid); err != nil {
+		t.Fatalf("write valid frame: %v", err)
+	}
+	// 帧 2：非法 protobuf，立即送达（令牌未回填，必被限速）。若限速发生在
+	// 反序列化之后，此帧会因解析失败直接关闭连接，帧 3 永远读不到。
+	if err := client.WriteMessage(websocket.BinaryMessage, []byte{0xff, 0xff, 0xff}); err != nil {
+		t.Fatalf("write invalid frame: %v", err)
+	}
+	// 等令牌回填后帧 3 必须仍然可读、可解析。
+	time.Sleep(30 * time.Millisecond)
+	if err := client.WriteMessage(websocket.BinaryMessage, valid); err != nil {
+		t.Fatalf("write third frame: %v", err)
+	}
+
+	first := <-results
+	if !first.gotFrame || !first.ok || first.denied {
+		t.Fatalf("first read = %+v, want parsed frame", first)
+	}
+	second := <-results
+	if !second.denied || !second.ok || second.gotFrame {
+		t.Fatalf("second read = %+v, want denied-but-alive (rate limit must precede unmarshal)", second)
+	}
+	third := <-results
+	if !third.gotFrame || !third.ok || third.denied {
+		t.Fatalf("third read = %+v, want parsed frame after refill", third)
+	}
+}
+
+// 握手前洪泛文本帧必须被判死关闭：旧实现 pre-hello 文本帧直接 continue，
+// 连接可零成本无限占住 terminal slot。
+func TestTerminalHandlerClosesPreHelloTextFlood(t *testing.T) {
+	srv := &Server{cfg: &config.Config{Token: "dev-token"}, sm: session.NewManager()}
+	ts := httptest.NewServer(srv.TerminalHandler())
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial terminal: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// 突发 200 + 3 次连续违规：300 帧洪泛必然越线。
+	for i := 0; i < 300; i++ {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte("flood")); err != nil {
+			break // 服务端已关闭，后续写入失败属预期
+		}
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("connection survived a 300-frame pre-hello text flood, want closed")
+	}
+}
+
+// 握手绝对时间边界：完全沉默的连接也必须在超时内被关闭。
+func TestTerminalHandshakeDeadlineClosesSilentConnection(t *testing.T) {
+	old := terminalHandshakeTimeout
+	terminalHandshakeTimeout = 50 * time.Millisecond
+	defer func() { terminalHandshakeTimeout = old }()
+
+	srv := &Server{cfg: &config.Config{Token: "dev-token"}, sm: session.NewManager()}
+	ts := httptest.NewServer(srv.TerminalHandler())
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial terminal: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// 不发任何帧：旧实现下可无限挂住 slot；50ms 握手超时后必须被关闭。
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("silent pre-hello connection was not closed by the handshake deadline")
+	}
+}
+
+// 正路回归：合法浏览器 hello 在新握手路径（限速器 + 截止时间）下照常放行。
+func TestTerminalHandlerBrowserHelloAccepted(t *testing.T) {
+	srv := &Server{cfg: &config.Config{Token: "dev-token"}, sm: session.NewManager()}
+	ts := httptest.NewServer(srv.TerminalHandler())
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial terminal: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	hello, err := proto.Marshal(&gatewayv2.TerminalClientFrame{
+		Payload: &gatewayv2.TerminalClientFrame_Hello{
+			Hello: &gatewayv2.ClientHello{
+				ProtocolVersion: ProtocolVersion,
+				Role:            gatewayv2.ClientRole_CLIENT_ROLE_BROWSER,
+				AgentId:         "agent-x",
+				Token:           "dev-token",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal hello: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, hello); err != nil {
+		t.Fatalf("write hello: %v", err)
+	}
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, payload, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read server hello: %v", err)
+	}
+	var frame gatewayv2.TerminalServerFrame
+	if err := proto.Unmarshal(payload, &frame); err != nil {
+		t.Fatalf("unmarshal server hello: %v", err)
+	}
+	if !frame.GetHello().GetOk() {
+		t.Fatalf("browser hello rejected: %q", frame.GetHello().GetMessage())
 	}
 }

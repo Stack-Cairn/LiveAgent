@@ -38,6 +38,21 @@ impl SystemProxyConfig {
     }
 
     fn proxy_url(&self) -> String {
+        self.proxy_url_with_scheme(self.scheme())
+    }
+
+    /// socks5h = 代理端解析目标主机;socks5 = 本进程解析后经 IP 连接代理。
+    /// SSRF 敏感出网点(图片代理)用后者:目标解析经由安全 resolver 完成并
+    /// 与最终连接绑定,代理只收到已审核的 IP。
+    fn proxy_url_local_dns(&self) -> String {
+        if self.proxy_type == SYSTEM_PROXY_TYPE_SOCKS5 {
+            self.proxy_url_with_scheme("socks5")
+        } else {
+            self.proxy_url()
+        }
+    }
+
+    fn proxy_url_with_scheme(&self, scheme: &str) -> String {
         let credentials = if self.username.is_empty() && self.password.is_empty() {
             String::new()
         } else {
@@ -49,7 +64,7 @@ impl SystemProxyConfig {
         };
         format!(
             "{}://{}{}:{}",
-            self.scheme(),
+            scheme,
             credentials,
             self.url_host(),
             self.port
@@ -304,6 +319,38 @@ pub fn async_client_builder() -> Result<reqwest::ClientBuilder, String> {
     async_client_builder_for_mode(&current_snapshot().mode)
 }
 
+/// SSRF 敏感出网点(图片代理)专用:与 `async_client_builder()` 相同,但
+/// socks5h 翻转为 socks5(目标主机由本进程解析后再把 IP 交给代理——图片代理
+/// 本就对每个目标做本地解析校验,不引入额外 DNS 暴露;解析结果与最终连接由此
+/// 绑定,杜绝代理端 rebind)。HTTP 代理协议(CONNECT / absolute-URI)只携带
+/// 主机名,目标解析仍在代理端完成,该模式的残余风险由调用方文档说明。
+///
+/// 返回的第二个值是已启用代理的主机名(小写、去 IPv6 方括号),供调用方的安全
+/// resolver 豁免代理端点自身——代理地址来自用户设置而非攻击者输入,若不经
+/// 豁免,指向回环/内网地址的代理主机名会被出网黑名单误杀,图片代理整体不可用。
+/// 直连时返回 None。
+pub fn async_client_builder_local_dns() -> Result<(reqwest::ClientBuilder, Option<String>), String>
+{
+    match current_snapshot().mode {
+        ProxyMode::Disabled => Ok((reqwest::Client::builder().no_proxy(), None)),
+        ProxyMode::Invalid(error) => Err(error),
+        ProxyMode::Enabled(config) => {
+            let proxy = reqwest::Proxy::all(config.proxy_url_local_dns())
+                .map(|proxy| proxy.no_proxy(reqwest::NoProxy::from_string(NO_PROXY_DEFAULT)))
+                .map_err(|_| format!("应用代理地址无效：{}", config.display_target()))?;
+            let host = config
+                .url_host()
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_ascii_lowercase();
+            Ok((
+                reqwest::Client::builder().no_proxy().proxy(proxy),
+                Some(host),
+            ))
+        }
+    }
+}
+
 /// Resolved proxy URL for consumers that configure their own HTTP client rather
 /// than using `cached_client()`/`blocking_client_builder()` (e.g.
 /// `tauri-plugin-updater`, which only accepts a `Url` on its builder).
@@ -402,6 +449,41 @@ mod tests {
         })));
         assert!(matches!(enabled, ProxyMode::Enabled(_)));
         assert!(os_proxy_fallback_builder_for_mode(&enabled).is_ok());
+    }
+
+    #[test]
+    fn local_dns_builder_flips_socks5h_to_socks5_and_exposes_proxy_host() {
+        let socks = config(json!({
+            "enabled": true, "type": "socks5", "host": "Proxy.Local", "port": 1080,
+            "username": "", "password": ""
+        }));
+        // socks5h(代理端解析)→ socks5(本进程经安全 resolver 解析,IP 交给代理)。
+        assert_eq!(socks.proxy_url(), "socks5h://Proxy.Local:1080");
+        assert_eq!(socks.proxy_url_local_dns(), "socks5://Proxy.Local:1080");
+
+        let http = config(json!({
+            "enabled": true, "type": "http", "host": "proxy.local", "port": 8080,
+            "username": "", "password": ""
+        }));
+        // HTTP 代理协议只携带主机名,无法本地解析,保持原样。
+        assert_eq!(http.proxy_url_local_dns(), "http://proxy.local:8080");
+    }
+
+    #[test]
+    fn local_dns_builder_returns_proxy_host_for_resolver_exemption() {
+        set_config(Some(&json!({
+            "enabled": true, "type": "socks5", "host": "[::1]", "port": 1080,
+            "username": "", "password": ""
+        })));
+        let (builder, host) =
+            async_client_builder_local_dns().expect("enabled proxy local-dns builder");
+        // 豁免串去方括号并小写,与 resolver 见到的 Name 形态对齐。
+        assert_eq!(host.as_deref(), Some("::1"));
+        drop(builder);
+
+        set_config(None);
+        let (_, host) = async_client_builder_local_dns().expect("disabled local-dns builder");
+        assert_eq!(host, None);
     }
 
     #[test]

@@ -25,6 +25,11 @@ import (
 
 const terminalWriteQueueSize = 1024
 
+// 握手阶段的绝对时间边界：配合逐帧计数限速（见 readTerminalFrame），空连接、
+// 慢速字节流与文本帧洪泛都不能无限占住 terminal connection slot。
+// var 而非 const：仅用于测试缩短。
+var terminalHandshakeTimeout = 10 * time.Second
+
 // TerminalHandler 返回 /ws/v2/terminal 的 HTTP 处理器。
 func (s *Server) TerminalHandler() http.Handler {
 	upgrader := s.upgrader()
@@ -49,11 +54,29 @@ func (s *Server) TerminalHandler() http.Handler {
 func (s *Server) serveTerminal(conn *websocket.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	frame, ok := readTerminalFrame(conn)
-	if !ok {
-		return
+	// 握手限速器自第一帧起生效（每帧在反序列化前计数，文本帧同罪）；浏览器角色
+	// 握手后沿用同一限速器——攻击者不能借完成握手重置预算。Agent 数据面输出帧
+	// 无丢帧语义，不在此限速（见 readTerminalFrame 的 nil 语义）。
+	limiter := wscore.NewInboundRateLimiter(
+		browserInboundFramesPerSecond, browserInboundBurst, browserRateLimitMaxViolations,
+	)
+	_ = conn.SetReadDeadline(time.Now().Add(terminalHandshakeTimeout))
+	var hello *gatewayv2.ClientHello
+	for {
+		frame, denied, ok := readTerminalFrame(conn, limiter)
+		if !ok {
+			return
+		}
+		if denied {
+			// 握手前被限速的帧静默丢弃（尚无协商好的反馈通道），截止时间与
+			// 违规阈值保证洪泛很快被判死。
+			continue
+		}
+		hello = frame.GetHello()
+		break
 	}
-	hello := frame.GetHello()
+	// 握手完成后恢复数据面既有的长连接语义（无读超时）。
+	_ = conn.SetReadDeadline(time.Time{})
 	// 终端路径两端共用：按 hello 声明的角色校验（未声明按浏览器处理）。
 	wantRole := hello.GetRole()
 	if wantRole == gatewayv2.ClientRole_CLIENT_ROLE_UNSPECIFIED {
@@ -148,23 +171,42 @@ func (s *Server) serveTerminal(conn *websocket.Conn) {
 		return
 	}
 	observability.Usage.V2TerminalConnectsTotal.Add(1)
-	s.serveTerminalBrowser(conn, boundAgentID)
+	s.serveTerminalBrowser(conn, boundAgentID, limiter)
 }
 
-func readTerminalFrame(conn *websocket.Conn) (*gatewayv2.TerminalClientFrame, bool) {
+// readTerminalFrame 读取并解码一帧。限速器（非 nil 时）在每次 ReadMessage 成功
+// 后、proto 反序列化前立即计数：文本帧与大型二进制帧同样消耗令牌——旧实现把
+// Allow 放在反序列化之后且文本帧直接 continue，洪泛文本帧可零成本绕过限速并
+// 占住连接 slot，大帧的解析 CPU 也无法被约束。denied=true 表示该帧在解析前被
+// 限速丢弃、连接仍存活（由调用方决定是否回 "too many requests"）；ok=false
+// 表示连接应关闭（读错误 / 解码失败 / 连续违规超阈值判定失控客户端）。
+//
+// limiter 为 nil 用于 Agent 数据面：输出帧没有可容忍的丢帧语义（静默丢弃会让
+// 终端显示残缺），其入站由 read limit 与会话通道背压兜底，对端是经凭证认证的
+// 桌面端。
+func readTerminalFrame(conn *websocket.Conn, limiter *wscore.InboundRateLimiter) (frame *gatewayv2.TerminalClientFrame, denied bool, ok bool) {
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
-			return nil, false
+			return nil, false, false
+		}
+		if limiter != nil {
+			if allowed, exceeded := limiter.Allow(); !allowed {
+				if exceeded {
+					return nil, false, false
+				}
+				return nil, true, true
+			}
 		}
 		if messageType != websocket.BinaryMessage {
+			// v2 终端链路上文本帧无意义：已在上方计入限速，忽略。
 			continue
 		}
-		var frame gatewayv2.TerminalClientFrame
-		if err := proto.Unmarshal(data, &frame); err != nil {
-			return nil, false
+		var decoded gatewayv2.TerminalClientFrame
+		if err := proto.Unmarshal(data, &decoded); err != nil {
+			return nil, false, false
 		}
-		return &frame, true
+		return &decoded, false, true
 	}
 }
 
@@ -197,7 +239,8 @@ func (s *Server) serveTerminalAgent(
 	}()
 
 	for {
-		frame, ok := readTerminalFrame(conn)
+		// Agent 数据面不限速（nil）：输出帧无丢帧语义，见 readTerminalFrame。
+		frame, _, ok := readTerminalFrame(conn, nil)
 		if !ok {
 			cancel()
 			return
@@ -251,8 +294,10 @@ type terminalBrowserConn struct {
 	done chan struct{}
 	once sync.Once
 
-	// rateLimiter 与主链路同款入站限速（100 帧/秒、突发 200、3 次违规断连）：
-	// 终端链路此前完全没有帧率限制，可被单连接以任意速率灌帧。
+	// rateLimiter 与主链路同款入站限速（100 帧/秒、突发 200、3 次违规断连）。
+	// 由 serveTerminal 在握手前创建并传入：限速自第一帧起生效，浏览器角色握手
+	// 后沿用同一预算，攻击者无法借完成握手重置额度。计数点在 ReadMessage 成功
+	// 后、反序列化前（见 readTerminalFrame），文本帧与大帧都计入。
 	rateLimiter *wscore.InboundRateLimiter
 
 	mu       sync.RWMutex
@@ -260,19 +305,17 @@ type terminalBrowserConn struct {
 	streams  map[string]struct{}
 }
 
-func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
+func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string, limiter *wscore.InboundRateLimiter) {
 	c := &terminalBrowserConn{
-		srv:      s,
-		sm:       s.sm,
-		conn:     conn,
-		agentID:  agentID,
-		out:      make(chan []byte, terminalWriteQueueSize),
-		done:     make(chan struct{}),
-		rateLimiter: wscore.NewInboundRateLimiter(
-			browserInboundFramesPerSecond, browserInboundBurst, browserRateLimitMaxViolations,
-		),
-		attached: make(map[string]struct{}),
-		streams:  make(map[string]struct{}),
+		srv:         s,
+		sm:          s.sm,
+		conn:        conn,
+		agentID:     agentID,
+		out:         make(chan []byte, terminalWriteQueueSize),
+		done:        make(chan struct{}),
+		rateLimiter: limiter,
+		attached:    make(map[string]struct{}),
+		streams:     make(map[string]struct{}),
 	}
 	defer c.close()
 
@@ -280,15 +323,12 @@ func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
 	c.startForwarder()
 
 	for {
-		frame, ok := readTerminalFrame(conn)
+		frame, denied, ok := readTerminalFrame(conn, c.rateLimiter)
 		if !ok {
 			return
 		}
-		// 入站限速：与主链路同款，超限丢帧、连续违规判定失控客户端、关闭连接。
-		if allowed, exceeded := c.rateLimiter.Allow(); !allowed {
-			if exceeded {
-				return
-			}
+		if denied {
+			// 帧在反序列化前已被丢弃，无 request 上下文可关联，回通用错误帧。
 			c.enqueueFrame(terminalErrorFrame(
 				&gatewayv2.TerminalStreamFrame{Kind: "error"},
 				"too many requests",
