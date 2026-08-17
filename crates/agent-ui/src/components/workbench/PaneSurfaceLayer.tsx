@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { PaneGeometry, WorkbenchRect } from "../../lib/workbench/geometry";
+import { paneRendersCompact } from "../../lib/workbench/geometry";
 import type { PaneRecord } from "../../lib/workbench/types";
 import { PaneFrame } from "./PaneFrame";
 
@@ -7,6 +8,12 @@ export type PaneSurfaceRenderContext = {
   isFocused: boolean;
   rect: WorkbenchRect;
   paneCount: number;
+  /**
+   * Derived per render from the pane rect (below the compact width threshold)
+   * OR the pane's explicit `view.compactChrome` override — never written back
+   * to layout state, so resize jitter cannot trigger revision churn.
+   */
+  isCompact: boolean;
 };
 
 export type PaneSurfaceLayerProps = {
@@ -47,6 +54,7 @@ export function PaneSurfaceLayer(props: PaneSurfaceLayerProps) {
           isFocused: focusedPaneId === paneId,
           rect,
           paneCount,
+          isCompact: paneRendersCompact(rect.width, pane.view),
         };
         return (
           <PaneFrame

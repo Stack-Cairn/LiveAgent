@@ -6,6 +6,8 @@ export type PaneChromeProps = {
   /** Conversation title — exposed via tooltip/aria only, never rendered. */
   title: string;
   isFocused: boolean;
+  /** Narrow-pane rendering: the grab pill shrinks so it never crowds the close dot. */
+  isCompact?: boolean;
   /** Accessible labels; the chrome itself stays i18n-agnostic. */
   dragHandleLabel: string;
   closeLabel: string;
@@ -26,6 +28,7 @@ export function PaneChrome(props: PaneChromeProps) {
     paneId,
     title,
     isFocused,
+    isCompact,
     dragHandleLabel,
     closeLabel,
     onClose,
@@ -40,6 +43,7 @@ export function PaneChrome(props: PaneChromeProps) {
   return (
     <div
       data-workbench-pane-chrome={paneId}
+      data-workbench-pane-chrome-compact={isCompact ? "true" : undefined}
       className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-5 items-center justify-center"
     >
       <button
@@ -50,16 +54,20 @@ export function PaneChrome(props: PaneChromeProps) {
         onPointerDown={onDragHandlePointerDown}
         className={cn(
           revealClass,
-          "group/pane-grip flex h-full w-24 cursor-grab items-center justify-center",
+          "group/pane-grip flex h-full cursor-grab items-center justify-center",
+          isCompact ? "w-12" : "w-24",
           "focus-visible:outline-none",
         )}
       >
         <span
           aria-hidden="true"
           className={cn(
-            "h-1 w-9 rounded-full transition-all duration-150 motion-reduce:transition-none",
+            "h-1 rounded-full transition-all duration-150 motion-reduce:transition-none",
+            isCompact ? "w-6" : "w-9",
             isFocused ? "bg-muted-foreground/45" : "bg-muted-foreground/25",
-            "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-11 group-hover/pane-grip:bg-muted-foreground/60",
+            isCompact
+              ? "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-7 group-hover/pane-grip:bg-muted-foreground/60"
+              : "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-11 group-hover/pane-grip:bg-muted-foreground/60",
             "group-focus-visible/pane-grip:bg-ring",
             // The pill is the drag handle's only focus indicator (the button
             // suppresses its outline), so it needs a system colour to survive
