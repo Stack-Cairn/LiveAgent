@@ -99,7 +99,21 @@ export function createTerminalPaneBindingStore(
     get(surfaceId) {
       const key = surfaceId.trim();
       if (!key) return null;
-      return bindings.get(key) ?? null;
+      const hit = bindings.get(key);
+      if (hit) return hit;
+      // 内存 miss 时从 storage 兜底采纳:dev HMR 可能让写入方与读取方持有
+      // 不同的模块实例,storage 是它们唯一的共享层。少了这一步,拖入既有
+      // 会话的 Pane 会误判"无绑定"而按 launchSpec 新建一个 PTY——表现为
+      // 拖入后要等 shell 冷启动(数秒),且原会话原样留在 dock。
+      // 静默采纳、不通知监听者:get 被 useSyncExternalStore 当 getSnapshot
+      // 在渲染期调用,首次读取即返回正确值,渲染期不得触发其他组件更新。
+      const persisted = readPersistedBindings(storage, storageKey).get(key);
+      if (persisted) {
+        bindings.set(key, persisted);
+        surfaceIdsSnapshot = Array.from(bindings.keys());
+        return persisted;
+      }
+      return null;
     },
     set(surfaceId, sessionId) {
       const surfaceKey = surfaceId.trim();

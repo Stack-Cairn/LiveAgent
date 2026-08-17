@@ -170,3 +170,36 @@ test("surfaceIds exposes a stable snapshot including persisted bindings", () => 
   store.delete("surface-b");
   assert.deepEqual(store.surfaceIds(), []);
 });
+
+test("get falls back to storage when the in-memory map misses (HMR split instances)", () => {
+  // dev HMR 下写入方与读取方可能持有不同的模块实例;storage 是唯一共享层。
+  // 写入方实例落盘后,读取方实例即便内存 miss 也必须能命中,否则宿主会误判
+  // "无绑定"并按 launchSpec 新建 PTY(拖入后冷启动新 shell、原会话留在 dock)。
+  const storage = createMemoryStorage();
+  const writer = createTerminalPaneBindingStore({ storage });
+  const reader = createTerminalPaneBindingStore({ storage });
+  writer.set("surface-a", "session-1");
+  assert.equal(reader.get("surface-a"), "session-1");
+  // 采纳后进入内存表,后续 surfaceIds 快照包含它。
+  assert.ok(reader.surfaceIds().includes("surface-a"));
+});
+
+test("the storage fallback stays silent: no listener fires during a render-phase get", () => {
+  const storage = createMemoryStorage();
+  const writer = createTerminalPaneBindingStore({ storage });
+  const reader = createTerminalPaneBindingStore({ storage });
+  writer.set("surface-a", "session-1");
+  let notified = 0;
+  reader.subscribe(() => {
+    notified += 1;
+  });
+  // get 被 useSyncExternalStore 当 getSnapshot 在渲染期调用,不得触发订阅回调。
+  assert.equal(reader.get("surface-a"), "session-1");
+  assert.equal(notified, 0);
+});
+
+test("a storage miss still returns null without inventing bindings", () => {
+  const storage = createMemoryStorage();
+  const store = createTerminalPaneBindingStore({ storage });
+  assert.equal(store.get("surface-missing"), null);
+});
