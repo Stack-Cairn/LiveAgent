@@ -81,6 +81,14 @@ export function createWorkbenchLayoutPersistence(): WorkbenchLayoutPersistence {
       } catch {
         // Diagnostics only.
       }
+      if (!native) return;
+      // Drop the SQLite row too, otherwise the next launch reloads the same
+      // corrupted payload.
+      void invoke("workbench_layout_delete", {
+        scopeId: WORKBENCH_LAYOUT_SCOPE_ID,
+      }).catch((error) => {
+        console.warn("failed to drop corrupted workbench layout", error);
+      });
     },
   };
 }

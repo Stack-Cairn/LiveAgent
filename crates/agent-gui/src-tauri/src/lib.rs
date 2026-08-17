@@ -142,6 +142,7 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_model_failover,
             commands::settings::workbench_layout_load,
             commands::settings::workbench_layout_save,
+            commands::settings::workbench_layout_delete,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,

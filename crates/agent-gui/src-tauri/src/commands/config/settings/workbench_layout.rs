@@ -64,6 +64,18 @@ fn save_workbench_layout(
     Ok(())
 }
 
+fn delete_workbench_layout(conn: &Connection, scope_id: &str) -> Result<(), String> {
+    if scope_id.trim().is_empty() {
+        return Err("工作台布局 scope_id 不能为空".to_string());
+    }
+    conn.execute(
+        "DELETE FROM workbench_layout WHERE scope_id = ?1",
+        params![scope_id],
+    )
+    .map_err(|e| format!("删除工作台布局失败：{e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn workbench_layout_load(
     scope_id: String,
@@ -89,4 +101,14 @@ pub async fn workbench_layout_save(
     })
     .await
     .map_err(|e| format!("workbench_layout_save join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn workbench_layout_delete(scope_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        delete_workbench_layout(&conn, &scope_id)
+    })
+    .await
+    .map_err(|e| format!("workbench_layout_delete join 失败：{e}"))?
 }
