@@ -1291,6 +1291,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.sshStatusReconnecting": "Reconnecting",
   "workbench.sshStatusDisconnected": "Disconnected",
   "workbench.sshReconnect": "Reconnect",
+  "workbench.sshLatency": "Round-trip latency",
   "workbench.unsupportedPane":
     "This layout item was created by a newer version and cannot be displayed here.",
 } as const satisfies Record<string, string>;

@@ -23,15 +23,18 @@ export type SshTerminalPaneSurfaceProps = {
   onReconnect?: () => void;
   /** 宿主的重连调用进行中(与会话自身的 reconnecting 状态叠加显示)。 */
   isReconnecting?: boolean;
+  /** 宿主轮询的往返延迟;null/省略显示 "--"(未知)。 */
+  latencyMs?: number | null;
+  /** 极窄 Pane:状态行隐藏端点标签,只留状态点+延迟+重连。 */
+  isCompact?: boolean;
   /** 透传给 LocalTerminalPaneSurface 的显式 kill 入口。 */
   onKillSession?: () => void;
 };
 
 /**
  * SSH 终端 Pane:在 LocalTerminalPaneSurface 之上叠一条紧凑连接状态行
- * (状态点/端点标签/重连按钮)。exited/error/占位语义完全沿用 Local;
+ * (状态点/端点标签/延迟/重连按钮)。exited/error/占位语义完全沿用 Local;
  * SFTP 保留在 workspace overlay,Pane 内只承载 shell 视口。
- * TODO(terminal-pane): 状态行可选显示 sshLatency 轮询结果;首期只做状态点+重连。
  */
 export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
   const {
@@ -46,6 +49,8 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
     onError,
     onReconnect,
     isReconnecting,
+    latencyMs,
+    isCompact,
     onKillSession,
   } = props;
   const { t } = useLocale();
@@ -58,6 +63,15 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
       : status === "reconnecting"
         ? t("workbench.sshStatusReconnecting")
         : t("workbench.sshStatusDisconnected");
+  // 延迟着色沿用状态点三色:<100ms 绿 / <300ms 黄 / 其余红;未知灰。
+  const latencyKnown = typeof latencyMs === "number" && Number.isFinite(latencyMs);
+  const latencyClass = !latencyKnown
+    ? "text-muted-foreground/70"
+    : latencyMs < 100
+      ? "text-emerald-500"
+      : latencyMs < 300
+        ? "text-amber-500"
+        : "text-destructive";
 
   return (
     <div
@@ -81,11 +95,24 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
             )}
           />
           <span className="sr-only">{statusLabel}</span>
+          {isCompact ? (
+            <span aria-hidden="true" className="min-w-0 flex-1" />
+          ) : (
+            <span
+              className="min-w-0 flex-1 truncate font-mono"
+              title={sshSessionEndpointLabel(session)}
+            >
+              {sshSessionEndpointLabel(session)}
+            </span>
+          )}
           <span
-            className="min-w-0 flex-1 truncate font-mono"
-            title={sshSessionEndpointLabel(session)}
+            data-terminal-pane-ssh-latency={
+              latencyKnown ? String(Math.round(latencyMs)) : "unknown"
+            }
+            title={t("workbench.sshLatency")}
+            className={cn("shrink-0 font-mono tabular-nums", latencyClass)}
           >
-            {sshSessionEndpointLabel(session)}
+            {latencyKnown ? `${Math.round(latencyMs)}ms` : "--"}
           </span>
           {onReconnect ? (
             <Button

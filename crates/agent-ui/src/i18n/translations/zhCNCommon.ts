@@ -1231,5 +1231,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.sshStatusReconnecting": "重连中",
   "workbench.sshStatusDisconnected": "已断开",
   "workbench.sshReconnect": "重连",
+  "workbench.sshLatency": "往返延迟",
   "workbench.unsupportedPane": "此布局项来自更新版本，当前版本无法显示。",
 } as const satisfies Record<string, string>;
