@@ -26,10 +26,23 @@ export type SettingsPageProps = {
   initialProviderId?: string;
   hiddenSections?: SectionId[];
   appUpdate: AppUpdateController;
+  /** 绕过 setSettings 从 SQLite 重新载入（备份还原后用，见 SettingsSectionProps）。 */
+  reloadSettings?: () => Promise<void>;
 };
 
 export type SettingsSectionProps = {
   settings: AppSettings;
   setSettings: SetSettingsFn;
   saveState?: SettingsSaveState;
+  /**
+   * 从 SQLite 重新载入设置，**不触发落盘**。
+   *
+   * 备份还原（导入 / WebDAV 下载）是后端直接改库，前端 store 完全不知情。
+   * 不重载的话，用户之后编辑任一域，`persistSettings` 会拿还原前的内存值去 diff，
+   * 把旧配置原样写回库，再由标脏推上远端 —— 还原被静默回滚。
+   *
+   * 必须走这条路径而不是 `setSettings`：后者每次都 `queueSettingsSave`，
+   * 会把刚落库的数据再写一遍并触发自动上传。
+   */
+  reloadSettings?: () => Promise<void>;
 };

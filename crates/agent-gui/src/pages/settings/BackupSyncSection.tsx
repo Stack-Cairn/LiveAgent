@@ -108,7 +108,7 @@ function describeSource(manifest: BackupManifest, t: (key: string) => string) {
 }
 
 export function BackupSyncSection(props: SettingsSectionProps) {
-  const { settings, setSettings } = props;
+  const { settings, setSettings, reloadSettings } = props;
   const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
@@ -122,6 +122,27 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
   const dirty = isDirty(form, syncView);
   const syncLocked = syncBusy !== null;
+
+  /**
+   * 还原（导入 / 下载）落库后同步前端状态。
+   *
+   * 顺序不能反：`reloadSettings` 从 SQLite 重载 providers/mcp/system，
+   * 但 skills 只存在于 localStorage，库里没有 —— 必须重载完再把快照里的
+   * skills 盖上去，否则会被重载出来的旧值顶掉。
+   *
+   * 不重载的后果不是「显示旧值」这么轻：`persistSettings` 按域 diff，
+   * 用户之后动任一域就会拿还原前的内存值写回库，把还原静默回滚掉。
+   */
+  const syncStateAfterRestore = useCallback(
+    async (skillsPayload: unknown) => {
+      await reloadSettings?.();
+      if (skillsPayload) {
+        const skills = normalizeSkillsSettings(skillsPayload);
+        setSettings((prev) => ({ ...prev, skills }));
+      }
+    },
+    [reloadSettings, setSettings],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -316,10 +337,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       if (!confirmed) return;
 
       const outcome = await downloadBackup();
-      if (outcome.skills) {
-        const skills = normalizeSkillsSettings(outcome.skills);
-        setSettings((prev) => ({ ...prev, skills }));
-      }
+      await syncStateAfterRestore(outcome.skills);
       // 下载成功证明这条链路是通的，后端已清 last_error，视图同步跟上。
       setSyncView((prev) => (prev ? { ...prev, lastError: null } : prev));
       setSyncStatus({
@@ -334,7 +352,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } finally {
       setSyncBusy(null);
     }
-  }, [confirm, setSettings, t]);
+  }, [confirm, syncStateAfterRestore, t]);
 
   const handleExport = useCallback(async () => {
     setBusy("export");
@@ -373,11 +391,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       if (!confirmed) return;
 
       const outcome = await applyBackupImport(preview.path);
-      // skills 后端写不了 webview 存储，必须在这里回写。
-      if (outcome.skills) {
-        const skills = normalizeSkillsSettings(outcome.skills);
-        setSettings((prev) => ({ ...prev, skills }));
-      }
+      await syncStateAfterRestore(outcome.skills);
       setStatus({
         kind: "ok",
         text: `${t("settings.backupImportDone")}${summarizeDomains(outcome.applied, t)}`,
@@ -387,7 +401,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } finally {
       setBusy(null);
     }
-  }, [confirm, setSettings, t]);
+  }, [confirm, syncStateAfterRestore, t]);
 
   return (
     <div className="space-y-6">

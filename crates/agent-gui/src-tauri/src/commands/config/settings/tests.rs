@@ -2115,10 +2115,15 @@ mod tests {
     }
 
     #[test]
-    fn verify_payload_skips_checks_when_manifest_omits_them() {
-        // 旧版本写的 manifest 没有 size/sha256 字段，此时只能放行，
-        // 否则升级后所有既有远端备份都下载不了。
-        assert!(verify_backup_payload(b"anything", 0, "").is_ok());
+    fn verify_payload_rejects_manifest_without_size_or_hash() {
+        // 缺 size/sha256 不能当「无需校验」放行。`v1/` 布局随本功能一起引入，
+        // 没有写过无摘要 manifest 的历史版本，会命中这里的只有异常数据。
+        let err = verify_backup_payload(b"anything", 0, "")
+            .expect_err("manifest without size/sha256 must be rejected");
+        assert!(err.contains("缺少大小或校验和"), "{err}");
+
+        assert!(verify_backup_payload(b"anything", 8, "").is_err());
+        assert!(verify_backup_payload(b"anything", 0, "abc").is_err());
     }
 
     #[test]

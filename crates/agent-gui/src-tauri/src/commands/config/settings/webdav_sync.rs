@@ -298,24 +298,32 @@ fn backup_credentials(config: &BackupSyncConfig) -> Result<crate::services::webd
 ///
 /// PUT 可能被中断，留下截断的 config.json；没有这道校验就会把残缺配置
 /// 当成合法快照写进本地库。
+///
+/// 缺字段一律当作损坏处理，**不跳过校验**。曾经这里对 size==0 / sha256=="" 放行，
+/// 理由是「兼容旧版本写的 manifest」—— 但 `v1/` 布局是随本功能一起引入的，
+/// 不存在写过无摘要 manifest 的历史版本。真正会命中这条分支的只有异常数据：
+/// 截断的 PUT、被别的客户端改写过的 manifest。放行等于让它们绕过完整性检查
+/// 直接落进本地库。
 pub(crate) fn verify_backup_payload(
     body: &[u8],
     expected_size: usize,
     expected_sha256: &str,
 ) -> Result<(), String> {
-    if expected_size > 0 && body.len() != expected_size {
+    if expected_size == 0 || expected_sha256.is_empty() {
+        return Err(
+            "远端备份元信息缺少大小或校验和，无法确认配置完整，请从源设备重新上传一次"
+                .to_string(),
+        );
+    }
+    if body.len() != expected_size {
         return Err(format!(
             "远端配置大小校验失败：期望 {expected_size} 字节，实际 {} 字节。远端文件可能未上传完整，请从源设备重新上传",
             body.len()
         ));
     }
-    if !expected_sha256.is_empty() {
-        let actual = backup_sha256_hex(body);
-        if !actual.eq_ignore_ascii_case(expected_sha256) {
-            return Err(
-                "远端配置校验和不匹配，文件可能已损坏，请从源设备重新上传".to_string()
-            );
-        }
+    let actual = backup_sha256_hex(body);
+    if !actual.eq_ignore_ascii_case(expected_sha256) {
+        return Err("远端配置校验和不匹配，文件可能已损坏，请从源设备重新上传".to_string());
     }
     Ok(())
 }
@@ -427,7 +435,14 @@ pub(crate) fn parse_backup_remote_manifest(body: &[u8]) -> Result<BackupRemoteMa
 /// 顺序是有意的。manifest 是「这份备份可用」的信号，最后写入，
 /// 中途失败时远端留下的是旧 manifest + 新 config，下载侧的 sha256 校验
 /// 会拦下这个不一致，而不会当成合法数据应用。
+///
+/// **锁必须在采集之前获取。** 反过来（先采集后加锁）会开一个窗口：一次手动
+/// 下载可以整个挤在采集与 PUT 之间完成，于是这次上传把下载前的旧快照盖回远端，
+/// 用户刚拉下来的远端配置被自己的机器悄悄覆盖。抑制守卫挡不住这种情况 ——
+/// 它只阻止下载期间新产生的标脏，管不了一个已经采完快照、正停在锁上的上传。
 async fn upload_backup_snapshot(skills: Option<Value>) -> Result<i64, String> {
+    let _guard = backup_sync_mutex().lock().await;
+
     let (config, document) = tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         let config = load_backup_sync_config(&conn)?;
@@ -441,7 +456,6 @@ async fn upload_backup_snapshot(skills: Option<Value>) -> Result<i64, String> {
     let (document, manifest) = document;
 
     let creds = backup_credentials(&config)?;
-    let _guard = backup_sync_mutex().lock().await;
 
     let body = document.into_bytes();
     let remote_manifest = BackupRemoteManifest {

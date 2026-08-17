@@ -12,7 +12,7 @@ export function createSettingsExtension(props: SettingsPageProps): {
   slots: UiExtensionSlots;
   sections: SettingsSectionDefinition<void>[];
 } {
-  const { settings, setSettings, appUpdate } = props;
+  const { settings, setSettings, appUpdate, reloadSettings } = props;
   return {
     surface: "desktop",
     iconClassName: "h-3.5 w-3.5",
@@ -39,7 +39,13 @@ export function createSettingsExtension(props: SettingsPageProps): {
         order: 15,
         labelKey: "settings.navBackup",
         icon: <Archive className="h-3.5 w-3.5" />,
-        render: () => <BackupSyncSection settings={settings} setSettings={setSettings} />,
+        render: () => (
+          <BackupSyncSection
+            settings={settings}
+            setSettings={setSettings}
+            reloadSettings={reloadSettings}
+          />
+        ),
       },
       {
         id: "about",
