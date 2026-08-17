@@ -24,14 +24,15 @@ impl TerminalSessionRegistry {
         rows: Option<u16>,
         sftp_enabled: bool,
     ) -> Result<TerminalSshCreateResponse, String> {
-        let cwd = canonicalize_workdir(&cwd)?;
+        // `cwd` here is the local project anchor recorded on the session (used for
+        // project scoping and the SFTP local root), not a remote path — the remote
+        // working directory is chosen by the SSH server. So it is validated exactly
+        // like a local terminal: caller-supplied key, cwd proven to live inside it.
         let project_key = project_path_key
             .map(|value| normalize_project_path_key(&value))
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| normalize_project_path_key(&cwd.display().to_string()));
-        if project_key.is_empty() {
-            return Err("project_path_key is required".to_string());
-        }
+            .ok_or_else(|| "project_path_key is required".to_string())?;
+        let cwd = canonicalize_workdir_within(&cwd, &project_key)?;
         let request = PendingSshConnectRequest {
             cwd: cwd.display().to_string(),
             project_path_key: project_key,

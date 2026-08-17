@@ -128,6 +128,35 @@ test("an unknown session id is ignored without side effects", () => {
   assert.deepEqual(deps.bindings.surfaceIds(), []);
 });
 
+test("a session from another project is rejected instead of opened", () => {
+  // 跨项目投放会造出「project 声称 /repo、cwd 实际在 /other」的 surface;
+  // Rust 侧建会话时也会拒,这里让它在投放阶段就无声失败。
+  const { deps, calls } = makeDeps({
+    sessions: [session("session-1", { projectPathKey: "/other", cwd: "/other" })],
+  });
+  const result = commitTerminalDrop(
+    { kind: "terminalSession", sessionId: "session-1", project: PROJECT, title: "Build" },
+    EDGE_TARGET,
+    deps,
+  );
+  assert.deepEqual(result, { action: "ignored" });
+  assert.equal(calls.open.length, 0);
+  assert.deepEqual(deps.bindings.surfaceIds(), []);
+});
+
+test("a session whose cwd only shares a prefix with the project is rejected", () => {
+  const { deps, calls } = makeDeps({
+    sessions: [session("session-1", { projectPathKey: "/repo-evil", cwd: "/repo-evil" })],
+  });
+  const result = commitTerminalDrop(
+    { kind: "terminalSession", sessionId: "session-1", project: PROJECT, title: "Build" },
+    EDGE_TARGET,
+    deps,
+  );
+  assert.deepEqual(result, { action: "ignored" });
+  assert.equal(calls.open.length, 0);
+});
+
 test("a failed open rolls the fresh binding back", () => {
   const { deps } = makeDeps({
     sessions: [session("session-1")],
@@ -184,7 +213,7 @@ test("stale pane-center targets are ignored for terminal payloads", () => {
 test("terminalSurfaceForSession maps ssh sessions to sshTerminal launch specs", () => {
   const sshSession = session("ssh-1", {
     kind: "ssh",
-    cwd: "/srv",
+    cwd: "/repo/deploy",
     ssh: {
       hostId: "host-1",
       hostName: "prod",
@@ -201,7 +230,7 @@ test("terminalSurfaceForSession maps ssh sessions to sshTerminal launch specs", 
   const surface = terminalSurfaceForSession(sshSession, "surface-9", PROJECT);
   assert.equal(surface.kind, "sshTerminal");
   assert.deepEqual(surface.launchSpec, {
-    cwd: "/srv",
+    cwd: "/repo/deploy",
     sshHostId: "host-1",
     title: "Build",
     sftpEnabled: true,

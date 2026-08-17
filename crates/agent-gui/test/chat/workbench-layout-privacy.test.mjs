@@ -239,7 +239,7 @@ function threePaneLayout() {
       surface: terminalSurfaceForSession(
         terminalSession("session-ssh-1", {
           kind: "ssh",
-          cwd: "/srv",
+          cwd: "/workspace/main/deploy",
           ssh: {
             hostId: "host-1",
             hostName: "prod",

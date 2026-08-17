@@ -1,3 +1,4 @@
+import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import type {
   WorkbenchDropTarget,
@@ -98,6 +99,12 @@ export function commitTerminalDrop(
     }
     const session = deps.sessions.find((entry) => entry.id === payload.sessionId);
     if (!session) return { action: "ignored" };
+    // 跨项目投放:会话的 project 与目标窗口的 project 不同源时拒绝,否则
+    // 会造出一个「project 声称 A、cwd 实际在 B」的 surface。后端建会话时
+    // 还会独立复核,这里只是让越界在投放阶段就无声失败而非留下坏 Pane。
+    if (!terminalSessionBelongsToProject(session, payload.project.projectPathKey)) {
+      return { action: "ignored" };
+    }
     const surfaceId = deps.createSurfaceId();
     const surface = terminalSurfaceForSession(session, surfaceId, payload.project);
     // 先绑定后开 Pane:宿主挂载即可命中既有会话,不触发 ensure 新建。

@@ -29,7 +29,7 @@ function sshSurface(surfaceId = "surface-ssh") {
     kind: "sshTerminal",
     surfaceId,
     project: PROJECT,
-    launchSpec: { cwd: "/srv", sshHostId: "host-1", sftpEnabled: true },
+    launchSpec: { cwd: "/repo/deploy", sshHostId: "host-1", sftpEnabled: true },
   };
 }
 
@@ -139,7 +139,7 @@ test("ssh ensure binds the created session and forwards the launch spec", async 
   assert.equal(created.id, "ssh-1");
   assert.equal(bindings.get("surface-ssh"), "ssh-1");
   assert.deepEqual(calls, [
-    { cwd: "/srv", projectPathKey: "/repo", hostId: "host-1", title: undefined, sftpEnabled: true },
+    { cwd: "/repo/deploy", projectPathKey: "/repo", hostId: "host-1", title: undefined, sftpEnabled: true },
   ]);
 });
 

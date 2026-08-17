@@ -87,14 +87,13 @@ impl TerminalSessionRegistry {
         cols: Option<u16>,
         rows: Option<u16>,
     ) -> Result<TerminalSnapshotResponse, String> {
-        let cwd = canonicalize_workdir(&cwd)?;
+        // The project key must come from the caller; deriving it from `cwd` would let
+        // any path mint its own "project" and defeat the containment check below.
         let project_key = project_path_key
             .map(|value| normalize_project_path_key(&value))
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| normalize_project_path_key(&cwd.display().to_string()));
-        if project_key.is_empty() {
-            return Err("project_path_key is required".to_string());
-        }
+            .ok_or_else(|| "project_path_key is required".to_string())?;
+        let cwd = canonicalize_workdir_within(&cwd, &project_key)?;
 
         let shell_spec = resolve_shell(shell)?;
         let size = TerminalSize {

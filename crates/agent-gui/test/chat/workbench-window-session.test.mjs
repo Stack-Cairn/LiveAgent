@@ -125,6 +125,47 @@ test("restore filtering always keeps terminal panes (dormant placeholder restore
   assert.equal(filtered.focusedPaneId, "pane-b");
 });
 
+test("restore filtering drops terminal panes whose cwd escaped their project", () => {
+  // 布局 JSON 不是授权凭据:持久化文件被改成「project 声称 /w/term-b、
+  // cwd 指向 /etc」时,该 Pane 不能作为可重启占位活下来。
+  const layout = mixedLayout();
+  layout.panes["pane-b"].surface.launchSpec.cwd = "/etc";
+  const filtered = filterLayoutToLiveSurfaces(layout, {
+    validConversationIds: new Set(["conv-a"]),
+  });
+  assert.deepEqual(Object.keys(filtered.panes).sort(), ["pane-a", "pane-c"]);
+  assert.equal(workbench.isWorkbenchLayoutValid(filtered), true);
+});
+
+test("restore filtering rejects cwd that only shares a string prefix with the project", () => {
+  const layout = mixedLayout();
+  layout.panes["pane-b"].surface.launchSpec.cwd = "/w/term-b-evil";
+  const filtered = filterLayoutToLiveSurfaces(layout, {
+    validConversationIds: new Set(["conv-a"]),
+  });
+  assert.equal(filtered.panes["pane-b"], undefined);
+});
+
+test("restore filtering keeps terminal panes rooted in a project subdirectory", () => {
+  const layout = mixedLayout();
+  layout.panes["pane-b"].surface.launchSpec.cwd = "/w/term-b/packages/app";
+  const filtered = filterLayoutToLiveSurfaces(layout, {
+    validConversationIds: new Set(["conv-a"]),
+  });
+  assert.equal(filtered.panes["pane-b"].surface.kind, "localTerminal");
+});
+
+test("layout validation reports a terminal cwd outside its project", () => {
+  const layout = mixedLayout();
+  layout.panes["pane-b"].surface.launchSpec.cwd = "/w/term-b/../../etc";
+  const issues = workbench.collectWorkbenchLayoutIssues(layout);
+  assert.equal(
+    issues.some((entry) => entry.code === "terminal-cwd-outside-project"),
+    true,
+  );
+  assert.equal(workbench.isWorkbenchLayoutValid(layout), false);
+});
+
 test("persisted layout round-trips through the codec", () => {
   const layout = threePaneLayout();
   const decoded = workbench.decodeWorkbenchLayout(workbench.encodeWorkbenchLayout(layout));

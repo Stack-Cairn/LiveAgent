@@ -54,7 +54,7 @@ function sshTerminalPane(paneId, surfaceId, overrides = {}) {
       kind: "sshTerminal",
       surfaceId,
       project: project(),
-      launchSpec: { cwd: "/remote/home", sshHostId: "host-1", ...overrides },
+      launchSpec: { cwd: "/workspace/project-main", sshHostId: "host-1", ...overrides },
     },
     view: {},
   };

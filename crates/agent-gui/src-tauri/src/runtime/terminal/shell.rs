@@ -84,6 +84,34 @@ pub(crate) fn canonicalize_workdir(workdir: &str) -> Result<PathBuf, String> {
     Ok(strip_windows_verbatim_prefix(canonical))
 }
 
+/// Canonicalize `workdir` and assert it stays inside `project_root`.
+///
+/// Both sides are canonicalized before comparison so symlinks, `..` segments and
+/// platform path shapes (Windows casing/separators, macOS `/var` -> `/private/var`)
+/// cannot be used to escape the project. Pane layout JSON is not an authorization
+/// credential: a caller may name any cwd/project pair, so containment has to be
+/// re-derived from the filesystem here rather than trusted from the request.
+pub(crate) fn canonicalize_workdir_within(
+    workdir: &str,
+    project_root: &str,
+) -> Result<PathBuf, String> {
+    let root_raw = project_root.trim();
+    if root_raw.is_empty() {
+        return Err("project_path_key is required".to_string());
+    }
+    let root = canonicalize_workdir(root_raw)
+        .map_err(|err| format!("project root is not a usable directory: {err}"))?;
+    let canonical = canonicalize_workdir(workdir)?;
+    if canonical == root || canonical.starts_with(&root) {
+        return Ok(canonical);
+    }
+    Err(format!(
+        "workdir is outside the current project: {} is not inside {}",
+        canonical.display(),
+        root.display()
+    ))
+}
+
 pub(crate) fn is_program_on_path(program: &str) -> bool {
     let path_var = std::env::var_os("PATH").unwrap_or_default();
     for dir in std::env::split_paths(&path_var) {

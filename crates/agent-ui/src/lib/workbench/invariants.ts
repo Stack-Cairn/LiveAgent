@@ -1,3 +1,4 @@
+import { terminalLaunchSpecIsInProject } from "./projectScope";
 import {
   type PaneNode,
   surfaceIdentityKey,
@@ -19,7 +20,8 @@ export type WorkbenchLayoutIssueCode =
   | "invalid-revision"
   | "invalid-schema-version"
   | "missing-pane-record"
-  | "orphan-pane-record";
+  | "orphan-pane-record"
+  | "terminal-cwd-outside-project";
 
 export type WorkbenchLayoutIssue = {
   code: WorkbenchLayoutIssueCode;
@@ -232,6 +234,17 @@ export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): Workbench
             "invalid-pane-record",
             `${panePath}.surface.launchSpec.cwd`,
             "Terminal launch specs require a working directory.",
+          ),
+        );
+      } else if (!terminalLaunchSpecIsInProject(surface)) {
+        // Layout JSON is not an authorization credential: a cwd that claims a
+        // project it does not live under is reported here and refused again by
+        // the backend when the session is created.
+        issues.push(
+          issue(
+            "terminal-cwd-outside-project",
+            `${panePath}.surface.launchSpec.cwd`,
+            `Terminal working directory '${surface.launchSpec.cwd.trim()}' is outside project '${surface.project.projectPathKey.trim()}'.`,
           ),
         );
       }
