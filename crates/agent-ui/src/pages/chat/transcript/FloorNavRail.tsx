@@ -414,17 +414,17 @@ export function FloorNavRail(props: {
       )}
       {!isCoarsePointer && hoveredFloor ? (
         <div
-          className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100cqw-5rem)] -translate-y-1/2 rounded-[14px] border border-border/60 bg-background/92 p-2 shadow-[0_14px_40px_-20px_rgba(15,23,42,0.48)] backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none dark:border-white/[0.1] dark:bg-[#2a2a2a]/95"
+          className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100cqw-5rem)] -translate-y-1/2 rounded-xl border border-border/60 bg-background/92 p-2 shadow-[0_14px_40px_-20px_rgba(15,23,42,0.48)] backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none dark:border-white/[0.1] dark:bg-[#2a2a2a]/95"
           style={{
             top: previewCardTop,
             right: "calc(100% - 2px)",
           }}
         >
-          <div className="group/preview flex min-w-0 items-start gap-1 rounded-[10px]">
+          <div className="group/preview flex min-w-0 items-start gap-1 rounded-lg">
             <button
               type="button"
               onClick={() => handleJump(hoveredFloor.rowKey)}
-              className="min-w-0 flex-1 rounded-[9px] px-2 py-1.5 text-left outline-none transition-colors hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]"
+              className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]"
             >
               <span className="block truncate text-[13px] font-medium leading-5 text-foreground">
                 {hoveredFloor.preview}

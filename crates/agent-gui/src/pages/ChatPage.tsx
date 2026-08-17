@@ -132,25 +132,25 @@ import { createConversationSurfaceController } from "./chat/conversations/create
 import { useConversationHydrationPhase } from "./chat/conversations/useConversationHydrationPhase";
 import { useConversationPaneHostBridge } from "./chat/conversations/useConversationPaneHostBridge";
 import { useConversationRuntimeEntrySnapshot } from "./chat/conversations/useConversationRuntimeEntrySnapshot";
-import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import type {
   EnsureGatewayBridgeConversationReadyOptions,
   SendChatAction,
 } from "./chat/gateway/gatewayBridgeTypes";
 import { useGatewayBridgeListeners } from "./chat/gateway/useGatewayBridgeListeners";
+import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
-import { useSharedHistory } from "./chat/history/useSharedHistory";
 import { useConversationHistoryActions } from "./chat/history/useConversationHistoryActions";
+import { useSharedHistory } from "./chat/history/useSharedHistory";
+import { useChatPageRuntimeStore } from "./chat/hooks/useChatPageRuntimeStore";
 import {
   createContextUsageTokensSource,
   useContextUsageTokensSource,
 } from "./chat/hooks/useContextUsageTokensSource";
-import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
-import { useChatPageRuntimeStore } from "./chat/hooks/useChatPageRuntimeStore";
 import { useEditResend } from "./chat/hooks/useEditResend";
 import { useLiveTranscriptController } from "./chat/hooks/useLiveTranscriptController";
+import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
@@ -159,11 +159,11 @@ import {
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
+import { createChatRuntimeHost } from "./chat/runtime/ChatRuntimeHost";
 import {
   pruneIdleConversationRuntimeCaches,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
-import { createChatRuntimeHost } from "./chat/runtime/ChatRuntimeHost";
 import { resolveActiveModelSelection } from "./chat/runtime/modelSelection";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
@@ -2952,7 +2952,7 @@ export function ChatPage(props: ChatPageProps) {
     sessionWorkbench.enabled && workbenchDragState ? (
       <div
         data-workbench-drag-ghost=""
-        className="pointer-events-none fixed z-[120] max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
           left: workbenchDragState.pointer.x + 14,
           top: workbenchDragState.pointer.y + 10,

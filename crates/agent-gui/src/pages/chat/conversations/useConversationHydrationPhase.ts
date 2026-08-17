@@ -13,9 +13,6 @@ export function useConversationHydrationPhase(
     (listener: () => void) => store.subscribe(conversationId, listener),
     [store, conversationId],
   );
-  const getSnapshot = useCallback(
-    () => store.getSnapshot(conversationId),
-    [store, conversationId],
-  );
+  const getSnapshot = useCallback(() => store.getSnapshot(conversationId), [store, conversationId]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

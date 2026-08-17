@@ -82,23 +82,20 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
   // registry-owned: the cache entry is their single source of truth, and the
   // visible values derive from it (useConversationRuntimeEntrySnapshot). Only
   // the still-mirrored transient fields come from the visible React state.
-  const buildRuntimeEntryFromVisibleState = useCallback(
-    (): ConversationRuntimeEntry => {
-      const cached = conversationRuntimeCacheRef.current.get(currentConversationIdRef.current);
-      return createConversationRuntimeEntry({
-        state: conversationState,
-        compactionStatus,
-        isSending,
-        errorMessage,
-        hookWarning,
-        sessionId: cached?.sessionId ?? currentConversationIdRef.current,
-        createdAt: cached?.createdAt ?? Date.now(),
-        workdir: cached?.workdir,
-        selectedModel: cached?.selectedModel,
-      });
-    },
-    [compactionStatus, conversationState, errorMessage, hookWarning, isSending],
-  );
+  const buildRuntimeEntryFromVisibleState = useCallback((): ConversationRuntimeEntry => {
+    const cached = conversationRuntimeCacheRef.current.get(currentConversationIdRef.current);
+    return createConversationRuntimeEntry({
+      state: conversationState,
+      compactionStatus,
+      isSending,
+      errorMessage,
+      hookWarning,
+      sessionId: cached?.sessionId ?? currentConversationIdRef.current,
+      createdAt: cached?.createdAt ?? Date.now(),
+      workdir: cached?.workdir,
+      selectedModel: cached?.selectedModel,
+    });
+  }, [compactionStatus, conversationState, errorMessage, hookWarning, isSending]);
 
   const syncVisibleConversationRuntime = useCallback(
     (conversationId: string, entry: ConversationRuntimeEntry) => {

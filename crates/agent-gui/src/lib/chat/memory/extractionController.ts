@@ -16,10 +16,7 @@ import {
 } from "@liveagent/ui/lib/memory/config";
 import { extractLatestUserText } from "../../memory/extraction/context";
 import { extractionSkipReason, isConfirmationDeferral } from "../../memory/extraction/gating";
-import type {
-  MemoryExtractionEngineParams,
-  MemoryExtractionResult,
-} from "./extractionEngine";
+import type { MemoryExtractionEngineParams, MemoryExtractionResult } from "./extractionEngine";
 
 type EngineFn = (params: MemoryExtractionEngineParams) => Promise<MemoryExtractionResult>;
 let engineOverride: EngineFn | null = null;
