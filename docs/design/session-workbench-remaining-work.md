@@ -70,6 +70,24 @@ dock 残留同名 tab 关不掉」——根因是**幽灵会话**:前端列表�
   3 例(跨实例命中、渲染期静默、miss 返回 null)。生产构建单实例不受影响,兜底
   只在 miss 时读一次 storage,无热路径开销。
 
+**第四轮(2026-08-18,幽灵工厂根除)**:实机「dock 创建 → 关闭 → `terminal session
+not found`」定位到幽灵会话的**真正生产者**——后端 `exit`/`closed` 广播竞态:
+
+- 根因:`close()` 杀进程树后自己 `mark_finished`(广播 exit)→ 移除会话 → 广播
+  closed;同时被杀 PTY 让 reader 线程 EOF,也调 `mark_finished`。旧实现的 exit
+  广播在 `if record.running` 块**之外**无条件执行:reader 若在移除前拿到 entry
+  Arc,会在 closed 之后补发一个带完整 session 记录的 exit。前端
+  `applyTerminalEventToSessions` 对未知 id 的非 output 事件一律追加——刚关闭的
+  会话被原样复活,dock 冒出 attach 必败的 tab。此前三轮记录的"closed 事件丢失/
+  写回竞态"只是次要来源,这条竞态每次关闭都有窗口。
+- 修复三层:① Rust `mark_finished` 改为首个 finisher(running→finished 翻转者)
+  独占 exit 广播,重复调用静默(cargo 测试 2 例:双 mark 只广播一次、close 后
+  迟到 mark 完全静默且事件序恰为 exit→closed);② 前端合并语义收紧:未知 id
+  仅 `created` 追加,exit/resized/renamed/reconnecting 等一律忽略
+  (`terminal-session-store.test.mjs` 4 例);③ dock 视口错误接入与 Pane 同款的
+  `onSessionGhost` → `verifyTerminalSessionAlive` 自愈(此前只有 Pane 侧有,
+  dock 的错误横幅只展示不自愈)。
+
 ### Permission-Changed blocked 态:调研结论(不实现)
 
 设计文档 §7.4 要求 Pane blocked 有 Missing / Archived / **Permission Changed** 三态。
