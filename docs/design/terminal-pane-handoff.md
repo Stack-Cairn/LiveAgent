@@ -12,7 +12,7 @@
 - **身份与绑定**:布局 JSON 只存 `launchSpec + surfaceId`,**不存 sessionId**(设计文档约束);surfaceId→sessionId 走 `terminalPaneBindingStore`(sessionStorage `liveagent.terminalPaneBindings.v1`,生命周期恰好匹配 webview reload 后 Rust 端会话仍存活);sessionId↔paneId 互斥走 `terminalPaneLeaseStore`;Right Dock 与 SSH overlay 经租约集(`hiddenSessionIds` / `paneLeasedSessionIds`)互斥,防输出流双消费/输入双写。
 - **组件**(agent-ui 共享层):`LocalTerminalPaneSurface`(connecting/ready/exited/error 四态受控,复用 XTermViewport,退出/错误叠提示条不清屏)、`SshTerminalPaneSurface`(三色状态点 + `user@host:port` + 重连按钮)、`UnsupportedPaneSurface`。所有新 props 可选、零 Tauri import(能力经 props 注入),webui 不受影响。
 - **页面宿主**(agent-gui):`src/pages/chat/surfaces/TerminalPaneHost.tsx` —— 绑定解析 → 缺失时按 launchSpec 异步 ensure 建会话(`terminalPaneRuntime.ts` 模块级 in-flight 表防 StrictMode 双建 PTY)→ 租约 acquire/release → 按 kind 渲染。drop 事务"几何先行"(`terminalDropCommit.ts`:newTerminal 只提交布局,PTY 挂载后异步创建;既有会话先写绑定再 OPEN_PANE,失败回滚)。恢复对账:restore 前 `terminal_list` → `bindings.reconcile`,list 失败安全降级为丢弃终端 Pane、不阻塞会话恢复。
-- **拖拽入口**:dock 本地终端 tab、SSH overlay 的 shell tab、dock 空态"新建终端"按钮均可拖入画板。Pane 的 × = Detach(进程保留回 dock);kill 走 Surface 内两态确认按钮(点一次武装、再点执行、3s 复位)。
+- **拖拽入口**:dock 本地终端 tab、SSH overlay 的 shell tab、dock 空态"新建终端"按钮均可拖入画板。Pane 的 × = Detach(进程保留回 dock);Pane 内不叠加文字终止控件,进程关闭统一在 Right Dock 管理。
 
 ### 验证状态(shell 会话在最终工作区独立复核)
 

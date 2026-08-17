@@ -7,16 +7,14 @@
 | 项 | 状态 | 落地方式 |
 |---|---|---|
 | T-1 cwd 范围校验 | ✅ | Rust `canonicalize_workdir_within`(registry.create / create_ssh 双路径强制,删除 cwd 反推)+ 前端 `projectScope.ts` 词法护栏(drop / restore / invariants 三道);cargo 测试 9 例 + 前端 6 例 |
-| T-2 stale 恢复 | ✅ | 保留 Pane + stale binding 自动清理 + launchSpec 自动重建;TerminalPaneHost 纯逻辑测试覆盖恢复、去重与 kill 防自启 |
+| T-2 stale 恢复 | ✅ | 保留 Pane + stale binding 自动清理 + launchSpec 自动重建;TerminalPaneHost 纯逻辑测试覆盖恢复与去重 |
 | T-3 newTerminal 拖入 | ✅ | 拖柄接到 RightDockLauncher 终端 tile(真实渲染路径),RightDockContent 不可达死代码已删 |
-| T-4 关闭语义 | ✅ | Detach-first 裁决写回架构文档(§15/§17/§28 + §16/§27 两处附带);SSH 专属"断开连接"两态文案 |
+| T-4 关闭语义 | ✅ | Detach-first 裁决写回架构文档(§15/§17/§28 + §16/§27 两处附带);Pane 内不叠加文字终止控件,进程关闭统一留在 Right Dock |
 | T-5 Right Dock 互斥 | ✅ | 本地会话改"保留+leased 标记"(视口层互斥,与 SSH overlay 同构);SSH hook 层对称;tab 右键/键盘菜单「在工作台打开/聚焦工作台面板」 |
 | T-6 resize 相同值去重 | ✅ | `streamBuffer.ts` `lastSentResize`(重连/传输中断/发送失败三处豁免,含 reject 竞态防护);测试 4 例 |
 | T-7 insufficient-space context 接入 | ✅ | `useWindowWorkbench` 从 ChatPage 的 `workbenchGeometryRef` 内部注入 context,`dividerSize: 6` 显式传入;拒绝经 `onCommandError` 转成 `workbench.noSpaceForSplit` 提示 |
 
 **已裁决的冲突**:`view.compactChrome` 死分支已删除(`paneRendersCompact` 只按 rectWidth 判定);360px 自动 compact 保留。SSH `launchSpec.cwd` 语义统一为"本地 project 锚点(SFTP local root)",前端校验对两种终端 surface 一致生效,4 个测试夹具已修正。
-
-**附加防御**:TerminalPaneHost 的 `killSession` 现在同时撤销启动资格(`setLaunchRequested(false)`),防止宿主未关 Pane 时 kill 被 ensure effect 变成静默重启。
 
 ### Permission-Changed blocked 态:调研结论(不实现)
 
@@ -73,7 +71,7 @@ ChatPage 的 `blockedMessage` 目前只有前两个来源。调研后的结论�
   **应用重启必然清空 → 重启后所有终端 pane 无声消失**。
 - **最终实现**:`surfaceIsLive` 保留 terminal Pane;WebView reload 优先重挂现存绑定,
   完整应用重启或 stale binding 则自动清理旧 sessionId,再由 `TerminalPaneHost`
-  按 launchSpec 创建新会话。显式 kill 会临时撤销启动资格并立即关闭 Pane,避免自启竞态。
+  按 launchSpec 创建新会话。进程终止仍由 Right Dock 的终端会话管理负责。
 
 ### T-3 · `newTerminal` / SSH 拖拽入口缺失
 - 类型、提交分支、terminalDropCommit、测试全部就绪,但全仓无
@@ -82,9 +80,9 @@ ChatPage 的 `blockedMessage` 目前只有前两个来源。调研后的结论�
   的拖柄模式),payload 用聚焦 pane 的 project。
 
 ### T-4 · 终端关闭语义与设计不符
-- 实现为静默 Detach + 独立"终止进程"两态按钮;设计要求运行中关闭默认确认终止。
+- 实现为静默 Detach;Pane 内不再叠加独立的文字终止按钮,进程关闭保留在 Right Dock。
 - **裁决建议**:认可 Detach-first 模型(不误杀进程,对终端更安全)并更新架构文档
-  §15.8/§17/§28.13;另需给 SSH 补断开确认。
+  §15.8/§17/§28.13;SSH 连接同样从 Right Dock 管理。
 
 ### T-5 · Right Dock 互斥做法 + SSH 未过滤
 - 实现为从列表整个过滤 leased 会话(设计要求只展示状态);SSH 会话不应用

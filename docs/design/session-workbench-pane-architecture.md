@@ -574,8 +574,8 @@ TerminalPaneSurface
 6. SSH Prompt 通过 `operationToken + paneId + promptId` 绑定。
 7. 恢复只显示 stale 启动规格；用户显式点击才启动/重连。
 8. 关闭采用 Detach-first：Pane 的 × 是默认且安全的动作，静默 Detach 视图并把 Session 交回 Right Dock，进程与连接不受影响。
-9. 终止进程/断开连接是 Surface 内独立的显式动作，用两态确认按钮：点一次武装、再点执行、3s 无操作自动复位；SSH 复用同一按钮执行断开。
-10. 裁决理由：关闭视图远比终止进程高频，默认确认会训练用户盲点头并误杀长任务；终端进程的生命周期与视图解耦后，Detach 可随时从 dock 找回或重新拖入，破坏性动作则集中在一个不会被误触的入口。
+9. Pane 内不叠加文字终止控件；终止进程/断开连接统一在 Right Dock 的会话管理入口完成。
+10. 裁决理由：关闭视图远比终止进程高频，默认确认会训练用户盲点头并误杀长任务；终端进程的生命周期与视图解耦后，Detach 可随时从 dock 找回或重新拖入，破坏性动作集中在会话管理入口。
 
 ## 16. Right Dock 与文件树边界
 
@@ -600,7 +600,7 @@ TerminalPaneSurface
 | 已连接 SSH Terminal | Detach 视图并回 Right Dock | 连接保持，Session 保留，可再次拖入 |
 | stale Terminal | 关闭视图 | 无 Runtime |
 
-终止进程树和断开 SSH 不在关闭路径上：两者都是 Surface 内的两态确认按钮（武装 → 执行，3s 超时复位），执行后才释放 Session。
+终止进程树和断开 SSH 不在 Pane 关闭路径上：两者统一从 Right Dock 的终端会话管理入口执行，Pane 内不再叠加文字按钮。
 
 关闭 Conversation Pane 绝不等于删除会话。会话仍在左侧，可再次拖入复用；后台运行状态继续显示。删除会话时若 Pane 可见，必须确认并原子关闭 View/Runtime，再删除历史。
 
@@ -899,7 +899,7 @@ Surface Registry 统一 Renderer、尺寸、关闭、唯一性和 Context，避�
 
 - Runtime Binding、View Lease、稳定 XTermViewport。
 - 新终端自动/定向贴靠。
-- Resize、关闭即 Detach、终止两态确认、Right Dock 互斥。
+- Resize、关闭即 Detach、终止入口归并到 Right Dock、Right Dock 互斥。
 
 验收：Conversation + 三终端可移动，输出/Attach/尺寸正确；Detach 后进程存活并可从 Dock 找回。
 
@@ -941,7 +941,7 @@ Surface Registry 统一 Renderer、尺寸、关闭、唯一性和 Context，避�
 10. 点击 Right Dock 不改变 focusedPaneId 或抢 Pane 焦点。
 11. 同一 Conversation/Terminal 无两个可输入视图。
 12. 关闭 Conversation 只关视图，可从侧栏重新拖入。
-13. Terminal/SSH 关闭即 Detach（可从 Right Dock 找回）；终止/断开走 Surface 内两态确认。
+13. Terminal/SSH 关闭即 Detach（可从 Right Dock 找回）；终止/断开统一从 Right Dock 管理。
 14. 布局不保存 Session ID、Secret、Prompt、输出、附件或错误。
 15. 重启不自动启动 Shell、发送、认证或信任 Host Key。
 16. 文件不自动发送，路径不自动执行，工作区 Drop 不扩权。
