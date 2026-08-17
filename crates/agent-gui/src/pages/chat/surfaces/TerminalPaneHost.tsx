@@ -161,6 +161,9 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       })
       .finally(() => {
         terminalPaneBindings.delete(surface.surfaceId);
+        // 撤销启动资格,防止仍挂载的宿主把 kill 立刻变成一次静默重启;
+        // 正常路径下 onSessionKilled 会关闭 Pane,这里是宿主未关 Pane 时的兜底。
+        setLaunchRequested(false);
         setKillPending(false);
         onSessionKilled?.();
       });

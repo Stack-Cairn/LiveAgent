@@ -11,7 +11,10 @@ import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDock
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
-import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
+import {
+  WORKBENCH_CANVAS_DIVIDER_SIZE,
+  WorkbenchCanvas,
+} from "@liveagent/ui/components/workbench/WorkbenchCanvas";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
@@ -46,6 +49,7 @@ import {
   findAdjacentPaneId,
   findParentSplitId,
   hitTestWorkbenchDrop,
+  type WorkbenchCommandError,
   type WorkbenchDropTarget,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
@@ -603,13 +607,13 @@ export function ChatPage(props: ChatPageProps) {
         : [],
     [terminalProjectPathKey, terminalSessions],
   );
-  // 被工作台 Pane 租用的会话对 Right Dock 隐藏(输出流双消费/输入双写互斥);
-  // 完整列表仍流经 onSessionsChange,租约释放后会话自动回到 dock。
+  // 被工作台 Pane 租用的会话在 Right Dock 中保留 tab 但标记为已租用;视口换成
+  // 占位(绝不第二次挂 XTermViewport),输出流/输入写入仍归 Pane 独占。
   const leasedTerminalSessionIds = useSyncExternalStore(
     terminalPaneLease.subscribe,
     terminalPaneLease.leasedSessionIds,
   );
-  const hiddenDockSessionIds = useMemo(
+  const leasedDockSessionIds = useMemo(
     () => (leasedTerminalSessionIds.length > 0 ? new Set(leasedTerminalSessionIds) : undefined),
     [leasedTerminalSessionIds],
   );
@@ -1885,16 +1889,32 @@ export function ChatPage(props: ChatPageProps) {
     () => (sessionWorkbench.enabled ? createWorkbenchLayoutPersistence() : undefined),
     [],
   );
+  const workbenchGeometryRef = useRef<WorkbenchGeometry | null>(null);
+  const handleWorkbenchGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
+    workbenchGeometryRef.current = geometry;
+  }, []);
+  // Every rejected command that failed purely for lack of room gets one
+  // toast, wherever it came from — drag drop, auto-dock menu, or keyboard.
+  // Other codes (stale revision, duplicate surface) are internal races the
+  // user never asked for and stay silent.
+  const handleWorkbenchCommandError = useCallback(
+    (error: WorkbenchCommandError) => {
+      if (error.code === "insufficient-space") {
+        addNotify("error", t("workbench.noSpaceForSplit"));
+      }
+    },
+    [addNotify, t],
+  );
   const workbench = useWindowWorkbench({
     enabled: sessionWorkbench.enabled,
     initialConversationId: initialConversationRef.current.conversationId,
     initialProject: initialWorkbenchProjectRef.current,
     persistence: workbenchLayoutPersistence,
+    geometryRef: workbenchGeometryRef,
+    // The canvas renders 6px dividers; the geometry library's default is 8.
+    dividerSize: WORKBENCH_CANVAS_DIVIDER_SIZE,
+    onCommandError: handleWorkbenchCommandError,
   });
-  const workbenchGeometryRef = useRef<WorkbenchGeometry | null>(null);
-  const handleWorkbenchGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
-    workbenchGeometryRef.current = geometry;
-  }, []);
 
   // A pane focus/drop selects its conversation asynchronously; until the
   // selection lands, syncCurrentConversation must not rebind the focused pane
@@ -2197,39 +2217,34 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag],
   );
 
-  // Menu alternative to dragging: dock the conversation beside the focused
-  // pane. Deterministic auto-dock with the same hard minimum-size checks as
-  // drops: right first (bottom first on narrow canvases), then the other
-  // axis, explicit rejection when no legal space remains.
+  // Menu alternative to dragging: dock beside the focused pane. Deterministic
+  // auto-dock with the same hard minimum-size checks as drops: right first
+  // (bottom first on narrow canvases), then the other axis, explicit rejection
+  // when no legal space remains.
+  const resolveWorkbenchAutoDockTarget = useCallback(() => {
+    const layout = workbench.layoutRef.current;
+    if (!layout.focusedPaneId) return { kind: "canvas-empty" } as const;
+    const geometry = workbenchGeometryRef.current;
+    const focusedRect = geometry?.panes.find((pane) => pane.paneId === layout.focusedPaneId)?.rect;
+    if (!geometry || !focusedRect) return null;
+    const preferVertical = geometry.canvas.width < 680;
+    const edges = preferVertical ? (["bottom", "right"] as const) : (["right", "bottom"] as const);
+    for (const edge of edges) {
+      if (canSplitRectAtEdge(focusedRect, edge)) {
+        return { kind: "pane-edge", paneId: layout.focusedPaneId, edge } as const;
+      }
+    }
+    return null;
+  }, [workbench]);
+
   const handleOpenConversationInSplit = useCallback(
     (item: SidebarConversation) => {
-      const layout = workbench.layoutRef.current;
       const existingPaneId = workbench.paneIdForConversation(item.id);
       if (existingPaneId) {
         handleWorkbenchFocusPane(existingPaneId);
         return;
       }
-      let target: Parameters<typeof workbench.openConversation>[1] | null = null;
-      if (!layout.focusedPaneId) {
-        target = { kind: "canvas-empty" };
-      } else {
-        const geometry = workbenchGeometryRef.current;
-        const focusedRect = geometry?.panes.find(
-          (pane) => pane.paneId === layout.focusedPaneId,
-        )?.rect;
-        if (geometry && focusedRect) {
-          const preferVertical = geometry.canvas.width < 680;
-          const edges = preferVertical
-            ? (["bottom", "right"] as const)
-            : (["right", "bottom"] as const);
-          for (const edge of edges) {
-            if (canSplitRectAtEdge(focusedRect, edge)) {
-              target = { kind: "pane-edge", paneId: layout.focusedPaneId, edge };
-              break;
-            }
-          }
-        }
-      }
+      const target = resolveWorkbenchAutoDockTarget();
       if (!target) {
         addNotify("error", t("workbench.noSpaceForSplit"));
         return;
@@ -2243,10 +2258,64 @@ export function ChatPage(props: ChatPageProps) {
     [
       addNotify,
       handleWorkbenchFocusPane,
+      resolveWorkbenchAutoDockTarget,
       selectWorkbenchConversation,
       t,
       workbench,
       workbenchProjectForConversation,
+    ],
+  );
+
+  // 同一提交通路的键盘/菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
+  // 由 commitTerminalDrop 自己走"移动既有 Pane",不会二次开 Pane。
+  const handleOpenTerminalInWorkbenchSplit = useCallback(
+    (session: TerminalSession) => {
+      const target = resolveWorkbenchAutoDockTarget();
+      if (!target) {
+        addNotify("error", t("workbench.noSpaceForSplit"));
+        return;
+      }
+      const projectPathKey = session.projectPathKey || workspaceProjectPathKey(session.cwd);
+      const project = workspaceProjects.find(
+        (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+      );
+      commitTerminalDrop(
+        {
+          kind: "terminalSession",
+          sessionId: session.id,
+          project: {
+            projectId: project?.id ?? `terminal:${session.id}`,
+            projectPathKey,
+          },
+          title: session.title || session.shell || "Terminal",
+        },
+        target,
+        {
+          layout: workbench.layoutRef.current,
+          sessions: terminalSessionsRef.current,
+          lease: terminalPaneLease,
+          bindings: terminalPaneBindings,
+          resolveProjectPath: (ref) =>
+            workspaceProjects.find((entry) => entry.id === ref.projectId)?.path ??
+            workspaceProjects.find(
+              (entry) => workspaceProjectPathKey(entry.path) === ref.projectPathKey,
+            )?.path ??
+            null,
+          createSurfaceId: createTerminalSurfaceId,
+          authorizeAutoLaunch: terminalPaneAutoLaunch.authorize,
+          openTerminalSurface: workbench.openTerminalSurface,
+          movePane: workbench.movePane,
+          focusPane: handleWorkbenchFocusPane,
+        },
+      );
+    },
+    [
+      addNotify,
+      handleWorkbenchFocusPane,
+      resolveWorkbenchAutoDockTarget,
+      t,
+      workbench,
+      workspaceProjects,
     ],
   );
 
@@ -3022,7 +3091,7 @@ export function ChatPage(props: ChatPageProps) {
                 workspaceOverlays.setWorkspaceSshTerminalOpen(false)
               }
               onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
-              sshTerminalPaneLeasedSessionIds={hiddenDockSessionIds}
+              sshTerminalPaneLeasedSessionIds={leasedDockSessionIds}
               onSshTerminalFocusLeasedSession={
                 sessionWorkbench.enabled ? focusWorkbenchTerminalPane : undefined
               }
@@ -3041,7 +3110,7 @@ export function ChatPage(props: ChatPageProps) {
         cwd={terminalProjectPath}
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
-        hiddenSessionIds={hiddenDockSessionIds}
+        leasedSessionIds={leasedDockSessionIds}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
@@ -3070,6 +3139,10 @@ export function ChatPage(props: ChatPageProps) {
         onNewTerminalDragStart={
           sessionWorkbench.enabled ? handleNewTerminalWorkbenchDragIntent : undefined
         }
+        onOpenTerminalInWorkbench={
+          sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
+        }
+        onFocusWorkbenchPane={sessionWorkbench.enabled ? focusWorkbenchTerminalPane : undefined}
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
         gitReviewFocusRequest={gitReviewFocusRequest}

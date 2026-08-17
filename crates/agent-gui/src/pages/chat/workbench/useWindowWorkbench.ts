@@ -5,9 +5,13 @@ import {
   findPaneIdByConversationId,
   findPaneIdBySurfaceKey,
   isWorkbenchLayoutValid,
+  terminalLaunchSpecIsInProject,
   WORKBENCH_LAYOUT_SCHEMA_VERSION,
   type WorkbenchCommand,
+  type WorkbenchCommandContext,
+  type WorkbenchCommandError,
   type WorkbenchCommandResult,
+  type WorkbenchGeometry,
   type WorkbenchLayout,
   type WorkbenchMoveTarget,
   type WorkbenchOpenTarget,
@@ -85,8 +89,14 @@ function surfaceIsLive(pane: PaneRecord, live: LiveWorkbenchSurfaces): boolean {
       return live.validConversationIds.has(pane.surface.conversationId);
     case "localTerminal":
     case "sshTerminal":
-      // Terminal panes always survive restore: their launchSpec is a full
-      // recovery identity. Dead sessions restore as a dormant "exited"
+      // A persisted launchSpec whose cwd escaped its own project can never be
+      // started (the backend re-derives containment and rejects it), so the
+      // pane is not live. Dropping it here also stops a tampered layout file
+      // from parking an out-of-project cwd in the window as a restartable
+      // placeholder.
+      if (!terminalLaunchSpecIsInProject(pane.surface)) return false;
+      // Terminal panes otherwise always survive restore: their launchSpec is a
+      // full recovery identity. Dead sessions restore as a dormant "exited"
       // placeholder (no PTY is created until the user restarts), so keeping
       // the pane is safe even when the live-session probe failed.
       return true;
@@ -167,6 +177,16 @@ export type UseWindowWorkbenchParams = {
   initialProject: ProjectRef;
   /** Native layout persistence; omitted in tests and non-workbench sessions. */
   persistence?: WorkbenchLayoutPersistenceAdapter;
+  /**
+   * Live canvas geometry. Supplying it turns on the reducer's pixel feasibility
+   * checks (minimum pane sizes on split, per-side clamping on resize) for every
+   * command this hook dispatches; omit it and the reducer stays permissive.
+   */
+  geometryRef?: { readonly current: WorkbenchGeometry | null };
+  /** The canvas' real divider thickness; defaults to the geometry library's. */
+  dividerSize?: number;
+  /** Called for every rejected command, so the page can surface a reason. */
+  onCommandError?: (error: WorkbenchCommandError) => void;
 };
 
 export type WorkbenchOpenConversationInput = {
@@ -212,7 +232,15 @@ export type WindowWorkbench = {
  * selecting a conversation whenever focus moves to another pane.
  */
 export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWorkbench {
-  const { enabled, initialConversationId, initialProject, persistence } = params;
+  const {
+    enabled,
+    initialConversationId,
+    initialProject,
+    persistence,
+    geometryRef,
+    dividerSize,
+    onCommandError,
+  } = params;
 
   const [layout, setLayout] = useState<WorkbenchLayout>(() =>
     singlePaneLayout(initialConversationId, initialProject),
@@ -226,6 +254,29 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   const persistTimerRef = useRef<number | null>(null);
   const persistenceRef = useRef(persistence);
   persistenceRef.current = persistence;
+  const geometrySourceRef = useRef(geometryRef);
+  geometrySourceRef.current = geometryRef;
+  const dividerSizeRef = useRef(dividerSize);
+  dividerSizeRef.current = dividerSize;
+  const commandErrorRef = useRef(onCommandError);
+  commandErrorRef.current = onCommandError;
+
+  /**
+   * Pixel context for the reducer's feasibility checks, read fresh per command
+   * so a resize between renders never judges against a stale canvas. Only the
+   * canvas rect is used — the reducer re-derives pane rects from the tree — so
+   * a geometry that lags the layout by one frame is still correct. Returns
+   * undefined before the canvas has ever measured, which keeps the reducer's
+   * pre-existing permissive behaviour instead of guessing a size.
+   */
+  const commandContext = useCallback((): WorkbenchCommandContext | undefined => {
+    const canvas = geometrySourceRef.current?.current?.canvas;
+    if (!canvas || canvas.width <= 0 || canvas.height <= 0) return undefined;
+    return {
+      canvasSize: { width: canvas.width, height: canvas.height },
+      dividerSize: dividerSizeRef.current,
+    };
+  }, []);
 
   useEffect(() => {
     if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
@@ -246,14 +297,23 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     };
   }, [enabled, layout]);
 
-  const dispatch = useCallback((command: WorkbenchCommand): WorkbenchCommandResult => {
-    const result = applyWorkbenchCommand(layoutRef.current, command);
-    if (result.ok) {
-      layoutRef.current = result.layout;
-      setLayout(result.layout);
-    }
-    return result;
-  }, []);
+  const dispatch = useCallback(
+    (command: WorkbenchCommand): WorkbenchCommandResult => {
+      // Callers may pin their own context (a drag commit freezes the geometry
+      // it previewed against); everything else picks up the live canvas.
+      const contextual =
+        command.context === undefined ? { ...command, context: commandContext() } : command;
+      const result = applyWorkbenchCommand(layoutRef.current, contextual);
+      if (result.ok) {
+        layoutRef.current = result.layout;
+        setLayout(result.layout);
+      } else {
+        commandErrorRef.current?.(result.error);
+      }
+      return result;
+    },
+    [commandContext],
+  );
 
   const dispatchCurrent = useCallback(
     (command: WorkbenchCommandInput): WorkbenchCommandResult =>
