@@ -207,7 +207,6 @@ test("attemptRestore falls back to the first conversation pane when a terminal h
   const workbench = renderWorkbench(harness, useWindowWorkbench, { persistence });
   const restored = await workbench.attemptRestore({
     validConversationIds: new Set(["conv-a"]),
-    liveTerminalSurfaceIds: new Set(["term-1"]),
   });
   assert.ok(restored);
   assert.equal(restored.focusConversationId, "conv-a");

@@ -29,6 +29,32 @@ export class TerminalPaneSshPromptError extends Error {
   }
 }
 
+/**
+ * 自动建会话授权集(窗口级内存):记录"本窗口会话中用户显式创建/重启过"的
+ * surfaceId。宿主挂载发现绑定缺失时,只有授权过的 surface 才自动按 launchSpec
+ * 建 PTY;恢复(应用重启/绑定对账清空)的 Pane 不在集合中,显示休眠占位,
+ * 用户点"重新启动"才授权重建——绝不因布局恢复静默新建进程。
+ * 不做消费式清除:StrictMode 双挂载会重跑同一 effect,一次性令牌会误判休眠。
+ */
+export function createTerminalPaneAutoLaunchRegistry() {
+  const authorized = new Set<string>();
+  return {
+    authorize(surfaceId: string): void {
+      const key = surfaceId.trim();
+      if (key) authorized.add(key);
+    },
+    isAuthorized(surfaceId: string): boolean {
+      return authorized.has(surfaceId.trim());
+    },
+  };
+}
+
+export type TerminalPaneAutoLaunchRegistry = ReturnType<
+  typeof createTerminalPaneAutoLaunchRegistry
+>;
+
+export const terminalPaneAutoLaunch = createTerminalPaneAutoLaunchRegistry();
+
 export type EnsureTerminalPaneSessionDeps = {
   client: TerminalClient;
   bindings: Pick<TerminalPaneBindingStore, "set">;
@@ -94,8 +120,10 @@ export type ResolveLiveTerminalSurfaceIdsDeps = {
 
 /**
  * 恢复期对账:用后端存活会话清理死绑定,返回仍然存活的 surfaceId 集合。
- * webview reload 时 Rust 终端注册表仍在,这些 surfaceId 对应的 Pane 可以恢复;
- * list 失败返回 null,调用方按安全默认丢弃全部终端 Pane,不阻塞会话恢复。
+ * webview reload 时 Rust 终端注册表仍在,这些 surfaceId 对应的 Pane 直接
+ * 重挂会话;绑定被清掉的 Pane 恢复为休眠占位(不自动建 PTY)。list 失败
+ * 返回 null,绑定保持原样——宿主对"绑定指向消失会话"另有 session-missing
+ * 错误态兜底,恢复流程不被阻塞。
  */
 export async function resolveLiveTerminalSurfaceIds(
   deps: ResolveLiveTerminalSurfaceIdsDeps,

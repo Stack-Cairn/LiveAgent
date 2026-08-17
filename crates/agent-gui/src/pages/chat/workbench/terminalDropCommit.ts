@@ -26,6 +26,8 @@ export type TerminalDropDeps = {
   /** newTerminal 需要真实 cwd;ProjectRef 只有 pathKey,由调用方解析回项目路径。 */
   resolveProjectPath(project: ProjectRef): string | null;
   createSurfaceId(): string;
+  /** 本窗口显式创建的 surface 授权自动建会话;恢复的 Pane 无此授权走休眠占位。 */
+  authorizeAutoLaunch(surfaceId: string): void;
   openTerminalSurface(
     surface: TerminalWorkbenchSurface,
     target: WorkbenchOpenTarget,
@@ -111,6 +113,8 @@ export function commitTerminalDrop(
   const cwd = deps.resolveProjectPath(payload.project);
   if (!cwd) return { action: "ignored" };
   const surfaceId = deps.createSurfaceId();
+  // 用户显式拖入"新建终端":授权宿主挂载后自动建 PTY(几何先行,创建异步)。
+  deps.authorizeAutoLaunch(surfaceId);
   const opened = deps.openTerminalSurface(
     {
       kind: "localTerminal",

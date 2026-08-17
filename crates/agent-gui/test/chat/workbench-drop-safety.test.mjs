@@ -54,6 +54,7 @@ function makeDeps(overrides = {}) {
     bindings: createTerminalPaneBindingStore({ storage: null }),
     resolveProjectPath: () => "/repo",
     createSurfaceId: () => `surface-${(surfaceCounter += 1)}`,
+    authorizeAutoLaunch: () => undefined,
     openTerminalSurface: (surface) => ({ paneId: `pane-for-${surface.surfaceId}` }),
     movePane: () => true,
     focusPane: () => undefined,

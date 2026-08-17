@@ -111,22 +111,15 @@ test("restore filtering empties the layout when nothing survives", () => {
   assert.equal(filtered.focusedPaneId, null);
 });
 
-test("restore filtering drops terminal panes when no live-session information exists", () => {
+test("restore filtering always keeps terminal panes (dormant placeholder restore)", () => {
   const filtered = filterLayoutToLiveSurfaces(mixedLayout(), {
     validConversationIds: new Set(["conv-a"]),
   });
-  // Terminal pane drops (no liveTerminalSurfaceIds); unsupported pane survives.
-  assert.deepEqual(Object.keys(filtered.panes).sort(), ["pane-a", "pane-c"]);
-  assert.equal(filtered.panes["pane-c"].surface.kind, "unsupported");
-});
-
-test("restore filtering keeps terminal panes whose surfaceId is confirmed live", () => {
-  const filtered = filterLayoutToLiveSurfaces(mixedLayout(), {
-    validConversationIds: new Set(["conv-a"]),
-    liveTerminalSurfaceIds: new Set(["term-b"]),
-  });
+  // Terminal panes restore as dormant placeholders (launchSpec is the
+  // recovery identity; no PTY is created); unsupported panes pass through.
   assert.deepEqual(Object.keys(filtered.panes).sort(), ["pane-a", "pane-b", "pane-c"]);
   assert.equal(filtered.panes["pane-b"].surface.kind, "localTerminal");
+  assert.equal(filtered.panes["pane-c"].surface.kind, "unsupported");
   // The focused terminal pane keeps focus; conversation selection is the
   // caller's concern (attemptRestore falls back to the first conversation).
   assert.equal(filtered.focusedPaneId, "pane-b");

@@ -35,7 +35,7 @@ function session(id, overrides = {}) {
 
 function makeDeps(overrides = {}) {
   let surfaceCounter = 0;
-  const calls = { open: [], move: [], focus: [] };
+  const calls = { open: [], move: [], focus: [], autoLaunch: [] };
   const deps = {
     layout: { panes: {} },
     sessions: [],
@@ -45,6 +45,9 @@ function makeDeps(overrides = {}) {
     createSurfaceId: () => {
       surfaceCounter += 1;
       return `surface-${surfaceCounter}`;
+    },
+    authorizeAutoLaunch: (surfaceId) => {
+      calls.autoLaunch.push(surfaceId);
     },
     openTerminalSurface: (surface, target) => {
       calls.open.push({ surface, target });
@@ -152,6 +155,8 @@ test("newTerminal opens an unbound local surface with the project cwd", () => {
   assert.deepEqual(surface.launchSpec, { cwd: "/workspace/app" });
   // PTY 由宿主挂载后创建:drop 阶段不得预建会话或写绑定。
   assert.deepEqual(deps.bindings.surfaceIds(), []);
+  // 显式新建须授权 auto-launch,宿主挂载后才会自动建会话(区别于恢复占位)。
+  assert.deepEqual(calls.autoLaunch, [surface.surfaceId]);
 });
 
 test("newTerminal with an unresolvable project path is ignored", () => {

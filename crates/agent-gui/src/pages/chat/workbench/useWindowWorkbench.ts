@@ -77,12 +77,6 @@ function removeLeaf(node: PaneNode, paneId: string): { node: PaneNode | null; fo
 
 export type LiveWorkbenchSurfaces = {
   validConversationIds: ReadonlySet<string>;
-  /**
-   * Terminal panes survive a restore only when their surfaceId is confirmed
-   * alive (terminal_list reconciliation). Omitted → all terminal panes drop,
-   * the safe default while restore has no live-session information.
-   */
-  liveTerminalSurfaceIds?: ReadonlySet<string>;
 };
 
 function surfaceIsLive(pane: PaneRecord, live: LiveWorkbenchSurfaces): boolean {
@@ -91,7 +85,11 @@ function surfaceIsLive(pane: PaneRecord, live: LiveWorkbenchSurfaces): boolean {
       return live.validConversationIds.has(pane.surface.conversationId);
     case "localTerminal":
     case "sshTerminal":
-      return live.liveTerminalSurfaceIds?.has(pane.surface.surfaceId) ?? false;
+      // Terminal panes always survive restore: their launchSpec is a full
+      // recovery identity. Dead sessions restore as a dormant "exited"
+      // placeholder (no PTY is created until the user restarts), so keeping
+      // the pane is safe even when the live-session probe failed.
+      return true;
     case "unsupported":
       // Forward-compat passthrough: newer-version panes must survive restore.
       return true;
