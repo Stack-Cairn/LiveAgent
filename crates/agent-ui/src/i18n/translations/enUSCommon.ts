@@ -1285,8 +1285,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.terminalSessionMissing": "This terminal session is no longer available",
   "workbench.terminalSshPrompt":
     "SSH authentication is required — open this host from the project tools panel first",
-  "workbench.terminalLeasedPlaceholder": "This terminal is open in a workbench pane",
-  "workbench.focusPane": "Focus workbench pane",
   "workbench.sshStatusConnected": "Connected",
   "workbench.sshStatusReconnecting": "Reconnecting",
   "workbench.sshStatusDisconnected": "Disconnected",

@@ -619,8 +619,9 @@ export function ChatPage(props: ChatPageProps) {
         : [],
     [terminalProjectPathKey, terminalSessions],
   );
-  // 被工作台 Pane 租用的会话在 Right Dock 中保留 tab 但标记为已租用;视口换成
-  // 占位(绝不第二次挂 XTermViewport),输出流/输入写入仍归 Pane 独占。
+  // 被工作台 Pane 租用的会话从 Right Dock 的终端 tab 中隐藏(终端任一时刻只
+  // 出现在一个宿主里);Pane 关闭(Detach)释放租约后自动回归 dock。SSH overlay
+  // 的 shell tab 仍用该集合做视口占位互斥。
   const leasedTerminalSessionIds = useSyncExternalStore(
     terminalPaneLease.subscribe,
     terminalPaneLease.leasedSessionIds,
@@ -3165,7 +3166,6 @@ export function ChatPage(props: ChatPageProps) {
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
         }
-        onFocusWorkbenchPane={sessionWorkbench.enabled ? focusWorkbenchTerminalPane : undefined}
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
         gitReviewFocusRequest={gitReviewFocusRequest}

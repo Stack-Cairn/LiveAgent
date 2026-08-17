@@ -103,8 +103,6 @@ type RightDockPanelProps = {
   onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
-  /** 已租用会话的"聚焦工作台面板"通路(tab 菜单 + 视口占位共用)。 */
-  onFocusWorkbenchPane?: (sessionId: string) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
   onInsertCodeReviewSkill?: () => void;
@@ -389,7 +387,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onTerminalTabDragStart,
     onNewTerminalDragStart,
     onOpenTerminalInWorkbench,
-    onFocusWorkbenchPane,
     onInsertFileMention,
     onOpenFile,
     onInsertCodeReviewSkill,
@@ -429,7 +426,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     handleCloseRequest,
     handleInitialTerminalSnapshotConsumed,
     initialTerminalSnapshotsRef,
-    leasedSessions,
     loading,
     localSessions,
     pendingCloseSession,
@@ -844,7 +840,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       activeSession={activeSession}
                       pendingCloseSessionId={pendingCloseSessionId}
                       closingSessionIds={closingSessionIds}
-                      leasedSessionIds={leasedSessions}
                       draggingTabId={draggingTabId}
                       renderTabDragHandle={renderTabDragHandle}
                       getTabDragProps={getTabDragProps}
@@ -856,7 +851,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onCloseTerminalRequest={handleCloseRequest}
                       onTerminalTabDragStart={onTerminalTabDragStart}
                       onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
-                      onFocusWorkbenchPane={onFocusWorkbenchPane}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
@@ -952,8 +946,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
-                  leasedSessionIds={leasedSessions}
-                  onFocusWorkbenchPane={onFocusWorkbenchPane}
                 />
               )}
             </>

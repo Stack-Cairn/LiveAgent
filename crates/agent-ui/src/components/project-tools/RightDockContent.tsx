@@ -22,13 +22,7 @@ type RightDockContentProps = {
   onTerminalError: (sessionId: string, message: string | null) => void;
   onInitialTerminalSnapshotConsumed: (sessionId: string) => void;
   onCreateTerminal: () => void;
-  /** 被工作台 Pane 租用的会话:视口换成占位,绝不挂载第二个 XTermViewport。 */
-  leasedSessionIds?: ReadonlySet<string>;
-  /** 租用占位上的"聚焦工作台面板"入口;省略时占位只显示文案。 */
-  onFocusWorkbenchPane?: (sessionId: string) => void;
 };
-
-const NO_LEASED_SESSIONS: ReadonlySet<string> = new Set();
 
 export function RightDockContent(props: RightDockContentProps) {
   const {
@@ -43,8 +37,6 @@ export function RightDockContent(props: RightDockContentProps) {
     onTerminalError,
     onInitialTerminalSnapshotConsumed,
     onCreateTerminal,
-    onFocusWorkbenchPane,
-    leasedSessionIds = NO_LEASED_SESSIONS,
   } = props;
   const { t } = useLocale();
   const context = useRightDockToolContext();
@@ -97,32 +89,8 @@ export function RightDockContent(props: RightDockContentProps) {
               const isActiveTerminal =
                 currentActiveTab === "terminal" && activeSession?.id === session.id;
               if (!isActiveTerminal) return null;
-              // 租给工作台 Pane 的会话在这里绝不挂 XTermViewport:同一 PTY 的
-              // 输出流只能有一个消费者,否则 dock 与 Pane 会互相吞字节。tab 仍
-              // 在列表里,只是视口换成"去 Pane"的占位。
-              if (leasedSessionIds.has(session.id)) {
-                return (
-                  <div
-                    key={session.id}
-                    data-project-tools-terminal-leased={session.id}
-                    className="absolute inset-0 flex min-h-0 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
-                      <Terminal className="h-5 w-5" />
-                    </div>
-                    <div>{t("workbench.terminalLeasedPlaceholder")}</div>
-                    {onFocusWorkbenchPane ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onFocusWorkbenchPane(session.id)}
-                      >
-                        {t("workbench.focusPane")}
-                      </Button>
-                    ) : null}
-                  </div>
-                );
-              }
+              // 拖入画板(持有租约)的会话已从 localSessions 隐藏,这里挂载的
+              // 视口必然是该会话的唯一消费者。
               return (
                 <div key={session.id} className="absolute inset-0 min-h-0">
                   <XTermViewport

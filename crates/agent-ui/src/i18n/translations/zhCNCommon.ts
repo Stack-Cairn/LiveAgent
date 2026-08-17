@@ -1225,8 +1225,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.terminalRetry": "重试",
   "workbench.terminalSessionMissing": "该终端会话已不存在",
   "workbench.terminalSshPrompt": "SSH 认证需先在项目工具面板中完成该主机的连接",
-  "workbench.terminalLeasedPlaceholder": "该终端已在工作台面板中打开",
-  "workbench.focusPane": "聚焦工作台面板",
   "workbench.sshStatusConnected": "已连接",
   "workbench.sshStatusReconnecting": "重连中",
   "workbench.sshStatusDisconnected": "已断开",

@@ -10,8 +10,6 @@ import { formatTerminalSessionTitle, type RightDockVisibleTab } from "./rightDoc
 import { getRightDockToolDefinition, type RightDockSingletonTabKind } from "./rightDockRegistry";
 import type { RightDockTabDragProps } from "./useRightDockTabReorder";
 
-const NO_LEASED_SESSIONS: ReadonlySet<string> = new Set();
-
 type RightDockTabStripProps = {
   tabs: RightDockVisibleTab[];
   currentActiveTab: RightDockTabKind;
@@ -22,8 +20,6 @@ type RightDockTabStripProps = {
   activeSession: TerminalSession | null;
   pendingCloseSessionId: string;
   closingSessionIds: ReadonlySet<string>;
-  /** 被工作台 Pane 租用的会话:tab 保留但标记,视口由上层换成占位。 */
-  leasedSessionIds?: ReadonlySet<string>;
   draggingTabId: string;
   renderTabDragHandle: (tabId: string, label: string) => ReactNode;
   getTabDragProps: (tabId: string) => RightDockTabDragProps;
@@ -49,8 +45,6 @@ type RightDockTabStripProps = {
    * session beside the focused workbench pane. Enables the tab context menu.
    */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
-  /** Focuses the pane already holding a leased session (menu + placeholder). */
-  onFocusWorkbenchPane?: (sessionId: string) => void;
 };
 
 // One descriptor per tab regardless of kind, so every tab shares a single
@@ -67,8 +61,6 @@ type DockTabDescriptor = {
   closeTitle: string;
   closeIcon?: ReactNode;
   closeDisabled?: boolean;
-  /** Leased to a workbench pane: the tab dims and its viewport is a placeholder. */
-  isLeased?: boolean;
   /** Context-menu entries; omitted when the host wires no workbench actions. */
   menuItems?: ReactNode;
   /** Overrides the default reorder pointer-down on the tab body (drag-out). */
@@ -105,8 +97,6 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     onCloseTerminalRequest,
     onTerminalTabDragStart,
     onOpenTerminalInWorkbench,
-    onFocusWorkbenchPane,
-    leasedSessionIds = NO_LEASED_SESSIONS,
   } = props;
   const { t } = useLocale();
   // One open menu at a time, keyed by tab id — the strip is a single row, so a
@@ -118,11 +108,9 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
       <div
         key={tab.id}
         data-project-tools-tab-id={tab.id}
-        data-project-tools-tab-leased={tab.isLeased ? "true" : undefined}
         className={cn(
           TAB_BASE_CLASS,
           tab.isActive && "border-border bg-muted text-foreground shadow-sm",
-          tab.isLeased && "opacity-60",
           tab.isPendingClose && "bg-destructive/10 text-destructive hover:bg-destructive/15",
           draggingTabId === tab.id &&
             "z-10 scale-[0.98] cursor-grabbing opacity-80 shadow-md ring-1 ring-ring",
@@ -170,7 +158,6 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
         >
           {tab.icon}
           <span className="min-w-0 truncate">{tab.label}</span>
-          {tab.isLeased ? <Columns2 className="h-3 w-3 shrink-0 text-muted-foreground/70" /> : null}
           {tab.running !== undefined ? (
             <span
               className={cn(
@@ -266,31 +253,21 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
 
         const session = tab.session;
         const isPendingClose = pendingCloseSessionId === session.id;
-        const isLeased = leasedSessionIds.has(session.id);
         const sessionTitle = formatTerminalSessionTitle(
           session.title,
           t("projectTools.terminalTitle"),
         );
-        // A leased session already lives in a pane, so its only workbench
-        // action is "take me there"; docking it again would fight the lease.
-        const menuItems =
-          isLeased && onFocusWorkbenchPane ? (
-            <DropdownMenuItem
-              onSelect={() => onFocusWorkbenchPane(session.id)}
-              className="gap-2 text-xs"
-            >
-              <Columns2 className="h-3.5 w-3.5" />
-              {t("workbench.focusPane")}
-            </DropdownMenuItem>
-          ) : !isLeased && onOpenTerminalInWorkbench ? (
-            <DropdownMenuItem
-              onSelect={() => onOpenTerminalInWorkbench(session)}
-              className="gap-2 text-xs"
-            >
-              <Columns2 className="h-3.5 w-3.5" />
-              {t("workbench.openInSplit")}
-            </DropdownMenuItem>
-          ) : null;
+        // 拖入画板(租约)的会话不在 dock 列表里,这里的 tab 都可自由进入
+        // 工作台;菜单是拖拽之外的键盘/指针等价入口。
+        const menuItems = onOpenTerminalInWorkbench ? (
+          <DropdownMenuItem
+            onSelect={() => onOpenTerminalInWorkbench(session)}
+            className="gap-2 text-xs"
+          >
+            <Columns2 className="h-3.5 w-3.5" />
+            {t("workbench.openInSplit")}
+          </DropdownMenuItem>
+        ) : null;
         return renderDockTab({
           id: session.id,
           label: sessionTitle,
@@ -298,7 +275,6 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           isActive: currentActiveTab === "terminal" && activeSession?.id === session.id,
           running: session.running,
           isPendingClose,
-          isLeased,
           menuItems,
           closeLabel: `${isPendingClose ? t("projectTools.confirmClose") : t("projectTools.close")} ${sessionTitle}`,
           closeTitle: isPendingClose

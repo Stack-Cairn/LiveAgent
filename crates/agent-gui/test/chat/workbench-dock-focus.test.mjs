@@ -9,9 +9,10 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // Dock 位于 Canvas 之外,只做会话列表/工具面板;它既不持有布局命令通路
 // (源码层断言),reducer 也只在显式 FOCUS/OPEN 上改焦点(模型层断言)。
 //
-// 唯一例外(白名单):`onFocusWorkbenchPane` —— dock 里已被 Pane 取走租约的
-// 会话显示占位,占位上的「聚焦工作台面板」是用户显式发起的跳转,语义上等同
-// 于点 Pane 本身。它是页面注入的回调,dock 侧只负责调用,不构造布局命令。
+// 被 Pane 租用的会话从 dock 的终端 tab 中整体隐藏(终端任一时刻只出现在一个
+// 宿主里),因此本地终端路径不再有任何 Pane 焦点入口。唯一保留的白名单是
+// SSH overlay 的 `onSshTerminalFocusLeasedSession`(overlay 的 shell tab 仍以
+// 占位互斥),它同样是页面注入的回调,dock/overlay 侧只调用不构造布局命令。
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -69,21 +70,23 @@ test("dock components hold no workbench layout commands", () => {
   }
 });
 
-test("the leased-session jump is the dock's only focus affordance, and it is host-injected", () => {
-  // 白名单:占位上的「聚焦工作台面板」。dock 侧只调注入的回调,回调体在页面。
-  assert.match(DOCK_SOURCES["RightDockContent.tsx"], /onFocusWorkbenchPane\(session\.id\)/);
-  assert.match(DOCK_SOURCES["RightDockTabStrip.tsx"], /onFocusWorkbenchPane\(session\.id\)/);
-  // 回调是可选 prop:宿主未接线(单 Pane / flag 关闭)时按钮不渲染。
+test("leased sessions are hidden from dock terminal tabs, leaving no focus affordance", () => {
+  // 新语义:拖入画板的会话从 localSessions 整体过滤,dock 里不存在它的 tab、
+  // 视口或跳转按钮;detach 释放租约后自动回归。
   assert.match(
-    DOCK_SOURCES["RightDockContent.tsx"],
-    /onFocusWorkbenchPane\?:\s*\(sessionId: string\) => void/,
+    DOCK_SOURCES["useRightDockSessions.ts"],
+    /!leasedSessionIds\?\.has\(session\.id\)/,
   );
-  assert.match(
-    DOCK_SOURCES["RightDockTabStrip.tsx"],
-    /onFocusWorkbenchPane\?:\s*\(sessionId: string\) => void/,
+  // dock 本地终端路径不再有任何 Pane 焦点回调。
+  assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("onFocusWorkbenchPane"), false);
+  assert.equal(DOCK_SOURCES["RightDockTabStrip.tsx"].includes("onFocusWorkbenchPane"), false);
+  assert.equal(DOCK_SOURCES["RightDockPanel.tsx"].includes("onFocusWorkbenchPane"), false);
+  // leased 标记态随隐藏语义一并退场。
+  assert.equal(DOCK_SOURCES["RightDockTabStrip.tsx"].includes("isLeased"), false);
+  assert.equal(
+    DOCK_SOURCES["RightDockContent.tsx"].includes("terminalLeasedPlaceholder"),
+    false,
   );
-  // 且只挂在「已被 Pane 取走租约」的占位/菜单项上,不在普通标签页点击路径里。
-  assert.match(DOCK_SOURCES["RightDockTabStrip.tsx"], /isLeased && onFocusWorkbenchPane/);
 });
 
 test("dock tab selection routes through dock-local state, never through pane focus", () => {
@@ -94,7 +97,7 @@ test("dock tab selection routes through dock-local state, never through pane foc
   assert.equal(sessions.includes("paneId"), false);
 });
 
-test("ChatPage wires no pane-focus handler into the dock beyond the explicit jump", () => {
+test("ChatPage wires no pane-focus handler into the dock", () => {
   const dockProps = extractJsxProps(chatPageSource, "RightDockPanel");
   // handleWorkbenchFocusPane 是 Canvas 的焦点通路;它不得出现在 dock 属性区。
   assert.equal(
@@ -102,13 +105,13 @@ test("ChatPage wires no pane-focus handler into the dock beyond the explicit jum
     false,
     "RightDockPanel receives the canvas focus handler",
   );
-  // 唯一允许的 Pane 焦点 prop:白名单跳转。(onGitReviewFocusRequest* 是
-  // git 面板内部的滚动/选中请求,与 Pane 焦点无关,故按 "Pane" 过滤。)
+  // 本地终端的 leased 会话已从 dock 隐藏,不再存在任何 Pane 焦点 prop。
+  // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点
+  // 无关,故按 "Pane" 过滤。)
   const paneFocusProps = [...dockProps.matchAll(/\bon[A-Za-z]*Focus[A-Za-z]*Pane[A-Za-z]*=/g)].map(
     (match) => match[0],
   );
-  assert.deepEqual(paneFocusProps, ["onFocusWorkbenchPane="]);
-  assert.match(dockProps, /onFocusWorkbenchPane=\{[^}]*focusWorkbenchTerminalPane[^}]*\}/);
+  assert.deepEqual(paneFocusProps, []);
 });
 
 test("the explicit jump only focuses a pane that actually holds the session's lease", () => {

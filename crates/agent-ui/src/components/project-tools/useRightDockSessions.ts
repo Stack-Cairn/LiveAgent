@@ -82,18 +82,20 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     () =>
       sessions.filter(
         (session) =>
-          session.kind !== "ssh" && terminalSessionBelongsToProject(session, projectPathKey),
+          session.kind !== "ssh" &&
+          terminalSessionBelongsToProject(session, projectPathKey) &&
+          // 拖入画板(持有租约)的会话从 dock 消失,detach 释放租约后自动回归:
+          // 终端在任一时刻只出现在一个宿主里。
+          !leasedSessionIds?.has(session.id),
       ),
-    [projectPathKey, sessions],
+    [leasedSessionIds, projectPathKey, sessions],
   );
   const sshSessions = useMemo(
     () => sessions.filter((session) => session.kind === "ssh"),
     [sessions],
   );
-  // Same treatment for both kinds: the session stays in its list and carries a
-  // leased marker. Local tabs and the SSH overlay each swap their viewport for
-  // a "go to the pane" placeholder, which is what keeps the stream single-
-  // consumer — nothing here removes a session from view.
+  // SSH overlay 仍需要租约集合做自己的视口互斥(shell tab 占位),这里只
+  // 收敛为"仍存活的租用会话"交给 overlay 消费。
   const leasedSessions = useMemo<ReadonlySet<string>>(() => {
     if (!leasedSessionIds || leasedSessionIds.size === 0) return EMPTY_LEASED_SESSIONS;
     const live = new Set<string>();
