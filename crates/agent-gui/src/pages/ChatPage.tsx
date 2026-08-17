@@ -16,6 +16,7 @@ import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
+import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -107,6 +108,7 @@ import {
 } from "./chat";
 import type { ChatPageProps } from "./chat/chatPageTypes";
 import { CurrentTaskProgress } from "./chat/components/CurrentTaskProgress";
+import { DesktopCheckpointRewindProvider } from "./chat/components/DesktopCheckpointRewindProvider";
 import { PendingToolApprovalBar } from "./chat/components/PendingToolApprovalBar";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
@@ -156,7 +158,7 @@ export function ChatPage(props: ChatPageProps) {
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const initialConversationRef = useRef(createConversationIdentity());
   const initialConversationStateRef = useRef(createConversationStateFromContext(context));
 
@@ -1735,12 +1737,14 @@ export function ChatPage(props: ChatPageProps) {
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
           trailingActions={
-            <ProjectToolsPanelToggle
-              isOpen={rightDockOpen}
-              sessionCount={projectTerminalSessions.length}
-              disabledMessage={terminalDisabledMessage}
-              onToggle={() => setRightDockOpen((open) => !open)}
-            />
+            <>
+              <ProjectToolsPanelToggle
+                isOpen={rightDockOpen}
+                sessionCount={projectTerminalSessions.length}
+                disabledMessage={terminalDisabledMessage}
+                onToggle={() => setRightDockOpen((open) => !open)}
+              />
+            </>
           }
           overlay={<NotifyToast items={notifyItems} onDismiss={dismissNotify} />}
         />
@@ -1817,38 +1821,58 @@ export function ChatPage(props: ChatPageProps) {
                 conversationId={currentConversationId}
                 transcript={
                   <ChangedFilesActionsProvider value={changedFilesActions}>
-                    <ChatTranscript
+                    <DesktopCheckpointRewindProvider
                       conversationId={currentConversationId}
                       workspaceRoot={currentConversationWorkspaceRoot}
-                      gitClient={tauriGitClient}
-                      followRef={scrollFollowRef}
-                      hasModels={hasModels}
-                      historyItems={transcriptItems}
-                      hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                      onLoadEarlierHistory={handleLoadEarlierHistory}
-                      isHistorySwitching={conversationOpenState.showOverlay}
-                      isSending={isSending}
-                      isAgentMode={isAgentMode}
-                      showUsage={isAgentDevExecutionMode}
-                      usageContextWindow={currentModelContextWindow}
-                      liveTranscriptStore={liveTranscriptStore}
-                      isCompactionRunning={isCompactionRunning}
-                      bottomReservePx={composerOverlayHeight}
-                      contentWidth={settings.customSettings.chatTranscript.width}
-                      onContentWidthChange={handleChatTranscriptWidthChange}
-                      onOpenFileLink={handleOpenChatFileLink}
-                      onResendFromEdit={handleResendFromEdit}
-                      onBranchConversation={
-                        // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
-                        isConversationHydrating || isConversationHydrationFailed
-                          ? undefined
-                          : handleBranchConversation
-                      }
-                      branchPendingMessageId={branchPendingMessageId}
-                      onOpenSettings={onOpenSettings}
-                      onSuggestionSelect={handleEmptyStateSuggestion}
-                      suggestionsDisabled={isSuggestionTyping}
-                    />
+                      project={activeWorkspaceProject}
+                      disabled={!currentConversationId || isSending}
+                      onRewound={(info) => {
+                        // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
+                        // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+                        //
+                        // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
+                        // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
+                        // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
+                        // 那要改写已落库的摘要才能修,不在本功能范围内。
+                        const notice = formatCheckpointRewoundNotification(
+                          info,
+                          locale === "zh-CN",
+                        );
+                        addNotify(notice.level, notice.message);
+                      }}
+                    >
+                      <ChatTranscript
+                        conversationId={currentConversationId}
+                        workspaceRoot={currentConversationWorkspaceRoot}
+                        gitClient={tauriGitClient}
+                        followRef={scrollFollowRef}
+                        hasModels={hasModels}
+                        historyItems={transcriptItems}
+                        hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                        onLoadEarlierHistory={handleLoadEarlierHistory}
+                        isHistorySwitching={conversationOpenState.showOverlay}
+                        isSending={isSending}
+                        isAgentMode={isAgentMode}
+                        showUsage={isAgentDevExecutionMode}
+                        usageContextWindow={currentModelContextWindow}
+                        liveTranscriptStore={liveTranscriptStore}
+                        isCompactionRunning={isCompactionRunning}
+                        bottomReservePx={composerOverlayHeight}
+                        contentWidth={settings.customSettings.chatTranscript.width}
+                        onContentWidthChange={handleChatTranscriptWidthChange}
+                        onOpenFileLink={handleOpenChatFileLink}
+                        onResendFromEdit={handleResendFromEdit}
+                        onBranchConversation={
+                          isConversationHydrating || isConversationHydrationFailed
+                            ? undefined
+                            : handleBranchConversation
+                        }
+                        branchPendingMessageId={branchPendingMessageId}
+                        onOpenSettings={onOpenSettings}
+                        onSuggestionSelect={handleEmptyStateSuggestion}
+                        suggestionsDisabled={isSuggestionTyping}
+                      />
+                    </DesktopCheckpointRewindProvider>
                   </ChangedFilesActionsProvider>
                 }
                 composer={

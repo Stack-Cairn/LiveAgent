@@ -249,6 +249,7 @@ export type RunAgentConversationTurnParams = {
   /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
   taskStateStore: TaskStateStore;
   conversationId: string;
+  checkpointTurnId?: string;
   conversationCwd?: string;
   fallbackTitle: string;
   createdAt: number;
@@ -320,6 +321,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sessionId,
     taskStateStore,
     conversationId,
+    checkpointTurnId,
     conversationCwd,
     fallbackTitle,
     createdAt,
@@ -505,6 +507,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       : undefined,
     taskStateStore,
     askUserQuestionConversationId: conversationId,
+    checkpoint: {
+      conversationId,
+      turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
+    },
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
     skillAccessPolicy,

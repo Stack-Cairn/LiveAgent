@@ -64,6 +64,7 @@ message GatewayEnvelope {
     HistorySetCwdRequest history_set_cwd = 95;
     WorkspaceRootGrantsRequest workspace_root_grants = 96;
     ImportDirectoryRequest import_directory = 97;
+    CheckpointRequest checkpoint = 98;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -141,6 +142,7 @@ message AgentEnvelope {
     HistorySetCwdResponse history_set_cwd_resp = 100;
     WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
     ImportDirectoryResponse import_directory_resp = 102;
+    CheckpointResponse checkpoint_resp = 103;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1387,4 +1389,22 @@ message WorkspaceRootGrantsRequest {
 
 message WorkspaceRootGrantsResponse {
   repeated WorkspaceRootGrant grants = 1;
+}
+
+message CheckpointExpectedEntry {
+  string key = 1;
+  string current_hash = 2;
+}
+
+message CheckpointRequest {
+  string action = 1; // "list" | "diff" | "rewind"
+  string conversation_id = 2;
+  uint64 turn_seq = 3;
+  repeated string authorized_roots = 4;
+  repeated CheckpointExpectedEntry expected = 5;
+}
+
+message CheckpointResponse {
+  string action = 1;
+  string result_json = 2;
 }

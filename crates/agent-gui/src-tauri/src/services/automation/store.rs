@@ -68,6 +68,12 @@ enum CronMutationEffect {
     Changed,
 }
 
+/// How long a queued prompt run may sit unclaimed before the sweep expires
+/// it. The task's own `timeout_seconds` only starts counting at claim time,
+/// so queue latency (webview reload, slow startup) never eats into the
+/// execution budget.
+pub const PROMPT_PENDING_CLAIM_WINDOW_MS: i64 = 10 * 60_000;
+
 pub enum PromptQueueOutcome {
     Queued,
     SkippedActiveRun,
@@ -96,6 +102,32 @@ impl AutomationStore {
             conn: Mutex::new(conn),
             notifier: Mutex::new(None),
         })
+    }
+
+    /// Test-only: read a run's lease deadline column (not exposed via any
+    /// public API).
+    #[cfg(test)]
+    pub fn debug_run_lease(&self, execution_id: &str) -> Result<Option<i64>, String> {
+        let conn = self.lock_conn()?;
+        conn.query_row(
+            "SELECT lease_expires_at FROM automation_cron_runs WHERE execution_id = ?1",
+            params![execution_id],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// Test-only: force a run's lease deadline so sweeps can be exercised
+    /// without waiting.
+    #[cfg(test)]
+    pub fn debug_set_run_lease(&self, execution_id: &str, lease_expires_at: i64) -> Result<(), String> {
+        let conn = self.lock_conn()?;
+        conn.execute(
+            "UPDATE automation_cron_runs SET lease_expires_at = ?2 WHERE execution_id = ?1",
+            params![execution_id, lease_expires_at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     pub fn set_notifier(&self, notifier: AutomationNotifier) {
@@ -389,8 +421,10 @@ impl AutomationStore {
                 provider_id,
                 model,
                 started_at,
-                lease_expires_at: started_at
-                    + (task.timeout_seconds.max(1) as i64).saturating_mul(1_000),
+                // Fixed claim window while pending; re-stamped from the
+                // timeout snapshot when a runner claims the row.
+                lease_expires_at: started_at + PROMPT_PENDING_CLAIM_WINDOW_MS,
+                timeout_seconds: task.timeout_seconds.max(1),
                 counted,
                 workdir: workdir.to_string(),
                 reasoning: task.reasoning.clone().unwrap_or_default(),
@@ -422,7 +456,10 @@ impl AutomationStore {
     }
 
     /// Atomically claim all pending prompt runs (pending -> leased). Overdue
-    /// runs are expired in the same pass instead of being handed out.
+    /// runs are expired in the same pass instead of being handed out. The
+    /// execution lease starts here: each claimed row is re-stamped to
+    /// `now + timeout_seconds` (column and request_json together), so queue
+    /// latency never counts against the task's execution budget.
     pub fn claim_prompt_runs(&self) -> Result<Vec<PromptRunRequest>, String> {
         self.sweep_expired_prompt_runs()?;
 
@@ -451,10 +488,17 @@ impl AutomationStore {
                     }
                 }
             }
-            for request in &claims {
+            let now = db::now_ms();
+            for request in &mut claims {
+                request.lease_expires_at =
+                    now + (request.timeout_seconds.max(1) as i64).saturating_mul(1_000);
+                let request_json = serde_json::to_string(request)
+                    .map_err(|e| format!("序列化 prompt run 请求失败：{e}"))?;
                 tx.execute(
-                    "UPDATE automation_cron_runs SET state = 'leased' WHERE execution_id = ?1",
-                    params![request.execution_id],
+                    "UPDATE automation_cron_runs
+                     SET state = 'leased', lease_expires_at = ?2, request_json = ?3
+                     WHERE execution_id = ?1",
+                    params![request.execution_id, request.lease_expires_at, request_json],
                 )
                 .map_err(|e| format!("租约 prompt run 失败：{e}"))?;
             }
@@ -467,14 +511,19 @@ impl AutomationStore {
     }
 
     /// Return a claimed-but-never-started run to the pending queue (e.g. the
-    /// claiming webview unmounted before executing).
+    /// claiming webview unmounted before executing). Re-stamps a fresh claim
+    /// window on the column; the stale lease inside request_json is harmless
+    /// because a claim always re-stamps before handing the row out.
     pub fn release_prompt_run(&self, execution_id: &str) -> Result<(), String> {
         let released = {
             let conn = self.lock_conn()?;
             conn.execute(
-                "UPDATE automation_cron_runs SET state = 'pending'
+                "UPDATE automation_cron_runs SET state = 'pending', lease_expires_at = ?2
                  WHERE execution_id = ?1 AND state = 'leased'",
-                params![execution_id.trim()],
+                params![
+                    execution_id.trim(),
+                    db::now_ms() + PROMPT_PENDING_CLAIM_WINDOW_MS
+                ],
             )
             .map_err(|e| format!("释放 prompt run 失败：{e}"))?
         };
@@ -579,13 +628,20 @@ impl AutomationStore {
 
     /// Expire pending/leased prompt runs whose deadline passed. Emits
     /// `automation:prompt-expired` per run so an in-flight frontend
-    /// execution aborts.
+    /// execution aborts. Pending rows expired here never started executing
+    /// (no runner claimed them), so they get a distinct message.
     pub fn sweep_expired_prompt_runs(&self) -> Result<Vec<PromptExpiredEvent>, String> {
-        self.expire_prompt_runs_where(
-            "state IN ('pending', 'leased') AND lease_expires_at IS NOT NULL AND lease_expires_at < ?1",
+        let mut events = self.expire_prompt_runs_where(
+            "state = 'pending' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?1",
+            params![db::now_ms()],
+            "Auto Prompt run expired before any runner claimed it.",
+        )?;
+        events.extend(self.expire_prompt_runs_where(
+            "state = 'leased' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?1",
             params![db::now_ms()],
             "Auto Prompt run timed out before the front-end completed it.",
-        )
+        )?);
+        Ok(events)
     }
 
     /// Startup recovery: any queued/leased run from a previous process is

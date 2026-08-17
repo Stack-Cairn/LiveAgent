@@ -82,6 +82,10 @@ pub struct SubagentWorktreeStatusInput {
 pub struct SubagentWorktreeApplyInput {
     pub parent_workdir: String,
     pub worktree_root: String,
+    /// 会话检查点上下文:apply 修改父工作区前对受影响路径捕获父侧前像。
+    /// 缺省(None)不捕获。worktree 子代理自身的临时工作区不参与检查点,
+    /// 只有合并回父工作区这一步才是可回退的真实变更。
+    pub checkpoint: Option<super::checkpoint::CheckpointCtx>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -722,6 +726,7 @@ fn run_git_apply_3way(cwd: &Path, patch: &str) -> Result<(), String> {
 fn apply_worktree_changes_blocking(
     parent_workdir: String,
     worktree_root: String,
+    checkpoint: Option<super::checkpoint::CheckpointCtx>,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
     let parent_workdir = canonicalize_existing_dir(&parent_workdir, "parentWorkdir")?;
     let worktree_root = canonicalize_existing_dir(&worktree_root, "worktreeRoot")?;
@@ -798,24 +803,52 @@ fn apply_worktree_changes_blocking(
         });
     }
 
+    // 在父仓库被任何 apply 路径(git apply / 3way / 文件拷贝兜底)修改之前,
+    // 对受影响路径捕获父工作区前像。捕获记在父仓库根下,rewind 才能恢复
+    // 真实工作区,而不是已被清理的 worktree 临时目录。
+    //
+    // 必须放在 empty_patch 提前返回之后:那条路径下父仓库一个字节都没动,
+    // 提前捕获会给未来的回退留下一批 existed_before=false 的记录,回退时
+    // 反而把父工作区里本来就存在的文件删掉。
+    // 捕获缺口先攒着,不立刻记账:此刻还不知道 apply 会不会真的改动父工作
+    // 区。already_applied / fallback_noop 下父仓库一个字节没动,那时把缺口
+    // 写成 error 记录,会让一个什么都没发生的轮次在 UI 上标 ⚠"回退可能不
+    // 完整"。所以只在确认 apply 生效的分支上落账。
+    let capture_skips = super::checkpoint::capture_worktree_apply_pre_images(
+        checkpoint.as_ref(),
+        &parent_repo_root,
+        &apply_paths,
+    );
+    let record_skips = || {
+        super::checkpoint::record_worktree_capture_skips(
+            checkpoint.as_ref(),
+            &parent_repo_root,
+            &capture_skips,
+        );
+    };
+
     let direct_apply_result = run_git_apply_with_options(&parent_repo_root, &patch, &[]);
 
     match direct_apply_result {
-        Ok(_) => Ok(SubagentWorktreeApplyResponse {
-            applied: true,
-            changed: true,
-            status,
-            patch_bytes,
-            skipped_reason: None,
-            apply_method: Some("git_apply".to_string()),
-            fallback_reason: None,
-            copied_files: Vec::new(),
-            deleted_files: Vec::new(),
-            conflict_files: Vec::new(),
-        }),
+        Ok(_) => {
+            record_skips();
+            Ok(SubagentWorktreeApplyResponse {
+                applied: true,
+                changed: true,
+                status,
+                patch_bytes,
+                skipped_reason: None,
+                apply_method: Some("git_apply".to_string()),
+                fallback_reason: None,
+                copied_files: Vec::new(),
+                deleted_files: Vec::new(),
+                conflict_files: Vec::new(),
+            })
+        }
         Err(apply_error) => {
             let three_way_apply_result = run_git_apply_3way(&parent_repo_root, &patch);
             if three_way_apply_result.is_ok() {
+                record_skips();
                 return Ok(SubagentWorktreeApplyResponse {
                     applied: true,
                     changed: true,
@@ -837,6 +870,11 @@ fn apply_worktree_changes_blocking(
                 &worktree_root,
                 &apply_paths,
             )
+            .inspect_err(|_| {
+                // 兜底中途失败:已拷/已删的路径是真改过的,缺口必须落账,
+                // 否则那一轮会显示成"完整"。
+                record_skips();
+            })
             .map_err(|fallback_error| {
                 format!(
                     "git apply failed: {apply_error}; git apply --3way failed: {three_way_error}; file copy fallback failed:\n{fallback_error}"
@@ -844,6 +882,11 @@ fn apply_worktree_changes_blocking(
             })?;
             let copied_or_deleted =
                 !fallback.copied_files.is_empty() || !fallback.deleted_files.is_empty();
+            // 只有真改过父工作区才记捕获缺口;already_applied / fallback_noop
+            // 什么都没动,记了就是误报。
+            if copied_or_deleted {
+                record_skips();
+            }
             Ok(SubagentWorktreeApplyResponse {
                 applied: copied_or_deleted,
                 changed: true,
@@ -1154,7 +1197,7 @@ pub async fn subagent_worktree_apply(
     input: SubagentWorktreeApplyInput,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        apply_worktree_changes_blocking(input.parent_workdir, input.worktree_root)
+        apply_worktree_changes_blocking(input.parent_workdir, input.worktree_root, input.checkpoint)
     })
     .await
     .map_err(|err| format!("subagent_worktree_apply join failed: {err}"))?
@@ -1261,7 +1304,7 @@ mod tests {
         )
         .map_err(|err| format!("failed to write worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("git_apply"));
         assert_eq!(
@@ -1292,7 +1335,7 @@ mod tests {
         fs::write(repo.join("test/agent.md"), content)
             .map_err(|err| format!("failed to write parent file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(!result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("file_copy_fallback"));
         assert_eq!(result.skipped_reason.as_deref(), Some("already_applied"));
@@ -1322,7 +1365,7 @@ mod tests {
         fs::remove_file(worktree.join("obsolete.md"))
             .map_err(|err| format!("failed to delete worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("obsolete.md").exists());
 
@@ -1347,7 +1390,7 @@ mod tests {
         fs::rename(worktree.join("docs/old.md"), worktree.join("docs/new.md"))
             .map_err(|err| format!("failed to rename worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))?;
+        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("docs/old.md").exists());
         assert_eq!(
@@ -1380,7 +1423,7 @@ mod tests {
         git(&repo, &["add", "file.txt"])?;
         git(&repo, &["commit", "-m", "parent update"])?;
 
-        let error = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree))
+        let error = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)
             .expect_err("conflicting 3-way apply should fail");
         assert!(error.contains("git apply --3way failed"));
         assert_eq!(

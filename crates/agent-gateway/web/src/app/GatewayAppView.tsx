@@ -16,6 +16,12 @@ import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDock
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
+import {
+  type CheckpointRewindClient,
+  CheckpointRewindProvider,
+  type CheckpointRewoundInfo,
+  formatCheckpointRewoundNotification,
+} from "@liveagent/ui/lib/chat/checkpointRewind";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
@@ -25,7 +31,7 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import { type CSSProperties, useCallback } from "react";
+import { type CSSProperties, useCallback, useMemo } from "react";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
   getNextTheme,
@@ -306,6 +312,48 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
     [setSettings],
   );
+  const resolveCheckpointAuthorizedRoots = useCallback(async () => {
+    const roots: string[] = [];
+    const push = (value?: string | null) => {
+      const normalized = value?.trim();
+      if (normalized && !roots.includes(normalized)) roots.push(normalized);
+    };
+    push(displayedConversationWorkdir);
+    if (
+      activeWorkspaceProject &&
+      activeWorkspaceProjectPath &&
+      activeWorkspaceProjectPath === displayedConversationWorkdir
+    ) {
+      try {
+        const grants = await api.listWorkspaceRootGrants(
+          activeWorkspaceProject.id,
+          activeWorkspaceProject.path,
+        );
+        for (const grant of grants) {
+          if (grant.state === "active" && grant.access === "write") push(grant.canonicalPath);
+        }
+      } catch {
+        // Keep the primary root when additional grant lookup fails.
+      }
+    }
+    return roots;
+  }, [activeWorkspaceProject, activeWorkspaceProjectPath, api, displayedConversationWorkdir]);
+  const checkpointClient = useMemo<CheckpointRewindClient>(
+    () => ({
+      list: (conversationId) => api.listCheckpointTurns(conversationId),
+      preview: (params) => api.previewCheckpointRewind(params),
+      rewind: (params) => api.rewindCheckpoint(params),
+    }),
+    [api],
+  );
+
+  const handleCheckpointRewound = useCallback(
+    (info: CheckpointRewoundInfo) => {
+      const notice = formatCheckpointRewoundNotification(info, settings.locale === "zh-CN");
+      addNotify(notice.level, notice.message);
+    },
+    [addNotify, settings.locale],
+  );
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
@@ -533,42 +581,50 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             className="gateway-transcript-scroll"
                           >
                             <ChangedFilesActionsProvider value={changedFilesActions}>
-                              <GatewayTranscript
+                              <CheckpointRewindProvider
+                                client={checkpointClient}
                                 conversationId={displayedConversationId}
-                                rows={transcriptRows}
-                                liveStartIndex={transcriptLiveStartIndex}
-                                activeTurnKey={displayedTranscript.activeTurnKey}
-                                contentWidth={settings.customSettings.chatTranscript.width}
-                                isViewportFollowing={transcriptFollow.isFollowing}
-                                viewportFollowing={transcriptFollowing}
-                                navRef={transcriptNavRef}
-                                onAnchorUserRowChange={setActiveFloorKey}
-                                error={transcriptError}
-                                toolStatus={transcriptToolStatus}
-                                toolStatusIsCompaction={transcriptToolStatusIsCompaction}
-                                retryAttempts={displayedTranscript.retryAttempts}
-                                isStreaming={transcriptBusy}
-                                isLoading={transcriptHistoryLoading}
-                                loadingTitle={historyDetailLoadingTitle}
-                                hasModels={modelOptions.length > 0}
-                                onOpenSettings={openSettings}
-                                hasMoreHistory={selectedHistoryHasMore}
-                                isLoadingMoreHistory={loadingOlderHistory}
-                                onLoadEarlierHistory={
-                                  selectedHistoryHasMore ? handleLoadEarlierHistory : undefined
-                                }
-                                showUsage={isAgentDevExecutionMode}
-                                usageContextWindow={currentModelContextWindow}
-                                workspaceRoot={displayedConversationWorkdir}
-                                onOpenFileLink={handleOpenChatFileLink}
-                                gitClient={gitClient}
-                                onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
-                                onResendFromEdit={handleResendFromEdit}
-                                onBranchConversation={handleBranchConversation}
-                                branchPendingMessageId={branchPendingMessageId}
-                                onSuggestionSelect={handleEmptyStateSuggestion}
-                                suggestionsDisabled={isSuggestionTyping}
-                              />
+                                disabled={!displayedConversationId || transcriptBusy}
+                                resolveAuthorizedRoots={resolveCheckpointAuthorizedRoots}
+                                onRewound={handleCheckpointRewound}
+                              >
+                                <GatewayTranscript
+                                  conversationId={displayedConversationId}
+                                  rows={transcriptRows}
+                                  liveStartIndex={transcriptLiveStartIndex}
+                                  activeTurnKey={displayedTranscript.activeTurnKey}
+                                  contentWidth={settings.customSettings.chatTranscript.width}
+                                  isViewportFollowing={transcriptFollow.isFollowing}
+                                  viewportFollowing={transcriptFollowing}
+                                  navRef={transcriptNavRef}
+                                  onAnchorUserRowChange={setActiveFloorKey}
+                                  error={transcriptError}
+                                  toolStatus={transcriptToolStatus}
+                                  toolStatusIsCompaction={transcriptToolStatusIsCompaction}
+                                  retryAttempts={displayedTranscript.retryAttempts}
+                                  isStreaming={transcriptBusy}
+                                  isLoading={transcriptHistoryLoading}
+                                  loadingTitle={historyDetailLoadingTitle}
+                                  hasModels={modelOptions.length > 0}
+                                  onOpenSettings={openSettings}
+                                  hasMoreHistory={selectedHistoryHasMore}
+                                  isLoadingMoreHistory={loadingOlderHistory}
+                                  onLoadEarlierHistory={
+                                    selectedHistoryHasMore ? handleLoadEarlierHistory : undefined
+                                  }
+                                  showUsage={isAgentDevExecutionMode}
+                                  usageContextWindow={currentModelContextWindow}
+                                  workspaceRoot={displayedConversationWorkdir}
+                                  onOpenFileLink={handleOpenChatFileLink}
+                                  gitClient={gitClient}
+                                  onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
+                                  onResendFromEdit={handleResendFromEdit}
+                                  onBranchConversation={handleBranchConversation}
+                                  branchPendingMessageId={branchPendingMessageId}
+                                  onSuggestionSelect={handleEmptyStateSuggestion}
+                                  suggestionsDisabled={isSuggestionTyping}
+                                />
+                              </CheckpointRewindProvider>
                             </ChangedFilesActionsProvider>
                           </ScrollArea>
                           <TranscriptWidthControls

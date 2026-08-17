@@ -776,7 +776,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronRemainingExecutionsEditRequired":
     "Run count is exhausted. Edit this task and change the run count first.",
   "settings.cronTimeoutSeconds": "Timeout (seconds)",
-  "settings.cronTimeoutSecondsInvalid": "Timeout must be an integer between 1 and 600 seconds.",
+  "settings.cronTimeoutSecondsInvalid":
+    "Timeout must be an integer between {min} and {max} seconds.",
+  "settings.cronTimeoutSecondsMaxHint": "Up to {max} seconds for this task type.",
   "settings.cronTimeoutSecondsUnitShort": "s",
   "settings.cronTaskType": "Task Type",
   "settings.cronTypeBash": "Shell Script",

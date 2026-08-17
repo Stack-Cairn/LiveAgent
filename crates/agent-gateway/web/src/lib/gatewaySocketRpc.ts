@@ -60,6 +60,9 @@ import {
   type ChatCommandUpdateListener,
   type ChatFileOpenResponse,
   type ChatQueueListener,
+  type CheckpointDiffStats,
+  type CheckpointRewindResult,
+  type CheckpointTurnSummary,
   type FsCreateDirResponse,
   type FsDeleteResponse,
   type FsListDirsResponse,
@@ -1109,6 +1112,38 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   async revokeWorkspaceRootGrants(projectId: string): Promise<void> {
     await this.request<GatewayWorkspaceRootGrantsResponse>("workspace_root_grants.revoke", {
       project_id: projectId,
+    });
+  }
+
+  async listCheckpointTurns(conversationId: string): Promise<CheckpointTurnSummary[]> {
+    return this.requestWithRecovery<CheckpointTurnSummary[]>("checkpoint.list", {
+      conversation_id: conversationId,
+    });
+  }
+
+  async previewCheckpointRewind(params: {
+    conversationId: string;
+    turnSeq: number;
+    authorizedRoots: string[];
+  }): Promise<CheckpointDiffStats> {
+    return this.request<CheckpointDiffStats>("checkpoint.diff", {
+      conversation_id: params.conversationId,
+      turn_seq: params.turnSeq,
+      authorized_roots: params.authorizedRoots,
+    });
+  }
+
+  async rewindCheckpoint(params: {
+    conversationId: string;
+    turnSeq: number;
+    authorizedRoots: string[];
+    expected: { key: string; currentHash: string }[];
+  }): Promise<CheckpointRewindResult> {
+    return this.request<CheckpointRewindResult>("checkpoint.rewind", {
+      conversation_id: params.conversationId,
+      turn_seq: params.turnSeq,
+      authorized_roots: params.authorizedRoots,
+      expected: params.expected,
     });
   }
 

@@ -1167,6 +1167,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       // this message can anchor its rebase without a history round-trip.
       messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
     });
+    if (effectiveIsAgentMode) {
+      try {
+        await invoke("checkpoint_begin_turn", {
+          conversation_id: conversationId,
+          turn_id: pendingUserMessage.id,
+        });
+      } catch (error) {
+        console.warn("checkpoint turn boundary failed", error);
+      }
+    }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
@@ -1621,6 +1631,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             taskStateStore,
             conversationId,
+            checkpointTurnId: pendingUserMessage.id,
             conversationCwd,
             fallbackTitle,
             createdAt,
