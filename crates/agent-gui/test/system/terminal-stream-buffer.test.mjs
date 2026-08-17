@@ -127,3 +127,92 @@ test("terminal stream buffer restores failed input for a later reconnect", async
   assert.deepEqual(delivered, [[6, 7, 8]]);
   buffer.dispose();
 });
+
+function resizeBuffer(sendResize) {
+  const resizes = [];
+  const buffer = new TerminalStreamBuffer(snapshot(), {
+    initialTransportReady: true,
+    async sendInput() {},
+    async sendResize(resize) {
+      resizes.push(resize);
+      await sendResize?.(resize, resizes.length);
+    },
+  });
+  return { buffer, resizes };
+}
+
+test("terminal stream buffer skips a resize that repeats the last sent size", async () => {
+  const { buffer, resizes } = resizeBuffer();
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.deepEqual(resizes, [{ cols: 100, rows: 40 }]);
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.deepEqual(resizes, [{ cols: 100, rows: 40 }]);
+
+  buffer.resize(100, 41);
+  await delay(30);
+  assert.deepEqual(resizes, [
+    { cols: 100, rows: 40 },
+    { cols: 100, rows: 41 },
+  ]);
+
+  buffer.dispose();
+});
+
+test("terminal stream buffer resends an unchanged size after resendCurrentResize", async () => {
+  const { buffer, resizes } = resizeBuffer();
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.equal(resizes.length, 1);
+
+  buffer.resendCurrentResize();
+  await delay(30);
+  assert.deepEqual(resizes, [
+    { cols: 100, rows: 40 },
+    { cols: 100, rows: 40 },
+  ]);
+
+  buffer.dispose();
+});
+
+test("terminal stream buffer resends an unchanged size after the transport drops", async () => {
+  const { buffer, resizes } = resizeBuffer();
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.equal(resizes.length, 1);
+
+  buffer.markTransportDown();
+  buffer.markTransportReady();
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.deepEqual(resizes, [
+    { cols: 100, rows: 40 },
+    { cols: 100, rows: 40 },
+  ]);
+
+  buffer.dispose();
+});
+
+test("terminal stream buffer retries the same size after a failed resize send", async () => {
+  const { buffer, resizes } = resizeBuffer(async (_resize, attempt) => {
+    if (attempt === 1) throw new Error("resize failed");
+  });
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.equal(resizes.length, 1);
+
+  buffer.resize(100, 40);
+  await delay(30);
+  assert.deepEqual(resizes, [
+    { cols: 100, rows: 40 },
+    { cols: 100, rows: 40 },
+  ]);
+
+  buffer.dispose();
+});

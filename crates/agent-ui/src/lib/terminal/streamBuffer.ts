@@ -40,6 +40,7 @@ export class TerminalStreamBuffer implements TerminalStreamHandle {
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private currentResize: TerminalResize | null = null;
   private latestResize: TerminalResize | null = null;
+  private lastSentResize: TerminalResize | null = null;
   private inputPausedReason: TerminalStreamInputState["reason"] | null = null;
 
   constructor(
@@ -132,6 +133,7 @@ export class TerminalStreamBuffer implements TerminalStreamHandle {
 
   markTransportDown() {
     this.transportReady = false;
+    this.lastSentResize = null;
     this.pauseInput("offline");
   }
 
@@ -145,6 +147,7 @@ export class TerminalStreamBuffer implements TerminalStreamHandle {
 
   resendCurrentResize() {
     if (this.disposed || !this.transportReady || !this.currentResize) return;
+    this.lastSentResize = null;
     this.latestResize = this.currentResize;
     this.flushResize();
   }
@@ -217,9 +220,18 @@ export class TerminalStreamBuffer implements TerminalStreamHandle {
     const latest = this.latestResize;
     this.latestResize = null;
     if (!latest) return;
-    void this.options
-      .sendResize(latest, this)
-      .catch((error: unknown) => this.options.onResizeSendError?.(error, latest, this));
+    if (
+      this.lastSentResize &&
+      this.lastSentResize.cols === latest.cols &&
+      this.lastSentResize.rows === latest.rows
+    ) {
+      return;
+    }
+    this.lastSentResize = latest;
+    void this.options.sendResize(latest, this).catch((error: unknown) => {
+      if (this.lastSentResize === latest) this.lastSentResize = null;
+      this.options.onResizeSendError?.(error, latest, this);
+    });
   }
 
   private scheduleOfflineInputRetry() {
