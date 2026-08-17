@@ -19,6 +19,7 @@ import {
   type RawTerminalSshLatency,
 } from "@liveagent/ui/lib/terminal/normalization";
 import { TerminalStreamBuffer } from "@liveagent/ui/lib/terminal/streamBuffer";
+import { createTerminalStreamHandleRegistry } from "@liveagent/ui/lib/terminal/streamHandleRegistry";
 import type {
   TerminalClient,
   TerminalEvent,
@@ -32,7 +33,9 @@ type TerminalEventListener = (event: TerminalEvent) => void;
 
 const globalTerminalListeners = new Set<TerminalEventListener>();
 let globalListenerStarted = false;
-const globalTerminalStreamHandles = new Set<TauriTerminalStreamHandle>();
+// 输出流按 sessionId 分桶派发（O(1)），画板多终端 Pane 并列后 handle 数量
+// 上升，避免每个输出事件线性扫全部 handle。
+const globalTerminalStreamHandles = createTerminalStreamHandleRegistry<TauriTerminalStreamHandle>();
 let globalStreamListenerStarted = false;
 
 function ensureGlobalTerminalListener() {
@@ -53,9 +56,7 @@ function ensureGlobalTerminalStreamListener() {
   void listen<RawTerminalStreamEvent>("terminal:stream", (event) => {
     const chunk = normalizeStreamEvent(event.payload);
     if (!chunk) return;
-    for (const handle of globalTerminalStreamHandles) {
-      handle.accept(chunk);
-    }
+    globalTerminalStreamHandles.dispatch(chunk);
   });
 }
 
@@ -119,6 +120,8 @@ function normalizeBytes(value: unknown): Uint8Array {
 }
 
 class TauriTerminalStreamHandle extends TerminalStreamBuffer {
+  readonly sessionId: string;
+
   constructor(snapshot: TerminalStreamSnapshot, sessionId: string) {
     super(snapshot, {
       initialTransportReady: true,
@@ -137,11 +140,12 @@ class TauriTerminalStreamHandle extends TerminalStreamBuffer {
       },
       onInputSendError: (_error, _bytes, buffer) => buffer.pauseInput("closed"),
     });
+    this.sessionId = sessionId;
   }
 
   override dispose() {
     super.dispose();
-    globalTerminalStreamHandles.delete(this);
+    globalTerminalStreamHandles.remove(this.sessionId, this);
   }
 }
 
@@ -263,7 +267,7 @@ export const tauriTerminalClient: TerminalClient = {
         },
         session.id,
       );
-      globalTerminalStreamHandles.add(handle);
+      globalTerminalStreamHandles.add(session.id, handle);
       try {
         const snapshot = normalizeStreamSnapshot(
           await invoke<RawTerminalStreamSnapshot>("terminal_stream_attach", {
