@@ -269,3 +269,13 @@ test("re-focusing the already focused pane is a no-op with no revision churn", (
   assert.equal(result.layout, layout);
   assert.equal(result.layout.revision, layout.revision);
 });
+
+test("the dock toggle badge counts only sessions still living in the dock", () => {
+  // 顶栏折叠按钮的 sessionCount 与 dock 内 tab 数保持一致:拖入画板(租约)
+  // 的会话不计入,detach 回归后恢复计入。
+  const start = chatPageSource.indexOf("const projectTerminalSessions = useMemo(");
+  assert.notEqual(start, -1);
+  const memo = chatPageSource.slice(start, chatPageSource.indexOf("]);", start) + 3);
+  assert.match(memo, /!leasedDockSessionIds\?\.has\(session\.id\)/);
+  assert.match(chatPageSource, /sessionCount=\{projectTerminalSessions\.length\}/);
+});

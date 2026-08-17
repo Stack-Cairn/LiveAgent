@@ -610,15 +610,6 @@ export function ChatPage(props: ChatPageProps) {
     t,
     setErrorMessage,
   });
-  const projectTerminalSessions = useMemo(
-    () =>
-      terminalProjectPathKey
-        ? terminalSessions.filter((session) =>
-            terminalSessionBelongsToProject(session, terminalProjectPathKey),
-          )
-        : [],
-    [terminalProjectPathKey, terminalSessions],
-  );
   // 被工作台 Pane 租用的会话从 Right Dock 的终端 tab 中隐藏(终端任一时刻只
   // 出现在一个宿主里);Pane 关闭(Detach)释放租约后自动回归 dock。SSH overlay
   // 的 shell tab 仍用该集合做视口占位互斥。
@@ -629,6 +620,19 @@ export function ChatPage(props: ChatPageProps) {
   const leasedDockSessionIds = useMemo(
     () => (leasedTerminalSessionIds.length > 0 ? new Set(leasedTerminalSessionIds) : undefined),
     [leasedTerminalSessionIds],
+  );
+  // 顶栏 dock 折叠按钮的计数徽标:只数还留在 dock 里的会话。拖入画板的
+  // 终端已在画板可见,徽标再计入会与 dock 内 tab 数对不上。
+  const projectTerminalSessions = useMemo(
+    () =>
+      terminalProjectPathKey
+        ? terminalSessions.filter(
+            (session) =>
+              terminalSessionBelongsToProject(session, terminalProjectPathKey) &&
+              !leasedDockSessionIds?.has(session.id),
+          )
+        : [],
+    [leasedDockSessionIds, terminalProjectPathKey, terminalSessions],
   );
   const terminalSessionsRef = useRef(terminalSessions);
   terminalSessionsRef.current = terminalSessions;
