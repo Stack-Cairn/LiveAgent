@@ -102,7 +102,6 @@ import {
   parseSelectedModelJson,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
-  type SelectedModel,
   updateExecutionModeFromChatSelection,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
@@ -139,7 +138,9 @@ import type {
   ConversationSurfaceController,
 } from "./chat/conversations/conversationControllerTypes";
 import { createConversationSurfaceController } from "./chat/conversations/createConversationSurfaceController";
+import { useConversationHydrationPhase } from "./chat/conversations/useConversationHydrationPhase";
 import { useConversationPaneHostBridge } from "./chat/conversations/useConversationPaneHostBridge";
+import { useConversationRuntimeEntrySnapshot } from "./chat/conversations/useConversationRuntimeEntrySnapshot";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
@@ -149,7 +150,6 @@ import {
   createContextUsageTokensSource,
   useContextUsageTokensSource,
 } from "./chat/hooks/useContextUsageTokensSource";
-import { useMirroredNullableState } from "./chat/hooks/useMirroredNullableState";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
@@ -169,7 +169,10 @@ import {
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
-import { ConversationPaneHost } from "./chat/surfaces/ConversationPaneHost";
+import {
+  ConversationPaneHost,
+  RestorableConversationPaneHost,
+} from "./chat/surfaces/ConversationPaneHost";
 import {
   type ConversationPaneBinding,
   ConversationPaneHostEnvironmentProvider,
@@ -178,6 +181,7 @@ import {
 } from "./chat/surfaces/ConversationPaneHostEnvironment";
 import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
 import { createWorkbenchLayoutPersistence } from "./chat/workbench/layoutPersistence";
+import { resolveWorkbenchPaneProject } from "./chat/workbench/paneProjectContext";
 import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
 import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
 import {
@@ -226,25 +230,12 @@ export function ChatPage(props: ChatPageProps) {
   const isImportingPastedTextRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hookWarning, setHookWarning] = useState<string | null>(null);
-  const [hydratingConversationId, setHydratingConversationId, hydratingConversationIdRef] =
-    useMirroredNullableState<string>();
-  const [
-    hydrationFailedConversationId,
-    setHydrationFailedConversationId,
-    hydrationFailedConversationIdRef,
-  ] = useMirroredNullableState<string>();
   const [currentConversationId, setCurrentConversationId] = useState<string>(
     () => initialConversationRef.current.conversationId,
   );
-  const [currentConversationSessionId, setCurrentConversationSessionId] = useState<string>(
-    () => initialConversationRef.current.sessionId,
-  );
-  const [currentConversationCreatedAt, setCurrentConversationCreatedAt] = useState(
-    () => initialConversationRef.current.createdAt,
-  );
-  const [currentConversationSelectedModel, setCurrentConversationSelectedModel] = useState<
-    SelectedModel | undefined
-  >(undefined);
+  // sessionId / createdAt / selectedModel 不再是页面级镜像 state:它们由
+  // registry entry 派生(见 useChatPageRuntimeStore 调用后的
+  // useConversationRuntimeEntrySnapshot),registry 是唯一写入方。
   const [runningConversationIds, setRunningConversationIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -419,6 +410,7 @@ export function ChatPage(props: ChatPageProps) {
   const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
     async () => "painted",
   );
+  const hydrateConversationActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const loadEarlierHistoryActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const cleanupDeletedConversationActionRef = useRef<(id: string) => void>(() => undefined);
   const openController = useMemo(
@@ -503,19 +495,32 @@ export function ChatPage(props: ChatPageProps) {
     isSending,
     errorMessage,
     hookWarning,
-    currentConversationSessionId,
-    currentConversationCreatedAt,
-    currentConversationSelectedModel,
     setConversationState,
     setCompactionStatus,
     setIsSending,
     setErrorMessage,
     setHookWarning,
-    setCurrentConversationSessionId,
-    setCurrentConversationCreatedAt,
-    setCurrentConversationSelectedModel,
     setRunningConversationIds,
   });
+  // Registry-derived "current conversation" metadata: the runtime entry is
+  // the single writer target, so these follow per-conversation updates (model
+  // selection, gateway installs) without a mirrored page-level slot.
+  const currentConversationRuntimeEntrySnapshot = useConversationRuntimeEntrySnapshot(
+    conversationRuntimeRegistry,
+    currentConversationId,
+  );
+  const currentConversationSessionId =
+    currentConversationRuntimeEntrySnapshot?.sessionId ?? currentConversationId;
+  const currentConversationCreatedAt =
+    currentConversationRuntimeEntrySnapshot?.createdAt ?? initialConversationRef.current.createdAt;
+  const currentConversationSelectedModel = currentConversationRuntimeEntrySnapshot?.selectedModel;
+  // Reactive read of the *current* conversation's hydration phase. Hydration
+  // itself is bucketed per conversation in the registry (two panes hydrating
+  // at once never clobber each other); this is only the page-level view.
+  const currentConversationHydrationPhase = useConversationHydrationPhase(
+    conversationRuntimeRegistry.hydration,
+    currentConversationId,
+  );
   const handleLoadEarlierHistory = useCallback(
     () => loadEarlierHistoryActionRef.current(currentConversationIdRef.current),
     [currentConversationIdRef],
@@ -555,8 +560,10 @@ export function ChatPage(props: ChatPageProps) {
 
   function cancelConversationLoad() {
     conversationLoadSequenceRef.current += 1;
-    setHydratingConversationId(null);
-    setHydrationFailedConversationId(null);
+    // The sequence bump invalidated every in-flight load, so no bucket may
+    // stay "hydrating". Failure marks stay: they describe a conversation that
+    // truly failed and are cleared per-id by that conversation's retry.
+    conversationRuntimeRegistry.hydration.clearAllHydrating();
   }
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
@@ -918,6 +925,7 @@ export function ChatPage(props: ChatPageProps) {
   const {
     startNewConversation,
     openInitial: openConversationInitial,
+    hydrateInBackground: hydrateConversationInBackground,
     loadEarlier: loadEarlierConversationHistory,
     replaceConversationAtMessage,
     cleanupDeletedConversation,
@@ -948,12 +956,12 @@ export function ChatPage(props: ChatPageProps) {
       normalizeSelectedModelForProviders(parseSelectedModelJson(json), settings.customProviders),
     setCurrentConversationId,
     setErrorMessage,
-    setHydratingConversationId,
-    setHydrationFailedConversationId,
+    hydration: conversationRuntimeRegistry.hydration,
   });
 
   startNewConversationActionRef.current = startNewConversation;
   openInitialActionRef.current = openConversationInitial;
+  hydrateConversationActionRef.current = hydrateConversationInBackground;
   loadEarlierHistoryActionRef.current = loadEarlierConversationHistory;
   cleanupDeletedConversationActionRef.current = cleanupDeletedConversation;
 
@@ -1071,10 +1079,7 @@ export function ChatPage(props: ChatPageProps) {
     isConversationRunning,
     sidebarStore,
     gatewayBridgeHistorySummaryRef,
-    hydratingConversationIdRef,
-    hydrationFailedConversationIdRef,
-    setHydratingConversationId,
-    setHydrationFailedConversationId,
+    hydration: conversationRuntimeRegistry.hydration,
   });
 
   ensureGatewayBridgeConversationReadyRef.current = ensureGatewayBridgeConversationReady;
@@ -1186,8 +1191,7 @@ export function ChatPage(props: ChatPageProps) {
     if (
       isSending ||
       isConversationRunning(currentConversationId) ||
-      hydratingConversationId === currentConversationId ||
-      hydrationFailedConversationId === currentConversationId ||
+      currentConversationHydrationPhase !== null ||
       composerBusyRef.current ||
       pendingUploadedFiles.length > 0
     ) {
@@ -1202,21 +1206,12 @@ export function ChatPage(props: ChatPageProps) {
     openController.open(currentConversationId);
   }, [
     currentConversationId,
+    currentConversationHydrationPhase,
     historyItems,
-    hydrationFailedConversationId,
-    hydratingConversationId,
     isSending,
     openController,
     pendingUploadedFiles,
   ]);
-
-  useEffect(() => {
-    hydratingConversationIdRef.current = hydratingConversationId;
-  }, [hydratingConversationId]);
-
-  useEffect(() => {
-    hydrationFailedConversationIdRef.current = hydrationFailedConversationId;
-  }, [hydrationFailedConversationId]);
 
   useEffect(() => {
     setContext(currentRequestContext);
@@ -1256,8 +1251,7 @@ export function ChatPage(props: ChatPageProps) {
     resetVisibleTransientState,
     isImportingPastedTextRef,
     setIsImportingPastedText,
-    hydratingConversationIdRef,
-    hydrationFailedConversationIdRef,
+    hydration: conversationRuntimeRegistry.hydration,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
     buildRuntimeEntryFromVisibleState,
@@ -1380,7 +1374,11 @@ export function ChatPage(props: ChatPageProps) {
   const conversationControllerActions = useMemo<ConversationControllerActions>(
     () => ({
       async hydrate({ conversationId }) {
-        await openInitialActionRef.current(conversationId);
+        if (conversationId === currentConversationIdRef.current) {
+          await openInitialActionRef.current(conversationId);
+        } else {
+          await hydrateConversationActionRef.current(conversationId);
+        }
       },
       async send({ conversationId, draft }) {
         await sendActionRef.current({
@@ -1395,7 +1393,11 @@ export function ChatPage(props: ChatPageProps) {
         await manualCompactActionRef.current({ conversationId });
       },
       async retry({ conversationId }) {
-        await openInitialActionRef.current(conversationId);
+        if (conversationId === currentConversationIdRef.current) {
+          await openInitialActionRef.current(conversationId);
+        } else {
+          await hydrateConversationActionRef.current(conversationId);
+        }
       },
     }),
     [],
@@ -1723,8 +1725,8 @@ export function ChatPage(props: ChatPageProps) {
     return displayedConversationWorkdir || undefined;
   })();
   const isCompactionRunning = compactionStatus.phase === "running";
-  const isConversationHydrating = hydratingConversationId === currentConversationId;
-  const isConversationHydrationFailed = hydrationFailedConversationId === currentConversationId;
+  const isConversationHydrating = currentConversationHydrationPhase === "hydrating";
+  const isConversationHydrationFailed = currentConversationHydrationPhase === "failed";
   const composerPlaceholder = isCompactionRunning
     ? t("chat.compactingContextWait")
     : isConversationHydrating
@@ -1923,19 +1925,16 @@ export function ChatPage(props: ChatPageProps) {
 
   // Right Dock follows the focused pane's project context when the pane maps
   // to a known, non-archived, non-missing workspace project. A stale
-  // ProjectRef never falls back to a different project.
+  // ProjectRef never falls back to a different project. Resolution lives in
+  // resolveWorkbenchPaneProject so the invariant is model-testable.
   const activateWorkbenchPaneProject = useCallback(
     (projectPathKey?: string) => {
-      if (
-        projectPathKey &&
-        !archivedWorkspaceProjectPathKeys.has(projectPathKey) &&
-        !missingWorkspaceProjectPathKeys.has(projectPathKey)
-      ) {
-        const project = workspaceProjects.find(
-          (item) => workspaceProjectPathKey(item.path) === projectPathKey,
-        );
-        if (project) activateWorkspaceProject(project);
-      }
+      const project = resolveWorkbenchPaneProject(projectPathKey, {
+        workspaceProjects,
+        archivedWorkspaceProjectPathKeys,
+        missingWorkspaceProjectPathKeys,
+      });
+      if (project) activateWorkspaceProject(project);
     },
     [
       activateWorkspaceProject,
@@ -2807,30 +2806,13 @@ export function ChatPage(props: ChatPageProps) {
               {blockedMessage}
             </div>
           ) : null;
-          // Restored panes without runtime state hydrate on focus; render a
-          // stale placeholder instead of an empty-looking conversation.
-          if (!isCurrent && !conversationRuntimeRegistry.getSnapshot(conversationId)) {
-            return (
-              <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {sidebarConversationsById.get(conversationId)?.title || t("chat.pendingTitle")}
-                </p>
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
-                  onClick={() => focusWorkbenchConversationPane(conversationId)}
-                >
-                  {t("workbench.loadConversation")}
-                </button>
-              </div>
-            );
-          }
           const host = (
-            <ConversationPaneHost
+            <RestorableConversationPaneHost
               ref={isCurrent ? conversationPaneHostRef : undefined}
               paneId={pane.paneId}
               conversationId={conversationId}
               project={surface.project}
+              title={sidebarConversationsById.get(conversationId)?.title}
             />
           );
           if (!blockedBanner) return host;

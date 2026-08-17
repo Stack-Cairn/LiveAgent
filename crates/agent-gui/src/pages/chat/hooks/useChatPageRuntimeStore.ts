@@ -5,7 +5,6 @@ import {
   createConversationStateFromContext,
 } from "../../../lib/chat/conversation/conversationState";
 import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";
-import type { SelectedModel } from "../../../lib/settings";
 import { createConversationRuntimeRegistry } from "../conversations/createConversationRuntimeRegistry";
 import {
   type ConversationRuntimeEntry,
@@ -31,17 +30,11 @@ type UseChatPageRuntimeStoreParams = {
   isSending: boolean;
   errorMessage: string | null;
   hookWarning: string | null;
-  currentConversationSessionId: string;
-  currentConversationCreatedAt: number;
-  currentConversationSelectedModel: SelectedModel | undefined;
   setConversationState: Dispatch<SetStateAction<ConversationViewState>>;
   setCompactionStatus: Dispatch<SetStateAction<CompactionStatus>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   setHookWarning: Dispatch<SetStateAction<string | null>>;
-  setCurrentConversationSessionId: Dispatch<SetStateAction<string>>;
-  setCurrentConversationCreatedAt: Dispatch<SetStateAction<number>>;
-  setCurrentConversationSelectedModel: Dispatch<SetStateAction<SelectedModel | undefined>>;
   setRunningConversationIds: Dispatch<SetStateAction<ReadonlySet<string>>>;
 };
 
@@ -55,17 +48,11 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     isSending,
     errorMessage,
     hookWarning,
-    currentConversationSessionId,
-    currentConversationCreatedAt,
-    currentConversationSelectedModel,
     setConversationState,
     setCompactionStatus,
     setIsSending,
     setErrorMessage,
     setHookWarning,
-    setCurrentConversationSessionId,
-    setCurrentConversationCreatedAt,
-    setCurrentConversationSelectedModel,
     setRunningConversationIds,
   } = params;
 
@@ -91,29 +78,26 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     new Map<string, (options: { force: boolean; requestVersion: number }) => void>(),
   );
 
+  // Conversation identity (sessionId / createdAt) and model selection are
+  // registry-owned: the cache entry is their single source of truth, and the
+  // visible values derive from it (useConversationRuntimeEntrySnapshot). Only
+  // the still-mirrored transient fields come from the visible React state.
   const buildRuntimeEntryFromVisibleState = useCallback(
-    (): ConversationRuntimeEntry =>
-      createConversationRuntimeEntry({
+    (): ConversationRuntimeEntry => {
+      const cached = conversationRuntimeCacheRef.current.get(currentConversationIdRef.current);
+      return createConversationRuntimeEntry({
         state: conversationState,
         compactionStatus,
         isSending,
         errorMessage,
         hookWarning,
-        sessionId: currentConversationSessionId,
-        createdAt: currentConversationCreatedAt,
-        workdir: conversationRuntimeCacheRef.current.get(currentConversationIdRef.current)?.workdir,
-        selectedModel: currentConversationSelectedModel,
-      }),
-    [
-      compactionStatus,
-      conversationState,
-      currentConversationCreatedAt,
-      currentConversationSessionId,
-      currentConversationSelectedModel,
-      errorMessage,
-      hookWarning,
-      isSending,
-    ],
+        sessionId: cached?.sessionId ?? currentConversationIdRef.current,
+        createdAt: cached?.createdAt ?? Date.now(),
+        workdir: cached?.workdir,
+        selectedModel: cached?.selectedModel,
+      });
+    },
+    [compactionStatus, conversationState, errorMessage, hookWarning, isSending],
   );
 
   const syncVisibleConversationRuntime = useCallback(
@@ -124,20 +108,8 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
       setIsSending(entry.isSending);
       setErrorMessage(entry.errorMessage);
       setHookWarning(entry.hookWarning);
-      setCurrentConversationSessionId(entry.sessionId);
-      setCurrentConversationCreatedAt(entry.createdAt);
-      setCurrentConversationSelectedModel(entry.selectedModel);
     },
-    [
-      setCompactionStatus,
-      setConversationState,
-      setCurrentConversationCreatedAt,
-      setCurrentConversationSelectedModel,
-      setCurrentConversationSessionId,
-      setErrorMessage,
-      setHookWarning,
-      setIsSending,
-    ],
+    [setCompactionStatus, setConversationState, setErrorMessage, setHookWarning, setIsSending],
   );
 
   const ensureConversationRuntimeEntry = useCallback(
@@ -325,6 +297,10 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
   );
 
   useEffect(() => {
+    // Registry-owned fields (identity, workdir, model) are preserved from the
+    // existing entry — the visible mirrors no longer carry them, so this
+    // write-back must never regress a registry-first update.
+    const cached = conversationRuntimeCacheRef.current.get(currentConversationId);
     setConversationRuntimeCacheEntry(
       conversationRuntimeCacheRef.current,
       currentConversationId,
@@ -334,19 +310,16 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         isSending,
         errorMessage,
         hookWarning,
-        sessionId: currentConversationSessionId,
-        createdAt: currentConversationCreatedAt,
-        workdir: conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir,
-        selectedModel: currentConversationSelectedModel,
+        sessionId: cached?.sessionId ?? currentConversationId,
+        createdAt: cached?.createdAt ?? Date.now(),
+        workdir: cached?.workdir,
+        selectedModel: cached?.selectedModel,
       }),
     );
   }, [
     compactionStatus,
     conversationState,
-    currentConversationCreatedAt,
     currentConversationId,
-    currentConversationSessionId,
-    currentConversationSelectedModel,
     errorMessage,
     hookWarning,
     isSending,
