@@ -271,6 +271,18 @@ test("checkpoint requests and responses round-trip through the agent-scoped gate
     assert.equal(Number(frame.payload.value.payload.value.turnSeq), common.turn_seq);
     assert.deepEqual(frame.payload.value.payload.value.authorizedRoots, common.authorized_roots);
     assert.equal(frame.payload.value.payload.value.expected.length, expectedCount);
+    if (expectedCount > 0) {
+      assert.deepEqual(
+        {
+          key: frame.payload.value.payload.value.expected[0].key,
+          currentHash: frame.payload.value.payload.value.expected[0].currentHash,
+        },
+        {
+          key: "C:/work/project\u0001src/a.ts",
+          currentHash: "hash-at-preview",
+        },
+      );
+    }
   }
 
   const decoded = decodeServerFrame(

@@ -1143,7 +1143,10 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       conversation_id: params.conversationId,
       turn_seq: params.turnSeq,
       authorized_roots: params.authorizedRoots,
-      expected: params.expected,
+      expected: params.expected.map((entry) => ({
+        key: entry.key,
+        current_hash: entry.currentHash,
+      })),
     });
   }
 

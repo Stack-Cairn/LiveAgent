@@ -145,7 +145,11 @@ func vetCheckpoint(req *gatewayv2.CheckpointRequest) error {
 		return errors.New("too many checkpoint expected entries")
 	}
 	for _, entry := range req.GetExpected() {
-		if entry == nil || strings.TrimSpace(entry.GetKey()) == "" || len(entry.GetKey()) > 65536 || len(entry.GetCurrentHash()) > 256 {
+		if entry == nil ||
+			strings.TrimSpace(entry.GetKey()) == "" ||
+			len(entry.GetKey()) > 65536 ||
+			strings.TrimSpace(entry.GetCurrentHash()) == "" ||
+			len(entry.GetCurrentHash()) > 256 {
 			return errors.New("checkpoint expected entry is invalid")
 		}
 	}
