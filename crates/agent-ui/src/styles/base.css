@@ -461,14 +461,14 @@
 
     --radius: 0.625rem;
 
-    /* Portal layers share one plane and rely on DOM order for nesting. */
+    /* Portal layers use semantic tokens and stay above page-local stacking contexts. */
     --layer-content: 1;
     --layer-raised: 10;
     --layer-panel: 20;
-    --layer-popover: 50;
-    --layer-modal: 50;
-    --layer-toast: 60;
-    --layer-critical: 70;
+    --layer-popover: 9999;
+    --layer-modal: 10000;
+    --layer-toast: 10010;
+    --layer-critical: 10020;
 
     /* Sidebar */
     --sidebar-bg: 220 14% 96%;

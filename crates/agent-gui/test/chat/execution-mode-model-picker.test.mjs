@@ -20,6 +20,18 @@ const branchSelectorSource = readFileSync(
   new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url),
   "utf8",
 );
+const popoverSource = readFileSync(
+  new URL("../../../agent-ui/src/components/ui/popover.tsx", import.meta.url),
+  "utf8",
+);
+const selectSource = readFileSync(
+  new URL("../../../agent-ui/src/components/ui/select.tsx", import.meta.url),
+  "utf8",
+);
+const baseStylesSource = readFileSync(
+  new URL("../../../agent-ui/src/styles/base.css", import.meta.url),
+  "utf8",
+);
 const iconSetSource = readFileSync(
   new URL("../../../agent-ui/src/components/IconSet.tsx", import.meta.url),
   "utf8",
@@ -119,6 +131,13 @@ test("branch selector reuses the model trigger visual language", () => {
   assert.match(branchSelectorSource, /data-\[popup-open\]:bg-muted\/60/);
   assert.match(branchSelectorSource, /menuOpen && "rotate-180"/);
   assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald/);
+});
+
+test("composer dropdown portals stay above the composer surface", () => {
+  assert.match(popoverSource, /className="layer-popover isolate"/);
+  assert.match(selectSource, /className="layer-popover"/);
+  assert.match(baseStylesSource, /--layer-popover: 9999;/);
+  assert.match(baseStylesSource, /--layer-modal: 10000;/);
 });
 
 test("DeepSeek provider icon uses the logo-only mark", () => {
