@@ -1828,4 +1828,164 @@ mod tests {
         assert_eq!(item.api_key, "");
         assert_eq!(item.request_format, "openai-responses");
     }
+
+    // ===== 配置备份：采集 / 校验 / 应用 =====
+
+    fn sample_backup_document() -> String {
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1", "name": "P1", "apiKey": "sk-plain" }])),
+            mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
+            system: Some(json!({ "executionMode": "tools" })),
+            skills: Some(json!({ "enabled": true, "selected": ["skill-a"] })),
+        };
+        let manifest = build_backup_manifest(&snapshot);
+        serialize_backup_document(&snapshot, &manifest).expect("serialize document")
+    }
+
+    #[test]
+    fn backup_document_round_trips_all_four_domains() {
+        let raw = sample_backup_document();
+        let (snapshot, manifest) = parse_backup_document(&raw).expect("parse document");
+
+        assert_eq!(manifest.protocol_version, BACKUP_PROTOCOL_VERSION);
+        assert_eq!(manifest.schema_version, BACKUP_SCHEMA_VERSION);
+        assert_eq!(manifest.encryption, "none");
+        // 计数用于 UI 摘要：mcp 数服务器条目，skills 数选中项。
+        assert_eq!(manifest.domains.providers, 1);
+        assert_eq!(manifest.domains.mcp, 1);
+        assert_eq!(manifest.domains.skills, 1);
+        assert_eq!(
+            snapshot.skills,
+            Some(json!({ "enabled": true, "selected": ["skill-a"] }))
+        );
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_future_versions() {
+        // 高版本必须拒绝，而不是把读不懂的域当成「空配置」写入而静默清库。
+        for field in ["protocolVersion", "schemaVersion"] {
+            let mut document: Value =
+                serde_json::from_str(&sample_backup_document()).expect("parse json");
+            document["_manifest"][field] = json!(99);
+            let err = parse_backup_document(&document.to_string())
+                .expect_err("future version must be rejected");
+            assert!(err.contains("99"), "错误信息应含版本号：{err}");
+        }
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_unknown_encryption() {
+        let mut document: Value =
+            serde_json::from_str(&sample_backup_document()).expect("parse json");
+        document["_manifest"]["encryption"] = json!("aes-256-gcm");
+
+        let err = parse_backup_document(&document.to_string())
+            .expect_err("unknown encryption must be rejected");
+        assert!(err.contains("aes-256-gcm"), "错误信息应含加密方式：{err}");
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_missing_manifest_and_malformed_domains() {
+        // 缺 manifest：可能是随便一个 JSON 文件，不是我们导出的备份。
+        let err = parse_backup_document(r#"{"providers": []}"#).expect_err("manifest required");
+        assert!(err.contains("元信息"), "应提示缺少元信息：{err}");
+
+        // 域结构不符：providers 必须是数组。
+        let mut document: Value =
+            serde_json::from_str(&sample_backup_document()).expect("parse json");
+        document["providers"] = json!({ "not": "an array" });
+        let err =
+            parse_backup_document(&document.to_string()).expect_err("providers must be an array");
+        assert!(err.contains("providers"), "应指出出错的域：{err}");
+    }
+
+    #[test]
+    fn backup_snapshot_excludes_device_level_sync_config() {
+        // 同步配置（WebDAV 地址/凭据）是设备级的，若随快照流转会让 A 机器的
+        // 凭据覆盖 B 机器。它刻意存放在独立表，因此采集时天然取不到。
+        let conn = open_memory_db();
+        let snapshot = collect_backup_snapshot(&conn, None).expect("collect snapshot");
+        let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+
+        assert!(!serialized.contains("backupSync"), "快照不应含同步配置");
+        assert!(snapshot.skills.is_none(), "skills 只能由前端传入");
+    }
+
+    #[test]
+    fn apply_backup_snapshot_to_db_overwrites_all_domains() {
+        let mut conn = open_memory_db();
+        save_providers(&mut conn, json!([{ "id": "stale", "name": "Stale" }]))
+            .expect("seed providers");
+
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1", "name": "P1" }])),
+            mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
+            system: None,
+            skills: None,
+        };
+        apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
+
+        // 整域覆盖：导入侧原有的 stale provider 必须消失。
+        assert_eq!(
+            load_providers(&conn).expect("load providers"),
+            Some(json!([{ "id": "p-1", "name": "P1" }]))
+        );
+        let mcp = load_mcp(&conn).expect("load mcp").expect("mcp present");
+        assert_eq!(mcp["selected"], json!(["s-1"]));
+    }
+
+    #[test]
+    fn apply_backup_snapshot_to_db_leaves_config_intact_when_domain_absent() {
+        // 某域为 None 表示导出侧没有该配置，不应被当成「清空」。
+        let mut conn = open_memory_db();
+        save_providers(&mut conn, json!([{ "id": "keep", "name": "Keep" }]))
+            .expect("seed providers");
+
+        apply_backup_snapshot_to_db(&mut conn, &BackupSnapshot::default()).expect("apply empty");
+
+        assert_eq!(
+            load_providers(&conn).expect("load providers"),
+            Some(json!([{ "id": "keep", "name": "Keep" }]))
+        );
+    }
+
+    #[test]
+    fn validate_backup_snapshot_rejects_malformed_domains() {
+        let cases = [
+            (
+                BackupSnapshot {
+                    providers: Some(json!({})),
+                    ..Default::default()
+                },
+                "providers",
+            ),
+            (
+                BackupSnapshot {
+                    mcp: Some(json!({ "servers": "nope" })),
+                    ..Default::default()
+                },
+                "mcp.servers",
+            ),
+            (
+                BackupSnapshot {
+                    system: Some(json!([])),
+                    ..Default::default()
+                },
+                "system",
+            ),
+            (
+                BackupSnapshot {
+                    skills: Some(json!("nope")),
+                    ..Default::default()
+                },
+                "skills",
+            ),
+        ];
+
+        for (snapshot, expected) in cases {
+            let err =
+                validate_backup_snapshot(&snapshot).expect_err("malformed domain must be rejected");
+            assert!(err.contains(expected), "错误信息应含 {expected}：{err}");
+        }
+    }
 }

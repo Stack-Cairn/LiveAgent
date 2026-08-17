@@ -164,6 +164,8 @@ include!("mcp.rs");
 include!("memory_settings.rs");
 include!("model_failover.rs");
 include!("gateway_sync.rs");
+include!("backup_snapshot.rs");
+include!("backup_io.rs");
 include!("ssh/mod.rs");
 include!("commands.rs");
 include!("tests.rs");

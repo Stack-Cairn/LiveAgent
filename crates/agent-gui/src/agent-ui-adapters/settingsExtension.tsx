@@ -1,7 +1,8 @@
-import { Info, Keyboard } from "@liveagent/ui/components/IconSet";
+import { Archive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
+import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 
@@ -30,6 +31,15 @@ export function createSettingsExtension(props: SettingsPageProps): {
         labelKey: "settings.navShortcuts",
         icon: <Keyboard className="h-3.5 w-3.5" />,
         render: () => <GlobalShortcutsSection />,
+      },
+      {
+        id: "backup",
+        groupKey: "settings.groupOther",
+        groupOrder: 50,
+        order: 15,
+        labelKey: "settings.navBackup",
+        icon: <Archive className="h-3.5 w-3.5" />,
+        render: () => <BackupSyncSection settings={settings} setSettings={setSettings} />,
       },
       {
         id: "about",
