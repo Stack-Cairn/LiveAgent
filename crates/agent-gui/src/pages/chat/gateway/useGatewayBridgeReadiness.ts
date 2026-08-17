@@ -1,5 +1,5 @@
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { MutableRefObject } from "react";
 import {
   type ConversationViewState,
   createConversationStateFromContext,
@@ -17,6 +17,7 @@ import {
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
 } from "../../../lib/settings";
+import type { ConversationHydrationStore } from "../conversations/conversationHydrationStore";
 import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
@@ -34,10 +35,7 @@ type UseGatewayBridgeReadinessParams = {
   isConversationRunning: (conversationId: string) => boolean;
   sidebarStore: SidebarStore;
   gatewayBridgeHistorySummaryRef: MutableRefObject<Map<string, ChatHistorySummary>>;
-  hydratingConversationIdRef: MutableRefObject<string | null>;
-  hydrationFailedConversationIdRef: MutableRefObject<string | null>;
-  setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
-  setHydrationFailedConversationId: Dispatch<SetStateAction<string | null>>;
+  hydration: ConversationHydrationStore;
 };
 
 export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParams) {
@@ -51,10 +49,7 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     isConversationRunning,
     sidebarStore,
     gatewayBridgeHistorySummaryRef,
-    hydratingConversationIdRef,
-    hydrationFailedConversationIdRef,
-    setHydratingConversationId,
-    setHydrationFailedConversationId,
+    hydration,
   } = params;
 
   function installHistoryRuntime(params: {
@@ -88,12 +83,10 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     if (currentConversationIdRef.current === conversationId) {
       syncVisibleConversationRuntime(conversationId, entry);
     }
-    if (hydratingConversationIdRef.current === conversationId) {
-      setHydratingConversationId(null);
-    }
-    if (hydrationFailedConversationIdRef.current === conversationId) {
-      setHydrationFailedConversationId(null);
-    }
+    // The bridge just installed a fresh, authoritative runtime for this
+    // conversation: both hydration marks are moot, and only this bucket's.
+    hydration.clearHydrating(conversationId);
+    hydration.clearFailed(conversationId);
     return entry;
   }
 

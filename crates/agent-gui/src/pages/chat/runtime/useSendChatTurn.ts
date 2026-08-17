@@ -86,6 +86,7 @@ import {
   buildTextFromComposerDraft,
   importPastedTextsAsFiles,
 } from "../composer/composerDraftText";
+import type { ConversationHydrationStore } from "../conversations/conversationHydrationStore";
 import {
   buildGatewayFinalProjectionEntries,
   buildGatewayRuntimeSnapshotEntries,
@@ -153,8 +154,7 @@ type UseSendChatTurnParams = {
   isImportingPastedTextRef: MutableRefObject<boolean>;
   setIsImportingPastedText: Dispatch<SetStateAction<boolean>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
-  hydratingConversationIdRef: MutableRefObject<string | null>;
-  hydrationFailedConversationIdRef: MutableRefObject<string | null>;
+  hydration: ConversationHydrationStore;
   currentConversationIdRef: ChatPageRuntimeStore["currentConversationIdRef"];
   conversationRuntimeCacheRef: ChatPageRuntimeStore["conversationRuntimeCacheRef"];
   buildRuntimeEntryFromVisibleState: ChatPageRuntimeStore["buildRuntimeEntryFromVisibleState"];
@@ -231,8 +231,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     isImportingPastedTextRef,
     setIsImportingPastedText,
     setErrorMessage,
-    hydratingConversationIdRef,
-    hydrationFailedConversationIdRef,
+    hydration,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
     buildRuntimeEntryFromVisibleState,
@@ -424,13 +423,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     if (isImportingPastedTextRef.current && typeof overrides?.textOverride !== "string") {
       return false;
     }
-    if (hydratingConversationIdRef.current === conversationId) {
+    if (hydration.isHydrating(conversationId)) {
       const message = "当前会话仍在加载，请稍候。";
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message, conversationId);
       return false;
     }
-    if (hydrationFailedConversationIdRef.current === conversationId) {
+    if (hydration.isFailed(conversationId)) {
       const message = "当前会话加载失败，请重新打开该会话后再继续。";
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message, conversationId);

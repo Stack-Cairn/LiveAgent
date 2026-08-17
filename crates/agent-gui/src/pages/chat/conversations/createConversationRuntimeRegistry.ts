@@ -8,6 +8,10 @@ import {
   createConversationDraftStore,
 } from "./conversationDraftStore";
 import {
+  type ConversationHydrationStore,
+  createConversationHydrationStore,
+} from "./conversationHydrationStore";
+import {
   type ConversationQueueStore,
   createConversationQueueStore,
 } from "./conversationQueueStore";
@@ -25,6 +29,7 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
   readonly uploads: ConversationUploadStore;
   readonly queue: ConversationQueueStore;
   readonly approvals: ConversationApprovalStore;
+  readonly hydration: ConversationHydrationStore;
 
   constructor(
     entries?: Iterable<readonly [string, ConversationRuntimeEntry]>,
@@ -32,12 +37,14 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
     uploads = createConversationUploadStore(),
     queue = createConversationQueueStore(),
     approvals = createConversationApprovalStore(),
+    hydration = createConversationHydrationStore(),
   ) {
     super();
     this.drafts = drafts;
     this.uploads = uploads;
     this.queue = queue;
     this.approvals = approvals;
+    this.hydration = hydration;
     if (!entries) return;
     for (const [conversationId, entry] of entries) {
       super.set(conversationId.trim(), entry);
@@ -85,6 +92,7 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
     if (!key) return false;
     const deletedRuntime = super.delete(key);
     const deletedDraft = this.drafts.delete(key);
+    this.hydration.delete(key);
     if (deletedRuntime || deletedDraft) {
       this.#viewCounts.delete(key);
     }
@@ -98,6 +106,7 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
     const conversationIds = Array.from(this.keys());
     super.clear();
     this.drafts.clear();
+    this.hydration.clear();
     this.#viewCounts.clear();
     for (const conversationId of conversationIds) {
       this.#emit(conversationId);

@@ -14,6 +14,17 @@ type CreateConversationSurfaceControllerParams = {
 };
 
 const IDLE_COMPACTION = { phase: "idle" } as const;
+const IDLE_LIFECYCLE = { hydrating: false, hydrationFailed: false } as const;
+const HYDRATING_LIFECYCLE = { hydrating: true, hydrationFailed: false } as const;
+const FAILED_LIFECYCLE = { hydrating: false, hydrationFailed: true } as const;
+
+function lifecycleFor(phase: "hydrating" | "failed" | null) {
+  return phase === "hydrating"
+    ? HYDRATING_LIFECYCLE
+    : phase === "failed"
+      ? FAILED_LIFECYCLE
+      : IDLE_LIFECYCLE;
+}
 
 export function createConversationSurfaceController(
   params: CreateConversationSurfaceControllerParams,
@@ -29,6 +40,7 @@ export function createConversationSurfaceController(
   let unsubscribeUploads: (() => void) | null = null;
   let unsubscribeQueue: (() => void) | null = null;
   let unsubscribeApprovals: (() => void) | null = null;
+  let unsubscribeHydration: (() => void) | null = null;
   let disposed = false;
   let snapshot: ConversationSurfaceSnapshot = readSnapshot();
 
@@ -44,6 +56,7 @@ export function createConversationSurfaceController(
       approvals: params.registry.approvals.getSnapshot(conversationId),
       model: runtime?.selectedModel ?? null,
       compaction: runtime?.compactionStatus ?? IDLE_COMPACTION,
+      lifecycle: lifecycleFor(params.registry.hydration.getSnapshot(conversationId)),
     };
   }
 
@@ -56,7 +69,8 @@ export function createConversationSurfaceController(
       next.queue === snapshot.queue &&
       next.approvals === snapshot.approvals &&
       next.model === snapshot.model &&
-      next.compaction === snapshot.compaction
+      next.compaction === snapshot.compaction &&
+      next.lifecycle === snapshot.lifecycle
     ) {
       return;
     }
@@ -74,6 +88,7 @@ export function createConversationSurfaceController(
     unsubscribeUploads = params.registry.uploads.subscribe(conversationId, () => refresh(true));
     unsubscribeQueue = params.registry.queue.subscribe(conversationId, () => refresh(true));
     unsubscribeApprovals = params.registry.approvals.subscribe(conversationId, () => refresh(true));
+    unsubscribeHydration = params.registry.hydration.subscribe(conversationId, () => refresh(true));
   }
 
   function disconnect() {
@@ -82,11 +97,13 @@ export function createConversationSurfaceController(
     unsubscribeUploads?.();
     unsubscribeQueue?.();
     unsubscribeApprovals?.();
+    unsubscribeHydration?.();
     unsubscribeRuntime = null;
     unsubscribeDraft = null;
     unsubscribeUploads = null;
     unsubscribeQueue = null;
     unsubscribeApprovals = null;
+    unsubscribeHydration = null;
   }
 
   return {

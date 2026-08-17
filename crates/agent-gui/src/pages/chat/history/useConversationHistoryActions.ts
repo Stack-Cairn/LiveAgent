@@ -24,6 +24,7 @@ import {
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
 import { type SelectedModel, serializeSelectedModelJson } from "../../../lib/settings";
+import type { ConversationHydrationStore } from "../conversations/conversationHydrationStore";
 import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
@@ -78,8 +79,8 @@ type UseConversationHistoryActionsParams = {
   resolveConversationSelectedModel: (json: string | null | undefined) => SelectedModel | undefined;
   setCurrentConversationId: Dispatch<SetStateAction<string>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
-  setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
-  setHydrationFailedConversationId: Dispatch<SetStateAction<string | null>>;
+  /** Per-conversation hydration lifecycle buckets (replaces the page slots). */
+  hydration: ConversationHydrationStore;
 };
 
 function createBlankConversationEntry(params: {
@@ -123,11 +124,11 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     resolveConversationSelectedModel,
     setCurrentConversationId,
     setErrorMessage,
-    setHydratingConversationId,
-    setHydrationFailedConversationId,
+    hydration,
   } = params;
 
   const earlierPageLoadsRef = useRef(new Map<string, Promise<void>>());
+  const backgroundHydrationRef = useRef(new Map<string, Promise<void>>());
 
   function pruneIdleConversationCaches(extraKeepIds: Iterable<string> = []) {
     pruneIdleConversationRuntimeCaches({
@@ -187,8 +188,9 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   async function openInitial(id: string): Promise<"cache-hit" | "painted"> {
     const loadSequence = conversationLoadSequenceRef.current + 1;
     conversationLoadSequenceRef.current = loadSequence;
-    setHydratingConversationId(id);
-    setHydrationFailedConversationId((prev) => (prev === id ? null : prev));
+    // Bucketed per conversation: hydrating replaces this id's stale fail mark
+    // and never touches another conversation's phase.
+    hydration.markHydrating(id);
     setErrorMessage(null);
 
     const visibleConversationId = currentConversationIdRef.current;
@@ -213,7 +215,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         isPendingHistoryItem ||
         isUnpersistedDraft
       ) {
-        setHydratingConversationId(null);
+        hydration.clearHydrating(id);
         activateConversation({
           conversationId: id,
           entry: cached,
@@ -231,6 +233,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         includeActiveSegment: true,
       });
       if (conversationLoadSequenceRef.current !== loadSequence) {
+        hydration.clearHydrating(id);
         return "painted";
       }
 
@@ -252,17 +255,71 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         },
         clearError: true,
       });
-      setHydratingConversationId((current) => (current === id ? null : current));
+      hydration.clearHydrating(id);
       return "painted";
     } catch (err) {
       if (conversationLoadSequenceRef.current === loadSequence) {
         const msg = err instanceof Error ? err.message : String(err);
-        setHydrationFailedConversationId(id);
+        // Failure is scoped to this conversation: another pane's concurrent
+        // success or failure cannot clear or overwrite it.
+        hydration.markFailed(id);
         setErrorMessage(msg || t("chat.history.openFailed"));
-        setHydratingConversationId((current) => (current === id ? null : current));
       }
       throw err;
     }
+  }
+
+  function hydrateInBackground(conversationId: string): Promise<void> {
+    const id = conversationId.trim();
+    if (!id) return Promise.resolve();
+
+    const existing = backgroundHydrationRef.current.get(id);
+    if (existing) return existing;
+
+    const cached = conversationRuntimeCacheRef.current.get(id);
+    const historyItem = sidebarStore.peek(id);
+    if (
+      cached &&
+      (conversationPersistenceCursorRef.current.has(id) ||
+        cached.isSending ||
+        historyItem?.isPending === true ||
+        historyItem === undefined)
+    ) {
+      hydration.clearHydrating(id);
+      return Promise.resolve();
+    }
+
+    hydration.markHydrating(id);
+    const task = (async () => {
+      try {
+        const record = await getChatHistoryWindow({
+          id,
+          maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+          includeActiveSegment: true,
+        });
+        if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+        const entry = createConversationRuntimeEntry({
+          state: buildConversationStateFromWindow(record),
+          sessionId: record.conversation.sessionId ?? record.conversation.id,
+          createdAt: record.conversation.createdAt,
+          workdir: record.conversation.cwd,
+          selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+        });
+        setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, id, entry);
+        conversationPersistenceCursorRef.current.set(id, {
+          activeSegmentIndex: record.activeSegment.segmentIndex,
+          activeSegmentId: record.activeSegment.segmentId,
+        });
+        hydration.clearHydrating(id);
+      } catch (error) {
+        hydration.markFailed(id);
+        throw error;
+      }
+    })().finally(() => {
+      backgroundHydrationRef.current.delete(id);
+    });
+    backgroundHydrationRef.current.set(id, task);
+    return task;
   }
 
   function loadEarlier(conversationId: string) {
@@ -512,6 +569,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   return {
     startNewConversation,
     openInitial,
+    hydrateInBackground,
     loadEarlier,
     replaceConversationAtMessage,
     cleanupDeletedConversation,

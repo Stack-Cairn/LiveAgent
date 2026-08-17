@@ -10,6 +10,10 @@ import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 export type ConversationApprovalSlice = PendingToolApprovalSummary[];
 export type ConversationModelSlice = SelectedModel | null;
 export type ConversationCompactionSlice = CompactionStatus;
+export type ConversationLifecycleSlice = {
+  hydrating: boolean;
+  hydrationFailed: boolean;
+};
 
 export type ConversationSurfaceSnapshot = {
   conversationId: string;
@@ -21,6 +25,7 @@ export type ConversationSurfaceSnapshot = {
   approvals: ConversationApprovalSlice;
   model: ConversationModelSlice;
   compaction: ConversationCompactionSlice;
+  lifecycle: ConversationLifecycleSlice;
 };
 
 export type ConversationControllerActions = {
