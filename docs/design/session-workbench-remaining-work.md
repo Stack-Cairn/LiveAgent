@@ -30,8 +30,24 @@ T-2 的"绑定失效即按 launchSpec 自动重建"漏判了运行期显式关�
   覆盖 connecting 窗口)联动 `handleWorkbenchClosePane`——dock 关闭 = 终止进程 + 收 Pane。
 - `terminalAppExitGuard`:`app_confirmed_exit` 前置位,退出路径 `close_all` 的 closed 风暴
   不触发关 Pane,布局落盘保留终端 Pane 供重启恢复;invoke 失败复位。
-- 测试:`terminal-session-closed-sync.test.mjs` 12 例(查找命中/落空/connecting 窗口/迟到
-  closed 与重启竞态/退出护栏/宿主停驻断言/ChatPage 接线断言)。
+- 测试:`terminal-session-closed-sync.test.mjs` 15 例(查找命中/落空/connecting 窗口/迟到
+  closed 与重启竞态/退出护栏/宿主停驻断言/ChatPage 接线断言/幽灵自愈断言)。
+
+**第二轮(同日,实机复现追加)**:实机出现「Pane attach 报 `terminal session not found`、
+dock 残留同名 tab 关不掉」——根因是**幽灵会话**:前端列表残留后端已不存在的记录(closed
+事件丢失窗口、dock 写回竞态等来源),拖入画板后 attach 永远失败,dock 关闭又因后端
+"not found" 报错而永不移除 tab。系统此前没有任何幽灵退场通路。追加两条自愈链路:
+
+- dock `closeSession` 失败时按 `client.list()` 权威复核:会话确认已消失则按成功关闭收尾
+  (移 tab、忘记会话);`list` 失败保守视为存活,不误删。幽灵 tab 从此必然可关。
+- 终端视口报错时宿主经新增 `onSessionGhost` 上抛,`useProjectTerminals.
+  verifyTerminalSessionAlive` 按权威列表校验:确认消失则整表刷新→幽灵从 dock 退场、
+  Pane 经 seen-live 守卫进入 session-closed 停驻(重试=按 launchSpec 重启);仍存活的
+  瞬时错误不动列表。
+- 已识别未修的竞态(记录):受控模式下 dock 写回(`rememberTerminalSnapshot`/
+  `reconcileSshSessions` 等)基于 `sessionsRef` 合并,若与父级的 closed 移除交错,可能把
+  已删除会话短暂写回父级列表(幽灵来源之一)。自愈链路已兜底;彻底修复需把受控模式的
+  写回改为基于最新 externalSessions 派生,留待单独立项。
 
 ### Permission-Changed blocked 态:调研结论(不实现)
 
