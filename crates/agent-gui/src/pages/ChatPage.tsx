@@ -603,6 +603,7 @@ export function ChatPage(props: ChatPageProps) {
     setTerminalSessions,
     terminalSessionsLoaded,
     handleRightDockSessionsChange,
+    verifyTerminalSessionAlive,
   } = useProjectTerminals({
     terminalProjectPathKey,
     requestConfirmDialog,
@@ -2819,6 +2820,7 @@ export function ChatPage(props: ChatPageProps) {
                 theme={effectiveTheme}
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
+                onSessionGhost={verifyTerminalSessionAlive}
               />
             );
           }

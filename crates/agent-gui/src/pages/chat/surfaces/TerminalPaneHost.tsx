@@ -25,6 +25,12 @@ export type TerminalPaneHostProps = {
   /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
   sessions: readonly TerminalSession[];
   sessionsLoaded: boolean;
+  /**
+   * 视口报错时上抛 sessionId,由页面按后端权威列表校验:会话确认消失
+   * (幽灵记录)则整表刷新,本 Pane 随之进入 session-closed 停驻态,
+   * 重试按钮变为按 launchSpec 重启,而不是对着死会话无限重连。
+   */
+  onSessionGhost?: (sessionId: string) => void;
 };
 
 type TerminalPaneErrorState =
@@ -43,7 +49,8 @@ const SSH_LATENCY_POLL_MS = 15_000;
  * 输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
-  const { paneId, surface, isFocused, isCompact, theme, sessions, sessionsLoaded } = props;
+  const { paneId, surface, isFocused, isCompact, theme, sessions, sessionsLoaded, onSessionGhost } =
+    props;
   const { t } = useLocale();
 
   const boundSessionId = useSyncExternalStore(terminalPaneBindings.subscribe, () =>
@@ -135,9 +142,15 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     }
   }, [paneId, sessionId]);
 
-  const handleViewportError = useCallback((_sessionId: string, message: string | null) => {
-    setViewportError(message);
-  }, []);
+  const handleViewportError = useCallback(
+    (errorSessionId: string, message: string | null) => {
+      setViewportError(message);
+      // attach 持续失败最常见的根因是幽灵会话(后端已丢、前端列表还在)。
+      // 上抛给页面做权威校验;瞬时错误在校验中会被识别为仍存活而不动列表。
+      if (message) onSessionGhost?.(errorSessionId);
+    },
+    [onSessionGhost],
+  );
 
   // SSH 重连:错误按提示条展示;"already in progress" 表示自动重连循环已接管。
   const [reconnectPending, setReconnectPending] = useState(false);

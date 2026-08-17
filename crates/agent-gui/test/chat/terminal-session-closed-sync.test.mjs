@@ -30,6 +30,10 @@ const projectTerminalsSource = readFileSync(
   new URL("../../src/pages/chat/workspace/useProjectTerminals.tsx", import.meta.url),
   "utf8",
 );
+const dockSessionsSource = readFileSync(
+  new URL("../../../agent-ui/src/components/project-tools/useRightDockSessions.ts", import.meta.url),
+  "utf8",
+);
 
 const PROJECT = { projectId: "project-1", projectPathKey: "/repo" };
 
@@ -213,4 +217,48 @@ test("session-closed maps to the dedicated missing-session message", () => {
 test("the seen-live marker only records sessions observed in the live list", () => {
   const marker = blockFrom(hostSource, "const seenLiveSessionIdRef");
   assert.match(marker, /if \(liveSession\) seenLiveSessionIdRef\.current = liveSession\.id;/);
+});
+
+// ---------------------------------------------------------------------------
+// 幽灵会话自愈:前端残留、后端已丢的记录必须能退场且能关闭
+// ---------------------------------------------------------------------------
+
+test("dock close treats an already-gone session as closed instead of erroring forever", () => {
+  // catch 内先按权威列表复核;确认消失走与成功关闭相同的收尾(移 tab、忘记
+  // 会话),仅确认仍存活才落错误条。list 失败保守视为存活,不误删。
+  const closeBlock = blockFrom(dockSessionsSource, "const closeSession = useCallback(");
+  assertOrderIn(
+    closeBlock,
+    [
+      "const finalizeClose = () => {",
+      ".then(finalizeClose)",
+      ".catch(async (err) => {",
+      ".list()",
+      ".catch(() => true)",
+      "if (!alive) {",
+      "finalizeClose();",
+      "setError(err instanceof Error ? err.message : String(err));",
+    ],
+    "ghost-tolerant close",
+  );
+});
+
+test("viewport errors escalate to an authoritative session-alive check", () => {
+  const handler = blockFrom(hostSource, "const handleViewportError = useCallback(");
+  assert.match(handler, /if \(message\) onSessionGhost\?\.\(errorSessionId\);/);
+  // 页面侧:确认消失才整表刷新;仍存活(瞬时错误)不动列表。
+  const verify = blockFrom(projectTerminalsSource, "const verifyTerminalSessionAlive");
+  assertOrderIn(
+    verify,
+    [
+      ".list()",
+      "if (live.some((session) => session.id === key)) return;",
+      "setTerminalSessions(sortTerminalSessions(live));",
+    ],
+    "verify-alive refresh",
+  );
+});
+
+test("ChatPage wires the ghost check into every terminal pane host", () => {
+  assert.match(chatPageSource, /onSessionGhost=\{verifyTerminalSessionAlive\}/);
 });

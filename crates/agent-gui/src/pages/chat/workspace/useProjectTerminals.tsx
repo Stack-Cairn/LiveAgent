@@ -70,6 +70,21 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
     });
   }, [terminalProjectPathKey]);
 
+  // 幽灵会话自愈:前端列表可能残留后端已不存在的记录(closed 事件丢失、
+  // dock 写回竞态等)。终端视口报错时按后端权威列表校验一次;确认消失则
+  // 整表刷新,幽灵从 dock 与 Pane 同步退场。会话仍在则视为瞬时错误,不动列表。
+  const verifyTerminalSessionAlive = useCallback((sessionId: string) => {
+    const key = sessionId.trim();
+    if (!key) return;
+    void tauriTerminalClient
+      .list()
+      .then((live) => {
+        if (live.some((session) => session.id === key)) return;
+        setTerminalSessions(sortTerminalSessions(live));
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
@@ -143,5 +158,6 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
     setTerminalSessions,
     terminalSessionsLoaded,
     handleRightDockSessionsChange,
+    verifyTerminalSessionAlive,
   };
 }

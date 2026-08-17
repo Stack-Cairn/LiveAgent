@@ -25,11 +25,12 @@ type UseRightDockSessionsOptions = {
   externalSessions?: TerminalSession[];
   externalSessionsLoaded?: boolean;
   /**
-   * Sessions currently displayed elsewhere (leased by a workbench pane). They
-   * stay listed as dock tabs — only marked — so the session does not vanish
-   * from the user's model of the dock. Mutual exclusion of the output stream
-   * is enforced one level down: a leased tab renders a placeholder instead of
-   * an XTermViewport, so the stream is never consumed twice.
+   * Sessions currently displayed elsewhere (leased by a workbench pane). A
+   * leased session is treated as living in its pane: it is hidden from the
+   * dock's terminal tabs entirely and returns to the dock when the pane
+   * detaches (lease released). This is also what keeps the output stream
+   * single-consumer — the dock never mounts an XTermViewport for a session
+   * that has a pane.
    */
   leasedSessionIds?: ReadonlySet<string>;
   isOpen: boolean;
@@ -343,29 +344,42 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
       if (closingSessionIds.has(session.id)) return;
       setError(null);
       setClosingSessionIds((current) => new Set(current).add(session.id));
+      // The close is this client's gesture, so it also owns moving the
+      // active tab off the dead session; remote clients only fall back at
+      // render time and never write.
+      const finalizeClose = () => {
+        forgetTerminalSession(session.id);
+        onProjectStateChange((current) => {
+          const tabOrder = current.tabOrder.filter((id) => id !== session.id);
+          if (current.activeTabId !== session.id) {
+            return tabOrder.length === current.tabOrder.length ? current : { ...current, tabOrder };
+          }
+          const fallback = rightDockNeighborTabId(current.tabOrder, session.id);
+          return {
+            ...current,
+            ...(fallback ? { activeTabId: fallback } : {}),
+            tabOrder,
+          };
+        });
+      };
       void client
         .close(session.id, session.projectPathKey)
-        .then(() => {
-          forgetTerminalSession(session.id);
-          // The close is this client's gesture, so it also owns moving the
-          // active tab off the dead session; remote clients only fall back at
-          // render time and never write.
-          onProjectStateChange((current) => {
-            const tabOrder = current.tabOrder.filter((id) => id !== session.id);
-            if (current.activeTabId !== session.id) {
-              return tabOrder.length === current.tabOrder.length
-                ? current
-                : { ...current, tabOrder };
-            }
-            const fallback = rightDockNeighborTabId(current.tabOrder, session.id);
-            return {
-              ...current,
-              ...(fallback ? { activeTabId: fallback } : {}),
-              tabOrder,
-            };
-          });
+        .then(finalizeClose)
+        .catch(async (err) => {
+          // A ghost tab (frontend record the backend no longer knows — e.g. a
+          // missed `closed` event) fails close forever; without this check the
+          // tab becomes permanently uncloseable. Verify against the live list
+          // and treat "already gone" as a successful close.
+          const alive = await client
+            .list()
+            .then((live) => live.some((entry) => entry.id === session.id))
+            .catch(() => true);
+          if (!alive) {
+            finalizeClose();
+            return;
+          }
+          setError(err instanceof Error ? err.message : String(err));
         })
-        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
         .finally(() =>
           setClosingSessionIds((current) => {
             if (!current.has(session.id)) return current;
