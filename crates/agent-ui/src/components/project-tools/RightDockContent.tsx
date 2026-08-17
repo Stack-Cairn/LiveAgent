@@ -86,15 +86,17 @@ export function RightDockContent(props: RightDockContentProps) {
             </div>
           ) : null}
           <div className="relative min-h-0 flex-1">
+            {/* 懒挂载：仅活跃 tab 真实挂载 XTermViewport。非活跃 tab 卸载以释放
+                attach 流与渲染开销（画板 Pane + dock 多 tab 叠加后 attach 数量
+                可观）。attach 协议带 offset 快照，切回 tab 时一次快照加载即可
+                无损重建 scrollback；焦点/滚动位置丢失可接受。key 用 session.id
+                保证切 tab 走完整卸载/重挂而不是复用实例。 */}
             {localSessions.map((session) => {
               const isActiveTerminal =
                 currentActiveTab === "terminal" && activeSession?.id === session.id;
+              if (!isActiveTerminal) return null;
               return (
-                <div
-                  key={session.id}
-                  aria-hidden={!isActiveTerminal}
-                  className={cn("absolute inset-0 min-h-0", isActiveTerminal ? "block" : "hidden")}
-                >
+                <div key={session.id} className="absolute inset-0 min-h-0">
                   <XTermViewport
                     client={terminalClient}
                     session={session}
