@@ -11,4 +11,5 @@ pub mod skills;
 pub mod system_proxy;
 pub mod tray;
 pub mod tunnel;
+pub mod webdav;
 pub mod workspace_watch;
