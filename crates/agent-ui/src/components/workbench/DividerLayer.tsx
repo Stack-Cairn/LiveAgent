@@ -170,8 +170,12 @@ export function DividerLayer(props: DividerLayerProps) {
             <span
               aria-hidden="true"
               className={cn(
-                "bg-border/80 transition-colors duration-100",
+                "bg-border/80 transition-colors duration-100 motion-reduce:transition-none",
                 "group-hover/divider:bg-primary/50 group-focus-visible/divider:bg-primary/60",
+                // Forced-colors modes drop the themed backgrounds entirely, so
+                // the divider needs a system colour to stay visible at all.
+                "forced-colors:bg-[CanvasText]",
+                "group-hover/divider:forced-colors:bg-[Highlight] group-focus-visible/divider:forced-colors:bg-[Highlight]",
                 divider.axis === "horizontal"
                   ? "h-full w-px group-hover/divider:w-[3px] group-focus-visible/divider:w-[3px]"
                   : "h-px w-full group-hover/divider:h-[3px] group-focus-visible/divider:h-[3px]",

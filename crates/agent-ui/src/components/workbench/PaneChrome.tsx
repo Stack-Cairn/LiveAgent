@@ -61,6 +61,10 @@ export function PaneChrome(props: PaneChromeProps) {
             isFocused ? "bg-muted-foreground/45" : "bg-muted-foreground/25",
             "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-11 group-hover/pane-grip:bg-muted-foreground/60",
             "group-focus-visible/pane-grip:bg-ring",
+            // The pill is the drag handle's only focus indicator (the button
+            // suppresses its outline), so it needs a system colour to survive
+            // forced-colors modes.
+            "forced-colors:bg-[CanvasText] group-focus-visible/pane-grip:forced-colors:bg-[Highlight]",
           )}
         />
       </button>
