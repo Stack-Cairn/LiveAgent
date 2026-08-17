@@ -43,93 +43,23 @@ import {
   uploadBackup,
 } from "../../lib/backup";
 import { normalizeSkillsSettings } from "../../lib/settings";
+import {
+  applySyncStatusEvent,
+  canTestSyncConnection,
+  detectPreset,
+  emptyForm,
+  formFromView,
+  isAutoSyncSuccess,
+  isDirty,
+  type PresetId,
+  SYNC_PRESETS,
+  type SyncForm,
+} from "./backupSyncForm";
 import type { SettingsSectionProps } from "./types";
 
 type Status = { kind: "ok" | "error"; text: string } | null;
 
 type SyncBusy = "load" | "test" | "save" | "upload" | "download" | null;
-
-/** 表单态。密码单独用 `passwordTouched` 标记，避免把占位符当真密码提交。 */
-type SyncForm = {
-  url: string;
-  username: string;
-  password: string;
-  passwordTouched: boolean;
-  remoteDir: string;
-  profile: string;
-  autoSync: boolean;
-};
-
-type PresetId = "jianguoyun" | "nextcloud" | "synology" | "custom";
-
-/** 预设仅填充 URL 模板，其余字段仍需用户自填。 */
-const SYNC_PRESETS: { id: Exclude<PresetId, "custom">; url: string }[] = [
-  { id: "jianguoyun", url: "https://dav.jianguoyun.com/dav/" },
-  { id: "nextcloud", url: "https://server/remote.php/dav/files/USER/" },
-  { id: "synology", url: "http://nas-ip:5005/" },
-];
-
-/**
- * 由已保存的 URL 反推预设，让重新进入设置页时下拉框不会永远停在「自定义」。
- *
- * 坚果云按 host 判断（而非 `includes`），否则 `dav.jianguoyun.com.evil.test`
- * 也会被认成坚果云。
- */
-function detectPreset(url: string): PresetId {
-  const trimmed = url.trim();
-  if (!trimmed) return "custom";
-  let host = "";
-  let port = "";
-  try {
-    const parsed = new URL(trimmed);
-    host = parsed.hostname.toLowerCase();
-    port = parsed.port;
-  } catch {
-    return "custom";
-  }
-  if (host === "dav.jianguoyun.com") return "jianguoyun";
-  if (/\/remote\.php\/dav\//i.test(trimmed)) return "nextcloud";
-  if (port === "5005" || port === "5006") return "synology";
-  return "custom";
-}
-
-function emptyForm(): SyncForm {
-  return {
-    url: "",
-    username: "",
-    password: "",
-    passwordTouched: false,
-    remoteDir: "",
-    profile: "",
-    autoSync: false,
-  };
-}
-
-function formFromView(view: BackupSyncConfigView): SyncForm {
-  return {
-    url: view.url,
-    username: view.username,
-    // 后端从不回传密码，表单里始终以空串起步，靠 placeholder 告知「已保存」。
-    password: "",
-    passwordTouched: false,
-    remoteDir: view.remoteDir,
-    profile: view.profile,
-    autoSync: view.autoSync,
-  };
-}
-
-/** 表单是否有未保存改动。上传/下载走的是库里的配置，脏表单必须先保存。 */
-function isDirty(form: SyncForm, view: BackupSyncConfigView | null): boolean {
-  if (!view) return true;
-  return (
-    form.passwordTouched ||
-    form.url !== view.url ||
-    form.username !== view.username ||
-    form.remoteDir !== view.remoteDir ||
-    form.profile !== view.profile ||
-    form.autoSync !== view.autoSync
-  );
-}
 
 /** 后端返回的错误已是可直接展示的中文文案。 */
 function errorText(error: unknown): string {
@@ -221,11 +151,13 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     void listen<BackupSyncStatusEvent>(BACKUP_SYNC_STATUS_EVENT, (event) => {
       const { lastSyncAt, lastError } = event.payload;
       if (lastError) {
-        setSyncStatus({ kind: "error", text: lastError });
+        // 后端已把它落库，这里同步更新视图让常驻横幅立刻反映最新状态 ——
+        // 不然要等下次重新进入设置页才看得到。
+        setSyncView((prev) => (prev ? { ...prev, lastError } : prev));
         return;
       }
       if (lastSyncAt !== null) {
-        setSyncView((prev) => (prev ? { ...prev, lastSyncAt } : prev));
+        setSyncView((prev) => (prev ? { ...prev, lastSyncAt, lastError: null } : prev));
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncAutoDone") });
       }
     }).then((fn) => {
@@ -255,7 +187,32 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     [patchForm],
   );
 
-  /** 保存后刷新视图，dirty 归零，上传/下载随即解锁。 */
+  /**
+   * 开启自动同步前先确认一次。
+   *
+   * 开关一旦打开，此后每次改配置都会把含明文 API Key 的快照推到远端，
+   * 而且不再有任何逐次提示。这个后果值得一次显式点头；关闭方向无害，直接生效。
+   */
+  const handleAutoSyncChange = useCallback(
+    async (checked: boolean) => {
+      if (!checked) {
+        patchForm({ autoSync: false });
+        return;
+      }
+      const confirmed = await confirm({
+        title: t("settings.backupSyncAutoConfirmTitle"),
+        subtitle: t("settings.backupSyncAutoConfirmSubtitle"),
+        description: t("settings.backupSyncAutoConfirmDesc"),
+        confirmLabel: t("settings.backupSyncAutoConfirmAction"),
+        cancelLabel: t("settings.backupCancel"),
+        tone: "warning",
+      });
+      if (confirmed) patchForm({ autoSync: true });
+    },
+    [confirm, patchForm, t],
+  );
+
+  /** 保存后立即测一次连接：配置填错的话，此刻纠正的成本最低。 */
   const handleSaveSync = useCallback(async () => {
     setSyncBusy("save");
     setSyncStatus(null);
@@ -272,7 +229,22 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       setSyncView(view);
       setForm(formFromView(view));
       setPreset(detectPreset(view.url));
-      setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveDone") });
+
+      // 凭据不全时没什么可测的，直接报保存成功即可。
+      if (!view.url || !view.username || !view.hasPassword) {
+        setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveDone") });
+        return;
+      }
+      try {
+        await testSyncConnection();
+        setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveAndTestDone") });
+      } catch (error) {
+        // 保存本身是成功的，连接失败只是提醒 —— 不能让用户以为配置没存上。
+        setSyncStatus({
+          kind: "error",
+          text: `${t("settings.backupSyncSaveAndTestFailed")}${errorText(error)}`,
+        });
+      }
     } catch (error) {
       setSyncStatus({
         kind: "error",
@@ -318,7 +290,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         if (!confirmed) return;
       }
       const syncedAt = await uploadBackup(settings.skills);
-      setSyncView((prev) => (prev ? { ...prev, lastSyncAt: syncedAt } : prev));
+      // 后端在成功时清了 last_error，视图同步跟上，横幅立即消失。
+      setSyncView((prev) => (prev ? { ...prev, lastSyncAt: syncedAt, lastError: null } : prev));
       setSyncStatus({ kind: "ok", text: t("settings.backupSyncUploadDone") });
     } catch (error) {
       setSyncStatus({
@@ -354,6 +327,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         const skills = normalizeSkillsSettings(outcome.skills);
         setSettings((prev) => ({ ...prev, skills }));
       }
+      // 下载成功证明这条链路是通的，后端已清 last_error，视图同步跟上。
+      setSyncView((prev) => (prev ? { ...prev, lastError: null } : prev));
       setSyncStatus({
         kind: "ok",
         text: `${t("settings.backupSyncDownloadDone")}${summarizeDomains(outcome.applied, t)}`,
@@ -588,7 +563,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               disabled={syncLocked}
               title={t("settings.backupSyncAuto")}
               aria-label={t("settings.backupSyncAuto")}
-              onCheckedChange={(checked) => patchForm({ autoSync: checked })}
+              onCheckedChange={(checked) => void handleAutoSyncChange(checked)}
             />
           </div>
         </div>
@@ -654,6 +629,25 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             {t("settings.backupSyncLastAt")}
             {formatTimestamp(syncView.lastSyncAt)}
           </p>
+        ) : null}
+
+        {/*
+          自动同步失败的常驻横幅。区别于下面那条 syncStatus —— 后者是本次交互的
+          即时反馈，切走页面就没了；这条来自库里的 last_error，只要故障没修好，
+          每次进设置页都还在。用户不会在后台同步失败时正好盯着这个页面。
+        */}
+        {syncView?.lastError ? (
+          <div className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <div className="min-w-0 space-y-1">
+              <div className="text-xs font-medium text-destructive">
+                {t("settings.backupSyncAutoErrorTitle")}
+              </div>
+              <p className="break-all text-xs leading-relaxed text-destructive/90">
+                {syncView.lastError}
+              </p>
+            </div>
+          </div>
         ) : null}
 
         {syncStatus ? (

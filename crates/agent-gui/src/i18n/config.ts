@@ -155,9 +155,17 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAutoHint":
       "配置变更后自动上传到远端。自动同步只上传，不会自动覆盖本机配置。",
     "settings.backupSyncAutoDone": "已自动同步到远端",
+    "settings.backupSyncAutoConfirmTitle": "开启自动同步？",
+    "settings.backupSyncAutoConfirmSubtitle": "此后每次配置变更都会自动上传到远端，不再逐次询问。",
+    "settings.backupSyncAutoConfirmDesc":
+      "上传的配置包含明文的服务商 API Key。请确认该 WebDAV 账号只有你自己能访问。自动同步只上传，不会自动下载覆盖本机配置。",
+    "settings.backupSyncAutoConfirmAction": "开启",
+    "settings.backupSyncAutoErrorTitle": "上次自动同步失败",
     "settings.backupSyncSave": "保存",
     "settings.backupSyncSaveDone": "同步配置已保存",
     "settings.backupSyncSaveFailed": "保存同步配置失败",
+    "settings.backupSyncSaveAndTestDone": "已保存，连接测试通过",
+    "settings.backupSyncSaveAndTestFailed": "已保存，但连接测试失败：",
     "settings.backupSyncTest": "测试连接",
     "settings.backupSyncTestDone": "连接成功",
     "settings.backupSyncTestFailed": "连接失败",
@@ -400,9 +408,18 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAutoHint":
       "Upload automatically after configuration changes. Auto sync only uploads and never overwrites this machine.",
     "settings.backupSyncAutoDone": "Auto-synced to remote",
+    "settings.backupSyncAutoConfirmTitle": "Enable auto sync?",
+    "settings.backupSyncAutoConfirmSubtitle":
+      "Every configuration change will be uploaded to the remote from now on, without further prompts.",
+    "settings.backupSyncAutoConfirmDesc":
+      "The uploaded configuration contains provider API keys in plaintext. Make sure this WebDAV account is accessible only by you. Auto sync only uploads — it never downloads over this machine's configuration.",
+    "settings.backupSyncAutoConfirmAction": "Enable",
+    "settings.backupSyncAutoErrorTitle": "Last auto sync failed",
     "settings.backupSyncSave": "Save",
     "settings.backupSyncSaveDone": "Sync settings saved",
     "settings.backupSyncSaveFailed": "Failed to save sync settings",
+    "settings.backupSyncSaveAndTestDone": "Saved — connection test passed",
+    "settings.backupSyncSaveAndTestFailed": "Saved, but the connection test failed: ",
     "settings.backupSyncTest": "Test Connection",
     "settings.backupSyncTestDone": "Connected",
     "settings.backupSyncTestFailed": "Connection failed",

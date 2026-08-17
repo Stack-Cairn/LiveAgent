@@ -105,6 +105,9 @@ pub fn redact_url_for_log(url: &str) -> String {
 
 /// 坚果云需要特判：它的错误码语义与通用 WebDAV 服务器不同，直接透传
 /// 状态码用户完全无法自救（尤其 401 —— 真正原因是要用应用密码而非登录密码）。
+///
+/// 国际版用的是 `dav.jianguoyun.com` 之外的 `nutstore` 域名，同一套后端、
+/// 同一套错误语义，必须一并识别，否则国际版用户只会看到通用文案。
 fn is_jianguoyun(url: &str) -> bool {
     let host = url
         .split_once("://")
@@ -112,9 +115,12 @@ fn is_jianguoyun(url: &str) -> bool {
         .unwrap_or(url)
         .split('/')
         .next()
-        .unwrap_or("");
-    host.eq_ignore_ascii_case("dav.jianguoyun.com")
-        || host.to_ascii_lowercase().ends_with(".jianguoyun.com")
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    // 只按域名边界匹配：`jianguoyun.com.evil.test` 不能命中。
+    ["jianguoyun.com", "nutstore.net", "nutstore.com"]
+        .iter()
+        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
 }
 
 /// 把状态码翻成用户能照着操作的中文文案。
@@ -385,9 +391,15 @@ mod tests {
     fn detects_jianguoyun_hosts() {
         assert!(is_jianguoyun("https://dav.jianguoyun.com/dav/"));
         assert!(is_jianguoyun("https://DAV.JianGuoYun.com/dav/"));
+        // 国际版走 nutstore 域名，错误语义与国内版一致。
+        assert!(is_jianguoyun("https://dav.jianguoyun.com.nutstore.net/dav/"));
+        assert!(is_jianguoyun("https://app.nutstore.net/dav/"));
         assert!(!is_jianguoyun("https://example.com/dav/"));
         // 后缀相似但不同域的主机不应误判。
         assert!(!is_jianguoyun("https://jianguoyun.com.evil.test/dav/"));
+        assert!(!is_jianguoyun("https://nutstore.net.evil.test/dav/"));
+        // 仅子串包含也不能命中。
+        assert!(!is_jianguoyun("https://mynutstore.example/dav/"));
     }
 
     #[test]

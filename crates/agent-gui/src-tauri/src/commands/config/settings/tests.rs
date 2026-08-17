@@ -2000,6 +2000,7 @@ mod tests {
             profile: "work".to_string(),
             auto_sync: false,
             last_sync_at: Some(1_700_000_000_000),
+            last_error: None,
         }
     }
 
@@ -2039,6 +2040,21 @@ mod tests {
         // 用户主动清空密码框 —— 必须真的清掉，不能回退到旧值，否则无法换账号。
         let resolved = resolve_backup_sync_config(sync_request("", true), &persisted);
         assert!(resolved.password.is_empty());
+    }
+
+    /// 保存配置必须清掉遗留的自动同步错误。
+    ///
+    /// 那条错误描述的是改动**之前**的配置状态；继续挂在界面上，用户会以为
+    /// 刚填好的新地址也是坏的，从而反复折腾一个已经修好的问题。
+    #[test]
+    fn sync_config_save_clears_stale_auto_sync_error() {
+        let mut persisted = sample_sync_config();
+        persisted.last_error = Some("认证失败（401）：请检查用户名与密码".to_string());
+
+        let resolved = resolve_backup_sync_config(sync_request("fresh-secret", true), &persisted);
+        assert!(resolved.last_error.is_none(), "保存后不应残留旧错误");
+        // 同步时间是既成事实，不能跟着一起清掉。
+        assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
     }
 
     #[test]
@@ -2162,5 +2178,29 @@ mod tests {
 
         let empty = BackupSyncConfigView::from(BackupSyncConfig::default());
         assert!(!empty.has_password);
+    }
+
+    /// `last_error` 要能穿过「序列化落库 → 反序列化读回」这条来回。
+    ///
+    /// 它是自动同步失败在页面卸载后唯一的留存处，序列化时丢掉就等于没做。
+    #[test]
+    fn sync_config_persists_auto_sync_error_across_serialization() {
+        let mut config = sample_sync_config();
+        config.last_error = Some("远端存储空间不足".to_string());
+
+        let json = serde_json::to_string(&config).expect("serialize config");
+        let restored: BackupSyncConfig = serde_json::from_str(&json).expect("deserialize config");
+        assert_eq!(restored.last_error.as_deref(), Some("远端存储空间不足"));
+
+        // 旧版本写入的记录没有这个字段，读回时必须回落 None 而不是解析失败。
+        let legacy = r#"{"url":"https://dav.example.com/dav","username":"alice",
+            "password":"s","remoteDir":"liveagent","profile":"work","autoSync":true}"#;
+        let parsed: BackupSyncConfig = serde_json::from_str(legacy).expect("parse legacy payload");
+        assert!(parsed.last_error.is_none());
+        assert!(parsed.last_sync_at.is_none());
+
+        // 错误必须随视图送到前端，否则 UI 仍然看不到。
+        let view: BackupSyncConfigView = config.into();
+        assert_eq!(view.last_error.as_deref(), Some("远端存储空间不足"));
     }
 }

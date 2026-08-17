@@ -74,6 +74,14 @@ export type BackupSyncConfigView = {
   autoSync: boolean;
   /** 毫秒时间戳。 */
   lastSyncAt: number | null;
+  /**
+   * 最近一次**自动**同步的失败原因，已落库。
+   *
+   * 手动同步的错误不写这里 —— 那种失败当场就反馈给了正在操作的用户。
+   * 自动同步发生在后台，用户多半不在设置页，所以必须持久化，
+   * 否则页面一卸载错误就没了，配置早已停止同步而用户毫不知情。
+   */
+  lastError: string | null;
 };
 
 /**

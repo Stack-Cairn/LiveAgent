@@ -40,6 +40,16 @@ pub struct BackupSyncConfig {
     /// 最近一次同步成功的时间（毫秒）。
     #[serde(default)]
     pub last_sync_at: Option<i64>,
+    /// 最近一次**自动**同步的失败原因。
+    ///
+    /// 只记录自动路径：手动同步的成败由命令返回值当场反馈，用户就在屏幕前，
+    /// 不需要留痕。自动同步发生在后台，用户多半不在设置页，错误只存在于前端
+    /// state 的话页面一卸载就丢了，用户永远不知道自己的配置早就没在同步。
+    ///
+    /// 等价于 cc-switch 的 `last_error` + `last_error_source == "auto"`：
+    /// 我们只在自动入口写这个字段，来源信息因此隐含在「字段有值」里。
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 fn default_backup_remote_dir() -> String {
@@ -60,6 +70,7 @@ impl Default for BackupSyncConfig {
             profile: default_backup_profile(),
             auto_sync: false,
             last_sync_at: None,
+            last_error: None,
         }
     }
 }
@@ -96,6 +107,8 @@ pub struct BackupSyncConfigView {
     pub profile: String,
     pub auto_sync: bool,
     pub last_sync_at: Option<i64>,
+    /// 最近一次自动同步的失败原因；成功或从未失败为 None。
+    pub last_error: Option<String>,
 }
 
 /// 远端备份的摘要，供上传/下载前的确认对话框展示。
@@ -130,6 +143,7 @@ impl From<BackupSyncConfig> for BackupSyncConfigView {
             profile: config.profile,
             auto_sync: config.auto_sync,
             last_sync_at: config.last_sync_at,
+            last_error: config.last_error,
         }
     }
 }
@@ -228,6 +242,9 @@ pub(crate) fn resolve_backup_sync_config(
         auto_sync: request.auto_sync,
         // 保存配置不改变同步时间。
         last_sync_at: persisted.last_sync_at,
+        // 但要清掉旧的自动同步错误：用户刚改过配置，那条错误说的是改之前的状态，
+        // 继续挂着会让人以为新配置也是坏的。下次自动同步会重新写入真实结果。
+        last_error: None,
     })
 }
 
@@ -308,13 +325,29 @@ fn load_backup_sync_config_from_db() -> Result<BackupSyncConfig, String> {
     load_backup_sync_config(&conn)
 }
 
+/// 记录一次同步成功：写入时间戳并清掉遗留的自动同步错误横幅。
 fn touch_backup_last_sync_at() -> Result<i64, String> {
     let timestamp = now_ms() as i64;
     let conn = open_db()?;
     let mut config = load_backup_sync_config(&conn)?;
     config.last_sync_at = Some(timestamp);
+    // 手动同步成功同样清错误：既然这条链路现在是通的，那条旧错误已经过期。
+    config.last_error = None;
     persist_backup_sync_config(&conn, &config)?;
     Ok(timestamp)
+}
+
+/// 记录一次**自动**同步失败。
+///
+/// 尽力而为：写库本身失败时只能放弃 —— 调用方已经处在错误路径上，
+/// 再抛一个错误没有任何人能处理，反而会盖掉真正的失败原因。
+fn record_backup_auto_sync_error(message: &str) {
+    let Ok(conn) = open_db() else { return };
+    let Ok(mut config) = load_backup_sync_config(&conn) else {
+        return;
+    };
+    config.last_error = Some(message.to_string());
+    let _ = persist_backup_sync_config(&conn, &config);
 }
 
 // ===== Tauri 命令 =====
@@ -457,8 +490,10 @@ pub fn settings_backup_mark_dirty(skills: Option<Value>) {
 
 /// 自动同步的上传入口。
 ///
-/// 与手动上传的唯一区别是「没开开关或凭据不全就静默跳过」——自动路径不该
-/// 因为用户没配 WebDAV 就反复弹错误。
+/// 与手动上传有两点不同：
+/// 1. 没开开关或凭据不全就静默跳过 —— 自动路径不该因为用户没配 WebDAV 就反复弹错误。
+/// 2. 失败会落库（`last_error`）。用户此刻多半不在设置页，只靠事件推送的话
+///    页面一卸载错误就没了，配置早已停止同步而用户毫不知情。
 pub(crate) async fn auto_upload_backup_snapshot(
     skills: Option<Value>,
 ) -> Result<Option<i64>, String> {
@@ -468,10 +503,26 @@ pub(crate) async fn auto_upload_backup_snapshot(
     if !config.auto_sync || backup_credentials(&config).is_err() {
         return Ok(None);
     }
-    upload_backup_snapshot(skills).await.map(Some)
+    match upload_backup_snapshot(skills).await {
+        Ok(timestamp) => Ok(Some(timestamp)),
+        Err(error) => {
+            let message = error.clone();
+            // 落库放到 blocking 线程，避免在异步上下文里做同步 SQLite IO。
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                record_backup_auto_sync_error(&message);
+            })
+            .await;
+            Err(error)
+        }
+    }
 }
 
 /// 下载：拉 manifest → 拉 config → 校验 size+sha256 → 应用快照。
+///
+/// **全程持有全局锁**，应用快照也在锁内。应用要跨 providers/mcp/system 三域
+/// 分别写库，中间态是不自洽的；若此时自动上传拿到锁开始采集快照，传上去的
+/// 就是半旧半新的配置。抑制守卫在锁内获取、随 blocking 任务一同释放，
+/// 顺序与 cc-switch 的 `run_with_webdav_lock` 一致。
 #[tauri::command]
 pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
@@ -479,40 +530,34 @@ pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
         .map_err(|e| format!("settings_backup_download join 失败：{e}"))??;
     let creds = backup_credentials(&config)?;
 
-    let (document, remote) = {
-        let _guard = backup_sync_mutex().lock().await;
+    let _guard = backup_sync_mutex().lock().await;
 
-        let Some(manifest_body) = crate::services::webdav::get_bytes(
-            &creds,
-            &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
-            WEBDAV_MANIFEST_MAX_BYTES,
-            "远端备份元信息",
-        )
-        .await?
-        else {
-            return Err("远端还没有备份，请先在任一设备上传一次".to_string());
-        };
-        let remote = parse_backup_remote_manifest(&manifest_body)?;
-
-        let Some(body) = crate::services::webdav::get_bytes(
-            &creds,
-            &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
-            WEBDAV_CONFIG_MAX_BYTES,
-            "远端配置",
-        )
-        .await?
-        else {
-            return Err(
-                "远端元信息存在但配置文件缺失，请从源设备重新上传一次".to_string()
-            );
-        };
-        verify_backup_payload(&body, remote.size, &remote.sha256)?;
-        let document = String::from_utf8(body)
-            .map_err(|_| "远端配置不是合法的 UTF-8 文本".to_string())?;
-        (document, remote)
+    let Some(manifest_body) = crate::services::webdav::get_bytes(
+        &creds,
+        &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
+        WEBDAV_MANIFEST_MAX_BYTES,
+        "远端备份元信息",
+    )
+    .await?
+    else {
+        return Err("远端还没有备份，请先在任一设备上传一次".to_string());
     };
-    // manifest 已在 parse 时校验过版本，这里只是显式保留引用语义。
-    let _ = &remote.manifest;
+    // parse 时已校验 manifest 的版本兼容性，不兼容会在这里中止。
+    let remote = parse_backup_remote_manifest(&manifest_body)?;
+
+    let Some(body) = crate::services::webdav::get_bytes(
+        &creds,
+        &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
+        WEBDAV_CONFIG_MAX_BYTES,
+        "远端配置",
+    )
+    .await?
+    else {
+        return Err("远端元信息存在但配置文件缺失，请从源设备重新上传一次".to_string());
+    };
+    verify_backup_payload(&body, remote.size, &remote.sha256)?;
+    let document =
+        String::from_utf8(body).map_err(|_| "远端配置不是合法的 UTF-8 文本".to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
         // 应用快照会走 save_providers / save_mcp / save_system，它们都会标脏。
