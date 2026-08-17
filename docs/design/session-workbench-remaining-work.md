@@ -49,6 +49,27 @@ dock 残留同名 tab 关不掉」——根因是**幽灵会话**:前端列表�
   已删除会话短暂写回父级列表(幽灵来源之一)。自愈链路已兜底;彻底修复需把受控模式的
   写回改为基于最新 externalSessions 派生,留待单独立项。
 
+**第三轮(2026-08-18,语义变更 + 慢加载修复)**:用户裁决推翻 T-5 的「保留+leased 标记」:
+拖入画板后 dock 里的本地终端 tab 应当**消失**,终端在任一时刻只出现在一个宿主里。
+
+- 语义变更:`useRightDockSessions.localSessions` 直接过滤 `leasedSessionIds`;
+  `RightDockTabStrip` / `RightDockContent` / `RightDockPanel` 的 leased 标记态、
+  「聚焦工作台面板」菜单与视口占位全部删除;`workbench.terminalLeasedPlaceholder` /
+  `workbench.focusPane` 两个 i18n key 随之删除(死 key)。Pane Detach 释放租约后
+  tab 自动回归。SSH overlay 的 shell tab 保持「占位+聚焦」互斥不变(overlay 是
+  SSH 连接管理入口,tab 需持续可见);`focusWorkbenchTerminalPane` 仅剩 overlay 消费。
+  架构文档 §16 已写回。`workbench-dock-focus.test.mjs` 的白名单断言改为「无 Pane
+  焦点入口」断言。
+- 拖入后「加载非常慢」根因:实机上拖入既有会话本应瞬时(先写绑定再开 Pane,宿主
+  直接命中会话),观察到的数秒等待是宿主走了 `ensureTerminalPaneSession` **新建 PTY
+  + shell 冷启动**——即绑定在宿主读取时命中失败。已定位的成因是 dev HMR 使
+  `terminalPaneRuntime` 模块被多实例化:drop 事务写入的是旧实例的内存 Map,宿主
+  读的是新实例;sessionStorage 是两者唯一共享层。修复:`terminalPaneBindingStore.get`
+  内存 miss 时从 storage 兜底采纳(静默、不通知——get 是 useSyncExternalStore 的
+  getSnapshot,渲染期不得触发更新)。`terminal-pane-binding-store.test.mjs` 增加
+  3 例(跨实例命中、渲染期静默、miss 返回 null)。生产构建单实例不受影响,兜底
+  只在 miss 时读一次 storage,无热路径开销。
+
 ### Permission-Changed blocked 态:调研结论(不实现)
 
 设计文档 §7.4 要求 Pane blocked 有 Missing / Archived / **Permission Changed** 三态。

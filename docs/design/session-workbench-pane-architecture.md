@@ -588,7 +588,7 @@ TerminalPaneSurface
 - 中央 Pane 不复用 Right Dock 单一 File Tree UI State。
 - 后续 Folder Pane 需重新评审数据层、权限和多实例状态，不能直接搬 DOM。
 
-运行终端列表是 Detach 后的找回入口，必须保留，但只展示状态与“在工作台打开”；持有 Workbench Lease 的 Session 不渲染 `XTermViewport`。
+运行终端列表是 Detach 后的找回入口，必须保留；持有 Workbench Lease 的 Session 从 dock 的终端 tab 中整体隐藏（终端在任一时刻只出现在一个宿主里），Pane Detach 释放租约后自动回归 dock。SSH overlay 的 shell tab 保持「占位 + 聚焦 Pane」互斥（overlay 是 SSH 连接管理入口，tab 需持续可见）。
 
 ## 17. 生命周期与关闭语义
 
