@@ -216,6 +216,11 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
+  /**
+   * 只读视图（如轨迹页）挂起输入区：整体 display:none 但保持挂载，
+   * 半打的草稿与队列状态在切回聊天页时原样恢复。
+   */
+  hidden?: boolean;
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
@@ -283,6 +288,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
+    hidden = false,
     inputPlaceholder,
     workdir,
     enabledSkills,
@@ -660,6 +666,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           ? "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4"
           : "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center",
         isComposerExpanded && (surface === "desktop" ? "top-14" : "top-0 pt-3"),
+        hidden && "hidden",
       )}
     >
       {surface === "desktop" ? (

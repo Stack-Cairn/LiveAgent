@@ -103,6 +103,12 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             payload_json TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        -- WebDAV 同步配置。独立成表是刻意的：见 mod.rs 上 BACKUP_SYNC_SETTINGS_TABLE 的注释。
+        CREATE TABLE IF NOT EXISTS backup_sync_settings (
+            config_id TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS tunnel_settings (
             tunnel_id TEXT PRIMARY KEY,
             payload_json TEXT NOT NULL,

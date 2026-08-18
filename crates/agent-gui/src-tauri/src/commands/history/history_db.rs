@@ -2,7 +2,7 @@ use rusqlite::{Connection, OptionalExtension};
 use std::{collections::HashSet, fs, path::PathBuf, sync::Mutex, time::Duration};
 
 const DB_FILENAME: &str = "chat-history.sqlite3";
-const HISTORY_DB_SCHEMA_VERSION: i64 = 2;
+const HISTORY_DB_SCHEMA_VERSION: i64 = 3;
 
 static HISTORY_DB_MIGRATION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -88,6 +88,11 @@ fn migrate_history_db_inner(conn: &Connection) -> Result<(), String> {
         set_user_version(conn, 2)?;
     }
 
+    if current_version < 3 {
+        migrate_to_v3(conn)?;
+        set_user_version(conn, 3)?;
+    }
+
     // The subagent schema is versioned independently via subagentMeta and is
     // safe to (re)ensure on every startup.
     ensure_subagent_schema(conn)?;
@@ -103,6 +108,13 @@ fn migrate_to_v1(conn: &Connection) -> Result<(), String> {
 // v2: chatHistory 新增 selected_model_json（每会话模型选择）。schema ensure
 // 本身幂等，重跑即补齐缺失列。
 fn migrate_to_v2(conn: &Connection) -> Result<(), String> {
+    ensure_chat_history_schema(conn)?;
+    Ok(())
+}
+
+// v3: trajectory diagnostics. Existing v2 installations must receive the
+// per-segment event columns and the content-addressed prompt section table.
+fn migrate_to_v3(conn: &Connection) -> Result<(), String> {
     ensure_chat_history_schema(conn)?;
     Ok(())
 }
@@ -190,6 +202,8 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
             end_message_id TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            trajectory_json TEXT NOT NULL DEFAULT '[]',
+            trajectory_truncated INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (conversation_id, segment_index),
             UNIQUE (conversation_id, segment_id),
             FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
@@ -202,6 +216,20 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
             redact_tool_content INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
+        );
+
+        -- 轨迹的 system prompt 分段池：内容寻址，按会话隔离。
+        -- 不做跨会话共享是刻意的：共享需要引用计数才能安全回收，而按会话隔离时
+        -- 删除会话即整段回收，代价只是 base 段在会话间重复存一份。
+        CREATE TABLE IF NOT EXISTS chatTrajectorySection (
+            conversation_id TEXT NOT NULL,
+            section_id TEXT NOT NULL,
+            slot TEXT NOT NULL,
+            content TEXT NOT NULL,
+            bytes INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (conversation_id, section_id),
             FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
         );
         ",
@@ -221,6 +249,8 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
             ON chatHistory(is_pinned DESC, pinned_at DESC, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_chatHistoryShare_token
             ON chatHistoryShare(token);
+        CREATE INDEX IF NOT EXISTS idx_chatTrajectorySection_conversation
+            ON chatTrajectorySection(conversation_id);
         ",
     )
     .map_err(|e| format!("初始化聊天历史索引失败：{e}"))?;
@@ -377,6 +407,15 @@ fn ensure_chat_history_segment_columns(conn: &Connection) -> Result<(), String> 
                 "updated_at",
                 "ALTER TABLE chatHistorySegment ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;",
             ),
+            // 轨迹事件随分段走，自动继承分支/截断/替换的生命周期。
+            (
+                "trajectory_json",
+                "ALTER TABLE chatHistorySegment ADD COLUMN trajectory_json TEXT NOT NULL DEFAULT '[]';",
+            ),
+            (
+                "trajectory_truncated",
+                "ALTER TABLE chatHistorySegment ADD COLUMN trajectory_truncated INTEGER NOT NULL DEFAULT 0;",
+            ),
         ],
     )?;
 
@@ -401,6 +440,14 @@ fn ensure_chat_history_segment_columns(conn: &Connection) -> Result<(), String> 
         UPDATE chatHistorySegment
         SET updated_at = created_at
         WHERE updated_at IS NULL;
+
+        UPDATE chatHistorySegment
+        SET trajectory_json = '[]'
+        WHERE trajectory_json IS NULL OR trim(trajectory_json) = '';
+
+        UPDATE chatHistorySegment
+        SET trajectory_truncated = 0
+        WHERE trajectory_truncated IS NULL;
         ",
     )
     .map_err(|e| format!("修复聊天历史分段表默认字段失败：{e}"))?;
@@ -745,7 +792,9 @@ mod tests {
             "chatHistory",
             "chatHistorySegment",
             "chatHistoryShare",
+            "chatTrajectorySection",
             "chatHistoryFtsSegmentIndex",
+            "chatTrajectorySection",
             "subagentMeta",
             "subagentIdentity",
             "subagentRun",
@@ -761,6 +810,77 @@ mod tests {
                 .expect("query table existence");
             assert_eq!(exists, 1, "{table_name} should exist");
         }
+    }
+
+    #[test]
+    fn migrate_v2_database_adds_trajectory_schema() {
+        let conn = Connection::open_in_memory().expect("open v2 in-memory history db");
+        conn.execute_batch(
+            "
+            CREATE TABLE chatHistory (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                provider_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                session_id TEXT,
+                cwd TEXT,
+                context_meta_json TEXT,
+                active_segment_index INTEGER,
+                total_segment_count INTEGER,
+                total_message_count INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                is_pinned INTEGER NOT NULL DEFAULT 0,
+                pinned_at INTEGER,
+                selected_model_json TEXT
+            );
+            CREATE TABLE chatHistorySegment (
+                conversation_id TEXT NOT NULL,
+                segment_index INTEGER NOT NULL,
+                segment_id TEXT NOT NULL,
+                summary_json TEXT,
+                messages_json TEXT NOT NULL,
+                message_count INTEGER NOT NULL,
+                start_message_id TEXT,
+                end_message_id TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (conversation_id, segment_index),
+                UNIQUE (conversation_id, segment_id),
+                FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
+            );
+            CREATE TABLE chatHistoryShare (
+                conversation_id TEXT PRIMARY KEY,
+                token TEXT UNIQUE,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                redact_tool_content INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
+            );
+            PRAGMA user_version = 2;
+            ",
+        )
+        .expect("create v2 history schema");
+
+        initialize_connection(&conn).expect("migrate v2 trajectory schema");
+
+        assert_eq!(
+            read_user_version(&conn).expect("read migrated version"),
+            HISTORY_DB_SCHEMA_VERSION
+        );
+        let segment_columns = read_table_columns(&conn, "chatHistorySegment", "chatHistorySegment")
+            .expect("read migrated segment columns");
+        assert!(segment_columns.contains("trajectory_json"));
+        assert!(segment_columns.contains("trajectory_truncated"));
+        let section_table_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'chatTrajectorySection'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query trajectory section table");
+        assert_eq!(section_table_exists, 1);
     }
 
     #[test]

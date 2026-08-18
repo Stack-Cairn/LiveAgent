@@ -603,6 +603,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.failoverQueueHint":
     "按优先级排列的 {vendor} 备用供应商（P1 优先）。当前供应商请求失败时，用同一个模型依次尝试；未激活该模型的供应商会被跳过。",
   "settings.failoverQueueAdd": "选择供应商加入队列",
+  "settings.failoverQueueSearch": "搜索供应商...",
+  "settings.failoverQueueNoMatch": "未找到匹配的供应商",
+  "settings.failoverQueueUnavailableCandidates":
+    "有 {count} 个供应商因缺少 Base URL 或 API Key，未列入候选。",
+  "settings.failoverQueueUnavailableExisting":
+    "队列中有 {count} 个供应商缺少 Base URL 或 API Key，运行时会跳过。",
   "settings.failoverQueueEmpty": "队列为空。添加至少一个备用供应商后，自动故障转移才会生效。",
   "settings.failoverQueueMoveUp": "上移",
   "settings.failoverQueueMoveDown": "下移",

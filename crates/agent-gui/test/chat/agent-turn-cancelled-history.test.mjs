@@ -106,6 +106,7 @@ async function replayCancelledHistoryScenario(params) {
 }
 
 let runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+let taskListRuntimeContextScenario = "";
 let memoryExtractionRequestScenario = async () => ({
   ok: true,
   acceptedCount: 0,
@@ -154,7 +155,7 @@ const loader = createTsModuleLoader({
     },
     [taskToolsPath]: {
       formatTaskListRuntimeContext() {
-        return "";
+        return taskListRuntimeContextScenario;
       },
     },
   },
@@ -164,6 +165,9 @@ const { runAgentConversationTurn } = loader.loadModule(
   "src/pages/chat/turns/runAgentConversationTurn.ts",
 );
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
+const { composeTrajectorySystemPrompt } = loader.loadModule(
+  "@liveagent/ui/lib/trajectory/sections.ts",
+);
 
 function noOp() {}
 
@@ -185,6 +189,7 @@ function createCompletedAgentDevTurnParams({
   applyConversationState = noOp,
   persistConversationWithHistorySync,
   gatewayTokens = [],
+  extra = {},
 }) {
   const userStop = new AbortController();
   return {
@@ -253,8 +258,115 @@ function createCompletedAgentDevTurnParams({
     commitVisibleAbortedConversation: () => false,
     freezeGatewayFinalProjection: noOp,
     persistConversationWithHistorySync,
+    ...extra,
   };
 }
+
+function trajectoryRecorderSpy(calls) {
+  return {
+    beginTurn: (info) => calls.push(["beginTurn", info]),
+    noteContext: (info) => calls.push(["noteContext", info]),
+    captureHeader: (input) => {
+      calls.push(["captureHeader", input]);
+      return "header-1";
+    },
+    stepStart: (step, headerId) => calls.push(["stepStart", { step, headerId }]),
+    firstToken: (step) => calls.push(["firstToken", step]),
+    stepEnd: (step, info) => calls.push(["stepEnd", { step, info }]),
+    noteRetry: noOp,
+    toolStart: noOp,
+    toolEnd: noOp,
+    compactionStart: noOp,
+    compactionEnd: noOp,
+    endTurn: noOp,
+    flush: async () => {},
+    dispose: async () => {},
+    discard: noOp,
+  };
+}
+
+test("trajectory captures the exact runtime prompt, tool-first TTFT, and failover metadata", async () => {
+  const calls = [];
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "BASE",
+    messages: [],
+  });
+  state.meta.taskList = { runId: "run-1", items: [] };
+  taskListRuntimeContextScenario = " TASKS ";
+  const actualAssistant = {
+    role: "assistant",
+    provider: "deepseek",
+    api: "openai-completions",
+    model: "deepseek-reasoner",
+    content: [{ type: "text", text: "done" }],
+    stopReason: "stop",
+    timestamp: 2,
+  };
+  const toolCall = {
+    type: "toolCall",
+    id: "call-tool-first",
+    name: "Read",
+    arguments: { path: "README.md" },
+  };
+  runAssistantWithToolsScenario = async (params) => {
+    const toolsSuffix = "TOOL RULES";
+    params.onRequestStart?.({
+      round: 1,
+      context: {
+        ...params.context,
+        systemPrompt: `${params.context.systemPrompt}\n\n${toolsSuffix}`,
+        tools: [],
+      },
+      toolsSuffix,
+    });
+    params.onTurnStart?.(1);
+    params.onToolCall?.(toolCall, 1);
+    params.onAssistantMessage?.(actualAssistant, 1);
+    return {
+      assistant: actualAssistant,
+      messages: [actualAssistant],
+      emittedMessages: [actualAssistant],
+    };
+  };
+
+  try {
+    await runAgentConversationTurn(
+      createCompletedAgentDevTurnParams({
+        state,
+        persistConversationWithHistorySync: async () => true,
+        extra: {
+          trajectory: trajectoryRecorderSpy(calls),
+          trajectoryTurn: 7,
+          trajectoryMessageId: "user-7",
+          readTrajectorySlots: () => ({ base: "BASE", agent: "AGENT" }),
+          buildPreparedContext: () => ({
+            systemPrompt: "BASE\n\nAGENT",
+            messages: [],
+          }),
+        },
+      }),
+    );
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+    taskListRuntimeContextScenario = "";
+  }
+
+  const contextCall = calls.find(([kind]) => kind === "noteContext");
+  assert.deepEqual(contextCall, ["noteContext", { source: "task-list", text: "TASKS" }]);
+  const header = calls.find(([kind]) => kind === "captureHeader")[1];
+  assert.equal(header.runtime, "TASKS");
+  assert.equal(
+    composeTrajectorySystemPrompt(header),
+    "BASE\n\nAGENT\n\nTASKS\n\nTOOL RULES",
+  );
+  const firstTokenAt = calls.findIndex(([kind]) => kind === "firstToken");
+  const stepEndAt = calls.findIndex(([kind]) => kind === "stepEnd");
+  assert.ok(firstTokenAt >= 0 && firstTokenAt < stepEndAt);
+  const stepEnd = calls[stepEndAt][1].info;
+  assert.equal(stepEnd.provider, "deepseek");
+  assert.equal(stepEnd.model, "deepseek-reasoner");
+  assert.equal(stepEnd.api, "openai-completions");
+});
 
 test("agent dev skips memory extraction when final history persistence fails", async () => {
   const finalAssistant = {

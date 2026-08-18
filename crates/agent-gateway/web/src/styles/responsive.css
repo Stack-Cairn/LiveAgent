@@ -57,6 +57,10 @@
     width: 100%;
   }
 
+  .gateway-main-shell [data-app-workbench-chrome] {
+    z-index: var(--layer-raised);
+  }
+
   .gateway-chat-frame {
     height: 100%;
     --gateway-chat-column-gutter: 12px;
@@ -711,6 +715,23 @@
     line-height: 1.5;
   }
 
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-heading {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"]
+    .settings-hooks-detail-heading
+    .settings-section-title-group {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-add {
+    flex: 0 0 auto;
+    align-self: flex-start;
+  }
+
   html[data-liveagent-webui="gateway"] .settings-hooks-card {
     padding: 12px;
     border-radius: 12px;
@@ -736,6 +757,34 @@
   html[data-liveagent-webui="gateway"] .settings-hooks-card-desc {
     font-size: 12.5px;
     line-height: 1.5;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-devices-card-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-devices-card-main,
+  html[data-liveagent-webui="gateway"] .settings-devices-card-meta {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-devices-card-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: stretch;
+    gap: 6px;
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    padding-top: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-devices-card-actions > button {
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    padding-inline: 8px;
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row {
@@ -1136,6 +1185,41 @@
     flex-wrap: wrap;
   }
 
+  html[data-liveagent-webui="gateway"] .settings-log-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span {
+    width: auto !important;
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span:first-of-type {
+    flex: initial;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span:nth-of-type(3) {
+    margin-left: 0 !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-provider-card-row {
+    display: grid;
+    grid-template-columns: 20px 20px minmax(0, 1fr) auto;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-provider-card-main {
+    min-width: 0;
+  }
+
   html[data-liveagent-webui="gateway"] .settings-hooks-card-row {
     grid-template-columns: 32px minmax(0, 1fr) auto;
   }
@@ -1174,6 +1258,15 @@
 }
 
 @media (max-width: 380px) {
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-add {
+    align-self: flex-start;
+  }
+
   .gateway-chat-frame {
     --gateway-chat-column-gutter: 8px;
   }

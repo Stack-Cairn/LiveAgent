@@ -4,6 +4,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
+import { markBackupDirty } from "../backup";
 import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
 import {
   type AppSettings,
@@ -385,7 +386,25 @@ export async function persistSettings(
     });
   }
 
+  // 备份快照只覆盖 providers / mcp / system / skills 四域，其余域的变更不该
+  // 触发同步。skills 存在 localStorage，后端感知不到，所以四域统一在这里通知
+  // ——providers/mcp/system 侧后端也会各自标脏，重复标脏被防抖窗口合并掉，无害。
+  const backupDirty =
+    hasChanged(prev.customProviders, next.customProviders) ||
+    hasChanged(prev.system, next.system) ||
+    hasChanged(prev.mcp, next.mcp) ||
+    hasChanged(prev.skills, next.skills);
+
   await Promise.all(tasks);
+
+  // 标脏必须等落盘完成，与后端侧一致（save_providers / save_mcp / save_system
+  // 都在 tx.commit() 之后才标脏）。提前标脏会让自动上传在某个域写失败时，
+  // 仍把「部分成功」的库状态当成一份完整快照推上远端 —— 它带着自洽的 sha256，
+  // 其他设备的下载校验一路放行，三域互不一致的配置就这么扩散出去了。
+  if (backupDirty) {
+    markBackupDirty(next.skills);
+  }
+
   return result;
 }
 

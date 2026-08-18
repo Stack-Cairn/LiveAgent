@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -131,7 +132,7 @@ func TestSnapshotRevisionIsMonotonic(t *testing.T) {
 	}
 }
 
-func TestAcquireTunnelLifecycleAndLimits(t *testing.T) {
+func TestAcquireTunnelLifecycle(t *testing.T) {
 	m := newTunnelTestManager(t)
 	m.ApplyDesiredState("test-agent", desiredState(
 		&gatewayv2.TunnelSpec{Id: "tun-a", TargetUrl: "http://localhost:3000"},
@@ -142,19 +143,17 @@ func TestAcquireTunnelLifecycleAndLimits(t *testing.T) {
 		t.Fatalf("acquire missing = %v, want ErrTunnelNotFound", err)
 	}
 
-	leases := make([]*TunnelStreamLease, 0, maxTunnelConnections)
-	for i := 0; i < maxTunnelConnections; i++ {
-		lease, err := m.AcquireTunnel(slug, "s-"+string(rune('a'+i)))
+	const concurrentConnections = 64
+	leases := make([]*TunnelStreamLease, 0, concurrentConnections)
+	for i := 0; i < concurrentConnections; i++ {
+		lease, err := m.AcquireTunnel(slug, "s-"+strconv.Itoa(i))
 		if err != nil {
 			t.Fatalf("acquire %d: %v", i, err)
 		}
 		leases = append(leases, lease)
 	}
-	if _, err := m.AcquireTunnel(slug, "s-over"); err != ErrTunnelOverLimit {
-		t.Fatalf("over-limit acquire = %v, want ErrTunnelOverLimit", err)
-	}
-	if got := m.TunnelStateSnapshot("test-agent").GetTunnels()[0].GetActiveConnections(); got != maxTunnelConnections {
-		t.Fatalf("active connections = %d, want %d", got, maxTunnelConnections)
+	if got := m.TunnelStateSnapshot("test-agent").GetTunnels()[0].GetActiveConnections(); got != concurrentConnections {
+		t.Fatalf("active connections = %d, want %d", got, concurrentConnections)
 	}
 	for _, lease := range leases {
 		lease.Release()

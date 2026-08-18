@@ -111,6 +111,7 @@ export const ConversationPaneHost = forwardRef<
     checkpointRewind,
     isConversationRunning,
     fileDrop,
+    trajectory,
   } = useConversationPaneBinding({ paneId, conversationId, project });
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
@@ -161,9 +162,12 @@ export const ConversationPaneHost = forwardRef<
           previewText: buildQueuedChatTurnPreview(item.draft),
           fileCount: item.uploadedFiles.length,
         }));
+        const trajectoryActive = Boolean(trajectory?.active);
 
         return {
-          transcript: (
+          transcript: trajectoryActive ? (
+            trajectory?.content
+          ) : (
             <ChangedFilesActionsProvider value={changedFilesActions}>
               <DesktopCheckpointRewindProvider
                 conversationId={snapshot.conversationId}
@@ -188,6 +192,8 @@ export const ConversationPaneHost = forwardRef<
           composer: (
             <ChatComposerBar
               {...composer}
+              // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
+              hidden={trajectoryActive}
               composerRef={composerRef}
               isSending={isSending}
               pendingUploadedFiles={snapshot.uploads}

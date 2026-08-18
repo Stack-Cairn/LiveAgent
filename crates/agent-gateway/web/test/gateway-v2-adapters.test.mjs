@@ -583,3 +583,25 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
     /unsupported gateway request type/,
   );
 });
+
+test("trajectory fetch keeps prompt section ids and subagent run ids in separate proto fields", () => {
+  const frame = decodeClientFrame(
+    encodeRequestFrame(
+      "trajectory-1",
+      "trajectory.fetch",
+      {
+        conversation_id: "conversation-1",
+        section_ids: ["section-a"],
+        subagent_run_ids: ["run-a", "run-b"],
+        include_subagent_runs: true,
+      },
+      "agent-a",
+    ),
+  );
+
+  assert.equal(frame.payload.value.payload.case, "trajectoryFetch");
+  const request = frame.payload.value.payload.value;
+  assert.deepEqual(request.sectionIds, ["section-a"]);
+  assert.deepEqual(request.subagentRunIds, ["run-a", "run-b"]);
+  assert.equal(request.includeSubagentRuns, true);
+});

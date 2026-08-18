@@ -17,7 +17,6 @@ import (
 
 const (
 	maxTunnelsPerAgent       = 5
-	maxTunnelConnections     = 20
 	tunnelSlugEntropyBytes   = 24
 	tunnelStreamChannelDepth = 256
 	tunnelAgentSendTimeout   = 10 * time.Second
@@ -442,9 +441,6 @@ func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLeas
 	}
 	if !record.expiresAt.IsZero() && !record.expiresAt.After(now) {
 		return nil, ErrTunnelExpired
-	}
-	if record.activeConnections >= maxTunnelConnections {
-		return nil, ErrTunnelOverLimit
 	}
 	stream := &tunnelStream{
 		streamID: streamID,

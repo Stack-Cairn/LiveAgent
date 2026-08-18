@@ -5,14 +5,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const {
-  ANTHROPIC_WEB_SEARCH_TOOL_TYPES,
-  ANTHROPIC_WEB_FETCH_TOOL_TYPES,
-  resolveAnthropicWebSearchToolType,
-  resolveAnthropicWebFetchToolType,
-  supportsAnthropicDynamicFilteringWebSearch,
-  supportsAnthropicNativeWebFetch,
+  ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
   hasAnthropicWebSearchTool,
-  hasAnthropicWebFetchTool,
   hasOpenAIResponsesWebSearchTool,
   hasGeminiGoogleSearchTool,
   isProviderNativeWebSearchToolName,
@@ -22,39 +16,8 @@ const {
   buildProviderNativeWebFetchBridgeResult,
 } = loader.loadModule("src/lib/providers/nativeWebSearch.ts");
 
-function createAnthropicModel(id, overrides = {}) {
-  return {
-    id,
-    name: id,
-    api: "anthropic-messages",
-    provider: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    reasoning: true,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 200_000,
-    maxTokens: 64_000,
-    ...overrides,
-  };
-}
-
-test("resolveAnthropicWebSearchToolType returns the dynamic-filtering version for adaptive-thinking models", () => {
-  const model = createAnthropicModel("claude-fable-5", { compat: { forceAdaptiveThinking: true } });
-  assert.equal(supportsAnthropicDynamicFilteringWebSearch(model), true);
-  assert.equal(resolveAnthropicWebSearchToolType(model), ANTHROPIC_WEB_SEARCH_TOOL_TYPES.dynamicFiltering);
-  assert.equal(resolveAnthropicWebSearchToolType(model), "web_search_20260318");
-});
-
-test("resolveAnthropicWebSearchToolType returns the legacy version for non-adaptive-thinking models", () => {
-  const model = createAnthropicModel("claude-opus-4-6", { compat: { forceAdaptiveThinking: false } });
-  assert.equal(supportsAnthropicDynamicFilteringWebSearch(model), false);
-  assert.equal(resolveAnthropicWebSearchToolType(model), ANTHROPIC_WEB_SEARCH_TOOL_TYPES.legacy);
-  assert.equal(resolveAnthropicWebSearchToolType(model), "web_search_20250305");
-});
-
-test("resolveAnthropicWebSearchToolType defaults to legacy when compat is absent", () => {
-  const model = createAnthropicModel("claude-custom-x");
-  assert.equal(resolveAnthropicWebSearchToolType(model), ANTHROPIC_WEB_SEARCH_TOOL_TYPES.legacy);
+test("Anthropic native search uses the stable GA version", () => {
+  assert.equal(ANTHROPIC_WEB_SEARCH_TOOL_TYPE, "web_search_20250305");
 });
 
 test("hasAnthropicWebSearchTool recognizes every live tool-type version plus the bare name", () => {
@@ -101,36 +64,6 @@ test("isProviderNativeWebSearchToolName recognizes xAI server-side search tool n
   assert.equal(isProviderNativeWebSearchToolName("x_search_call_output"), true);
   assert.equal(isProviderNativeWebSearchToolName("x_searcher"), false);
   assert.equal(isProviderNativeWebSearchToolName("x_unrelated_tool"), false);
-});
-
-test("resolveAnthropicWebFetchToolType mirrors the web_search dynamic-filtering gate", () => {
-  const modern = createAnthropicModel("claude-sonnet-5", {
-    compat: { forceAdaptiveThinking: true },
-  });
-  assert.equal(supportsAnthropicNativeWebFetch(modern), true);
-  assert.equal(
-    resolveAnthropicWebFetchToolType(modern),
-    ANTHROPIC_WEB_FETCH_TOOL_TYPES.dynamicFiltering,
-  );
-  assert.equal(resolveAnthropicWebFetchToolType(modern), "web_fetch_20260318");
-
-  const legacy = createAnthropicModel("claude-opus-4-6", {
-    compat: { forceAdaptiveThinking: false },
-  });
-  assert.equal(supportsAnthropicNativeWebFetch(legacy), false);
-  assert.equal(resolveAnthropicWebFetchToolType(legacy), ANTHROPIC_WEB_FETCH_TOOL_TYPES.legacy);
-  assert.equal(resolveAnthropicWebFetchToolType(legacy), "web_fetch_20250910");
-});
-
-test("hasAnthropicWebFetchTool recognizes every live tool-type version plus the bare name", () => {
-  assert.equal(hasAnthropicWebFetchTool({ type: "web_fetch_20250910", name: "web_fetch" }), true);
-  assert.equal(hasAnthropicWebFetchTool({ type: "web_fetch_20260209", name: "web_fetch" }), true);
-  assert.equal(hasAnthropicWebFetchTool({ type: "web_fetch_20260309", name: "web_fetch" }), true);
-  assert.equal(hasAnthropicWebFetchTool({ type: "web_fetch_20260318", name: "web_fetch" }), true);
-  assert.equal(hasAnthropicWebFetchTool({ type: "something_else", name: "web_fetch" }), true);
-  assert.equal(hasAnthropicWebFetchTool({ type: "function", name: "unrelated" }), false);
-  assert.equal(hasAnthropicWebFetchTool(null), false);
-  assert.equal(hasAnthropicWebFetchTool("web_fetch"), false);
 });
 
 test("isProviderNativeWebFetchToolName matches every hidden tool name, case-insensitively", () => {

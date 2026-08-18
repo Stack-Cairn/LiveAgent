@@ -24,6 +24,7 @@ export type ChatHeaderProps = {
   onOpenSettings: (section?: "providers", providerId?: string) => void;
   onToggleTheme: () => void;
   onOpenSidebar: () => void;
+  leadingActions?: ReactNode;
   preThemeActions?: ReactNode;
   trailingActions?: ReactNode;
   className?: string;
@@ -36,6 +37,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     onOpenSettings,
     onToggleTheme,
     onOpenSidebar,
+    leadingActions,
     preThemeActions,
     trailingActions,
     className,
@@ -71,6 +73,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
             <PanelLeft className="h-4.5 w-4.5" />
           </Button>
         ) : null}
+        {leadingActions}
       </div>
 
       <div

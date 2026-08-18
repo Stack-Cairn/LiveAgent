@@ -26,6 +26,10 @@ const SSH_KNOWN_HOSTS_TABLE: &str = "ssh_known_hosts";
 const REMOTE_SETTINGS_TABLE: &str = "remote_settings";
 const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
 const MODEL_FAILOVER_SETTINGS_TABLE: &str = "model_failover_settings";
+// WebDAV 同步配置。刻意独立成表而不寄居 system_settings —— 后者的 save_system
+// 会 DELETE 整表再按固定白名单重建，任何不在白名单的 key 都会被静默抹掉。
+// 独立表还顺带保证它不被 load_system 采进配置快照，避免 A 机器的凭据同步覆盖 B 机器。
+const BACKUP_SYNC_SETTINGS_TABLE: &str = "backup_sync_settings";
 
 const SYSTEM_EXECUTION_MODE_KEY: &str = "executionMode";
 const SYSTEM_WORKDIR_KEY: &str = "workdir";
@@ -164,6 +168,9 @@ include!("mcp.rs");
 include!("memory_settings.rs");
 include!("model_failover.rs");
 include!("gateway_sync.rs");
+include!("backup_snapshot.rs");
+include!("backup_io.rs");
+include!("webdav_sync.rs");
 include!("ssh/mod.rs");
 include!("workbench_layout.rs");
 include!("commands.rs");

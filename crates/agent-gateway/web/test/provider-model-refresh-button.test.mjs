@@ -10,6 +10,14 @@ const providersSectionSource = ["ProviderModal.tsx", "ProviderModalView.tsx"]
     ),
   )
   .join("\n");
+const providerListSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
+  "utf8",
+);
+const responsiveStylesSource = readFileSync(
+  new URL("../src/styles/responsive.css", import.meta.url),
+  "utf8",
+);
 
 test("WebUI provider model refresh only disables while a request is running", () => {
   const clickHandlerIndex = providersSectionSource.indexOf("onClick={handleRefresh}");
@@ -42,4 +50,21 @@ test("provider model refresh accepts a saved WebUI key without exposing it", () 
   assert.notEqual(reuseGuardEnd, -1);
   assert.doesNotMatch(providersSectionSource.slice(reuseGuardStart, reuseGuardEnd), /isFullUrl\s*===/);
   assert.match(providersSectionSource, /providerId: initialData\?\.id/);
+});
+
+test("provider cards keep their content and actions on one mobile row", () => {
+  assert.match(providerListSource, /settings-provider-card-row/);
+  assert.match(providerListSource, /settings-provider-card-main min-w-0 flex-1/);
+  assert.match(
+    responsiveStylesSource,
+    /\.settings-provider-card-row\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px 20px minmax\(0, 1fr\) auto;/,
+  );
+});
+
+test("provider request navigation label stays centered on mobile", () => {
+  assert.match(
+    providersSectionSource,
+    /min-w-0 flex-1 max-\[720px\]:flex-none max-\[720px\]:basis-auto/,
+  );
+  assert.doesNotMatch(providersSectionSource, /max-\[720px\]:basis-\[calc\(100%-3rem\)\]/);
 });

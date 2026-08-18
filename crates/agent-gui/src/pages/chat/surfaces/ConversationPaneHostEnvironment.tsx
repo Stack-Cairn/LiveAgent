@@ -54,6 +54,12 @@ export type ConversationPaneCheckpointRewind = {
   onRewound: (info: CheckpointRewoundInfo) => void;
 };
 
+export type ConversationPaneTrajectory = {
+  /** 视图开关跟随全局 Tabs;仅当前会话的 Pane 会拿到 active=true。 */
+  active: boolean;
+  content: ReactNode;
+};
+
 export type ConversationPaneBinding = {
   controller: ConversationSurfaceController;
   transcript: ConversationTranscriptBindings;
@@ -62,6 +68,8 @@ export type ConversationPaneBinding = {
   checkpointRewind: ConversationPaneCheckpointRewind;
   isConversationRunning: boolean;
   fileDrop: ConversationPaneFileDropState;
+  /** 轨迹视图(只读分析);背景 Pane 不提供,始终渲染常规转录。 */
+  trajectory?: ConversationPaneTrajectory;
 };
 
 export type ConversationPaneHostEnvironment = {

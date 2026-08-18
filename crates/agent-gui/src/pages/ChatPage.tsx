@@ -1,6 +1,10 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
+import {
+  type ConversationViewId,
+  ConversationViewTabs,
+} from "@liveagent/ui/components/chat/ConversationViewTabs";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
@@ -8,6 +12,7 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
+import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
@@ -46,6 +51,10 @@ import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/sk
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
+import {
+  toTrajectoryLiveAssistantMessage,
+  toTrajectoryMessages,
+} from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
   findAdjacentPaneId,
@@ -75,6 +84,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
+import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { PaneLoadingSkeleton } from "../components/app/PaneLoadingSkeleton";
@@ -118,6 +128,11 @@ import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
+import {
+  desktopLiveTrajectoryEvents,
+  desktopTrajectoryReloadVersion,
+  subscribeDesktopLiveTrajectory,
+} from "../lib/trajectory/liveTrajectory";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
@@ -393,6 +408,14 @@ export function ChatPage(props: ChatPageProps) {
     [conversationState],
   );
   const loadComposerHistoryPrompts = useComposerHistoryPrompts(transcriptItems);
+  const liveTrajectory = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
+    desktopLiveTrajectoryEvents(currentConversationId),
+  );
+  const trajectoryAuthoritativeRevision = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
+    desktopTrajectoryReloadVersion(currentConversationId),
+  );
+  const [activeConversationView, setActiveConversationView] =
+    useState<ConversationViewId>("conversation");
   const currentRequestContext = useMemo(
     () => buildRequestContext(conversationState),
     [conversationState],
@@ -459,6 +482,40 @@ export function ChatPage(props: ChatPageProps) {
   } = useLiveTranscriptController({
     currentConversationId,
   });
+  // Persisted transcript rows provide stable historical content; the synthetic live assistant
+  // supplies current streaming text/thinking/tool payloads until the final history write lands.
+  const trajectoryPersistedMessages = useMemo(
+    () => toTrajectoryMessages(transcriptItems),
+    [transcriptItems],
+  );
+  const trajectoryLiveTranscriptSnapshot = useSyncExternalStore(
+    (listener) => liveTranscriptStore.subscribe(listener),
+    () => liveTranscriptStore.getSnapshot(),
+  );
+  const trajectoryLiveAssistantMessage = useMemo(
+    () =>
+      toTrajectoryLiveAssistantMessage(
+        trajectoryLiveTranscriptSnapshot,
+        `trajectory-live-${currentConversationId}`,
+      ),
+    [currentConversationId, trajectoryLiveTranscriptSnapshot],
+  );
+  const trajectoryMessages = useMemo(
+    () =>
+      trajectoryLiveAssistantMessage === undefined
+        ? trajectoryPersistedMessages
+        : [...trajectoryPersistedMessages, trajectoryLiveAssistantMessage],
+    [trajectoryLiveAssistantMessage, trajectoryPersistedMessages],
+  );
+  const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
+  const hasConversationReply =
+    !isDraftConversation && trajectoryMessages.some((message) => message.role === "assistant");
+  const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
+  useEffect(() => {
+    if (!hasConversationReply && activeConversationView !== "conversation") {
+      setActiveConversationView("conversation");
+    }
+  }, [activeConversationView, hasConversationReply]);
   const {
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
@@ -576,8 +633,6 @@ export function ChatPage(props: ChatPageProps) {
     // truly failed and are cleared per-id by that conversation's retry.
     conversationRuntimeRegistry.hydration.clearAllHydrating();
   }
-
-  const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
 
   const currentConversationPersistedCwd =
     historyItems.find((item) => item.id === currentConversationId)?.cwd?.trim() || "";
@@ -740,6 +795,10 @@ export function ChatPage(props: ChatPageProps) {
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
   });
+  const trajectoryHost = useMemo(
+    () => createTauriTrajectoryHost(handleOpenChatFileLink),
+    [handleOpenChatFileLink],
+  );
 
   const {
     isUploadingFiles,
@@ -1846,6 +1905,24 @@ export function ChatPage(props: ChatPageProps) {
       title: fileDropTitle,
       description: fileDropDescription,
       limitHint: fileDropLimitHint,
+    },
+    // 轨迹视图只跟随当前会话:全局 Tabs 切换到 trajectory 时,聚焦 Pane 的
+    // 转录槽位换成 TrajectoryView;背景 Pane 不提供该字段,始终渲染常规转录。
+    trajectory: {
+      active: renderedConversationView === "trajectory",
+      content: (
+        <TrajectoryView
+          conversationId={currentConversationId}
+          host={trajectoryHost}
+          messages={trajectoryMessages}
+          workdir={displayedConversationWorkdir}
+          hasMoreMessages={conversationState.transcript.hasMoreBefore}
+          loadEarlierMessages={handleLoadEarlierHistory}
+          liveEvents={liveTrajectory}
+          liveOwnership="authoritative"
+          authoritativeRevision={trajectoryAuthoritativeRevision}
+        />
+      ),
     },
     transcript: {
       workspaceRoot: currentConversationWorkspaceRoot,
@@ -3059,6 +3136,14 @@ export function ChatPage(props: ChatPageProps) {
           onOpenSettings={onOpenSettings}
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
+          leadingActions={
+            activeView === "chat" && hasConversationReply ? (
+              <ConversationViewTabs
+                active={renderedConversationView}
+                onChange={setActiveConversationView}
+              />
+            ) : null
+          }
           trailingActions={
             <>
               <ProjectToolsPanelToggle

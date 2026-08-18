@@ -720,6 +720,7 @@ export default function App() {
                   initialSection={settingsSection}
                   initialProviderId={settingsProviderId}
                   appUpdate={appUpdate}
+                  reloadSettings={reloadPersistedSettings}
                 />
               </Suspense>
             </AppErrorBoundary>
