@@ -36,6 +36,7 @@ chatroom
 !.vscode/extensions.json
 .idea
 .DS_Store
+._*
 *.suo
 *.ntvs*
 *.njsproj

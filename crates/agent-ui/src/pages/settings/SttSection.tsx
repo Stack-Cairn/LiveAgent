@@ -1,15 +1,23 @@
 import type { AppSettings, SttProviderId, SttProviderSettings } from "@liveagent/app/lib/settings";
 import {
+  Brackets,
+  Check,
   CheckCircle2,
+  Cloud,
   Eye,
   EyeOff,
+  Flame,
+  type IconComponent,
   LoaderCircle,
   Mic,
+  PawPrint,
   Plug,
   Shield,
+  Trash2,
   XCircle,
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import type {
   SttConnectionTestResponse,
@@ -22,34 +30,91 @@ import { useCallback, useMemo, useRef, useState } from "react";
 const PROVIDERS: Array<{
   id: SttProviderId;
   label: string;
+  vendor: string;
   fields: Array<keyof SttProviderSettings>;
   secretFields: Array<keyof SttProviderSettings>;
 }> = [
   {
     id: "tencent_cloud",
     label: "腾讯云实时语音识别",
+    vendor: "Tencent Cloud",
     fields: ["appId", "engineModelType", "secretId", "secretKey"],
     secretFields: ["secretId", "secretKey"],
   },
   {
     id: "volcengine_seed_v3",
     label: "火山引擎实时语音识别",
+    vendor: "Volcengine",
     fields: ["websocketUrl", "appId", "accessToken", "resourceId"],
     secretFields: ["accessToken"],
   },
   {
     id: "aliyun_dashscope",
     label: "阿里云 DashScope",
+    vendor: "Alibaba Cloud",
     fields: ["websocketUrl", "model", "apiKey"],
     secretFields: ["apiKey"],
   },
   {
     id: "baidu_cloud",
     label: "百度智能云实时语音识别",
+    vendor: "Baidu AI Cloud",
     fields: ["websocketUrl", "baiduAppId", "devPid", "baiduApiKey"],
     secretFields: ["baiduApiKey"],
   },
 ];
+
+// 品牌视觉:logos 图标集没有这四家国内厂商的商标,用贴近品牌意象的
+// lucide 图形 + 品牌色近似值代替(百度=爪印、阿里云=中括号、火山=火焰)。
+const PROVIDER_BRAND: Record<
+  SttProviderId,
+  { icon: IconComponent; iconClass: string; boxClass: string }
+> = {
+  tencent_cloud: {
+    icon: Cloud,
+    iconClass: "text-sky-600 dark:text-sky-400",
+    boxClass: "bg-sky-500/10",
+  },
+  volcengine_seed_v3: {
+    icon: Flame,
+    iconClass: "text-rose-600 dark:text-rose-400",
+    boxClass: "bg-rose-500/10",
+  },
+  aliyun_dashscope: {
+    icon: Brackets,
+    iconClass: "text-orange-600 dark:text-orange-400",
+    boxClass: "bg-orange-500/10",
+  },
+  baidu_cloud: {
+    icon: PawPrint,
+    iconClass: "text-indigo-600 dark:text-indigo-400",
+    boxClass: "bg-indigo-500/10",
+  },
+};
+
+function ProviderBrandBadge({
+  provider,
+  className,
+  iconClassName,
+}: {
+  provider: SttProviderId;
+  className?: string;
+  iconClassName?: string;
+}) {
+  const brand = PROVIDER_BRAND[provider];
+  const Icon = brand.icon;
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg",
+        brand.boxClass,
+        className,
+      )}
+    >
+      <Icon className={cn(brand.iconClass, iconClassName)} />
+    </span>
+  );
+}
 
 const FIELD_LABELS: Partial<Record<keyof SttProviderSettings, string>> = {
   websocketUrl: "实时识别 WebSocket 地址",
@@ -296,6 +361,8 @@ export function SttSection({
     timeout: "连接超时",
   };
   const testResult = testResults[definition.id] ?? null;
+  const testPassed =
+    testResult?.result === "connected" || testResult?.result === "connected_no_speech";
 
   return (
     <div className="w-full min-w-0 space-y-5">
@@ -315,121 +382,198 @@ export function SttSection({
           ) : null}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {PROVIDERS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => selectProvider(item.id)}
-            className={`max-w-full whitespace-normal rounded-lg border px-3 py-2 text-xs ${item.id === definition.id ? "border-primary bg-primary/10 text-primary" : "border-border/60"}`}
-          >
-            {item.label}
-            {displayedStt.providers[item.id].configured ? " · 已配置" : ""}
-          </button>
-        ))}
-      </div>
-      <div className="w-full min-w-0 space-y-3 rounded-xl border border-border/50 bg-background/60 p-4">
-        {definition.fields.map((field) => {
-          const secret = definition.secretFields.includes(field);
-          const secretField = secret ? (field as SttSecretField) : null;
-          const visible = secretField ? visibleSecrets[secretField] === true : false;
-          const hasDraft = secretField ? Object.hasOwn(draftSecrets, secretField) : false;
-          const value = !secretField
-            ? fieldValue(provider, field)
-            : visible && service.secretRevealMode === "field-name"
-              ? fieldLabel(definition.id, field)
-              : hasDraft
-                ? (draftSecrets[secretField] ?? "")
-                : visible
-                  ? (revealedSecrets[secretField] ?? "")
-                  : provider.configured
-                    ? SAVED_SECRET_MASK
-                    : "";
-          const inputId = `stt-${definition.id}-${String(field)}`;
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {PROVIDERS.map((item) => {
+          const active = item.id === definition.id;
+          const configured = displayedStt.providers[item.id].configured;
           return (
-            <div key={field} className="block min-w-0 space-y-1.5 text-xs">
-              <label htmlFor={inputId} className="block text-muted-foreground">
-                {fieldLabel(definition.id, field)}
-                {secret && provider.configured ? "（已保存）" : ""}
-              </label>
-              <div className="relative min-w-0">
-                <Input
-                  id={inputId}
-                  type={secret && !visible ? "password" : "text"}
-                  autoComplete="off"
-                  spellCheck={false}
-                  readOnly={
-                    Boolean(secretField) && visible && service.secretRevealMode === "field-name"
-                  }
-                  className={secret ? "w-full min-w-0 pr-10" : "w-full min-w-0"}
-                  inputMode={
-                    (definition.id === "tencent_cloud" && field === "appId") ||
-                    (definition.id === "baidu_cloud" &&
-                      (field === "baiduAppId" || field === "devPid"))
-                      ? "numeric"
-                      : undefined
-                  }
-                  value={value}
-                  placeholder={fieldPlaceholder(definition.id, field)}
-                  onFocus={(event) => {
-                    if (secret && provider.configured && !hasDraft && !visible) {
-                      event.currentTarget.select();
-                    }
-                  }}
-                  onClick={(event) => {
-                    if (secret && provider.configured && !hasDraft && !visible) {
-                      event.currentTarget.select();
-                    }
-                  }}
-                  onChange={(event) => {
-                    if (secret) {
-                      setTestResults((previous) => {
-                        const next = { ...previous };
-                        delete next[definition.id];
-                        return next;
-                      });
-                      setDraftSecrets((old) => ({ ...old, [field]: event.target.value }));
-                      return;
-                    }
-                    updateProvider({
-                      [field]: event.target.value,
-                    } as Partial<SttProviderSettings>);
-                  }}
-                />
-                {secretField ? (
-                  <button
-                    type="button"
-                    className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                    disabled={
-                      saving ||
-                      testing ||
-                      clearing ||
-                      revealingSecret === secretField ||
-                      (service.secretRevealMode === "value" && !provider.configured && !hasDraft)
-                    }
-                    onClick={() => void toggleSecretVisibility(secretField)}
-                    title={
-                      visible
-                        ? "隐藏该字段"
-                        : service.secretRevealMode === "field-name"
-                          ? "查看字段名（WebUI 不显示密钥内容）"
-                          : "查看已保存的密钥"
-                    }
-                    aria-label={visible ? "隐藏该字段" : `查看 ${fieldLabel(definition.id, field)}`}
-                  >
-                    {revealingSecret === secretField ? (
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : visible ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => selectProvider(item.id)}
+              aria-pressed={active}
+              className={cn(
+                "group relative flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-150",
+                active
+                  ? "border-primary/50 bg-primary/5 shadow-sm ring-1 ring-primary/25"
+                  : "border-border/50 bg-background/40 hover:border-border hover:bg-muted/40",
+              )}
+            >
+              <ProviderBrandBadge
+                provider={item.id}
+                className="h-9 w-9 transition-transform duration-150 group-hover:scale-105"
+                iconClassName="h-[18px] w-[18px]"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium leading-tight">
+                  {item.label}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="truncate">{item.vendor}</span>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1",
+                      configured && "text-emerald-600 dark:text-emerald-400",
                     )}
-                  </button>
-                ) : null}
-              </div>
-            </div>
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        configured ? "bg-emerald-500" : "bg-muted-foreground/40",
+                      )}
+                    />
+                    {configured ? "已配置" : "未配置"}
+                  </span>
+                </span>
+              </span>
+              {active ? (
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="h-3 w-3" />
+                </span>
+              ) : null}
+            </button>
           );
         })}
+      </div>
+      <div className="w-full min-w-0 space-y-4 rounded-xl border border-border/50 bg-background/60 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ProviderBrandBadge
+              provider={definition.id}
+              className="h-8 w-8"
+              iconClassName="h-4 w-4"
+            />
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-medium leading-tight">
+                {definition.label}
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">
+                {provider.configured
+                  ? "凭据已保存，可直接使用语音输入"
+                  : "填写凭据后保存并测试连接"}
+              </div>
+            </div>
+          </div>
+          {provider.configured ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+              <Shield className="h-3 w-3" />
+              密钥已脱敏保存
+            </span>
+          ) : null}
+        </div>
+        <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
+          {definition.fields.map((field) => {
+            const secret = definition.secretFields.includes(field);
+            const secretField = secret ? (field as SttSecretField) : null;
+            const visible = secretField ? visibleSecrets[secretField] === true : false;
+            const hasDraft = secretField ? Object.hasOwn(draftSecrets, secretField) : false;
+            const value = !secretField
+              ? fieldValue(provider, field)
+              : visible && service.secretRevealMode === "field-name"
+                ? fieldLabel(definition.id, field)
+                : hasDraft
+                  ? (draftSecrets[secretField] ?? "")
+                  : visible
+                    ? (revealedSecrets[secretField] ?? "")
+                    : provider.configured
+                      ? SAVED_SECRET_MASK
+                      : "";
+            const inputId = `stt-${definition.id}-${String(field)}`;
+            return (
+              <div
+                key={field}
+                className={cn(
+                  "block min-w-0 space-y-1.5 text-xs",
+                  field === "websocketUrl" && "sm:col-span-2",
+                )}
+              >
+                <label htmlFor={inputId} className="block font-medium text-foreground/80">
+                  {fieldLabel(definition.id, field)}
+                  {secret && provider.configured ? (
+                    <span className="ml-1 font-normal text-muted-foreground">（已保存）</span>
+                  ) : null}
+                </label>
+                <div className="relative min-w-0">
+                  <Input
+                    id={inputId}
+                    type={secret && !visible ? "password" : "text"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    readOnly={
+                      Boolean(secretField) && visible && service.secretRevealMode === "field-name"
+                    }
+                    className={secret ? "w-full min-w-0 pr-10" : "w-full min-w-0"}
+                    inputMode={
+                      (definition.id === "tencent_cloud" && field === "appId") ||
+                      (definition.id === "baidu_cloud" &&
+                        (field === "baiduAppId" || field === "devPid"))
+                        ? "numeric"
+                        : undefined
+                    }
+                    value={value}
+                    placeholder={fieldPlaceholder(definition.id, field)}
+                    onFocus={(event) => {
+                      if (secret && provider.configured && !hasDraft && !visible) {
+                        event.currentTarget.select();
+                      }
+                    }}
+                    onClick={(event) => {
+                      if (secret && provider.configured && !hasDraft && !visible) {
+                        event.currentTarget.select();
+                      }
+                    }}
+                    onChange={(event) => {
+                      if (secret) {
+                        setTestResults((previous) => {
+                          const next = { ...previous };
+                          delete next[definition.id];
+                          return next;
+                        });
+                        setDraftSecrets((old) => ({ ...old, [field]: event.target.value }));
+                        return;
+                      }
+                      updateProvider({
+                        [field]: event.target.value,
+                      } as Partial<SttProviderSettings>);
+                    }}
+                  />
+                  {secretField ? (
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                      disabled={
+                        saving ||
+                        testing ||
+                        clearing ||
+                        revealingSecret === secretField ||
+                        (service.secretRevealMode === "value" && !provider.configured && !hasDraft)
+                      }
+                      onClick={() => void toggleSecretVisibility(secretField)}
+                      title={
+                        visible
+                          ? "隐藏该字段"
+                          : service.secretRevealMode === "field-name"
+                            ? "查看字段名（WebUI 不显示密钥内容）"
+                            : "查看已保存的密钥"
+                      }
+                      aria-label={
+                        visible ? "隐藏该字段" : `查看 ${fieldLabel(definition.id, field)}`
+                      }
+                    >
+                      {revealingSecret === secretField ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : visible ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
         {service.secretRevealMode === "field-name" ? (
           <p className="text-[11px] text-muted-foreground">
             WebUI 的查看按钮只显示字段名；已保存的密钥内容不会下发到浏览器。
@@ -440,12 +584,12 @@ export function SttSection({
             appid 必须是数字；dev_pid 不提供默认值，请按百度模型填写。
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
           <button
             type="button"
             onClick={() => void test()}
             disabled={saving || testing || clearing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-2 text-xs disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
             {saving || testing ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -458,33 +602,46 @@ export function SttSection({
             type="button"
             onClick={() => void clearProviderSecrets()}
             disabled={saving || testing || clearing}
-            className="rounded-lg border border-destructive/40 px-3 py-2 text-xs text-destructive disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3.5 py-2 text-xs text-destructive transition-colors hover:bg-destructive/5 disabled:opacity-60"
           >
+            {clearing ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
             {clearing ? "正在清空…" : "清空密钥"}
           </button>
-          {provider.configured ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
-              <Shield className="h-3.5 w-3.5" />
-              密钥已脱敏保存
-            </span>
-          ) : null}
         </div>
         {testResult ? (
           <div
-            className={`inline-flex items-center gap-1 text-xs ${testResult.result === "connected" || testResult.result === "connected_no_speech" ? "text-emerald-600" : "text-destructive"}`}
-          >
-            {testResult.result === "connected" || testResult.result === "connected_no_speech" ? (
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            ) : (
-              <XCircle className="h-3.5 w-3.5" />
+            className={cn(
+              "flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs",
+              testPassed
+                ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+                : "border-destructive/30 bg-destructive/5 text-destructive",
             )}
-            {resultLabel[testResult.result]}
+          >
+            {testPassed ? (
+              <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className="font-medium">{resultLabel[testResult.result]}</div>
+              {testResult.message ? (
+                <p className="mt-0.5 break-words font-normal text-muted-foreground">
+                  {testResult.message}
+                </p>
+              ) : null}
+            </div>
           </div>
         ) : null}
-        {testResult?.message ? (
-          <p className="break-words text-xs text-muted-foreground">{testResult.message}</p>
+        {error ? (
+          <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+            <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+            <p className="break-words">{error}</p>
+          </div>
         ) : null}
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </div>
   );
