@@ -1,4 +1,4 @@
-import { Loader2, Maximize2, Minus, Plus, RefreshCw, X } from "@liveagent/ui/components/IconSet";
+import { Loader2, Maximize2, Minus, Plus, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { mermaid } from "@streamdown/mermaid";
 import {
@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   formatMermaidViewBox,
   type MermaidViewBox,
@@ -19,6 +18,7 @@ import {
   zoomMermaidViewBox,
 } from "../lib/mermaidViewBox";
 import { cn } from "../lib/shared/utils";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -66,19 +66,6 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
   const [error, setError] = useState("");
   const [viewportState, setViewportState] = useState<MermaidViewportState | null>(null);
   const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     let active = true;
@@ -175,100 +162,98 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("chat.imageViewer.fullscreen")}
-      className="fixed inset-0 z-[120] flex bg-background"
-      data-liveagent-mermaid-fullscreen="true"
-    >
-      <div
-        ref={viewportRef}
-        role="application"
-        aria-label="Mermaid chart"
-        className={cn(
-          "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
-          dragging ? "cursor-grabbing" : "cursor-grab",
-        )}
-        onPointerDown={(event) => {
-          if (
-            event.button !== 0 ||
-            !viewportState ||
-            (event.target instanceof Element && event.target.closest("button"))
-          ) {
-            return;
-          }
-          dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setDragging(true);
-        }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag || drag.pointerId !== event.pointerId) return;
-          const delta = { x: event.clientX - drag.x, y: event.clientY - drag.y };
-          drag.x = event.clientX;
-          drag.y = event.clientY;
-          const svgRect = svgHostRef.current?.querySelector("svg")?.getBoundingClientRect();
-          if (!svgRect) return;
-          setViewportState((current) =>
-            current
-              ? {
-                  ...current,
-                  viewBox: panMermaidViewBox(current.viewBox, delta, {
-                    width: svgRect.width,
-                    height: svgRect.height,
-                  }),
-                }
-              : current,
-          );
-        }}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
+    <Dialog open disablePointerDismissal onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="fixed inset-0 m-0 flex h-full w-screen max-w-none overflow-hidden rounded-none border-0 bg-background p-0 shadow-none transition-none"
+        closeLabel={t("chat.imageViewer.exitFullscreen")}
+        data-liveagent-mermaid-fullscreen="true"
+        showCloseButton
+        style={{ opacity: 1, scale: "none", transform: "none" }}
       >
+        <DialogTitle className="sr-only">{t("chat.imageViewer.fullscreen")}</DialogTitle>
         <div
-          ref={svgHostRef}
-          className="absolute inset-4 flex items-center justify-center [&_svg]:!h-full [&_svg]:!w-full [&_svg]:!max-w-none"
-        />
-        {!svg && !error ? (
-          <Loader2 className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
-        ) : null}
-        {error ? (
+          ref={viewportRef}
+          role="application"
+          aria-label="Mermaid chart"
+          className={cn(
+            "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
+            dragging ? "cursor-grabbing" : "cursor-grab",
+          )}
+          onPointerDown={(event) => {
+            if (
+              event.button !== 0 ||
+              !viewportState ||
+              (event.target instanceof Element && event.target.closest("button"))
+            ) {
+              return;
+            }
+            dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setDragging(true);
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            const delta = { x: event.clientX - drag.x, y: event.clientY - drag.y };
+            drag.x = event.clientX;
+            drag.y = event.clientY;
+            const svgRect = svgHostRef.current?.querySelector("svg")?.getBoundingClientRect();
+            if (!svgRect) return;
+            setViewportState((current) =>
+              current
+                ? {
+                    ...current,
+                    viewBox: panMermaidViewBox(current.viewBox, delta, {
+                      width: svgRect.width,
+                      height: svgRect.height,
+                    }),
+                  }
+                : current,
+            );
+          }}
+          onPointerUp={finishDrag}
+          onPointerCancel={finishDrag}
+        >
           <div
-            role="alert"
-            className="absolute left-1/2 top-1/2 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-md border border-destructive/30 bg-background px-4 py-3 text-sm text-destructive shadow-lg"
-          >
-            {error}
+            ref={svgHostRef}
+            className="absolute inset-4 flex items-center justify-center [&_svg]:!h-full [&_svg]:!w-full [&_svg]:!max-w-none"
+          />
+          {!svg && !error ? (
+            <Loader2 className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+          ) : null}
+          {error ? (
+            <div
+              role="alert"
+              className="absolute left-1/2 top-1/2 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-md border border-destructive/30 bg-background px-4 py-3 text-sm text-destructive shadow-lg"
+            >
+              {error}
+            </div>
+          ) : null}
+          <div className="absolute bottom-4 left-4 z-10 flex items-center rounded-md border border-border bg-background/95 p-1 shadow-md">
+            <MermaidControlButton
+              label={t("chat.imageViewer.zoomOut")}
+              disabled={!viewportState || viewportState.zoom <= MIN_ZOOM}
+              onClick={() => changeZoom(-ZOOM_STEP)}
+            >
+              <Minus className="h-4 w-4" />
+            </MermaidControlButton>
+            <span className="w-12 text-center text-[11px] tabular-nums text-muted-foreground">
+              {Math.round((viewportState?.zoom ?? 1) * 100)}%
+            </span>
+            <MermaidControlButton
+              label={t("chat.imageViewer.zoomIn")}
+              disabled={!viewportState || viewportState.zoom >= MAX_ZOOM}
+              onClick={() => changeZoom(ZOOM_STEP)}
+            >
+              <Plus className="h-4 w-4" />
+            </MermaidControlButton>
+            <MermaidControlButton label={t("chat.imageViewer.reset")} onClick={resetView}>
+              <RefreshCw className="h-4 w-4" />
+            </MermaidControlButton>
           </div>
-        ) : null}
-        <div className="absolute bottom-4 left-4 z-10 flex items-center rounded-md border border-border bg-background/95 p-1 shadow-md">
-          <MermaidControlButton
-            label={t("chat.imageViewer.zoomOut")}
-            disabled={!viewportState || viewportState.zoom <= MIN_ZOOM}
-            onClick={() => changeZoom(-ZOOM_STEP)}
-          >
-            <Minus className="h-4 w-4" />
-          </MermaidControlButton>
-          <span className="w-12 text-center text-[11px] tabular-nums text-muted-foreground">
-            {Math.round((viewportState?.zoom ?? 1) * 100)}%
-          </span>
-          <MermaidControlButton
-            label={t("chat.imageViewer.zoomIn")}
-            disabled={!viewportState || viewportState.zoom >= MAX_ZOOM}
-            onClick={() => changeZoom(ZOOM_STEP)}
-          >
-            <Plus className="h-4 w-4" />
-          </MermaidControlButton>
-          <MermaidControlButton label={t("chat.imageViewer.reset")} onClick={resetView}>
-            <RefreshCw className="h-4 w-4" />
-          </MermaidControlButton>
         </div>
-        <div className="absolute right-4 top-4 z-10 rounded-md border border-border bg-background/95 p-1 shadow-md">
-          <MermaidControlButton label={t("chat.imageViewer.exitFullscreen")} onClick={onClose}>
-            <X className="h-4 w-4" />
-          </MermaidControlButton>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -290,9 +275,7 @@ export function MermaidFullscreenButton({ chart, className }: MermaidFullscreenB
       >
         <Maximize2 className="h-3.5 w-3.5" />
       </button>
-      {open && typeof document !== "undefined"
-        ? createPortal(<MermaidFullscreenDialog chart={chart} onClose={close} />, document.body)
-        : null}
+      {open ? <MermaidFullscreenDialog chart={chart} onClose={close} /> : null}
     </>
   );
 }
