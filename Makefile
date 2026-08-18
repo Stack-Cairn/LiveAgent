@@ -230,8 +230,8 @@ desktop-verify-macos:
 
 help:
 	@printf "\n%s\n" "Desktop"
-	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（默认启用 Session Workbench）"
-	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "使用旧单会话布局启动 Tauri"
+	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（Session Workbench 已默认启用）"
+	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "回退旧单会话布局启动 Tauri（逃生开关）"
 	@printf "  %-34s %s\n" "make build" "构建当前平台 Tauri 应用"
 	@printf "  %-34s %s\n" "make desktop-build-macos" "构建当前 Mac 芯片架构"
 	@printf "  %-34s %s\n" "make desktop-build-macos-release" "签名、公证并验证 macOS DMG"
