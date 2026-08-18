@@ -82,7 +82,6 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { TaskStateStore } from "../../../lib/tools/taskTools";
 import {
-  appendDesktopLiveTrajectory,
   clearLocalTrajectory,
   invalidateDesktopTrajectory,
 } from "../../../lib/trajectory/liveTrajectory";
@@ -1235,9 +1234,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       conversationId,
       getActiveSegment(nextConversationState)?.segmentIndex ??
         nextConversationState.meta.activeSegmentIndex,
-      // 实时骨架下发给 WebUI；转录区忽略这个事件类型，只有轨迹页消费。
+      // registry 已写入桌面实时缓存；这里只下发给 WebUI 轨迹页。
       (events) => {
-        appendDesktopLiveTrajectory(conversationId, events);
         for (const event of events) {
           gatewayBridgeEvents.queueEvent({
             type: "trajectory",

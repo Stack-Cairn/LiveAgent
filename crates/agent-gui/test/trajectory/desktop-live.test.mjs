@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -9,6 +10,9 @@ const {
   clearDesktopLiveTrajectory,
   desktopLiveTrajectoryEvents,
 } = loader.loadModule("src/lib/trajectory/liveTrajectory.ts");
+const { acquireTrajectoryRecorder, discardTrajectoryRecorder } = loader.loadModule(
+  "src/lib/trajectory/recorderRegistry.ts",
+);
 
 test("desktop live trajectory snapshots update and clear per conversation", () => {
   clearDesktopLiveTrajectory("desktop-live-c1");
@@ -23,4 +27,37 @@ test("desktop live trajectory snapshots update and clear per conversation", () =
   assert.notEqual(second, first);
   clearDesktopLiveTrajectory("desktop-live-c1");
   assert.equal(desktopLiveTrajectoryEvents("desktop-live-c1").length, 0);
+});
+
+test("the recorder appends locally and publishes each event once", () => {
+  const conversationId = "desktop-live-recorder-c1";
+  const published = [];
+  clearDesktopLiveTrajectory(conversationId);
+  const { recorder } = acquireTrajectoryRecorder(conversationId, 0, (events) => {
+    published.push(...events);
+  });
+
+  try {
+    recorder.beginTurn({ turn: 1, messageIndex: 0, text: "hello" });
+    assert.equal(desktopLiveTrajectoryEvents(conversationId).length, 1);
+    assert.equal(published.length, 1);
+  } finally {
+    discardTrajectoryRecorder(conversationId);
+  }
+});
+
+test("the recorder registry exclusively owns desktop live trajectory writes", () => {
+  const registrySource = readFileSync(
+    new URL("../../src/lib/trajectory/recorderRegistry.ts", import.meta.url),
+    "utf8",
+  );
+  const publisherSources = [
+    "../../src/pages/chat/runtime/useSendChatTurn.ts",
+    "../../src/pages/chat/runtime/useManualCompaction.ts",
+  ].map((relativePath) => readFileSync(new URL(relativePath, import.meta.url), "utf8"));
+
+  assert.match(registrySource, /appendDesktopLiveTrajectory\(conversationId, events\)/);
+  for (const source of publisherSources) {
+    assert.doesNotMatch(source, /appendDesktopLiveTrajectory/);
+  }
 });

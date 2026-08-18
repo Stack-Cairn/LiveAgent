@@ -18,7 +18,6 @@ import { memoryTurnInjection } from "../../../lib/chat/memory/injectionControlle
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import type { AppSettings } from "../../../lib/settings";
-import { appendDesktopLiveTrajectory } from "../../../lib/trajectory/liveTrajectory";
 import {
   acquireTrajectoryRecorder,
   updateTrajectoryRecorderSegment,
@@ -365,7 +364,6 @@ export function useManualCompaction(params: {
           getActiveSegment(runtimeEntry.state)?.segmentIndex ??
             runtimeEntry.state.meta.activeSegmentIndex,
           (events) => {
-            appendDesktopLiveTrajectory(conversationId, events);
             for (const event of events) {
               gatewayBridgeEvents.queueEvent({
                 type: "trajectory",
