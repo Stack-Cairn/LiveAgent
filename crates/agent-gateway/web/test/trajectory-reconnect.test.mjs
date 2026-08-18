@@ -2,17 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createTsModuleLoader } from "../../../agent-gui/test/helpers/load-ts-module.mjs";
+import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
-const loader = createTsModuleLoader();
+// 用 web 自己的模块加载器：CI 的 webui job 只装本包依赖，
+// 借 agent-gui 的 helper 会在 runner 上找不到它的 node_modules。
+const loader = createWebModuleLoader({
+  rootDir: fileURLToPath(new URL("../", import.meta.url)),
+});
 const {
   absorbTrajectoryChatEvent,
   clearLiveTrajectory,
   liveTrajectoryAuthoritativeRevision,
   liveTrajectoryEvents,
-} = loader.loadModule(
-  fileURLToPath(new URL("../src/lib/trajectory/liveTrajectory.ts", import.meta.url)),
-);
+} = loader.loadModule("src/lib/trajectory/liveTrajectory.ts");
 
 test("rebase clears live events and invalidates the authoritative window", () => {
   const conversationId = "trajectory-rebase-test";
