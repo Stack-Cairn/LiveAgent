@@ -135,3 +135,63 @@ func TestVetAgentRequestRejectsMalformedWorkspaceRootGrants(t *testing.T) {
 		}
 	}
 }
+
+func TestVetAgentRequestAllowsCheckpointActions(t *testing.T) {
+	requests := []*gatewayv2.CheckpointRequest{
+		{Action: "list", ConversationId: "conversation-1"},
+		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 2, AuthorizedRoots: []string{"/work"}},
+		{
+			Action:          "rewind",
+			ConversationId:  "conversation-1",
+			TurnSeq:         2,
+			AuthorizedRoots: []string{"/work"},
+			Expected:        []*gatewayv2.CheckpointExpectedEntry{{Key: "/work\x01a.txt", CurrentHash: "abc"}},
+		},
+	}
+
+	for _, request := range requests {
+		env := &gatewayv2.GatewayEnvelope{
+			Payload: &gatewayv2.GatewayEnvelope_Checkpoint{Checkpoint: request},
+		}
+		if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+			t.Fatalf("vetAgentRequest(%+v) error = %v", request, err)
+		}
+	}
+}
+
+func TestVetAgentRequestRejectsMalformedCheckpoint(t *testing.T) {
+	tooManyRoots := make([]string, 65)
+	for index := range tooManyRoots {
+		tooManyRoots[index] = "/work"
+	}
+	requests := []*gatewayv2.CheckpointRequest{
+		nil,
+		{Action: "list", ConversationId: "conversation-1", TurnSeq: 1},
+		{Action: "diff", ConversationId: "conversation-1"},
+		{Action: "rewind", ConversationId: "conversation-1"},
+		{Action: "unknown", ConversationId: "conversation-1"},
+		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 1, AuthorizedRoots: []string{" "}},
+		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 1, AuthorizedRoots: tooManyRoots},
+		{
+			Action:         "rewind",
+			ConversationId: "conversation-1",
+			TurnSeq:        1,
+			Expected:       []*gatewayv2.CheckpointExpectedEntry{{Key: " ", CurrentHash: "abc"}},
+		},
+		{
+			Action:         "rewind",
+			ConversationId: "conversation-1",
+			TurnSeq:        1,
+			Expected:       []*gatewayv2.CheckpointExpectedEntry{{Key: "/work\x01a.txt"}},
+		},
+	}
+
+	for _, request := range requests {
+		env := &gatewayv2.GatewayEnvelope{
+			Payload: &gatewayv2.GatewayEnvelope_Checkpoint{Checkpoint: request},
+		}
+		if err := vetAgentRequest(session.AgentView{}, env); err == nil {
+			t.Fatalf("vetAgentRequest(%+v) unexpectedly succeeded", request)
+		}
+	}
+}

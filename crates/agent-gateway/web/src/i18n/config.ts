@@ -13,6 +13,8 @@ export {
  */
 export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    "app.desktopSettingsSyncFailed": "同步桌面端设置失败。",
+    "app.webSettingsSaveFailed": "保存 WebUI 设置失败。",
     "chat.runtime.settingsSyncTitle": "正在同步桌面端设置",
     "chat.runtime.protocolIncompatible":
       "桌面端版本不支持可靠聊天同步。请更新 LiveAgent 桌面端后再使用 WebUI 聊天。",
@@ -107,6 +109,8 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
       "启用后，本地 LiveAgent 将通过 WebSocket（v2 协议）连接云端 Gateway。你可以在浏览器中通过 WebUI 远程发送 Chat 消息、管理 Cron 任务和查看历史记录。所有工具执行仍在本地完成，远程端仅转发指令和结果。",
   },
   "en-US": {
+    "app.desktopSettingsSyncFailed": "Failed to sync desktop settings.",
+    "app.webSettingsSaveFailed": "Failed to save WebUI settings.",
     "chat.runtime.settingsSyncTitle": "Syncing desktop settings",
     "chat.runtime.protocolIncompatible":
       "This desktop version does not support reliable chat sync. Update LiveAgent desktop before using WebUI chat.",

@@ -623,7 +623,7 @@ impl GatewayController {
                                             proto::agent_envelope::Payload::SettingsUpdateResp(
                                                 proto::SettingsUpdateResponse {
                                                     accepted: false,
-                                                    message: conflict,
+                                                    message: conflict.gateway_message().to_string(),
                                                 },
                                             ),
                                         ),
@@ -825,6 +825,19 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 400, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::Checkpoint(request)) => {
+                match gateway_bridge::handle_checkpoint(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::CheckpointResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::FsListDirs(request)) => {
                 match gateway_bridge::handle_fs_list_dirs(request).await {
                     Ok(response) => {
@@ -1014,6 +1027,21 @@ impl GatewayController {
                         .await
                     }
                     Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
+            Some(proto::gateway_envelope::Payload::ImportDirectory(request)) => {
+                match gateway_bridge::handle_import_directory(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::ImportDirectoryResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
                 }
             }
             Some(proto::gateway_envelope::Payload::UploadedImagePreview(request)) => {

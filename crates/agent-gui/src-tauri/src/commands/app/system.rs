@@ -2,11 +2,15 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs;
-use std::io::{BufReader, Read, Write};
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, OpenOptions};
+use std::future::Future;
+use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::power_activity::PowerActivityManager;
@@ -16,7 +20,50 @@ pub use crate::services::skills::{
 };
 
 const UPLOADED_IMAGE_PREVIEW_MAX_BYTES: usize = 5 * 1024 * 1024; // 5MB
+const IMAGE_PREVIEW_DATA_MAX_BYTES: usize = 25 * 1024 * 1024; // Keep preview actions bounded.
+const IMAGE_PREVIEW_MAX_DIMENSION: u32 = 8_192;
+const IMAGE_PREVIEW_MAX_ALLOC_BYTES: u64 = 64 * 1024 * 1024;
+const IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL: Duration = Duration::from_secs(2 * 60);
+const IMAGE_PREVIEW_SAVE_TARGET_TTL: Duration = Duration::from_secs(5 * 60);
 const UPLOADED_NATIVE_ATTACHMENT_MAX_BYTES: u64 = 25 * 1024 * 1024; // 25MB
+
+#[derive(Debug)]
+struct PendingImagePreviewSaveTarget {
+    target: PathBuf,
+    created_at: SystemTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImagePreviewFileSignature {
+    len: u64,
+    modified_at: Option<SystemTime>,
+}
+
+#[derive(Debug)]
+struct PreparedImagePreviewClipboard {
+    target: PathBuf,
+    signature: ImagePreviewFileSignature,
+    prepared_at: SystemTime,
+    width: usize,
+    height: usize,
+    rgba: Vec<u8>,
+}
+
+static PENDING_IMAGE_PREVIEW_SAVE_TARGETS: OnceLock<
+    Mutex<HashMap<String, PendingImagePreviewSaveTarget>>,
+> = OnceLock::new();
+
+static PREPARED_IMAGE_PREVIEW_CLIPBOARD: OnceLock<Mutex<Option<PreparedImagePreviewClipboard>>> =
+    OnceLock::new();
+
+fn pending_image_preview_save_targets(
+) -> &'static Mutex<HashMap<String, PendingImagePreviewSaveTarget>> {
+    PENDING_IMAGE_PREVIEW_SAVE_TARGETS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn prepared_image_preview_clipboard() -> &'static Mutex<Option<PreparedImagePreviewClipboard>> {
+    PREPARED_IMAGE_PREVIEW_CLIPBOARD.get_or_init(|| Mutex::new(None))
+}
 const UPLOADED_TEXT_TRANSCODE_MAX_BYTES: u64 = 64 * 1024 * 1024; // 64MB，超出则原样落盘不转码
 
 #[derive(Debug, Serialize, Clone)]
@@ -499,6 +546,27 @@ fn sanitize_uploaded_file_name(input: &str) -> String {
     avoid_windows_reserved_file_name(candidate)
 }
 
+/// 目录导入需要保留 `.env`、`.gitignore`、`.github` 等合法前导点；只清理
+/// 跨平台非法字符与 Windows 不允许的尾随空格/点。精确的 `.`/`..` 由调用方拒绝。
+fn sanitize_import_path_component(input: &str) -> Option<String> {
+    if input == "." || input == ".." {
+        return None;
+    }
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*') {
+            out.push('_');
+        } else {
+            out.push(ch);
+        }
+    }
+    let trimmed = out.trim_end_matches(|ch: char| ch == '.' || ch.is_whitespace());
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        return None;
+    }
+    Some(avoid_windows_reserved_file_name(trimmed.to_string()))
+}
+
 fn is_windows_reserved_file_name(input: &str) -> bool {
     let stem = input
         .split('.')
@@ -790,6 +858,233 @@ fn canonicalize_uploaded_attachment_path(
         ));
     }
     Ok(target)
+}
+
+fn resolve_uploaded_image_target(
+    workdir: &str,
+    absolute_path: &str,
+) -> Result<(PathBuf, &'static str), String> {
+    let workdir = canonicalize_upload_workdir(workdir)?;
+    let target = canonicalize_uploaded_file_path(absolute_path)?;
+    if !is_allowed_attachment_target(&workdir, &target) {
+        return Err(format!(
+            "Image path is outside the current workspace and upload staging area: {}",
+            target.display()
+        ));
+    }
+    let mime_type = infer_image_upload_mime(&target)
+        .ok_or_else(|| format!("{} is not a supported image file", target.display()))?;
+    Ok((target, mime_type))
+}
+
+fn decode_image_preview_base64(data_base64: &str) -> Result<Vec<u8>, String> {
+    let encoded = data_base64.trim();
+    if encoded.is_empty() {
+        return Err("Image preview data is empty".to_string());
+    }
+
+    // Reject oversized input before decoding so a malformed request cannot
+    // force a large allocation just to discover that it is not usable.
+    if encoded.len() > IMAGE_PREVIEW_DATA_MAX_BYTES.saturating_mul(4) / 3 + 4 {
+        return Err("Image preview data is too large".to_string());
+    }
+
+    let bytes = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|error| format!("Invalid image preview data: {error}"))?;
+    if bytes.len() > IMAGE_PREVIEW_DATA_MAX_BYTES {
+        return Err("Image preview data is too large".to_string());
+    }
+    Ok(bytes)
+}
+
+fn decode_image_preview_rgba_bytes(bytes: Vec<u8>) -> Result<(usize, usize, Vec<u8>), String> {
+    let mut reader = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|error| format!("Unable to identify image preview format: {error}"))?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(IMAGE_PREVIEW_MAX_DIMENSION);
+    limits.max_image_height = Some(IMAGE_PREVIEW_MAX_DIMENSION);
+    limits.max_alloc = Some(IMAGE_PREVIEW_MAX_ALLOC_BYTES);
+    reader.limits(limits);
+    let decoded = reader
+        .decode()
+        .map_err(|error| format!("Unable to decode image preview: {error}"))?;
+    let rgba = decoded.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    Ok((width as usize, height as usize, rgba.into_raw()))
+}
+
+fn decode_image_preview_rgba(data_base64: &str) -> Result<(usize, usize, Vec<u8>), String> {
+    decode_image_preview_rgba_bytes(decode_image_preview_base64(data_base64)?)
+}
+
+fn write_image_to_clipboard_data(
+    width: usize,
+    height: usize,
+    bytes: Cow<'_, [u8]>,
+) -> Result<(), String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|error| format!("clipboard unavailable: {error}"))?;
+    clipboard
+        .set_image(arboard::ImageData {
+            width,
+            height,
+            bytes,
+        })
+        .map_err(|error| format!("clipboard image write failed: {error}"))
+}
+
+fn write_image_to_clipboard(width: usize, height: usize, bytes: Vec<u8>) -> Result<(), String> {
+    write_image_to_clipboard_data(width, height, Cow::Owned(bytes))
+}
+
+fn image_preview_file_signature(target: &Path) -> Result<ImagePreviewFileSignature, String> {
+    let metadata = fs::metadata(target).map_err(|error| {
+        format!(
+            "Unable to inspect image attachment {}: {error}",
+            target.display()
+        )
+    })?;
+    if metadata.len() > IMAGE_PREVIEW_DATA_MAX_BYTES as u64 {
+        return Err(format!(
+            "Image attachment is too large for clipboard copying: {}",
+            target.display()
+        ));
+    }
+    Ok(ImagePreviewFileSignature {
+        len: metadata.len(),
+        modified_at: metadata.modified().ok(),
+    })
+}
+
+fn prepared_image_preview_clipboard_matches(
+    prepared: &PreparedImagePreviewClipboard,
+    target: &Path,
+    signature: &ImagePreviewFileSignature,
+    now: SystemTime,
+) -> bool {
+    prepared.target == target
+        && prepared.signature == *signature
+        && now
+            .duration_since(prepared.prepared_at)
+            .map(|age| age <= IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL)
+            .unwrap_or(false)
+}
+
+fn prepare_uploaded_image_preview_clipboard_target(target: &Path) -> Result<(), String> {
+    let signature = image_preview_file_signature(target)?;
+    let now = SystemTime::now();
+    {
+        let cache = prepared_image_preview_clipboard()
+            .lock()
+            .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+        if cache.as_ref().is_some_and(|prepared| {
+            prepared_image_preview_clipboard_matches(prepared, target, &signature, now)
+        }) {
+            return Ok(());
+        }
+    }
+
+    let bytes = fs::read(target).map_err(|error| {
+        format!(
+            "Unable to read image attachment {}: {error}",
+            target.display()
+        )
+    })?;
+    let (width, height, rgba) = decode_image_preview_rgba_bytes(bytes)?;
+    let mut cache = prepared_image_preview_clipboard()
+        .lock()
+        .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+    *cache = Some(PreparedImagePreviewClipboard {
+        target: target.to_path_buf(),
+        signature,
+        prepared_at: now,
+        width,
+        height,
+        rgba,
+    });
+    Ok(())
+}
+
+fn remember_image_preview_save_target(target: PathBuf) -> Result<String, String> {
+    let save_token = Uuid::new_v4().to_string();
+    let mut targets = pending_image_preview_save_targets()
+        .lock()
+        .map_err(|_| "Unable to lock image preview save targets".to_string())?;
+    let now = SystemTime::now();
+    targets.retain(|_, pending| {
+        now.duration_since(pending.created_at)
+            .map(|age| age <= IMAGE_PREVIEW_SAVE_TARGET_TTL)
+            .unwrap_or(true)
+    });
+    targets.insert(
+        save_token.clone(),
+        PendingImagePreviewSaveTarget {
+            target,
+            created_at: now,
+        },
+    );
+    Ok(save_token)
+}
+
+fn take_image_preview_save_target(save_token: &str) -> Result<PathBuf, String> {
+    let mut targets = pending_image_preview_save_targets()
+        .lock()
+        .map_err(|_| "Unable to lock image preview save targets".to_string())?;
+    let pending = targets
+        .remove(save_token)
+        .ok_or_else(|| "Image preview save target is unavailable or has expired".to_string())?;
+    if pending
+        .created_at
+        .elapsed()
+        .map(|age| age > IMAGE_PREVIEW_SAVE_TARGET_TTL)
+        .unwrap_or(false)
+    {
+        return Err("Image preview save target has expired".to_string());
+    }
+    Ok(pending.target)
+}
+
+pub(crate) fn system_prepare_preview_file_save_sync(
+    file_name: String,
+) -> Result<Option<String>, String> {
+    let safe_file_name = sanitize_uploaded_file_name(&file_name);
+    let target = FileDialog::new().set_file_name(&safe_file_name).save_file();
+    target.map(remember_image_preview_save_target).transpose()
+}
+
+pub(crate) fn system_write_preview_file_sync(
+    save_token: String,
+    data_base64: String,
+    _mime_type: String,
+) -> Result<(), String> {
+    // Consume the user-selected target before decoding untrusted data so this
+    // capability cannot be reused by a concurrent or later frontend request.
+    let target = take_image_preview_save_target(&save_token)?;
+    let bytes = decode_image_preview_base64(&data_base64)?;
+    fs::write(&target, bytes)
+        .map_err(|error| format!("Unable to save image preview {}: {error}", target.display()))
+}
+
+pub(crate) fn system_save_preview_file_sync(
+    data_base64: String,
+    file_name: String,
+    mime_type: String,
+) -> Result<bool, String> {
+    let Some(save_token) = system_prepare_preview_file_save_sync(file_name)? else {
+        return Ok(false);
+    };
+    system_write_preview_file_sync(save_token, data_base64, mime_type)?;
+    Ok(true)
+}
+
+pub(crate) fn system_clipboard_write_image_sync(
+    data_base64: String,
+    _mime_type: String,
+) -> Result<(), String> {
+    let (width, height, bytes) = decode_image_preview_rgba(&data_base64)?;
+    write_image_to_clipboard(width, height, bytes)
 }
 
 fn infer_native_attachment_mime(path: &Path, kind: Option<&str>) -> String {
@@ -1116,16 +1411,7 @@ pub(crate) fn system_read_uploaded_image_preview_sync(
     workdir: String,
     absolute_path: String,
 ) -> Result<SystemUploadedImagePreviewResponse, String> {
-    let workdir = canonicalize_upload_workdir(&workdir)?;
-    let target = canonicalize_uploaded_file_path(&absolute_path)?;
-    if !is_allowed_attachment_target(&workdir, &target) {
-        return Err(format!(
-            "图片路径超出当前工作目录与上传暂存区：{}",
-            target.display()
-        ));
-    }
-    let mime_type = infer_image_upload_mime(&target)
-        .ok_or_else(|| format!("{} 不是受支持的图片文件", target.display()))?;
+    let (target, mime_type) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
     let bytes = fs::read(&target).map_err(|e| format!("读取图片失败 {}: {e}", target.display()))?;
     if bytes.len() > UPLOADED_IMAGE_PREVIEW_MAX_BYTES {
         return Err(format!(
@@ -1138,6 +1424,50 @@ pub(crate) fn system_read_uploaded_image_preview_sync(
         mime_type: mime_type.to_string(),
         data: BASE64_STANDARD.encode(bytes),
     })
+}
+
+pub(crate) fn system_open_uploaded_image_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    crate::commands::fs::spawn_workspace_open_command(&target, "open")
+}
+
+pub(crate) fn system_prepare_uploaded_image_clipboard_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    prepare_uploaded_image_preview_clipboard_target(&target)
+}
+
+pub(crate) fn system_clipboard_write_uploaded_image_sync(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    let (target, _) = resolve_uploaded_image_target(&workdir, &absolute_path)?;
+    prepare_uploaded_image_preview_clipboard_target(&target)?;
+    let signature = image_preview_file_signature(&target)?;
+    let cache = prepared_image_preview_clipboard()
+        .lock()
+        .map_err(|_| "Unable to lock prepared image clipboard data".to_string())?;
+    let prepared = cache
+        .as_ref()
+        .filter(|prepared| {
+            prepared_image_preview_clipboard_matches(
+                prepared,
+                &target,
+                &signature,
+                SystemTime::now(),
+            )
+        })
+        .ok_or_else(|| "Prepared image clipboard data is unavailable".to_string())?;
+    write_image_to_clipboard_data(
+        prepared.width,
+        prepared.height,
+        Cow::Borrowed(prepared.rgba.as_slice()),
+    )
 }
 
 pub(crate) fn system_read_uploaded_native_attachment_sync(
@@ -1285,6 +1615,830 @@ fn canonicalize_project_folder(path: &Path) -> String {
     project_folder_display_path(&fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
 }
 
+/// 上传区拖入内容的分类结果：文件走附件导入管线，目录挂载为附属目录。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemClassifiedDroppedPaths {
+    pub files: Vec<String>,
+    pub dirs: Vec<String>,
+}
+
+/// 与工作空间区的原子拒绝不同：上传区允许文件与目录混拖，各自分流处理，
+/// 因此这里只校验存在性并归类，不因为混入目录而整体失败。
+fn system_classify_dropped_paths_sync(
+    paths: Vec<String>,
+) -> Result<SystemClassifiedDroppedPaths, String> {
+    if paths.is_empty() {
+        return Err("未检测到拖入的内容".to_string());
+    }
+
+    let mut files = Vec::new();
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+    for raw_path in paths {
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            return Err("拖入路径不能为空".to_string());
+        }
+
+        let path = expand_tilde_path(raw_path);
+        if !path.is_absolute() {
+            return Err(format!("拖入路径必须是绝对路径：{raw_path}"));
+        }
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("拖入路径不存在或无法访问（{raw_path}）：{error}"))?;
+
+        if metadata.is_dir() {
+            let canonical = fs::canonicalize(&path)
+                .map_err(|error| format!("无法解析拖入的目录（{raw_path}）：{error}"))?;
+            let display_path = project_folder_display_path(&canonical);
+            if seen.insert(display_path.clone()) {
+                dirs.push(display_path);
+            }
+        } else if seen.insert(raw_path.to_string()) {
+            // 文件保留原始路径交给附件导入管线，由它做可读性校验与暂存。
+            files.push(raw_path.to_string());
+        }
+    }
+
+    Ok(SystemClassifiedDroppedPaths { files, dirs })
+}
+
+fn system_resolve_dropped_workspace_folders_sync(
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Err("未检测到拖入的文件夹".to_string());
+    }
+
+    let mut resolved = Vec::with_capacity(paths.len());
+    let mut seen = HashSet::new();
+    for raw_path in paths {
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            return Err("拖入路径不能为空".to_string());
+        }
+
+        let path = expand_tilde_path(raw_path);
+        if !path.is_absolute() {
+            return Err(format!("拖入的工作空间路径必须是绝对路径：{raw_path}"));
+        }
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("拖入路径不存在或无法访问（{raw_path}）：{error}"))?;
+        if !metadata.is_dir() {
+            return Err(format!("工作空间区域只支持拖入文件夹：{raw_path}"));
+        }
+
+        let canonical = fs::canonicalize(&path)
+            .map_err(|error| format!("无法解析拖入的工作空间目录（{raw_path}）：{error}"))?;
+        let display_path = project_folder_display_path(&canonical);
+        if seen.insert(display_path.clone()) {
+            resolved.push(display_path);
+        }
+    }
+
+    Ok(resolved)
+}
+
+/// Web 端拖入的目录经网关转发后在本机落盘的输入/输出形状。
+pub(crate) struct SystemImportDirectoryInputFile {
+    pub relative_path: String,
+    pub content: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub(crate) struct SystemImportDirectoryOutcome {
+    pub root_path: String,
+    pub file_count: u32,
+    pub skipped: Vec<String>,
+    pub received_bytes: u64,
+}
+
+const DIRECTORY_IMPORT_MAX_FILES: usize = 2000;
+const DIRECTORY_IMPORT_MAX_BYTES: u64 = 200 * 1024 * 1024;
+pub(crate) const DIRECTORY_IMPORT_CHUNK_BYTES: usize = 1024 * 1024;
+
+struct DirectoryImportFileState {
+    destination: Option<PathBuf>,
+    next_offset: u64,
+    complete: bool,
+}
+
+struct DirectoryImportTransferState {
+    base: PathBuf,
+    folder_name: String,
+    staging_root: PathBuf,
+    expected_files: usize,
+    expected_bytes: u64,
+    received_bytes: u64,
+    files: HashMap<String, DirectoryImportFileState>,
+    skipped: Vec<String>,
+    last_activity: Instant,
+}
+
+static DIRECTORY_IMPORT_TRANSFERS: OnceLock<Mutex<HashMap<String, DirectoryImportTransferState>>> =
+    OnceLock::new();
+
+fn directory_import_transfers() -> &'static Mutex<HashMap<String, DirectoryImportTransferState>> {
+    DIRECTORY_IMPORT_TRANSFERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 网关断连/重启后 ABORT 可能永远送不到；空闲超过该时长的传输一律视为
+/// 死亡（网关侧单次往返超时默认 2 分钟，正常传输的空闲间隔远小于它）。
+const DIRECTORY_IMPORT_IDLE_TTL: Duration = Duration::from_secs(15 * 60);
+
+/// 主动清理周期必须显著短于空闲 TTL，确保不依赖下一次目录导入才能回收。
+const DIRECTORY_IMPORT_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// activity marker 位于 staging 目录旁而不在目录内，避免与用户上传的文件
+/// 撞名或在 COMMIT 后混入最终导入目录。跨进程 GC 通过它识别仍在推进的传输。
+const DIRECTORY_IMPORT_ACTIVITY_SUFFIX: &str = ".activity";
+
+fn directory_import_activity_path(staging_root: &Path) -> PathBuf {
+    let transfer_id = staging_root
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    staging_root.with_file_name(format!("{transfer_id}{DIRECTORY_IMPORT_ACTIVITY_SUFFIX}"))
+}
+
+fn write_directory_import_activity(staging_root: &Path) -> Result<(), String> {
+    let activity_path = directory_import_activity_path(staging_root);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string();
+    fs::write(&activity_path, timestamp).map_err(|error| {
+        format!(
+            "无法更新目录导入活动标记（{}）：{error}",
+            activity_path.display()
+        )
+    })
+}
+
+fn remove_directory_import_staging_root(staging_root: &Path) -> Result<(), String> {
+    let activity_path = directory_import_activity_path(staging_root);
+    let mut errors = Vec::new();
+    if let Err(error) = fs::remove_dir_all(staging_root) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            errors.push(format!("{}: {error}", staging_root.display()));
+        }
+    }
+    if let Err(error) = fs::remove_file(&activity_path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            errors.push(format!("{}: {error}", activity_path.display()));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("无法清理目录导入暂存数据：{}", errors.join("; ")))
+    }
+}
+
+/// 从内存表摘出空闲超时的传输并返回其暂存路径。调用方须已持有锁；磁盘
+/// 删除必须在释放锁后执行，避免慢文件系统阻塞仍在正常推进的其他传输。
+fn take_stale_directory_transfers(
+    transfers: &mut HashMap<String, DirectoryImportTransferState>,
+    idle_ttl: Duration,
+) -> Vec<PathBuf> {
+    let stale: Vec<String> = transfers
+        .iter()
+        .filter(|(_, transfer)| transfer.last_activity.elapsed() > idle_ttl)
+        .map(|(id, _)| id.clone())
+        .collect();
+    stale
+        .into_iter()
+        .filter_map(|transfer_id| {
+            transfers
+                .remove(&transfer_id)
+                .map(|transfer| transfer.staging_root)
+        })
+        .collect()
+}
+
+/// 清理 `<base>/.staging` 下不属于当前进程活跃表的陈旧目录。优先使用跨
+/// 进程 activity marker，旧版本残留再回退到目录 mtime（目录名即 transfer id）。
+fn gc_directory_import_staging_in(
+    staging_base: &Path,
+    active: &HashSet<String>,
+    now: SystemTime,
+    retention: Duration,
+) -> usize {
+    let entries = match fs::read_dir(staging_base) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+        Err(error) => {
+            eprintln!(
+                "failed to read directory import staging base {}: {error}",
+                staging_base.display()
+            );
+            return 0;
+        }
+    };
+    let mut removed = 0usize;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                eprintln!(
+                    "failed to read an entry under directory import staging base {}: {error}",
+                    staging_base.display()
+                );
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_dir() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(transfer_id) = name.strip_suffix(DIRECTORY_IMPORT_ACTIVITY_SUFFIX) {
+                let staging_root = staging_base.join(transfer_id);
+                let expired = entry
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .is_some_and(|age| age > retention);
+                if !staging_root.exists() && expired {
+                    match fs::remove_file(&path) {
+                        Ok(()) => removed += 1,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => eprintln!(
+                            "failed to remove orphaned directory import activity marker {}: {error}",
+                            path.display()
+                        ),
+                    }
+                }
+            }
+            continue;
+        }
+        let transfer_id = entry.file_name().to_string_lossy().into_owned();
+        if active.contains(&transfer_id) {
+            continue;
+        }
+        // 跨进程活跃传输不在当前进程的内存表中；优先读取每个 chunk 都会
+        // 刷新的 marker，旧版本残留没有 marker 时再回退到目录 mtime。
+        let activity_path = directory_import_activity_path(&path);
+        let modified = fs::metadata(&activity_path)
+            .or_else(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    entry.metadata()
+                } else {
+                    Err(error)
+                }
+            })
+            .and_then(|metadata| metadata.modified())
+            .map_err(|error| {
+                eprintln!(
+                    "failed to read directory import activity time for {}: {error}",
+                    path.display()
+                );
+                error
+            })
+            .ok();
+        let expired = modified
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > retention);
+        if expired {
+            match remove_directory_import_staging_root(&path) {
+                Ok(()) => removed += 1,
+                Err(error) => eprintln!("{error}"),
+            }
+        }
+    }
+    removed
+}
+
+fn directory_import_staging_bases() -> Vec<PathBuf> {
+    ["workspace", "project-root"]
+        .into_iter()
+        .filter_map(|target| match directory_import_base(target) {
+            Ok(base) => Some(base.join(".staging")),
+            Err(error) => {
+                eprintln!("failed to resolve directory import staging base: {error}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn sweep_directory_import_staging_in(
+    transfers: &Mutex<HashMap<String, DirectoryImportTransferState>>,
+    staging_bases: &[PathBuf],
+    now: SystemTime,
+    idle_ttl: Duration,
+) {
+    let (stale_roots, active) = {
+        let mut transfers = match transfers.lock() {
+            Ok(transfers) => transfers,
+            Err(_) => {
+                eprintln!("failed to lock directory import transfer state during staging sweep");
+                return;
+            }
+        };
+        let stale_roots = take_stale_directory_transfers(&mut transfers, idle_ttl);
+        let active = transfers.keys().cloned().collect::<HashSet<_>>();
+        (stale_roots, active)
+    };
+
+    for staging_root in stale_roots {
+        if let Err(error) = remove_directory_import_staging_root(&staging_root) {
+            eprintln!("{error}");
+        }
+    }
+    for staging_base in staging_bases {
+        gc_directory_import_staging_in(staging_base, &active, now, idle_ttl);
+    }
+}
+
+fn sweep_directory_import_staging_once() {
+    let staging_bases = directory_import_staging_bases();
+    sweep_directory_import_staging_in(
+        directory_import_transfers(),
+        &staging_bases,
+        SystemTime::now(),
+        DIRECTORY_IMPORT_IDLE_TTL,
+    );
+}
+
+async fn run_periodic_directory_import_gc<F, Fut>(period: Duration, mut sweep: F)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = ()>,
+{
+    let mut interval = tokio::time::interval(period);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // interval 的首个 tick 立即就绪；启动清理已单独执行，先消费它再进入周期。
+    interval.tick().await;
+    loop {
+        interval.tick().await;
+        sweep().await;
+    }
+}
+
+async fn run_directory_import_staging_sweep() {
+    if let Err(error) =
+        tauri::async_runtime::spawn_blocking(sweep_directory_import_staging_once).await
+    {
+        eprintln!("directory import staging sweep task failed: {error}");
+    }
+}
+
+/// 启动时立即清理一次，并在进程存活期间周期回收空闲 transfer 与陈旧
+/// `.staging`。清理失败只记录，下一轮继续重试，不阻断应用启动。
+pub fn start_directory_import_staging_gc() {
+    tauri::async_runtime::spawn(async {
+        run_directory_import_staging_sweep().await;
+        run_periodic_directory_import_gc(DIRECTORY_IMPORT_SWEEP_INTERVAL, || {
+            run_directory_import_staging_sweep()
+        })
+        .await;
+    });
+}
+
+/// 目录导入落在 `~/.liveagent/imports/` 下而非 uploads 暂存区：导入结果会
+/// 成为工作空间或附属目录授权的根路径，必须躲开暂存区的 30 天 GC。
+fn directory_import_base(target: &str) -> Result<PathBuf, String> {
+    let subdir = match target {
+        "workspace" => "workspaces",
+        "project-root" => "mounts",
+        _ => return Err(format!("未知的目录导入目标：{target}")),
+    };
+    Ok(app_storage_dir()?.join("imports").join(subdir))
+}
+
+fn create_unique_import_root(base: &Path, name: &str) -> Result<PathBuf, String> {
+    fs::create_dir_all(base)
+        .map_err(|error| format!("无法创建目录导入基目录（{}）：{error}", base.display()))?;
+    let mut suffix = 1usize;
+    loop {
+        let candidate = if suffix == 1 {
+            base.join(name)
+        } else {
+            base.join(format!("{name}-{suffix}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                suffix += 1;
+                if suffix > 1000 {
+                    return Err(format!("目录名冲突过多，无法创建导入目录：{name}"));
+                }
+            }
+            Err(error) => {
+                return Err(format!(
+                    "无法创建导入目录（{}）：{error}",
+                    candidate.display()
+                ))
+            }
+        }
+    }
+}
+
+/// 相对路径必须逐段清洗：拒绝 `.`/`..` 防穿越，同时保留 `.env`、
+/// `.gitignore`、`.github` 等合法前导点。
+fn sanitized_relative_components(relative_path: &str) -> Option<Vec<String>> {
+    let normalized = relative_path.replace('\\', "/");
+    let mut components = Vec::new();
+    for part in normalized.split('/') {
+        if part.is_empty() {
+            continue;
+        }
+        if part == "." || part == ".." {
+            return None;
+        }
+        components.push(sanitize_import_path_component(part)?);
+    }
+    if components.is_empty() {
+        None
+    } else {
+        Some(components)
+    }
+}
+
+pub(crate) fn system_import_directory_sync(
+    name: String,
+    target: String,
+    files: Vec<SystemImportDirectoryInputFile>,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    if files.is_empty() {
+        return Err("未检测到上传的目录内容".to_string());
+    }
+    if files.len() > DIRECTORY_IMPORT_MAX_FILES {
+        return Err(format!(
+            "目录内文件过多（超过 {DIRECTORY_IMPORT_MAX_FILES} 个），请精简后重试"
+        ));
+    }
+    let total_bytes = files.iter().try_fold(0u64, |total, file| {
+        total.checked_add(u64::try_from(file.content.len()).unwrap_or(u64::MAX))
+    });
+    let total_bytes = total_bytes.ok_or_else(|| "目录内容字节数溢出".to_string())?;
+    if total_bytes > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err(format!(
+            "目录内容超过 {} MiB 上限",
+            DIRECTORY_IMPORT_MAX_BYTES / 1024 / 1024
+        ));
+    }
+    let folder_name =
+        sanitize_import_path_component(name.trim()).ok_or_else(|| "目录名称无效".to_string())?;
+    let base = directory_import_base(target.trim())?;
+    let root = create_unique_import_root(&base, &folder_name)?;
+
+    let mut skipped = Vec::new();
+    let mut file_count = 0u32;
+    for file in files {
+        let Some(components) = sanitized_relative_components(&file.relative_path) else {
+            skipped.push(file.relative_path);
+            continue;
+        };
+        let mut destination = root.clone();
+        for component in &components {
+            destination.push(component);
+        }
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("无法创建导入子目录（{}）：{error}", parent.display()))?;
+        }
+        // 清洗后的组件可能与同目录下其他文件撞名（如非法字符都归一成 `_`）。
+        let destination = unique_path_for_copy(destination);
+        fs::write(&destination, &file.content)
+            .map_err(|error| format!("写入导入文件失败（{}）：{error}", destination.display()))?;
+        file_count += 1;
+    }
+
+    if file_count == 0 {
+        let _ = fs::remove_dir_all(&root);
+        return Err("上传的目录内容均无法导入".to_string());
+    }
+
+    Ok(SystemImportDirectoryOutcome {
+        root_path: project_folder_display_path(&root),
+        file_count,
+        skipped,
+        received_bytes: total_bytes,
+    })
+}
+
+fn validate_directory_transfer_id(transfer_id: &str) -> Result<&str, String> {
+    let transfer_id = transfer_id.trim();
+    if transfer_id.is_empty()
+        || transfer_id.len() > 128
+        || !transfer_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err("目录导入 transfer id 无效".to_string());
+    }
+    Ok(transfer_id)
+}
+
+pub(crate) fn system_import_directory_start_sync(
+    transfer_id: String,
+    name: String,
+    target: String,
+    total_files: u32,
+    total_bytes: u64,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let expected_files = usize::try_from(total_files).unwrap_or(usize::MAX);
+    if expected_files == 0 || expected_files > DIRECTORY_IMPORT_MAX_FILES {
+        return Err(format!(
+            "目录内文件数量必须在 1 到 {DIRECTORY_IMPORT_MAX_FILES} 之间"
+        ));
+    }
+    if total_bytes > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err(format!(
+            "目录内容超过 {} MiB 上限",
+            DIRECTORY_IMPORT_MAX_BYTES / 1024 / 1024
+        ));
+    }
+
+    let folder_name =
+        sanitize_import_path_component(name.trim()).ok_or_else(|| "目录名称无效".to_string())?;
+    let base = directory_import_base(target.trim())?;
+    let staging_base = base.join(".staging");
+    fs::create_dir_all(&staging_base).map_err(|error| {
+        format!(
+            "无法创建目录导入暂存区（{}）：{error}",
+            staging_base.display()
+        )
+    })?;
+    let staging_root = staging_base.join(&transfer_id);
+
+    // START 仍保留一次即时回收，周期任务负责没有后续导入时的主动清理。
+    sweep_directory_import_staging_in(
+        directory_import_transfers(),
+        std::slice::from_ref(&staging_base),
+        SystemTime::now(),
+        DIRECTORY_IMPORT_IDLE_TTL,
+    );
+    let mut transfers = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
+    if transfers.contains_key(&transfer_id) || staging_root.exists() {
+        return Err("目录导入 transfer id 已存在".to_string());
+    }
+    fs::create_dir(&staging_root).map_err(|error| {
+        format!(
+            "无法创建目录导入暂存目录（{}）：{error}",
+            staging_root.display()
+        )
+    })?;
+    if let Err(error) = write_directory_import_activity(&staging_root) {
+        let _ = remove_directory_import_staging_root(&staging_root);
+        return Err(error);
+    }
+    transfers.insert(
+        transfer_id,
+        DirectoryImportTransferState {
+            base,
+            folder_name,
+            staging_root,
+            expected_files,
+            expected_bytes: total_bytes,
+            received_bytes: 0,
+            files: HashMap::new(),
+            skipped: Vec::new(),
+            last_activity: Instant::now(),
+        },
+    );
+
+    Ok(SystemImportDirectoryOutcome {
+        root_path: String::new(),
+        file_count: 0,
+        skipped: Vec::new(),
+        received_bytes: 0,
+    })
+}
+
+pub(crate) fn system_import_directory_chunk_sync(
+    transfer_id: String,
+    relative_path: String,
+    offset: u64,
+    chunk: Vec<u8>,
+    file_complete: bool,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    if chunk.len() > DIRECTORY_IMPORT_CHUNK_BYTES {
+        return Err(format!(
+            "目录导入分块超过 {} 字节上限",
+            DIRECTORY_IMPORT_CHUNK_BYTES
+        ));
+    }
+    if chunk.is_empty() && !file_complete {
+        return Err("目录导入分块为空且未结束文件".to_string());
+    }
+    let normalized_path = relative_path.replace('\\', "/");
+    if normalized_path.trim().is_empty() {
+        return Err("目录导入相对路径为空".to_string());
+    }
+
+    let mut transfers = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?;
+    let transfer = transfers
+        .get_mut(&transfer_id)
+        .ok_or_else(|| "目录导入 transfer id 不存在".to_string())?;
+
+    if !transfer.files.contains_key(&normalized_path) {
+        if offset != 0 {
+            return Err("目录导入文件的首块偏移必须为 0".to_string());
+        }
+        if transfer.files.len() >= transfer.expected_files {
+            return Err("目录导入文件数量超过声明值".to_string());
+        }
+        let destination = if let Some(components) = sanitized_relative_components(&normalized_path)
+        {
+            let mut destination = transfer.staging_root.clone();
+            for component in components {
+                destination.push(component);
+            }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    format!("无法创建导入子目录（{}）：{error}", parent.display())
+                })?;
+            }
+            Some(unique_path_for_copy(destination))
+        } else {
+            transfer.skipped.push(normalized_path.clone());
+            None
+        };
+        transfer.files.insert(
+            normalized_path.clone(),
+            DirectoryImportFileState {
+                destination,
+                next_offset: 0,
+                complete: false,
+            },
+        );
+    }
+
+    let file = transfer
+        .files
+        .get_mut(&normalized_path)
+        .expect("directory import file state inserted above");
+    if file.complete {
+        return Err("目录导入文件已经完成".to_string());
+    }
+    if offset != file.next_offset {
+        return Err(format!(
+            "目录导入分块偏移不连续：期望 {}，收到 {offset}",
+            file.next_offset
+        ));
+    }
+    let chunk_bytes = u64::try_from(chunk.len()).unwrap_or(u64::MAX);
+    let next_received = transfer
+        .received_bytes
+        .checked_add(chunk_bytes)
+        .ok_or_else(|| "目录导入字节数溢出".to_string())?;
+    if next_received > transfer.expected_bytes || next_received > DIRECTORY_IMPORT_MAX_BYTES {
+        return Err("目录导入内容超过声明的总字节数".to_string());
+    }
+
+    if let Some(destination) = &file.destination {
+        let mut output = if offset == 0 {
+            OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(destination)
+        } else {
+            OpenOptions::new().append(true).open(destination)
+        }
+        .map_err(|error| format!("无法打开导入文件（{}）：{error}", destination.display()))?;
+        output
+            .write_all(&chunk)
+            .map_err(|error| format!("写入导入文件失败（{}）：{error}", destination.display()))?;
+    }
+    file.next_offset = file
+        .next_offset
+        .checked_add(chunk_bytes)
+        .ok_or_else(|| "目录导入文件偏移溢出".to_string())?;
+    file.complete = file_complete;
+    transfer.received_bytes = next_received;
+    transfer.last_activity = Instant::now();
+    write_directory_import_activity(&transfer.staging_root)?;
+
+    let file_count = transfer
+        .files
+        .values()
+        .filter(|state| state.complete && state.destination.is_some())
+        .count();
+    Ok(SystemImportDirectoryOutcome {
+        root_path: String::new(),
+        file_count: u32::try_from(file_count).unwrap_or(u32::MAX),
+        skipped: transfer.skipped.clone(),
+        received_bytes: transfer.received_bytes,
+    })
+}
+
+fn move_staging_to_unique_import_root(
+    staging_root: &Path,
+    base: &Path,
+    name: &str,
+) -> Result<PathBuf, String> {
+    for suffix in 1usize..=1000 {
+        let destination = if suffix == 1 {
+            base.join(name)
+        } else {
+            base.join(format!("{name}-{suffix}"))
+        };
+        // On Unix, rename can replace an existing empty directory. Never let an
+        // import commit overwrite a user-created directory, even when it is empty.
+        if destination.exists() {
+            continue;
+        }
+        match fs::rename(staging_root, &destination) {
+            Ok(()) => return Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "无法提交目录导入（{} → {}）：{error}",
+                    staging_root.display(),
+                    destination.display()
+                ))
+            }
+        }
+    }
+    Err(format!("目录名冲突过多，无法提交导入目录：{name}"))
+}
+
+pub(crate) fn system_import_directory_commit_sync(
+    transfer_id: String,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let transfer = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?
+        .remove(&transfer_id)
+        .ok_or_else(|| "目录导入 transfer id 不存在".to_string())?;
+
+    let complete_files = transfer
+        .files
+        .values()
+        .filter(|state| state.complete)
+        .count();
+    if complete_files != transfer.expected_files
+        || transfer.files.len() != transfer.expected_files
+        || transfer.received_bytes != transfer.expected_bytes
+    {
+        let _ = remove_directory_import_staging_root(&transfer.staging_root);
+        return Err(format!(
+            "目录导入不完整：文件 {complete_files}/{}, 字节 {}/{}",
+            transfer.expected_files, transfer.received_bytes, transfer.expected_bytes
+        ));
+    }
+    let written_files = transfer
+        .files
+        .values()
+        .filter(|state| state.destination.is_some())
+        .count();
+    if written_files == 0 {
+        let _ = remove_directory_import_staging_root(&transfer.staging_root);
+        return Err("上传的目录内容均无法导入".to_string());
+    }
+
+    let activity_path = directory_import_activity_path(&transfer.staging_root);
+    if let Err(error) = fs::remove_file(&activity_path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "failed to remove committed directory import activity marker {}: {error}",
+                activity_path.display()
+            );
+        }
+    }
+
+    let root = match move_staging_to_unique_import_root(
+        &transfer.staging_root,
+        &transfer.base,
+        &transfer.folder_name,
+    ) {
+        Ok(root) => root,
+        Err(error) => {
+            let _ = remove_directory_import_staging_root(&transfer.staging_root);
+            return Err(error);
+        }
+    };
+    Ok(SystemImportDirectoryOutcome {
+        root_path: project_folder_display_path(&root),
+        file_count: u32::try_from(written_files).unwrap_or(u32::MAX),
+        skipped: transfer.skipped,
+        received_bytes: transfer.received_bytes,
+    })
+}
+
+pub(crate) fn system_import_directory_abort_sync(transfer_id: String) -> Result<(), String> {
+    let transfer_id = validate_directory_transfer_id(&transfer_id)?.to_string();
+    let transfer = directory_import_transfers()
+        .lock()
+        .map_err(|_| "目录导入状态锁已损坏".to_string())?
+        .remove(&transfer_id);
+    if let Some(transfer) = transfer {
+        remove_directory_import_staging_root(&transfer.staging_root)?;
+    }
+    Ok(())
+}
+
 pub(crate) fn system_create_project_folder_sync(
     parent: String,
     name: String,
@@ -1349,6 +2503,26 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn system_resolve_dropped_workspace_folders(
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_resolve_dropped_workspace_folders_sync(paths)
+    })
+    .await
+    .map_err(|e| format!("system_resolve_dropped_workspace_folders join 失败：{e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_classify_dropped_paths(
+    paths: Vec<String>,
+) -> Result<SystemClassifiedDroppedPaths, String> {
+    tauri::async_runtime::spawn_blocking(move || system_classify_dropped_paths_sync(paths))
+        .await
+        .map_err(|e| format!("system_classify_dropped_paths join 失败：{e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_file(
     initial_workdir: Option<String>,
     filter_name: Option<String>,
@@ -1379,17 +2553,7 @@ pub async fn system_save_preview_file(
     data_base64: String,
 ) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = BASE64_STANDARD
-            .decode(data_base64)
-            .map_err(|error| format!("Invalid preview file data: {error}"))?;
-        // Preserve the source extension in the suggested name. A MIME type is
-        // not a usable native dialog extension filter by itself.
-        let _ = mime_type;
-        let Some(path) = FileDialog::new().set_file_name(&file_name).save_file() else {
-            return Ok(false);
-        };
-        fs::write(path, bytes).map_err(|error| format!("Failed to save preview file: {error}"))?;
-        Ok(true)
+        system_save_preview_file_sync(data_base64, file_name, mime_type.unwrap_or_default())
     })
     .await
     .map_err(|e| format!("system_save_preview_file join failed: {e}"))?
@@ -1405,23 +2569,7 @@ pub async fn system_clipboard_write_image(
         if !mime_type.to_ascii_lowercase().starts_with("image/") {
             return Err("The selected workspace preview is not an image".to_string());
         }
-        let encoded = BASE64_STANDARD
-            .decode(data_base64)
-            .map_err(|error| format!("Invalid image clipboard data: {error}"))?;
-        let image = image::load_from_memory(&encoded)
-            .map_err(|error| format!("Failed to decode image for clipboard: {error}"))?
-            .to_rgba8();
-        let width = usize::try_from(image.width()).map_err(|_| "Image width is too large")?;
-        let height = usize::try_from(image.height()).map_err(|_| "Image height is too large")?;
-        let mut clipboard =
-            arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?;
-        clipboard
-            .set_image(arboard::ImageData {
-                width,
-                height,
-                bytes: std::borrow::Cow::Owned(image.into_raw()),
-            })
-            .map_err(|error| format!("Failed to write image clipboard: {error}"))
+        system_clipboard_write_image_sync(data_base64, mime_type)
     })
     .await
     .map_err(|e| format!("system_clipboard_write_image join failed: {e}"))?
@@ -1505,6 +2653,62 @@ pub async fn system_read_uploaded_image_preview(
     })
     .await
     .map_err(|e| format!("system_read_uploaded_image_preview join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_open_uploaded_image(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_open_uploaded_image_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_open_uploaded_image join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_prepare_preview_file_save(file_name: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || system_prepare_preview_file_save_sync(file_name))
+        .await
+        .map_err(|e| format!("system_prepare_preview_file_save join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_write_preview_file(
+    save_token: String,
+    data_base64: String,
+    mime_type: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_write_preview_file_sync(save_token, data_base64, mime_type)
+    })
+    .await
+    .map_err(|e| format!("system_write_preview_file join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_prepare_uploaded_image_clipboard(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_prepare_uploaded_image_clipboard_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_prepare_uploaded_image_clipboard join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_clipboard_write_uploaded_image(
+    workdir: String,
+    absolute_path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_clipboard_write_uploaded_image_sync(workdir, absolute_path)
+    })
+    .await
+    .map_err(|e| format!("system_clipboard_write_uploaded_image join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1679,6 +2883,28 @@ mod tests {
     }
 
     #[test]
+    fn directory_import_components_preserve_leading_dots() {
+        assert_eq!(
+            sanitized_relative_components(".env"),
+            Some(vec![".env".to_string()])
+        );
+        assert_eq!(
+            sanitized_relative_components(".github/workflows/ci.yml"),
+            Some(vec![
+                ".github".to_string(),
+                "workflows".to_string(),
+                "ci.yml".to_string(),
+            ])
+        );
+        assert_eq!(
+            sanitized_relative_components(".gitignore"),
+            Some(vec![".gitignore".to_string()])
+        );
+        assert_eq!(sanitized_relative_components("../.env"), None);
+        assert_eq!(sanitized_relative_components("./.env"), None);
+    }
+
+    #[test]
     fn upload_import_root_stays_outside_the_workspace() {
         let root = upload_import_root().expect("create upload root");
 
@@ -1812,6 +3038,418 @@ mod tests {
         .expect_err("reject missing parent");
 
         assert!(error.contains("父目录不存在"));
+    }
+
+    #[test]
+    fn resolve_dropped_workspace_folders_canonicalizes_and_deduplicates() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        fs::create_dir(&project).expect("create project dir");
+        let raw = project.to_string_lossy().into_owned();
+
+        let resolved =
+            system_resolve_dropped_workspace_folders_sync(vec![raw.clone(), format!("{raw}/./")])
+                .expect("resolve dropped workspace folders");
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0],
+            project_folder_display_path(&project.canonicalize().expect("canonicalize project"))
+        );
+    }
+
+    #[test]
+    fn resolve_dropped_workspace_folders_rejects_mixed_files_atomically() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        let file = temp.path().join("notes.txt");
+        fs::create_dir(&project).expect("create project dir");
+        fs::write(&file, b"notes").expect("write file");
+
+        let error = system_resolve_dropped_workspace_folders_sync(vec![
+            project.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+        ])
+        .expect_err("mixed drop must be rejected");
+
+        assert!(error.contains("只支持拖入文件夹"));
+    }
+
+    #[test]
+    fn classify_dropped_paths_splits_files_and_dirs() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        let file = temp.path().join("notes.txt");
+        fs::create_dir(&project).expect("create project dir");
+        fs::write(&file, b"notes").expect("write file");
+
+        let classified = system_classify_dropped_paths_sync(vec![
+            project.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+        ])
+        .expect("classify dropped paths");
+
+        assert_eq!(classified.files, vec![file.to_string_lossy().into_owned()]);
+        assert_eq!(
+            classified.dirs,
+            vec![project_folder_display_path(
+                &project.canonicalize().expect("canonicalize project")
+            )]
+        );
+    }
+
+    #[test]
+    fn classify_dropped_paths_deduplicates_canonical_dirs() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        fs::create_dir(&project).expect("create project dir");
+        let raw = project.to_string_lossy().into_owned();
+
+        let classified = system_classify_dropped_paths_sync(vec![raw.clone(), format!("{raw}/./")])
+            .expect("classify dropped paths");
+
+        assert!(classified.files.is_empty());
+        assert_eq!(classified.dirs.len(), 1);
+    }
+
+    #[test]
+    fn classify_dropped_paths_rejects_missing_entries() {
+        let temp = tempdir().expect("create temp dir");
+        let missing = temp.path().join("missing");
+
+        let error =
+            system_classify_dropped_paths_sync(vec![missing.to_string_lossy().into_owned()])
+                .expect_err("missing path must be rejected");
+
+        assert!(error.contains("不存在或无法访问"));
+    }
+
+    #[test]
+    fn import_directory_writes_nested_files_and_skips_traversal() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let root = create_unique_import_root(&base, "demo").expect("create root");
+        assert!(root.ends_with("demo"));
+
+        let files = vec![
+            SystemImportDirectoryInputFile {
+                relative_path: "src/main.rs".to_string(),
+                content: b"fn main() {}".to_vec(),
+            },
+            SystemImportDirectoryInputFile {
+                relative_path: "../escape.txt".to_string(),
+                content: b"nope".to_vec(),
+            },
+        ];
+        let mut skipped = Vec::new();
+        let mut count = 0u32;
+        for file in files {
+            match sanitized_relative_components(&file.relative_path) {
+                Some(components) => {
+                    let mut destination = root.clone();
+                    for component in &components {
+                        destination.push(component);
+                    }
+                    fs::create_dir_all(destination.parent().expect("parent"))
+                        .expect("create parent");
+                    fs::write(&destination, &file.content).expect("write file");
+                    count += 1;
+                }
+                None => skipped.push(file.relative_path),
+            }
+        }
+
+        assert_eq!(count, 1);
+        assert_eq!(skipped, vec!["../escape.txt".to_string()]);
+        assert_eq!(
+            fs::read(root.join("src/main.rs")).expect("read nested file"),
+            b"fn main() {}"
+        );
+    }
+
+    #[test]
+    fn chunked_directory_import_preserves_dot_paths_and_commits_atomically() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_root = base.join(".staging").join("test-dotfiles");
+        fs::create_dir_all(&staging_root).expect("create staging root");
+        let env_content = b"TOKEN=secret";
+        let workflow_content = b"name: CI";
+        let expected_bytes = u64::try_from(env_content.len() + workflow_content.len()).unwrap();
+        directory_import_transfers()
+            .lock()
+            .expect("lock transfers")
+            .insert(
+                "test-dotfiles".to_string(),
+                DirectoryImportTransferState {
+                    base: base.clone(),
+                    folder_name: ".demo".to_string(),
+                    staging_root,
+                    expected_files: 2,
+                    expected_bytes,
+                    received_bytes: 0,
+                    files: HashMap::new(),
+                    skipped: Vec::new(),
+                    last_activity: Instant::now(),
+                },
+            );
+
+        system_import_directory_chunk_sync(
+            "test-dotfiles".to_string(),
+            ".env".to_string(),
+            0,
+            env_content.to_vec(),
+            true,
+        )
+        .expect("write env chunk");
+        system_import_directory_chunk_sync(
+            "test-dotfiles".to_string(),
+            ".github/workflows/ci.yml".to_string(),
+            0,
+            workflow_content.to_vec(),
+            true,
+        )
+        .expect("write workflow chunk");
+        let outcome = system_import_directory_commit_sync("test-dotfiles".to_string())
+            .expect("commit directory import");
+
+        let root = PathBuf::from(&outcome.root_path);
+        assert!(root.ends_with(".demo"));
+        assert_eq!(fs::read(root.join(".env")).unwrap(), env_content);
+        assert_eq!(
+            fs::read(root.join(".github/workflows/ci.yml")).unwrap(),
+            workflow_content
+        );
+        assert_eq!(outcome.file_count, 2);
+        assert_eq!(outcome.received_bytes, expected_bytes);
+    }
+
+    #[test]
+    fn chunked_directory_import_rejects_oversized_or_non_contiguous_chunks() {
+        let too_large = vec![0; DIRECTORY_IMPORT_CHUNK_BYTES + 1];
+        let error = system_import_directory_chunk_sync(
+            "missing-transfer".to_string(),
+            "large.bin".to_string(),
+            0,
+            too_large,
+            true,
+        )
+        .expect_err("oversized chunks must fail before transfer lookup");
+        assert!(error.contains("分块超过"));
+
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_root = base.join(".staging").join("test-offsets");
+        fs::create_dir_all(&staging_root).expect("create staging root");
+        directory_import_transfers()
+            .lock()
+            .expect("lock transfers")
+            .insert(
+                "test-offsets".to_string(),
+                DirectoryImportTransferState {
+                    base,
+                    folder_name: "offsets".to_string(),
+                    staging_root,
+                    expected_files: 1,
+                    expected_bytes: 4,
+                    received_bytes: 0,
+                    files: HashMap::new(),
+                    skipped: Vec::new(),
+                    last_activity: Instant::now(),
+                },
+            );
+        system_import_directory_chunk_sync(
+            "test-offsets".to_string(),
+            "data.bin".to_string(),
+            0,
+            vec![1, 2],
+            false,
+        )
+        .expect("write first chunk");
+        let error = system_import_directory_chunk_sync(
+            "test-offsets".to_string(),
+            "data.bin".to_string(),
+            3,
+            vec![3, 4],
+            true,
+        )
+        .expect_err("non-contiguous offsets must fail");
+        assert!(error.contains("偏移不连续"));
+        system_import_directory_abort_sync("test-offsets".to_string())
+            .expect("abort offset test transfer");
+    }
+
+    fn directory_transfer_state_for_test(
+        base: &Path,
+        staging_root: PathBuf,
+    ) -> DirectoryImportTransferState {
+        DirectoryImportTransferState {
+            base: base.to_path_buf(),
+            folder_name: "demo".to_string(),
+            staging_root,
+            expected_files: 1,
+            expected_bytes: 4,
+            received_bytes: 0,
+            files: HashMap::new(),
+            skipped: Vec::new(),
+            last_activity: Instant::now(),
+        }
+    }
+
+    #[test]
+    fn stale_directory_transfers_expire_with_their_staging_dirs() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_base = base.join(".staging");
+        let stale_staging = staging_base.join("stale-transfer");
+        let live_staging = staging_base.join("live-transfer");
+        fs::create_dir_all(&stale_staging).expect("create stale staging");
+        fs::create_dir_all(&live_staging).expect("create live staging");
+        write_directory_import_activity(&stale_staging).expect("write stale activity");
+        write_directory_import_activity(&live_staging).expect("write live activity");
+
+        // 局部表避免并行测试共享全局单例；直接执行一次 sweep，验证无需下一次
+        // START 或进程重启也能同时释放内存状态、暂存目录和 activity marker。
+        let transfers = Mutex::new(HashMap::new());
+        let mut states = transfers.lock().expect("lock local transfers");
+        states.insert(
+            "stale-transfer".to_string(),
+            DirectoryImportTransferState {
+                last_activity: Instant::now()
+                    .checked_sub(Duration::from_secs(10))
+                    .expect("stale instant"),
+                ..directory_transfer_state_for_test(&base, stale_staging.clone())
+            },
+        );
+        states.insert(
+            "live-transfer".to_string(),
+            directory_transfer_state_for_test(&base, live_staging.clone()),
+        );
+        drop(states);
+
+        sweep_directory_import_staging_in(
+            &transfers,
+            &[staging_base],
+            SystemTime::now(),
+            Duration::from_secs(5),
+        );
+
+        let states = transfers.lock().expect("lock swept transfers");
+        assert!(!states.contains_key("stale-transfer"));
+        assert!(!stale_staging.exists());
+        assert!(!directory_import_activity_path(&stale_staging).exists());
+        assert!(states.contains_key("live-transfer"));
+        assert!(live_staging.exists());
+        assert!(directory_import_activity_path(&live_staging).exists());
+    }
+
+    #[test]
+    fn directory_import_staging_gc_removes_only_stale_orphans() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let staging_base = base.join(".staging");
+        let orphan = staging_base.join("orphan-transfer");
+        let active_staging = staging_base.join("active-transfer");
+        fs::create_dir_all(&orphan).expect("create orphan staging");
+        fs::write(orphan.join("partial.bin"), b"data").expect("write orphan residue");
+        write_directory_import_activity(&orphan).expect("write orphan activity");
+        fs::create_dir_all(&active_staging).expect("create active staging");
+
+        let active = HashSet::from(["active-transfer".to_string()]);
+
+        // 用推后的 now 模拟目录已陈旧，避免在测试里改 mtime。
+        let aged_now = SystemTime::now() + DIRECTORY_IMPORT_IDLE_TTL + Duration::from_secs(60);
+        let removed = gc_directory_import_staging_in(
+            &staging_base,
+            &active,
+            aged_now,
+            DIRECTORY_IMPORT_IDLE_TTL,
+        );
+        assert_eq!(removed, 1);
+        assert!(!orphan.exists());
+        assert!(!directory_import_activity_path(&orphan).exists());
+        assert!(active_staging.exists());
+
+        // 当前进程内没有状态、但 activity marker 仍新鲜的目录可能属于另一个
+        // LiveAgent 实例，必须保留；没有 marker 的新鲜旧版本目录也同样保留。
+        let foreign_active = staging_base.join("foreign-active");
+        fs::create_dir_all(&foreign_active).expect("create foreign active staging");
+        write_directory_import_activity(&foreign_active).expect("write foreign activity");
+        let fresh_legacy = staging_base.join("fresh-legacy");
+        fs::create_dir_all(&fresh_legacy).expect("create fresh legacy staging");
+        let removed = gc_directory_import_staging_in(
+            &staging_base,
+            &active,
+            SystemTime::now(),
+            DIRECTORY_IMPORT_IDLE_TTL,
+        );
+        assert_eq!(removed, 0);
+        assert!(foreign_active.exists());
+        assert!(fresh_legacy.exists());
+    }
+
+    #[tokio::test]
+    async fn directory_import_gc_runs_periodically_without_external_events() {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let mut sender = Some(sender);
+        let task = tokio::spawn(run_periodic_directory_import_gc(
+            Duration::from_millis(10),
+            move || {
+                let sender = sender.take();
+                async move {
+                    if let Some(sender) = sender {
+                        let _ = sender.send(());
+                    }
+                }
+            },
+        ));
+
+        tokio::time::timeout(Duration::from_secs(1), receiver)
+            .await
+            .expect("periodic directory import GC did not run")
+            .expect("periodic directory import GC signal dropped");
+        task.abort();
+    }
+
+    #[test]
+    fn chunked_directory_commit_does_not_replace_existing_empty_directory() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let existing = base.join("demo");
+        let staging = base.join(".staging").join("test-no-replace");
+        fs::create_dir_all(&existing).expect("create existing directory");
+        fs::create_dir_all(&staging).expect("create staging directory");
+        fs::write(staging.join("file.txt"), b"content").expect("write staged file");
+
+        let destination = move_staging_to_unique_import_root(&staging, &base, "demo")
+            .expect("commit without replacing existing directory");
+
+        assert!(existing.is_dir());
+        assert_eq!(destination, base.join("demo-2"));
+        assert_eq!(fs::read(destination.join("file.txt")).unwrap(), b"content");
+    }
+
+    #[test]
+    fn import_root_names_get_unique_suffixes() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+
+        let first = create_unique_import_root(&base, "demo").expect("first root");
+        let second = create_unique_import_root(&base, "demo").expect("second root");
+
+        assert!(first.ends_with("demo"));
+        assert!(second.ends_with("demo-2"));
+    }
+
+    #[test]
+    fn sanitized_relative_components_rejects_dot_segments_and_keeps_cjk() {
+        assert_eq!(sanitized_relative_components("../secret"), None);
+        assert_eq!(sanitized_relative_components("a/./b"), None);
+        assert_eq!(sanitized_relative_components(""), None);
+        assert_eq!(
+            sanitized_relative_components("docs\\报告.pdf"),
+            Some(vec!["docs".to_string(), "报告.pdf".to_string()])
+        );
     }
 
     #[test]
@@ -2057,6 +3695,179 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&batch);
+    }
+
+    #[test]
+    fn resolve_uploaded_image_target_allows_workspace_and_staging_images() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let workspace_image = workdir.join("diagram.png");
+        fs::write(&workspace_image, b"not-decoded-by-this-validation").expect("write image");
+
+        let (target, mime_type) = resolve_uploaded_image_target(
+            &workdir.to_string_lossy(),
+            &workspace_image.to_string_lossy(),
+        )
+        .expect("workspace image should be authorized");
+        assert_eq!(
+            target,
+            fs::canonicalize(&workspace_image).expect("canonicalize image")
+        );
+        assert_eq!(mime_type, "image/png");
+
+        let staging = upload_staging_base().expect("resolve staging base");
+        let batch = staging.join(format!("test-batch-image-open-{}", std::process::id()));
+        fs::create_dir_all(&batch).expect("create staging batch");
+        let staged_image = batch.join("generated.webp");
+        fs::write(&staged_image, b"staged-image").expect("write staged image");
+
+        let (_, staged_mime_type) = resolve_uploaded_image_target(
+            &workdir.to_string_lossy(),
+            &staged_image.to_string_lossy(),
+        )
+        .expect("staging image should be authorized");
+        assert_eq!(staged_mime_type, "image/webp");
+
+        let _ = fs::remove_dir_all(&batch);
+    }
+
+    #[test]
+    fn resolve_uploaded_image_target_rejects_directories_non_images_invalid_workdirs_and_escapes() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+
+        let directory_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &workdir.to_string_lossy())
+                .expect_err("directories must be rejected");
+        assert!(!directory_error.trim().is_empty());
+
+        let text_file = workdir.join("notes.txt");
+        fs::write(&text_file, b"notes").expect("write text file");
+        let non_image_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &text_file.to_string_lossy())
+                .expect_err("non-images must be rejected");
+        assert!(non_image_error.contains("not a supported image file"));
+
+        let outside = temp.path().join("outside.png");
+        fs::write(&outside, b"outside").expect("write outside image");
+        let outside_error =
+            resolve_uploaded_image_target(&workdir.to_string_lossy(), &outside.to_string_lossy())
+                .expect_err("outside images must be rejected");
+        assert!(outside_error.contains("outside the current workspace"));
+
+        let invalid_workdir = temp.path().join("missing-workspace");
+        let workdir_error = resolve_uploaded_image_target(
+            &invalid_workdir.to_string_lossy(),
+            &outside.to_string_lossy(),
+        )
+        .expect_err("missing workdir must be rejected");
+        assert!(!workdir_error.trim().is_empty());
+    }
+
+    #[test]
+    fn image_preview_data_rejects_empty_invalid_and_oversized_base64() {
+        assert!(decode_image_preview_base64("").is_err());
+        assert!(decode_image_preview_base64("definitely-not-base64").is_err());
+
+        let oversized = "A".repeat(IMAGE_PREVIEW_DATA_MAX_BYTES * 4 / 3 + 8);
+        let error = decode_image_preview_base64(&oversized)
+            .expect_err("oversized preview data must be rejected before decoding");
+        assert!(error.contains("too large"));
+    }
+
+    #[test]
+    fn image_preview_rgba_decoder_converts_png() {
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        let (width, height, rgba) =
+            decode_image_preview_rgba(png).expect("valid PNG preview should decode");
+
+        assert_eq!((width, height), (1, 1));
+        assert_eq!(rgba.len(), 4);
+    }
+
+    #[test]
+    fn prepared_image_preview_clipboard_requires_matching_fresh_file_signature() {
+        let now = SystemTime::now();
+        let target = PathBuf::from("prepared-image-preview.png");
+        let signature = ImagePreviewFileSignature {
+            len: 123,
+            modified_at: Some(now),
+        };
+        let prepared = PreparedImagePreviewClipboard {
+            target: target.clone(),
+            signature: signature.clone(),
+            prepared_at: now,
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+        };
+
+        assert!(prepared_image_preview_clipboard_matches(
+            &prepared, &target, &signature, now
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &PathBuf::from("other-image-preview.png"),
+            &signature,
+            now,
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &target,
+            &ImagePreviewFileSignature {
+                len: 124,
+                modified_at: Some(now),
+            },
+            now,
+        ));
+        assert!(!prepared_image_preview_clipboard_matches(
+            &prepared,
+            &target,
+            &signature,
+            now.checked_add(IMAGE_PREVIEW_CLIPBOARD_CACHE_TTL + Duration::from_secs(1))
+                .expect("valid expiry timestamp"),
+        ));
+    }
+
+    #[test]
+    fn image_preview_save_target_is_one_time_and_expires() {
+        let target = PathBuf::from("image-preview-save-target.png");
+        let save_token = remember_image_preview_save_target(target.clone())
+            .expect("remember image preview save target");
+        assert_eq!(
+            take_image_preview_save_target(&save_token).expect("consume image preview save target"),
+            target
+        );
+        assert!(take_image_preview_save_target(&save_token).is_err());
+
+        let expired_token = Uuid::new_v4().to_string();
+        pending_image_preview_save_targets()
+            .lock()
+            .expect("lock image preview save targets")
+            .insert(
+                expired_token.clone(),
+                PendingImagePreviewSaveTarget {
+                    target: PathBuf::from("expired-image-preview-save-target.png"),
+                    created_at: SystemTime::now()
+                        .checked_sub(IMAGE_PREVIEW_SAVE_TARGET_TTL + Duration::from_secs(1))
+                        .expect("valid expired image preview save timestamp"),
+                },
+            );
+        assert!(take_image_preview_save_target(&expired_token).is_err());
+    }
+
+    #[test]
+    fn image_preview_save_name_is_reduced_to_a_safe_file_name() {
+        assert_eq!(
+            sanitize_uploaded_file_name("../../chart.png"),
+            "_.._chart.png"
+        );
+        assert_eq!(
+            sanitize_uploaded_file_name("C:\\temp\\chart.png"),
+            "C__temp_chart.png"
+        );
     }
 
     #[test]

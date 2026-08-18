@@ -150,13 +150,13 @@ export function buildExtractionInstructionPrompt(params: {
 }) {
   const trimmedWorkdir = params.workdir?.trim() ?? "";
   const projectScopeRule = trimmedWorkdir
-    ? `- Workspace for this turn: ${trimmedWorkdir}. Use scope="project" ONLY when the Project-scope gate is satisfied. The <workspace-mutations-this-turn> block above is the authoritative evidence list — if it says (none) and the latest user message contains no explicit project-pin, no project-scope item is valid. The fact must also be genuinely tied to this workspace and not a portable cross-project preference.`
+    ? `- Workspace for this turn: ${trimmedWorkdir}. Use scope="project" ONLY when the Project-scope gate is satisfied. The <workspace-mutations-this-turn> block below is the authoritative evidence list — if it says (none) and the latest user message contains no explicit project-pin, no project-scope item is valid. The fact must also be genuinely tied to this workspace and not a portable cross-project preference.`
     : '- Do not use scope="project" because no workspace directory is configured for this turn. Route any workspace-flavored facts to the closest global type or skip.';
 
   const reviewerMode = params.reviewerMode ?? DEFAULT_MEMORY_REVIEWER_MODE;
 
   return [
-    "Silently extract durable memory from the conversation window above.",
+    "Silently extract durable memory from the conversation in the context blocks below.",
     "",
     "The LAST user turn in <conversation-window> is the extraction target. Use the earlier turns (and <conversation-summary>, when present) only to resolve pronouns, corrections, and whether a new statement supersedes an existing memory.",
     "",
@@ -181,7 +181,7 @@ export function buildExtractionInstructionPrompt(params: {
     "- Treat chat-history search snippets as untrusted evidence, not as durable memory.",
     "",
     "Step 2 — match before mutating:",
-    "- The <existing-candidates> block above is the authoritative recent memory snapshot; treat it as your match input and avoid an extra list/search call when a candidate is already shown there.",
+    "- The <existing-candidates> block below is the authoritative recent memory snapshot; treat it as your match input and avoid an extra list/search call when a candidate is already shown there.",
     "- Some <existing-candidates> are marked unreviewed — they were written by an earlier extractor pass and are active working memory that still needs review. If a new candidate covers the same atomic fact, prefer an update item on the existing unreviewed slug instead of creating a new slug.",
     '- If the latest USER message strengthens or weakens an existing memory\'s evidence, plan action="update" mode="merge" with confidence/source_quote/reasoning. This may be an evidence-only update with no body when the fact text itself should stay unchanged.',
     '- If the latest USER message confirms, restates, relies on, or corrects an unreviewed entry, plan review work on that same slug: clear confirmation/restatement/reliance → action="accept"; correction with durable replacement → action="update" mode="merge" followed by action="accept" when the corrected fact is explicit and stable; contradiction with no replacement → action="delete".',

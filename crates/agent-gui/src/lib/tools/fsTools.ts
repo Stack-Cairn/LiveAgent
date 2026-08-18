@@ -290,8 +290,11 @@ export function createFsTools(params: {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   additionalRoots?: readonly AdditionalProjectRoot[];
+  /** 会话检查点上下文;缺省时 Write/Edit/Delete 不做前像捕获(如 Cron 场景)。 */
+  checkpoint?: { conversationId: string; turnId: string };
 }): BuiltinToolBundle {
   const { workdir, fileState } = params;
+  const checkpointCtx = params.checkpoint;
   const allowSkillsRoot = params.skillsRootEnabled === true;
   const skillAccessPolicy = params.skillAccessPolicy;
   let cachedSkillsRootDir =
@@ -1438,6 +1441,7 @@ export function createFsTools(params: {
           mode: "rewrite",
           expected_mtime_ms: primed?.snapshot.mtimeMs,
           expected_content_hash: primed?.snapshot.contentHash,
+          ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
         },
       });
     } catch (error) {
@@ -1525,6 +1529,7 @@ export function createFsTools(params: {
           replace_all,
           expected_mtime_ms: snapshot.mtimeMs,
           expected_content_hash: snapshot.contentHash,
+          ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
         },
       });
     } catch (error) {
@@ -1590,6 +1595,7 @@ export function createFsTools(params: {
       args: {
         workdir: resolved.root,
         path,
+        ...(checkpointCtx ? { checkpoint: checkpointCtx } : {}),
       },
     });
     fileState.clear(statePathKey(resolved));

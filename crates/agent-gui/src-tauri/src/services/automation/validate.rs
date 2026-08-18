@@ -14,11 +14,26 @@ use super::types::{
 pub const MIN_HOOK_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_HOOK_TIMEOUT_MS: u64 = 10 * 60_000;
 
-/// Cron timeout bounds. The upper bound mirrors the shell runner's hard cap
+/// Cron timeout bounds, per task kind.
+///
+/// bash/http: the upper bound mirrors the shell runner's hard cap
 /// (MAX_SHELL_TIMEOUT_MS): a larger stored value would silently be cut to ten
 /// minutes for bash tasks, so validation refuses to store one.
+///
+/// prompt: runs execute in the frontend webview, never through the shell
+/// runner, so the shell cap does not apply. The value only bounds the
+/// execution lease, which is stamped at claim time (see store.rs).
 pub const MIN_CRON_TIMEOUT_SECONDS: u64 = 1;
-pub const MAX_CRON_TIMEOUT_SECONDS: u64 = 600;
+pub const MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS: u64 = 600;
+pub const MAX_PROMPT_CRON_TIMEOUT_SECONDS: u64 = 3_600;
+
+pub fn max_cron_timeout_seconds(kind: &str) -> u64 {
+    if kind == "prompt" {
+        MAX_PROMPT_CRON_TIMEOUT_SECONDS
+    } else {
+        MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS
+    }
+}
 
 pub fn validate_cron_expression(expression: &str) -> Result<(), String> {
     let trimmed = expression.trim();
@@ -84,16 +99,17 @@ fn parse_remaining_executions(
     }
 }
 
-fn parse_timeout_seconds(map: &Map<String, Value>, label: &str) -> Result<u64, String> {
+fn parse_timeout_seconds(map: &Map<String, Value>, label: &str, kind: &str) -> Result<u64, String> {
     match map.get("timeoutSeconds") {
         None | Some(Value::Null) => Ok(DEFAULT_CRON_TIMEOUT_SECONDS),
         Some(Value::Number(number)) => {
             let value = number
                 .as_u64()
                 .ok_or_else(|| format!("{label}.timeoutSeconds 必须是正整数（秒）"))?;
-            if !(MIN_CRON_TIMEOUT_SECONDS..=MAX_CRON_TIMEOUT_SECONDS).contains(&value) {
+            let max = max_cron_timeout_seconds(kind);
+            if !(MIN_CRON_TIMEOUT_SECONDS..=max).contains(&value) {
                 return Err(format!(
-                    "{label}.timeoutSeconds 必须在 {MIN_CRON_TIMEOUT_SECONDS}-{MAX_CRON_TIMEOUT_SECONDS} 秒之间"
+                    "{label}.timeoutSeconds 必须在 {MIN_CRON_TIMEOUT_SECONDS}-{max} 秒之间（{kind} 任务）"
                 ));
             }
             Ok(value)
@@ -216,9 +232,6 @@ pub fn validate_cron_task(value: Value, label: &str) -> Result<CronTask, String>
     let cron = required_string(&map, "cron", label)?;
     validate_cron_expression(&cron)?;
     let remaining_executions = parse_remaining_executions(&map, label)?;
-    let timeout_seconds = parse_timeout_seconds(&map, label)?;
-    let enabled =
-        bool_with_default(&map, "enabled", label, false)? && remaining_executions != Some(0);
     let kind = map
         .get("type")
         .and_then(Value::as_str)
@@ -228,6 +241,9 @@ pub fn validate_cron_task(value: Value, label: &str) -> Result<CronTask, String>
     if !CRON_TASK_KINDS.contains(&kind.as_str()) {
         return Err(format!("{label}.type 不支持：{kind}"));
     }
+    let timeout_seconds = parse_timeout_seconds(&map, label, &kind)?;
+    let enabled =
+        bool_with_default(&map, "enabled", label, false)? && remaining_executions != Some(0);
 
     let mut task = CronTask {
         id,

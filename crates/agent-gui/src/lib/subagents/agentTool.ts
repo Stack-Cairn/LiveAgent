@@ -207,6 +207,9 @@ export function createSubagentTools(params: {
   additionalRoots?: readonly AdditionalProjectRoot[];
   createSubagentToolRegistry?: (workdir: string) => Promise<SubagentToolRegistry>;
   worktreeIpc?: SubagentWorktreeIpc;
+  /** 父对话检查点上下文;仅用于 worktree apply 合并回父工作区前捕获前像,
+   * 不下发给子代理自身的工具注册表(子代理 workdir 是临时目录)。 */
+  checkpoint?: { conversationId: string; turnId: string };
 }): BuiltinToolBundle {
   const store = params.store;
   const templates = params.templates;
@@ -344,6 +347,7 @@ export function createSubagentTools(params: {
           }
         : undefined,
       enqueueWorktreeApply,
+      checkpoint: params.checkpoint,
       onStatus: context?.emitToolStatus,
     };
 

@@ -33,6 +33,10 @@ const {
   isManualCronRunFinished,
   MANUAL_CRON_RUN_POLL_INTERVAL_MS,
   MANUAL_CRON_RUN_TIMEOUT_MS,
+  MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS,
+  MAX_PROMPT_CRON_TIMEOUT_SECONDS,
+  maxCronTimeoutSeconds,
+  PROMPT_PENDING_CLAIM_WINDOW_MS,
 } = loader.loadModule("@liveagent/ui/lib/automation/types.ts");
 const { createCompletePromptRunInput, PROMPT_RUN_RECONCILE_INTERVAL_MS } = loader.loadModule(
   "src/components/cron/promptRunProtocol.ts",
@@ -241,4 +245,37 @@ test("Cron reasoning levels follow the selected model in shared UI", () => {
       /if \(levels\.includes\(DEFAULT_CRON_REASONING\)\) return DEFAULT_CRON_REASONING;\s*return levels\[0\] \?\? DEFAULT_CRON_REASONING;/,
     );
   }
+});
+
+test("Cron timeout upper bound is per task kind and mirrors Rust", () => {
+  // Bounds mirror validate.rs: bash/http stay at the shell runner's cap,
+  // prompt tasks get the higher frontend-execution ceiling.
+  assert.equal(MAX_BASH_HTTP_CRON_TIMEOUT_SECONDS, 600);
+  assert.equal(MAX_PROMPT_CRON_TIMEOUT_SECONDS, 3600);
+  assert.equal(maxCronTimeoutSeconds("prompt"), 3600);
+  assert.equal(maxCronTimeoutSeconds("bash"), 600);
+  assert.equal(maxCronTimeoutSeconds("http"), 600);
+  // Pending claim window mirrors PROMPT_PENDING_CLAIM_WINDOW_MS in store.rs.
+  assert.equal(PROMPT_PENDING_CLAIM_WINDOW_MS, 600_000);
+
+  // The modal validates against the per-kind max (rejects, never clamps) and
+  // shows a kind-aware hint under the timeout input.
+  assert.match(cronModalSource, /const timeoutMax = maxCronTimeoutSeconds\(type\)/);
+  assert.match(cronModalSource, /parsedTimeoutSeconds > timeoutMax/);
+  assert.match(
+    cronModalSource,
+    /settings\.cronTimeoutSecondsMaxHint"\)\.replace\(\s*"\{max\}",\s*String\(maxCronTimeoutSeconds\(type\)\),?\s*\)/,
+  );
+
+  // Manual prompt runs are watched across the pending claim window plus the
+  // execution lease.
+  assert.match(
+    cronViewSource,
+    /task\?\.type === "prompt" \? PROMPT_PENDING_CLAIM_WINDOW_MS : 0/,
+  );
+
+  // The LLM tool schema advertises the widened prompt ceiling; Rust remains
+  // the authority for the per-kind rejection.
+  assert.match(cronToolsSource, /maximum: 3600/);
+  assert.match(cronToolsSource, /up to 3600 for type=prompt/);
 });

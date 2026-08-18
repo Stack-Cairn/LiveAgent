@@ -9,6 +9,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type WorkspaceCloneTask = {
   id: string;
@@ -74,7 +75,10 @@ function CloneTaskCard({
             </span>
           </div>
           <p
-            className={`mt-1 truncate text-xs ${task.status === "failed" ? "text-destructive" : "text-muted-foreground"}`}
+            className={cn(
+              "mt-1 truncate text-xs",
+              task.status === "failed" ? "text-destructive" : "text-muted-foreground",
+            )}
           >
             {active ? t(`chat.workspaceCloneTaskPhase.${task.phase}`) : message}
           </p>
@@ -142,7 +146,7 @@ function CloneTaskCard({
 export function WorkspaceCloneTaskOverlay(props: WorkspaceCloneTaskOverlayProps) {
   if (props.tasks.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex max-h-[calc(100vh-2rem)] flex-col-reverse gap-2 overflow-y-auto">
+    <div className="layer-toast pointer-events-none fixed bottom-4 right-4 flex max-h-[calc(100vh-2rem)] flex-col-reverse gap-2 overflow-y-auto">
       {props.tasks.map((task) => (
         <CloneTaskCard key={task.id} task={task} {...props} />
       ))}

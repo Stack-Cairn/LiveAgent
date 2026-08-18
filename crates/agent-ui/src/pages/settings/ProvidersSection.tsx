@@ -28,8 +28,8 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
+import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
   SelectContent,
@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
@@ -46,7 +47,6 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { ProviderModal } from "./ProviderModal";
 import {
   DialogSwitch,
@@ -67,37 +67,32 @@ function FailoverNumberField(props: {
   onCommit: (value: number) => void;
 }) {
   const { label, hint, value, min, max, onCommit } = props;
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState<number | null>(value);
 
   useEffect(() => {
-    setDraft(String(value));
+    setDraft(value);
   }, [value]);
 
-  function commitDraft() {
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(value));
-      return;
-    }
-    const next = Math.min(max, Math.max(min, Math.round(parsed)));
-    setDraft(String(next));
+  function commitDraft(nextValue: number | null) {
+    const next = nextValue ?? value;
+    setDraft(next);
     if (next !== value) onCommit(next);
   }
 
   return (
     <div className="space-y-1.5">
       <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
-      <Input
-        type="number"
+      <NumberInput
+        aria-label={label}
+        incrementLabel={`${label} +`}
+        decrementLabel={`${label} -`}
         min={min}
         max={max}
+        step={1}
+        snapOnStep
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commitDraft}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commitDraft();
-        }}
-        className="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+        onValueChange={setDraft}
+        onValueCommitted={commitDraft}
       />
       <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
     </div>
@@ -156,7 +151,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   }
 
   return (
-    <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
+    <section className="py-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -187,7 +182,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         />
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-5 space-y-2">
         <Label className="text-[12px] font-medium text-foreground/80">
           {t("settings.failoverQueueTitle")}
         </Label>
@@ -275,7 +270,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         ) : null}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 border-t border-foreground/[0.08] pt-5">
         <FailoverNumberField
           label={t("settings.failoverMaxSwitches")}
           hint={t("settings.failoverMaxSwitchesHint")}
@@ -301,7 +296,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
           onCommit={(value) => patchFailover({ cooldownSeconds: value })}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -330,7 +325,7 @@ function CustomSettingsModelField(props: {
       : modelOptions;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 py-4">
       <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
       <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
       <ModelPicker
@@ -351,26 +346,7 @@ function CustomSettingsDrawer(
 ) {
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
-  const [closing, setClosing] = useState(false);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
-
-  useEffect(
-    () => () => {
-      if (closeTimerRef.current !== null) {
-        clearTimeout(closeTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  function requestClose() {
-    if (closing) return;
-    setClosing(true);
-    closeTimerRef.current = setTimeout(() => {
-      onClose();
-    }, 220);
-  }
 
   function handleModelSettingChange(
     key: "conversationTitleModel" | "commitMessageModel",
@@ -384,44 +360,23 @@ function CustomSettingsDrawer(
     );
   }
 
-  return createPortal(
-    <div
-      className={`${
-        closing ? "skills-drawer-backdrop-closing" : "skills-drawer-backdrop"
-      } fixed inset-0 z-50 flex justify-end bg-foreground/[0.06] backdrop-blur-md dark:bg-background/40`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="provider-custom-settings-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) requestClose();
-      }}
-    >
-      <aside
-        className={`${
-          closing ? "skills-drawer-panel-closing" : "skills-drawer-panel"
-        } relative flex h-full w-full flex-col overflow-hidden border-l border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60`}
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        variant="inset"
+        className="max-w-none border-border bg-background sm:max-w-[440px]"
+        closeLabel={t("settings.closeCustomSettings")}
+        showCloseButton={false}
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/10"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-white/5 dark:from-white/[0.02] dark:via-transparent dark:to-transparent"
-        />
-
         <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
           <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
-            <div
-              id="provider-custom-settings-title"
-              className="text-[17px] font-semibold leading-tight tracking-tight text-foreground/95"
-            >
+            <SheetTitle className="text-[17px] leading-tight tracking-tight text-foreground/95">
               {t("settings.customSettings")}
-            </div>
+            </SheetTitle>
           </div>
           <button
             type="button"
-            onClick={requestClose}
+            onClick={onClose}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground"
             title={t("settings.closeCustomSettings")}
             aria-label={t("settings.closeCustomSettings")}
@@ -435,48 +390,40 @@ function CustomSettingsDrawer(
           className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         />
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <section className="space-y-3">
-            <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
-              <CustomSettingsModelField
-                label={t("settings.conversationTitleModel")}
-                hint={t("settings.conversationTitleModelHint")}
-                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
-                selected={settings.customSettings.conversationTitleModel}
-                modelOptions={modelOptions}
-                onChange={(value) => handleModelSettingChange("conversationTitleModel", value)}
-              />
-              <div
-                aria-hidden="true"
-                className="my-4 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
-              />
-              <CustomSettingsModelField
-                label={t("settings.commitMessageModel")}
-                hint={t("settings.commitMessageModelHint")}
-                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
-                selected={settings.customSettings.commitMessageModel}
-                modelOptions={modelOptions}
-                onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
-              />
-              {modelOptions.length === 0 ? (
-                <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="divide-y divide-foreground/[0.08]">
+            <CustomSettingsModelField
+              label={t("settings.conversationTitleModel")}
+              hint={t("settings.conversationTitleModelHint")}
+              followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+              selected={settings.customSettings.conversationTitleModel}
+              modelOptions={modelOptions}
+              onChange={(value) => handleModelSettingChange("conversationTitleModel", value)}
+            />
+            <CustomSettingsModelField
+              label={t("settings.commitMessageModel")}
+              hint={t("settings.commitMessageModelHint")}
+              followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+              selected={settings.customSettings.commitMessageModel}
+              modelOptions={modelOptions}
+              onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
+            />
+            {modelOptions.length === 0 ? (
+              <div className="py-4">
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                   {t("settings.customSettingsModelEmpty")}
                 </div>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="mt-4 space-y-3">
+              </div>
+            ) : null}
             <FailoverSettingsCard
               settings={settings}
               setSettings={setSettings}
               providerType={providerType}
             />
-          </section>
+          </div>
         </div>
-      </aside>
-    </div>,
-    document.body,
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -801,11 +748,12 @@ export function ProvidersSection(
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
                 activeTab === tab
                   ? "bg-background text-foreground shadow"
-                  : "hover:text-foreground/80"
-              }`}
+                  : "hover:text-foreground/80",
+              )}
             >
               <ProviderBrandIcon type={tab} />
               {getProviderLabel(tab)}

@@ -65,6 +65,7 @@ import {
 } from "./gatewayHistoryWindowActions";
 import { createLocalDraftConversationId, isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
+import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
 import { useGatewayChatConfiguration } from "./hooks/useGatewayChatConfiguration";
 import { useGatewayChatPresentation } from "./hooks/useGatewayChatPresentation";
 import { useGatewayClients } from "./hooks/useGatewayClients";
@@ -396,8 +397,8 @@ function useGatewayAppController() {
   } = useGatewaySharedHistory({ api, gatewayConnectionLost, sidebarStore, status });
 
   const startNewConversationRef = useRef<
-    (options?: { workdir?: string; preserveCurrentComposerDraft?: boolean }) => void
-  >(() => undefined);
+    (options?: { workdir?: string; preserveCurrentComposerDraft?: boolean }) => string
+  >(() => "");
   const {
     activateWorkspaceProject,
     activeWorkspaceProject,
@@ -477,6 +478,21 @@ function useGatewayAppController() {
     return agentID;
   }, []);
 
+  const { workspaceFolderDropActive, workspaceFolderDropHandlers, mountDroppedDirectories } =
+    useDirectoryDropActions({
+      token,
+      historyShareToken,
+      locale: settings.locale,
+      resolveAgentID: resolveActiveAgentID,
+      addNotify,
+      activeWorkspaceProject,
+      workspaceProjectRootClient,
+      onWorkspaceCreated: handleWorkdirPickerSelect,
+    });
+
+  // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
+  const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
+
   const {
     pendingUploadedFiles,
     isUploadingFiles,
@@ -507,6 +523,8 @@ function useGatewayAppController() {
     displayedConversationWorkdirRef,
     composerRef,
     addNotify,
+    onDropDirectories: mountDroppedDirectories,
+    ensureUploadConversation,
   });
 
   const applyChatQueueSnapshot = useCallback((snapshot: ChatQueueSnapshot | null | undefined) => {
@@ -1186,7 +1204,9 @@ function useGatewayAppController() {
     setProjectSettingsProject,
   ]);
 
-  const userMenuLabel = (status?.name || status?.agent_id || "当前用户").trim() || "当前用户";
+  const currentUserLabel = translate("common.currentUser", settings.locale);
+  const userMenuLabel =
+    (status?.name || status?.agent_id || currentUserLabel).trim() || currentUserLabel;
   const userAvatarLabel = userMenuLabel.slice(0, 1).toUpperCase();
   const handleActiveAgentChange = useCallback(
     (agentId: string) => {
@@ -1923,6 +1943,8 @@ function useGatewayAppController() {
     workspaceFilePreviewMounted,
     workspaceFilePreviewOpen,
     workspaceFilePreviewOpenRequest,
+    workspaceFolderDropActive,
+    workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
     workspaceSshTerminalMounted,

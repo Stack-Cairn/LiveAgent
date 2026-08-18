@@ -1,8 +1,19 @@
 import { CheckCircle2, Download, Loader2, Upload } from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
+import { Input } from "@liveagent/ui/components/ui/input";
 import type { SftpEntry, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type ReactNode, useEffect } from "react";
-import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 import {
   basename,
   type DragPayload,
@@ -39,83 +50,60 @@ export function CreateFolderDialog(props: {
   } = props;
   const canSubmit = value.trim().length > 0 && !submitting;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSubmit) {
-            onSubmit();
-          }
-        }}
+  return (
+    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={cancelLabel}
+        showCloseButton
       >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          {path ? (
-            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{path}</div>
-          ) : null}
-        </div>
-        <div className="space-y-2 px-5 py-5">
-          <label
-            className="block text-xs font-medium text-muted-foreground"
-            htmlFor="workspace-sftp-new-folder-name"
-          >
-            {prompt}
-          </label>
-          <input
-            id="workspace-sftp-new-folder-name"
-            value={value}
-            autoFocus
-            disabled={submitting}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            onChange={(event) => onChange(event.currentTarget.value)}
-          />
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={submitting}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={!canSubmit}
-          >
-            {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {confirmLabel}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit) {
+              onSubmit();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            {path ? (
+              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
+                {path}
+              </DialogDescription>
+            ) : null}
+          </DialogHeader>
+          <DialogBody className="space-y-2 py-5">
+            <label
+              className="block text-xs font-medium text-muted-foreground"
+              htmlFor="workspace-sftp-new-folder-name"
+            >
+              {prompt}
+            </label>
+            <Input
+              id="workspace-sftp-new-folder-name"
+              value={value}
+              autoFocus
+              disabled={submitting}
+              className="h-10 text-xs"
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </DialogBody>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                {confirmLabel}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -128,37 +116,14 @@ export function CopyPathDialog(props: {
 }) {
   const { title, prompt, closeLabel, text, onClose } = props;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{prompt}</div>
-        </div>
-        <div className="px-5 py-5">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md p-0" closeLabel={closeLabel} showCloseButton>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="mt-1 text-xs">{prompt}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="py-5">
           <textarea
             value={text}
             readOnly
@@ -166,25 +131,22 @@ export function CopyPathDialog(props: {
             className="min-h-28 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
             onFocus={(event) => event.currentTarget.select()}
           />
-        </div>
-        <div className="flex justify-end border-t border-border/60 bg-muted/20 px-5 py-4">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            onClick={onClose}
-          >
-            {closeLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </DialogBody>
+        <DialogFooter className="bg-muted/20">
+          <DialogActions>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {closeLabel}
+            </Button>
+          </DialogActions>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export function CopyPathToast(props: { message: string }) {
   return (
-    <div className="pointer-events-none absolute bottom-14 right-4 z-[90]">
+    <div className="layer-raised pointer-events-none absolute bottom-14 right-4">
       <div className="notify-toast-enter flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
         <span>{props.message}</span>
@@ -222,83 +184,60 @@ export function RenameEntryDialog(props: {
   const trimmedValue = value.trim();
   const canSubmit = trimmedValue.length > 0 && trimmedValue !== originalName && !submitting;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSubmit) {
-            onSubmit();
-          }
-        }}
+  return (
+    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={cancelLabel}
+        showCloseButton
       >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          {path ? (
-            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{path}</div>
-          ) : null}
-        </div>
-        <div className="space-y-2 px-5 py-5">
-          <label
-            className="block text-xs font-medium text-muted-foreground"
-            htmlFor="workspace-sftp-rename-entry-name"
-          >
-            {prompt}
-          </label>
-          <input
-            id="workspace-sftp-rename-entry-name"
-            value={value}
-            autoFocus
-            disabled={submitting}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            onChange={(event) => onChange(event.currentTarget.value)}
-          />
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={submitting}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={!canSubmit}
-          >
-            {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {confirmLabel}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit) {
+              onSubmit();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            {path ? (
+              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
+                {path}
+              </DialogDescription>
+            ) : null}
+          </DialogHeader>
+          <DialogBody className="space-y-2 py-5">
+            <label
+              className="block text-xs font-medium text-muted-foreground"
+              htmlFor="workspace-sftp-rename-entry-name"
+            >
+              {prompt}
+            </label>
+            <Input
+              id="workspace-sftp-rename-entry-name"
+              value={value}
+              autoFocus
+              disabled={submitting}
+              className="h-10 text-xs"
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </DialogBody>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                {confirmLabel}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -397,7 +336,7 @@ export function DragPreview(props: {
 
   return (
     <div
-      className="pointer-events-none fixed z-[120] flex w-[260px] max-w-[calc(100vw-32px)] items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
+      className="layer-toast pointer-events-none fixed flex w-[260px] max-w-[calc(100vw-32px)] items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
       style={{
         left: x + 18,
         top: y + 14,

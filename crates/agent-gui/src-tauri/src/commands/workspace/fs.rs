@@ -16,6 +16,7 @@ use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use zip::ZipArchive;
 
+use super::checkpoint::{capture_pre_image, CheckpointCtx, PreImage};
 use super::edit_match::{apply_edit_replacements, find_edit_matches};
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::skills::skills_root_dir;
@@ -630,6 +631,19 @@ fn logical_rel_path(rel: &Path) -> String {
     rel.to_string_lossy().replace('\\', "/")
 }
 
+/// 检查点记录用的相对路径:必须相对于 canonicalize **之后**的真实目标。
+///
+/// `resolve_target` 会解析工作区内部的符号链接,所以请求路径(`link/a.txt`)
+/// 和实际落盘路径(`real/a.txt`)可能分叉。按请求路径记有两个后果:前像挂在
+/// 一个根本没被改动的路径上;回退时逐级拒符号链接又会把它判成不可解析,于是
+/// 这条改动永远回退不了。取不到前缀(理论上不该发生)时退回请求路径。
+fn checkpoint_rel(workdir: &Path, target: &Path, requested: &Path) -> PathBuf {
+    target
+        .strip_prefix(workdir)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| requested.to_path_buf())
+}
+
 fn display_path(path: &Path) -> String {
     let normalized = path.to_string_lossy().replace('\\', "/");
     if let Some(rest) = normalized.strip_prefix("//?/UNC/") {
@@ -654,13 +668,16 @@ fn resolve_existing_file_target(workdir: &Path, rel: &Path) -> Result<PathBuf, F
     Ok(resolved)
 }
 
-fn ensure_parent_dir(workdir: &Path, target: &Path) -> Result<(), FsError> {
+/// 建好目标的父目录并返回其 canonical 形态。返回值不是锦上添花:新建文件
+/// 没有 canonicalize 入口,父目录若经由工作区内部符号链接(`link/new.txt`),
+/// 未解析的原始路径会被当作落盘目标记进检查点,而回退侧逐级拒符号链接,
+/// 这条记录就永远回退不了。调用方必须用返回的真实父目录拼接目标。
+fn ensure_parent_dir(workdir: &Path, target: &Path) -> Result<PathBuf, FsError> {
     let parent = target
         .parent()
         .ok_or_else(|| FsError::Other("Invalid target path".to_string()))?;
     fs::create_dir_all(parent)?;
-    ensure_within_workdir_existing(workdir, parent)?;
-    Ok(())
+    ensure_within_workdir_existing(workdir, parent)
 }
 
 fn split_text_lines(text: &str) -> Vec<&str> {
@@ -3028,6 +3045,7 @@ pub(crate) fn fs_write_text_sync(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsCommandError> {
     let target = resolve_scoped_fs_path(&workdir, &path)?;
     fs_write_text_impl(
@@ -3036,6 +3054,7 @@ pub(crate) fn fs_write_text_sync(
         mode,
         expected_mtime_ms,
         expected_content_hash,
+        checkpoint,
     )
     .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
@@ -3046,6 +3065,7 @@ fn fs_write_text_impl(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsError> {
     let logical_path = path.logical_path.clone();
     let raw_target = path.root.join(&path.relative_path);
@@ -3072,8 +3092,14 @@ fn fs_write_text_impl(
             )
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            ensure_parent_dir(&path.root, &raw_target)?;
-            (raw_target.clone(), false)
+            // 用 canonical 父目录拼接目标:请求路径可能经由工作区内部符号
+            // 链接(`link/new.txt`),原始拼接会让检查点记下链接路径,回退侧
+            // 逐级拒符号链接后这个新建文件永远删不掉。
+            let parent = ensure_parent_dir(&path.root, &raw_target)?;
+            let file_name = raw_target
+                .file_name()
+                .ok_or_else(|| FsError::Other("Invalid target path".to_string()))?;
+            (parent.join(file_name), false)
         }
         Err(err) => return Err(FsError::Io(err)),
     };
@@ -3084,6 +3110,19 @@ fn fs_write_text_impl(
         })?;
         ensure_expected_version_matches(&target, &logical_path, &expected)?;
     }
+
+    // 落盘前捕获前像(root + 相对路径):不存在则记删除标记,存在则拷贝原
+    // 字节。失败不阻断写入。
+    capture_pre_image(
+        checkpoint.as_ref(),
+        &path.root,
+        &checkpoint_rel(&path.root, &target, &path.relative_path),
+        if existed_before {
+            PreImage::File(None)
+        } else {
+            PreImage::Missing
+        },
+    );
 
     fs::write(&target, content.as_bytes())?;
     let canon = fs::canonicalize(&target)?;
@@ -3109,6 +3148,7 @@ pub async fn fs_write_text(
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsCommandError> {
     run_blocking_fs("fs_write_text", move || {
         fs_write_text_sync(
@@ -3118,6 +3158,7 @@ pub async fn fs_write_text(
             mode,
             expected_mtime_ms,
             expected_content_hash,
+            checkpoint,
         )
     })
     .await
@@ -3147,6 +3188,7 @@ pub(crate) fn fs_edit_text_sync(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsCommandError> {
     let wd = canonicalize_workdir(&workdir)?;
     fs_edit_text_impl(
@@ -3158,10 +3200,12 @@ pub(crate) fn fs_edit_text_sync(
         replace_all,
         expected_mtime_ms,
         expected_content_hash,
+        checkpoint,
     )
     .map_err(|e| FsCommandError::from(e).with_workdir(&wd))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fs_edit_text_impl(
     wd: &Path,
     path: &str,
@@ -3171,6 +3215,7 @@ fn fs_edit_text_impl(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsError> {
     let rel = sanitize_rel_path(path)?;
     let logical_path = logical_rel_path(&rel);
@@ -3227,6 +3272,14 @@ fn fs_edit_text_impl(
     };
     let next = apply_edit_replacements(&text, applied);
 
+    // 落盘前捕获前像:直接复用上面已读入内存的原字节。失败不阻断写入。
+    capture_pre_image(
+        checkpoint.as_ref(),
+        wd,
+        &checkpoint_rel(wd, &target, &rel),
+        PreImage::File(Some(&bytes)),
+    );
+
     fs::write(&target, next.as_bytes())?;
     let md = fs::metadata(&target)?;
 
@@ -3243,6 +3296,7 @@ fn fs_edit_text_impl(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
 pub async fn fs_edit_text(
     workdir: String,
     path: String,
@@ -3252,6 +3306,7 @@ pub async fn fs_edit_text(
     replace_all: Option<bool>,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<EditTextResponse, FsCommandError> {
     run_blocking_fs("fs_edit_text", move || {
         fs_edit_text_sync(
@@ -3263,6 +3318,7 @@ pub async fn fs_edit_text(
             replace_all,
             expected_mtime_ms,
             expected_content_hash,
+            checkpoint,
         )
     })
     .await
@@ -3288,12 +3344,17 @@ fn remove_symlink_path(target: &Path) -> Result<(), io::Error> {
 pub(crate) fn fs_delete_sync(
     workdir: String,
     path: String,
+    checkpoint: Option<CheckpointCtx>,
 ) -> Result<DeleteResponse, FsCommandError> {
     let wd = canonicalize_workdir(&workdir)?;
-    fs_delete_impl(&wd, &path).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    fs_delete_impl(&wd, &path, checkpoint).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
 }
 
-fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
+fn fs_delete_impl(
+    wd: &Path,
+    path: &str,
+    checkpoint: Option<CheckpointCtx>,
+) -> Result<DeleteResponse, FsError> {
     let rel = sanitize_rel_path(path)?;
     let logical_path = logical_rel_path(&rel);
     let file_name = rel
@@ -3304,13 +3365,19 @@ fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
     let target = parent.join(file_name);
 
     let meta = fs::symlink_metadata(&target)?;
+    let ckpt_rel = checkpoint_rel(wd, &target, &rel);
     let kind = if meta.file_type().is_symlink() {
+        // 符号链接不做前像捕获:链接目标不属于本文件的内容,恢复语义不明确。
         remove_symlink_path(&target)?;
         "symlink"
     } else if meta.is_file() {
+        // 删除前捕获整个文件内容,回退即可原样恢复。失败不阻断删除。
+        capture_pre_image(checkpoint.as_ref(), wd, &ckpt_rel, PreImage::File(None));
         fs::remove_file(&target)?;
         "file"
     } else if meta.is_dir() {
+        // 目录是递归删除,只能记不可恢复的标记,由 diff 统计如实呈现。
+        capture_pre_image(checkpoint.as_ref(), wd, &ckpt_rel, PreImage::Dir);
         fs::remove_dir_all(&target)?;
         "dir"
     } else {
@@ -3326,8 +3393,15 @@ fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn fs_delete(workdir: String, path: String) -> Result<DeleteResponse, FsCommandError> {
-    run_blocking_fs("fs_delete", move || fs_delete_sync(workdir, path)).await
+pub async fn fs_delete(
+    workdir: String,
+    path: String,
+    checkpoint: Option<CheckpointCtx>,
+) -> Result<DeleteResponse, FsCommandError> {
+    run_blocking_fs("fs_delete", move || {
+        fs_delete_sync(workdir, path, checkpoint)
+    })
+    .await
 }
 
 #[derive(Debug, Serialize)]
@@ -5285,6 +5359,7 @@ mod tests {
             "rewrite".to_string(),
             Some(read.mtime_ms),
             Some(read.content_hash),
+            None,
         )
         .expect("skill text should save");
         assert_eq!(write.path, "skill://demo/SKILL.md");
@@ -5572,18 +5647,21 @@ mod tests {
         fs::write(workdir.join("file.txt"), "file").expect("write file");
         fs::write(workdir.join("nested/child/file.txt"), "file").expect("write nested file");
 
-        let file_response = fs_delete_sync(workdir.display().to_string(), "file.txt".to_string())
-            .expect("delete file should succeed");
+        let file_response =
+            fs_delete_sync(workdir.display().to_string(), "file.txt".to_string(), None)
+                .expect("delete file should succeed");
         assert_eq!(file_response.kind, "file");
         assert!(!workdir.join("file.txt").exists());
 
-        let empty_response = fs_delete_sync(workdir.display().to_string(), "empty".to_string())
-            .expect("delete empty dir should succeed");
+        let empty_response =
+            fs_delete_sync(workdir.display().to_string(), "empty".to_string(), None)
+                .expect("delete empty dir should succeed");
         assert_eq!(empty_response.kind, "dir");
         assert!(!workdir.join("empty").exists());
 
-        let nested_response = fs_delete_sync(workdir.display().to_string(), "nested".to_string())
-            .expect("delete non-empty dir should succeed");
+        let nested_response =
+            fs_delete_sync(workdir.display().to_string(), "nested".to_string(), None)
+                .expect("delete non-empty dir should succeed");
         assert_eq!(nested_response.kind, "dir");
         assert!(!workdir.join("nested").exists());
 
@@ -6077,6 +6155,40 @@ mod tests {
         let _ = fs::remove_dir_all(workdir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn write_new_file_through_internal_symlink_resolves_real_parent() {
+        let workdir = unique_test_workdir("write-symlink-parent");
+        fs::create_dir_all(workdir.join("real")).expect("create real dir");
+        let workdir = fs::canonicalize(&workdir).expect("canonicalize workdir");
+        std::os::unix::fs::symlink(workdir.join("real"), workdir.join("link"))
+            .expect("create dir symlink");
+
+        // 经由工作区内部符号链接新建文件:落盘目标必须是解析后的真实路径,
+        // 否则检查点会记下链接路径,回退侧逐级拒符号链接后永远删不掉它。
+        let write = fs_write_text_sync(
+            workdir.display().to_string(),
+            "link/new.txt".to_string(),
+            "hello\n".to_string(),
+            "rewrite".to_string(),
+            None,
+            None,
+            None,
+        )
+        .expect("write through symlinked parent should succeed");
+        assert!(write.file_id.is_some());
+        assert!(workdir.join("real/new.txt").is_file());
+        // checkpoint_rel 拿到的必须是真实相对路径 real/new.txt。
+        let resolved = resolve_existing_file_target(&workdir, Path::new("link/new.txt"))
+            .expect("resolve through symlink");
+        assert_eq!(
+            checkpoint_rel(&workdir, &resolved, Path::new("link/new.txt")),
+            PathBuf::from("real/new.txt")
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
     #[test]
     fn write_response_file_id_matches_path_status() {
         let workdir = unique_test_workdir("write-file-id");
@@ -6087,6 +6199,7 @@ mod tests {
             "notes.txt".to_string(),
             "hello\n".to_string(),
             "rewrite".to_string(),
+            None,
             None,
             None,
         )
@@ -6124,6 +6237,7 @@ mod tests {
             replace_all,
             Some(version.0),
             Some(version.1),
+            None,
         )
     }
 

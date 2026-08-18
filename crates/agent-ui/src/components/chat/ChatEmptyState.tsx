@@ -1,6 +1,7 @@
 import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
 import { FolderTree, Lightbulb, Settings, Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type CSSProperties, useEffect, useState } from "react";
 
 type GreetingPeriod = "morning" | "noon" | "afternoon" | "evening" | "night";
@@ -136,7 +137,10 @@ export function ChatEmptyState({
                   className="chat-hero-card-enter flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
                 >
                   <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center ${card.chipClassName}`}
+                    className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center",
+                      card.chipClassName,
+                    )}
                   >
                     <card.icon className="h-4 w-4" />
                   </span>

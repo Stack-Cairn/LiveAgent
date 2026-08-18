@@ -34,6 +34,7 @@ enum CherryImportProtocol {
     Claude,
     CodexCompletions,
     CodexResponses,
+    DeepSeek,
     Gemini,
 }
 
@@ -42,13 +43,14 @@ impl CherryImportProtocol {
         match self {
             Self::Claude => "claude_code",
             Self::CodexCompletions | Self::CodexResponses => "codex",
+            Self::DeepSeek => "deepseek",
             Self::Gemini => "gemini",
         }
     }
 
     fn request_format(self) -> &'static str {
         match self {
-            Self::CodexCompletions => "openai-completions",
+            Self::CodexCompletions | Self::DeepSeek => "openai-completions",
             _ => "openai-responses",
         }
     }
@@ -58,6 +60,7 @@ impl CherryImportProtocol {
             Self::Claude => "anthropic",
             Self::CodexCompletions => "openai-chat",
             Self::CodexResponses => "openai-responses",
+            Self::DeepSeek => "deepseek-chat",
             Self::Gemini => "gemini",
         }
     }
@@ -401,6 +404,7 @@ fn cherry_append_v1_provider(
             continue;
         }
         let base_url = cherry_v1_base_url(provider, &source_provider_type, protocol);
+        let protocol = cherry_reclassify_deepseek_protocol(protocol, &base_url);
         cherry_group_add_model(&mut groups, protocol, base_url, model_id);
     }
 
@@ -410,7 +414,7 @@ fn cherry_append_v1_provider(
         };
         let base_url = cherry_v1_base_url(provider, &source_provider_type, protocol);
         groups.push(CherryImportGroup {
-            protocol,
+            protocol: cherry_reclassify_deepseek_protocol(protocol, &base_url),
             base_url,
             models: Vec::new(),
         });
@@ -569,6 +573,7 @@ fn cherry_read_v2(
                 continue;
             }
             let base_url = cherry_v2_endpoint_base_url(&endpoint_configs, &endpoint);
+            let protocol = cherry_reclassify_deepseek_protocol(protocol, &base_url);
             cherry_group_add_model(&mut groups, protocol, base_url, model_id);
         }
 
@@ -584,7 +589,7 @@ fn cherry_read_v2(
                 default_endpoint.as_deref().unwrap_or_default(),
             );
             groups.push(CherryImportGroup {
-                protocol,
+                protocol: cherry_reclassify_deepseek_protocol(protocol, &base_url),
                 base_url,
                 models: Vec::new(),
             });
@@ -648,6 +653,7 @@ fn cherry_v1_default_protocol(provider_type: &str) -> Option<CherryImportProtoco
     match provider_type.trim().to_ascii_lowercase().as_str() {
         "anthropic" | "vertex-anthropic" => Some(CherryImportProtocol::Claude),
         "gemini" | "vertexai" => Some(CherryImportProtocol::Gemini),
+        "deepseek" => Some(CherryImportProtocol::DeepSeek),
         "openai-response" => Some(CherryImportProtocol::CodexResponses),
         "openai" | "new-api" | "gateway" | "ollama" => Some(CherryImportProtocol::CodexCompletions),
         _ => None,
@@ -660,6 +666,9 @@ fn cherry_protocol_from_endpoint(endpoint: &str) -> Option<CherryImportProtocol>
         "gemini" | "google-generate-content" | "generatecontent" | "streamgeneratecontent" => {
             Some(CherryImportProtocol::Gemini)
         }
+        "deepseek" | "deepseek-chat" | "deepseek-chat-completions" => {
+            Some(CherryImportProtocol::DeepSeek)
+        }
         "openai-response" | "openai-responses" | "responses" | "response" => {
             Some(CherryImportProtocol::CodexResponses)
         }
@@ -667,6 +676,20 @@ fn cherry_protocol_from_endpoint(endpoint: &str) -> Option<CherryImportProtocol>
             Some(CherryImportProtocol::CodexCompletions)
         }
         _ => None,
+    }
+}
+
+fn cherry_reclassify_deepseek_protocol(
+    protocol: CherryImportProtocol,
+    base_url: &str,
+) -> CherryImportProtocol {
+    if protocol != CherryImportProtocol::CodexCompletions {
+        return protocol;
+    }
+    if is_official_deepseek_base_url(base_url) {
+        CherryImportProtocol::DeepSeek
+    } else {
+        protocol
     }
 }
 

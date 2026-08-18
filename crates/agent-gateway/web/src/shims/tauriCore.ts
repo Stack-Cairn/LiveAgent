@@ -1,5 +1,6 @@
 import { getGatewayWebSocketClient } from "../lib/gatewaySocket";
 import { loadToken } from "../lib/storage";
+import { promptPathInBrowser } from "./browserPathPrompt";
 
 type GatewayRuntimeStatus = {
   online: boolean;
@@ -61,117 +62,6 @@ async function invokeGatewayMemory<T>(command: string, args?: Record<string, unk
   return getGatewayWebSocketClient(loadToken().trim()).memoryManage<T>({
     command,
     args: payloadArgs,
-  });
-}
-
-type BrowserPathPromptOptions = {
-  title: string;
-  description: string;
-  label: string;
-  placeholder: string;
-  inputId: string;
-};
-
-function promptPathInBrowser(options: BrowserPathPromptOptions): Promise<string | null> {
-  if (typeof window === "undefined" || typeof document === "undefined" || !document.body) {
-    return Promise.resolve(null);
-  }
-
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className =
-      "fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm";
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", options.title);
-
-    const panel = document.createElement("form");
-    panel.className =
-      "relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl";
-
-    const header = document.createElement("div");
-    header.className = "border-b border-border/60 px-5 py-4";
-
-    const title = document.createElement("div");
-    title.className = "text-base font-semibold text-foreground";
-    title.textContent = options.title;
-
-    const description = document.createElement("div");
-    description.className = "mt-1 text-xs text-muted-foreground";
-    description.textContent = options.description;
-
-    const body = document.createElement("div");
-    body.className = "space-y-2 px-5 py-5";
-
-    const label = document.createElement("label");
-    label.className = "block text-xs font-medium text-muted-foreground";
-    label.htmlFor = options.inputId;
-    label.textContent = options.label;
-
-    const input = document.createElement("input");
-    input.id = options.inputId;
-    input.className =
-      "h-10 w-full rounded-lg border border-input bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20";
-    input.placeholder = options.placeholder;
-    input.type = "text";
-
-    const footer = document.createElement("div");
-    footer.className =
-      "flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end";
-
-    const cancelButton = document.createElement("button");
-    cancelButton.type = "button";
-    cancelButton.className =
-      "inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:w-auto";
-    cancelButton.textContent = "取消";
-
-    const confirmButton = document.createElement("button");
-    confirmButton.type = "submit";
-    confirmButton.className =
-      "inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto";
-    confirmButton.disabled = true;
-    confirmButton.textContent = "确认";
-    let closed = false;
-
-    const cleanup = (value: string | null) => {
-      if (closed) return;
-      closed = true;
-      window.removeEventListener("keydown", handleKeyDown);
-      overlay.remove();
-      resolve(value);
-    };
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        cleanup(null);
-      }
-    }
-
-    input.addEventListener("input", () => {
-      confirmButton.disabled = input.value.trim().length === 0;
-    });
-    cancelButton.addEventListener("click", () => cleanup(null));
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) {
-        cleanup(null);
-      }
-    });
-    panel.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const value = input.value.trim();
-      if (value) {
-        cleanup(value);
-      }
-    });
-    window.addEventListener("keydown", handleKeyDown);
-
-    header.append(title, description);
-    body.append(label, input);
-    footer.append(cancelButton, confirmButton);
-    panel.append(header, body, footer);
-    overlay.append(panel);
-    document.body.append(overlay);
-    window.requestAnimationFrame(() => input.focus());
   });
 }
 

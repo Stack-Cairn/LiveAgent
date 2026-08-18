@@ -74,7 +74,7 @@ const SelectScrollUpButton = React.forwardRef<
     // must be anchored and given a background or they float transparently
     // over the list items.
     className={cn(
-      "left-0 top-0 z-[1] flex w-full cursor-default items-center justify-center rounded-t-md bg-popover py-1",
+      "left-0 top-0 z-10 flex w-full cursor-default items-center justify-center rounded-t-md bg-popover py-1",
       className,
     )}
     {...props}
@@ -91,7 +91,7 @@ const SelectScrollDownButton = React.forwardRef<
   <SelectPrimitive.ScrollDownArrow
     ref={ref}
     className={cn(
-      "bottom-0 left-0 z-[1] flex w-full cursor-default items-center justify-center rounded-b-md bg-popover py-1",
+      "bottom-0 left-0 z-10 flex w-full cursor-default items-center justify-center rounded-b-md bg-popover py-1",
       className,
     )}
     {...props}
@@ -101,36 +101,60 @@ const SelectScrollDownButton = React.forwardRef<
 ));
 SelectScrollDownButton.displayName = "SelectScrollDownButton";
 
-export const SelectContent = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> & {
+type SelectContentProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> &
+  Pick<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Positioner>,
+    "align" | "collisionPadding" | "side" | "sideOffset"
+  > & {
     position?: "popper" | "item-aligned";
-  }
->(({ className, children, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Positioner sideOffset={4} alignItemWithTrigger={false} className="z-[9999]">
-      <SelectPrimitive.Popup
-        ref={ref}
-        className={cn(
-          "max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-          className,
-        )}
-        {...props}
+  };
+
+export const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
+  (
+    {
+      align,
+      children,
+      className,
+      collisionPadding,
+      position = "popper",
+      side,
+      sideOffset = 4,
+      ...props
+    },
+    ref,
+  ) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Positioner
+        align={align}
+        collisionPadding={collisionPadding}
+        side={side}
+        sideOffset={sideOffset}
+        alignItemWithTrigger={false}
+        className="layer-popover"
       >
-        <SelectScrollUpButton />
-        <SelectPrimitive.List
+        <SelectPrimitive.Popup
+          ref={ref}
           className={cn(
-            "p-1 max-h-[inherit] overflow-y-auto",
-            position === "popper" && "w-full min-w-(--anchor-width)",
+            "max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+            className,
           )}
+          {...props}
         >
-          {children}
-        </SelectPrimitive.List>
-        <SelectScrollDownButton />
-      </SelectPrimitive.Popup>
-    </SelectPrimitive.Positioner>
-  </SelectPrimitive.Portal>
-));
+          <SelectScrollUpButton />
+          <SelectPrimitive.List
+            className={cn(
+              "p-1 max-h-[inherit] overflow-y-auto",
+              position === "popper" && "w-full min-w-(--anchor-width)",
+            )}
+          >
+            {children}
+          </SelectPrimitive.List>
+          <SelectScrollDownButton />
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
+    </SelectPrimitive.Portal>
+  ),
+);
 SelectContent.displayName = "SelectContent";
 
 export const SelectItem = React.forwardRef<

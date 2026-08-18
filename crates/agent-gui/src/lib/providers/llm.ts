@@ -1,6 +1,12 @@
 export { providerSupportsNativeWebSearch } from "./nativeWebSearch";
-export { attachAnthropicAutomaticCaching } from "./runtime/anthropicCache";
-export { resolvePromptCacheHintMode } from "./runtime/codexPromptCache";
+export {
+  attachAnthropicAutomaticCaching,
+  describeAnthropicCacheShape,
+} from "./runtime/anthropicCache";
+export {
+  describeCodexCacheShape,
+  resolvePromptCacheHintMode,
+} from "./runtime/codexPromptCache";
 export { attachCodexResponsesStorage } from "./runtime/codexStorage";
 export { normalizeErrorMessage } from "./runtime/errors";
 export {
@@ -21,6 +27,7 @@ export {
   finalizeProviderStreamOptions,
   type ProviderPayloadMiddleware,
 } from "./runtime/payloadPipeline";
+export { describeProviderCacheShape } from "./runtime/providerCacheShape";
 export { createProviderRuntimeConfig } from "./runtime/providerRuntimeConfig";
 export {
   buildAnthropicAuthHeaders,

@@ -130,3 +130,39 @@ test("stream request debug payload never includes runtime or option credentials"
   assert.equal(serialized.includes("raw-option-key"), false);
   assert.equal(serialized.includes("raw-option-auth"), false);
 });
+
+test("stream request debug payload carries prefix cache diagnostics", () => {
+  const payload = agentDebug.buildStreamRequestDebugPayload({
+    runtime: {
+      baseUrl: "https://example.test/v1",
+      apiKey: "raw-runtime-key",
+      promptCachingEnabled: true,
+    },
+    context: { messages: [] },
+    round: 2,
+    prefixCache: {
+      prefixHash: "0123456789abcdef",
+      systemHash: "1111111122222222",
+      toolsHash: "3333333344444444",
+      toolCount: 7,
+      prefixChanged: true,
+      prefixChangeReasons: ["system"],
+      prefixChangeSummary: "system",
+    },
+  });
+
+  assert.equal(payload.prefixCache.prefixChangeSummary, "system");
+  assert.deepEqual(payload.prefixCache.prefixChangeReasons, ["system"]);
+  assert.equal(payload.prefixCache.prefixHash, "0123456789abcdef");
+  assert.equal(payload.prefixCache.toolCount, 7);
+  assert.equal(payload.runtime.promptCachingEnabled, true);
+});
+
+test("stream request debug payload omits prefix cache when not provided", () => {
+  const payload = agentDebug.buildStreamRequestDebugPayload({
+    runtime: { baseUrl: "https://example.test/v1", apiKey: "k" },
+    context: { messages: [] },
+  });
+
+  assert.equal(payload.prefixCache, undefined);
+});

@@ -1,8 +1,9 @@
-import { Popover } from "@base-ui/react";
 import { AlertTriangle } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 import { Button } from "./button";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "./popover";
 
 export function ConfirmActionPopover(props: {
   title: string;
@@ -38,73 +39,76 @@ export function ConfirmActionPopover(props: {
   const { t } = useLocale();
 
   return (
-    <Popover.Root
+    <Popover
       open={open}
       onOpenChange={onOpenChange ? (nextOpen) => onOpenChange(nextOpen) : undefined}
     >
       {/* Pass no-op — Popover.Trigger merges its own click handler via render prop */}
-      <Popover.Trigger render={children(() => {}) as React.ReactElement} />
-      <Popover.Portal>
-        <Popover.Positioner side={side} align={align} sideOffset={6} className="z-[9999]">
-          <Popover.Popup
-            className="confirm-action-popover-popup w-64 rounded-xl border border-border bg-popover shadow-lg outline-none"
-            onPointerDown={(event) => event.stopPropagation()}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <div className="p-3">
-              <div className="flex items-start gap-2.5">
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                    tone === "destructive" ? "bg-destructive/10" : "bg-primary/10"
-                  }`}
-                >
-                  <AlertTriangle
-                    className={`h-4 w-4 ${tone === "destructive" ? "text-destructive" : "text-primary"}`}
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{title}</p>
-                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {description}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 flex justify-end gap-2">
-                <Popover.Close
-                  render={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2.5 text-xs"
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                  }
-                >
-                  {t("settings.cancel")}
-                </Popover.Close>
-                <Popover.Close
-                  render={
-                    <Button
-                      variant={tone === "destructive" ? "destructive" : "default"}
-                      size="sm"
-                      className="h-7 px-2.5 text-xs"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onConfirm();
-                      }}
-                    />
-                  }
-                >
-                  {confirmLabel}
-                </Popover.Close>
+      <PopoverTrigger render={children(() => {}) as React.ReactElement} />
+      <PopoverContent
+        side={side}
+        align={align}
+        sideOffset={6}
+        className="confirm-action-popover-popup w-64 p-0"
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <div className="p-3">
+          <div className="flex items-start gap-2.5">
+            <div
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                tone === "destructive" ? "bg-destructive/10" : "bg-primary/10",
+              )}
+            >
+              <AlertTriangle
+                className={cn(
+                  "h-4 w-4",
+                  tone === "destructive" ? "text-destructive" : "text-primary",
+                )}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{title}</p>
+              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {description}
               </div>
             </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <PopoverClose
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={(event) => event.stopPropagation()}
+                />
+              }
+            >
+              {t("settings.cancel")}
+            </PopoverClose>
+            <PopoverClose
+              render={
+                <Button
+                  variant={tone === "destructive" ? "destructive" : "default"}
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onConfirm();
+                  }}
+                />
+              }
+            >
+              {confirmLabel}
+            </PopoverClose>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

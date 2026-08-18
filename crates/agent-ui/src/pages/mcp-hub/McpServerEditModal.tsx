@@ -1,6 +1,15 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
-import { AlertTriangle, Pencil, Plug, Plus, X } from "@liveagent/ui/components/IconSet";
+import { AlertTriangle, McpLogo, Plus, Save } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -12,9 +21,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 
 type ServerDraft = {
   id: string;
@@ -182,7 +189,6 @@ export function McpServerEditModal(props: {
 }) {
   const { mode, initialServer, existingServers, onClose, onSave } = props;
   const { t } = useLocale();
-  const { modalState, requestClose } = useModalMotion(onClose);
 
   const existingIdsExcludingCurrent = useMemo(() => {
     return existingServers
@@ -212,7 +218,7 @@ export function McpServerEditModal(props: {
     try {
       const server = buildServerFromDraft(draft, initialServer, existingIdsExcludingCurrent, t);
       onSave(server);
-      requestClose();
+      onClose();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
     }
@@ -227,240 +233,278 @@ export function McpServerEditModal(props: {
       : t("mcpHub.editSubtitle").replace("{name}", initialServer?.id ?? "");
   const submitLabel = mode === "add" ? t("mcpHub.modalAdd") : t("mcpHub.modalSave");
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-      role="dialog"
-      aria-modal="true"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={requestClose}
-        aria-label={t("settings.cancel")}
-      />
-      <form
-        onSubmit={handleSubmit}
-        className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeLabel={t("settings.cancel")}
+        layout="fullscreen-mobile"
+        showCloseButton
       >
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/70 px-6 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
-            <Plug className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{title}</h2>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground" title={subtitleRaw}>
-              {subtitleRaw}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="settings-modal-body flex-1 overflow-y-auto px-6 py-5">
-          <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="mcp-edit-id" className="text-xs text-muted-foreground">
-                  {t("mcpHub.serverName")}
-                </Label>
-                <Input
-                  id="mcp-edit-id"
-                  value={draft.id}
-                  placeholder={t("mcpHub.serverNamePlaceholder")}
-                  onChange={(event) => updateDraft({ id: event.currentTarget.value })}
-                />
-                <p className="text-[10.5px] text-muted-foreground">{t("mcpHub.serverNameHint")}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-edit-transport" className="text-xs text-muted-foreground">
-                  {t("mcpHub.transport")}
-                </Label>
-                <Select
-                  value={draft.transport}
-                  onValueChange={(value) => {
-                    const transport = value === "http" ? "http" : value === "sse" ? "sse" : "stdio";
-                    updateDraft({ transport });
-                  }}
-                >
-                  <SelectTrigger id="mcp-edit-transport">
-                    <SelectValue placeholder={t("mcpHub.selectTransport")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stdio">{t("mcpHub.stdio")}</SelectItem>
-                    <SelectItem value="http">{t("mcpHub.http")}</SelectItem>
-                    <SelectItem value="sse">{t("mcpHub.sse")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-edit-timeout" className="text-xs text-muted-foreground">
-                  {t("mcpHub.timeout")}
-                </Label>
-                <Input
-                  id="mcp-edit-timeout"
-                  type="number"
-                  value={draft.timeoutMs}
-                  placeholder="60000"
-                  onChange={(event) => updateDraft({ timeoutMs: event.currentTarget.value })}
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <DialogHeader className="flex-row items-center gap-3 px-6 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <McpLogo className="h-5 w-5" />
             </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription className="mt-0.5 truncate text-xs" title={subtitleRaw}>
+                {subtitleRaw}
+              </DialogDescription>
+            </div>
+          </DialogHeader>
 
-            {isStdio ? (
-              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
+          <DialogBody className="px-6 py-5">
+            <div className="space-y-6">
+              <section aria-labelledby="mcp-edit-basics-heading" className="space-y-3">
+                <h3
+                  id="mcp-edit-basics-heading"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {t("mcpHub.basicSettings")}
+                </h3>
+                <div className="grid gap-x-3 gap-y-4 sm:grid-cols-4">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="mcp-edit-id" className="text-xs text-muted-foreground">
+                      {t("mcpHub.serverName")}
+                    </Label>
+                    <Input
+                      id="mcp-edit-id"
+                      value={draft.id}
+                      placeholder={t("mcpHub.serverNamePlaceholder")}
+                      aria-describedby="mcp-edit-id-hint"
+                      onChange={(event) => updateDraft({ id: event.currentTarget.value })}
+                    />
+                    <p id="mcp-edit-id-hint" className="text-xs leading-5 text-muted-foreground">
+                      {t("mcpHub.serverNameHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mcp-edit-transport" className="text-xs text-muted-foreground">
+                      {t("mcpHub.transport")}
+                    </Label>
+                    <Select
+                      value={draft.transport}
+                      onValueChange={(value) => {
+                        const transport =
+                          value === "http" ? "http" : value === "sse" ? "sse" : "stdio";
+                        updateDraft({ transport });
+                      }}
+                    >
+                      <SelectTrigger id="mcp-edit-transport">
+                        <SelectValue placeholder={t("mcpHub.selectTransport")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stdio">{t("mcpHub.stdio")}</SelectItem>
+                        <SelectItem value="http">{t("mcpHub.http")}</SelectItem>
+                        <SelectItem value="sse">{t("mcpHub.sse")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mcp-edit-timeout" className="text-xs text-muted-foreground">
+                      {t("mcpHub.timeout")}
+                    </Label>
+                    <Input
+                      id="mcp-edit-timeout"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={draft.timeoutMs}
+                      placeholder="60000"
+                      onChange={(event) => updateDraft({ timeoutMs: event.currentTarget.value })}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section
+                aria-labelledby="mcp-edit-connection-heading"
+                className="space-y-3 border-t border-border/60 pt-5"
+              >
+                <h3
+                  id="mcp-edit-connection-heading"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {t("mcpHub.connectionSettings")}
+                </h3>
+                {isStdio ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="mcp-edit-command" className="text-xs text-muted-foreground">
+                          {t("mcpHub.command")}
+                        </Label>
+                        <Input
+                          id="mcp-edit-command"
+                          value={draft.command}
+                          placeholder="npx"
+                          className="font-mono text-[12.5px]"
+                          onChange={(event) => updateDraft({ command: event.currentTarget.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="mcp-edit-cwd" className="text-xs text-muted-foreground">
+                          {t("mcpHub.cwd")}
+                        </Label>
+                        <Input
+                          id="mcp-edit-cwd"
+                          value={draft.cwd}
+                          placeholder={t("mcpHub.cwdDefault")}
+                          className="font-mono text-[12.5px]"
+                          onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="mcp-edit-args" className="text-xs text-muted-foreground">
+                          {t("mcpHub.args")}
+                        </Label>
+                        <Textarea
+                          id="mcp-edit-args"
+                          rows={4}
+                          value={draft.argsText}
+                          placeholder={"-y\n@modelcontextprotocol/server-time"}
+                          className="resize-y font-mono text-xs"
+                          onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="mcp-edit-env" className="text-xs text-muted-foreground">
+                          {t("mcpHub.env")}
+                        </Label>
+                        <Textarea
+                          id="mcp-edit-env"
+                          rows={4}
+                          value={draft.envText}
+                          placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
+                          className="resize-y font-mono text-xs"
+                          onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mcp-edit-url" className="text-xs text-muted-foreground">
+                        {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
+                      </Label>
+                      <Input
+                        id="mcp-edit-url"
+                        value={draft.url}
+                        placeholder={
+                          draft.transport === "http"
+                            ? "http://127.0.0.1:3000/mcp"
+                            : "http://127.0.0.1:3000/sse"
+                        }
+                        className="font-mono text-[12.5px]"
+                        onChange={(event) => updateDraft({ url: event.currentTarget.value })}
+                      />
+                    </div>
+                    {isSse ? (
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mcp-edit-message-url"
+                          className="text-xs text-muted-foreground"
+                        >
+                          {t("mcpHub.messageUrl")}
+                        </Label>
+                        <Input
+                          id="mcp-edit-message-url"
+                          value={draft.messageUrl}
+                          placeholder="http://127.0.0.1:3000/message"
+                          className="font-mono text-[12.5px]"
+                          onChange={(event) =>
+                            updateDraft({
+                              messageUrl: event.currentTarget.value,
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mcp-edit-headers" className="text-xs text-muted-foreground">
+                        {t("mcpHub.headers")}
+                      </Label>
+                      <Textarea
+                        id="mcp-edit-headers"
+                        rows={4}
+                        value={draft.headersText}
+                        placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
+                        className="resize-y font-mono text-xs"
+                        onChange={(event) =>
+                          updateDraft({
+                            headersText: event.currentTarget.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section
+                aria-labelledby="mcp-edit-details-heading"
+                className="space-y-3 border-t border-border/60 pt-5"
+              >
+                <h3
+                  id="mcp-edit-details-heading"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {t("mcpHub.optionalDetails")}
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="mcp-edit-command" className="text-xs text-muted-foreground">
-                      {t("mcpHub.command")}
+                    <Label htmlFor="mcp-edit-description" className="text-xs text-muted-foreground">
+                      {t("mcpHub.description")}
                     </Label>
-                    <Input
-                      id="mcp-edit-command"
-                      value={draft.command}
-                      placeholder="npx"
-                      className="font-mono text-[12.5px]"
-                      onChange={(event) => updateDraft({ command: event.currentTarget.value })}
+                    <Textarea
+                      id="mcp-edit-description"
+                      rows={3}
+                      value={draft.description}
+                      placeholder={t("mcpHub.descriptionPlaceholder")}
+                      className="resize-y text-sm"
+                      onChange={(event) => updateDraft({ description: event.currentTarget.value })}
                     />
                   </div>
+
                   <div className="space-y-1.5">
-                    <Label htmlFor="mcp-edit-cwd" className="text-xs text-muted-foreground">
-                      {t("mcpHub.cwd")}
+                    <Label htmlFor="mcp-edit-docs-url" className="text-xs text-muted-foreground">
+                      {t("mcpHub.docsUrl")}
                     </Label>
                     <Input
-                      id="mcp-edit-cwd"
-                      value={draft.cwd}
-                      placeholder={t("mcpHub.cwdDefault")}
-                      className="font-mono text-[12.5px]"
-                      onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
+                      id="mcp-edit-docs-url"
+                      value={draft.docsUrl}
+                      placeholder={t("mcpHub.docsUrlPlaceholder")}
+                      className="font-mono text-xs"
+                      onChange={(event) => updateDraft({ docsUrl: event.currentTarget.value })}
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="mcp-edit-args" className="text-xs text-muted-foreground">
-                    {t("mcpHub.args")}
-                  </Label>
-                  <Textarea
-                    id="mcp-edit-args"
-                    value={draft.argsText}
-                    placeholder={"-y\n@modelcontextprotocol/server-time"}
-                    className="min-h-[92px] font-mono text-[12.5px]"
-                    onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="mcp-edit-env" className="text-xs text-muted-foreground">
-                    {t("mcpHub.env")}
-                  </Label>
-                  <Textarea
-                    id="mcp-edit-env"
-                    value={draft.envText}
-                    placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
-                    className="min-h-[92px] font-mono text-[12.5px]"
-                    onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="mcp-edit-url" className="text-xs text-muted-foreground">
-                    {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
-                  </Label>
-                  <Input
-                    id="mcp-edit-url"
-                    value={draft.url}
-                    placeholder={
-                      draft.transport === "http"
-                        ? "http://127.0.0.1:3000/mcp"
-                        : "http://127.0.0.1:3000/sse"
-                    }
-                    className="font-mono text-[12.5px]"
-                    onChange={(event) => updateDraft({ url: event.currentTarget.value })}
-                  />
-                </div>
-                {isSse ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mcp-edit-message-url" className="text-xs text-muted-foreground">
-                      {t("mcpHub.messageUrl")}
-                    </Label>
-                    <Input
-                      id="mcp-edit-message-url"
-                      value={draft.messageUrl}
-                      placeholder="http://127.0.0.1:3000/message"
-                      className="font-mono text-[12.5px]"
-                      onChange={(event) => updateDraft({ messageUrl: event.currentTarget.value })}
-                    />
-                  </div>
-                ) : null}
-                <div className="space-y-1.5">
-                  <Label htmlFor="mcp-edit-headers" className="text-xs text-muted-foreground">
-                    {t("mcpHub.headers")}
-                  </Label>
-                  <Textarea
-                    id="mcp-edit-headers"
-                    value={draft.headersText}
-                    placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
-                    className="min-h-[92px] font-mono text-[12.5px]"
-                    onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
-                  />
-                </div>
-              </div>
-            )}
+              </section>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-edit-description" className="text-xs text-muted-foreground">
-                {t("mcpHub.description")}
-              </Label>
-              <Textarea
-                id="mcp-edit-description"
-                value={draft.description}
-                placeholder={t("mcpHub.descriptionPlaceholder")}
-                className="min-h-[72px] text-[12.5px]"
-                onChange={(event) => updateDraft({ description: event.currentTarget.value })}
-              />
+              {formError ? (
+                <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              ) : null}
             </div>
+          </DialogBody>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-edit-docs-url" className="text-xs text-muted-foreground">
-                {t("mcpHub.docsUrl")}
-              </Label>
-              <Input
-                id="mcp-edit-docs-url"
-                value={draft.docsUrl}
-                placeholder={t("mcpHub.docsUrlPlaceholder")}
-                className="font-mono text-[12.5px]"
-                onChange={(event) => updateDraft({ docsUrl: event.currentTarget.value })}
-              />
-            </div>
-
-            {formError ? (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="settings-modal-footer settings-modal-footer-row flex items-center justify-end gap-2 border-t border-border/70 px-6 py-4">
-          <Button type="button" variant="outline" onClick={requestClose}>
-            {t("settings.cancel")}
-          </Button>
-          <Button type="submit" className="gap-1.5">
-            {mode === "add" ? <Plus className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-            {submitLabel}
-          </Button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+          <DialogFooter className="flex-row flex-wrap px-6 py-3.5">
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("settings.cancel")}
+            </Button>
+            <Button type="submit" className="gap-1.5">
+              {mode === "add" ? <Plus className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+              {submitLabel}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -465,7 +465,11 @@ test("ManagedProcess can be omitted from shell tools for non-chat runtimes", asy
   });
 
   assert.equal(bundle.tools.some((tool) => tool.name === "ManagedProcess"), false);
+  assert.equal(bundle.tools.some((tool) => tool.name === "ProcessWait"), false);
+  assert.equal(bundle.tools.some((tool) => tool.name === "ProcessStop"), false);
   assert.equal(bundle.metadataByName.has("ManagedProcess"), false);
+  assert.equal(bundle.metadataByName.has("ProcessWait"), false);
+  assert.equal(bundle.metadataByName.has("ProcessStop"), false);
 
   const result = await bundle.executeToolCall({
     type: "toolCall",
@@ -974,4 +978,282 @@ test("Bash tool blocks workspace skills guesses before shell execution", async (
   assert.match(result.content[0].text, /workspace skills\/ guesses/);
   assert.match(result.content[0].text, /cwd to skill:\/\/<enabled-skill>\/scripts/);
   assert.deepEqual(calls, []);
+});
+
+test("chat shell tools expose resumable Bash, ProcessWait, and ProcessStop schemas", async () => {
+  const loader = createTsModuleLoader();
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+  });
+
+  assert.deepEqual(
+    bundle.tools.map((tool) => tool.name),
+    ["Bash", "ProcessWait", "ProcessStop"],
+  );
+  assert.match(JSON.stringify(bundle.tools[0].parameters), /yield_time_ms/);
+  assert.match(JSON.stringify(bundle.tools[1].parameters), /"maximum":300000/);
+  assert.match(bundle.tools[0].description, /session_duration_ms as cumulative/);
+  assert.match(bundle.tools[1].description, /must not be added across responses/);
+  assert.match(bundle.tools[1].description, /completed, failed, cancelled, and timed_out/);
+  assert.match(bundle.tools[2].description, /status=cancelled/);
+  assert.equal(bundle.metadataByName.get("ProcessWait").isReadOnly, true);
+  assert.equal(bundle.metadataByName.get("ProcessStop").isReadOnly, false);
+});
+
+test("resumable Bash yields a session without applying an implicit hard timeout", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "shell_session_start");
+          return {
+            status: "running",
+            session_id: args.session_id,
+            cursor: 6,
+            output: [{ stream: "stdout", text: "start\n" }],
+            output_truncated: false,
+            has_more: false,
+            exit_code: null,
+            duration_ms: 10_003,
+            shell: "zsh",
+            platform: "macos",
+            profile: "posix-zsh",
+            shell_family: "posix",
+            timeout_ms: null,
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "compile",
+    name: "Bash",
+    arguments: { command: "pnpm build" },
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.yield_time_ms, 10_000);
+  assert.equal(calls[0].args.timeout_ms, undefined);
+  // Resumable 模式下 provider cap 不适用：显式 timeout_ms 与 max_timeout_ms
+  // 都按全局上限（600s）收敛，避免 codex 系 30s cap 误杀长任务。
+  assert.equal(calls[0].args.max_timeout_ms, 600_000);
+  assert.equal(calls[0].args.provider_id, undefined);
+  assert.match(result.content[0].text, /status: running/);
+  assert.match(result.content[0].text, /session_duration_ms: 10003/);
+  assert.doesNotMatch(result.content[0].text, /^duration_ms:/m);
+  assert.equal(result.details.duration_ms, 10_003);
+  assert.match(result.content[0].text, /Continue with ProcessWait/);
+  assert.doesNotMatch(result.content[0].text, /Bash sleep 10/);
+});
+
+test("resumable Bash stops a running session returned after cancellation", async () => {
+  let resolveStart;
+  let startResolved = false;
+  const startPromise = new Promise((resolve) => {
+    resolveStart = resolve;
+  });
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args, startResolved });
+          if (command === "shell_session_start") return startPromise;
+          if (command === "shell_session_stop") {
+            if (!startResolved) throw new Error("session not started yet");
+            return {
+              status: "cancelled",
+              session_id: args.session_id,
+              cursor: args.cursor ?? 0,
+              output: [],
+              output_truncated: false,
+              has_more: false,
+              exit_code: -1,
+              duration_ms: 400,
+              shell: "bash",
+            };
+          }
+          throw new Error("unexpected invoke " + command);
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+  });
+  const controller = new AbortController();
+
+  const resultPromise = bundle.executeToolCall(
+    {
+      type: "toolCall",
+      id: "cancelled-compile",
+      name: "Bash",
+      arguments: { command: "pnpm build" },
+    },
+    controller.signal,
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  const result = await resultPromise;
+  assert.equal(result.details.status, "cancelled");
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  startResolved = true;
+  const sessionId = calls.find((call) => call.command === "shell_session_start").args.session_id;
+  resolveStart({
+    status: "running",
+    session_id: sessionId,
+    cursor: 9,
+    output: [{ stream: "stdout", text: "building\n" }],
+    output_truncated: false,
+    has_more: false,
+    exit_code: null,
+    duration_ms: 10_000,
+    shell: "bash",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.command === "shell_session_stop" &&
+        call.startResolved === true &&
+        call.args.session_id === sessionId &&
+        call.args.cursor === 9,
+    ),
+  );
+});
+
+test("ProcessWait paginates a Bash session and ProcessStop terminates it", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          if (command === "shell_session_wait") {
+            return {
+              status: "running",
+              session_id: args.session_id,
+              cursor: 12,
+              output: [{ stream: "stderr", text: "building\n" }],
+              output_truncated: false,
+              has_more: false,
+              exit_code: null,
+              duration_ms: 40_000,
+              shell: "bash",
+            };
+          }
+          assert.equal(command, "shell_session_stop");
+          return {
+            status: "cancelled",
+            session_id: args.session_id,
+            cursor: 14,
+            output: [{ stream: "stdout", text: "x\n" }],
+            output_truncated: false,
+            has_more: false,
+            exit_code: -1,
+            duration_ms: 40_100,
+            shell: "bash",
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+  });
+
+  const waited = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "wait",
+    name: "ProcessWait",
+    arguments: { session_id: "bash-session", cursor: 6, yield_time_ms: 999_999 },
+  });
+  const stopped = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "stop",
+    name: "ProcessStop",
+    arguments: { session_id: "bash-session", cursor: 12 },
+  });
+
+  assert.equal(calls[0].command, "shell_session_wait");
+  assert.equal(calls[0].args.yield_time_ms, 300_000);
+  assert.equal(calls[1].command, "shell_session_stop");
+  assert.equal(calls[1].args.cursor, 12);
+  assert.match(waited.content[0].text, /building/);
+  assert.match(waited.content[0].text, /session_duration_ms: 40000/);
+  assert.doesNotMatch(waited.content[0].text, /^duration_ms:/m);
+  assert.match(stopped.content[0].text, /status: cancelled/);
+  assert.match(stopped.content[0].text, /session_duration_ms: 40100/);
+  assert.equal(stopped.isError, false);
+});
+
+test("resumable Bash blocks leading sleep polling but allows short or internal sleeps", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          return {
+            status: "completed",
+            session_id: args.session_id,
+            cursor: 0,
+            output: [],
+            output_truncated: false,
+            has_more: false,
+            exit_code: 0,
+            duration_ms: 1,
+            shell: "bash",
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+  });
+
+  for (const command of ["sleep 28", "sleep 28 && status", "sleep 28; status"]) {
+    const result = await bundle.executeToolCall(createBashCall(command));
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Call ProcessWait/);
+  }
+  assert.equal(calls.length, 0);
+
+  assert.equal((await bundle.executeToolCall(createBashCall("sleep 0.5"))).isError, false);
+  assert.equal(
+    (await bundle.executeToolCall(createBashCall("echo ready; sleep 28"))).isError,
+    false,
+  );
+  assert.equal(calls.length, 2);
 });

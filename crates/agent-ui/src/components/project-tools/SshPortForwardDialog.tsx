@@ -1,6 +1,6 @@
-import { Dialog } from "@base-ui/react/dialog";
-import { Cable, Loader2, X } from "@liveagent/ui/components/IconSet";
+import { Cable, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useRef, useState } from "react";
 import type {
   SshLocalForwardAction,
@@ -11,6 +11,17 @@ import {
   validateSshLocalForwardTarget,
 } from "../../lib/terminal/sshLocalForwardTypes";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 
 export type SshPortForwardDialogProps = {
   sessionId: string;
@@ -110,157 +121,142 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
   const previewPort = remotePort || "?";
 
   return (
-    <Dialog.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="ssh-forward-dialog-backdrop fixed inset-0 z-[120] bg-black/55 backdrop-blur-sm" />
-        <Dialog.Viewport className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <Dialog.Popup className="ssh-forward-dialog-popup relative w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl outline-none">
-            <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
-                  <Cable className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <Dialog.Title className="break-words text-base font-semibold text-foreground">
-                    {t("projectTools.sshLocalForwardModalTitle")}
-                  </Dialog.Title>
-                  <div className="mt-1 break-words font-mono text-xs leading-5 text-muted-foreground">
-                    {subtitle}
-                  </div>
-                </div>
-              </div>
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={submitting}
+        closeLabel={t("projectTools.sshLocalForwardCancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-start gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
+              <Cable className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="break-words">
+                {t("projectTools.sshLocalForwardModalTitle")}
+              </DialogTitle>
+              <DialogDescription className="mt-1 break-words font-mono text-xs leading-5">
+                {subtitle}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
 
-              <Dialog.Close
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-                    title={t("projectTools.sshLocalForwardCancel")}
-                    aria-label={t("projectTools.sshLocalForwardCancel")}
-                  />
-                }
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleSubmit();
+          }}
+        >
+          <DialogBody className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="ssh-forward-local-port"
+                  className="text-xs font-medium text-foreground"
+                >
+                  {t("projectTools.sshLocalForwardLocalPortLabel")}
+                </label>
+                <input
+                  id="ssh-forward-local-port"
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
+                  value={localPort}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (!isSshLocalForwardPortDraft(value)) return;
+                    setLocalPort(value);
+                    setError("");
+                  }}
+                  onBlur={handleLocalPortBlur}
+                  className={cn(FIELD_CLASS, "font-mono")}
+                  placeholder={t("projectTools.sshLocalForwardAutoPort")}
+                  disabled={submitting}
+                />
+              </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="ssh-forward-remote-port"
+                  className="text-xs font-medium text-foreground"
+                >
+                  {t("projectTools.sshLocalForwardRemotePortLabel")}
+                </label>
+                <input
+                  id="ssh-forward-remote-port"
+                  type="text"
+                  inputMode="numeric"
+                  value={remotePort}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (!isSshLocalForwardPortDraft(value)) return;
+                    setRemotePort(value);
+                    setError("");
+                  }}
+                  className={cn(FIELD_CLASS, "font-mono")}
+                  placeholder={t("projectTools.sshLocalForwardRemotePortLabel")}
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label
+                htmlFor="ssh-forward-remote-host"
+                className="text-xs font-medium text-foreground"
               >
-                <X className="h-4 w-4" />
-              </Dialog.Close>
+                {t("projectTools.sshLocalForwardRemoteHostLabel")}
+              </label>
+              <input
+                id="ssh-forward-remote-host"
+                type="text"
+                value={remoteHost}
+                onChange={(event) => {
+                  setRemoteHost(event.currentTarget.value);
+                  setError("");
+                }}
+                className={FIELD_CLASS}
+                placeholder={t("projectTools.sshLocalForwardHostPlaceholder")}
+                disabled={submitting}
+              />
             </div>
 
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                handleSubmit();
-              }}
-            >
-              <div className="space-y-3 px-5 py-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="ssh-forward-local-port"
-                      className="text-xs font-medium text-foreground"
-                    >
-                      {t("projectTools.sshLocalForwardLocalPortLabel")}
-                    </label>
-                    <input
-                      id="ssh-forward-local-port"
-                      type="text"
-                      inputMode="numeric"
-                      autoFocus
-                      value={localPort}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        if (!isSshLocalForwardPortDraft(value)) return;
-                        setLocalPort(value);
-                        setError("");
-                      }}
-                      onBlur={handleLocalPortBlur}
-                      className={`${FIELD_CLASS} font-mono`}
-                      placeholder={t("projectTools.sshLocalForwardAutoPort")}
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="ssh-forward-remote-port"
-                      className="text-xs font-medium text-foreground"
-                    >
-                      {t("projectTools.sshLocalForwardRemotePortLabel")}
-                    </label>
-                    <input
-                      id="ssh-forward-remote-port"
-                      type="text"
-                      inputMode="numeric"
-                      value={remotePort}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        if (!isSshLocalForwardPortDraft(value)) return;
-                        setRemotePort(value);
-                        setError("");
-                      }}
-                      className={`${FIELD_CLASS} font-mono`}
-                      placeholder={t("projectTools.sshLocalForwardRemotePortLabel")}
-                      disabled={submitting}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label
-                    htmlFor="ssh-forward-remote-host"
-                    className="text-xs font-medium text-foreground"
-                  >
-                    {t("projectTools.sshLocalForwardRemoteHostLabel")}
-                  </label>
-                  <input
-                    id="ssh-forward-remote-host"
-                    type="text"
-                    value={remoteHost}
-                    onChange={(event) => {
-                      setRemoteHost(event.currentTarget.value);
-                      setError("");
-                    }}
-                    className={FIELD_CLASS}
-                    placeholder={t("projectTools.sshLocalForwardHostPlaceholder")}
-                    disabled={submitting}
-                  />
-                </div>
+            <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
+              127.0.0.1:{previewLocal}
+              <span className="mx-1.5 text-muted-foreground/60">→</span>
+              {previewHost}:{previewPort}
+            </div>
 
-                <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
-                  127.0.0.1:{previewLocal}
-                  <span className="mx-1.5 text-muted-foreground/60">→</span>
-                  {previewHost}:{previewPort}
-                </div>
+            <div className="text-xs leading-5 text-muted-foreground">
+              {t("projectTools.sshLocalForwardHelp")}
+            </div>
 
-                <div className="text-xs leading-5 text-muted-foreground">
-                  {t("projectTools.sshLocalForwardHelp")}
-                </div>
-
-                {error ? (
-                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                    {error}
-                  </div>
-                ) : null}
+            {error ? (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
               </div>
+            ) : null}
+          </DialogBody>
 
-              <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-                <Dialog.Close
-                  render={<Button type="button" variant="outline" className="w-full sm:w-auto" />}
-                >
-                  {t("projectTools.sshLocalForwardCancel")}
-                </Dialog.Close>
-                <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
-                  {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                  {t("projectTools.sshLocalForwardSubmit")}
-                </Button>
-              </div>
-            </form>
-          </Dialog.Popup>
-        </Dialog.Viewport>
-      </Dialog.Portal>
-    </Dialog.Root>
+          <DialogFooter className="bg-muted/20">
+            <DialogActions>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                {t("projectTools.sshLocalForwardCancel")}
+              </DialogClose>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {t("projectTools.sshLocalForwardSubmit")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

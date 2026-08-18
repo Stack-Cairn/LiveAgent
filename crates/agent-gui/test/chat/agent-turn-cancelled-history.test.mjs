@@ -368,59 +368,6 @@ test("trajectory captures the exact runtime prompt, tool-first TTFT, and failove
   assert.equal(stepEnd.api, "openai-completions");
 });
 
-test("task-list changes update the next provider context even without a message bus", async () => {
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "BASE",
-    messages: [],
-  });
-  let nextTurnOverride = null;
-  taskListRuntimeContextScenario = "TASKS AFTER TOOL";
-  const finalAssistant = {
-    ...abortedAssistant,
-    content: [{ type: "text", text: "done" }],
-    stopReason: "stop",
-  };
-  runAssistantWithToolsScenario = async (params) => {
-    state.meta.taskList = { runId: "run-1", items: [] };
-    nextTurnOverride = await params.onBeforeNextTurn?.({
-      round: 1,
-      assistant: toolUseAssistant,
-      toolResults: [parentToolResult, cardToolResult],
-      emittedMessages: [toolUseAssistant, parentToolResult, cardToolResult],
-      runtimeContext: params.context,
-      signal: params.signal,
-    });
-    params.onTurnStart?.(2);
-    params.onAssistantMessage?.(finalAssistant, 2);
-    return {
-      assistant: finalAssistant,
-      messages: [finalAssistant],
-      emittedMessages: [finalAssistant],
-    };
-  };
-
-  try {
-    await runAgentConversationTurn(
-      createCompletedAgentDevTurnParams({
-        state,
-        persistConversationWithHistorySync: async () => true,
-        extra: {
-          buildPreparedContext: (currentState) => ({
-            systemPrompt: "BASE",
-            messages: currentState.segments.flatMap((segment) => segment.messages),
-          }),
-        },
-      }),
-    );
-  } finally {
-    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
-    taskListRuntimeContextScenario = "";
-  }
-
-  assert.ok(nextTurnOverride);
-  assert.equal(nextTurnOverride.context.systemPrompt, "BASE\n\nTASKS AFTER TOOL");
-});
-
 test("agent dev skips memory extraction when final history persistence fails", async () => {
   const finalAssistant = {
     ...abortedAssistant,

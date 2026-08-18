@@ -204,7 +204,7 @@ export function TrajectoryTimeline(props: {
                     statusLabel: t(`trajectory.status.${status}`),
                   })}
                   className={cn(
-                    "absolute top-0 flex h-[12px] items-center gap-1 overflow-hidden rounded-[3px] px-1 text-[9px] leading-none",
+                    "absolute top-0 flex h-[12px] items-center gap-1 overflow-hidden rounded-xs px-1 text-[9px] leading-none",
                     status === "running"
                       ? "bg-primary/15 text-primary"
                       : status === "error"
@@ -251,7 +251,7 @@ export function TrajectoryTimeline(props: {
                 key={span.index}
                 aria-hidden="true"
                 className={cn(
-                  "absolute overflow-hidden rounded-[3px] transition-opacity",
+                  "absolute overflow-hidden rounded-xs transition-opacity",
                   span.isError ? "bg-red-500/85" : SPAN_TONE[span.kind],
                   span.status === "running" && "animate-pulse",
                   dimmed && "opacity-25",
@@ -372,7 +372,7 @@ export function TrajectoryTimeline(props: {
           type="button"
           aria-label={t("trajectory.timeline.minimapHint")}
           title={t("trajectory.timeline.minimapHint")}
-          className="relative block w-full cursor-pointer touch-none select-none rounded-[3px] bg-muted/40"
+          className="relative block w-full cursor-pointer touch-none select-none rounded-xs bg-muted/40"
           style={{ height: MINIMAP_HEIGHT }}
           onPointerDown={minimap.onPointerDown}
           onPointerMove={minimap.onPointerMove}
@@ -404,7 +404,7 @@ export function TrajectoryTimeline(props: {
                 key={span.index}
                 aria-hidden="true"
                 className={cn(
-                  "absolute rounded-[1px]",
+                  "absolute rounded-full",
                   span.isError ? "bg-red-500/80" : SPAN_TONE[span.kind],
                 )}
                 style={{
@@ -440,7 +440,7 @@ export function TrajectoryTimeline(props: {
             return (
               <span
                 aria-hidden="true"
-                className="absolute inset-y-0 rounded-[2px] border-x border-primary/80 bg-primary/10"
+                className="absolute inset-y-0 rounded-xs border-x border-primary/80 bg-primary/10"
                 style={{ left: `${left}%`, width: `${width}%` }}
               />
             );

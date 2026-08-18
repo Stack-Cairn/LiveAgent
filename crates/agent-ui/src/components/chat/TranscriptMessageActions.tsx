@@ -5,8 +5,10 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Undo2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "../../i18n/index";
+import { useCheckpointRewindAction } from "../../lib/chat/checkpointRewind";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 
@@ -43,6 +45,8 @@ export function TranscriptUserMessageActions(
     editTitle: string;
     onEdit: () => void;
     readOnly?: boolean;
+    /** 本行用户消息的稳定 ID:检查点回退按 turnId=消息 ID 命中该轮。 */
+    rewindTurnId?: string;
   },
 ) {
   const {
@@ -55,8 +59,12 @@ export function TranscriptUserMessageActions(
     editTitle,
     onEdit,
     readOnly = false,
+    rewindTurnId,
   } = props;
   const { t } = useLocale();
+  // Provider 外(只读分享页等)返回 null:整颗按钮不渲染。
+  const rewind = useCheckpointRewindAction(rewindTurnId);
+  const rewindTitle = rewind?.available ? t("chat.rewindCode") : t("chat.rewindUnavailable");
 
   return (
     <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
@@ -87,6 +95,22 @@ export function TranscriptUserMessageActions(
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
+          {rewind ? (
+            <button
+              type="button"
+              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title={rewindTitle}
+              aria-label={rewindTitle}
+              disabled={rewind.disabled}
+              onClick={rewind.onRewind}
+            >
+              {rewind.pending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Undo2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+          ) : null}
         </div>
       ) : null}
       <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">

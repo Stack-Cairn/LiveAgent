@@ -60,6 +60,9 @@ import {
   type ChatCommandUpdateListener,
   type ChatFileOpenResponse,
   type ChatQueueListener,
+  type CheckpointDiffStats,
+  type CheckpointRewindResult,
+  type CheckpointTurnSummary,
   type FsCreateDirResponse,
   type FsDeleteResponse,
   type FsListDirsResponse,
@@ -116,6 +119,22 @@ import type {
   MemoryManagePayload,
   RunningConversationSummary,
 } from "./gatewayTypes";
+
+const LEGACY_SETTINGS_CHANGED_MESSAGE = "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。";
+
+export type GatewaySettingsUpdateErrorCode = "settings_changed";
+
+export class GatewaySettingsUpdateError extends Error {
+  readonly code: GatewaySettingsUpdateErrorCode;
+  readonly responseMessage: string;
+
+  constructor(code: GatewaySettingsUpdateErrorCode, responseMessage: string) {
+    super(responseMessage || "Gateway settings update rejected");
+    this.name = "GatewaySettingsUpdateError";
+    this.code = code;
+    this.responseMessage = responseMessage;
+  }
+}
 
 export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   subscribeChatQueue(listener: ChatQueueListener): () => void {
@@ -1036,9 +1055,11 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   async updateSettings(payload: GatewaySettingsSyncUpdatePayload): Promise<void> {
     const response = await this.request<GatewaySettingsUpdateResponse>("settings.update", payload);
     if (response?.accepted === false) {
-      throw new Error(
-        response.message?.trim() || "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。",
-      );
+      const message = response.message?.trim() || "Gateway settings update rejected";
+      if (message === "settings_changed" || message === LEGACY_SETTINGS_CHANGED_MESSAGE) {
+        throw new GatewaySettingsUpdateError("settings_changed", message);
+      }
+      throw new Error(message);
     }
   }
 
@@ -1113,6 +1134,41 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   async revokeWorkspaceRootGrants(projectId: string): Promise<void> {
     await this.request<GatewayWorkspaceRootGrantsResponse>("workspace_root_grants.revoke", {
       project_id: projectId,
+    });
+  }
+
+  async listCheckpointTurns(conversationId: string): Promise<CheckpointTurnSummary[]> {
+    return this.requestWithRecovery<CheckpointTurnSummary[]>("checkpoint.list", {
+      conversation_id: conversationId,
+    });
+  }
+
+  async previewCheckpointRewind(params: {
+    conversationId: string;
+    turnSeq: number;
+    authorizedRoots: string[];
+  }): Promise<CheckpointDiffStats> {
+    return this.request<CheckpointDiffStats>("checkpoint.diff", {
+      conversation_id: params.conversationId,
+      turn_seq: params.turnSeq,
+      authorized_roots: params.authorizedRoots,
+    });
+  }
+
+  async rewindCheckpoint(params: {
+    conversationId: string;
+    turnSeq: number;
+    authorizedRoots: string[];
+    expected: { key: string; currentHash: string }[];
+  }): Promise<CheckpointRewindResult> {
+    return this.request<CheckpointRewindResult>("checkpoint.rewind", {
+      conversation_id: params.conversationId,
+      turn_seq: params.turnSeq,
+      authorized_roots: params.authorizedRoots,
+      expected: params.expected.map((entry) => ({
+        key: entry.key,
+        current_hash: entry.currentHash,
+      })),
     });
   }
 

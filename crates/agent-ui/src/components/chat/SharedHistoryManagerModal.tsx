@@ -10,14 +10,20 @@ import {
   RefreshCw,
   Search,
   Share2,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 
 export type ManagedHistoryShareStatus = {
   conversationId?: string;
@@ -217,42 +223,28 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
       .catch(() => setCopiedId(null));
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("sharedHistory.managerLabel")}
-    >
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative z-10 flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex max-h-[86dvh] max-w-3xl flex-col p-0"
+        closeLabel={t("sharedHistory.close")}
+        showCloseButton
+      >
+        <DialogHeader>
+          <div className="flex items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
                 <Share2 className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <div className="text-base font-semibold text-foreground">
+                <DialogTitle className="text-base leading-normal">
                   {t("sharedHistory.title")}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-5">
                   {t("sharedHistory.subtitle")}
-                </div>
+                </DialogDescription>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              title={t("sharedHistory.close")}
-              aria-label={t("sharedHistory.close")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
@@ -325,9 +317,9 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <DialogBody className="py-5">
           {filteredConversations.length === 0 ? (
             <EmptyState isFiltered={conversations.length > 0 && Boolean(normalizedQuery)} />
           ) : (
@@ -516,9 +508,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
               })}
             </div>
           )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }

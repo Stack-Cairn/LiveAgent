@@ -23,20 +23,30 @@ import {
   Undo2,
   X,
 } from "@liveagent/ui/components/IconSet";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type CodeMentionReference,
   createCodeMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import * as monaco from "@liveagent/ui/lib/monacoEditor";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import * as monaco from "monaco-editor";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import CssWorker from "monaco-editor/languages/features/css/css.worker.js?worker";
+import HtmlWorker from "monaco-editor/languages/features/html/html.worker.js?worker";
+import JsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
+import TsWorker from "monaco-editor/languages/features/typescript/ts.worker.js?worker";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -159,88 +169,6 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function languageForPath(path: string) {
-  const name = basename(path).toLowerCase();
-  if (name === "dockerfile") return "dockerfile";
-  if (name === "makefile") return "makefile";
-  if (name === "cargo.lock") return "toml";
-  if (name.endsWith(".d.ts")) return "typescript";
-
-  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
-  switch (ext) {
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-      return "javascript";
-    case "ts":
-    case "tsx":
-      return "typescript";
-    case "json":
-    case "jsonc":
-      return "json";
-    case "css":
-      return "css";
-    case "scss":
-    case "sass":
-      return "scss";
-    case "less":
-      return "less";
-    case "html":
-    case "htm":
-      return "html";
-    case "md":
-    case "mdx":
-      return "markdown";
-    case "rs":
-      return "rust";
-    case "go":
-      return "go";
-    case "py":
-      return "python";
-    case "java":
-      return "java";
-    case "kt":
-    case "kts":
-      return "kotlin";
-    case "c":
-    case "h":
-      return "c";
-    case "cc":
-    case "cpp":
-    case "cxx":
-    case "hpp":
-      return "cpp";
-    case "cs":
-      return "csharp";
-    case "php":
-      return "php";
-    case "rb":
-      return "ruby";
-    case "swift":
-      return "swift";
-    case "sh":
-    case "bash":
-    case "zsh":
-      return "shell";
-    case "yml":
-    case "yaml":
-      return "yaml";
-    case "toml":
-      return "toml";
-    case "xml":
-    case "svg":
-      return "xml";
-    case "sql":
-      return "sql";
-    case "graphql":
-    case "gql":
-      return "graphql";
-    default:
-      return "plaintext";
-  }
 }
 
 function toMessage(error: unknown, fallback: string) {
@@ -418,7 +346,11 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       }
 
       const contentToSave = tab.content;
-      updateTab(tabKey, (current) => ({ ...current, status: "saving", error: null }));
+      updateTab(tabKey, (current) => ({
+        ...current,
+        status: "saving",
+        error: null,
+      }));
       try {
         const io = ioForSource(tab.projectPathKey, tab.remote);
         const result = await io.write({
@@ -431,7 +363,11 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         });
         if (result.kind === "conflict") {
           const message = t("workspaceEditor.conflictMessage");
-          updateTab(tabKey, (current) => ({ ...current, status: "conflict", error: message }));
+          updateTab(tabKey, (current) => ({
+            ...current,
+            status: "conflict",
+            error: message,
+          }));
           setGlobalError(message);
           return false;
         }
@@ -496,7 +432,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           contentHash: response.contentHash,
           sizeBytes: response.sizeBytes,
           totalLines: response.totalLines,
-          language: languageForPath(response.path),
+          language: monaco.languageForPath(response.path),
           status: "ready",
           error: null,
           remote: request.remote,
@@ -540,7 +476,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           contentHash: response.contentHash,
           sizeBytes: response.sizeBytes,
           totalLines: response.totalLines,
-          language: languageForPath(response.path),
+          language: monaco.languageForPath(response.path),
           status: "ready",
           error: null,
         }));
@@ -1177,39 +1113,36 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         ) : null}
       </div>
 
-      {pendingDialog ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-2xl">
-            <div className="text-sm font-semibold">{dialogTitle}</div>
-            <div className="mt-2 text-sm leading-5 text-muted-foreground">{dialogDescription}</div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={() => setPendingDialog(null)}
-              >
+      <AlertDialog
+        open={pendingDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDialog(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-md p-0">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">{dialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription className="leading-5">
+              {dialogDescription}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogActions className="max-sm:grid-cols-1">
+              <Button type="button" variant="outline" onClick={() => setPendingDialog(null)}>
                 {t("workspaceEditor.cancel")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={discardDialogTarget}
-              >
+              </Button>
+              <Button type="button" variant="outline" onClick={discardDialogTarget}>
                 {t("workspaceEditor.discard")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                onClick={saveDialogTarget}
-              >
-                {pendingDialog.kind === "closeOverlay"
+              </Button>
+              <Button type="button" onClick={saveDialogTarget}>
+                {pendingDialog?.kind === "closeOverlay"
                   ? t("workspaceEditor.saveAll")
                   : t("workspaceEditor.save")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+              </Button>
+            </AlertDialogActions>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

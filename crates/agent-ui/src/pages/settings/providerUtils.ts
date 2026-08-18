@@ -306,13 +306,13 @@ export function normalizeProviderModelsBaseUrl(
   if (isFullUrl) return deriveModelsBaseUrlFromFullUrl(baseUrl);
   let normalizedUrl = normalizeBaseUrl(baseUrl);
 
-  if (type !== "codex" && type !== "xai" && type !== "gemini") {
+  if (type !== "codex" && type !== "xai" && type !== "deepseek" && type !== "gemini") {
     return normalizedUrl;
   }
 
   const lower = normalizedUrl.toLowerCase();
 
-  if (type === "codex" || type === "xai") {
+  if (type === "codex" || type === "xai" || type === "deepseek") {
     for (const suffix of CODEX_MODELS_SUFFIXES) {
       if (lower.endsWith(suffix)) {
         normalizedUrl = normalizedUrl.slice(0, -suffix.length);
@@ -402,7 +402,7 @@ export function buildProviderModelsAttempts(
     { kind: "default", headers: buildModelsHeaders(type, apiKey, "default") },
     { kind: "official", headers: buildModelsHeaders(type, apiKey, "official") },
   ];
-  // codex/xai 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
+  // codex/xai/deepseek 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
   // 必不同），重复请求同一端点没有意义，收敛为一次。
   return JSON.stringify(attempts[0].headers) === JSON.stringify(attempts[1].headers)
     ? [attempts[0]]
@@ -555,11 +555,14 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
     const ownedBy =
       (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
+    const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
+    const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
     out.push({
       id,
       ...(ownedBy ? { ownedBy } : {}),
-      contextWindow: normalizePositiveInteger(obj.inputTokenLimit) ?? draft.contextWindow,
-      maxOutputToken: normalizePositiveInteger(obj.outputTokenLimit) ?? draft.maxOutputToken,
+      contextWindow: contextWindow ?? draft.contextWindow,
+      maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
+      limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
     });
   }
 
@@ -583,11 +586,24 @@ export function mergeFetchedModels(
       model.contextWindow === 1_000_000 &&
       existingModel.contextWindow < 1_000_000 &&
       Math.round(existingModel.contextWindow / 1_000) === 1_000;
+    // 供应商本次响应自带真实限额字段（provider 来源）：比落库的目录/兜底值
+    // 更新鲜，直接采信；用户手改（user）来源任何时候都不被自动覆盖。
+    const shouldAdoptFreshProviderLimits =
+      existingModel !== undefined &&
+      model.limitsSource === "provider" &&
+      existingModel.limitsSource !== "user";
     merged.push(
       existingModel
         ? {
             ...existingModel,
             ...(shouldNormalizeOneMillion ? { contextWindow: model.contextWindow } : {}),
+            ...(shouldAdoptFreshProviderLimits
+              ? {
+                  contextWindow: model.contextWindow,
+                  maxOutputToken: model.maxOutputToken,
+                  limitsSource: "provider",
+                }
+              : {}),
             ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
           }
         : model,

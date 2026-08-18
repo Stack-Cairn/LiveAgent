@@ -269,7 +269,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
 
   return (
     <div
-      className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-[9] -translate-x-1/2"
+      className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2"
       style={{
         width: `var(${CHAT_TRANSCRIPT_WIDTH_CSS_VAR}, ${DEFAULT_CHAT_TRANSCRIPT_WIDTH}px)`,
         maxWidth: `calc(100% - ${TRANSCRIPT_HORIZONTAL_SAFE_SPACE}px)`,

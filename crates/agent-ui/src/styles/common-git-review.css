@@ -11,7 +11,7 @@
 
   .git-review-floating-scrollbar {
     position: fixed;
-    z-index: 60;
+    z-index: var(--layer-raised);
     border-radius: 999px;
     background-color: hsl(var(--muted-foreground) / 0.34);
     opacity: 0;

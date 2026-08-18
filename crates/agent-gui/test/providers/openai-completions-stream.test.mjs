@@ -13,7 +13,7 @@ function createUsage() {
   };
 }
 
-function createAssistant(content, errorMessage = "Stream ended without finish_reason") {
+function createAssistant(content, stopReason = "stop", errorMessage) {
   return {
     role: "assistant",
     content,
@@ -21,18 +21,20 @@ function createAssistant(content, errorMessage = "Stream ended without finish_re
     provider: "openai",
     model: "compatible-model",
     usage: createUsage(),
-    stopReason: "error",
-    errorMessage,
+    stopReason,
+    ...(errorMessage ? { errorMessage } : {}),
     timestamp: 1,
   };
 }
 
-function createErrorSource(assistant, events = []) {
+function createTerminalSource(assistant, events = [], terminalType = "done") {
   return {
     async *[Symbol.asyncIterator]() {
       yield { type: "start", partial: { ...assistant, content: [] } };
       for (const event of events) yield event;
-      yield { type: "error", reason: "error", error: assistant };
+      yield terminalType === "done"
+        ? { type: "done", reason: assistant.stopReason, message: assistant }
+        : { type: "error", reason: "error", error: assistant };
     },
     async result() {
       return assistant;
@@ -58,16 +60,17 @@ function createModel() {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 8192,
     maxTokens: 1024,
+    compat: { supportsFinishReason: false },
   };
 }
 
-test("openai-completions: compatible endpoint recovers usable text missing finish_reason", async () => {
+test("openai-completions: upstream finish-reason compatibility preserves usable text", async () => {
   const assistant = createAssistant([{ type: "text", text: "complete answer" }]);
   const loader = createTsModuleLoader({
     mocks: {
       "@earendil-works/pi-ai/api/openai-completions": {
         stream() {
-          return createErrorSource(assistant, [
+          return createTerminalSource(assistant, [
             {
               type: "text_delta",
               contentIndex: 0,
@@ -88,7 +91,6 @@ test("openai-completions: compatible endpoint recovers usable text missing finis
   const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
 
   const stream = streamSimpleByApi(createModel(), { messages: [] }, {
-    recoverMissingFinishReason: true,
     streamRetry: { disabled: true },
   });
   const events = await collectEvents(stream);
@@ -103,13 +105,13 @@ test("openai-completions: compatible endpoint recovers usable text missing finis
   assert.equal(result.content[0].text, "complete answer");
 });
 
-test("openai-completions: empty stream still fails when finish_reason is missing", async () => {
+test("openai-completions: empty successful stream is rejected", async () => {
   const loader = createTsModuleLoader();
-  const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
     "src/lib/providers/runtime/openAICompletionsStream.ts",
   );
   const assistant = createAssistant([]);
-  const stream = recoverOpenAICompletionsMissingFinishReason(createErrorSource(assistant));
+  const stream = rejectEmptyOpenAICompletionsResponse(createTerminalSource(assistant));
   const events = await collectEvents(stream);
 
   assert.deepEqual(
@@ -117,27 +119,80 @@ test("openai-completions: empty stream still fails when finish_reason is missing
     ["start", "error"],
   );
   assert.equal((await stream.result()).stopReason, "error");
+  // 措辞必须继续命中 pi-ai 的可重试模式,否则空响应会直接打死一轮而不是重试。
+  assert.match((await stream.result()).errorMessage, /provider returned error/i);
+});
+
+test("openai-completions: empty response error stays retryable for withStreamRetry", async () => {
+  const { isRetryableAssistantError } = await import("@earendil-works/pi-ai");
+  const loader = createTsModuleLoader();
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
+    "src/lib/providers/runtime/openAICompletionsStream.ts",
+  );
+  const stream = rejectEmptyOpenAICompletionsResponse(
+    createTerminalSource(createAssistant([])),
+  );
+  await collectEvents(stream);
+
+  // 空响应是上游抖动,必须能被统一重试链路吃掉;文案一旦偏离 pi-ai 的模式表,
+  // 一次空回复就会直接终结整轮对话。
+  assert.equal(isRetryableAssistantError(await stream.result()), true);
+});
+
+test("openai-completions: truncated and aborted turns are never rewritten as empty", async () => {
+  const loader = createTsModuleLoader();
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
+    "src/lib/providers/runtime/openAICompletionsStream.ts",
+  );
+
+  // length = 输出被 token 上限截断,是真实终止语义(下游据此拒绝可能截断的工具
+  // 调用);aborted = 用户主动停止。两者都不能被改写成"空响应"。
+  for (const stopReason of ["length", "aborted"]) {
+    const stream = rejectEmptyOpenAICompletionsResponse(
+      createTerminalSource(createAssistant([], stopReason)),
+    );
+    const events = await collectEvents(stream);
+    assert.equal(events.at(-1).type, "done", stopReason);
+    assert.equal((await stream.result()).stopReason, stopReason);
+  }
+});
+
+test("openai-completions: thinking-only turns are not treated as empty", async () => {
+  const loader = createTsModuleLoader();
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
+    "src/lib/providers/runtime/openAICompletionsStream.ts",
+  );
+  // 推理模型可能把预算全烧在 thinking 上;重试只会再烧一遍,不是空响应。
+  const assistant = createAssistant([{ type: "thinking", thinking: "long chain" }]);
+  const stream = rejectEmptyOpenAICompletionsResponse(createTerminalSource(assistant));
+  const events = await collectEvents(stream);
+
+  assert.equal(events.at(-1).type, "done");
+  assert.equal((await stream.result()).stopReason, "stop");
 });
 
 test("openai-completions: unrelated errors are never recovered", async () => {
   const loader = createTsModuleLoader();
-  const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
     "src/lib/providers/runtime/openAICompletionsStream.ts",
   );
   const assistant = createAssistant(
     [{ type: "text", text: "partial" }],
+    "error",
     "503 service unavailable",
   );
-  const stream = recoverOpenAICompletionsMissingFinishReason(createErrorSource(assistant));
+  const stream = rejectEmptyOpenAICompletionsResponse(
+    createTerminalSource(assistant, [], "error"),
+  );
   const events = await collectEvents(stream);
 
   assert.equal(events.at(-1).type, "error");
   assert.equal((await stream.result()).stopReason, "error");
 });
 
-test("openai-completions: recovered tool calls retain truncation guard coverage", async () => {
+test("openai-completions: inferred tool calls retain truncation guard coverage", async () => {
   const loader = createTsModuleLoader();
-  const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
+  const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
     "src/lib/providers/runtime/openAICompletionsStream.ts",
   );
   const { wrapStreamWithToolCallArgumentGuard } = loader.loadModule(
@@ -149,8 +204,8 @@ test("openai-completions: recovered tool calls retain truncation guard coverage"
     name: "read_file",
     arguments: { path: "/tmp" },
   };
-  const assistant = createAssistant([toolCall]);
-  const source = createErrorSource(assistant, [
+  const assistant = createAssistant([toolCall], "toolUse");
+  const source = createTerminalSource(assistant, [
     { type: "toolcall_start", contentIndex: 0, partial: assistant },
     {
       type: "toolcall_delta",
@@ -161,8 +216,8 @@ test("openai-completions: recovered tool calls retain truncation guard coverage"
     { type: "toolcall_end", contentIndex: 0, toolCall, partial: assistant },
   ]);
   const incomplete = [];
-  const recovered = recoverOpenAICompletionsMissingFinishReason(source);
-  const guarded = wrapStreamWithToolCallArgumentGuard(recovered, (call, reason) => {
+  const validated = rejectEmptyOpenAICompletionsResponse(source);
+  const guarded = wrapStreamWithToolCallArgumentGuard(validated, (call, reason) => {
     incomplete.push({ call, reason });
   });
   const events = await collectEvents(guarded);
@@ -175,33 +230,26 @@ test("openai-completions: recovered tool calls retain truncation guard coverage"
   assert.match(incomplete[0].reason, /before it was complete/);
 });
 
-test("openai-completions: compatibility is enabled only for non-official endpoints", () => {
+test("openai-completions: model compat infers finish reasons only for non-official endpoints", () => {
   const loader = createTsModuleLoader();
-  const { finalizeProviderStreamOptions } = loader.loadModule(
-    "src/lib/providers/runtime/payloadPipeline.ts",
+  const { createModelFromConfig } = loader.loadModule(
+    "src/lib/providers/runtime/modelFactory.ts",
   );
-  const model = createModel();
+  const compatible = createModelFromConfig(
+    "codex",
+    "compatible-model",
+    "https://relay.example.com/v1",
+    "openai-completions",
+  );
+  const official = createModelFromConfig(
+    "codex",
+    "compatible-model",
+    "http://127.0.0.1:18080/proxy/codex/v1",
+    "openai-completions",
+    undefined,
+    "https://api.openai.com/v1",
+  );
 
-  const compatible = finalizeProviderStreamOptions({
-    providerId: "codex",
-    baseUrl: "https://relay.example.com/v1",
-    options: {},
-    model,
-  });
-  const official = finalizeProviderStreamOptions({
-    providerId: "codex",
-    baseUrl: "https://api.openai.com/v1",
-    options: {},
-    model,
-  });
-  const explicitStrict = finalizeProviderStreamOptions({
-    providerId: "codex",
-    baseUrl: "https://relay.example.com/v1",
-    options: { recoverMissingFinishReason: false },
-    model,
-  });
-
-  assert.equal(compatible.recoverMissingFinishReason, true);
-  assert.equal(official.recoverMissingFinishReason, undefined);
-  assert.equal(explicitStrict.recoverMissingFinishReason, false);
+  assert.equal(compatible.compat.supportsFinishReason, false);
+  assert.notEqual(official.compat?.supportsFinishReason, false);
 });

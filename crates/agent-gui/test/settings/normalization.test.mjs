@@ -277,6 +277,64 @@ test("gemini provider normalization keeps native routing and model limits", () =
   assert.equal(provider.models[0].maxOutputToken, 65_536);
 });
 
+test("DeepSeek is the fifth built-in provider with native-only defaults", () => {
+  const providers = settings.getBuiltinCustomProviders();
+  assert.deepEqual(
+    providers.map((provider) => provider.type),
+    ["claude_code", "codex", "gemini", "xai", "deepseek"],
+  );
+
+  const provider = providers.at(-1);
+  assert.equal(provider.id, "builtin-deepseek");
+  assert.equal(provider.name, "DeepSeek");
+  assert.equal(provider.baseUrl, "https://api.deepseek.com");
+  assert.equal(provider.reasoning, "high");
+  assert.equal(provider.promptCachingEnabled, false);
+  assert.equal(provider.promptCacheHintMode, undefined);
+  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.requestFormat, undefined);
+});
+
+test("DeepSeek provider normalization keeps native routing and disables unsupported toggles", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "deepseek-1",
+    name: " DeepSeek Relay ",
+    type: "deepseek",
+    baseUrl: " https://api.deepseek.com/v1/chat/completions/ ",
+    requestFormat: "openai-responses",
+    promptCachingEnabled: true,
+    promptCacheHintMode: "openai-key",
+    nativeWebSearchEnabled: true,
+    models: ["deepseek-chat", "deepseek-reasoner"],
+    activeModels: ["deepseek-chat", "deepseek-reasoner"],
+  });
+
+  assert.equal(provider.type, "deepseek");
+  assert.equal(provider.baseUrl, "https://api.deepseek.com/v1/chat/completions");
+  assert.equal(provider.requestFormat, undefined);
+  assert.equal(provider.promptCachingEnabled, false);
+  assert.equal(provider.promptCacheHintMode, undefined);
+  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.models[0].contextWindow, 1_000_000);
+  assert.equal(provider.models[0].maxOutputToken, 384_000);
+});
+
+test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
+  // 存量 codex 分组挂 DeepSeek 的配置不做自动改判：用户自行迁移到正式
+  // deepseek 分组（避免归一化层堆积一次性迁移逻辑）。
+  const legacy = settings.normalizeCustomProvider({
+    id: "legacy-deepseek",
+    name: "DeepSeek",
+    type: "codex",
+    baseUrl: "https://api.deepseek.com/v1",
+    apiKey: "sk-legacy",
+    models: ["deepseek-chat"],
+    activeModels: ["deepseek-chat"],
+  });
+  assert.equal(legacy.type, "codex");
+  assert.equal(legacy.requestFormat, "openai-responses");
+});
+
 test("settings normalization drops stale selected models and preserves valid selections", () => {
   const customProviders = [
     {
@@ -508,6 +566,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 
@@ -591,13 +650,29 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["high"],
   );
-  // deepseek-chat：目录声明非思考模型，无档位（思考控件整组隐藏）。
+  // DeepSeek 正式供应商直接读取自己的目录：chat 无思考，reasoner 恒开不可调，
+  // v4-pro 提供 high/max 两档。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "codex",
+      providerId: "deepseek",
       modelId: "deepseek-chat",
     }),
     [],
+  );
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "deepseek",
+      modelId: "deepseek-reasoner",
+    }),
+    [],
+  );
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "deepseek",
+      modelId: "deepseek-v4-pro",
+    }),
+    ["high", "max"],
   );
 
   assert.deepEqual(
@@ -626,6 +701,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         codex_openai_completions: "xhigh",
         gemini: "high",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -658,6 +734,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -683,6 +760,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
+        deepseek: "high",
       },
     },
   );
@@ -740,6 +818,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 });
@@ -2602,31 +2681,103 @@ test("cross-provider models resolve real catalog limits instead of provider fall
 
 test("stale fallback limits persisted for cross-provider models are repaired on read", () => {
   // 跨供应商回查上线前，grok-4.5 挂 anthropic 下会以 200K/32K 兜底对落库：
-  // 读侧识别并替换为目录真实限额，不需要用户删除重加。
+  // 读侧识别并替换为目录真实限额，不需要用户删除重加。存量无 limitsSource
+  // 字段，推断规则判其为 fallback（落库值恰等于当时的兜底对），随即按
+  // catalog/fallback 重解析规则刷新为当前目录真值，来源改记 catalog。
   const repaired = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 200_000, maxOutputToken: 32_000 },
     "claude_code",
   );
   assert.equal(repaired.contextWindow, 500_000);
   assert.equal(repaired.maxOutputToken, 32_000);
-  // 任一值偏离兜底对 = 用户显式配置，原样保留。
+  assert.equal(repaired.limitsSource, "catalog");
+  // 任一值偏离兜底对 = 用户显式配置，推断为 user，原样保留、不重解析。
   const custom = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 200_000, maxOutputToken: 30_000 },
     "claude_code",
   );
   assert.equal(custom.contextWindow, 200_000);
   assert.equal(custom.maxOutputToken, 30_000);
-  // 本供应商目录内的模型不受存量修复影响（claude-opus-4-1 真实限额恰为兜底对）。
+  assert.equal(custom.limitsSource, "user");
+  // 目录外的本供应商 id（claude-opus-4-1 不在当前目录快照里）不受存量修复
+  // 误伤：落库值恰好等于兜底对，推断链判定为 fallback，数值不变、来源如实
+  // 记为 fallback（并非目录真值，只是巧合相等）。
   const native = settings.normalizeProviderModelConfig(
     { id: "claude-opus-4-1", contextWindow: 200_000, maxOutputToken: 32_000 },
     "claude_code",
   );
   assert.equal(native.contextWindow, 200_000);
   assert.equal(native.maxOutputToken, 32_000);
-  // 新增（无存量限额）直接拿跨供应商默认值。
+  assert.equal(native.limitsSource, "fallback");
+  // 新增（无存量限额）直接拿跨供应商默认值，来源记 catalog。
   const fresh = settings.normalizeProviderModelConfig("grok-4.5", "claude_code");
   assert.equal(fresh.contextWindow, 500_000);
   assert.equal(fresh.maxOutputToken, 32_000);
+  assert.equal(fresh.limitsSource, "catalog");
+});
+
+test("legacy configs without limitsSource infer catalog/fallback/user by matching stored value", () => {
+  // 推断规则 1：落库值等于当前目录解析结果 → catalog。
+  const catalogMatch = settings.normalizeProviderModelConfig(
+    { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 32_000 },
+    "xai",
+  );
+  assert.equal(catalogMatch.limitsSource, "catalog");
+  // 推断规则 2：落库值等于当前供应商兜底常量、且目录/跨供应商都查不到 → fallback。
+  const fallbackMatch = settings.normalizeProviderModelConfig(
+    { id: "relay-only-model", contextWindow: 258_000, maxOutputToken: 142_000 },
+    "xai",
+  );
+  assert.equal(fallbackMatch.limitsSource, "fallback");
+  // 推断规则 3：两者都不等 → user（无法证明不是用户手改，保守保留原值）。
+  const userMatch = settings.normalizeProviderModelConfig(
+    { id: "relay-only-model", contextWindow: 300_000, maxOutputToken: 50_000 },
+    "xai",
+  );
+  assert.equal(userMatch.contextWindow, 300_000);
+  assert.equal(userMatch.maxOutputToken, 50_000);
+  assert.equal(userMatch.limitsSource, "user");
+});
+
+test("provider-sourced limits are not reparsed on load; user-sourced limits are never touched", () => {
+  // provider 来源：供应商上次刷新自带的真实限额，加载阶段没有新的接口响应
+  // 可用，原样保留落库值，即使它和当前目录/兜底值都不一致。
+  const providerSourced = settings.normalizeProviderModelConfig(
+    { id: "grok-4.5", contextWindow: 999_000, maxOutputToken: 40_000, limitsSource: "provider" },
+    "xai",
+  );
+  assert.equal(providerSourced.contextWindow, 999_000);
+  assert.equal(providerSourced.maxOutputToken, 40_000);
+  assert.equal(providerSourced.limitsSource, "provider");
+  // user 来源：即使数值恰好等于当前目录真值，也保持 user 标记，不被目录更新
+  // 悄悄"升级"回 catalog（避免用户下次手动改动时被目录波动覆盖的假象）。
+  const userSourced = settings.normalizeProviderModelConfig(
+    { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 32_000, limitsSource: "user" },
+    "xai",
+  );
+  assert.equal(userSourced.contextWindow, 500_000);
+  assert.equal(userSourced.maxOutputToken, 32_000);
+  assert.equal(userSourced.limitsSource, "user");
+});
+
+test("provider-declared limits from a fresh /v1/models response are always tagged provider", () => {
+  // extractProviderDeclaredLimits 命中（如 OpenRouter 的 context_length）时
+  // 无条件记 provider，即使旧存档已有 limitsSource 也会被本次响应覆盖——
+  // 这是唯一比落库值更新鲜的数据源。
+  const declared = settings.normalizeProviderModelConfig(
+    {
+      id: "some-openrouter-model",
+      context_length: 300_000,
+      top_provider: { max_completion_tokens: 50_000 },
+      contextWindow: 200_000,
+      maxOutputToken: 32_000,
+      limitsSource: "user",
+    },
+    "codex",
+  );
+  assert.equal(declared.contextWindow, 300_000);
+  assert.equal(declared.maxOutputToken, 50_000);
+  assert.equal(declared.limitsSource, "provider");
 });
 
 test("persisted degenerate limits are repaired at normalize time for every provider", () => {

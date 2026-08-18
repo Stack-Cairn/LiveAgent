@@ -7,6 +7,7 @@ use crate::commands::{
     chat_file_links::open_chat_file_link_for_conversation,
     chat_history,
     chat_history::ChatHistoryMessageRef,
+    checkpoint,
     fs::{
         fs_create_dir_sync, fs_delete_sync, fs_list_dirs_sync, fs_list_sync, fs_mention_list_sync,
         fs_read_editable_text_sync, fs_read_workspace_image_sync, fs_rename_sync, fs_roots_sync,
@@ -19,9 +20,13 @@ use crate::commands::{
     },
     settings::{load_providers, open_db},
     system::{
-        system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
-        system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
-        system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
+        system_create_project_folder_sync, system_import_directory_abort_sync,
+        system_import_directory_chunk_sync, system_import_directory_commit_sync,
+        system_import_directory_start_sync, system_import_directory_sync,
+        system_import_uploaded_readable_files_sync, system_list_skill_files_sync,
+        system_read_skill_metadata_sync, system_read_skill_text_sync,
+        system_read_uploaded_image_preview_sync, SystemImportDirectoryInputFile,
+        SystemReadableFileUploadInput,
     },
 };
 use crate::services::automation::{
@@ -61,6 +66,52 @@ pub async fn handle_provider_usage(
             .await
     };
     provider_usage_response(result)
+}
+
+pub async fn handle_checkpoint(
+    request: proto::CheckpointRequest,
+) -> Result<proto::CheckpointResponse, String> {
+    let action = request.action.trim().to_string();
+    let result_json = match action.as_str() {
+        "list" => {
+            serde_json::to_string(&checkpoint::checkpoint_list(request.conversation_id).await?)
+                .map_err(|error| format!("serialize checkpoint list failed: {error}"))?
+        }
+        "diff" => serde_json::to_string(
+            &checkpoint::checkpoint_diff_stats(
+                request.conversation_id,
+                request.turn_seq,
+                request.authorized_roots,
+            )
+            .await?,
+        )
+        .map_err(|error| format!("serialize checkpoint diff failed: {error}"))?,
+        "rewind" => {
+            let expected = request
+                .expected
+                .into_iter()
+                .map(|entry| checkpoint::CheckpointExpectedEntry {
+                    key: entry.key,
+                    current_hash: entry.current_hash,
+                })
+                .collect();
+            serde_json::to_string(
+                &checkpoint::checkpoint_rewind_code(
+                    request.conversation_id,
+                    request.turn_seq,
+                    request.authorized_roots,
+                    expected,
+                )
+                .await?,
+            )
+            .map_err(|error| format!("serialize checkpoint rewind failed: {error}"))?
+        }
+        _ => return Err(format!("unsupported checkpoint action: {action}")),
+    };
+    Ok(proto::CheckpointResponse {
+        action,
+        result_json,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -872,6 +923,8 @@ pub async fn handle_fs_write_text(
             request.mode,
             expected_mtime_ms,
             expected_content_hash,
+            // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
+            None,
         )
     })
     .await
@@ -920,14 +973,16 @@ pub async fn handle_fs_rename(
 pub async fn handle_fs_delete(
     request: proto::FsDeleteRequest,
 ) -> Result<proto::FsDeleteResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path))
-        .await
-        .map_err(|e| format!("gateway fs delete join failed: {e}"))?
-        .map_err(|e| e.message)
-        .map(|response| proto::FsDeleteResponse {
-            path: response.path,
-            kind: response.kind,
-        })
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_delete_sync(request.workdir, request.path, None)
+    })
+    .await
+    .map_err(|e| format!("gateway fs delete join failed: {e}"))?
+    .map_err(|e| e.message)
+    .map(|response| proto::FsDeleteResponse {
+        path: response.path,
+        kind: response.kind,
+    })
 }
 
 pub async fn handle_git_request(
@@ -987,6 +1042,64 @@ pub async fn handle_upload_readable_files(
             })
             .collect(),
         skipped: response.skipped,
+    })
+}
+
+pub async fn handle_import_directory(
+    request: proto::ImportDirectoryRequest,
+) -> Result<proto::ImportDirectoryResponse, String> {
+    let transfer_id = request.transfer_id.clone();
+    let operation = proto::ImportDirectoryOperation::try_from(request.operation)
+        .map_err(|_| format!("不支持的目录导入操作：{}", request.operation))?;
+    let outcome = tauri::async_runtime::spawn_blocking(move || match operation {
+        proto::ImportDirectoryOperation::Start => system_import_directory_start_sync(
+            request.transfer_id,
+            request.name,
+            request.target,
+            request.total_files,
+            request.total_bytes,
+        ),
+        proto::ImportDirectoryOperation::WriteChunk => system_import_directory_chunk_sync(
+            request.transfer_id,
+            request.relative_path,
+            request.offset,
+            request.chunk,
+            request.file_complete,
+        ),
+        proto::ImportDirectoryOperation::Commit => {
+            system_import_directory_commit_sync(request.transfer_id)
+        }
+        proto::ImportDirectoryOperation::Abort => {
+            system_import_directory_abort_sync(request.transfer_id)?;
+            Ok(crate::commands::system::SystemImportDirectoryOutcome {
+                root_path: String::new(),
+                file_count: 0,
+                skipped: Vec::new(),
+                received_bytes: 0,
+            })
+        }
+        proto::ImportDirectoryOperation::Unspecified => {
+            #[allow(deprecated)]
+            let files = request
+                .files
+                .into_iter()
+                .map(|file| SystemImportDirectoryInputFile {
+                    relative_path: file.relative_path,
+                    content: file.content,
+                })
+                .collect();
+            system_import_directory_sync(request.name, request.target, files)
+        }
+    })
+    .await
+    .map_err(|e| format!("gateway import directory join failed: {e}"))??;
+
+    Ok(proto::ImportDirectoryResponse {
+        root_path: outcome.root_path,
+        file_count: i32::try_from(outcome.file_count).unwrap_or(i32::MAX),
+        skipped: outcome.skipped,
+        transfer_id,
+        received_bytes: outcome.received_bytes,
     })
 }
 
@@ -1290,6 +1403,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "Image"
             | "List"
             | "ManagedProcess"
+            | "ProcessStop"
+            | "ProcessWait"
             | "McpManager"
             | "MemoryManager"
             | "Read"

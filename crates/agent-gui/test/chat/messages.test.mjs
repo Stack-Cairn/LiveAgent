@@ -1836,7 +1836,7 @@ After`,
   assert.equal(seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text), "Before\n\nAfter");
 });
 
-test("seed tool call recovery converts flattened DeepSeek tool request text", () => {
+test("seed tool call recovery does not infer flattened text from DeepSeek metadata", () => {
   const assistant = {
     role: "assistant",
     api: "anthropic-messages",
@@ -1866,21 +1866,12 @@ After`,
   };
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
-  assert.ok(recovered);
-  assert.equal(recovered.toolCalls.length, 1);
-  assert.equal(recovered.toolCalls[0].id, "call_00_recovered");
-  assert.equal(recovered.toolCalls[0].name, "Read");
-  assert.deepEqual(recovered.toolCalls[0].arguments, {
-    path: "src/App.tsx",
-    line: 12,
-    flags: { raw: true },
-  });
-  assert.equal(recovered.assistant.content[0].text, "Before\n\nAfter");
+  assert.equal(recovered, null);
+  // 旧 DeepSeek 适配的 flattened 文本恢复已随定向适配一并删除：strip 只处理
+  // seed 标记，历史扁平化文本原样保留。
   assert.equal(
-    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text, {
-      recoverFlattenedText: true,
-    }),
-    "Before\n\nAfter",
+    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text),
+    assistant.content[0].text,
   );
 });
 
@@ -2030,7 +2021,7 @@ test("visible live tool calls are marked running as soon as their cards appear",
   assert.deepEqual(parentOnly.runningToolCallIds, []);
 });
 
-test("seed tool call recovery strips repeated historical tool call text without duplicating native calls", () => {
+test("seed tool call recovery preserves repeated flattened text beside native calls", () => {
   const assistant = {
     role: "assistant",
     api: "anthropic-messages",
@@ -2062,20 +2053,14 @@ After`,
   };
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
-  assert.ok(recovered);
-  assert.equal(recovered.toolCalls.length, 0);
-  assert.equal(recovered.assistant.content.length, 2);
-  assert.equal(recovered.assistant.content[0].text, "Before\n\nAfter");
-  assert.equal(recovered.assistant.content[1].id, "call_00_native_grep");
+  assert.equal(recovered, null);
   assert.equal(
-    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text, {
-      recoverFlattenedText: true,
-    }),
-    "Before\n\nAfter",
+    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text),
+    assistant.content[0].text,
   );
 });
 
-test("seed tool call recovery strips bare tool_name text without duplicating native calls", () => {
+test("seed tool call recovery preserves bare tool_name text beside native calls", () => {
   const assistant = {
     role: "assistant",
     api: "anthropic-messages",
@@ -2113,20 +2098,14 @@ After`,
   };
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
-  assert.ok(recovered);
-  assert.equal(recovered.toolCalls.length, 0);
-  assert.equal(recovered.assistant.content.length, 2);
-  assert.equal(recovered.assistant.content[0].text, "Before\n\nAfter");
-  assert.equal(recovered.assistant.content[1].id, "call_00_native_route_grep");
+  assert.equal(recovered, null);
   assert.equal(
-    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text, {
-      recoverFlattenedText: true,
-    }),
-    "Before\n\nAfter",
+    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text),
+    assistant.content[0].text,
   );
 });
 
-test("seed tool call recovery strips malformed labeled DeepSeek historical tool text", () => {
+test("seed tool call recovery preserves malformed labeled DeepSeek historical text", () => {
   const assistant = {
     role: "assistant",
     api: "anthropic-messages",
@@ -2162,19 +2141,10 @@ arguments:
   };
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
-  assert.ok(recovered);
-  assert.equal(recovered.toolCalls.length, 0);
-  assert.equal(recovered.assistant.content.length, 2);
-  assert.equal(recovered.assistant.content[0].text.includes("Historical assistant"), false);
-  assert.equal(recovered.assistant.content[0].text.includes("tool_name: Bash"), false);
-  assert.equal(
-    recovered.assistant.content[0].text,
-    "**Edit / Write 正常。** 继续测试 **Bash、MemoryManager 和管道类工具**：",
-  );
-  assert.equal(recovered.assistant.content[1].id, "call_01_native_bash");
+  assert.equal(recovered, null);
 });
 
-test("seed tool call recovery strips DeepSeek orphan DSML close text after native calls", () => {
+test("seed tool call recovery preserves orphan DSML close text based only on DeepSeek metadata", () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
   const assistant = {
     role: "assistant",
@@ -2205,14 +2175,7 @@ test("seed tool call recovery strips DeepSeek orphan DSML close text after nativ
   };
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
-  assert.ok(recovered);
-  assert.equal(recovered.toolCalls.length, 0);
-  assert.deepEqual(
-    recovered.assistant.content.map((block) => block.type),
-    ["text", "toolCall"],
-  );
-  assert.equal(recovered.assistant.content[0].text.includes("DSML"), false);
-  assert.equal(recovered.assistant.content[1].id, "call_00_native_edit");
+  assert.equal(recovered, null);
 });
 
 test("seed tool call recovery preserves non-DeepSeek flattened tool text", () => {
@@ -2272,9 +2235,7 @@ After`,
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
   assert.equal(recovered, null);
   assert.equal(
-    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text, {
-      recoverFlattenedText: true,
-    }),
+    seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text),
     assistant.content[0].text,
   );
 });

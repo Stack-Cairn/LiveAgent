@@ -13,7 +13,7 @@ export { MODEL_CATALOG, MODEL_CATALOG_SNAPSHOT_DATE } from "./catalog.generated"
 export type { CatalogModelEntry, CatalogProviderId };
 
 // 与 settings 的 ProviderId 结构相同；本模块不 import settings（避免环）。
-export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai";
+export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai" | "deepseek";
 
 export type ModelLimits = { contextWindow: number; maxOutputToken: number };
 
@@ -23,6 +23,7 @@ export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, Cata
   codex: "openai",
   gemini: "google",
   xai: "xai",
+  deepseek: "deepseek",
 };
 
 /** 目录未命中时的供应商兜底限额（xai 与 codex 同为 OpenAI 兼容生态，共用兜底值）。 */
@@ -31,6 +32,7 @@ export const PROVIDER_FALLBACK_LIMITS: Record<CatalogAppProviderId, ModelLimits>
   codex: { contextWindow: 258_000, maxOutputToken: 142_000 },
   gemini: { contextWindow: 1_048_576, maxOutputToken: 65_536 },
   xai: { contextWindow: 258_000, maxOutputToken: 142_000 },
+  deepseek: { contextWindow: 128_000, maxOutputToken: 32_000 },
 };
 
 // 唯一的目录数据语义规则：社区目录对不公布独立输出上限的供应商一律记
@@ -67,6 +69,14 @@ export function normalizeModelIdCandidates(modelId: string): string[] {
   const withoutContextSuffix = withoutAtVersion.replace(/\[1m\]$/i, "");
   push(withoutContextSuffix);
   push(withoutContextSuffix.replace(/-20\d{6}$/, ""));
+  // 中转聚合商常在模型 id 前加自家路径前缀（bailian/deepseek-v4-pro、
+  // openrouter/xxx 等），目录里存的是裸 id。放链尾——所有精确形态、
+  // 全部分区都查空后才尝试剥前缀，避免裸段误撞目录里无关的同名模型。
+  const lastSegment = withoutContextSuffix.split("/").pop() ?? "";
+  if (lastSegment !== withoutContextSuffix) {
+    push(lastSegment);
+    push(lastSegment.replace(/-20\d{6}$/, ""));
+  }
   return candidates;
 }
 
@@ -107,7 +117,8 @@ export function findCatalogModel(
 // 真实限额被本供应商兜底值顶掉。国内厂商分区（deepseek/zhipuai/alibaba 等）
 // 没有对应的应用供应商类型，只经这里消费。目录 id 全局小写唯一（生成期跨
 // 分区去重+目录不变量测试锁死）；候选链放外层——更精确的 id 形态优先于
-// 供应商声明序。
+// 供应商声明序。已有正式应用供应商的模型也允许出现在通用中转端点中，因此仍可
+// 经这条协议无关的元数据回查路径命中。
 const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
 
 export function findCatalogModelAcrossProviders(
@@ -132,25 +143,6 @@ export function resolveModelLimitsAcrossProviders(
   return { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
 }
 
-// 跨供应商回查上线前，别家模型挂在本供应商下会以本供应商兜底值落库。存量
-// 恰为兜底对、且模型只在其他供应商目录命中时视为坏默认值替换为目录真实限额；
-// 两值有一处偏离兜底对即视为用户显式配置，原样保留。
-export function repairStaleCrossProviderLimits(
-  providerId: CatalogAppProviderId,
-  modelId: string,
-  limits: ModelLimits,
-): ModelLimits {
-  const fallback = PROVIDER_FALLBACK_LIMITS[providerId];
-  if (
-    limits.contextWindow !== fallback.contextWindow ||
-    limits.maxOutputToken !== fallback.maxOutputToken
-  ) {
-    return limits;
-  }
-  if (findCatalogModel(providerId, modelId)) return limits;
-  return resolveModelLimitsAcrossProviders(modelId) ?? limits;
-}
-
 export function resolveModelLimits(
   providerId: CatalogAppProviderId,
   modelId: string | undefined,
@@ -164,4 +156,35 @@ export function resolveModelLimits(
 export function getProviderFallbackLimits(providerId: CatalogAppProviderId): ModelLimits {
   const fallback = PROVIDER_FALLBACK_LIMITS[providerId];
   return { contextWindow: fallback.contextWindow, maxOutputToken: fallback.maxOutputToken };
+}
+
+// 供应商 /v1/models 接口自带的真实限额字段——比本地静态目录更新、更准（目录是
+// 构建期快照，供应商接口是该次部署的实时数据）。识别几种真实世界常见写法：
+// OpenRouter 风格顶层 context_length，以及嵌套在 top_provider 下的同名字段。
+// 只在这些字段解析为正整数时才采信，识别不出来的字段名回退到目录/兜底流程，
+// 与 normalizeGeminiFetchedModels 读 inputTokenLimit/outputTokenLimit 同一思路。
+export function extractProviderDeclaredLimits(
+  obj: Record<string, unknown>,
+): ModelLimits | undefined {
+  const asPositiveInt = (value: unknown): number | undefined => {
+    const numeric =
+      typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+    return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : undefined;
+  };
+  const topProvider =
+    obj.top_provider && typeof obj.top_provider === "object"
+      ? (obj.top_provider as Record<string, unknown>)
+      : undefined;
+
+  const contextWindow =
+    asPositiveInt(obj.context_length) ?? asPositiveInt(topProvider?.context_length);
+  if (!contextWindow) return undefined;
+
+  const maxOutputToken =
+    asPositiveInt(topProvider?.max_completion_tokens) ??
+    asPositiveInt(obj.max_completion_tokens) ??
+    // 部分中转商不单独公布输出上限，仅给窗口——按目录同一规则钳到保守预留值。
+    normalizeModelLimits({ contextWindow, maxOutputToken: contextWindow }).maxOutputToken;
+
+  return normalizeModelLimits({ contextWindow, maxOutputToken });
 }

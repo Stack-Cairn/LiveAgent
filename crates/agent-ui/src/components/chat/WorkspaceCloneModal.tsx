@@ -1,6 +1,15 @@
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
-import { FolderOpen, GitBranch, Loader2, X } from "@liveagent/ui/components/IconSet";
+import { FolderOpen, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -11,9 +20,7 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 type RemoteBranches = {
   defaultBranch: string;
@@ -58,7 +65,6 @@ export function WorkspaceCloneModal({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [cloning, setCloning] = useState(false);
-  const { modalState, requestClose } = useModalMotion(onClose);
 
   const [nameIsAutomatic, setNameIsAutomatic] = useState(true);
   const [branch, setBranch] = useState("");
@@ -75,17 +81,6 @@ export function WorkspaceCloneModal({
       !branchesLoading &&
       !cloning,
   );
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      // defaultPrevented: an open branch Select consumes Escape to close itself.
-      if (event.key !== "Escape" || event.defaultPrevented || cloning) return;
-      event.preventDefault();
-      requestClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cloning, requestClose]);
 
   async function chooseParent() {
     try {
@@ -144,7 +139,7 @@ export function WorkspaceCloneModal({
     setError("");
     try {
       await onClone(remoteUrl.trim(), parent.trim(), name.trim(), branch);
-      requestClose();
+      onClose();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -152,51 +147,41 @@ export function WorkspaceCloneModal({
     }
   }
 
-  const modal = createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="workspace-create-title"
+  const modal = (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !cloning) onClose();
+      }}
     >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default bg-black/25 backdrop-blur-md dark:bg-black/50"
-        onClick={requestClose}
-        aria-label={t("settings.cancel")}
-      />
-      <div className="settings-modal-panel relative z-10 w-full max-w-xl overflow-hidden rounded-[28px] border border-black/[0.07] bg-white/[0.93] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.08]">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-foreground/70 shadow-sm dark:border-white/10 dark:bg-white/[0.07] dark:text-foreground/80">
+      <DialogContent
+        className="flex max-h-[90dvh] max-w-xl flex-col p-0"
+        closeDisabled={cloning}
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6 py-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
             <GitBranch className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 id="workspace-create-title" className="text-base font-semibold">
+            <DialogTitle className="text-base leading-normal">
               {t("chat.workspaceCreate")}
-            </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs leading-relaxed">
               {t("chat.workspaceCreateDescription")}
-            </p>
+            </DialogDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={requestClose}
-            aria-label={t("settings.cancel")}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
-        <div className="space-y-5 px-6 py-5">
+        <DialogBody className="space-y-5 px-6 py-5">
           <Button
             type="button"
             variant="outline"
             className="h-auto w-full justify-start gap-3 rounded-2xl p-4 text-left"
             onClick={() => {
               onOpenFolder();
-              requestClose();
+              onClose();
             }}
           >
             <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -312,8 +297,8 @@ export function WorkspaceCloneModal({
               <p className="mt-3 text-xs text-muted-foreground">{cloneDisabledMessage}</p>
             ) : null}
             {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={requestClose} disabled={cloning}>
+            <DialogActions className="mt-4">
+              <Button variant="outline" onClick={onClose} disabled={cloning}>
                 {t("settings.cancel")}
               </Button>
               <Button onClick={() => void cloneRepository()} disabled={!canSubmit}>
@@ -324,12 +309,11 @@ export function WorkspaceCloneModal({
                 )}
                 {cloning ? t("chat.workspaceCloning") : t("chat.workspaceCloneSubmit")}
               </Button>
-            </div>
+            </DialogActions>
           </section>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 
   return (

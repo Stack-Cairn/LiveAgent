@@ -1,6 +1,7 @@
 import { Check } from "@liveagent/ui/components/IconSet";
 import { DropdownMenuItem, DropdownMenuLabel } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import type { AgentStatus } from "@/lib/gatewayTypes";
@@ -86,11 +87,12 @@ export function AgentSelector({
         <div className="px-2.5 pb-2.5 pt-1">
           <div className="flex min-w-0 items-center gap-2.5">
             <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
                 agent.online
                   ? "bg-emerald-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.12)]"
-                  : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]"
-              }`}
+                  : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]",
+              )}
               title={statusLabel}
             >
               <span className="sr-only">{statusLabel}</span>
@@ -104,11 +106,12 @@ export function AgentSelector({
               </span>
             </span>
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
                 agent.online
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-              }`}
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+              )}
             >
               {statusLabel}
             </span>
@@ -139,11 +142,12 @@ export function AgentSelector({
               onSelect={() => handleChange(agentID)}
             >
               <span
-                className={`h-2 w-2 shrink-0 rounded-full ${
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
                   agent.online
                     ? "bg-emerald-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.12)]"
-                    : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]"
-                }`}
+                    : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]",
+                )}
                 title={statusLabel}
               >
                 <span className="sr-only">{statusLabel}</span>

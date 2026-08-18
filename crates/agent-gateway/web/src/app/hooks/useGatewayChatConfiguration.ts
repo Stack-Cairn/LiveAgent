@@ -1,3 +1,4 @@
+import { t as translate } from "@liveagent/ui/i18n/index";
 import { useComposerSkillSelection } from "@liveagent/ui/lib/chat/useComposerActions";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import type { Dispatch, SetStateAction } from "react";
@@ -40,12 +41,12 @@ export function useGatewayChatConfiguration({
 }: UseGatewayChatConfigurationOptions) {
   const activeProviders = useMemo(() => settings.customProviders, [settings.customProviders]);
   const currentModelLabel = useMemo(() => {
-    if (!activeSelectedModel) return "选择模型";
+    if (!activeSelectedModel) return translate("chat.selectModel", settings.locale);
     const provider = activeProviders.find(
       (item) => item.id === activeSelectedModel.customProviderId,
     );
     return provider ? `${provider.name} / ${activeSelectedModel.model}` : activeSelectedModel.model;
-  }, [activeProviders, activeSelectedModel]);
+  }, [activeProviders, activeSelectedModel, settings.locale]);
   const currentModelContextWindow = useMemo(() => {
     if (!activeSelectedModel) return undefined;
     const provider = settings.customProviders.find(

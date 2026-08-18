@@ -1,4 +1,3 @@
-import { Meter } from "@base-ui/react";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
@@ -9,6 +8,7 @@ import {
 } from "../../lib/chat/contextUsage";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 import { LabelTooltip } from "../ui/label-tooltip";
+import { Meter } from "../ui/meter";
 
 const RING_STROKE_BY_LEVEL = {
   ok: "stroke-emerald-500 dark:stroke-emerald-400",
@@ -101,7 +101,7 @@ export function ContextUsageRing(props: {
   };
 
   const ring = (
-    <Meter.Root
+    <Meter
       value={clampedPercentage}
       aria-valuetext={usageLabel}
       className="relative flex h-8 w-8 items-center justify-center text-[8px] font-semibold leading-none tabular-nums text-foreground/75"
@@ -132,7 +132,7 @@ export function ContextUsageRing(props: {
         />
       </svg>
       <span className="relative">{displayedPercentage}%</span>
-    </Meter.Root>
+    </Meter>
   );
 
   // 触屏端一律禁用 closeOnClick：trigger 按压关闭发生在 pointerdown，早于

@@ -5,7 +5,6 @@ import {
   Globe,
   Plus,
   Terminal,
-  X,
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -15,13 +14,23 @@ import {
   type HookEvent,
   type HookType,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogSectionHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
-import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   createEmptyRequestDraft,
   type HttpRequestDraft,
@@ -57,8 +66,6 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
-
   const isEditing = Boolean(initialData);
 
   async function handleSave() {
@@ -94,7 +101,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
             ? parsedTimeoutSeconds * 1000
             : undefined,
       });
-      requestClose();
+      onClose();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -104,43 +111,34 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
   const scriptLineCount = scriptText.split(/\r?\n/).filter((line) => line.trim()).length;
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        closeDisabled={isSaving}
+        closeLabel={t("settings.cancel")}
+        showCloseButton
+      >
+        <DialogHeader className="flex-row items-center gap-3 px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Zap className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">
+            <DialogTitle>
               {isEditing ? t("settings.hooksEdit") : t("settings.hooksAdd")}
-            </h2>
-            <div className="mt-0.5 flex items-center gap-2">
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 flex items-center gap-2 text-xs">
               <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {event}
               </span>
               <span className="text-xs text-muted-foreground">
                 {t(HOOK_EVENT_TRANSLATION_KEYS[event])}
               </span>
-            </div>
+            </DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        <div className="settings-modal-body flex-1 overflow-y-auto">
+        <DialogBody className="p-0 max-[820px]:p-0">
           <div className="border-b border-border/30 px-6 py-5">
             <div className="mb-4 flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
@@ -201,26 +199,29 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("command");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "command"
                     ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "command"
                       ? "bg-blue-500/15 text-blue-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Terminal className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${
-                      type === "command" ? "text-blue-600 dark:text-blue-400" : "text-foreground"
-                    }`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "command" ? "text-blue-600 dark:text-blue-400" : "text-foreground",
+                    )}
                   >
                     {t("settings.hooksTypeCommand")}
                   </div>
@@ -241,26 +242,31 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("http");
                 }}
-                className={`group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                className={cn(
+                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
                   type === "http"
                     ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }`}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
+                )}
               >
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "http"
                       ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-muted/60 text-muted-foreground"
-                  }`}
+                      : "bg-muted/60 text-muted-foreground",
+                  )}
                 >
                   <Globe className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`text-sm font-semibold ${
-                      type === "http" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
-                    }`}
+                    className={cn(
+                      "text-sm font-semibold",
+                      type === "http"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
                   >
                     {t("settings.hooksTypeHttp")}
                   </div>
@@ -278,7 +284,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
           </div>
 
           <div className="px-6 py-5">
-            <div className="settings-modal-step-row mb-4 flex items-center justify-between">
+            <DialogSectionHeader>
               <div className="flex items-center gap-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
                   3
@@ -320,7 +326,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   </Button>
                 </div>
               )}
-            </div>
+            </DialogSectionHeader>
 
             {type === "command" ? (
               <div className="space-y-3">
@@ -378,9 +384,9 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               />
             )}
           </div>
-        </div>
+        </DialogBody>
 
-        <div className="settings-modal-footer flex items-center justify-between border-t border-border/40 px-6 py-4">
+        <DialogFooter className="px-6 min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
               <div className="flex items-center gap-1.5 text-xs text-destructive">
@@ -394,20 +400,16 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               </div>
             ) : null}
           </div>
-          <div className="settings-modal-actions flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+          <DialogActions>
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
               {t("settings.cancel")}
             </Button>
-            <Button
-              onClick={() => void handleSave()}
-              disabled={!name.trim() || isSaving || isClosing}
-            >
+            <Button onClick={() => void handleSave()} disabled={!name.trim() || isSaving}>
               {t("settings.save")}
             </Button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
+          </DialogActions>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

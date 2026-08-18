@@ -304,7 +304,10 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           ) : null}
 
           <div
-            className={`select-text transition-opacity duration-150 ${isTranscriptSettling ? "opacity-0" : "opacity-100"}`}
+            className={cn(
+              "select-text transition-opacity duration-150",
+              isTranscriptSettling ? "opacity-0" : "opacity-100",
+            )}
           >
             <RowInteractionProvider value={rowInteractionStore}>
               {/* Keyed remount per conversation: per-conversation state
@@ -375,7 +378,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
               ref={transcriptContextMenuRef}
               role="menu"
               className={cn(
-                "editor-context-menu fixed z-[120] w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
+                "editor-context-menu layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
                 isContextMenuExiting && "editor-context-menu-exit",
               )}
               style={{

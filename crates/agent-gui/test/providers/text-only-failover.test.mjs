@@ -268,3 +268,24 @@ test("text mode exposes the exact provider-boundary prompt before transport setu
   assert.equal(starts[0].context.systemPrompt, `BASE\n\n${starts[0].systemSuffix}`);
   assert.equal(streamCalls[0].context.systemPrompt, starts[0].context.systemPrompt);
 });
+
+test("DeepSeek title-style text requests preserve explicit thinking-off and workdir", async () => {
+  streamImpl = () => successStream("title");
+
+  await streamAssistantMessage(
+    baseParams({
+      providerId: "deepseek",
+      model: "deepseek-reasoner",
+      runtime: {
+        ...makeRuntime("https://api.deepseek.com/v1"),
+        reasoning: "off",
+      },
+      workdir: "/workspace",
+    }),
+  );
+
+  assert.equal(streamCalls.length, 1);
+  assert.equal(streamCalls[0].options.reasoning, undefined);
+  assert.equal(streamCalls[0].options.deepSeekThinking, "disabled");
+  assert.equal(streamCalls[0].options.workdir, "/workspace");
+});

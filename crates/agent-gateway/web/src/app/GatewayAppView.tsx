@@ -1,4 +1,5 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
+import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import {
@@ -20,8 +21,15 @@ import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryVi
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
+import {
+  type CheckpointRewindClient,
+  CheckpointRewindProvider,
+  type CheckpointRewoundInfo,
+  formatCheckpointRewoundNotification,
+} from "@liveagent/ui/lib/chat/checkpointRewind";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
@@ -30,8 +38,7 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import type { CSSProperties } from "react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { type CSSProperties, useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
@@ -51,10 +58,12 @@ import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
+import { useWindowFileDropGuard } from "./hooks/useWindowFileDropGuard";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
 import { UserMenu } from "./UserMenu";
 
 export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }) {
+  useWindowFileDropGuard();
   const {
     activeFloorKey,
     activeView,
@@ -302,6 +311,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceFilePreviewMounted,
     workspaceFilePreviewOpen,
     workspaceFilePreviewOpenRequest,
+    workspaceFolderDropActive,
+    workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
     workspaceSshTerminalMounted,
@@ -323,6 +334,53 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   );
   const trajectoryAuthoritativeRevision = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryAuthoritativeRevision(displayedConversationId),
+  );
+  const handleSelectExecutionMode = useCallback(
+    (mode: "text" | "tools") =>
+      setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
+    [setSettings],
+  );
+  const resolveCheckpointAuthorizedRoots = useCallback(async () => {
+    const roots: string[] = [];
+    const push = (value?: string | null) => {
+      const normalized = value?.trim();
+      if (normalized && !roots.includes(normalized)) roots.push(normalized);
+    };
+    push(displayedConversationWorkdir);
+    if (
+      activeWorkspaceProject &&
+      activeWorkspaceProjectPath &&
+      activeWorkspaceProjectPath === displayedConversationWorkdir
+    ) {
+      try {
+        const grants = await api.listWorkspaceRootGrants(
+          activeWorkspaceProject.id,
+          activeWorkspaceProject.path,
+        );
+        for (const grant of grants) {
+          if (grant.state === "active" && grant.access === "write") push(grant.canonicalPath);
+        }
+      } catch {
+        // Keep the primary root when additional grant lookup fails.
+      }
+    }
+    return roots;
+  }, [activeWorkspaceProject, activeWorkspaceProjectPath, api, displayedConversationWorkdir]);
+  const checkpointClient = useMemo<CheckpointRewindClient>(
+    () => ({
+      list: (conversationId) => api.listCheckpointTurns(conversationId),
+      preview: (params) => api.previewCheckpointRewind(params),
+      rewind: (params) => api.rewindCheckpoint(params),
+    }),
+    [api],
+  );
+
+  const handleCheckpointRewound = useCallback(
+    (info: CheckpointRewoundInfo) => {
+      const notice = formatCheckpointRewoundNotification(info, settings.locale === "zh-CN");
+      addNotify(notice.level, notice.message);
+    },
+    [addNotify, settings.locale],
   );
   return (
     <LocaleContext.Provider value={localeContextValue}>
@@ -355,6 +413,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               activeProjectId={activeWorkspaceProject?.id}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+              workspaceFolderDropActive={workspaceFolderDropActive}
+              workspaceFolderDropHandlers={workspaceFolderDropHandlers}
               recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
               canShareConversations={canShareHistory}
               sharedConversationCount={sharedHistoryItems.length}
@@ -450,6 +510,47 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
             <main className="gateway-main-shell">
               <div className="gateway-main-backdrop" />
+              <AppWorkbenchChrome
+                settings={settings}
+                sidebarOpen={sidebarOpen}
+                onOpenSettings={openSettings}
+                onToggleTheme={() =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    theme: getNextTheme(prev.theme),
+                  }))
+                }
+                onOpenSidebar={() => setSidebarOpen(true)}
+                trailingActions={
+                  <>
+                    <ProjectToolsPanelToggle
+                      isOpen={rightDockOpen}
+                      sessionCount={projectTerminalSessions.length}
+                      disabledMessage={projectToolsDisabledMessage}
+                      className="gateway-project-tools-panel-toggle"
+                      onToggle={() => setRightDockOpen((open) => !open)}
+                    />
+                    <UserMenu
+                      open={userMenuOpen}
+                      onOpenChange={setUserMenuOpen}
+                      userMenuLabel={userMenuLabel}
+                      userAvatarLabel={userAvatarLabel}
+                      agentStatus={
+                        status === null ? "unknown" : status.online ? "online" : "offline"
+                      }
+                      agentSelector={
+                        <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
+                      }
+                      onLogout={handleLogout}
+                    />
+                  </>
+                }
+                overlay={
+                  <div className="relative z-50">
+                    <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+                  </div>
+                }
+              />
               <ApplicationView
                 activeView={activeView}
                 settings={settings}
@@ -471,52 +572,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragLeave: handleFileDragLeave,
                     onDrop: handleFileDrop,
                   },
-                  onSelectExecutionMode: (mode) =>
-                    setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
-                  hasModels: modelOptions.length > 0,
-                  currentModelLabel,
-                  modelOptions,
-                  selectedValue,
-                  sidebarOpen,
-                  onSelectModel: handleSelectModel,
-                  onOpenSettings: openSettings,
-                  onToggleTheme: () =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      theme: getNextTheme(prev.theme),
-                    })),
-                  onOpenSidebar: () => setSidebarOpen(true),
-                  trailingActions: (
-                    <>
-                      <ProjectToolsPanelToggle
-                        isOpen={rightDockOpen}
-                        sessionCount={projectTerminalSessions.length}
-                        disabledMessage={projectToolsDisabledMessage}
-                        className="gateway-project-tools-panel-toggle"
-                        onToggle={() => setRightDockOpen((open) => !open)}
-                      />
-                      <UserMenu
-                        open={userMenuOpen}
-                        onOpenChange={setUserMenuOpen}
-                        userMenuLabel={userMenuLabel}
-                        userAvatarLabel={userAvatarLabel}
-                        agentStatus={
-                          status === null ? "unknown" : status.online ? "online" : "offline"
-                        }
-                        agentSelector={
-                          <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
-                        }
-                        onLogout={handleLogout}
-                      />
-                    </>
-                  ),
-                  headerOverlay: (
-                    // Zero-height anchor: NotifyToast positions itself below
-                    // the header's bottom edge, mirroring the GUI placement.
-                    <div className="relative z-50">
-                      <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-                    </div>
-                  ),
                   content: (
                     <>
                       {statusError ? (
@@ -572,42 +627,50 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               className="gateway-transcript-scroll"
                             >
                               <ChangedFilesActionsProvider value={changedFilesActions}>
-                                <GatewayTranscript
+                                <CheckpointRewindProvider
+                                  client={checkpointClient}
                                   conversationId={displayedConversationId}
-                                  rows={transcriptRows}
-                                  liveStartIndex={transcriptLiveStartIndex}
-                                  activeTurnKey={displayedTranscript.activeTurnKey}
-                                  contentWidth={settings.customSettings.chatTranscript.width}
-                                  isViewportFollowing={transcriptFollow.isFollowing}
-                                  viewportFollowing={transcriptFollowing}
-                                  navRef={transcriptNavRef}
-                                  onAnchorUserRowChange={setActiveFloorKey}
-                                  error={transcriptError}
-                                  toolStatus={transcriptToolStatus}
-                                  toolStatusIsCompaction={transcriptToolStatusIsCompaction}
-                                  retryAttempts={displayedTranscript.retryAttempts}
-                                  isStreaming={transcriptBusy}
-                                  isLoading={transcriptHistoryLoading}
-                                  loadingTitle={historyDetailLoadingTitle}
-                                  hasModels={modelOptions.length > 0}
-                                  onOpenSettings={openSettings}
-                                  hasMoreHistory={selectedHistoryHasMore}
-                                  isLoadingMoreHistory={loadingOlderHistory}
-                                  onLoadEarlierHistory={
-                                    selectedHistoryHasMore ? handleLoadEarlierHistory : undefined
-                                  }
-                                  showUsage={isAgentDevExecutionMode}
-                                  usageContextWindow={currentModelContextWindow}
-                                  workspaceRoot={displayedConversationWorkdir}
-                                  onOpenFileLink={handleOpenChatFileLink}
-                                  gitClient={gitClient}
-                                  onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
-                                  onResendFromEdit={handleResendFromEdit}
-                                  onBranchConversation={handleBranchConversation}
-                                  branchPendingMessageId={branchPendingMessageId}
-                                  onSuggestionSelect={handleEmptyStateSuggestion}
-                                  suggestionsDisabled={isSuggestionTyping}
-                                />
+                                  disabled={!displayedConversationId || transcriptBusy}
+                                  resolveAuthorizedRoots={resolveCheckpointAuthorizedRoots}
+                                  onRewound={handleCheckpointRewound}
+                                >
+                                  <GatewayTranscript
+                                    conversationId={displayedConversationId}
+                                    rows={transcriptRows}
+                                    liveStartIndex={transcriptLiveStartIndex}
+                                    activeTurnKey={displayedTranscript.activeTurnKey}
+                                    contentWidth={settings.customSettings.chatTranscript.width}
+                                    isViewportFollowing={transcriptFollow.isFollowing}
+                                    viewportFollowing={transcriptFollowing}
+                                    navRef={transcriptNavRef}
+                                    onAnchorUserRowChange={setActiveFloorKey}
+                                    error={transcriptError}
+                                    toolStatus={transcriptToolStatus}
+                                    toolStatusIsCompaction={transcriptToolStatusIsCompaction}
+                                    retryAttempts={displayedTranscript.retryAttempts}
+                                    isStreaming={transcriptBusy}
+                                    isLoading={transcriptHistoryLoading}
+                                    loadingTitle={historyDetailLoadingTitle}
+                                    hasModels={modelOptions.length > 0}
+                                    onOpenSettings={openSettings}
+                                    hasMoreHistory={selectedHistoryHasMore}
+                                    isLoadingMoreHistory={loadingOlderHistory}
+                                    onLoadEarlierHistory={
+                                      selectedHistoryHasMore ? handleLoadEarlierHistory : undefined
+                                    }
+                                    showUsage={isAgentDevExecutionMode}
+                                    usageContextWindow={currentModelContextWindow}
+                                    workspaceRoot={displayedConversationWorkdir}
+                                    onOpenFileLink={handleOpenChatFileLink}
+                                    gitClient={gitClient}
+                                    onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
+                                    onResendFromEdit={handleResendFromEdit}
+                                    onBranchConversation={handleBranchConversation}
+                                    branchPendingMessageId={branchPendingMessageId}
+                                    onSuggestionSelect={handleEmptyStateSuggestion}
+                                    suggestionsDisabled={isSuggestionTyping}
+                                  />
+                                </CheckpointRewindProvider>
                               </ChangedFilesActionsProvider>
                             </ScrollArea>
                             <TranscriptWidthControls
@@ -663,7 +726,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
-                          isAgentMode={isAgentMode}
+                          executionMode={settings.system.executionMode}
+                          hasModels={modelOptions.length > 0}
+                          currentModelLabel={currentModelLabel}
+                          modelOptions={modelOptions}
+                          selectedValue={selectedValue}
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
@@ -677,6 +744,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           gitWriteEnabled={settings.remote.enableWebGit}
                           gitDisabledMessage={gitDisabledMessage}
                           workspaceActivityClient={workspaceActivityClient}
+                          onSelectModel={handleSelectModel}
+                          onSelectExecutionMode={handleSelectExecutionMode}
+                          onOpenSettings={openSettings}
                           onSend={() => {
                             if (
                               submitInFlightRef.current ||
@@ -806,15 +876,18 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             />
                           }
                           approvalBar={approvalBar}
+                          fileDropOverlay={
+                            isFileDropActive ? (
+                              <FileDropOverlay
+                                variant="composer"
+                                canDropUpload={canDropUpload}
+                                title={fileDropTitle}
+                                description={fileDropDescription}
+                                limitHint={fileDropLimitHint}
+                              />
+                            ) : null
+                          }
                         />
-                        {isFileDropActive ? (
-                          <FileDropOverlay
-                            canDropUpload={canDropUpload}
-                            title={fileDropTitle}
-                            description={fileDropDescription}
-                            limitHint={fileDropLimitHint}
-                          />
-                        ) : null}
                       </section>
                     </>
                   ),
@@ -926,9 +999,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
           {settingsOpen ? (
             <div
-              className={`gateway-settings-overlay ${
-                overlay === "open" ? "gateway-settings-overlay-open" : ""
-              }`}
+              className={cn(
+                "gateway-settings-overlay",
+                overlay === "open" ? "gateway-settings-overlay-open" : "",
+              )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >
               <SettingsPage

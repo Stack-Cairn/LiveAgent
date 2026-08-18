@@ -2,6 +2,7 @@ import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard
 import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
@@ -41,7 +42,7 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
   );
 
   return (
-    <div className={`group/assistant w-full max-w-full${compacted ? " opacity-70" : ""}`}>
+    <div className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}>
       {changedFiles ? (
         <div className="flex w-full max-w-full items-start gap-3">
           {showAvatar ? (
@@ -49,7 +50,7 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
           ) : (
             <div aria-hidden="true" className="h-7 w-7 shrink-0" />
           )}
-          <div className={`min-w-0 flex-1 ${showAvatar ? "pt-0.5" : ""}`}>
+          <div className={cn("min-w-0 flex-1", showAvatar ? "pt-0.5" : "")}>
             <ChangedFilesCard summary={changedFiles} />
           </div>
         </div>
@@ -86,7 +87,7 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
     onResendFromEdit,
     onBranchConversation,
   } = props;
-  const compactedClass = row.compacted ? " opacity-70" : "";
+  const compactedClass = row.compacted ? "opacity-70" : "";
 
   if (row.unit.kind === "footer") {
     return (
@@ -101,7 +102,7 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
   }
 
   return (
-    <div className={`group/assistant w-full max-w-full${compactedClass}`}>
+    <div className={cn("group/assistant w-full max-w-full", compactedClass)}>
       <AssistantBubbleUnit
         row={row}
         showUsage={showUsage}

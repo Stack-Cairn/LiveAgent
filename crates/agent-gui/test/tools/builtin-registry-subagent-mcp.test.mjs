@@ -156,6 +156,16 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   // Sanity: the base surface is otherwise intact.
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("mcp_docs_search"));
+  // 内置工具不再声明 JSON-schema 约束采样(部分 provider 在 strict 模式下
+  // 按白名单校验 schema 关键字,minimum/maxItems 等会 400 整轮请求)。
+  assert.equal(
+    registry.tools.find((tool) => tool.name === "Read").constrainedSampling,
+    undefined,
+  );
+  assert.equal(
+    registry.tools.find((tool) => tool.name === "mcp_docs_search").constrainedSampling,
+    undefined,
+  );
 });
 
 test("registry with a subagent runtime exposes Agent and the parent SendMessage", async () => {
@@ -168,6 +178,10 @@ test("registry with a subagent runtime exposes Agent and the parent SendMessage"
   assert.equal(registry.metadataByName.get("Agent").isReadOnly, false);
   assert.equal(registry.metadataByName.get("SendMessage").isReadOnly, true);
   assert.ok(registry.hasTool("agent"));
+  assert.equal(
+    registry.tools.find((tool) => tool.name === "Agent").constrainedSampling,
+    undefined,
+  );
 });
 
 test("Agent tool description embeds the hydrated roster and enabled templates", async () => {

@@ -828,7 +828,82 @@ fn cron_apply_defaults_and_validates_timeout_seconds() {
 }
 
 #[test]
-fn queue_prompt_run_lease_uses_task_timeout() {
+fn cron_timeout_upper_bound_is_per_kind() {
+    // Prompt tasks accept values beyond the bash/http cap, up to one hour.
+    let (store, task) = store_with_task(create_prompt_task_op("p1"));
+    let revision = store.snapshot().expect("snapshot").cron.revision;
+    let response = store
+        .cron_apply(apply_input(
+            revision,
+            vec![AutomationOp::Update {
+                id: task.id.clone(),
+                patch: json!({ "timeoutSeconds": 601 }),
+            }],
+        ))
+        .expect("prompt accepts 601");
+    assert_eq!(response.status, ApplyStatus::Ok);
+    let response = store
+        .cron_apply(apply_input(
+            response.cron.revision,
+            vec![AutomationOp::Update {
+                id: task.id.clone(),
+                patch: json!({ "timeoutSeconds": 3600 }),
+            }],
+        ))
+        .expect("prompt accepts 3600");
+    assert_eq!(response.status, ApplyStatus::Ok);
+    assert_eq!(response.cron.tasks[0].timeout_seconds, 3600);
+
+    // Beyond the prompt cap is still rejected.
+    let revision = response.cron.revision;
+    for bad in [json!(3601), json!(0)] {
+        let error = store
+            .cron_apply(apply_input(
+                revision,
+                vec![AutomationOp::Update {
+                    id: task.id.clone(),
+                    patch: json!({ "timeoutSeconds": bad }),
+                }],
+            ))
+            .expect_err("reject out-of-range prompt timeout");
+        assert!(error.contains("timeoutSeconds"), "error: {error}");
+    }
+
+    // Switching a long-timeout prompt task to bash re-validates against the
+    // bash cap and rejects instead of clamping.
+    let error = store
+        .cron_apply(apply_input(
+            revision,
+            vec![AutomationOp::Update {
+                id: task.id.clone(),
+                patch: json!({ "type": "bash", "script": "echo hi" }),
+            }],
+        ))
+        .expect_err("reject kind switch with oversized timeout");
+    assert!(error.contains("timeoutSeconds"), "error: {error}");
+
+    // bash/http creations stay capped at 600.
+    let revision = store.snapshot().expect("snapshot").cron.revision;
+    let error = store
+        .cron_apply(apply_input(
+            revision,
+            vec![AutomationOp::Create {
+                item: json!({
+                    "id": "b1",
+                    "name": "Bash",
+                    "cron": "0 * * * * *",
+                    "type": "bash",
+                    "script": "echo hello",
+                    "timeoutSeconds": 601,
+                }),
+            }],
+        ))
+        .expect_err("bash rejects 601");
+    assert!(error.contains("timeoutSeconds"), "error: {error}");
+}
+
+#[test]
+fn prompt_lease_starts_at_claim_not_enqueue() {
     let (store, task) = store_with_task(create_prompt_task_op("p1"));
     let revision = store.snapshot().expect("snapshot").cron.revision;
     let response = store
@@ -842,13 +917,118 @@ fn queue_prompt_run_lease_uses_task_timeout() {
         .expect("apply timeout update");
     let task = response.cron.tasks[0].clone();
 
+    let before_queue = db::now_ms();
     assert!(matches!(
         store
             .queue_prompt_run(&task, "", true)
             .expect("queue prompt run"),
         super::store::PromptQueueOutcome::Queued
     ));
+
+    // While pending, the row carries the fixed claim window, not the task
+    // timeout.
     let claims = store.claim_prompt_runs().expect("claim");
     assert_eq!(claims.len(), 1);
-    assert_eq!(claims[0].lease_expires_at - claims[0].started_at, 30_000);
+    let claim = &claims[0];
+    assert_eq!(claim.timeout_seconds, 30);
+    let pending_deadline = claim.started_at + super::store::PROMPT_PENDING_CLAIM_WINDOW_MS;
+    assert!(
+        claim.lease_expires_at < pending_deadline,
+        "claim re-stamps the lease from the timeout, not the pending window"
+    );
+
+    // The execution lease is stamped at claim time from the timeout snapshot.
+    let after_claim = db::now_ms();
+    assert!(claim.lease_expires_at >= before_queue + 30_000);
+    assert!(claim.lease_expires_at <= after_claim + 30_000);
+
+    // Column and returned request agree.
+    let column = store
+        .debug_run_lease(&claim.execution_id)
+        .expect("read lease column");
+    assert_eq!(column, Some(claim.lease_expires_at));
+}
+
+#[test]
+fn released_prompt_run_gets_fresh_claim_window() {
+    let (store, task) = store_with_task(create_prompt_task_op("p1"));
+    store.queue_prompt_run(&task, "", true).expect("queue");
+    let claims = store.claim_prompt_runs().expect("claim");
+    let execution_id = claims[0].execution_id.clone();
+    let execution_lease = claims[0].lease_expires_at;
+
+    store.release_prompt_run(&execution_id).expect("release");
+    let released_lease = store
+        .debug_run_lease(&execution_id)
+        .expect("read lease after release")
+        .expect("lease present");
+    // Back to a pending claim window (longer than the 300s execution lease).
+    assert!(released_lease > execution_lease);
+
+    // Re-claiming re-stamps the execution lease again.
+    let reclaimed = store.claim_prompt_runs().expect("reclaim");
+    assert_eq!(reclaimed.len(), 1);
+    assert_eq!(reclaimed[0].execution_id, execution_id);
+    assert!(reclaimed[0].lease_expires_at < released_lease);
+}
+
+#[test]
+fn sweep_distinguishes_unclaimed_from_execution_timeout() {
+    // An overdue pending run expires with the "never claimed" message.
+    let (store, task) = store_with_task(create_prompt_task_op("p1"));
+    store.queue_prompt_run(&task, "", false).expect("queue");
+    let pending_id = {
+        let claims_probe = store.list_runs("p1", 10).expect("list runs");
+        claims_probe[0].id.clone()
+    };
+    store
+        .debug_set_run_lease(&pending_id, db::now_ms() - 1_000)
+        .expect("force pending expiry");
+    let events = store.sweep_expired_prompt_runs().expect("sweep pending");
+    assert_eq!(events.len(), 1);
+    let runs = store.list_runs("p1", 10).expect("list runs");
+    assert!(matches!(runs[0].state, RunState::Expired));
+    assert!(
+        runs[0].output.contains("before any runner claimed"),
+        "output: {}",
+        runs[0].output
+    );
+
+    // An overdue leased run expires with the execution-timeout message.
+    store.queue_prompt_run(&task, "", false).expect("requeue");
+    let claims = store.claim_prompt_runs().expect("claim");
+    assert_eq!(claims.len(), 1);
+    store
+        .debug_set_run_lease(&claims[0].execution_id, db::now_ms() - 1_000)
+        .expect("force leased expiry");
+    let events = store.sweep_expired_prompt_runs().expect("sweep leased");
+    assert_eq!(events.len(), 1);
+    let runs = store.list_runs("p1", 10).expect("list runs");
+    let leased_run = runs
+        .iter()
+        .find(|run| run.id == claims[0].execution_id)
+        .expect("find leased run");
+    assert!(
+        leased_run.output.contains("timed out before the front-end"),
+        "output: {}",
+        leased_run.output
+    );
+}
+
+#[test]
+fn prompt_run_request_missing_timeout_defaults() {
+    // Rows serialized before the timeout snapshot existed resolve to the
+    // default instead of failing to parse.
+    let request: PromptRunRequest = serde_json::from_value(json!({
+        "executionId": "e1",
+        "taskId": "t1",
+        "taskName": "Old row",
+        "prompt": "hi",
+        "providerId": "provider-a",
+        "model": "gpt-5",
+        "startedAt": 1,
+        "leaseExpiresAt": 2,
+    }))
+    .expect("parse legacy request json");
+    assert_eq!(request.timeout_seconds, DEFAULT_CRON_TIMEOUT_SECONDS);
 }
