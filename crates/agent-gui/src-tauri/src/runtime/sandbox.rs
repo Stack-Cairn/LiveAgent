@@ -8,19 +8,23 @@
 //! 整体关断。fail-closed:沙箱被请求而平台机制不可用时直接报错,绝不静默降级为
 //! 无沙箱执行。
 //!
-//! Windows 平台限制(免管理员方案的固有边界,见 memory windows-sandbox-facts):
-//! WRITE_RESTRICTED 只围栏“写”,读无法在无管理员下掩蔽敏感目录;断网只能靠
-//! AppContainer 而它会连带默认拒读、破坏工具链。故 Windows 上 sandbox 仅提供写
-//! 围栏,sandboxOffline(断网)不可用 —— `network_control=false`,前端据此禁用,
-//! `wrap_command` 对 `!allow_network` 直接 fail-closed 报错。
+//! Windows 双后端(均免管理员/免 UAC,见 memory windows-sandbox-facts):
+//! - sandbox(联网):受限令牌(WRITE_RESTRICTED)只围栏“写”,读广泛放行保工具链
+//!   可用;读掩蔽在此模式下不可得(免管理员边界)。
+//! - sandboxOffline(断网):AppContainer(零 capability)。WFP 对无网络 capability
+//!   的 AppContainer 默认拒绝全部网络含 loopback ⇒ 内核级强制断网,无需提权(对比
+//!   Codex:unelevated 仅 env 级软断网,强制断网须提权建专用账号+防火墙)。AC 默认
+//!   拒绝未授权读,系统目录靠自带的 ALL APPLICATION PACKAGES ACE 可读,用户主目录
+//!   默认不可读 ⇒ 断网变体顺带获得敏感目录读掩蔽;读收紧对 offline 场景可接受。
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// 自我再执行启动器子命令标记:Windows `wrap_command` 把 (program, args) 包成
-/// `current_exe __sandbox_exec --write-root <root> -- <program> <args...>`;
+/// `current_exe __sandbox_exec --write-root <root> --net on|off [--isolated] -- <program> <args...>`;
 /// 进程启动最早期 `windows_sandbox::run_sandbox_launcher_if_requested` 识别它,
-/// 建受限令牌后 `CreateProcessAsUserW` 真实命令。非 Windows 平台不产生该标记。
+/// 按 --net 建受限令牌(联网)或 AppContainer(断网)后执行真实命令。
+/// 非 Windows 平台不产生该标记。
 pub(crate) const SANDBOX_EXEC_SUBCOMMAND: &str = "__sandbox_exec";
 
 /// 启动器解析后的调用信息(纯逻辑,跨平台可测)。
@@ -28,30 +32,51 @@ pub(crate) const SANDBOX_EXEC_SUBCOMMAND: &str = "__sandbox_exec";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LauncherInvocation {
     pub write_root: PathBuf,
+    /// 网络放行与否决定后端:true → 受限令牌(联网),false → AppContainer(断网)。
+    pub allow_network: bool,
+    /// isolated 常驻进程须在启动器死亡后继续存活 ⇒ 启动器不得给子进程挂
+    /// KILL_ON_JOB_CLOSE 的 Job Object(对齐 Linux bwrap 省略 --die-with-parent)。
+    pub isolated: bool,
     pub program: PathBuf,
     pub args: Vec<String>,
 }
 
 /// 构造传给自我再执行启动器的参数向量(含子命令标记,作为 argv[1])。
-/// 形如 `[__sandbox_exec, --write-root, <root>, --, <program>, <args...>]`。
+/// 形如 `[__sandbox_exec, --write-root, <root>, --net, on|off, [--isolated,] --, <program>, <args...>]`。
 #[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn build_launcher_args(write_root: &Path, program: &Path, args: &[String]) -> Vec<String> {
+pub(crate) fn build_launcher_args(
+    write_root: &Path,
+    allow_network: bool,
+    isolated: bool,
+    program: &Path,
+    args: &[String],
+) -> Vec<String> {
     let mut out = vec![
         SANDBOX_EXEC_SUBCOMMAND.to_string(),
         "--write-root".to_string(),
         write_root.to_string_lossy().into_owned(),
-        "--".to_string(),
-        program.to_string_lossy().into_owned(),
+        "--net".to_string(),
+        if allow_network { "on" } else { "off" }.to_string(),
     ];
+    if isolated {
+        out.push("--isolated".to_string());
+    }
+    out.push("--".to_string());
+    out.push(program.to_string_lossy().into_owned());
     out.extend(args.iter().cloned());
     out
 }
 
-/// 解析启动器 payload(子命令标记之后的部分):`--write-root <root> -- <program> [args...]`。
+/// 解析启动器 payload(子命令标记之后的部分):
+/// `--write-root <root> --net on|off [--isolated] -- <program> [args...]`。
+/// `--net` 为必填:构造与解析同版本(同一 exe 自我再执行),不存在旧格式兼容问题;
+/// 缺失即拒绝,绝不隐式默认成某个后端。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn parse_launcher_args(payload: &[String]) -> Result<LauncherInvocation, String> {
     let mut it = payload.iter();
     let mut write_root: Option<PathBuf> = None;
+    let mut allow_network: Option<bool> = None;
+    let mut isolated = false;
     let mut program: Option<PathBuf> = None;
     let mut rest: Vec<String> = Vec::new();
     while let Some(tok) = it.next() {
@@ -62,6 +87,15 @@ pub(crate) fn parse_launcher_args(payload: &[String]) -> Result<LauncherInvocati
                     .ok_or_else(|| "--write-root requires a value".to_string())?;
                 write_root = Some(PathBuf::from(value));
             }
+            "--net" => {
+                let value = it.next().ok_or_else(|| "--net requires a value".to_string())?;
+                allow_network = Some(match value.as_str() {
+                    "on" => true,
+                    "off" => false,
+                    other => return Err(format!("--net expects on|off, got: {other}")),
+                });
+            }
+            "--isolated" => isolated = true,
             "--" => {
                 program = it.next().map(PathBuf::from);
                 rest = it.cloned().collect();
@@ -71,9 +105,12 @@ pub(crate) fn parse_launcher_args(payload: &[String]) -> Result<LauncherInvocati
         }
     }
     let write_root = write_root.ok_or_else(|| "missing --write-root".to_string())?;
+    let allow_network = allow_network.ok_or_else(|| "missing --net on|off".to_string())?;
     let program = program.ok_or_else(|| "missing program after `--`".to_string())?;
     Ok(LauncherInvocation {
         write_root,
+        allow_network,
+        isolated,
         program,
         args: rest,
     })
@@ -220,9 +257,10 @@ pub(crate) struct SandboxSpec {
     pub write_root: PathBuf,
     pub allow_network: bool,
     /// isolated 常驻进程须在 LiveAgent 退出后继续存活(managed_process 的 isolated
-    /// 语义),因此 Linux bwrap 不能加 `--die-with-parent`。仅 bubblewrap 后端消费;
-    /// macOS/Windows 无父进程死亡耦合,不读取本字段。
-    #[cfg_attr(any(target_os = "macos", windows), allow(dead_code))]
+    /// 语义)。Linux bwrap 据此省略 `--die-with-parent`;Windows 启动器据此省略
+    /// KILL_ON_JOB_CLOSE 的 Job Object(经 `--isolated` 穿透自我再执行边界)。
+    /// macOS Seatbelt 无父进程死亡耦合,不读取本字段。
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub isolated: bool,
 }
 
@@ -244,8 +282,8 @@ pub struct SandboxCapability {
     pub mechanism: &'static str,
     pub platform: &'static str,
     /// 是否支持断网变体(sandboxOffline)。macOS/Linux 在 `supported` 时为 true;
-    /// Windows 免管理员方案无法可靠断网,恒为 false —— 前端据此仅禁用 sandboxOffline,
-    /// 保留 sandbox。`supported=false` 时该字段无意义(整体不可用)。
+    /// Windows 亦为 true(AppContainer 后端,内核级断网)。`supported=false` 时该
+    /// 字段无意义(整体不可用)。
     pub network_control: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -567,13 +605,14 @@ mod platform {
     use super::*;
 
     pub(super) fn capability() -> SandboxCapability {
-        // 免管理员写围栏(CreateRestrictedToken WRITE_RESTRICTED + 工作区继承写 ACE)
-        // 无需任何依赖或提权,恒可用。断网(sandboxOffline)不可用:见模块注释。
+        // 双后端均免依赖/免提权,恒可用:sandbox → 受限令牌写围栏;sandboxOffline →
+        // AppContainer(零 capability,WFP 默认拒网 ⇒ 内核级断网 + 默认拒读掩蔽)。
+        // mechanism 报联网后端名;断网命令实际生效的机制经 wrap_command 返回值上报。
         SandboxCapability {
             supported: true,
             mechanism: "restricted-token",
             platform: "windows",
-            network_control: false,
+            network_control: true,
             reason: None,
         }
     }
@@ -583,22 +622,24 @@ mod platform {
         program: &Path,
         args: &[String],
     ) -> Result<(PathBuf, Vec<String>, &'static str), String> {
-        // fail-closed:免管理员方案无法断网,sandboxOffline 在 Windows 上直接报错,
-        // 绝不静默当作联网沙箱执行。capability.network_control=false 已让前端禁用该项,
-        // 这里是执行层的兜底(设置可能同步自 macOS)。
-        if !spec.allow_network {
-            return Err(
-                "Offline sandbox (no network) is not available on Windows without elevation. \
-Use the plain Sandbox mode, or run on macOS/Linux for the offline variant."
-                    .to_string(),
-            );
-        }
         // 自我再执行:把真实命令包进 current_exe 的 __sandbox_exec 启动器。启动器在
-        // 进程最早期建受限令牌并 CreateProcessAsUserW 真实命令(见 windows_sandbox)。
+        // 进程最早期按 --net 选后端:on → 受限令牌(CreateProcessAsUserW),off →
+        // AppContainer(CreateProcessW + SECURITY_CAPABILITIES);见 windows_sandbox。
         let current_exe = std::env::current_exe()
             .map_err(|err| format!("failed to resolve current executable for sandbox: {err}"))?;
-        let launcher_args = build_launcher_args(&spec.write_root, program, args);
-        Ok((current_exe, launcher_args, "restricted-token"))
+        let launcher_args = build_launcher_args(
+            &spec.write_root,
+            spec.allow_network,
+            spec.isolated,
+            program,
+            args,
+        );
+        let mechanism = if spec.allow_network {
+            "restricted-token"
+        } else {
+            "appcontainer"
+        };
+        Ok((current_exe, launcher_args, mechanism))
     }
 }
 
@@ -723,13 +764,20 @@ mod tests {
     fn launcher_args_roundtrip() {
         let program = PathBuf::from(r"C:\Program Files\Git\bin\bash.exe");
         let args = vec!["-lc".to_string(), "echo \"hi there\" && ls".to_string()];
-        let built = build_launcher_args(Path::new(r"C:\ws\proj"), &program, &args);
-        assert_eq!(built[0], SANDBOX_EXEC_SUBCOMMAND);
-        // payload = built[1..](去掉 argv[1] 子命令标记),即启动器实际解析的部分。
-        let parsed = parse_launcher_args(&built[1..]).expect("parse");
-        assert_eq!(parsed.write_root, PathBuf::from(r"C:\ws\proj"));
-        assert_eq!(parsed.program, program);
-        assert_eq!(parsed.args, args);
+        for (allow_network, isolated) in
+            [(true, false), (false, false), (true, true), (false, true)]
+        {
+            let built =
+                build_launcher_args(Path::new(r"C:\ws\proj"), allow_network, isolated, &program, &args);
+            assert_eq!(built[0], SANDBOX_EXEC_SUBCOMMAND);
+            // payload = built[1..](去掉 argv[1] 子命令标记),即启动器实际解析的部分。
+            let parsed = parse_launcher_args(&built[1..]).expect("parse");
+            assert_eq!(parsed.write_root, PathBuf::from(r"C:\ws\proj"));
+            assert_eq!(parsed.allow_network, allow_network);
+            assert_eq!(parsed.isolated, isolated);
+            assert_eq!(parsed.program, program);
+            assert_eq!(parsed.args, args);
+        }
     }
 
     #[test]
@@ -738,7 +786,31 @@ mod tests {
         assert!(parse_launcher_args(&["--".to_string()]).is_err());
         assert!(parse_launcher_args(&[]).is_err());
         // 缺 --write-root。
-        assert!(parse_launcher_args(&["--".to_string(), "cmd.exe".to_string()]).is_err());
+        assert!(parse_launcher_args(&[
+            "--net".to_string(),
+            "on".to_string(),
+            "--".to_string(),
+            "cmd.exe".to_string(),
+        ])
+        .is_err());
+        // 缺 --net(必填,绝不隐式默认后端)。
+        assert!(parse_launcher_args(&[
+            "--write-root".to_string(),
+            r"C:\ws".to_string(),
+            "--".to_string(),
+            "cmd.exe".to_string(),
+        ])
+        .is_err());
+        // --net 值非法。
+        assert!(parse_launcher_args(&[
+            "--write-root".to_string(),
+            r"C:\ws".to_string(),
+            "--net".to_string(),
+            "maybe".to_string(),
+            "--".to_string(),
+            "cmd.exe".to_string(),
+        ])
+        .is_err());
     }
 
     #[test]
@@ -746,11 +818,15 @@ mod tests {
         let parsed = parse_launcher_args(&[
             "--write-root".to_string(),
             r"C:\ws".to_string(),
+            "--net".to_string(),
+            "off".to_string(),
             "--".to_string(),
             "cmd.exe".to_string(),
         ])
         .expect("parse");
         assert_eq!(parsed.program, PathBuf::from("cmd.exe"));
+        assert!(!parsed.allow_network);
+        assert!(!parsed.isolated);
         assert!(parsed.args.is_empty());
     }
 

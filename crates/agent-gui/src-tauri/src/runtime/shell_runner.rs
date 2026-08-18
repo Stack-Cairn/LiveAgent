@@ -693,6 +693,92 @@ fn default_platform_shell_profile() -> ShellExecutionProfile {
         })
 }
 
+/// 沙箱下 shell 候选可用性的进程级缓存。key = (候选程序路径, 沙箱机制):同一 shell 在
+/// 受限令牌与 AppContainer 两种机制下兼容性可能不同,须分别记录;探测结果与工作区无关
+/// (loader 死亡源于令牌/内核对象语义,非路径),故 key 不含 write_root。
+#[cfg(windows)]
+static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
+    Mutex<HashMap<(PathBuf, &'static str), bool>>,
+> = std::sync::OnceLock::new();
+
+/// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码:0xC0000142(DLL 初始化失败,
+/// msys/cygwin 系 shell 在沙箱下的典型死法)、0xC0000135(DLL 缺失)、0xC0000022(拒绝
+/// 访问)。命中 ⇒ 该候选在此沙箱机制下根本起不来。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_loader_failure_exit(code: i32) -> bool {
+    matches!(code as u32, 0xC000_0142 | 0xC000_0135 | 0xC000_0022)
+}
+
+/// 探测裁决:给定探测进程的退出码(None = 超时/被杀/无退出码),该候选是否可用。
+/// 只有明确的 loader NTSTATUS 判不可用;其余(超时、普通非零退出)一律放行,由真实
+/// spawn 自行失败并走既有错误链——探测只负责识别“启动即死”这一类硬不兼容。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
+    !exit_code.is_some_and(is_loader_failure_exit)
+}
+
+/// Windows 沙箱下探测某 shell 候选能否活过 loader(结果进程级缓存)。
+///
+/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中 loader NTSTATUS
+/// (典型:Git Bash 的 msys-2.0.dll 在受限令牌下 0xC0000142)⇒ 不可用,调用方落到
+/// 下一候选(pwsh/powershell/cmd,均原生 PE,必然可用)。探测本身失败(wrap/spawn
+/// 出错)判可用:让真实 spawn 复现错误并走既有 fail-closed/错误报告路径,探测不吞错。
+#[cfg(windows)]
+fn sandbox_candidate_usable(
+    spec: &SandboxSpec,
+    candidate: &ShellCandidate,
+    mechanism: &'static str,
+) -> bool {
+    use wait_timeout::ChildExt;
+
+    let cache = SANDBOX_SHELL_PROBE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = (candidate.program.clone(), mechanism);
+    if let Ok(map) = cache.lock() {
+        if let Some(&usable) = map.get(&key) {
+            return usable;
+        }
+    }
+
+    let probe_args: Vec<String> = match candidate.profile.profile {
+        "windows-git-bash" => vec!["-c".to_string(), "exit 0".to_string()],
+        "windows-pwsh" | "windows-powershell" => vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-NonInteractive".to_string(),
+            "-Command".to_string(),
+            "exit 0".to_string(),
+        ],
+        _ => vec!["/D".to_string(), "/C".to_string(), "exit 0".to_string()],
+    };
+
+    let usable = match sandbox::wrap_command(spec, &candidate.program, &probe_args) {
+        Ok((program, args, _)) => {
+            let exit_code = Command::new(&program)
+                .args(&args)
+                .current_dir(&spec.write_root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .ok()
+                .and_then(|mut child| match child.wait_timeout(Duration::from_secs(2)) {
+                    Ok(Some(status)) => status.code(),
+                    _ => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        None
+                    }
+                });
+            sandbox_probe_verdict(exit_code)
+        }
+        Err(_) => true,
+    };
+    if let Ok(mut map) = cache.lock() {
+        map.insert(key, usable);
+    }
+    usable
+}
+
 pub(crate) fn spawn_platform_shell_command<F>(
     command: &str,
     cwd: &Path,
@@ -718,6 +804,21 @@ where
             }
             None => (candidate.program.clone(), candidate.args.clone(), None),
         };
+        // Windows 沙箱专属:候选回退链平时靠 spawn 失败推进,但沙箱下 spawn 的永远是
+        // LiveAgent.exe 启动器(总能成功),loader 级不兼容(如 Git Bash 的 msys 依赖
+        // 在受限令牌下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
+        // (`exit 0`)提前识别,落到下一候选(pwsh/powershell),不给模型返回死 shell。
+        #[cfg(windows)]
+        if let (Some(spec), Some(mechanism)) = (sandbox_spec, sandbox_mechanism) {
+            if !sandbox_candidate_usable(spec, &candidate, mechanism) {
+                errors.push(format!(
+                    "{} ({}) skipped: incompatible with the {mechanism} sandbox (loader-level \
+                     startup failure, e.g. STATUS_DLL_INIT_FAILED)",
+                    candidate.profile.profile, candidate.profile.display_shell
+                ));
+                continue;
+            }
+        }
         let (stdout, stderr) =
             stdio_factory().map_err(|err| format!("Failed to prepare shell stdio: {err}"))?;
         let mut c = Command::new(&spawn_program);
@@ -923,14 +1024,31 @@ process output to a log file, for example: `nohup command > /tmp/liveagent-task.
 #[cfg(test)]
 mod tests {
     use super::{
-        default_platform_shell_profile, normalize_timeout_ms, run_shell_script,
-        sanitize_rel_path_core, ShellRunRegistry, DEFAULT_SHELL_TIMEOUT_MS, MAX_SHELL_TIMEOUT_MS,
-        MIN_SHELL_TIMEOUT_MS,
+        default_platform_shell_profile, is_loader_failure_exit, normalize_timeout_ms,
+        run_shell_script, sandbox_probe_verdict, sanitize_rel_path_core, ShellRunRegistry,
+        DEFAULT_SHELL_TIMEOUT_MS, MAX_SHELL_TIMEOUT_MS, MIN_SHELL_TIMEOUT_MS,
     };
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有 loader 级 NTSTATUS 判不可用;
+    // 超时/普通失败一律放行交由真实 spawn 走既有错误链。
+    #[test]
+    fn sandbox_probe_verdict_only_rejects_loader_ntstatus() {
+        // loader 死亡三码(as i32 后为负数,与 std ExitStatus::code() 的表示一致)。
+        assert!(is_loader_failure_exit(0xC000_0142_u32 as i32)); // STATUS_DLL_INIT_FAILED
+        assert!(is_loader_failure_exit(0xC000_0135_u32 as i32)); // STATUS_DLL_NOT_FOUND
+        assert!(is_loader_failure_exit(0xC000_0022_u32 as i32)); // STATUS_ACCESS_DENIED
+        assert!(!sandbox_probe_verdict(Some(0xC000_0142_u32 as i32)));
+        // 正常退出、普通失败、其它 NTSTATUS、超时(None)都不构成“候选不可用”。
+        assert!(sandbox_probe_verdict(Some(0)));
+        assert!(sandbox_probe_verdict(Some(1)));
+        assert!(sandbox_probe_verdict(Some(127)));
+        assert!(sandbox_probe_verdict(Some(0xC000_0005_u32 as i32))); // ACCESS_VIOLATION:运行期崩溃,非启动即死
+        assert!(sandbox_probe_verdict(None));
+    }
 
     #[test]
     fn sanitize_rel_path_accepts_windows_style_separators() {
