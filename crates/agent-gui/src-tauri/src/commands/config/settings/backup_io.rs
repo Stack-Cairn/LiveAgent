@@ -69,8 +69,18 @@ pub async fn settings_backup_peek_import(
 /// 导入应用：真正写库。写入前自动备份当前配置。
 ///
 /// 返回的 skills 由前端写回 localStorage。
+///
+/// **与 WebDAV 共用全局锁。** 导入同样跨 providers/mcp/system 三域分别写库，
+/// 中间态不自洽；不加锁的话一次自动上传可以正好在写到一半时采集快照，把
+/// 半旧半新的配置推上远端，而它会带着自洽的 sha256 通过下载侧所有校验。
+/// 与 `upload_backup_snapshot` 里把锁提到采集之前所堵的是同一个窗口。
+///
+/// 抑制守卫则**有意不加**：导入是用户明确要求把这份配置变成当前配置，
+/// 随后自动同步上去正是预期行为（与 WebDAV 下载相反 —— 那边数据本就来自
+/// 远端，推回去纯属回声）。
 #[tauri::command]
 pub async fn settings_backup_apply_import(path: String) -> Result<BackupApplyOutcome, String> {
+    let _guard = backup_sync_mutex().lock().await;
     tauri::async_runtime::spawn_blocking(move || {
         let target = PathBuf::from(path);
         let raw = read_backup_file(&target)?;

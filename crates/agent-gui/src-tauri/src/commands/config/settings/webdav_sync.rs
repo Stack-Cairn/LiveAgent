@@ -157,19 +157,28 @@ fn backup_sync_mutex() -> &'static tokio::sync::Mutex<()> {
     MUTEX.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
+/// 清洗一段远端路径：去首尾斜杠，并丢弃 `.` / `..` 段。
+///
+/// `join_url` 是逐段 percent-encode，而 `.` 与 `..` 都不在转义集里，会原样留在
+/// URL 路径里由服务器按相对路径解析。用户在「远端目录」里填 `../../etc`，
+/// 请求就会打到 WebDAV 根目录之外 —— 上传时那是把全部明文 API key PUT 到
+/// 非预期路径，下载时是从非预期路径读回来当配置应用。
+fn sanitize_remote_path(raw: &str) -> String {
+    raw.split('/')
+        .map(str::trim)
+        .filter(|part| !part.is_empty() && *part != "." && *part != "..")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 fn normalize_backup_sync_config(mut config: BackupSyncConfig) -> BackupSyncConfig {
     config.url = config.url.trim().trim_end_matches('/').to_string();
     config.username = config.username.trim().to_string();
-    config.remote_dir = config
-        .remote_dir
-        .trim()
-        .trim_matches('/')
-        .trim()
-        .to_string();
+    config.remote_dir = sanitize_remote_path(&config.remote_dir);
     if config.remote_dir.is_empty() {
         config.remote_dir = default_backup_remote_dir();
     }
-    config.profile = config.profile.trim().trim_matches('/').trim().to_string();
+    config.profile = sanitize_remote_path(&config.profile);
     if config.profile.is_empty() {
         config.profile = default_backup_profile();
     }
@@ -580,7 +589,13 @@ pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
         let (snapshot, _) = parse_backup_document(&document)?;
         let mut conn = open_db()?;
         let outcome = apply_backup_snapshot(&mut conn, snapshot)?;
-        touch_backup_last_sync_at()?;
+        // 时间戳写失败**不能**推翻已经落库的还原。快照此刻已经 commit，
+        // 这里再返回 Err 会让前端走 catch 分支：还原提示变成错误提示，
+        // 且负责重载前端 store 的 `syncStateAfterRestore` 不会执行 ——
+        // 内存里仍是还原前的旧配置，下次编辑任一域就把它整个写回库，
+        // 用户看到的是「还原报错了，配置也确实没变」，而库已经被改了。
+        // last_sync_at 只是展示用的元信息，丢一次远不如丢掉还原结果严重。
+        let _ = touch_backup_last_sync_at();
         Ok(outcome)
     })
     .await

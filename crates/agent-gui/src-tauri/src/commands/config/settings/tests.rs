@@ -34,6 +34,7 @@ mod tests {
             MODEL_FAILOVER_SETTINGS_TABLE,
             SSH_PROJECT_HOST_ASSOCIATIONS_TABLE,
             SSH_KNOWN_HOSTS_TABLE,
+            BACKUP_SYNC_SETTINGS_TABLE,
         ] {
             let exists = conn
                 .query_row(
@@ -1903,12 +1904,72 @@ mod tests {
     fn backup_snapshot_excludes_device_level_sync_config() {
         // 同步配置（WebDAV 地址/凭据）是设备级的，若随快照流转会让 A 机器的
         // 凭据覆盖 B 机器。它刻意存放在独立表，因此采集时天然取不到。
+        //
+        // 这条断言只有在库里**确实存着**一份凭据、且快照本身非空时才有意义：
+        // 对着空库采集，快照里当然搜不到密码，字段真被塞进去也照样通过。
         let conn = open_memory_db();
+        let credentials = BackupSyncConfig {
+            url: "https://dav.example.com/dav/".to_string(),
+            username: "sentinel-user@example.com".to_string(),
+            password: "sentinel-password-must-not-leak".to_string(),
+            remote_dir: "liveagent".to_string(),
+            profile: "default".to_string(),
+            auto_sync: true,
+            last_sync_at: Some(1_700_000_000_000),
+            last_error: Some("sentinel-error".to_string()),
+        };
+        persist_backup_sync_config(&conn, &credentials).expect("persist sync config");
+        // 前提自检：凭据确实进了库，否则下面的断言又变回空转。
+        assert_eq!(
+            load_backup_sync_config(&conn)
+                .expect("reload sync config")
+                .password,
+            "sentinel-password-must-not-leak"
+        );
+
+        let mut conn = conn;
+        save_providers(&mut conn, json!([{ "id": "p-1", "name": "P1" }])).expect("seed providers");
+        save_mcp(&mut conn, json!({ "servers": [], "selected": [] })).expect("seed mcp");
+
         let snapshot = collect_backup_snapshot(&conn, None).expect("collect snapshot");
         let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        assert!(snapshot.providers.is_some(), "前提：快照非空");
 
         assert!(!serialized.contains("backupSync"), "快照不应含同步配置");
+        for leaked in [
+            "sentinel-password-must-not-leak",
+            "sentinel-user@example.com",
+            "dav.example.com",
+            "sentinel-error",
+        ] {
+            assert!(
+                !serialized.contains(leaked),
+                "快照泄漏了设备级同步配置字段 {leaked}：{serialized}"
+            );
+        }
         assert!(snapshot.skills.is_none(), "skills 只能由前端传入");
+    }
+
+    #[test]
+    fn normalize_sync_config_strips_dot_segments() {
+        // `..` 不在 `join_url` 的 percent-encode 集合里，会原样留在 URL 路径中
+        // 由服务器解析为上级目录，请求因此可以打到 WebDAV 根之外。
+        let normalized = normalize_backup_sync_config(BackupSyncConfig {
+            remote_dir: "../../etc".to_string(),
+            profile: "a/../../b".to_string(),
+            ..BackupSyncConfig::default()
+        });
+        assert_eq!(normalized.remote_dir, "etc");
+        assert_eq!(normalized.profile, "a/b");
+
+        // 全被剥掉时回落默认值，而不是留空拼出畸形 URL。
+        let emptied = normalize_backup_sync_config(BackupSyncConfig {
+            remote_dir: "..".to_string(),
+            profile: "./.".to_string(),
+            ..BackupSyncConfig::default()
+        });
+        assert_eq!(emptied.remote_dir, WEBDAV_DEFAULT_REMOTE_DIR);
+        assert_eq!(emptied.profile, WEBDAV_DEFAULT_PROFILE);
     }
 
     #[test]

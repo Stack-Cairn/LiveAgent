@@ -518,9 +518,16 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                     ? t("settings.backupSyncPasswordSaved")
                     : ""
                 }
-                onChange={(event) =>
-                  patchForm({ password: event.target.value, passwordTouched: true })
-                }
+                onChange={(event) => {
+                  const password = event.target.value;
+                  // 清空密码框视为「没动过」，而不是「把密码改成空」。
+                  // 后端只在 passwordTouched 时采用新值，若这里对空串也置 true，
+                  // 用户输入几个字符再全删掉就会静默抹掉已存的密码 —— 与本框
+                  // 自己的「留空则不修改」占位提示直接矛盾，且此后自动同步因
+                  // 凭据不全而永久静默跳过（auto_upload 的 credentials 分支）。
+                  // 真要清空密码就关掉同步或改用户名，不该由删字符触发。
+                  patchForm({ password, passwordTouched: password.length > 0 });
+                }}
               />
             </div>
           </div>

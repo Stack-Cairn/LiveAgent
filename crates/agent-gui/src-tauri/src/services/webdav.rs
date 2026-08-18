@@ -50,8 +50,17 @@ fn method_mkcol() -> Method {
 }
 
 /// 构造客户端。**必须**走应用代理设置，否则用户配了代理却对 WebDAV 无效。
+///
+/// **不跟随重定向**，与 `provider_usage` / `tunnel` 的出网客户端一致。
+/// reqwest 默认 `Policy::limited(10)` 会静默吞掉 3xx，带来两类问题：
+/// 一是本文件里对 3xx 的判断（`describe_status_error` 的「地址可能不在 WebDAV
+/// 根路径下」提示、`ensure_remote_dirs` 的 may_already_exist）全部变成死代码，
+/// 用户把门户地址误填成 WebDAV 地址时，302→200 会让测试连接/MKCOL/PUT 全部
+/// 报成功而实际什么都没存；二是 307/308 会把 `config.json`（含全部明文
+/// provider API key）原样重发到一个用户从未配置过的主机。
 fn build_client(timeout: Duration) -> Result<Client, String> {
     system_proxy::async_client_builder()?
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(timeout)
         .build()
         .map_err(|_| "创建 WebDAV HTTP 客户端失败".to_string())
@@ -209,6 +218,19 @@ pub async fn test_connection(creds: &WebdavCredentials) -> Result<(), String> {
     }
 }
 
+/// 把各段按 `/` 摊平成逐级目录名，口径与 `join_url` 一致。
+///
+/// `remote_dir` 允许写成 `a/b` 这种多级路径。若按传入的**元素**迭代，`a/b`
+/// 会被当成一级，中间的 `a/` 永远不会被 MKCOL，服务器只能返回 409（上级缺失），
+/// 嵌套远端目录因此彻底不可用。
+fn dir_ladder<'a>(segments: &[&'a str]) -> Vec<&'a str> {
+    segments
+        .iter()
+        .flat_map(|segment| segment.split('/'))
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
 /// 逐级创建目录。
 ///
 /// 乐观 MKCOL：不先查存在性（多一轮 RTT），直接建，遇到「已存在」类错误就
@@ -219,10 +241,11 @@ pub async fn ensure_remote_dirs(
     segments: &[&str],
 ) -> Result<(), String> {
     let client = build_client(WEBDAV_META_TIMEOUT)?;
-    let mut accumulated: Vec<&str> = Vec::with_capacity(segments.len());
+    let ladder = dir_ladder(segments);
+    let mut accumulated: Vec<&str> = Vec::with_capacity(ladder.len());
 
-    for segment in segments {
-        accumulated.push(segment);
+    for part in ladder {
+        accumulated.push(part);
         let url = dir_url(&creds.base_url, &accumulated);
         let response = client
             .request(method_mkcol(), &url)
@@ -336,6 +359,15 @@ mod tests {
             "https://example.com/dav/liveagent/v1"
         );
         assert_eq!(join_url("https://example.com/dav/", &[]), "https://example.com/dav");
+    }
+
+    #[test]
+    fn dir_ladder_flattens_multi_level_segments() {
+        // remote_dir 写成 `a/b` 时必须逐级建，否则中间的 `a/` 从来没被 MKCOL 过，
+        // 服务器对 `a/b` 只会回 409。
+        assert_eq!(dir_ladder(&["a/b", "v1", "default"]), ["a", "b", "v1", "default"]);
+        // 摊平口径与 join_url 一致：空段一律丢弃。
+        assert_eq!(dir_ladder(&["//a//", "/b/"]), ["a", "b"]);
     }
 
     #[test]

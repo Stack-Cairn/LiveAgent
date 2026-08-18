@@ -124,7 +124,18 @@ async fn run(app: AppHandle, mut rx: mpsc::Receiver<()>) {
 
 async fn sync_once(app: &AppHandle) {
     // 防抖期间用户可能开始了手动下载，这里再确认一次。
+    //
+    // 直接 return 会丢掉这次已经被 `rx.recv()` 消费掉的脏信号（通道容量 1，
+    // 且抑制期内 `mark_dirty` 是空操作，不会有新信号补进来），于是抑制窗口里
+    // 攒下的所有本地改动永远等不到下一次上传。补一次标脏：此刻 SUPPRESSION
+    // 尚未归零，`mark_dirty` 仍会被挡掉，所以要绕过它直接投递。
+    //
+    // 代价是抑制期间这里每 DEBOUNCE（1s）空转一次，直到守卫释放。下载是秒级
+    // 操作，多几次纯内存的重投递不值得为它引入条件变量之类的额外机制。
     if suppressed() {
+        if let Some(tx) = DIRTY_TX.get() {
+            let _ = tx.try_send(());
+        }
         return;
     }
 
