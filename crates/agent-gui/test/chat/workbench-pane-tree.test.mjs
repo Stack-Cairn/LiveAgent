@@ -10,13 +10,10 @@ const {
   clampRatioToMinSize,
   computeWorkbenchGeometry,
   createEmptyWorkbenchLayout,
-  decodeWorkbenchLayout,
-  encodeWorkbenchLayout,
   findAdjacentPaneId,
   findParentSplitId,
   hitTestWorkbenchDrop,
   previewRectForDropTarget,
-  WORKBENCH_LAYOUT_SCHEMA_VERSION,
 } = workbench;
 
 let splitCounter = 0;
@@ -473,86 +470,6 @@ test("ratio min-size clamping keeps both sides above the pane minimum", () => {
     dividerSize: 8,
   });
   assert.equal(tiny, 0.5, "regions too small for both minimums equalize instead");
-});
-
-test("codec round-trips a valid layout without repairs", () => {
-  let layout = openRoot();
-  layout = mustApply(layout, {
-    type: "OPEN_PANE",
-    pane: pane("pane-b", "conversation-b", "project-second"),
-    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
-  });
-  const decoded = decodeWorkbenchLayout(encodeWorkbenchLayout(layout));
-  assert.equal(decoded.ok, true);
-  assert.equal(decoded.repaired, false);
-  assert.deepEqual(decoded.layout, layout);
-});
-
-test("codec rejects corrupted JSON and unsupported schema versions", () => {
-  assert.deepEqual(decodeWorkbenchLayout("{not json"), { ok: false, reason: "corrupted-json" });
-  assert.deepEqual(decodeWorkbenchLayout('"a string"'), { ok: false, reason: "corrupted-json" });
-  const future = JSON.stringify({
-    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION + 1,
-    revision: 0,
-    root: null,
-    panes: {},
-    focusedPaneId: null,
-  });
-  assert.deepEqual(decodeWorkbenchLayout(future), { ok: false, reason: "unsupported-schema" });
-});
-
-test("codec repairs leaves without records and collapses their splits", () => {
-  let layout = openRoot();
-  layout = mustApply(layout, {
-    type: "OPEN_PANE",
-    pane: pane("pane-b", "conversation-b"),
-    target: { kind: "pane-edge", paneId: "pane-a", edge: "right" },
-  });
-  const damaged = JSON.parse(encodeWorkbenchLayout(layout));
-  delete damaged.panes["pane-b"];
-  const decoded = decodeWorkbenchLayout(JSON.stringify(damaged));
-  assert.equal(decoded.ok, true);
-  assert.equal(decoded.repaired, true);
-  assert.deepEqual(decoded.layout.root, { type: "leaf", paneId: "pane-a" });
-  assert.equal(decoded.layout.focusedPaneId, "pane-a");
-});
-
-test("codec repairs duplicate pane references and invalid focus", () => {
-  const payload = JSON.stringify({
-    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
-    revision: 5,
-    root: {
-      type: "split",
-      splitId: "split-x",
-      axis: "horizontal",
-      ratio: 7,
-      first: { type: "leaf", paneId: "pane-a" },
-      second: { type: "leaf", paneId: "pane-a" },
-    },
-    panes: { "pane-a": pane("pane-a", "conversation-a") },
-    focusedPaneId: "pane-missing",
-  });
-  const decoded = decodeWorkbenchLayout(payload);
-  assert.equal(decoded.ok, true);
-  assert.equal(decoded.repaired, true);
-  assert.deepEqual(decoded.layout.root, { type: "leaf", paneId: "pane-a" });
-  assert.equal(decoded.layout.focusedPaneId, "pane-a");
-  assert.equal(decoded.layout.revision, 5);
-});
-
-test("codec repairs a fully invalid tree into an empty layout", () => {
-  const payload = JSON.stringify({
-    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
-    revision: 2,
-    root: { type: "leaf", paneId: "pane-ghost" },
-    panes: {},
-    focusedPaneId: "pane-ghost",
-  });
-  const decoded = decodeWorkbenchLayout(payload);
-  assert.equal(decoded.ok, true);
-  assert.equal(decoded.repaired, true);
-  assert.equal(decoded.layout.root, null);
-  assert.equal(decoded.layout.focusedPaneId, null);
 });
 
 // --- B-16: split feasibility (`context.canvasSize`) -------------------------

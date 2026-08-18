@@ -1,5 +1,4 @@
 export * from "./adjacency";
-export * from "./codec";
 export * from "./commands";
 export * from "./featureFlags";
 export * from "./geometry";

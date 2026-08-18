@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // 终端 Pane 泛化后的 useWindowWorkbench 行为:openTerminalSurface 复用、
-// closePane/syncCurrentConversation 对非会话 Pane 的收窄、attemptRestore 回退。
+// closePane/syncCurrentConversation 对非会话 Pane 的收窄。
 
 function createHookHarness() {
   const refs = [];
@@ -67,10 +67,10 @@ function createHookHarness() {
 function loadHook(harness) {
   const loader = createTsModuleLoader({ mocks: { react: harness.react } });
   const workbenchLib = loader.loadModule("@liveagent/ui/lib/workbench/index.ts");
-  const { useWindowWorkbench, WORKBENCH_LAYOUT_STORAGE_KEY } = loader.loadModule(
+  const { useWindowWorkbench } = loader.loadModule(
     "src/pages/chat/workbench/useWindowWorkbench.ts",
   );
-  return { workbenchLib, useWindowWorkbench, WORKBENCH_LAYOUT_STORAGE_KEY };
+  return { workbenchLib, useWindowWorkbench };
 }
 
 const PROJECT = { projectId: "project-main", projectPathKey: "/workspace/project-main" };
@@ -87,7 +87,6 @@ function terminalSurface(surfaceId) {
 function renderWorkbench(harness, hook, params) {
   return harness.render(() =>
     hook({
-      enabled: true,
       initialConversationId: "conv-root",
       initialProject: PROJECT,
       ...params,
@@ -164,53 +163,5 @@ test("syncCurrentConversation is a no-op while a terminal pane is focused", () =
   // The conversation must never be written into the terminal pane.
   assert.equal(after, before);
   assert.equal(after.panes[opened.paneId].surface.kind, "localTerminal");
-  harness.cleanup();
-});
-
-test("attemptRestore falls back to the first conversation pane when a terminal holds focus", async () => {
-  const harness = createHookHarness();
-  const { useWindowWorkbench, workbenchLib } = loadHook(harness);
-
-  const persisted = {
-    schemaVersion: workbenchLib.WORKBENCH_LAYOUT_SCHEMA_VERSION,
-    revision: 3,
-    root: {
-      type: "split",
-      splitId: "s1",
-      axis: "horizontal",
-      ratio: 0.5,
-      first: { type: "leaf", paneId: "pane-conv" },
-      second: { type: "leaf", paneId: "pane-term" },
-    },
-    panes: {
-      "pane-conv": {
-        paneId: "pane-conv",
-        surface: { kind: "conversation", conversationId: "conv-a", project: PROJECT },
-        view: {},
-      },
-      "pane-term": {
-        paneId: "pane-term",
-        surface: terminalSurface("term-1"),
-        view: {},
-      },
-    },
-    focusedPaneId: "pane-term",
-  };
-  const persistence = {
-    async load() {
-      return workbenchLib.encodeWorkbenchLayout(persisted);
-    },
-    save() {},
-    saveCorrupted() {},
-  };
-
-  const workbench = renderWorkbench(harness, useWindowWorkbench, { persistence });
-  const restored = await workbench.attemptRestore({
-    validConversationIds: new Set(["conv-a"]),
-  });
-  assert.ok(restored);
-  assert.equal(restored.focusConversationId, "conv-a");
-  assert.equal(workbench.layoutRef.current.focusedPaneId, "pane-term");
-  assert.equal(Object.keys(workbench.layoutRef.current.panes).length, 2);
   harness.cleanup();
 });

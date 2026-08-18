@@ -1,11 +1,8 @@
 import {
   applyWorkbenchCommand,
-  decodeWorkbenchLayout,
-  encodeWorkbenchLayout,
   findPaneIdByConversationId,
   findPaneIdBySurfaceKey,
   isWorkbenchLayoutValid,
-  terminalLaunchSpecIsInProject,
   WORKBENCH_LAYOUT_SCHEMA_VERSION,
   type WorkbenchCommand,
   type WorkbenchCommandContext,
@@ -17,18 +14,13 @@ import {
   type WorkbenchOpenTarget,
 } from "@liveagent/ui/lib/workbench/index";
 import {
-  type PaneNode,
   type PaneRecord,
   type ProjectRef,
   surfaceIdentityKey,
   type TerminalWorkbenchSurface,
 } from "@liveagent/ui/lib/workbench/types";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readRestorableWorkbenchLayoutCrashShadow } from "./layoutStorage";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-export { WORKBENCH_LAYOUT_STORAGE_KEY } from "./layoutStorage";
-
-const PERSIST_DEBOUNCE_MS = 250;
 export const ROOT_CONVERSATION_PANE_ID = "root-conversation-pane";
 
 let paneIdCounter = 0;
@@ -66,99 +58,6 @@ function singlePaneLayout(conversationId: string, project: ProjectRef): Workbenc
   };
 }
 
-function removeLeaf(node: PaneNode, paneId: string): { node: PaneNode | null; found: boolean } {
-  if (node.type === "leaf") {
-    return node.paneId === paneId ? { node: null, found: true } : { node, found: false };
-  }
-  const first = removeLeaf(node.first, paneId);
-  if (first.found) {
-    return { node: first.node ? { ...node, first: first.node } : node.second, found: true };
-  }
-  const second = removeLeaf(node.second, paneId);
-  if (second.found) {
-    return { node: second.node ? { ...node, second: second.node } : node.first, found: true };
-  }
-  return { node, found: false };
-}
-
-export type LiveWorkbenchSurfaces = {
-  validConversationIds: ReadonlySet<string>;
-};
-
-function surfaceIsLive(pane: PaneRecord, live: LiveWorkbenchSurfaces): boolean {
-  switch (pane.surface.kind) {
-    case "conversation":
-      return live.validConversationIds.has(pane.surface.conversationId);
-    case "localTerminal":
-    case "sshTerminal":
-      // A persisted launchSpec whose cwd escaped its own project can never be
-      // started (the backend re-derives containment and rejects it), so the
-      // pane is not live. Dropping it here also stops a tampered layout file
-      // from parking an out-of-project cwd in the window as a restartable
-      // placeholder.
-      if (!terminalLaunchSpecIsInProject(pane.surface)) return false;
-      // Terminal panes otherwise always survive restore: their launchSpec is a
-      // full recovery identity. Dead sessions are recreated by TerminalPaneHost
-      // after restore, while live webview-reload sessions reattach by binding.
-      return true;
-    case "unsupported":
-      // Forward-compat passthrough: newer-version panes must survive restore.
-      return true;
-  }
-}
-
-/**
- * Drop panes whose surface no longer maps to anything live; their splits
- * collapse. Used when restoring a persisted layout against the live sidebar
- * and terminal registry.
- */
-export function filterLayoutToLiveSurfaces(
-  layout: WorkbenchLayout,
-  live: LiveWorkbenchSurfaces,
-): WorkbenchLayout {
-  let root = layout.root;
-  const panes: Record<string, PaneRecord> = {};
-  for (const [paneId, pane] of Object.entries(layout.panes)) {
-    if (surfaceIsLive(pane, live)) {
-      panes[paneId] = pane;
-      continue;
-    }
-    if (root) {
-      const removal = removeLeaf(root, paneId);
-      if (removal.found) root = removal.node;
-    }
-  }
-  const focusedPaneId =
-    layout.focusedPaneId && panes[layout.focusedPaneId]
-      ? layout.focusedPaneId
-      : root
-        ? firstLeafId(root)
-        : null;
-  return {
-    schemaVersion: WORKBENCH_LAYOUT_SCHEMA_VERSION,
-    revision: layout.revision,
-    root,
-    panes: root ? panes : {},
-    focusedPaneId: root ? focusedPaneId : null,
-  };
-}
-
-function firstLeafId(node: PaneNode): string {
-  return node.type === "leaf" ? node.paneId : firstLeafId(node.first);
-}
-
-/** First conversation pane in tree order, or null when none exists. */
-function firstConversationId(layout: WorkbenchLayout): string | null {
-  const walk = (node: PaneNode): string | null => {
-    if (node.type === "leaf") {
-      const surface = layout.panes[node.paneId]?.surface;
-      return surface?.kind === "conversation" ? surface.conversationId : null;
-    }
-    return walk(node.first) ?? walk(node.second);
-  };
-  return layout.root ? walk(layout.root) : null;
-}
-
 /** Distributive omit of the CAS field; filled in from the live revision. */
 type WorkbenchCommandInput = WorkbenchCommand extends infer Command
   ? Command extends WorkbenchCommand
@@ -166,20 +65,9 @@ type WorkbenchCommandInput = WorkbenchCommand extends infer Command
     : never
   : never;
 
-export type WorkbenchLayoutPersistenceAdapter = {
-  load(): Promise<string | null>;
-  save(input: { payloadJson: string; schemaVersion: number; revision: number }): void;
-  /** Synchronous last-known-good copy used when the process is force-killed. */
-  saveCrashShadow(payloadJson: string): void;
-  saveCorrupted(raw: string): void;
-};
-
 export type UseWindowWorkbenchParams = {
-  enabled: boolean;
   initialConversationId: string;
   initialProject: ProjectRef;
-  /** Native layout persistence; omitted in tests and non-workbench sessions. */
-  persistence?: WorkbenchLayoutPersistenceAdapter;
   /**
    * Live canvas geometry. Supplying it turns on the reducer's pixel feasibility
    * checks (minimum pane sizes on split, per-side clamping on resize) for every
@@ -200,8 +88,6 @@ export type WorkbenchOpenConversationInput = {
 export type WindowWorkbench = {
   layout: WorkbenchLayout;
   layoutRef: React.MutableRefObject<WorkbenchLayout>;
-  /** Layout geometry is visible, but surfaces stay inert until validation finishes. */
-  restoreReady: boolean;
   paneIdForConversation(conversationId: string): string | null;
   /** Raw transaction entry point (drag commits pass their frozen revision). */
   dispatch(command: WorkbenchCommand): WorkbenchCommandResult;
@@ -221,13 +107,6 @@ export type WindowWorkbench = {
   equalizeSplit(splitId: string): void;
   /** Keep the focused pane bound to the page's current conversation. */
   syncCurrentConversation(conversationId: string, project: ProjectRef): void;
-  /**
-   * One-shot restore of the persisted layout. `focusConversationId` is null
-   * when the restored layout holds no conversation pane (e.g. terminals only).
-   */
-  attemptRestore(
-    live: LiveWorkbenchSurfaces,
-  ): Promise<{ focusConversationId: string | null } | null>;
 };
 
 /**
@@ -237,57 +116,20 @@ export type WindowWorkbench = {
  * selecting a conversation whenever focus moves to another pane.
  */
 export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWorkbench {
-  const {
-    enabled,
-    initialConversationId,
-    initialProject,
-    persistence,
-    geometryRef,
-    dividerSize,
-    onCommandError,
-  } = params;
+  const { initialConversationId, initialProject, geometryRef, dividerSize, onCommandError } =
+    params;
 
-  const bootLayoutRef = useRef(singlePaneLayout(initialConversationId, initialProject));
-  const [layout, setLayout] = useState<WorkbenchLayout>(() => {
-    if (!enabled || !persistence) return bootLayoutRef.current;
-    return readRestorableWorkbenchLayoutCrashShadow() ?? bootLayoutRef.current;
-  });
+  const [layout, setLayout] = useState<WorkbenchLayout>(() =>
+    singlePaneLayout(initialConversationId, initialProject),
+  );
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
-  const [restoreReady, setRestoreReady] = useState(!enabled || !persistence);
-  const restoreAttemptedRef = useRef(false);
-  // Writes stay disabled until the restore round-trip finished, so a fresh
-  // boot layout cannot clobber a stored multi-pane layout mid-load.
-  const restoreCompletedRef = useRef(false);
-  const persistTimerRef = useRef<number | null>(null);
-  const persistenceRef = useRef(persistence);
-  persistenceRef.current = persistence;
   const geometrySourceRef = useRef(geometryRef);
   geometrySourceRef.current = geometryRef;
   const dividerSizeRef = useRef(dividerSize);
   dividerSizeRef.current = dividerSize;
   const commandErrorRef = useRef(onCommandError);
   commandErrorRef.current = onCommandError;
-
-  const persistLayoutNow = useCallback(
-    (candidate: WorkbenchLayout) => {
-      if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
-      persistenceRef.current.save({
-        payloadJson: encodeWorkbenchLayout(candidate),
-        schemaVersion: candidate.schemaVersion,
-        revision: candidate.revision,
-      });
-    },
-    [enabled],
-  );
-
-  const persistCrashShadowNow = useCallback(
-    (candidate: WorkbenchLayout) => {
-      if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
-      persistenceRef.current.saveCrashShadow(encodeWorkbenchLayout(candidate));
-    },
-    [enabled],
-  );
 
   /**
    * Pixel context for the reducer's feasibility checks, read fresh per command
@@ -306,53 +148,6 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     };
   }, []);
 
-  useEffect(() => {
-    if (!enabled || !persistenceRef.current || !restoreCompletedRef.current) return;
-    // Keep the latest revision synchronously before entering the debounce
-    // window. A hard process kill does not reliably deliver unload events.
-    persistCrashShadowNow(layout);
-    if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null;
-      persistLayoutNow(layout);
-    }, PERSIST_DEBOUNCE_MS);
-    return () => {
-      if (persistTimerRef.current !== null) {
-        window.clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
-    };
-  }, [enabled, layout, persistCrashShadowNow, persistLayoutNow]);
-
-  useEffect(() => {
-    if (
-      !enabled ||
-      !persistenceRef.current ||
-      typeof window === "undefined" ||
-      typeof document === "undefined"
-    ) {
-      return;
-    }
-    const flush = () => {
-      if (persistTimerRef.current !== null) {
-        window.clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
-      persistLayoutNow(layoutRef.current);
-    };
-    const flushWhenHidden = () => {
-      if (document.visibilityState === "hidden") flush();
-    };
-    window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
-    document.addEventListener("visibilitychange", flushWhenHidden);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      window.removeEventListener("beforeunload", flush);
-      document.removeEventListener("visibilitychange", flushWhenHidden);
-    };
-  }, [enabled, persistLayoutNow]);
-
   const dispatch = useCallback(
     (command: WorkbenchCommand): WorkbenchCommandResult => {
       // Callers may pin their own context (a drag commit freezes the geometry
@@ -362,17 +157,13 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       const result = applyWorkbenchCommand(layoutRef.current, contextual);
       if (result.ok) {
         layoutRef.current = result.layout;
-        // Commit the recovery identity before React paints the new geometry.
-        // A force-kill immediately after a visible drag/split therefore still
-        // has the exact accepted revision in localStorage.
-        persistCrashShadowNow(result.layout);
         setLayout(result.layout);
       } else {
         commandErrorRef.current?.(result.error);
       }
       return result;
     },
-    [commandContext, persistCrashShadowNow],
+    [commandContext],
   );
 
   const dispatchCurrent = useCallback(
@@ -549,80 +340,10 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     });
   }, []);
 
-  const attemptRestore = useCallback(
-    async (live: LiveWorkbenchSurfaces): Promise<{ focusConversationId: string | null } | null> => {
-      if (restoreAttemptedRef.current) return null;
-      restoreAttemptedRef.current = true;
-      try {
-        const adapter = persistenceRef.current;
-        if (!enabled || !adapter) {
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        let raw: string | null = null;
-        try {
-          raw = await adapter.load();
-        } catch {
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        if (!raw) {
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        const decoded = decodeWorkbenchLayout(raw);
-        if (!decoded.ok) {
-          // Keep a diagnostic copy of the corrupted payload, then fall back.
-          adapter.saveCorrupted(raw);
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        const filtered = filterLayoutToLiveSurfaces(decoded.layout, live);
-        if (!filtered.root || !filtered.focusedPaneId || !isWorkbenchLayoutValid(filtered)) {
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        // Nothing to restore beyond what boot already shows.
-        if (Object.keys(filtered.panes).length < 2) {
-          setLayout(bootLayoutRef.current);
-          layoutRef.current = bootLayoutRef.current;
-          return null;
-        }
-        // Keep revisions monotonic across sessions so persisted records keep
-        // increasing rather than restarting from the boot layout's zero.
-        const next = {
-          ...filtered,
-          revision: Math.max(filtered.revision, layoutRef.current.revision) + 1,
-        };
-        layoutRef.current = next;
-        setLayout(next);
-        const focusedPane = filtered.panes[filtered.focusedPaneId];
-        // Focus restored onto a terminal/unsupported pane: fall back to the
-        // first conversation pane in tree order, or null when none survive.
-        return {
-          focusConversationId:
-            focusedPane.surface.kind === "conversation"
-              ? focusedPane.surface.conversationId
-              : firstConversationId(filtered),
-        };
-      } finally {
-        restoreCompletedRef.current = true;
-        setRestoreReady(true);
-      }
-    },
-    [enabled],
-  );
-
   return useMemo(
     () => ({
       layout,
       layoutRef,
-      restoreReady,
       paneIdForConversation,
       dispatch,
       focusPane,
@@ -633,11 +354,9 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       resizeSplit,
       equalizeSplit,
       syncCurrentConversation,
-      attemptRestore,
     }),
     [
       layout,
-      restoreReady,
       paneIdForConversation,
       dispatch,
       focusPane,
@@ -648,7 +367,6 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       resizeSplit,
       equalizeSplit,
       syncCurrentConversation,
-      attemptRestore,
     ],
   );
 }

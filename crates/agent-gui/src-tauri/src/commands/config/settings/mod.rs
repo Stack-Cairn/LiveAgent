@@ -172,6 +172,5 @@ include!("backup_snapshot.rs");
 include!("backup_io.rs");
 include!("webdav_sync.rs");
 include!("ssh/mod.rs");
-include!("workbench_layout.rs");
 include!("commands.rs");
 include!("tests.rs");

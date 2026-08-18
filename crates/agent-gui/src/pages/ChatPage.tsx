@@ -196,14 +196,12 @@ import {
   createConversationPaneHostEnvironment,
 } from "./chat/surfaces/ConversationPaneHostEnvironment";
 import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
-import { createWorkbenchLayoutPersistence } from "./chat/workbench/layoutPersistence";
 import { resolveWorkbenchPaneProject } from "./chat/workbench/paneProjectContext";
 import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
 import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
 import {
   createTerminalSurfaceId,
   findTerminalPaneForSession,
-  resolveLiveTerminalSurfaceIds,
   terminalAppExitGuard,
   terminalPaneAutoLaunch,
   terminalPaneBindings,
@@ -361,7 +359,6 @@ export function ChatPage(props: ChatPageProps) {
   // render needs (draft detection, pending-item effect, workspace root).
   const historyItems = useSidebarSelector(sidebarStore, selectConversations);
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
-  const sidebarListStatus = useSidebarSelector(sidebarStore, (s) => s.listStatus);
   const {
     canShareHistory,
     shareConversation,
@@ -1996,10 +1993,6 @@ export function ChatPage(props: ChatPageProps) {
     projectId: `conversation:${initialConversationRef.current.conversationId}`,
     projectPathKey: `conversation:${initialConversationRef.current.conversationId}`,
   });
-  const workbenchLayoutPersistence = useMemo(
-    () => (sessionWorkbench.enabled ? createWorkbenchLayoutPersistence() : undefined),
-    [],
-  );
   const workbenchGeometryRef = useRef<WorkbenchGeometry | null>(null);
   const handleWorkbenchGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
     workbenchGeometryRef.current = geometry;
@@ -2017,31 +2010,13 @@ export function ChatPage(props: ChatPageProps) {
     [addNotify, t],
   );
   const workbench = useWindowWorkbench({
-    enabled: sessionWorkbench.enabled,
     initialConversationId: initialConversationRef.current.conversationId,
     initialProject: initialWorkbenchProjectRef.current,
-    persistence: workbenchLayoutPersistence,
     geometryRef: workbenchGeometryRef,
     // The canvas renders 6px dividers; the geometry library's default is 8.
     dividerSize: WORKBENCH_CANVAS_DIVIDER_SIZE,
     onCommandError: handleWorkbenchCommandError,
   });
-
-  // The crash shadow already identifies the pane the user was looking at.
-  // Warm that conversation while the sidebar validates the full layout so the
-  // authoritative restore can activate a cache hit instead of starting the
-  // history read only after sidebar + layout IPC have both completed.
-  const workbenchPrefetchConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!sessionWorkbench.enabled || workbench.restoreReady) return;
-    const layout = workbench.layoutRef.current;
-    const focusedPane = layout.focusedPaneId ? layout.panes[layout.focusedPaneId] : null;
-    if (!focusedPane || focusedPane.surface.kind !== "conversation") return;
-    const conversationId = focusedPane.surface.conversationId.trim();
-    if (!conversationId || workbenchPrefetchConversationRef.current === conversationId) return;
-    workbenchPrefetchConversationRef.current = conversationId;
-    void hydrateConversationActionRef.current(conversationId).catch(() => undefined);
-  }, [workbench.restoreReady, workbench.layoutRef]);
 
   // A pane focus/drop selects its conversation asynchronously; until the
   // selection lands, syncCurrentConversation must not rebind the focused pane
@@ -2500,7 +2475,6 @@ export function ChatPage(props: ChatPageProps) {
   const lastWorkbenchSyncedConversationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
-    if (!workbench.restoreReady) return;
     const pending = workbenchPendingSelectRef.current;
     if (
       pending &&
@@ -2544,35 +2518,10 @@ export function ChatPage(props: ChatPageProps) {
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
   }, [currentConversationId, conversationSurfaceProject, conversationRuntimeCacheRef, workbench]);
 
-  // Restore the persisted layout once history is available. Validation uses
-  // the unscoped conversation map so panes from other workspaces survive a
-  // restore; panes for conversations that no longer exist are dropped.
-  const workbenchRestoreRequestedRef = useRef(false);
-  useEffect(() => {
-    if (!sessionWorkbench.enabled || workbenchRestoreRequestedRef.current) return;
-    if (sidebarListStatus === "initial" || sidebarListStatus === "loading") return;
-    workbenchRestoreRequestedRef.current = true;
-    void (async () => {
-      // 终端对账与布局验证并行。布局壳已经可见,终端 Pane 自己负责 connecting
-      // 与 stale binding 清理,所以 terminal_list 绝不能阻塞对话 Pane 水合。
-      void resolveLiveTerminalSurfaceIds({
-        client: tauriTerminalClient,
-        bindings: terminalPaneBindings,
-      });
-      const restored = await workbench.attemptRestore({
-        validConversationIds: new Set(sidebarConversationsById.keys()),
-      });
-      if (restored?.focusConversationId) {
-        selectWorkbenchConversation(restored.focusConversationId);
-      }
-    })();
-  }, [selectWorkbenchConversation, sidebarConversationsById, sidebarListStatus, workbench]);
-
   // Close panes whose conversation was deleted from history (the focused
   // pane already falls back through the legacy new-conversation path).
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
-    if (!workbench.restoreReady) return;
     const layout = workbench.layoutRef.current;
     for (const pane of Object.values(layout.panes)) {
       if (pane.surface.kind !== "conversation") continue;
@@ -2595,7 +2544,7 @@ export function ChatPage(props: ChatPageProps) {
   // W closes it, and =/+ equalizes its parent split. Every command needs at
   // least two panes; with one pane the workbench has nothing to navigate.
   useEffect(() => {
-    if (!sessionWorkbench.enabled || !workbench.restoreReady) return;
+    if (!sessionWorkbench.enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
       const layout = workbench.layoutRef.current;
@@ -2897,7 +2846,6 @@ export function ChatPage(props: ChatPageProps) {
     pane: PaneRecord,
     context: { isFocused: boolean; paneCount: number; isCompact: boolean },
   ) => {
-    if (!workbench.restoreReady) return null;
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
     const title = workbenchPaneTitle(surface);
@@ -2952,18 +2900,6 @@ export function ChatPage(props: ChatPageProps) {
         }}
         renderPaneContent={(pane, paneContext) => {
           const surface = pane.surface;
-          if (!workbench.restoreReady) {
-            return (
-              <PaneLoadingSkeleton
-                label={t("app.loading")}
-                variant={
-                  surface.kind === "localTerminal" || surface.kind === "sshTerminal"
-                    ? "terminal"
-                    : "conversation"
-                }
-              />
-            );
-          }
           if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
             return (
               <TerminalPaneHost
@@ -3022,9 +2958,9 @@ export function ChatPage(props: ChatPageProps) {
           );
         }}
         renderPaneChrome={renderWorkbenchPaneChrome}
-        onResizeSplit={workbench.restoreReady ? workbench.resizeSplit : undefined}
-        onEqualizeSplit={workbench.restoreReady ? workbench.equalizeSplit : undefined}
-        onFocusPane={workbench.restoreReady ? handleWorkbenchFocusPane : undefined}
+        onResizeSplit={workbench.resizeSplit}
+        onEqualizeSplit={workbench.equalizeSplit}
+        onFocusPane={handleWorkbenchFocusPane}
         onGeometryChange={handleWorkbenchGeometryChange}
         dropPreview={
           workbenchDragState?.previewRect

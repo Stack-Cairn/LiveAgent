@@ -1,48 +1,6 @@
-import type { PaneNode, WorkbenchLayout } from "@liveagent/ui/lib/workbench/types";
-import { readRestorableWorkbenchLayoutCrashShadow } from "../../pages/chat/workbench/layoutStorage";
 import { PaneLoadingSkeleton } from "./PaneLoadingSkeleton";
 
-function BootPaneTree(props: { layout: WorkbenchLayout; node: PaneNode; loadingLabel: string }) {
-  const { layout, node, loadingLabel } = props;
-  if (node.type === "leaf") {
-    const surface = layout.panes[node.paneId]?.surface;
-    const variant =
-      surface?.kind === "localTerminal" || surface?.kind === "sshTerminal"
-        ? "terminal"
-        : "conversation";
-    return <PaneLoadingSkeleton label={loadingLabel} variant={variant} />;
-  }
-
-  const horizontal = node.axis === "horizontal";
-  return (
-    <div
-      className={
-        horizontal ? "flex h-full min-h-0 min-w-0" : "flex h-full min-h-0 min-w-0 flex-col"
-      }
-    >
-      <div
-        className="min-h-0 min-w-0 overflow-hidden"
-        style={{ flex: `0 0 calc(${node.ratio * 100}% - 3px)` }}
-      >
-        <BootPaneTree layout={layout} node={node.first} loadingLabel={loadingLabel} />
-      </div>
-      <div
-        className={
-          horizontal
-            ? "w-1.5 shrink-0 border-x border-border/25"
-            : "h-1.5 shrink-0 border-y border-border/25"
-        }
-        aria-hidden
-      />
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-        <BootPaneTree layout={layout} node={node.second} loadingLabel={loadingLabel} />
-      </div>
-    </div>
-  );
-}
-
 export function AppBootShell(props: { loadingLabel: string }) {
-  const layout = readRestorableWorkbenchLayoutCrashShadow();
   return (
     <div
       data-app-boot-shell=""
@@ -72,11 +30,7 @@ export function AppBootShell(props: { loadingLabel: string }) {
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          {layout?.root ? (
-            <BootPaneTree layout={layout} node={layout.root} loadingLabel={props.loadingLabel} />
-          ) : (
-            <PaneLoadingSkeleton label={props.loadingLabel} />
-          )}
+          <PaneLoadingSkeleton label={props.loadingLabel} />
         </div>
       </main>
     </div>

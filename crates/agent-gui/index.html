@@ -70,8 +70,7 @@
         background: var(--liveagent-boot-sidebar);
       }
       .boot-brand,
-      .boot-header-actions,
-      .boot-terminal-line {
+      .boot-header-actions {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -128,8 +127,6 @@
         opacity: 0.6;
       }
       .boot-canvas,
-      .boot-split,
-      .boot-split-part,
       .boot-pane {
         min-width: 0;
         min-height: 0;
@@ -137,29 +134,6 @@
       .boot-canvas {
         flex: 1;
         overflow: hidden;
-      }
-      .boot-split {
-        display: flex;
-        width: 100%;
-        height: 100%;
-      }
-      .boot-split[data-axis="vertical"] {
-        flex-direction: column;
-      }
-      .boot-split-part {
-        overflow: hidden;
-      }
-      .boot-divider {
-        box-sizing: border-box;
-        flex: 0 0 6px;
-        border-right: 1px solid var(--liveagent-boot-border);
-        border-left: 1px solid var(--liveagent-boot-border);
-      }
-      .boot-split[data-axis="vertical"] > .boot-divider {
-        border-top: 1px solid var(--liveagent-boot-border);
-        border-right: 0;
-        border-bottom: 1px solid var(--liveagent-boot-border);
-        border-left: 0;
       }
       .boot-pane {
         position: relative;
@@ -195,17 +169,6 @@
         margin-left: auto;
         border-radius: 16px 16px 4px;
         opacity: 0.55;
-      }
-      .boot-terminal-body {
-        display: grid;
-        gap: 12px;
-        padding: 20px 16px;
-      }
-      .boot-terminal-prompt {
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        background: rgba(16, 185, 129, 0.4);
       }
       .boot-pane::after {
         position: absolute;
@@ -265,7 +228,7 @@
               <div class="boot-header-button"></div>
             </div>
           </header>
-          <div class="boot-canvas" data-static-boot-canvas="">
+          <div class="boot-canvas">
             <div class="boot-pane" data-boot-pane="conversation">
               <div class="boot-pane-header" aria-hidden="true">
                 <div class="boot-dot"></div>
@@ -285,54 +248,6 @@
     </div>
     <script>
       (() => {
-        const canvas = document.querySelector("[data-static-boot-canvas]");
-        const paneMarkup = (variant) => {
-          const pane = document.createElement("div");
-          pane.className = "boot-pane";
-          pane.dataset.bootPane = variant;
-          pane.innerHTML =
-            variant === "terminal"
-              ? '<div class="boot-pane-header" aria-hidden="true"><div class="boot-dot"></div><div class="boot-line" style="width:80px"></div></div><div class="boot-terminal-body" aria-hidden="true"><div class="boot-terminal-line"><span class="boot-terminal-prompt"></span><span class="boot-line" style="width:160px"></span></div><div class="boot-line" style="width:224px;opacity:.65"></div><div class="boot-line" style="width:144px;opacity:.65"></div></div>'
-              : '<div class="boot-pane-header" aria-hidden="true"><div class="boot-dot"></div><div class="boot-line" style="width:80px"></div></div><div class="boot-pane-body" aria-hidden="true"><div class="boot-line" style="width:58%"></div><div class="boot-line" style="width:42%;opacity:.65"></div><div class="boot-bubble"></div><div class="boot-line" style="width:72%"></div><div class="boot-line" style="width:54%;opacity:.65"></div></div>';
-          return pane;
-        };
-        const buildTree = (node, panes, depth = 0) => {
-          if (!node || depth > 8) return null;
-          if (node.type === "leaf" && typeof node.paneId === "string") {
-            const surface = panes[node.paneId]?.surface;
-            const terminal = surface?.kind === "localTerminal" || surface?.kind === "sshTerminal";
-            return paneMarkup(terminal ? "terminal" : "conversation");
-          }
-          if (node.type !== "split" || !["horizontal", "vertical"].includes(node.axis)) return null;
-          const first = buildTree(node.first, panes, depth + 1);
-          const second = buildTree(node.second, panes, depth + 1);
-          if (!first || !second) return null;
-          const ratio = Number.isFinite(node.ratio) ? Math.min(0.9, Math.max(0.1, node.ratio)) : 0.5;
-          const split = document.createElement("div");
-          split.className = "boot-split";
-          split.dataset.axis = node.axis;
-          const firstPart = document.createElement("div");
-          firstPart.className = "boot-split-part";
-          firstPart.style.flex = `0 0 calc(${ratio * 100}% - 3px)`;
-          firstPart.append(first);
-          const divider = document.createElement("div");
-          divider.className = "boot-divider";
-          const secondPart = document.createElement("div");
-          secondPart.className = "boot-split-part";
-          secondPart.style.flex = "1";
-          secondPart.append(second);
-          split.append(firstPart, divider, secondPart);
-          return split;
-        };
-        try {
-          const raw = localStorage.getItem("liveagent.sessionWorkbench.layout.v1");
-          const layout = raw ? JSON.parse(raw) : null;
-          const panes = layout?.panes && typeof layout.panes === "object" ? layout.panes : null;
-          if (canvas && panes && Object.keys(panes).length >= 2 && Object.keys(panes).length <= 16) {
-            const tree = buildTree(layout.root, panes);
-            if (tree) canvas.replaceChildren(tree);
-          }
-        } catch {}
         performance.mark?.("liveagent:static-shell-ready");
         const reveal = (attempt = 0) => {
           const invoke = window.__TAURI_INTERNALS__?.invoke;
