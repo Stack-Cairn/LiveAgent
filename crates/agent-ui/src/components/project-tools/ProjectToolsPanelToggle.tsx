@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { PanelRightClose, PanelRightOpen } from "../IconSet";
 import { Button } from "../ui/button";
 
@@ -19,9 +20,11 @@ export function ProjectToolsPanelToggle(props: {
       title={
         isOpen ? "Collapse project tools panel" : (disabledMessage ?? "Expand project tools panel")
       }
-      className={`${className} relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
-        isOpen ? "bg-muted text-foreground" : ""
-      }`}
+      className={cn(
+        className,
+        "relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95",
+        isOpen ? "bg-muted text-foreground" : "",
+      )}
     >
       {isOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
       {sessionCount > 0 ? (

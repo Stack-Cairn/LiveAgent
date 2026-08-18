@@ -32,9 +32,27 @@ import {
   selectedGitRepositoryLabel,
 } from "@liveagent/ui/lib/git/types";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { cn } from "../../../lib/shared/utils";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
 import { Button } from "../../ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,90 +102,90 @@ export function GitRemoteSetupModal(props: {
     onSubmit,
   } = props;
   const { t } = useLocale();
-  const titleId = useId();
   const remoteUrlId = useId();
 
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
     >
-      <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={loading ? undefined : onClose}
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("chat.cancel")}
+        showCloseButton
       >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div id={titleId} className="text-sm font-semibold text-foreground">
-            {t("projectTools.gitReview.remoteSetupTitle")}
-          </div>
-          <div className="mt-1 text-xs leading-5 text-muted-foreground">
-            {t(remoteSetupDescriptionKey(action))}
-          </div>
-        </div>
-        <div className="space-y-4 px-5 py-4">
-          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-            <div
-              className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2"
-              title={branch}
-            >
-              {branch}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-sm leading-normal">
+              {t("projectTools.gitReview.remoteSetupTitle")}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs leading-5">
+              {t(remoteSetupDescriptionKey(action))}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+              <div
+                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2"
+                title={branch}
+              >
+                {branch}
+              </div>
+              <div
+                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2"
+                title={workdir}
+              >
+                {workdir}
+              </div>
             </div>
-            <div
-              className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2"
-              title={workdir}
-            >
-              {workdir}
+            <div className="space-y-1.5">
+              <label htmlFor={remoteUrlId} className="text-xs text-muted-foreground">
+                {t("projectTools.gitReview.remoteUrl")}
+              </label>
+              <Input
+                id={remoteUrlId}
+                value={remoteUrl}
+                onChange={(event) => onRemoteUrlChange(event.target.value)}
+                className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
+                placeholder={t("projectTools.gitReview.remoteUrlPlaceholder")}
+                autoFocus
+                disabled={loading}
+              />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor={remoteUrlId} className="text-xs text-muted-foreground">
-              {t("projectTools.gitReview.remoteUrl")}
-            </label>
-            <Input
-              id={remoteUrlId}
-              value={remoteUrl}
-              onChange={(event) => onRemoteUrlChange(event.target.value)}
-              className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
-              placeholder={t("projectTools.gitReview.remoteUrlPlaceholder")}
-              autoFocus
-              disabled={loading}
-            />
-          </div>
-          {error ? (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button type="submit" size="sm" disabled={loading || !remoteUrl.trim()}>
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : action === "push" ? (
-              <Upload className="h-3.5 w-3.5" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            {t(remoteSetupSubmitKey(action))}
-          </Button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+            {error ? (
+              <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+                {t("chat.cancel")}
+              </Button>
+              <Button type="submit" size="sm" disabled={loading || !remoteUrl.trim()}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : action === "push" ? (
+                  <Upload className="h-3.5 w-3.5" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {t(remoteSetupSubmitKey(action))}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -179,8 +197,6 @@ export function GitDiscardConfirmModal(props: {
 }) {
   const { target, loading, onClose, onConfirm } = props;
   const { t } = useLocale();
-  const titleId = useId();
-
   if (!target) return null;
 
   const isAll = target.kind === "all";
@@ -191,53 +207,50 @@ export function GitDiscardConfirmModal(props: {
     ? t("projectTools.gitReview.discardAllConfirm")
     : t("projectTools.gitReview.discardConfirm").replace("{path}", target.path);
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <AlertDialog
+      open={Boolean(target)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
     >
-      <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={loading ? undefined : onClose}
-      />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
-        <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+      <AlertDialogContent className="max-w-md p-0">
+        <AlertDialogHeader className="flex-row items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </div>
           <div className="min-w-0 flex-1">
-            <div id={titleId} className="text-sm font-semibold text-foreground">
-              {title}
-            </div>
-            <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>
+            <AlertDialogTitle className="text-sm leading-normal">{title}</AlertDialogTitle>
+            <AlertDialogDescription className="mt-1 text-xs leading-5">
+              {description}
+            </AlertDialogDescription>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : isAll ? (
-              <Trash2 className="h-3.5 w-3.5" />
-            ) : (
-              <BrushCleaning className="h-3.5 w-3.5" />
-            )}
-            {title}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogActions>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+              {t("chat.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isAll ? (
+                <Trash2 className="h-3.5 w-3.5" />
+              ) : (
+                <BrushCleaning className="h-3.5 w-3.5" />
+              )}
+              {title}
+            </Button>
+          </AlertDialogActions>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -252,84 +265,86 @@ export function GitBranchFromCommitModal(props: {
 }) {
   const { target, branchName, loading, error, onBranchNameChange, onClose, onSubmit } = props;
   const { t } = useLocale();
-  const titleId = useId();
   const branchNameId = useId();
 
   if (!target) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <Dialog
+      open={Boolean(target)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
     >
-      <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={loading ? undefined : onClose}
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
+      <DialogContent
+        className="max-w-md p-0"
+        closeDisabled={loading}
+        closeLabel={t("chat.cancel")}
+        showCloseButton
       >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div id={titleId} className="text-sm font-semibold text-foreground">
-            {t("projectTools.gitReview.createBranchFromCommitTitle")}
-          </div>
-          <div className="mt-1 text-xs leading-5 text-muted-foreground">
-            {t("projectTools.gitReview.createBranchFromCommitDescription")
-              .replace("{sha}", target.shortSha)
-              .replace("{subject}", target.subject || target.shortSha)}
-          </div>
-        </div>
-        <div className="space-y-4 px-5 py-4">
-          <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs">
-            <div className="font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
-              {target.shortSha}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-sm leading-normal">
+              {t("projectTools.gitReview.createBranchFromCommitTitle")}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs leading-5">
+              {t("projectTools.gitReview.createBranchFromCommitDescription")
+                .replace("{sha}", target.shortSha)
+                .replace("{subject}", target.subject || target.shortSha)}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs">
+              <div className="font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+                {target.shortSha}
+              </div>
+              <div className="mt-1 truncate font-medium" title={target.subject}>
+                {target.subject || target.commitSha}
+              </div>
             </div>
-            <div className="mt-1 truncate font-medium" title={target.subject}>
-              {target.subject || target.commitSha}
+            <div className="space-y-1.5">
+              <label htmlFor={branchNameId} className="text-xs text-muted-foreground">
+                {t("projectTools.gitReview.branchName")}
+              </label>
+              <Input
+                id={branchNameId}
+                value={branchName}
+                onChange={(event) => onBranchNameChange(event.target.value)}
+                className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
+                placeholder={t("projectTools.gitReview.branchNamePlaceholder")}
+                autoFocus
+                disabled={loading}
+              />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor={branchNameId} className="text-xs text-muted-foreground">
-              {t("projectTools.gitReview.branchName")}
-            </label>
-            <Input
-              id={branchNameId}
-              value={branchName}
-              onChange={(event) => onBranchNameChange(event.target.value)}
-              className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
-              placeholder={t("projectTools.gitReview.branchNamePlaceholder")}
-              autoFocus
-              disabled={loading}
-            />
-          </div>
-          {error ? (
-            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button type="submit" size="sm" disabled={loading || !branchName.trim()}>
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <GitBranch className="h-3.5 w-3.5" />
-            )}
-            {t("projectTools.gitReview.createBranch")}
-          </Button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+            {error ? (
+              <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <DialogActions>
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+                {t("chat.cancel")}
+              </Button>
+              <Button type="submit" size="sm" disabled={loading || !branchName.trim()}>
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <GitBranch className="h-3.5 w-3.5" />
+                )}
+                {t("projectTools.gitReview.createBranch")}
+              </Button>
+            </DialogActions>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -406,54 +421,49 @@ export function GitBranchSwitchConflictModal(props: {
 }) {
   const { conflict, loading, onClose, onConfirm } = props;
   const { t } = useLocale();
-  const titleId = useId();
-
   if (!conflict) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <AlertDialog
+      open={Boolean(conflict)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
     >
-      <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={loading ? undefined : onClose}
-      />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
-        <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+      <AlertDialogContent className="max-w-md p-0">
+        <AlertDialogHeader className="flex-row items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </div>
           <div className="min-w-0 flex-1">
-            <div id={titleId} className="text-sm font-semibold text-foreground">
+            <AlertDialogTitle className="text-sm leading-normal">
               {t("projectTools.gitReview.switchBranchConflictTitle")}
-            </div>
-            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+            </AlertDialogTitle>
+            <AlertDialogDescription className="mt-1 text-xs leading-5">
               {t("projectTools.gitReview.switchBranchConflictDescription").replace(
                 "{branch}",
                 conflict.branch,
               )}
-            </div>
+            </AlertDialogDescription>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            {t("chat.cancel")}
-          </Button>
-          <Button type="button" size="sm" onClick={onConfirm} disabled={loading}>
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {t("projectTools.gitReview.stashAndSwitch")}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogActions>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+              {t("chat.cancel")}
+            </Button>
+            <Button type="button" size="sm" onClick={onConfirm} disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {t("projectTools.gitReview.stashAndSwitch")}
+            </Button>
+          </AlertDialogActions>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

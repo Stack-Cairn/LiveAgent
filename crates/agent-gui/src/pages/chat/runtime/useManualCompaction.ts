@@ -23,7 +23,7 @@ import type {
   FinishGatewayRunMirrorInput,
   RegisterGatewayRunMirrorInput,
 } from "../gateway/useGatewayRunMirrorCoordinator";
-import type { PersistConversationParams } from "../history/useConversationHistoryActions";
+import type { PersistConversationAction } from "../history/useConversationHistoryActions";
 import type { ConversationRuntimeEntry } from "./chatPageRuntime";
 import {
   buildPreparedContext as buildPreparedConversationContext,
@@ -123,7 +123,7 @@ export function useManualCompaction(params: {
   flushGatewayBridgeEventsForRequest: (requestId: string) => Promise<void>;
   registerGatewayRunMirror: (input: RegisterGatewayRunMirrorInput) => void;
   finishGatewayRunMirror: (input: FinishGatewayRunMirrorInput) => Promise<void>;
-  persistConversation: (params: PersistConversationParams) => Promise<boolean>;
+  persistConversation: PersistConversationAction;
   setErrorMessage: (message: string | null) => void;
   activeAgentPrompt: string;
   // 与发送链路同源的提示词构建：当前会话据当前工作区解析 skills/memory 提示词；

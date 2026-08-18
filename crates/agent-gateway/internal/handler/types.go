@@ -93,13 +93,13 @@ func NormalizeChatSelectedModel(
 	}
 
 	switch selectedModel.ProviderType {
-	case "codex", "claude_code", "gemini", "xai":
+	case "codex", "claude_code", "gemini", "xai", "deepseek":
 		return selectedModel, nil
 	case "":
 		return nil, fmt.Errorf("selected_model.provider_type is required")
 	default:
 		return nil, fmt.Errorf(
-			"selected_model.provider_type must be codex, claude_code, gemini, or xai",
+			"selected_model.provider_type must be codex, claude_code, gemini, xai, or deepseek",
 		)
 	}
 }

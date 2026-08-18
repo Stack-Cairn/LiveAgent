@@ -12,38 +12,16 @@ import {
   type OpenAIResponsesOptions,
   stream as streamOpenAIResponses,
 } from "@earendil-works/pi-ai/api/openai-responses";
-import { wrapDeepSeekDsmlToolCallStream } from "../deepSeekDsmlToolCallStream";
-import {
-  attachDeepSeekProviderPayloadAdapter,
-  isDeepSeekAnthropicTarget,
-  isDeepSeekTarget,
-  mapDeepSeekReasoningEffort,
-} from "../deepSeekProviderAdapter";
+import { DEEPSEEK_CHAT_COMPLETIONS_API, streamDeepSeekNative } from "../deepSeekNative";
 import { resolveMaxTokens } from "./common";
 import { rejectEmptyOpenAICompletionsResponse } from "./openAICompletionsStream";
 import { withStreamRetry } from "./streamRetry";
-import { normalizeStructuredToolCallHistoryForDeepSeek } from "./textModeToolRecovery";
 import {
-  type AnthropicEffort,
-  type AnthropicThinkingRuntime,
   clampOpenAIReasoningEffort,
   resolveAnthropicThinkingRuntime,
   resolveGeminiThinkingRuntime,
 } from "./thinkingLevels";
 import type { StreamOptionsEx, ToolChoice } from "./types";
-
-function resolveDeepSeekAnthropicThinkingRuntime(
-  model: Model<any>,
-  options: StreamOptionsEx,
-): AnthropicThinkingRuntime {
-  const effort = mapDeepSeekReasoningEffort(options.reasoning) as AnthropicEffort | undefined;
-  return {
-    thinkingEnabled: Boolean(effort),
-    mode: effort ? "adaptive" : "disabled",
-    maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
-    ...(effort ? { effort } : {}),
-  };
-}
 
 function mapToolChoiceToOpenAI(
   toolChoice: ToolChoice | undefined,
@@ -88,87 +66,55 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
   switch (model.api) {
     case "anthropic-messages": {
       // Anthropic：需要我们自己调用 streamAnthropic()，以便显式传 toolChoice（以及启用/禁用 thinking）。
-      const isDeepSeekAnthropic =
-        Boolean(options.deepSeekProviderAdapter || options.deepSeekDsmlToolCallRepair) ||
-        isDeepSeekAnthropicTarget({
-          api: model.api,
-          baseUrl: model.baseUrl,
-          modelId: model.id,
-        });
-      const anthropicThinking = isDeepSeekAnthropic
-        ? resolveDeepSeekAnthropicThinkingRuntime(model, options)
-        : resolveAnthropicThinkingRuntime(model, options);
-      const anthropicOptions = isDeepSeekAnthropic
-        ? attachDeepSeekProviderPayloadAdapter(options, {
-            providerId: "claude_code",
-            baseUrl: model.baseUrl,
-            model,
-          })
-        : options;
-      const anthropicContext = isDeepSeekAnthropic
-        ? normalizeStructuredToolCallHistoryForDeepSeek(context)
-        : context;
+      const anthropicThinking = resolveAnthropicThinkingRuntime(model, options);
       return withStreamRetry(
         () => {
-          const stream = streamAnthropic(model as any, anthropicContext, {
-            temperature: anthropicOptions.temperature,
+          return streamAnthropic(model as any, context, {
+            temperature: options.temperature,
             maxTokens: anthropicThinking.maxTokens,
-            signal: anthropicOptions.signal,
-            apiKey: anthropicOptions.apiKey,
-            cacheRetention: anthropicOptions.cacheRetention,
-            sessionId: anthropicOptions.sessionId,
-            headers: anthropicOptions.headers,
-            onPayload: anthropicOptions.onPayload,
-            maxRetryDelayMs: anthropicOptions.maxRetryDelayMs,
-            metadata: anthropicOptions.metadata,
+            signal: options.signal,
+            apiKey: options.apiKey,
+            cacheRetention: options.cacheRetention,
+            sessionId: options.sessionId,
+            headers: options.headers,
+            onPayload: options.onPayload,
+            maxRetryDelayMs: options.maxRetryDelayMs,
+            metadata: options.metadata,
             thinkingEnabled: anthropicThinking.thinkingEnabled,
             ...(anthropicThinking.effort ? { effort: anthropicThinking.effort } : {}),
             ...(anthropicThinking.thinkingBudgetTokens !== undefined
               ? { thinkingBudgetTokens: anthropicThinking.thinkingBudgetTokens }
               : {}),
-            toolChoice: anthropicOptions.toolChoice ?? "none",
+            toolChoice: options.toolChoice ?? "none",
           });
-          return isDeepSeekAnthropic || anthropicOptions.deepSeekDsmlToolCallRepair
-            ? wrapDeepSeekDsmlToolCallStream(stream)
-            : stream;
         },
-        { signal: anthropicOptions.signal, ...anthropicOptions.streamRetry },
+        { signal: options.signal, ...options.streamRetry },
       );
     }
     case "openai-completions": {
-      const openAICompletionsOptions = isDeepSeekTarget({
-        baseUrl: model.baseUrl,
-        modelId: model.id,
-      })
-        ? attachDeepSeekProviderPayloadAdapter(options, {
-            providerId: "codex",
-            baseUrl: model.baseUrl,
-            model,
-          })
-        : options;
-      const openAICompletionsContext = openAICompletionsOptions.deepSeekProviderAdapter
-        ? normalizeStructuredToolCallHistoryForDeepSeek(context)
-        : context;
       // 严格校验的 OpenAI 兼容端点（xAI/各类中转网关）对「带 tool_choice 但没带
       // tools」的请求直接 400（"A tool_choice was set on the request but no tools
       // were specified"）——compaction 摘要、标题生成等 text-only 请求没有工具，
       // 会踩中。tool_choice 在无工具时本就无意义，只在请求真正携带 tools 时下发。
       const openAIOptions: OpenAICompletionsOptions = {
-        ...buildOpenAIBaseOptions(model, openAICompletionsOptions),
-        reasoningEffort: clampOpenAIReasoningEffort(model, openAICompletionsOptions.reasoning),
-        toolChoice: openAICompletionsContext.tools?.length
-          ? mapToolChoiceToOpenAI(openAICompletionsOptions.toolChoice)
-          : undefined,
+        ...buildOpenAIBaseOptions(model, options),
+        reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
+        toolChoice: context.tools?.length ? mapToolChoiceToOpenAI(options.toolChoice) : undefined,
       };
       return withStreamRetry(
         () => {
           return rejectEmptyOpenAICompletionsResponse(
-            streamOpenAICompletions(model as any, openAICompletionsContext, openAIOptions),
+            streamOpenAICompletions(model as any, context, openAIOptions),
           );
         },
-        { signal: openAICompletionsOptions.signal, ...openAICompletionsOptions.streamRetry },
+        { signal: options.signal, ...options.streamRetry },
       );
     }
+    case DEEPSEEK_CHAT_COMPLETIONS_API:
+      return withStreamRetry(() => streamDeepSeekNative(model, context, options), {
+        signal: options.signal,
+        ...options.streamRetry,
+      });
     case "openai-responses": {
       const openAIOptions: OpenAIResponsesOptions = {
         ...buildOpenAIBaseOptions(model, options),

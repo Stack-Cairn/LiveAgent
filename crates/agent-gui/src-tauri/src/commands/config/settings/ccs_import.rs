@@ -130,7 +130,8 @@ fn list_ccswitch_liveagent_providers_from_db(
                'codex',
                'claude', 'claude-code', 'claude_code',
                'gemini',
-               'grokbuild', 'grok-build', 'grok_build', 'grok', 'xai'
+               'grokbuild', 'grok-build', 'grok_build', 'grok', 'xai',
+               'deepseek'
              )
              ORDER BY
                CASE app_type
@@ -144,7 +145,8 @@ fn list_ccswitch_liveagent_providers_from_db(
                  WHEN 'grok_build' THEN 3
                  WHEN 'grok' THEN 3
                  WHEN 'xai' THEN 3
-                 ELSE 4
+                 WHEN 'deepseek' THEN 4
+                 ELSE 5
                END,
                COALESCE(sort_index, 999999), created_at ASC, id ASC",
         )
@@ -180,7 +182,16 @@ fn ccs_provider_from_value(
     name: &str,
     config: &Value,
 ) -> Option<CcsProviderImportItem> {
-    let provider_type = ccs_provider_type_from_app_type(app_type)?;
+    let mapped_provider_type = ccs_provider_type_from_app_type(app_type)?;
+    let mapped_base_url = ccs_extract_base_url(mapped_provider_type, config).unwrap_or_default();
+    let provider_type = if mapped_provider_type == "codex"
+        && ccs_is_chat_protocol(config)
+        && is_official_deepseek_base_url(&mapped_base_url)
+    {
+        "deepseek"
+    } else {
+        mapped_provider_type
+    };
     let base_url = ccs_extract_base_url(provider_type, config).unwrap_or_default();
     let api_key = ccs_extract_api_key(provider_type, config).unwrap_or_default();
     Some(CcsProviderImportItem {
@@ -203,7 +214,9 @@ fn ccs_provider_from_value(
             .trim()
             .to_string(),
         api_key,
-        request_format: if provider_type == "xai" {
+        request_format: if provider_type == "deepseek" {
+            "openai-completions".to_string()
+        } else if provider_type == "xai" {
             // Grok / xAI 在 LiveAgent 固定 Responses。
             "openai-responses".to_string()
         } else if provider_type == "codex" && ccs_is_chat_protocol(config) {
@@ -220,6 +233,7 @@ fn ccs_provider_type_from_app_type(app_type: &str) -> Option<&'static str> {
         "codex" => Some("codex"),
         "claude" | "claude-code" | "claude_code" => Some("claude_code"),
         "gemini" => Some("gemini"),
+        "deepseek" => Some("deepseek"),
         // CC-Switch Grok Build 应用桶（与上游 AppType::GrokBuild 别名对齐）。
         "grokbuild" | "grok-build" | "grok_build" | "grok" | "xai" => Some("xai"),
         _ => None,
@@ -251,6 +265,20 @@ fn ccs_extract_models(provider_type: &str, config: &Value) -> Vec<String> {
         "gemini" => {
             for key in ["GEMINI_MODEL", "GOOGLE_GEMINI_MODEL", "GOOGLE_MODEL"] {
                 if let Some(model) = ccs_string_at_path(config, &["env", key]) {
+                    push_model(model);
+                }
+            }
+        }
+        "deepseek" => {
+            for key in [
+                "DEEPSEEK_MODEL",
+                "DEEPSEEK_DEFAULT_MODEL",
+                "DEEPSEEK_CHAT_MODEL",
+                "DEEPSEEK_REASONER_MODEL",
+            ] {
+                if let Some(model) = ccs_string_at_path(config, &["env", key])
+                    .or_else(|| ccs_string_at_path(config, &["config", key]))
+                {
                     push_model(model);
                 }
             }
@@ -296,6 +324,20 @@ fn ccs_extract_base_url(provider_type: &str, config: &Value) -> Option<String> {
         "gemini" => ccs_string_at_path(config, &["env", "GEMINI_BASE_URL"])
             .or_else(|| ccs_string_at_path(config, &["env", "GOOGLE_GEMINI_BASE_URL"]))
             .or_else(|| ccs_string_at_path(config, &["config", "base_url"])),
+        "deepseek" => ccs_string_at_path(config, &["env", "DEEPSEEK_BASE_URL"])
+            .or_else(|| ccs_string_at_path(config, &["config", "DEEPSEEK_BASE_URL"]))
+            .or_else(|| ccs_string_at(config, &["base_url", "baseURL"]))
+            .or_else(|| {
+                config
+                    .get("config")
+                    .and_then(|value| ccs_string_at(value, &["base_url", "baseURL"]))
+            })
+            .or_else(|| {
+                config
+                    .get("config")
+                    .and_then(Value::as_str)
+                    .and_then(|text| ccs_extract_toml_string_value(text, "base_url"))
+            }),
         "xai" => ccs_string_at(config, &["base_url", "baseURL"])
             .or_else(|| {
                 config
@@ -331,6 +373,27 @@ fn ccs_extract_api_key(provider_type: &str, config: &Value) -> Option<String> {
             .or_else(|| ccs_string_at_path(config, &["env", "ANTHROPIC_API_KEY"])),
         "gemini" => ccs_string_at_path(config, &["env", "GEMINI_API_KEY"])
             .or_else(|| ccs_string_at_path(config, &["env", "GOOGLE_API_KEY"])),
+        "deepseek" => ccs_string_at_path(config, &["env", "DEEPSEEK_API_KEY"])
+            .or_else(|| ccs_string_at_path(config, &["config", "DEEPSEEK_API_KEY"]))
+            .or_else(|| {
+                config
+                    .pointer("/auth/DEEPSEEK_API_KEY")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .or_else(|| {
+                config
+                    .pointer("/env/OPENAI_API_KEY")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .or_else(|| {
+                config
+                    .pointer("/auth/OPENAI_API_KEY")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .or_else(|| ccs_string_at(config, &["apiKey", "api_key"])),
         "xai" => config
             .pointer("/env/OPENAI_API_KEY")
             .and_then(Value::as_str)
@@ -393,6 +456,13 @@ fn ccs_matches_chat_protocol(value: &str) -> bool {
         value.trim().to_ascii_lowercase().as_str(),
         "chat" | "chat_completions" | "chat-completions" | "openai_chat" | "openai-chat"
     )
+}
+
+fn is_official_deepseek_base_url(value: &str) -> bool {
+    reqwest::Url::parse(value.trim())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
+        .is_some_and(|host| host == "api.deepseek.com")
 }
 
 fn ccs_string_at(value: &Value, keys: &[&str]) -> Option<String> {

@@ -34,9 +34,9 @@ test("web thinking wrappers delegate to the shared resolver", () => {
   assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.5"), true);
   assert.equal(settings.isThinkingAlwaysOnForModel("codex", "gpt-5"), true);
   assert.deepEqual(settings.getKnownModelThinkingLevels("codex", "gpt-4o"), []);
-  // 恒开不可调（中转挂载）：无档位但思考恒开
-  assert.deepEqual(settings.getKnownModelThinkingLevels("claude_code", "deepseek-reasoner"), []);
-  assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "deepseek-reasoner"), true);
+  // DeepSeek 正式供应商的恒开不可调模型：无档位但思考恒开。
+  assert.deepEqual(settings.getKnownModelThinkingLevels("deepseek", "deepseek-reasoner"), []);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
 });
 
 test("web resolver honors decorated ids and heuristics like the GUI", () => {

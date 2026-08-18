@@ -89,8 +89,10 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
           setSelectedEntry(null);
         }
       }
+      return true;
     } catch (err) {
       setError(formatMemoryError(err));
+      return false;
     } finally {
       setLoading(false);
     }

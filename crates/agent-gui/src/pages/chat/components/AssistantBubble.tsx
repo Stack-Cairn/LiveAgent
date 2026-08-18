@@ -4,6 +4,7 @@ import { RoundBlockContent } from "@liveagent/ui/components/chat/assistant-bubbl
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo } from "react";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { AssistantUnitRow } from "../transcript/rowModel";
@@ -55,9 +56,10 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
         <div aria-hidden="true" className="h-7 w-7 shrink-0" />
       )}
       <div
-        className={`min-w-0 flex-1 space-y-2 ${
-          unit.kind === "status" && isAgentMode ? "pt-1" : row.showAvatar ? "pt-0.5" : ""
-        }`}
+        className={cn(
+          "min-w-0 flex-1 space-y-2",
+          unit.kind === "status" && isAgentMode ? "pt-1" : row.showAvatar ? "pt-0.5" : "",
+        )}
       >
         {status ? <div className="min-w-0 max-w-full overflow-hidden py-1.5">{status}</div> : null}
 

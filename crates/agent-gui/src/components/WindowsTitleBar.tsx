@@ -186,7 +186,7 @@ export function WindowsTitleBar() {
         <img
           src={iconSimpleUrl}
           alt=""
-          className="h-[15px] w-[15px] shrink-0 rounded-[3.5px]"
+          className="h-[15px] w-[15px] shrink-0 rounded-xs"
           draggable={false}
         />
         <span className="truncate text-[12px] font-medium leading-[1.45] tracking-[0.01em] text-foreground/80">

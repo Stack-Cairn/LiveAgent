@@ -131,6 +131,15 @@ export type GatewayWorkspaceRootGrantsResponse = {
   grants: GatewayWorkspaceRootGrant[];
 };
 
+// 检查点回退的载荷类型:UI 层 checkpointRewind 是唯一真源,这里只做转发,
+// 保证 socket 层调用方(gatewaySocket/gatewaySocketRpc)不直接跨层 import。
+export type {
+  CheckpointDiffStats,
+  CheckpointRewindClient,
+  CheckpointRewindResult,
+  CheckpointTurnSummary,
+} from "@liveagent/ui/lib/chat/checkpointRewind";
+
 export type FsListDirsResponse = {
   path: string;
   entries: Array<{ path: string; name: string }>;

@@ -1,8 +1,9 @@
 import { Loader2 } from "@liveagent/ui/components/IconSet";
+import { t as translate } from "@liveagent/ui/i18n/index";
 import type { AppSettings } from "@/lib/settings";
 
 export function HistorySwitchLoadingOverlay(props: { locale: AppSettings["locale"] }) {
-  const label = props.locale === "en-US" ? "Loading conversation..." : "正在加载对话...";
+  const label = translate("chat.loadingConversation", props.locale);
 
   return (
     <div

@@ -1,5 +1,6 @@
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   CloudDownload,
   Download,
@@ -14,6 +15,7 @@ import {
   Search,
   Upload,
 } from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -28,6 +30,11 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  COMPOSER_CONTROL_CHEVRON_CLASS,
+  COMPOSER_CONTROL_LABEL_CLASS,
+  COMPOSER_CONTROL_TRIGGER_CLASS,
+} from "@liveagent/ui/lib/chat/composerControlStyles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import { useWorkspaceInvalidation } from "@liveagent/ui/lib/workspace-activity/useWorkspaceInvalidation";
@@ -1004,22 +1011,26 @@ export function GitBranchSelector(props: {
     <>
       <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger
-          disabled={disabled || !gitClient || !workdir.trim()}
-          className={cn(
-            "composer-reasoning-trigger inline-flex h-8 min-w-0 max-w-[13rem] items-center gap-1 rounded-full border px-2 text-xs font-medium outline-hidden transition-colors",
-            noRepo
-              ? "border-transparent bg-foreground/[0.04] text-muted-foreground"
-              : "border-emerald-300/25 bg-emerald-50/65 text-foreground hover:bg-emerald-50 dark:border-emerald-300/15 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.13]",
-            "disabled:pointer-events-none disabled:opacity-45",
-          )}
+          render={
+            <Button
+              variant="ghost"
+              disabled={disabled || !gitClient || !workdir.trim()}
+              className={cn(
+                COMPOSER_CONTROL_TRIGGER_CLASS,
+                "data-[popup-open]:bg-muted/60",
+                noRepo && "text-muted-foreground",
+              )}
+            />
+          }
           title={visibleError || (!canWrite ? disabledMessage : "") || label}
         >
           {loading || mutating || initializing ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
           ) : (
-            <GitBranch className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
+            <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
-          <span className="min-w-0 truncate">{label}</span>
+          <span className={COMPOSER_CONTROL_LABEL_CLASS}>{label}</span>
+          <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           className="composer-branch-dropdown flex w-72 flex-col overflow-hidden p-0"

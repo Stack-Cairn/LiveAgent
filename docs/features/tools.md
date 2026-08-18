@@ -27,6 +27,40 @@
 | Task tools | `taskTools.ts`、`taskState.ts` | `TaskCreate`/`TaskUpdate`/`TaskList` 按稳定数字 ID 增量维护当前 Run 的权威任务状态；状态随 `context_meta_json` 持久化并跨压缩 checkpoint 保留，仅 `runtimeScope=chat` 可用且不进入子代理注册表。 |
 | Subagent | `src/lib/subagents/*`（适配层 `agentTool.ts`、`sendMessageTool.ts`） | `Agent`/`SendMessage` 内置工具：委托持久化子代理、隔离 worktree、Message Bus。 |
 
+## 长时 Bash 会话
+
+Chat runtime 中的 Bash 采用可恢复 session：初始等待窗口结束后，未完成的命令返回 `session_id` 和绝对 `cursor`；模型通过 `ProcessWait` 等待并增量读取同一进程，通过 `ProcessStop` 终止完整进程树。非 Chat runtime 继续使用原有同步 Shell 路径。
+
+GUI 与 WebUI 均按调用顺序独立展示 `Bash`、`ProcessWait` 和 `ProcessStop`，保留每次调用的参数、状态快照和增量输出，不跨 round 合并或隐藏 session 控制工具。
+
+| 字段/状态 | 语义 |
+|---|---|
+| `session_duration_ms` | 从最初 Bash 启动开始计算的累计时长；不同响应之间不得相加。底层兼容 details 仍使用 `duration_ms`。 |
+| `completed` | 命令正常结束且 exit code 为 0。 |
+| `failed` | 命令启动或执行失败。 |
+| `cancelled` | 由 `ProcessStop`、Chat Stop 或应用生命周期取消。 |
+| `timed_out` | 显式硬超时触发。 |
+| `output_truncated` | Session 环形缓冲已经淘汰调用方请求的历史输出。 |
+
+### 验收提示词
+
+下面的提示词同时验证单次启动、cursor 续读、累计时长语义和 Git 前后基线：
+
+```text
+请在当前 LiveAgent 仓库执行一次长时间 Bash session 验证。
+
+1. 开始前先运行一次只读的 `git status --porcelain=v1`，完整记录为测试前基线。
+2. 只启动一次 `cargo test -p liveagent -- --test-threads=1`，不得重复启动该测试命令。
+3. 如果 Bash 返回 status=running：
+   - 记录 session_id 和 cursor；
+   - 不要重新运行 cargo test，不要执行 Bash sleep 或轮询脚本；
+   - 使用 ProcessWait 等待同一 session，每次传入上一响应的最新 cursor；
+   - 对预计较安静的长任务使用 yield_time_ms=60000。
+4. 一直等待到 completed、failed、cancelled 或 timed_out。session_duration_ms 是从最初 Bash 启动开始计算的累计时长，不得把多次响应的值相加。
+5. 完成后再次运行 `git status --porcelain=v1`，逐行比较测试前后基线是否完全一致。
+6. 报告测试命令启动次数、ProcessWait 次数、session_id、cursor 推进、最终状态、exit_code、最终 session_duration_ms、output_truncated、测试统计和 Git 基线比较结果。
+```
+
 ## 执行边界
 
 | 端 | 是否执行工具 | 说明 |

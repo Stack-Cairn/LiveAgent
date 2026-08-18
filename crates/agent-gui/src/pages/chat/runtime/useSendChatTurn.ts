@@ -94,7 +94,7 @@ import {
 import type { ActiveGatewayBridgeRequest } from "../gateway/gatewayBridgeTypes";
 import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
 import type { useGatewayRunMirrorCoordinator } from "../gateway/useGatewayRunMirrorCoordinator";
-import type { PersistConversationParams } from "../history/useConversationHistoryActions";
+import type { PersistConversationAction } from "../history/useConversationHistoryActions";
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
 import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptController";
 import type { createChatRuntimeHost } from "./ChatRuntimeHost";
@@ -193,7 +193,7 @@ type UseSendChatTurnParams = {
   activeAgentPrompt: string;
   ensureTunnelToolTab: (projectPathKey?: string) => void;
   ensureSshTunnelToolTab: (projectPathKey?: string) => void;
-  persistConversation: (params: PersistConversationParams) => Promise<boolean>;
+  persistConversation: PersistConversationAction;
   replaceConversationAtMessage: (
     conversationId: string,
     messageRef: HistoryMessageRef,
@@ -278,9 +278,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
   // persist-driven upsert (locally and via sync events); no settings write,
   // no extra workdirs IPC.
   async function persistConversationWithHistorySync(
-    params: Parameters<typeof persistConversation>[0],
-  ) {
-    return await persistConversation(params);
+    params: Parameters<PersistConversationAction>[0],
+  ): Promise<boolean> {
+    return (await persistConversation(params)) !== null;
   }
 
   async function waitForTerminalHistoryPersist(persistPromise: Promise<boolean> | null) {
@@ -1159,6 +1159,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       // this message can anchor its rebase without a history round-trip.
       messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
     });
+    if (effectiveIsAgentMode) {
+      try {
+        await invoke("checkpoint_begin_turn", {
+          conversation_id: conversationId,
+          turn_id: pendingUserMessage.id,
+        });
+      } catch (error) {
+        console.warn("checkpoint turn boundary failed", error);
+      }
+    }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
@@ -1612,6 +1622,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             taskStateStore,
             conversationId,
+            checkpointTurnId: pendingUserMessage.id,
             conversationCwd,
             fallbackTitle,
             createdAt,

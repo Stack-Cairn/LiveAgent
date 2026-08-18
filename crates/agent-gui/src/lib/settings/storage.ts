@@ -4,6 +4,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
+import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -61,14 +62,26 @@ export type SettingsSaveState =
 
 type SshPatchApplyResponse = {
   ssh?: unknown;
-  conflict?: string | null;
+  conflict?: "settings_changed" | null;
 };
 
 export type PersistSettingsResult = {
   ssh?: AppSettings["ssh"];
   stt?: AppSettings["stt"];
-  conflict?: string;
+  conflict?: "ssh_settings_changed";
 };
+
+async function invokeSettingsCommand<T>(
+  code: SettingsStorageErrorCode,
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    throw new SettingsStorageError(code, error);
+  }
+}
 
 function readLocalUiSettings(): {
   skills: SkillsSettings;
@@ -223,7 +236,10 @@ export type PersistedSettingsLoadResult = {
 export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSettingsLoadResult> {
   const defaults = getDefaultSettings();
   const localUi = readLocalUiSettings();
-  const persisted = await invoke<PersistedSettingsResponse>("settings_load_all");
+  const persisted = await invokeSettingsCommand<PersistedSettingsResponse>(
+    "load_failed",
+    "settings_load_all",
+  );
   const defaultWorkdir = normalizeDefaultWorkdir(persisted?.defaultWorkdir);
 
   const settings = normalizeSettings({
@@ -275,33 +291,33 @@ export async function persistSettings(
 
   if (hasChanged(prev.customProviders, next.customProviders)) {
     tasks.push(
-      invoke("settings_save_providers", {
+      invokeSettingsCommand("save_failed", "settings_save_providers", {
         payload: next.customProviders,
-      } as any),
+      }),
     );
   }
 
   if (hasChanged(prev.system, next.system)) {
     tasks.push(
-      invoke("settings_save_system", {
+      invokeSettingsCommand("save_failed", "settings_save_system", {
         payload: next.system,
-      } as any),
+      }),
     );
   }
 
   if (hasChanged(prev.mcp, next.mcp)) {
     tasks.push(
-      invoke("settings_save_mcp", {
+      invokeSettingsCommand("save_failed", "settings_save_mcp", {
         payload: next.mcp,
-      } as any),
+      }),
     );
   }
 
   if (hasChanged(prev.agents, next.agents)) {
     tasks.push(
-      invoke("settings_save_agents", {
+      invokeSettingsCommand("save_failed", "settings_save_agents", {
         payload: next.agents,
-      } as any),
+      }),
     );
   }
 
@@ -310,17 +326,17 @@ export async function persistSettings(
       includeProviderApiKeyUpdates: true,
     });
     tasks.push(
-      invoke<SshPatchApplyResponse>("settings_apply_ssh_patch", {
+      invokeSettingsCommand<SshPatchApplyResponse>("save_failed", "settings_apply_ssh_patch", {
         payload: {
           sshPatch: update.sshPatch ?? {},
           sshSecretUpdates: update.sshSecretUpdates,
         },
-      } as any).then((response) => {
+      }).then((response) => {
         if (response?.ssh) {
           result.ssh = normalizeSettings({ ssh: response.ssh as AppSettings["ssh"] }).ssh;
         }
         if (response?.conflict) {
-          result.conflict = response.conflict;
+          result.conflict = "ssh_settings_changed";
         }
       }),
     );
@@ -328,25 +344,25 @@ export async function persistSettings(
 
   if (hasChanged(prev.remote, next.remote)) {
     tasks.push(
-      invoke("settings_save_remote", {
+      invokeSettingsCommand("save_failed", "settings_save_remote", {
         payload: next.remote,
-      } as any),
+      }),
     );
   }
 
   if (hasChanged(prev.memory, next.memory)) {
     tasks.push(
-      invoke("settings_save_memory", {
+      invokeSettingsCommand("save_failed", "settings_save_memory", {
         payload: next.memory,
-      } as any),
+      }),
     );
   }
 
   if (hasChanged(prev.modelFailover, next.modelFailover)) {
     tasks.push(
-      invoke("settings_save_model_failover", {
+      invokeSettingsCommand("save_failed", "settings_save_model_failover", {
         payload: next.modelFailover,
-      } as any),
+      }),
     );
   }
 
@@ -387,7 +403,7 @@ export async function persistSettings(
 }
 
 export async function publishGatewaySettingsSync(settings: AppSettings): Promise<void> {
-  await invoke("gateway_publish_settings_sync", {
+  await invokeSettingsCommand("gateway_sync_failed", "gateway_publish_settings_sync", {
     payload: buildGatewaySettingsSyncPayload(settings),
-  } as any);
+  });
 }

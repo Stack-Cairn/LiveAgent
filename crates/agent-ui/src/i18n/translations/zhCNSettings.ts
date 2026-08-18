@@ -41,6 +41,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "记忆配额已满：{scope} 已用 {used}/{limit}，请立即整理或删除记忆。",
   "settings.memoryRefresh": "刷新",
+  "settings.memoryRefreshing": "正在刷新",
+  "settings.memoryRefreshComplete": "刷新完成",
+  "settings.memoryRefreshFailed": "刷新失败",
   "settings.memoryOpenSettings": "记忆设置",
   "settings.memorySettingsTitle": "记忆设置",
   "settings.memorySettingsClose": "关闭记忆设置",
@@ -170,6 +173,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "日志",
   "settings.memoryScopeGlobal": "全局",
   "settings.memoryScopeProject": "项目",
+  "settings.memoryScope": "记忆范围",
+  "settings.memoryType": "记忆类型",
   "settings.memoryTypeUser": "用户",
   "settings.memoryTypeFeedback": "偏好",
   "settings.memoryTypeProject": "项目",
@@ -310,6 +315,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.managed_process.desc": "启动并管理长时间运行的后台进程",
   "settings.builtinTool.managed_process.detail":
     "启动、探活与停止长时间运行的后台进程（如开发服务器），进程记录可跨应用重启保留。仅在对话场景注册。",
+  "settings.builtinTool.process_wait.name": "等待命令",
+  "settings.builtinTool.process_wait.desc": "等待运行中的 Bash 会话并读取新增输出",
+  "settings.builtinTool.process_wait.detail":
+    "继续等待现有 Bash 会话，不会再启动 Shell 进程；命令完成、输出需要分页或达到等待时限时返回。",
+  "settings.builtinTool.process_stop.name": "停止命令",
+  "settings.builtinTool.process_stop.desc": "停止运行中的 Bash 会话",
+  "settings.builtinTool.process_stop.detail": "终止 Bash 会话的完整进程树，并返回最终缓冲输出。",
   "settings.builtinTool.read_terminal.name": "读取终端",
   "settings.builtinTool.read_terminal.desc": "读取右侧终端面板的屏幕内容",
   "settings.builtinTool.read_terminal.detail":
@@ -734,7 +746,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cronRemainingExecutionsUnitShort": "次",
   "settings.cronRemainingExecutionsEditRequired": "执行轮次已归零，请先编辑更改执行轮次。",
   "settings.cronTimeoutSeconds": "超时时间（秒）",
-  "settings.cronTimeoutSecondsInvalid": "超时时间必须是 1-600 之间的整数（秒）。",
+  "settings.cronTimeoutSecondsInvalid": "超时时间必须是 {min}-{max} 之间的整数（秒）。",
+  "settings.cronTimeoutSecondsMaxHint": "当前任务类型最长 {max} 秒。",
   "settings.cronTimeoutSecondsUnitShort": "秒",
   "settings.cronTaskType": "任务类型",
   "settings.cronTypeBash": "Shell 脚本",
@@ -865,7 +878,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsImportDesc":
     "扫描本机 Claude Code、Codex、CodeBuddy 与 AGENTS 的技能目录，勾选后导入到 LiveAgent。",
   "settings.skillsImportOverwriteHint": "同名技能将自动备份后覆盖。",
-  "settings.skillsImportScanning": "正在扫描本地技能...",
+  "settings.skillsImportScanning": "正在扫描",
   "settings.skillsImportRescan": "重新扫描",
   "settings.skillsImportNotDetected": "未检测到",
   "settings.skillsImportEmpty": "该目录下未发现技能",

@@ -1,6 +1,5 @@
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
-import { ChatHeader, type ChatHeaderProps } from "../components/chat/ChatHeader";
 import { cn } from "../lib/shared/utils";
 import type { SkillSummary } from "../lib/skills/index";
 import { McpHubPage } from "../pages/mcp-hub/McpHubPage";
@@ -8,10 +7,8 @@ import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 
 export type ApplicationViewId = "chat" | "skills-hub" | "mcp-hub";
 
-type ApplicationChatViewProps = Omit<ChatHeaderProps, "settings"> & {
+type ApplicationChatViewProps = {
   containerProps?: Omit<HTMLAttributes<HTMLDivElement>, "children">;
-  headerClassName?: string;
-  headerOverlay?: ReactNode;
   content: ReactNode;
 };
 
@@ -72,13 +69,7 @@ export function ApplicationView(props: ApplicationViewProps) {
       />
     );
   } else {
-    const {
-      containerProps,
-      headerClassName,
-      headerOverlay,
-      content: chatContent,
-      ...headerProps
-    } = chat;
+    const { containerProps, content: chatContent } = chat;
     content = (
       <div
         {...containerProps}
@@ -87,10 +78,6 @@ export function ApplicationView(props: ApplicationViewProps) {
           containerProps?.className,
         )}
       >
-        <div className={headerClassName}>
-          <ChatHeader {...headerProps} settings={settings} />
-          {headerOverlay}
-        </div>
         {chatContent}
       </div>
     );

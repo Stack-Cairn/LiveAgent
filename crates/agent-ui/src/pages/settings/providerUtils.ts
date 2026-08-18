@@ -306,13 +306,13 @@ export function normalizeProviderModelsBaseUrl(
   if (isFullUrl) return deriveModelsBaseUrlFromFullUrl(baseUrl);
   let normalizedUrl = normalizeBaseUrl(baseUrl);
 
-  if (type !== "codex" && type !== "xai" && type !== "gemini") {
+  if (type !== "codex" && type !== "xai" && type !== "deepseek" && type !== "gemini") {
     return normalizedUrl;
   }
 
   const lower = normalizedUrl.toLowerCase();
 
-  if (type === "codex" || type === "xai") {
+  if (type === "codex" || type === "xai" || type === "deepseek") {
     for (const suffix of CODEX_MODELS_SUFFIXES) {
       if (lower.endsWith(suffix)) {
         normalizedUrl = normalizedUrl.slice(0, -suffix.length);
@@ -402,7 +402,7 @@ export function buildProviderModelsAttempts(
     { kind: "default", headers: buildModelsHeaders(type, apiKey, "default") },
     { kind: "official", headers: buildModelsHeaders(type, apiKey, "official") },
   ];
-  // codex/xai 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
+  // codex/xai/deepseek 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
   // 必不同），重复请求同一端点没有意义，收敛为一次。
   return JSON.stringify(attempts[0].headers) === JSON.stringify(attempts[1].headers)
     ? [attempts[0]]

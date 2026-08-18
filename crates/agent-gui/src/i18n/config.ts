@@ -15,6 +15,10 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
   "zh-CN": {
     "app.windowPinned": "已置顶",
     "app.windowPinnedHint": "窗口已置顶，浮在其他应用上方。点击取消置顶。",
+    "app.settingsLoadFailed": "加载设置失败，已回退到默认配置。",
+    "app.settingsSaveFailed": "保存设置失败。",
+    "app.settingsReloadFailed": "重新加载设置失败，当前显示的是旧配置。",
+    "app.gatewaySettingsSyncFailed": "同步 WebUI 设置失败。",
     "window.controls": "窗口控制",
     "window.minimize": "最小化",
     "window.maximize": "最大化",
@@ -176,6 +180,11 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
   "en-US": {
     "app.windowPinned": "Pinned",
     "app.windowPinnedHint": "Window is pinned above other apps. Click to unpin.",
+    "app.settingsLoadFailed": "Failed to load settings. Default settings have been restored.",
+    "app.settingsSaveFailed": "Failed to save settings.",
+    "app.settingsReloadFailed":
+      "Failed to reload settings. The previous settings are still displayed.",
+    "app.gatewaySettingsSyncFailed": "Failed to sync WebUI settings.",
     "window.controls": "Window controls",
     "window.minimize": "Minimize",
     "window.maximize": "Maximize",

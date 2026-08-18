@@ -113,13 +113,12 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedResourcePanel, /<Input/);
   assert.match(sharedResourcePanel, /<ResourceSelectionCard/);
   assert.match(sharedResourcePanel, /getMcpTransportMeta/);
-  assert.match(sharedProjectSettings, /<Dialog\.Root/);
-  assert.match(sharedProjectSettings, /<Dialog\.Portal>/);
-  assert.match(sharedProjectSettings, /<Dialog\.Backdrop/);
-  assert.match(sharedProjectSettings, /<Dialog\.Viewport/);
-  assert.match(sharedProjectSettings, /<Dialog\.Popup/);
-  assert.match(sharedProjectSettings, /<Dialog\.Title/);
-  assert.match(sharedProjectSettings, /<Dialog\.Close/);
+  assert.match(sharedProjectSettings, /from "\.\.\/ui\/dialog"/);
+  assert.match(sharedProjectSettings, /<Dialog\b/);
+  assert.match(sharedProjectSettings, /<DialogContent/);
+  assert.match(sharedProjectSettings, /<DialogTitle/);
+  assert.match(sharedProjectSettings, /<DialogClose/);
+  assert.doesNotMatch(sharedProjectSettings, /Dialog\.(?:Root|Portal|Backdrop|Viewport|Popup)/);
   assert.doesNotMatch(sharedProjectSettings, /createPortal|role="dialog"/);
   assert.match(sharedProjectSettings, /onRenameProject\?\.\(normalizedProjectName\)/);
   assert.match(guiChatPage, /onRenameProject=\{\(name\)/);
@@ -141,8 +140,10 @@ test("workspace configuration uses one entry and one shared two-column modal", (
     sharedProjectSettings,
     /if \(directoryPickerActive\) \{\s*return <>\{directoryPickerElement\}<\/>;/,
   );
-  assert.match(sharedProjectSettings, /open=\{!isClosing\}/);
-  assert.doesNotMatch(sharedProjectSettings, /open=\{!isClosing && !directoryPickerActive\}/);
+  assert.match(sharedProjectSettings, /open=\{dialogOpen\}/);
+  assert.match(sharedProjectSettings, /onOpenChangeComplete=\{\(open\) =>/);
+  assert.doesNotMatch(sharedProjectSettings, /isClosing|useModalMotion/);
+  assert.doesNotMatch(sharedProjectSettings, /open=\{dialogOpen && !directoryPickerActive\}/);
   assert.match(sharedWorkspaceCloneModal, /@liveagent\/adapters\/directoryPicker/);
   assert.match(sharedWorkspaceCloneModal, /\{directoryPickerElement\}/);
   assert.match(webDirectoryPickerAdapter, /useRemotePathPicker/);
@@ -150,12 +151,11 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(sharedProjectSettings, /window\.requestAnimationFrame/);
   assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
   assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
-  assert.match(webRemotePathPicker, /remote-path-picker-panel/);
   assert.match(webRemotePathPicker, /h-\[min\(650px,92vh\)\]/);
   assert.match(webRemotePathPicker, /max-h-\[92vh\]/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
   assert.doesNotMatch(webRemotePathPicker, /forceRender/);
-  assert.match(webRemotePathPicker, /bg-black\/60 backdrop-blur-sm/);
+  assert.doesNotMatch(webRemotePathPicker, /overlayClassName|viewportClassName|z-\[\d+\]/);
   assert.ok(
     webRemotePathPicker.indexOf("selectedPathRef.current = path") <
       webRemotePathPicker.indexOf("pending.resolve(selectedPathRef.current)"),
@@ -163,14 +163,17 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(webGatewayApp, /useDirectoryPicker|directoryPickerElement/);
   assert.match(sharedResourceTabs, /<TabsList[\s\S]*<TabsTrigger/);
   assert.match(sharedResourceCard, /ResourceActivationSwitch/);
-  assert.match(sharedSheet, /export const SheetViewport/);
+  assert.doesNotMatch(sharedSheet, /SheetPrimitive\.Viewport|backdropClassName|portalProps/);
   assert.match(sharedSheet, /export const SheetPopup/);
   assert.match(sharedSheet, /export const SheetPanel/);
   assert.match(sharedSheet, /SheetPopup as SheetContent/);
   assert.match(sharedDirectoryPanel, /maxLength=\{32\}/);
   assert.match(sharedDirectoryPanel, /pattern="\[a-z\]\[a-z0-9_-\]\{0,31\}"/);
-  assert.match(sharedDirectoryPanel, /<option value="read"/);
-  assert.match(sharedDirectoryPanel, /<option value="write"/);
+  assert.match(sharedDirectoryPanel, /<Input/);
+  assert.match(sharedDirectoryPanel, /<Select\b/);
+  assert.match(sharedDirectoryPanel, /<SelectItem value="read"/);
+  assert.match(sharedDirectoryPanel, /<SelectItem value="write"/);
+  assert.doesNotMatch(sharedDirectoryPanel, /<(?:input|select|option)\b/);
   assert.doesNotMatch(sharedResourcePanel, /McpImportView|McpRegistryBrowser|SkillsStoreView/);
 });
 

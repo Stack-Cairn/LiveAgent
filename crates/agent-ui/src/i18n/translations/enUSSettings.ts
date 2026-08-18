@@ -44,6 +44,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaExhausted":
     "Memory quota exhausted: {scope} at {used}/{limit}. Organize or delete memories now.",
   "settings.memoryRefresh": "Refresh",
+  "settings.memoryRefreshing": "Refreshing…",
+  "settings.memoryRefreshComplete": "Refreshed",
+  "settings.memoryRefreshFailed": "Refresh failed",
   "settings.memoryOpenSettings": "Memory settings",
   "settings.memorySettingsTitle": "Memory settings",
   "settings.memorySettingsClose": "Close memory settings",
@@ -179,6 +182,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryCategoryJournal": "Journal",
   "settings.memoryScopeGlobal": "Global",
   "settings.memoryScopeProject": "Project",
+  "settings.memoryScope": "Memory scope",
+  "settings.memoryType": "Memory type",
   "settings.memoryTypeUser": "User",
   "settings.memoryTypeFeedback": "Preference",
   "settings.memoryTypeProject": "Project",
@@ -321,6 +326,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.managed_process.desc": "Start and manage long-running background processes",
   "settings.builtinTool.managed_process.detail":
     "Starts, health-checks and stops long-running background processes such as dev servers; the process journal survives app restarts. Registered in chat sessions only.",
+  "settings.builtinTool.process_wait.name": "Wait for Command",
+  "settings.builtinTool.process_wait.desc": "Wait for a running Bash session and read new output",
+  "settings.builtinTool.process_wait.detail":
+    "Continues an existing Bash session without starting another shell process. It returns on completion, output pagination, or the configured wait deadline.",
+  "settings.builtinTool.process_stop.name": "Stop Command",
+  "settings.builtinTool.process_stop.desc": "Stop a running Bash session",
+  "settings.builtinTool.process_stop.detail":
+    "Terminates the Bash session's complete process tree and returns its final buffered output.",
   "settings.builtinTool.read_terminal.name": "Read Terminal",
   "settings.builtinTool.read_terminal.desc": "Read the on-screen content of the terminal panel",
   "settings.builtinTool.read_terminal.detail":
@@ -769,7 +782,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronRemainingExecutionsEditRequired":
     "Run count is exhausted. Edit this task and change the run count first.",
   "settings.cronTimeoutSeconds": "Timeout (seconds)",
-  "settings.cronTimeoutSecondsInvalid": "Timeout must be an integer between 1 and 600 seconds.",
+  "settings.cronTimeoutSecondsInvalid":
+    "Timeout must be an integer between {min} and {max} seconds.",
+  "settings.cronTimeoutSecondsMaxHint": "Up to {max} seconds for this task type.",
   "settings.cronTimeoutSecondsUnitShort": "s",
   "settings.cronTaskType": "Task Type",
   "settings.cronTypeBash": "Shell Script",
@@ -905,7 +920,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
   "settings.skillsImportOverwriteHint":
     "Skills with the same name are backed up, then overwritten.",
-  "settings.skillsImportScanning": "Scanning local skills...",
+  "settings.skillsImportScanning": "Scanning",
   "settings.skillsImportRescan": "Rescan",
   "settings.skillsImportNotDetected": "Not detected",
   "settings.skillsImportEmpty": "No skills found in this directory",

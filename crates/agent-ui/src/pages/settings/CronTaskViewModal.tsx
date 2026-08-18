@@ -12,7 +12,6 @@ import {
   ScrollText,
   Terminal,
   Timer,
-  X,
   XCircle,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -26,12 +25,13 @@ import {
   listCronRuns,
   MANUAL_CRON_RUN_POLL_INTERVAL_MS,
   MANUAL_CRON_RUN_TIMEOUT_MS,
+  PROMPT_PENDING_CLAIM_WINDOW_MS,
   runCronNow,
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useModalMotion } from "../../lib/shared/modalMotion";
+import { Dialog, DialogBody, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ConfirmActionPopover } from "./shared";
 
 type CronTaskViewModalProps = {
@@ -116,7 +116,6 @@ function LeftPanel({
   isRunningNow,
   runNowError,
   onRunNow,
-  onClose,
 }: {
   task: CronTask;
   t: (key: string) => string;
@@ -124,7 +123,6 @@ function LeftPanel({
   isRunningNow: boolean;
   runNowError: string | null;
   onRunNow: () => void;
-  onClose: () => void;
 }) {
   const TypeIcon = cfg.icon;
   const script = task.script?.trim() ?? "";
@@ -134,15 +132,20 @@ function LeftPanel({
     <>
       {/* ── Fixed hero header ── */}
       <div className="relative shrink-0 overflow-hidden">
-        <div className={`absolute inset-0 ${cfg.accentBg} opacity-40`} />
+        <div className={cn("absolute inset-0", cfg.accentBg, "opacity-40")} />
         <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-white/10 to-transparent blur-2xl" />
 
-        <div className="relative px-5 pb-4 pt-5">
+        <div className="relative px-5 pb-4 pt-5 max-[820px]:pr-14">
           {/* Type badge + run-now button on the hero's top row, kept out of
               the meta/content area so pill wrapping never moves the button */}
           <div className="flex items-center justify-between gap-2">
             <div
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder}`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+                cfg.accent,
+                cfg.accentBg,
+                cfg.accentBorder,
+              )}
             >
               <TypeIcon className="h-3 w-3" />
               {t(cfg.label)}
@@ -158,27 +161,19 @@ function LeftPanel({
                 aria-label={
                   isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
                 }
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder} hover:brightness-110 disabled:cursor-wait disabled:opacity-60`}
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                  cfg.accent,
+                  cfg.accentBg,
+                  cfg.accentBorder,
+                  "hover:brightness-110 disabled:cursor-wait disabled:opacity-60",
+                )}
               >
                 {isRunningNow ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Play className="h-3.5 w-3.5" />
                 )}
-              </button>
-              {/* Desktop keeps the close button in the logs header (the modal's
-                  top-right corner there). On the stacked mobile layout the
-                  gateway CSS shows this hero copy right of run-now instead and
-                  hides the logs-header one (settings-cron-view-hero-close /
-                  settings-cron-logs-close). */}
-              <button
-                type="button"
-                onClick={onClose}
-                title={t("settings.cronViewClose")}
-                aria-label={t("settings.cronViewClose")}
-                className="settings-cron-view-hero-close hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              >
-                <X size={14} />
               </button>
             </div>
           </div>
@@ -198,27 +193,32 @@ function LeftPanel({
               <span className="font-mono">{task.cron}</span>
             </div>
             <div
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ${
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium",
                 task.enabled
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground"
-              }`}
+                  : "bg-muted text-muted-foreground",
+              )}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${task.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  task.enabled ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
               />
               {task.enabled
                 ? t("settings.cronViewStatusEnabled")
                 : t("settings.cronViewStatusDisabled")}
             </div>
             <div
-              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium ${
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium",
                 task.remainingExecutions === 0
                   ? "bg-red-500/10 text-red-600 dark:text-red-400"
                   : task.remainingExecutions == null
                     ? "bg-muted text-muted-foreground"
-                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400"
-              }`}
+                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+              )}
               title={
                 task.remainingExecutions == null
                   ? t("settings.cronRemainingExecutionsUnlimited")
@@ -402,15 +402,7 @@ function LeftPanel({
 
 /* ─────────────────────── Right panel ─────────────────────── */
 
-function RightPanel({
-  task,
-  t,
-  onClose,
-}: {
-  task: CronTask;
-  t: (key: string) => string;
-  onClose: () => void;
-}) {
+function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string }) {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [logs, setLogs] = useState<CronRunRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -479,7 +471,7 @@ function RightPanel({
   return (
     <>
       {/* ── Fixed header ── */}
-      <div className="settings-cron-logs-header flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3.5 pr-14 max-sm:flex-wrap">
         <ScrollText className="h-4 w-4 text-muted-foreground/50" />
         <span className="text-sm font-semibold text-foreground">{t("settings.cronViewLogs")}</span>
         <div className="ml-auto flex items-center gap-2">
@@ -533,16 +525,6 @@ function RightPanel({
             </span>
           ) : null}
         </div>
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={onClose}
-          title={t("settings.cronViewClose")}
-          aria-label={t("settings.cronViewClose")}
-          className="settings-cron-logs-close flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-        >
-          <X size={14} />
-        </button>
       </div>
 
       {/* ── Scrollable log list ── */}
@@ -570,13 +552,14 @@ function RightPanel({
               return (
                 <div
                   key={log.id}
-                  className={`overflow-hidden rounded-xl border transition-colors ${
+                  className={cn(
+                    "overflow-hidden rounded-xl border transition-colors",
                     isRunning
                       ? "border-sky-500/20 bg-sky-500/[0.03]"
                       : log.success
                         ? "border-border/50 bg-muted/20"
-                        : "border-red-500/20 bg-red-500/[0.03]"
-                  }`}
+                        : "border-red-500/20 bg-red-500/[0.03]",
+                  )}
                 >
                   {/* Summary — fixed-width columns for vertical alignment */}
                   <button
@@ -598,13 +581,14 @@ function RightPanel({
                     </span>
                     {/* Status tag — fixed width for alignment */}
                     <span
-                      className={`w-[36px] shrink-0 text-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                      className={cn(
+                        "w-[36px] shrink-0 text-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                         isRunning
                           ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
                           : log.success
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-red-500/10 text-red-600 dark:text-red-400"
-                      }`}
+                            : "bg-red-500/10 text-red-600 dark:text-red-400",
+                      )}
                     >
                       {isRunning
                         ? t("settings.cronViewLogRunning")
@@ -620,9 +604,10 @@ function RightPanel({
                     </span>
                     {/* Chevron */}
                     <ChevronDown
-                      className={`h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform ${
-                        isExpanded ? "rotate-0" : "-rotate-90"
-                      }`}
+                      className={cn(
+                        "h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
+                        isExpanded ? "rotate-0" : "-rotate-90",
+                      )}
                     />
                   </button>
 
@@ -640,11 +625,12 @@ function RightPanel({
                           <span className="text-muted-foreground/60">
                             {t("settings.cronViewLogExit")}:{" "}
                             <span
-                              className={`font-mono font-medium ${
+                              className={cn(
+                                "font-mono font-medium",
                                 log.exitCode === 0
                                   ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }`}
+                                  : "text-red-600 dark:text-red-400",
+                              )}
                             >
                               {log.exitCode}
                             </span>
@@ -659,11 +645,12 @@ function RightPanel({
                               : t("settings.cronViewLogOutput")}
                           </div>
                           <pre
-                            className={`whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2 font-mono text-[11px] leading-relaxed ${
+                            className={cn(
+                              "whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2 font-mono text-[11px] leading-relaxed",
                               log.success
                                 ? "border-border/40 bg-background/60 text-foreground/70"
-                                : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300"
-                            }`}
+                                : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300",
+                            )}
                           >
                             {log.output}
                           </pre>
@@ -695,7 +682,6 @@ function RightPanel({
 
 export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   const { t } = useLocale();
-  const { modalState, requestClose } = useModalMotion(onClose);
   // Live subscription: enable/disable toggles, executor decrements and
   // scheduler errors show up while the modal is open.
   const { cron } = useAutomation();
@@ -705,17 +691,20 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   const [runNowError, setRunNowError] = useState<string | null>(null);
   const runNowLockRef = useRef(false);
   // Manual runs are watched for at least the legacy six-minute window, and
-  // longer when the task timeout exceeds it (plus scheduler/completion slack).
+  // longer when the task timeout exceeds it (plus scheduler/completion
+  // slack). Prompt runs may additionally sit in the pending claim window
+  // before their execution lease starts.
   const manualRunWatchTimeoutMs = Math.max(
     MANUAL_CRON_RUN_TIMEOUT_MS,
-    ((task?.timeoutSeconds ?? DEFAULT_CRON_TIMEOUT_SECONDS) + 60) * 1_000,
+    (task?.type === "prompt" ? PROMPT_PENDING_CLAIM_WINDOW_MS : 0) +
+      ((task?.timeoutSeconds ?? DEFAULT_CRON_TIMEOUT_SECONDS) + 60) * 1_000,
   );
 
   useEffect(() => {
     if (!task) {
-      requestClose();
+      onClose();
     }
-  }, [task, requestClose]);
+  }, [task, onClose]);
 
   useEffect(() => {
     if (manualRunStartedAt == null) return;
@@ -783,36 +772,35 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
     }
   }
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      {/* Use explicit h-[80vh] so children can compute flex/overflow correctly */}
-      <div className="settings-modal-panel settings-cron-view-panel relative z-10 flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex h-[80dvh] max-w-4xl p-0 max-[820px]:h-full max-[820px]:flex-col"
+        closeLabel={t("settings.cronViewClose")}
+        showCloseButton
+      >
+        <DialogTitle className="sr-only">{task.name}</DialogTitle>
         {/* ── Left: task detail ── */}
-        <div className="settings-cron-view-left flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background">
-          <LeftPanel
-            task={task}
-            t={t}
-            cfg={cfg}
-            isRunningNow={isRunningNow}
-            runNowError={runNowError}
-            onRunNow={() => {
-              void handleRunNow(task.id);
-            }}
-            onClose={requestClose}
-          />
-        </div>
+        <DialogBody className="flex overflow-hidden p-0 max-[820px]:flex-col">
+          <div className="flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background max-[820px]:max-h-[42%] max-[820px]:w-full max-[820px]:border-b max-[820px]:border-r-0">
+            <LeftPanel
+              task={task}
+              t={t}
+              cfg={cfg}
+              isRunningNow={isRunningNow}
+              runNowError={runNowError}
+              onRunNow={() => {
+                void handleRunNow(task.id);
+              }}
+            />
+          </div>
 
-        {/* ── Right: logs ── */}
-        <div className="settings-cron-view-right flex min-w-0 flex-1 flex-col bg-muted/5">
-          <RightPanel task={task} t={t} onClose={requestClose} />
-        </div>
-      </div>
-    </div>,
-    document.body,
+          {/* ── Right: logs ── */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/5">
+            <RightPanel task={task} t={t} />
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }

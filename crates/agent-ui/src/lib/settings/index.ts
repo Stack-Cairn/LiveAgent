@@ -307,6 +307,22 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
     },
+    {
+      id: "builtin-deepseek",
+      name: "DeepSeek",
+      type: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      isFullUrl: false,
+      apiKey: "",
+      customHeaders: [],
+      models: [],
+      activeModels: [],
+      reasoning: "high",
+      promptCachingEnabled: false,
+      nativeWebSearchEnabled: false,
+      useSystemProxy: false,
+      usageQuery: getDefaultUsageQueryConfig(),
+    },
   ];
 }
 
@@ -349,6 +365,7 @@ const CHAT_RUNTIME_REASONING_PROVIDER_KEYS: ChatRuntimeReasoningProviderKey[] = 
   "codex_openai_completions",
   "gemini",
   "xai",
+  "deepseek",
 ];
 
 export function getChatRuntimeReasoningProviderKey(params: {
@@ -363,6 +380,9 @@ export function getChatRuntimeReasoningProviderKey(params: {
   }
   if (params.providerId === "xai") {
     return "xai";
+  }
+  if (params.providerId === "deepseek") {
+    return "deepseek";
   }
   if (params.providerId === "codex" && params.requestFormat === "openai-completions") {
     return "codex_openai_completions";
@@ -881,6 +901,7 @@ function normalizeProviderId(input: unknown): ProviderId {
     case "codex":
     case "gemini":
     case "xai":
+    case "deepseek":
       return input;
     default:
       return "claude_code";
@@ -1052,18 +1073,18 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
-    // 行为由 promptCacheHintMode 决定。Gemini / xAI 不使用这里的缓存控制。
+    // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。
     promptCachingEnabled:
       type === "codex"
         ? promptCacheHintMode !== "none"
-        : type === "gemini" || type === "xai"
+        : type === "gemini" || type === "xai" || type === "deepseek"
           ? false
           : obj.promptCachingEnabled !== false,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
     ...(type === "claude_code" && obj.promptCacheRetention === "long"
       ? { promptCacheRetention: "long" as const }
       : {}),
-    nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
+    nativeWebSearchEnabled: type === "deepseek" ? false : obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
     usageQuery: normalizeUsageQueryConfig(obj.usageQuery),
   };

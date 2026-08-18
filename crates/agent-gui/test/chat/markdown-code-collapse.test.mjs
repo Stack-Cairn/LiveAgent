@@ -49,6 +49,12 @@ function createMarkdownModule(expanded) {
       },
       "./ui/button": { Button: "Button" },
       "./ui/copy-button": { CopyButton: "CopyButton" },
+      "./ui/dialog": {
+        Dialog: "Dialog",
+        DialogContent: "DialogContent",
+        DialogDescription: "DialogDescription",
+        DialogTitle: "DialogTitle",
+      },
     },
   });
   return loader.loadModule("@liveagent/ui/components/Markdown.tsx");

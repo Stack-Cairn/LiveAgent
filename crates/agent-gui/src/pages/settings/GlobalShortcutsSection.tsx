@@ -7,6 +7,7 @@ import {
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import {
   type ReactNode,
@@ -869,11 +870,12 @@ export function GlobalShortcutsSection() {
               <div
                 key={action.id}
                 data-ghk-row={action.id}
-                className={`flex w-full items-center gap-1.5 rounded-xl border pr-2.5 transition-all ${
+                className={cn(
+                  "flex w-full items-center gap-1.5 rounded-xl border pr-2.5 transition-all",
                   isRecording
                     ? "border-primary bg-primary/5 shadow-sm shadow-primary/20"
-                    : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35"
-                }`}
+                    : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35",
+                )}
               >
                 <button
                   type="button"
@@ -889,11 +891,12 @@ export function GlobalShortcutsSection() {
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
                         isRecording
                           ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground group-hover:bg-accent/80"
-                      }`}
+                          : "bg-muted text-muted-foreground group-hover:bg-accent/80",
+                      )}
                     >
                       {action.icon}
                     </div>
@@ -905,7 +908,10 @@ export function GlobalShortcutsSection() {
                     </div>
                   </div>
                   <div
-                    className={`flex shrink-0 items-center gap-1.5 ${bindingDisabled ? "opacity-40" : ""}`}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5",
+                      bindingDisabled ? "opacity-40" : "",
+                    )}
                   >
                     {tokens.length > 0 ? (
                       tokens.map((token, index) => (
@@ -918,7 +924,10 @@ export function GlobalShortcutsSection() {
                       ))
                     ) : (
                       <span
-                        className={`text-xs ${isRecording ? "text-primary" : "text-muted-foreground"}`}
+                        className={cn(
+                          "text-xs",
+                          isRecording ? "text-primary" : "text-muted-foreground",
+                        )}
                       >
                         {isRecording
                           ? t("settings.shortcutRecordingHint")
@@ -956,7 +965,10 @@ export function GlobalShortcutsSection() {
 
         {status ? (
           <div
-            className={`text-xs font-medium ${status.kind === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}
+            className={cn(
+              "text-xs font-medium",
+              status.kind === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+            )}
           >
             {status.text}
           </div>
@@ -975,11 +987,12 @@ export function GlobalShortcutsSection() {
                 key={option}
                 type="button"
                 onClick={() => setLayout(option)}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs transition-all",
                   layout === option
                     ? "bg-background font-semibold text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {t(`settings.shortcutLayout${option}`)}
               </button>
@@ -1008,7 +1021,7 @@ export function GlobalShortcutsSection() {
         <div ref={outerRef} className="overflow-hidden pt-2">
           <div ref={scalerRef}>
             <div className="ghk-stage">
-              <div className={`ghk-board${recording ? " ghk-rec" : ""}`}>
+              <div className={cn("ghk-board", recording && "ghk-rec")}>
                 {renderMainBlock(layout !== "61")}
                 {layout !== "61" ? renderNavBlock() : null}
                 {layout === "104" ? renderNumBlock() : null}

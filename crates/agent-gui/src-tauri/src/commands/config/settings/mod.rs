@@ -52,7 +52,6 @@ pub(crate) const SSH_PATCH_FIELD: &str = "sshPatch";
 /// 仅用于已认证桌面 Agent → Gateway 的后端同步；Gateway 必须在任何 Web 广播前移除。
 pub(crate) const STT_SECRET_SYNC_FIELD: &str = "sttSecretSync";
 pub(crate) const STT_SECRET_UPDATE_FIELD: &str = "sttSecretUpdate";
-const SSH_SYNC_CONFLICT_MESSAGE: &str = "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。";
 
 const PROVIDER_SETTINGS_SELECT_SQL: &str = "
     SELECT provider_id, payload_json

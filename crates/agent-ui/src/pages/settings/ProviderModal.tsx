@@ -23,7 +23,6 @@ import {
   createModelOrderSnapshot,
   findNewModelIds,
 } from "@liveagent/ui/lib/providers/modelVendor";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import {
   applyModelBulkActiveState,
   applyUsageQueryModePreset,
@@ -156,7 +155,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
   const [promptCachingEnabled, setPromptCachingEnabled] = useState(
-    initialData?.promptCachingEnabled ?? (providerType !== "gemini" && providerType !== "xai"),
+    initialData?.promptCachingEnabled ??
+      (providerType !== "gemini" && providerType !== "xai" && providerType !== "deepseek"),
   );
   const [promptCacheHintMode, setPromptCacheHintMode] = useState<PromptCacheHintMode>(
     initialData?.promptCacheHintMode ??
@@ -194,7 +194,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     rect: { left: number; top: number; width: number };
   } | null>(null);
   const [headerSuggestActive, setHeaderSuggestActive] = useState(0);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
+  const [dialogOpen, setDialogOpen] = useState(true);
+  const requestClose = useCallback(() => setDialogOpen(false), []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFetchKey = useRef("");
@@ -685,7 +686,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       promptCachingEnabled:
         providerType === "codex"
           ? promptCacheHintMode !== "none"
-          : providerType === "gemini" || providerType === "xai"
+          : providerType === "gemini" || providerType === "xai" || providerType === "deepseek"
             ? false
             : promptCachingEnabled,
       promptCacheHintMode: providerType === "codex" ? promptCacheHintMode : undefined,
@@ -693,7 +694,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
           ? "long"
           : undefined,
-      nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
+      nativeWebSearchEnabled:
+        providerType === "deepseek" ? false : (initialData?.nativeWebSearchEnabled ?? true),
       useSystemProxy,
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });
@@ -895,12 +897,11 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     headerSuggestItems,
     headerValidationSubmitted,
     headerValueRefs,
-    isClosing,
+    dialogOpen,
     isEditing,
     isFullUrl,
     isGatewayWebui,
     matchedBalanceProviders,
-    modalState,
     modelBulkDisableCount,
     modelBulkEnableCount,
     modelBulkMode,
@@ -914,6 +915,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     name,
     newModelName,
     newModelPhases,
+    onClose,
     openHeaderSuggest,
     openModelSettings,
     persistedUsageQueryProviderId,

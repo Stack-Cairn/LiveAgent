@@ -50,7 +50,15 @@ export type CompactionSinks = {
   publishStatus?: (status: CompactionStatus) => void;
   setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
   queueCheckpoint?: (state: ConversationViewState, contextUsageTokens: number) => void;
-  persist?: (state: ConversationViewState) => Promise<boolean | undefined>;
+  // false/null 表示持久化失败（压缩中止回滚）。成功可返回"盖好 revision 的持
+  // 久化状态"——finalizeCheckpoint 会落地这一份而非入参状态：checkpoint 状态
+  // 出自 appendMessagesToConversation，revision 恒为 null，若照原样 apply，
+  // 运行时缓存会失去 replace/分页所需的 CAS 令牌（压缩后 edit-resend 报
+  // "历史会话缺少 revision"即源于此）。返回 true/undefined 则沿用入参状态
+  //（子代理的 fire-and-forget persist 走这条）。
+  persist?: (
+    state: ConversationViewState,
+  ) => Promise<ConversationViewState | boolean | null | undefined>;
   restoreComposer?: (
     composerText: string | undefined,
     uploadedFiles: PendingUploadedFile[],
@@ -178,11 +186,16 @@ export class CompactionController {
     return { compactionsApplied: this.pressure.compactionsApplied };
   }
 
-  private async persistCheckpoint(binding: CompactionTurnBinding, state: ConversationViewState) {
+  private async persistCheckpoint(
+    binding: CompactionTurnBinding,
+    state: ConversationViewState,
+  ): Promise<ConversationViewState> {
     const persisted = await binding.sinks.persist?.(state);
-    if (persisted === false) {
+    if (persisted === false || persisted === null) {
       throw new Error("compaction checkpoint persistence failed");
     }
+    // 持久化钩子返回的盖章状态（带重建的 revision）优先；布尔/undefined 回落入参。
+    return typeof persisted === "object" ? persisted : state;
   }
 
   // 压缩成功后的统一收尾（pre-send 与 during-run 共用同一顺序不变量）：
@@ -209,8 +222,10 @@ export class CompactionController {
     const checkpointTokens = deriveContextTokens(checkpointContext, {
       fixedTokens: params.fixedTokens,
     });
-    const checkpointState = withActiveSummaryContextTokens(params.state, checkpointTokens);
-    await this.persistCheckpoint(params.binding, checkpointState);
+    const checkpointState = await this.persistCheckpoint(
+      params.binding,
+      withActiveSummaryContextTokens(params.state, checkpointTokens),
+    );
     this.rollbackSnapshot = null;
     params.apply(checkpointState);
     this.settleCompleted(params.trigger, params.newSegmentIndex);
@@ -329,6 +344,16 @@ export class CompactionController {
         buildOptions,
         apply: (checkpointState) => {
           appliedState = presend.composeAppliedState(checkpointState);
+          // compose 走 appendMessagesToConversation 会把刚盖上的 revision 清掉。
+          // 追加只发生在内存，DB 仍停在 checkpoint 持久化那一刻，CAS 令牌依旧
+          // 指向当前库版本，补回；下一次成功 persist 会重新盖章。
+          const revision = checkpointState.transcript.revision;
+          if (revision && !appliedState.transcript.revision) {
+            appliedState = {
+              ...appliedState,
+              transcript: { ...appliedState.transcript, revision },
+            };
+          }
           binding.sinks.applyState?.(appliedState);
         },
       });

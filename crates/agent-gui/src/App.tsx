@@ -11,6 +11,7 @@ import {
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -31,6 +32,7 @@ import {
   THEME_OPTIONS,
   type Theme,
 } from "./lib/settings";
+import { getSettingsErrorMessage, SettingsStorageError } from "./lib/settings/errors";
 import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
@@ -46,12 +48,6 @@ function getDefaultContext(): Context {
   return {
     messages: [],
   };
-}
-
-function asErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  const text = String(error ?? "").trim();
-  return text || fallback;
 }
 
 function interpolateMessage(template: string, values: Record<string, string>) {
@@ -309,12 +305,18 @@ export default function App() {
         }
       } catch (error) {
         if (!cancelled) {
+          console.error("load persisted settings failed", error);
           const fallback = getDefaultSettings();
           settingsRef.current = fallback;
           setSettingsState(fallback);
           setSettingsSaveState({
             status: "error",
-            message: asErrorMessage(error, "加载设置失败，已回退到默认配置。"),
+            message: getSettingsErrorMessage(
+              error,
+              translate("app.settingsLoadFailed", fallback.locale),
+              fallback.locale,
+              translate,
+            ),
           });
         }
       } finally {
@@ -357,7 +359,7 @@ export default function App() {
             setSettingsState(merged);
           }
           if (persistResult.conflict) {
-            throw new Error(persistResult.conflict);
+            throw new SettingsStorageError(persistResult.conflict);
           }
           if (publishSync) {
             await publishGatewaySettingsSync(publishTarget);
@@ -370,9 +372,10 @@ export default function App() {
         })
         .catch((error) => {
           if (saveSequenceRef.current === saveSequence) {
+            console.error("persist settings failed", error);
             setSettingsSaveState({
               status: "error",
-              message: asErrorMessage(error, fallback),
+              message: getSettingsErrorMessage(error, fallback, next.locale, translate),
             });
           }
         });
@@ -394,7 +397,7 @@ export default function App() {
       queueSettingsSave(
         prev,
         next,
-        "保存设置失败。",
+        translate("app.settingsSaveFailed", next.locale),
         hasSettingsSyncChanged(prev, next) || hasSensitiveSettingsUpdates(next),
       );
     },
@@ -438,9 +441,15 @@ export default function App() {
       setSettingsProviderId(section === "providers" ? providerId : undefined);
       openSettingsOverlay();
       void reloadPersistedSettings().catch((error) => {
+        console.error("reload persisted settings failed", error);
         setSettingsSaveState({
           status: "error",
-          message: asErrorMessage(error, "重新加载设置失败，当前显示的是旧配置。"),
+          message: getSettingsErrorMessage(
+            error,
+            translate("app.settingsReloadFailed", settingsRef.current.locale),
+            settingsRef.current.locale,
+            translate,
+          ),
         });
       });
     },
@@ -595,7 +604,12 @@ export default function App() {
         }
         settingsRef.current = next;
         setSettingsState(next);
-        queueSettingsSave(prev, next, "同步 WebUI 设置失败。", publicChanged);
+        queueSettingsSave(
+          prev,
+          next,
+          translate("app.gatewaySettingsSyncFailed", next.locale),
+          publicChanged,
+        );
       },
     );
 
@@ -641,9 +655,10 @@ export default function App() {
         </AppErrorBoundary>
         {visible && (
           <div
-            className={`absolute inset-0 z-50 transition-all duration-300 ease-out ${
-              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-            }`}
+            className={cn(
+              "absolute inset-0 z-50 transition-all duration-300 ease-out",
+              active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+            )}
             onTransitionEnd={handleTransitionEnd}
           >
             <AppErrorBoundary>
@@ -667,7 +682,7 @@ export default function App() {
               void invoke("app_toggle_window_pin").catch(() => {});
             }}
             title={translate("app.windowPinnedHint", settings.locale)}
-            className="absolute top-3 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
+            className="layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
           >
             <Pin className="h-3 w-3" />
             {translate("app.windowPinned", settings.locale)}

@@ -23,26 +23,54 @@ function listSourceFiles(root, directory = root) {
   return files;
 }
 
+function listUiFiles(root, directory = root) {
+  const files = [];
+  for (const entry of readdirSync(directory)) {
+    const absolutePath = join(directory, entry);
+    if (statSync(absolutePath).isDirectory()) {
+      files.push(...listUiFiles(root, absolutePath));
+    } else if (/\.(?:css|ts|tsx)$/.test(entry)) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
 const checks = [
   {
     root: join(repoRoot, "crates/agent-ui/src"),
     forbidden: [
-      { pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//, reason: "共享层必须通过 @liveagent/adapters 访问应用能力" },
-      { pattern: /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-(?:gui|gateway)/, reason: "共享层不能反向依赖具体应用路径" },
+      {
+        pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//,
+        reason: "共享层必须通过 @liveagent/adapters 访问应用能力",
+      },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-(?:gui|gateway)/,
+        reason: "共享层不能反向依赖具体应用路径",
+      },
     ],
   },
   {
     root: join(repoRoot, "crates/agent-gateway/web/src"),
     forbidden: [
-      { pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//, reason: "WebUI 不能直接导入 Tauri API" },
-      { pattern: /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gui/, reason: "WebUI 不能依赖桌面应用源码" },
       {
-        pattern: /(?:from\s+|import\s*\(\s*|import\s+)["'](?:@\/|\.{1,2}\/)[^"']*ChatComposerBar["']/,
+        pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//,
+        reason: "WebUI 不能直接导入 Tauri API",
+      },
+      {
+        pattern: /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gui/,
+        reason: "WebUI 不能依赖桌面应用源码",
+      },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*|import\s+)["'](?:@\/|\.{1,2}\/)[^"']*ChatComposerBar["']/,
         reason: "聊天输入栏必须使用 @liveagent/ui/pages/chat/ChatComposerBar",
       },
       {
         pattern: /chat-(?:user-bubble|assistant)-action/,
-        reason: "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
+        reason:
+          "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
       },
       {
         pattern:
@@ -50,7 +78,8 @@ const checks = [
         reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
       },
       {
-        pattern: /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
+        pattern:
+          /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
         reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
       },
       {
@@ -73,14 +102,20 @@ const checks = [
   {
     root: join(repoRoot, "crates/agent-gui/src"),
     forbidden: [
-      { pattern: /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gateway\/web/, reason: "GUI 不能依赖 WebUI 应用源码" },
       {
-        pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']\.{1,2}\/[^"']*ChatComposerBar["']/,
+        pattern:
+          /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gateway\/web/,
+        reason: "GUI 不能依赖 WebUI 应用源码",
+      },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*|import\s+)["']\.{1,2}\/[^"']*ChatComposerBar["']/,
         reason: "聊天输入栏必须使用 @liveagent/ui/pages/chat/ChatComposerBar",
       },
       {
         pattern: /chat-(?:user-bubble|assistant)-action/,
-        reason: "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
+        reason:
+          "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
       },
       {
         pattern:
@@ -88,7 +123,8 @@ const checks = [
         reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
       },
       {
-        pattern: /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
+        pattern:
+          /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
         reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
       },
       {
@@ -113,6 +149,61 @@ for (const check of checks) {
       if (!rule.pattern.test(source)) continue;
       failures += 1;
       console.error(`${relative(repoRoot, file)}: ${rule.reason}`);
+    }
+  }
+}
+
+const retiredDialogPatterns = [
+  {
+    pattern:
+      /\b(?:settings-modal-(?:overlay|panel|header|subheader|body|footer|actions|step-row)|(?:external-link|history-share)-modal-(?:overlay|panel)|modal-dialog-(?:backdrop|popup|viewport)|ssh-forward-dialog-(?:backdrop|popup))\b/,
+    reason: "Dialog 显隐、动画和层级必须由共享 Dialog/Sheet 原语管理",
+  },
+  {
+    pattern: /\buseModalMotion\b/,
+    reason:
+      "Dialog 退场必须使用 Base UI onOpenChangeComplete，不能恢复手写计时器",
+  },
+  {
+    pattern: /\brole=["']dialog["']/,
+    reason: "业务组件不能手写 dialog 语义，必须使用共享 Dialog/AlertDialog",
+  },
+  {
+    pattern:
+      /\b(?:overlayClassName|viewportClassName|backdropClassName|portalProps)\b/,
+    reason:
+      "业务组件不能覆盖弹层基础设施；布局应落在 Content/Sheet 的语义 API 内",
+  },
+  {
+    pattern: /\bz-\[\d+\]/,
+    reason: "层级必须使用 layer-popover/layer-modal/layer-toast 等语义 token",
+  },
+  {
+    pattern: /\brounded-\[(?:\d|\.\d)[^\]]*\]/,
+    reason: "圆角必须使用由 --radius 派生的标准 rounded-* token",
+  },
+];
+for (const root of [
+  join(repoRoot, "crates/agent-ui/src"),
+  join(repoRoot, "crates/agent-gui/src"),
+  join(repoRoot, "crates/agent-gateway/web/src"),
+]) {
+  for (const file of listUiFiles(root)) {
+    const source = readFileSync(file, "utf8");
+    const filePath = toPosixPath(relative(repoRoot, file));
+    if (
+      /from\s+["']@base-ui\/react(?:\/[^"']+)?["']/.test(source) &&
+      !filePath.startsWith("crates/agent-ui/src/components/ui/")
+    ) {
+      failures += 1;
+      console.error(
+        `${filePath}: Base UI 只能由 agent-ui 共享 UI 原语直接导入`,
+      );
+    }
+    for (const rule of retiredDialogPatterns) {
+      if (!rule.pattern.test(source)) continue;
+      failures += 1;
+      console.error(`${filePath}: ${rule.reason}`);
     }
   }
 }
@@ -272,7 +363,9 @@ for (const retiredPath of retiredSharedCopies) {
   if (sharedFacades.has(retiredPath)) continue;
   if (!existsSync(join(repoRoot, retiredPath))) continue;
   failures += 1;
-  console.error(`${retiredPath}: 已迁移到 agent-ui 的共享源码不能在宿主目录重新创建`);
+  console.error(
+    `${retiredPath}: 已迁移到 agent-ui 的共享源码不能在宿主目录重新创建`,
+  );
 }
 
 const applicationEntries = [

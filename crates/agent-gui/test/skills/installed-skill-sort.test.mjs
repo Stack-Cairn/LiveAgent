@@ -185,7 +185,10 @@ for (const { label, loader, sources } of implementations) {
       source.match(/hub-panel-enter pointer-events-auto[^"]*bg-background\/95/g)?.length,
       3,
     );
-    assert.match(source, /notify-toast-enter[^"]*bg-amber-50/);
+    assert.match(
+      source,
+      /notify-toast-enter[^"]*border-amber-500\/30[^"]*bg-background/,
+    );
     assert.doesNotMatch(source, /<select[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /hub-skill-card[^"]*backdrop-blur/);

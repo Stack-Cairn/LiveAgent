@@ -27,8 +27,7 @@
     "remark-breaks": "^4.0.0",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",
-    "xlsx": "^0.18.5",
-    "yet-another-react-lightbox": "^3.31.0"
+    "xlsx": "^0.18.5"
   },
   "peerDependencies": {
     "react": "^19.2.4",

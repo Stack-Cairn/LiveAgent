@@ -33,6 +33,7 @@ export function SkillsImportView(props: {
   importedCount: number | null;
   importToast: string | null;
   onDismissImportToast: () => void;
+  onDismissImportResult: () => void;
   bulkMode: boolean;
   onToggle: (baseDir: string) => void;
   onBatchToggle: (baseDirs: string[], on: boolean) => void;
@@ -53,6 +54,7 @@ export function SkillsImportView(props: {
     importedCount,
     importToast,
     onDismissImportToast,
+    onDismissImportResult,
     bulkMode,
     onToggle,
     onBatchToggle,
@@ -151,31 +153,79 @@ export function SkillsImportView(props: {
 
   return (
     <div className="relative h-full min-h-0">
+      {importToast || importErrors.length > 0 || (importedCount !== null && importedCount > 0) ? (
+        <div className="pointer-events-none absolute inset-x-2 top-2 z-40 flex justify-end">
+          {importToast ? (
+            <div
+              role="status"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onDismissImportToast}
+                className="mt-0.5 h-6 w-6 shrink-0"
+                aria-label={t("settings.close")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : importErrors.length > 0 ? (
+            <div
+              role="alert"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-destructive">{t("settings.skillsImportFailed")}</p>
+                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs leading-relaxed text-muted-foreground">
+                  {importErrors.map((failure) => (
+                    <p key={failure.baseDir} className="break-words">
+                      {failure.name}: {failure.message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onDismissImportResult}
+                className="mt-0.5 h-6 w-6 shrink-0"
+                aria-label={t("settings.close")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div
+              role="status"
+              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+            >
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
+              <p className="min-w-0 flex-1 leading-relaxed text-foreground">
+                {t("settings.skillsImportDone")} ({importedCount})
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onDismissImportResult}
+                className="mt-0.5 h-6 w-6 shrink-0"
+                aria-label={t("settings.close")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div
         className={cn(
           "h-full min-h-0 overflow-y-auto px-1.5 pb-4 pt-1.5",
           bulkMode ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-20" : null,
         )}
       >
-        {importToast ? (
-          <div className="pointer-events-none sticky top-2 z-[80] flex justify-end px-1">
-            <div className="notify-toast-enter pointer-events-auto flex max-w-sm items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-50 px-3 py-2.5 text-sm shadow-lg dark:border-amber-500/25 dark:bg-amber-950">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <p className="min-w-0 flex-1 leading-relaxed text-amber-800 dark:text-amber-200">
-                {importToast}
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportToast}
-                className="mt-0.5 h-6 w-6 shrink-0 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
-                aria-label={t("settings.cancel")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        ) : null}
         <div className="flex flex-col gap-3">
           {error ? (
             <GlassPanel tone="error" className="hub-panel-enter">
@@ -183,35 +233,6 @@ export function SkillsImportView(props: {
                 <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
                 <span className="text-xs text-destructive">
                   {t("settings.skillsImportScanFailed")}: {error}
-                </span>
-              </div>
-            </GlassPanel>
-          ) : null}
-
-          {importErrors.length > 0 ? (
-            <GlassPanel tone="error" className="hub-panel-enter">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-                  <span className="text-xs font-medium text-destructive">
-                    {t("settings.skillsImportFailed")}
-                  </span>
-                </div>
-                {importErrors.map((failure) => (
-                  <div key={failure.baseDir} className="pl-6 text-[11px] text-destructive/90">
-                    {failure.name}: {failure.message}
-                  </div>
-                ))}
-              </div>
-            </GlassPanel>
-          ) : null}
-
-          {importedCount !== null && importedCount > 0 ? (
-            <GlassPanel tone="muted" className="hub-panel-enter">
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
-                <span className="text-xs text-muted-foreground">
-                  {t("settings.skillsImportDone")} ({importedCount})
                 </span>
               </div>
             </GlassPanel>
@@ -274,7 +295,7 @@ export function SkillsImportView(props: {
 
           {initializing ? (
             <div
-              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
               role="status"
               aria-live="polite"
               aria-busy="true"
@@ -357,7 +378,7 @@ export function SkillsImportView(props: {
                         : t("settings.skillsImportSelectAll")}
                     </Button>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                     {activeScan.skills.map((skill) => {
                       const alreadyInstalled = installedNames.has(skill.name);
                       const checked = !alreadyInstalled && selected.has(skill.baseDir);
@@ -408,12 +429,12 @@ export function SkillsImportView(props: {
                             event.currentTarget.click();
                           }}
                           className={cn(
-                            "group flex min-h-48 w-full flex-col rounded-xl border border-border bg-card p-3.5 text-left shadow-xs transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            "group flex min-h-48 w-full flex-col rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                             alreadyInstalled
                               ? "border-emerald-600/25"
                               : checked
                                 ? "border-foreground bg-muted/30 shadow-sm"
-                                : "hover:border-foreground/20",
+                                : "hover:border-foreground/30 hover:bg-muted/20",
                             importing && !alreadyInstalled ? "opacity-60" : null,
                           )}
                         >

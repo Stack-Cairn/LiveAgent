@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   ClaudeIcon,
+  DeepseekIcon,
   GeminiIcon,
   GrokIcon,
   OpenaiChatgptIcon,
@@ -37,6 +38,7 @@ function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?:
   if (type === "claude_code") return <ClaudeIcon className={cls} />;
   if (type === "gemini") return <GeminiIcon className={cls} />;
   if (type === "xai") return <GrokIcon className={cls} />;
+  if (type === "deepseek") return <DeepseekIcon className={cls} />;
   return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
 }
 
@@ -168,7 +170,7 @@ export function ModelPicker({
         align="start"
         sideOffset={4}
         collisionPadding={8}
-        className="z-[80] w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
+        className="w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
       >
         <div className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">

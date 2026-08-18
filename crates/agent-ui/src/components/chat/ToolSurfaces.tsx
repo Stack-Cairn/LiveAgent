@@ -119,7 +119,7 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
+        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
         className,
       )}
     >

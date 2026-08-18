@@ -19,12 +19,30 @@ import {
   Settings2,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";
+import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import type { MemoryMeta } from "../../../lib/memory/api";
 import { MEMORY_TYPES, type MemoryType } from "../../../lib/memory/schema";
 import { MemorySettingsDrawer } from "./MemorySettingsDrawer";
@@ -56,6 +74,9 @@ const EMPTY_CREATE_DRAFT: MemoryCreateDraft = {
   body: "",
 };
 
+const MEMORY_REFRESH_FEEDBACK_MS = 600;
+const MEMORY_REFRESH_RESULT_MS = 1_200;
+
 export function MemoryPanel(props: {
   workdir?: string;
   settings: AppSettings;
@@ -68,6 +89,9 @@ export function MemoryPanel(props: {
   const [showCreate, setShowCreate] = useState(false);
   const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "success" | "error">(
+    "idle",
+  );
   const [draft, setDraft] = useState<MemoryCreateDraft>(EMPTY_CREATE_DRAFT);
   const {
     entries,
@@ -102,6 +126,18 @@ export function MemoryPanel(props: {
     [props.settings],
   );
 
+  async function handleRefresh() {
+    if (refreshState !== "idle") return;
+    setRefreshState("refreshing");
+    const [refreshed] = await Promise.all([
+      reload(),
+      new Promise<void>((resolve) => window.setTimeout(resolve, MEMORY_REFRESH_FEEDBACK_MS)),
+    ]);
+    setRefreshState(refreshed ? "success" : "error");
+    await new Promise<void>((resolve) => window.setTimeout(resolve, MEMORY_REFRESH_RESULT_MS));
+    setRefreshState("idle");
+  }
+
   const globalEntries = useMemo(() => {
     return entries
       .filter((entry) => entry.scope === "global" && entry.memoryType !== "daily")
@@ -117,7 +153,12 @@ export function MemoryPanel(props: {
   const projectGroups = useMemo(() => {
     const groups = new Map<
       string,
-      { key: string; label: string; latestUpdatedAt: number; entries: MemoryMeta[] }
+      {
+        key: string;
+        label: string;
+        latestUpdatedAt: number;
+        entries: MemoryMeta[];
+      }
     >();
     for (const entry of entries) {
       if (entry.scope !== "project" || entry.memoryType === "daily") continue;
@@ -180,19 +221,20 @@ export function MemoryPanel(props: {
   function renderEntryButton(entry: MemoryMeta, nested = false) {
     const active = activeEntryKey === entryKey(entry);
     return (
-      <button
+      <Button
         key={entryKey(entry)}
-        type="button"
+        variant="outline"
+        aria-pressed={active}
         onClick={() => openEntry(entry)}
-        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-          nested ? "ml-3 w-[calc(100%-0.75rem)]" : ""
-        } ${
+        className={cn(
+          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
+          nested ? "ml-3 w-[calc(100%-0.75rem)]" : "",
           active
             ? "border-primary/50 bg-primary/5 shadow-xs"
             : entry.unreviewed
               ? "border-amber-500/20 bg-amber-500/[0.05] hover:bg-amber-500/[0.08]"
-              : "border-border/50 bg-background/70 hover:bg-muted/35"
-        }`}
+              : "border-border/50 bg-background/70 hover:bg-muted/35",
+        )}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 truncate text-xs font-semibold">{entryTitle(entry)}</div>
@@ -203,7 +245,7 @@ export function MemoryPanel(props: {
         <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/70">
           id: {entry.slug}
         </div>
-      </button>
+      </Button>
     );
   }
 
@@ -242,20 +284,55 @@ export function MemoryPanel(props: {
                 return (
                   <div
                     key={`${item.scope}:${item.workdirHash}`}
-                    className={`rounded-md border px-2.5 py-1.5 text-xs ${quotaPillClass(level)}`}
+                    className={cn("rounded-md border px-2.5 py-1.5 text-xs", quotaPillClass(level))}
                   >
                     {label} {item.used} / {item.limit}
                   </div>
                 );
               })}
               <div
-                className={`rounded-md border px-2.5 py-1.5 text-xs ${quotaStatusClass(quotaStatus)}`}
+                className={cn(
+                  "rounded-md border px-2.5 py-1.5 text-xs",
+                  quotaStatusClass(quotaStatus),
+                )}
               >
                 {t(quotaStatusLabelKey(quotaStatus))}
               </div>
-              <Button variant="outline" size="sm" onClick={() => reload()} disabled={loading}>
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                {t("settings.memoryRefresh")}
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "min-w-[112px] disabled:opacity-100",
+                  refreshState === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300"
+                    : refreshState === "error"
+                      ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
+                      : "",
+                )}
+                onClick={() => void handleRefresh()}
+                disabled={loading || refreshState !== "idle"}
+              >
+                {refreshState === "success" ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : refreshState === "error" ? (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                ) : (
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      loading || refreshState === "refreshing" ? "animate-spin" : "",
+                    )}
+                  />
+                )}
+                <span aria-live="polite">
+                  {refreshState === "success"
+                    ? t("settings.memoryRefreshComplete")
+                    : refreshState === "error"
+                      ? t("settings.memoryRefreshFailed")
+                      : loading || refreshState === "refreshing"
+                        ? t("settings.memoryRefreshing")
+                        : t("settings.memoryRefresh")}
+                </span>
               </Button>
               <Button
                 variant="outline"
@@ -307,41 +384,50 @@ export function MemoryPanel(props: {
         <div className="settings-memory-layout grid min-h-0 flex-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
           <section className="settings-memory-list-section flex min-h-0 flex-col rounded-xl border border-border/60 bg-card">
             <div className="shrink-0 space-y-3 border-b border-border/40 p-3">
-              <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted/50 p-1">
-                <button
-                  type="button"
-                  onClick={() => setTab("global")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "global" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
+              <Tabs
+                value={tab}
+                onValueChange={(value) => {
+                  if (value === "global" || value === "project" || value === "journal") {
+                    setTab(value);
+                  }
+                }}
+              >
+                <TabsList
+                  aria-label={t("settings.memoryTitle")}
+                  className="grid h-auto w-full grid-cols-3 gap-1 rounded-lg bg-muted/50 p-1"
                 >
-                  <Globe2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {globalEntryCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("project")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "project" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
-                >
-                  <Folder className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryProject")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {projectEntryCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("journal")}
-                  className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ${tab === "journal" ? "bg-background shadow-xs" : "text-muted-foreground"}`}
-                >
-                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{t("settings.memoryCategoryJournal")}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {dailyEntryCount}
-                  </span>
-                </button>
-              </div>
+                  <TabsTrigger
+                    value="global"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {globalEntryCount}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="project"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <Folder className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryProject")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {projectEntryCount}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="journal"
+                    className="min-w-0 gap-1.5 px-2 py-1.5 text-xs text-muted-foreground data-[active]:text-foreground"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("settings.memoryCategoryJournal")}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {dailyEntryCount}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -408,51 +494,65 @@ export function MemoryPanel(props: {
                   <Input
                     value={draft.slug}
                     onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, slug: event.target.value }))
+                      setDraft((prev) => ({
+                        ...prev,
+                        slug: event.target.value,
+                      }))
                     }
                     placeholder={t("settings.memorySlugPlaceholder")}
                   />
-                  <select
+                  <Select
                     value={draft.memoryType}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setDraft((prev) => ({
                         ...prev,
-                        memoryType: event.target.value as MemoryType,
+                        memoryType: value as MemoryType,
                       }))
                     }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    {MEMORY_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {memoryTypeLabel(type, t)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
+                    <SelectTrigger aria-label={t("settings.memoryType")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEMORY_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {memoryTypeLabel(type, t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
                     value={draft.scope}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setDraft((prev) => ({
                         ...prev,
-                        scope: event.target.value as "global" | "project",
+                        scope: value as "global" | "project",
                       }))
                     }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    <option value="global">{t("settings.memoryScopeGlobal")}</option>
-                    <option value="project">{t("settings.memoryScopeProject")}</option>
-                  </select>
+                    <SelectTrigger aria-label={t("settings.memoryScope")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">{t("settings.memoryScopeGlobal")}</SelectItem>
+                      <SelectItem value="project">{t("settings.memoryScopeProject")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Input
                     value={draft.description}
                     onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, description: event.target.value }))
+                      setDraft((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
                     }
                     placeholder={t("settings.memoryDescriptionPlaceholder")}
                   />
                 </div>
-                <textarea
+                <Textarea
                   value={draft.body}
                   onChange={(event) => setDraft((prev) => ({ ...prev, body: event.target.value }))}
-                  className="mt-3 min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="mt-3 min-h-28 resize-y"
                   placeholder={t("settings.memoryBodyPlaceholder")}
                 />
                 <div className="mt-3 flex justify-end gap-2">
@@ -527,12 +627,15 @@ export function MemoryPanel(props: {
                 <div className="settings-memory-detail-body min-h-0 flex-1 overflow-auto p-4">
                   {selected.memoryType === "daily" ? (
                     <div className="space-y-3">
-                      <textarea
+                      <Textarea
                         value={editDraft.appendBody}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, appendBody: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            appendBody: event.target.value,
+                          }))
                         }
-                        className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="min-h-24 resize-y"
                         placeholder={t("settings.memoryAppendBlockPlaceholder")}
                       />
                       <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
@@ -546,16 +649,22 @@ export function MemoryPanel(props: {
                       <Input
                         value={editDraft.description}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, description: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            description: event.target.value,
+                          }))
                         }
                         placeholder={t("settings.memoryDescriptionPlaceholder")}
                       />
-                      <textarea
+                      <Textarea
                         value={editDraft.body}
                         onChange={(event) =>
-                          setEditDraft((prev) => ({ ...prev, body: event.target.value }))
+                          setEditDraft((prev) => ({
+                            ...prev,
+                            body: event.target.value,
+                          }))
                         }
-                        className="min-h-[360px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+                        className="min-h-[360px] resize-y font-mono text-xs leading-relaxed"
                       />
                     </div>
                   )}
@@ -605,45 +714,35 @@ export function MemoryPanel(props: {
         />
       ) : null}
 
-      {wipeConfirmOpen
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="memory-wipe-confirm-title"
-            >
-              <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={() => setWipeConfirmOpen(false)}
-              />
-              <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border bg-background shadow-2xl">
-                <div className="flex items-start gap-3 border-b px-5 py-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div id="memory-wipe-confirm-title" className="text-sm font-semibold">
-                      {t("settings.memoryWipeConfirmTitle")}
-                    </div>
-                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {t("settings.memoryWipeConfirmDescription")}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 px-5 py-4">
-                  <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
-                    {t("settings.memoryCancel")}
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
-                    {t("settings.memoryWipeAll")}
-                  </Button>
-                </div>
+      {wipeConfirmOpen ? (
+        <AlertDialog open onOpenChange={setWipeConfirmOpen}>
+          <AlertDialogContent className="max-w-md p-0">
+            <AlertDialogHeader className="flex-row items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
-            </div>,
-            document.body,
-          )
-        : null}
+              <div className="min-w-0 flex-1">
+                <AlertDialogTitle className="text-sm">
+                  {t("settings.memoryWipeConfirmTitle")}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1 text-xs leading-relaxed">
+                  {t("settings.memoryWipeConfirmDescription")}
+                </AlertDialogDescription>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogActions>
+                <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
+                  {t("settings.memoryCancel")}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
+                  {t("settings.memoryWipeAll")}
+                </Button>
+              </AlertDialogActions>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </>
   );
 }

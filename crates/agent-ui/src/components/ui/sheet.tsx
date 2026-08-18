@@ -5,8 +5,13 @@ import * as React from "react";
 import { cn } from "../../lib/shared/utils";
 import { Button } from "./button";
 
-export const Sheet = SheetPrimitive.Root;
-export const SheetPortal = SheetPrimitive.Portal;
+export function Sheet(props: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Root>) {
+  return <SheetPrimitive.Root data-slot="sheet" {...props} />;
+}
+
+export function SheetPortal(props: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Portal>) {
+  return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
+}
 
 export function SheetTrigger(props: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Trigger>) {
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />;
@@ -24,7 +29,7 @@ export const SheetBackdrop = React.forwardRef<
     ref={ref}
     data-slot="sheet-backdrop"
     className={cn(
-      "fixed inset-0 z-[100] bg-black/35 backdrop-blur-[2px] transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -35,35 +40,9 @@ SheetBackdrop.displayName = "SheetBackdrop";
 type SheetSide = "top" | "right" | "bottom" | "left";
 type SheetVariant = "default" | "inset";
 
-type SheetViewportProps = React.ComponentPropsWithoutRef<typeof SheetPrimitive.Viewport> & {
-  side?: SheetSide;
-  variant?: SheetVariant;
-};
-
-export const SheetViewport = React.forwardRef<HTMLDivElement, SheetViewportProps>(
-  ({ className, side = "right", variant = "default", ...props }, ref) => (
-    <SheetPrimitive.Viewport
-      ref={ref}
-      data-slot="sheet-viewport"
-      className={cn(
-        "fixed inset-0 z-[101] grid",
-        side === "bottom" && "grid-rows-[1fr_auto] pt-12",
-        side === "top" && "grid-rows-[auto_1fr] pb-12",
-        side === "left" && "flex justify-start",
-        side === "right" && "flex justify-end",
-        variant === "inset" && "sm:p-4",
-        className,
-      )}
-      {...props}
-    />
-  ),
-);
-SheetViewport.displayName = "SheetViewport";
-
 type SheetPopupProps = React.ComponentPropsWithoutRef<typeof SheetPrimitive.Popup> & {
   closeLabel?: string;
   closeProps?: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Close>;
-  portalProps?: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Portal>;
   showCloseButton?: boolean;
   side?: SheetSide;
   variant?: SheetVariant;
@@ -78,48 +57,49 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
       children,
       closeLabel = "Close",
       closeProps,
-      portalProps,
       showCloseButton = true,
       ...props
     },
     ref,
   ) => (
-    <SheetPortal {...portalProps}>
+    <SheetPortal>
       <SheetBackdrop />
-      <SheetViewport side={side} variant={variant}>
-        <SheetPrimitive.Popup
-          ref={ref}
-          data-slot="sheet-popup"
-          className={cn(
-            "relative flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
-            side === "top" &&
-              "max-h-[85dvh] border-b data-[ending-style]:-translate-y-8 data-[starting-style]:-translate-y-8",
-            side === "right" &&
-              "h-full w-[calc(100%-3rem)] max-w-lg border-l data-[ending-style]:translate-x-8 data-[starting-style]:translate-x-8",
-            side === "bottom" &&
-              "row-start-2 max-h-[85dvh] border-t data-[ending-style]:translate-y-8 data-[starting-style]:translate-y-8",
-            side === "left" &&
-              "h-full w-[calc(100%-3rem)] max-w-lg border-r data-[ending-style]:-translate-x-8 data-[starting-style]:-translate-x-8",
-            variant === "inset" && "sm:rounded-2xl sm:border",
-            className,
-          )}
-          {...props}
-        >
-          {children}
-          {showCloseButton ? (
-            <SheetPrimitive.Close
-              data-slot="sheet-close"
-              aria-label={closeLabel}
-              title={closeLabel}
-              className="absolute right-3 top-3 z-10"
-              render={<Button variant="ghost" size="icon" className="h-8 w-8" />}
-              {...closeProps}
-            >
-              <X className="h-4 w-4" />
-            </SheetPrimitive.Close>
-          ) : null}
-        </SheetPrimitive.Popup>
-      </SheetViewport>
+      <SheetPrimitive.Popup
+        ref={ref}
+        data-slot="sheet-popup"
+        data-side={side}
+        className={cn(
+          "layer-modal fixed flex max-h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+          side === "top" &&
+            "inset-x-0 top-0 max-h-[85dvh] border-b data-[ending-style]:-translate-y-8 data-[starting-style]:-translate-y-8",
+          side === "right" &&
+            "inset-y-0 right-0 w-[calc(100%-3rem)] max-w-lg border-l data-[ending-style]:translate-x-8 data-[starting-style]:translate-x-8",
+          side === "bottom" &&
+            "inset-x-0 bottom-0 max-h-[85dvh] border-t data-[ending-style]:translate-y-8 data-[starting-style]:translate-y-8",
+          side === "left" &&
+            "inset-y-0 left-0 w-[calc(100%-3rem)] max-w-lg border-r data-[ending-style]:-translate-x-8 data-[starting-style]:-translate-x-8",
+          variant === "inset" && side === "right" && "inset-y-4 right-4 rounded-2xl border",
+          variant === "inset" && side === "left" && "inset-y-4 left-4 rounded-2xl border",
+          variant === "inset" && side === "top" && "inset-x-4 top-4 rounded-2xl border",
+          variant === "inset" && side === "bottom" && "inset-x-4 bottom-4 rounded-2xl border",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton ? (
+          <SheetPrimitive.Close
+            data-slot="sheet-close"
+            aria-label={closeLabel}
+            title={closeLabel}
+            className="absolute right-3 top-3 z-10"
+            render={<Button variant="ghost" size="icon" className="h-8 w-8" />}
+            {...closeProps}
+          >
+            <X className="h-4 w-4" />
+          </SheetPrimitive.Close>
+        ) : null}
+      </SheetPrimitive.Popup>
     </SheetPortal>
   ),
 );
@@ -196,4 +176,4 @@ export const SheetDescription = React.forwardRef<
 ));
 SheetDescription.displayName = "SheetDescription";
 
-export { SheetBackdrop as SheetOverlay, SheetPopup as SheetContent, SheetPrimitive };
+export { SheetBackdrop as SheetOverlay, SheetPopup as SheetContent };

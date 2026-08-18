@@ -68,8 +68,11 @@ import {
   createDeferredProviderNativeWebSearchStatus,
   resolveProviderNativeWebSearchStatus,
 } from "../search/providerNativeSearchStatus";
-import { comparableToolCall } from "./flattenedToolCallText";
-import { recoverAssistantSeedToolCalls, stripSeedToolCallMarkup } from "./seedToolCalls";
+import {
+  comparableToolCall,
+  recoverAssistantSeedToolCalls,
+  stripSeedToolCallMarkup,
+} from "./seedToolCalls";
 import { wrapStreamWithToolCallArgumentGuard } from "./toolCallArgumentGuard";
 import { buildToolsSuffix } from "./toolExecutionPrompt";
 
@@ -798,7 +801,6 @@ export async function runAssistantWithTools(params: {
         assistant.content
           .flatMap((block) => (block.type === "text" ? [block.text] : []))
           .join("\n"),
-        { recoverFlattenedText: true },
       ).trim();
 
     // Relays that execute Anthropic server tools in-band can leak the original
@@ -1235,11 +1237,13 @@ export async function runAssistantWithTools(params: {
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
         const fallbackReasoning =
-          target.providerId === "claude_code" || target.providerId === "gemini"
+          target.providerId === "claude_code" ||
+          target.providerId === "gemini" ||
+          target.providerId === "deepseek" ||
+          targetModel.api === "openai-responses" ||
+          targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
-            : targetModel.api === "openai-responses" || targetModel.api === "openai-completions"
-              ? toSimpleStreamReasoning(target.runtime.reasoning)
-              : undefined;
+            : undefined;
         const targetNativeWebSearchStatus =
           target.index === 0
             ? nativeWebSearchStatus
@@ -1277,6 +1281,7 @@ export async function runAssistantWithTools(params: {
           metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
           toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+          workdir: params.workdir,
           streamRetry: {
             onRetry: (attempt, maxAttempts, errorMessage) => {
               params.onToolStatus?.(

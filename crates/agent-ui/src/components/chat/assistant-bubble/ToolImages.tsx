@@ -1,5 +1,10 @@
 import { deferLargeToolImages } from "@liveagent/adapters/assistantBubble";
-import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import {
+  ImagePreview,
+  ImagePreviewActionFeedback,
+  ImagePreviewContextMenu,
+  type ImagePreviewSlide,
+} from "@liveagent/ui/components/chat/ImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type {
   DisplayImageItemDetails,
@@ -38,6 +43,33 @@ type ToolImageLoadState = "loading" | "loaded" | "error";
 
 function getImageDataUrl(image: ImageContent) {
   return `data:${image.mimeType};base64,${image.data}`;
+}
+
+function imageFileExtension(mimeType: string | undefined) {
+  switch (mimeType?.split(";", 1)[0]?.trim().toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    case "image/svg+xml":
+      return "svg";
+    case "image/bmp":
+      return "bmp";
+    case "image/x-icon":
+      return "ico";
+    default:
+      return "image";
+  }
+}
+
+function displayImageFileName(detail: DisplayImageItemDetails, index: number, mimeType: string) {
+  const path = detail.path?.trim() ?? "";
+  const baseName = path.replace(/\\/g, "/").split("/").pop()?.trim() ?? "";
+  return baseName || `image-${index + 1}.${imageFileExtension(mimeType)}`;
 }
 
 function isDisplayImageItemDetails(value: unknown): value is DisplayImageItemDetails {
@@ -199,9 +231,12 @@ function formatToolResultBytes(sizeBytes: number) {
   return `${sizeBytes} B`;
 }
 
-function getInitialImageLoadState(source: NativeDisplayImageSourceState): ToolImageLoadState {
-  if (source.status === "error") return "error";
-  if (source.status === "ready" && !source.src) return "error";
+function getInitialImageLoadState(
+  status: NativeDisplayImageSourceState["status"],
+  src: string,
+): ToolImageLoadState {
+  if (status === "error") return "error";
+  if (status === "ready" && !src) return "error";
   return "loading";
 }
 
@@ -229,7 +264,7 @@ function ToolImageStatusCard(props: {
   return (
     <div
       className={cn(
-        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[8px] border border-dashed px-4 py-5 text-center",
+        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
         isError
           ? "border-red-500/25 bg-red-500/[0.04] text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.06] dark:text-red-300"
           : "border-black/[0.08] bg-black/[0.025] text-muted-foreground dark:border-white/[0.1] dark:bg-white/[0.035]",
@@ -238,7 +273,7 @@ function ToolImageStatusCard(props: {
     >
       <div
         className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-[8px] border bg-white/80 shadow-sm dark:bg-black/20",
+          "flex h-9 w-9 items-center justify-center rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
           isError ? "border-red-500/20" : "border-black/[0.06] dark:border-white/[0.08]",
         )}
       >
@@ -288,6 +323,8 @@ export function ToolResultImagePreview(props: {
     deferLargeToolImages && estimatedBytes > LARGE_TOOL_IMAGE_INLINE_THRESHOLD_BYTES;
   const [shouldLoad, setShouldLoad] = useState(readOnly ? true : !shouldDeferImage);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>("loading");
   const imageRef = useRef<HTMLImageElement | null>(null);
   const src = getImageDataUrl(image);
@@ -298,9 +335,13 @@ export function ToolResultImagePreview(props: {
         src,
         alt,
         title: alt,
+        dataBase64: image.data,
+        mimeType: image.mimeType,
+        sizeBytes: estimatedBytes,
+        fileName: `tool-image-${id}.${imageFileExtension(image.mimeType)}`,
       },
     ],
-    [alt, src],
+    [alt, estimatedBytes, id, image.data, image.mimeType, src],
   );
 
   useEffect(() => {
@@ -321,12 +362,12 @@ export function ToolResultImagePreview(props: {
     return (
       <button
         type="button"
-        className="group flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-[8px] border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5 text-center text-muted-foreground transition-colors hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]"
+        className="group flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5 text-center text-muted-foreground transition-colors hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]"
         onClick={() => setShouldLoad(true)}
         title={alt}
         aria-label={`${t("chat.image.load")} ${alt}`}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black/[0.06] bg-white/80 shadow-sm transition-colors group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]">
           <Eye className="h-4 w-4" />
         </div>
         <div className="max-w-full space-y-1">
@@ -364,7 +405,7 @@ export function ToolResultImagePreview(props: {
           loading="lazy"
           decoding="async"
           className={cn(
-            "max-h-[32rem] w-full rounded-[8px] object-contain transition-opacity duration-200",
+            "block max-h-[32rem] w-full rounded-md object-contain transition-opacity duration-200",
             imageStatus === "loaded"
               ? "opacity-100"
               : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
@@ -381,12 +422,17 @@ export function ToolResultImagePreview(props: {
       <button
         type="button"
         className={cn(
-          "relative block w-full overflow-hidden rounded-[8px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
+          "relative block w-full overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
           canPreview ? "cursor-zoom-in" : "cursor-default",
         )}
         disabled={!canPreview}
         onClick={() => {
           if (canPreview) setPreviewOpen(true);
+        }}
+        onContextMenu={(event) => {
+          if (!canPreview) return;
+          event.preventDefault();
+          setContextMenu({ x: event.clientX, y: event.clientY });
         }}
         title={alt}
         aria-label={
@@ -398,6 +444,16 @@ export function ToolResultImagePreview(props: {
       {previewOpen ? (
         <ImagePreview open={previewOpen} slides={slides} onClose={() => setPreviewOpen(false)} />
       ) : null}
+      {contextMenu && slides[0] ? (
+        <ImagePreviewContextMenu
+          slide={slides[0]}
+          position={contextMenu}
+          onOpen={() => setPreviewOpen(true)}
+          onClose={() => setContextMenu(null)}
+          onActionError={setActionError}
+        />
+      ) : null}
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }
@@ -450,17 +506,18 @@ function NativeDisplayImageTile(props: {
   isSvgImage: boolean;
   loading: "lazy" | "eager";
   onPreview: () => void;
+  onContextMenu?: (position: { x: number; y: number }) => void;
   readOnly?: boolean;
 }) {
-  const { source, alt, isGallery, isSvgImage, loading, onPreview } = props;
+  const { source, alt, isGallery, isSvgImage, loading, onPreview, onContextMenu } = props;
   const { t } = useLocale();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>(() =>
-    getInitialImageLoadState(source),
+    getInitialImageLoadState(source.status, source.src),
   );
 
   useEffect(() => {
-    setImageStatus(getInitialImageLoadState(source));
+    setImageStatus(getInitialImageLoadState(source.status, source.src));
   }, [source.src, source.status]);
 
   useEffect(() => {
@@ -481,7 +538,7 @@ function NativeDisplayImageTile(props: {
         : t("chat.image.loading");
 
   const className = cn(
-    "relative flex max-w-full items-center justify-center overflow-hidden rounded-[10px] text-left shadow-sm transition-[filter,transform]",
+    "relative flex max-w-full items-center justify-center overflow-hidden rounded-lg text-left shadow-sm transition-[filter,transform]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
     canPreview ? "cursor-zoom-in hover:brightness-[0.98]" : "cursor-default hover:brightness-100",
     isGallery && "aspect-square w-full bg-muted/30",
@@ -518,7 +575,7 @@ function NativeDisplayImageTile(props: {
           title={statusTitle}
           detail={imageStatus === "error" ? t("chat.image.checkSource") : alt}
           className={cn(
-            "rounded-[10px]",
+            "rounded-lg",
             isGallery ? "absolute inset-0 min-h-0" : "min-h-28 w-full max-w-3xl",
           )}
         />
@@ -535,6 +592,11 @@ function NativeDisplayImageTile(props: {
       onClick={() => {
         if (canPreview) onPreview();
       }}
+      onContextMenu={(event) => {
+        if (!canPreview) return;
+        event.preventDefault();
+        onContextMenu?.({ x: event.clientX, y: event.clientY });
+      }}
     >
       {content}
     </button>
@@ -549,14 +611,25 @@ export function NativeDisplayImageBlock(props: {
   const { t } = useLocale();
   const isGallery = payload.entries.length > 1;
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ index: number; x: number; y: number } | null>(
+    null,
+  );
   const imageSources = useNativeDisplayImageSources(payload.entries);
   const slides = useMemo<ImagePreviewSlide[]>(
     () =>
-      payload.entries.map((_entry, index) => ({
-        src: imageSources[index]?.src ?? "",
-        alt: formatDisplayImageLabel(t, payload.entries.length, index),
-        title: formatDisplayImageLabel(t, payload.entries.length, index),
-      })),
+      payload.entries.map((entry, index) => {
+        const mimeType = entry.image?.mimeType ?? entry.detail.mimeType ?? "";
+        return {
+          src: imageSources[index]?.src ?? "",
+          alt: formatDisplayImageLabel(t, payload.entries.length, index),
+          title: formatDisplayImageLabel(t, payload.entries.length, index),
+          dataBase64: entry.image?.data,
+          mimeType,
+          sizeBytes: entry.image ? estimateBase64Bytes(entry.image.data) : entry.detail.sizeBytes,
+          fileName: displayImageFileName(entry.detail, index, mimeType),
+        };
+      }),
     [imageSources, payload.entries, t],
   );
 
@@ -579,6 +652,7 @@ export function NativeDisplayImageBlock(props: {
               isSvgImage={isSvgImage}
               loading={isGallery ? "eager" : "lazy"}
               onPreview={() => setPreviewIndex(index)}
+              onContextMenu={({ x, y }) => setContextMenu({ index, x, y })}
               readOnly={readOnly}
             />
           );
@@ -592,6 +666,16 @@ export function NativeDisplayImageBlock(props: {
           onClose={() => setPreviewIndex(null)}
         />
       ) : null}
+      {contextMenu && slides[contextMenu.index] ? (
+        <ImagePreviewContextMenu
+          slide={slides[contextMenu.index]}
+          position={contextMenu}
+          onOpen={() => setPreviewIndex(contextMenu.index)}
+          onClose={() => setContextMenu(null)}
+          onActionError={setActionError}
+        />
+      ) : null}
+      <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
 }

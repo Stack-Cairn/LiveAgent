@@ -1255,7 +1255,7 @@ export function GitReviewHistoryView(props: {
         <div
           ref={contextMenuRef}
           role="menu"
-          className={cn("absolute z-[75] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
+          className={cn("layer-popover absolute min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {

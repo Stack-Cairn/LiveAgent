@@ -277,6 +277,64 @@ test("gemini provider normalization keeps native routing and model limits", () =
   assert.equal(provider.models[0].maxOutputToken, 65_536);
 });
 
+test("DeepSeek is the fifth built-in provider with native-only defaults", () => {
+  const providers = settings.getBuiltinCustomProviders();
+  assert.deepEqual(
+    providers.map((provider) => provider.type),
+    ["claude_code", "codex", "gemini", "xai", "deepseek"],
+  );
+
+  const provider = providers.at(-1);
+  assert.equal(provider.id, "builtin-deepseek");
+  assert.equal(provider.name, "DeepSeek");
+  assert.equal(provider.baseUrl, "https://api.deepseek.com");
+  assert.equal(provider.reasoning, "high");
+  assert.equal(provider.promptCachingEnabled, false);
+  assert.equal(provider.promptCacheHintMode, undefined);
+  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.requestFormat, undefined);
+});
+
+test("DeepSeek provider normalization keeps native routing and disables unsupported toggles", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "deepseek-1",
+    name: " DeepSeek Relay ",
+    type: "deepseek",
+    baseUrl: " https://api.deepseek.com/v1/chat/completions/ ",
+    requestFormat: "openai-responses",
+    promptCachingEnabled: true,
+    promptCacheHintMode: "openai-key",
+    nativeWebSearchEnabled: true,
+    models: ["deepseek-chat", "deepseek-reasoner"],
+    activeModels: ["deepseek-chat", "deepseek-reasoner"],
+  });
+
+  assert.equal(provider.type, "deepseek");
+  assert.equal(provider.baseUrl, "https://api.deepseek.com/v1/chat/completions");
+  assert.equal(provider.requestFormat, undefined);
+  assert.equal(provider.promptCachingEnabled, false);
+  assert.equal(provider.promptCacheHintMode, undefined);
+  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.models[0].contextWindow, 1_000_000);
+  assert.equal(provider.models[0].maxOutputToken, 384_000);
+});
+
+test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
+  // 存量 codex 分组挂 DeepSeek 的配置不做自动改判：用户自行迁移到正式
+  // deepseek 分组（避免归一化层堆积一次性迁移逻辑）。
+  const legacy = settings.normalizeCustomProvider({
+    id: "legacy-deepseek",
+    name: "DeepSeek",
+    type: "codex",
+    baseUrl: "https://api.deepseek.com/v1",
+    apiKey: "sk-legacy",
+    models: ["deepseek-chat"],
+    activeModels: ["deepseek-chat"],
+  });
+  assert.equal(legacy.type, "codex");
+  assert.equal(legacy.requestFormat, "openai-responses");
+});
+
 test("settings normalization drops stale selected models and preserves valid selections", () => {
   const customProviders = [
     {
@@ -508,6 +566,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 
@@ -591,13 +650,29 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["high"],
   );
-  // deepseek-chat：目录声明非思考模型，无档位（思考控件整组隐藏）。
+  // DeepSeek 正式供应商直接读取自己的目录：chat 无思考，reasoner 恒开不可调，
+  // v4-pro 提供 high/max 两档。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "codex",
+      providerId: "deepseek",
       modelId: "deepseek-chat",
     }),
     [],
+  );
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "deepseek",
+      modelId: "deepseek-reasoner",
+    }),
+    [],
+  );
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "deepseek",
+      modelId: "deepseek-v4-pro",
+    }),
+    ["high", "max"],
   );
 
   assert.deepEqual(
@@ -626,6 +701,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         codex_openai_completions: "xhigh",
         gemini: "high",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -658,6 +734,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
         xai: "xhigh",
+        deepseek: "xhigh",
       },
     },
   );
@@ -683,6 +760,7 @@ test("chat runtime controls default and follow provider model reasoning support"
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
+        deepseek: "high",
       },
     },
   );
@@ -740,6 +818,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       codex_openai_completions: "high",
       gemini: "high",
       xai: "high",
+      deepseek: "high",
     },
   });
 });

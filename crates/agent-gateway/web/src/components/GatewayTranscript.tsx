@@ -321,6 +321,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         onEdit={() => {
           if (effectiveMessageRef) setEditingMessageId(row.key);
         }}
+        rewindTurnId={effectiveMessageRef?.messageId}
         readOnly={readOnly}
         alwaysShowActions
       />

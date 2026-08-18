@@ -1,5 +1,10 @@
-import { Select as SelectPrimitive } from "@base-ui/react";
-import { Check, ChevronDown } from "@liveagent/ui/components/IconSet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
 
 export type DrawerSelectOption = {
   value: string;
@@ -17,89 +22,42 @@ export function DrawerSelect(props: {
   className?: string;
 }) {
   const { value, onValueChange, options, ariaLabel, placeholder, disabled, className } = props;
-  const selected = options.find((option) => option.value === value);
   const triggerClass = [
-    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-foreground/[0.08] bg-white/55 px-3 text-[13px] leading-none text-foreground/90",
-    "outline-none transition-[background-color,border-color,box-shadow] duration-150",
-    "hover:border-foreground/[0.14] hover:bg-white/75",
-    "data-[open]:border-foreground/[0.2] data-[open]:bg-white/85 data-[open]:shadow-[0_1px_0_rgba(255,255,255,0.65)_inset,0_2px_8px_-4px_rgba(15,23,42,0.08)]",
+    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-[13px] leading-none text-foreground/90 shadow-xs",
+    "outline-none transition-colors duration-150",
+    "hover:bg-accent/40",
+    "data-[open]:bg-accent/50",
     "data-[placeholder]:text-muted-foreground",
     "focus-visible:outline-none focus-visible:ring-0",
     "disabled:cursor-not-allowed disabled:opacity-50",
-    "dark:bg-white/[0.04] dark:hover:bg-white/[0.06] dark:data-[open]:bg-white/[0.08]",
     className,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <SelectPrimitive.Root
-      value={value}
-      onValueChange={(nextValue) => {
-        if (nextValue != null) onValueChange(nextValue as string);
-      }}
-      disabled={disabled}
-    >
-      <SelectPrimitive.Trigger aria-label={ariaLabel} className={triggerClass}>
-        <span className="min-w-0 flex-1 truncate text-left">
-          <SelectPrimitive.Value>{selected ? selected.label : placeholder}</SelectPrimitive.Value>
-        </span>
-        <SelectPrimitive.Icon>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 ease-out group-data-[open]/drawer-select:rotate-180" />
-        </SelectPrimitive.Icon>
-      </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
-        <SelectPrimitive.Positioner
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          collisionPadding={12}
-          alignItemWithTrigger={false}
-          className="z-[9999]"
-        >
-          <SelectPrimitive.Popup
-            className={[
-              "drawer-select-content z-[80] overflow-hidden rounded-xl border border-foreground/[0.08] bg-background/95 p-1 text-[13px] text-foreground/90",
-              "shadow-[0_24px_48px_-24px_rgba(15,23,42,0.32),0_2px_6px_-3px_rgba(15,23,42,0.18)] backdrop-blur-2xl",
-              "min-w-[var(--anchor-width)]",
-              "data-[open]:animate-in data-[closed]:animate-out",
-              "data-[closed]:fade-out-0 data-[open]:fade-in-0",
-              "data-[closed]:zoom-out-95 data-[open]:zoom-in-95",
-              "data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1",
-              "dark:bg-background/90",
-            ].join(" ")}
+    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+      <SelectTrigger aria-label={ariaLabel} className={triggerClass}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="drawer-select-content min-w-(--anchor-width) rounded-xl border-border bg-background text-[13px] text-foreground/90 shadow-xl"
+      >
+        {options.map((option) => (
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            description={option.description}
+            className="cursor-pointer py-1.5 text-[13px] leading-tight"
           >
-            <SelectPrimitive.List className="max-h-[min(320px,var(--available-height))] overflow-y-auto p-0.5">
-              {options.map((option) => (
-                <SelectPrimitive.Item
-                  key={option.value}
-                  value={option.value}
-                  className={[
-                    "relative flex w-full cursor-pointer select-none items-start gap-2 rounded-md py-1.5 pl-2.5 pr-8 leading-tight outline-none transition-colors",
-                    "hover:bg-foreground/[0.05] data-[highlighted]:bg-foreground/[0.06] data-[highlighted]:text-foreground",
-                    "data-[selected]:bg-primary/[0.08] data-[selected]:text-foreground",
-                    "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
-                  ].join(" ")}
-                >
-                  <span className="min-w-0 flex-1">
-                    <SelectPrimitive.ItemText>
-                      <span className="block truncate">{option.label}</span>
-                    </SelectPrimitive.ItemText>
-                    {option.description ? (
-                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/80">
-                        {option.description}
-                      </span>
-                    ) : null}
-                  </span>
-                  <SelectPrimitive.ItemIndicator className="absolute right-2 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-primary">
-                    <Check className="h-3.5 w-3.5" />
-                  </SelectPrimitive.ItemIndicator>
-                </SelectPrimitive.Item>
-              ))}
-            </SelectPrimitive.List>
-          </SelectPrimitive.Popup>
-        </SelectPrimitive.Positioner>
-      </SelectPrimitive.Portal>
-    </SelectPrimitive.Root>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

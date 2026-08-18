@@ -8,6 +8,8 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AlertCircle, Folder, FolderTree, Loader2, Plus, Trash2 } from "../../IconSet";
 import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { rootStateTone } from "./workspaceProjectSettingsUtils";
 
 export function WorkspaceDirectorySettingsPanel(props: {
@@ -120,14 +122,14 @@ export function WorkspaceDirectorySettingsPanel(props: {
             >
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <input
+                  <Input
                     value={root.alias}
                     onChange={(event) => onAliasChange(root.id, event.currentTarget.value)}
                     aria-label={t("chat.workspaceSettingsDirectoryAlias")}
                     maxLength={32}
                     pattern="[a-z][a-z0-9_-]{0,31}"
                     disabled={!loaded}
-                    className="h-7 min-w-0 max-w-[180px] rounded-md border border-transparent bg-transparent px-1.5 text-sm font-medium outline-none transition-colors hover:border-border/60 focus:border-border/60 focus:ring-2 focus:ring-foreground/10"
+                    className="h-7 min-w-0 max-w-[180px] border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10"
                   />
                   <span
                     className={cn(
@@ -154,18 +156,26 @@ export function WorkspaceDirectorySettingsPanel(props: {
                 <label className="sr-only" htmlFor={`workspace-root-access-${root.id}`}>
                   {t("chat.workspaceSettingsDirectoryAccess")}
                 </label>
-                <select
-                  id={`workspace-root-access-${root.id}`}
+                <Select
                   value={root.access}
                   disabled={!loaded}
-                  onChange={(event) =>
-                    onAccessChange(root.id, event.currentTarget.value as WorkspaceProjectRootAccess)
+                  onValueChange={(value) =>
+                    onAccessChange(root.id, value as WorkspaceProjectRootAccess)
                   }
-                  className="h-8 rounded-md border border-border/60 bg-background px-2.5 text-xs outline-none focus:ring-2 focus:ring-foreground/10"
                 >
-                  <option value="read">{t("chat.workspaceSettingsDirectoryRead")}</option>
-                  <option value="write">{t("chat.workspaceSettingsDirectoryWrite")}</option>
-                </select>
+                  <SelectTrigger
+                    id={`workspace-root-access-${root.id}`}
+                    className="h-8 w-auto min-w-24 border-border/60 px-2.5 text-xs"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    <SelectItem value="read">{t("chat.workspaceSettingsDirectoryRead")}</SelectItem>
+                    <SelectItem value="write">
+                      {t("chat.workspaceSettingsDirectoryWrite")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button
                   type="button"
                   variant="ghost"

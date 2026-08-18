@@ -663,7 +663,7 @@ export function GitReviewStatusView(props: {
       {changesMenu ? (
         <div
           ref={changesMenuRef}
-          className="absolute z-[75] min-w-56"
+          className="layer-popover absolute min-w-56"
           style={{ right: changesMenu.right, top: changesMenu.y }}
         >
           <div
@@ -729,7 +729,7 @@ export function GitReviewStatusView(props: {
         <div
           ref={changeContextMenuRef}
           role="menu"
-          className={cn("absolute z-[80] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
+          className={cn("layer-popover absolute min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: changeContextMenu.x, top: changeContextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {

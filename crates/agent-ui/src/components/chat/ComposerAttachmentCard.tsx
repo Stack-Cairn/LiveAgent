@@ -1,8 +1,17 @@
 import { X } from "@liveagent/ui/components/IconSet";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useMemo, useState } from "react";
-import { ImagePreview, type ImagePreviewSlide } from "./ImagePreview";
+import type { PendingUploadedFile } from "../../lib/chat/uploadedFiles";
+import {
+  ImagePreview,
+  ImagePreviewActionFeedback,
+  ImagePreviewContextMenu,
+  type ImagePreviewSlide,
+} from "./ImagePreview";
 
 export function ComposerAttachmentCard(props: {
+  file?: PendingUploadedFile;
+  workspaceRoot?: string;
   fileName: string;
   pathTitle: string;
   imageSrc?: string | null;
@@ -15,6 +24,8 @@ export function ComposerAttachmentCard(props: {
   onRemove: () => void;
 }) {
   const {
+    file,
+    workspaceRoot,
     fileName,
     pathTitle,
     imageSrc,
@@ -27,9 +38,42 @@ export function ComposerAttachmentCard(props: {
     onRemove,
   } = props;
   const [previewOpen, setPreviewOpen] = useState(false);
-  const previewSlides = useMemo<ImagePreviewSlide[]>(
-    () => (imageSrc ? [{ src: imageSrc, alt: fileName, title: fileName }] : []),
-    [fileName, imageSrc],
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [imageLoadState, setImageLoadState] = useState<{
+    src: string | null;
+    status: "loaded" | "error";
+  } | null>(null);
+  const previewSlides = useMemo<ImagePreviewSlide[]>(() => {
+    if (!imageSrc) return [];
+    const workdir = workspaceRoot?.trim() ?? "";
+    const absolutePath = file?.absolutePath?.trim() ?? "";
+    const relativePath = file?.relativePath.trim() ?? "";
+    return [
+      {
+        src: imageSrc,
+        alt: fileName,
+        title: fileName,
+        fileName,
+        sizeBytes: file?.sizeBytes,
+        ...(file && workdir && absolutePath && relativePath
+          ? {
+              attachment: {
+                workdir,
+                absolutePath,
+                relativePath,
+              },
+            }
+          : {}),
+      },
+    ];
+  }, [file, fileName, imageSrc, workspaceRoot]);
+  const previewSlide = previewSlides[0];
+  const imageLoadFailed = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "error",
+  );
+  const canPreview = Boolean(
+    imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded",
   );
 
   // 图片附件：纯缩略图方块，点击放大预览，文件名放悬浮提示，角标删除。
@@ -39,16 +83,39 @@ export function ComposerAttachmentCard(props: {
         title={fileName}
         className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color] hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]"
       >
-        {imageSrc ? (
+        {imageSrc && !imageLoadFailed ? (
           <button
             type="button"
+            disabled={!canPreview}
             onClick={() => setPreviewOpen(true)}
-            className="block h-full w-full cursor-zoom-in outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60"
+            className={cn(
+              "block h-full w-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60",
+              canPreview ? "cursor-zoom-in" : "cursor-default",
+            )}
             aria-label={previewLabel ? `${previewLabel}: ${fileName}` : fileName}
             title={previewLabel}
+            onContextMenu={(event) => {
+              if (!canPreview) return;
+              event.preventDefault();
+              setContextMenu({ x: event.clientX, y: event.clientY });
+            }}
           >
-            <img src={imageSrc} alt="" draggable={false} className="h-full w-full object-cover" />
+            <img
+              src={imageSrc}
+              alt=""
+              draggable={false}
+              className="block h-full w-full object-cover"
+              onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
+              onError={() => {
+                setImageLoadState({ src: imageSrc, status: "error" });
+                setContextMenu(null);
+              }}
+            />
           </button>
+        ) : imageLoadFailed ? (
+          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+            {fallbackIcon}
+          </span>
         ) : (
           <span className="block h-full w-full animate-pulse bg-black/[0.055] dark:bg-white/[0.09]" />
         )}
@@ -70,6 +137,16 @@ export function ComposerAttachmentCard(props: {
             onClose={() => setPreviewOpen(false)}
           />
         ) : null}
+        {contextMenu && previewSlide ? (
+          <ImagePreviewContextMenu
+            slide={previewSlide}
+            position={contextMenu}
+            onOpen={() => setPreviewOpen(true)}
+            onClose={() => setContextMenu(null)}
+            onActionError={setActionError}
+          />
+        ) : null}
+        <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
       </div>
     );
   }

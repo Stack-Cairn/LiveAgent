@@ -539,6 +539,14 @@ export async function setChatHistoryShare(
 export async function deleteChatHistory(id: string) {
   return withConversationWriteLock(id, async () => {
     await invoke<void>("chat_history_delete", { id });
+    // 检查点数据(索引 + blobs)以会话为单位存放，没有独立的 GC。会话都删了
+    // 还留着，单个会话最多能压着 512MB blob 永不回收。尽力而为：清理失败不能
+    // 反过来让删除会话报错。
+    try {
+      await invoke<void>("checkpoint_clear", { conversation_id: id });
+    } catch {
+      // 忽略：残留的检查点目录不影响任何功能，只是占盘。
+    }
   });
 }
 
