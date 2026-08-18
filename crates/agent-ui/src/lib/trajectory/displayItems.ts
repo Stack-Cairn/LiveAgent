@@ -19,7 +19,7 @@ export type TrajectoryDisplayItem =
   | { kind: "record"; key: string; record: TrajectoryRecord };
 
 export const TRAJECTORY_DISPLAY_HEIGHTS = {
-  turnHeader: 24,
+  turnHeader: 30,
   record: 30,
 } as const;
 

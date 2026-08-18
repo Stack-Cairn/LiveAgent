@@ -6,7 +6,7 @@
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
 import {
@@ -66,6 +66,38 @@ export function TrajectoryTable(props: {
     overscan: OVERSCAN_ROWS,
     enabled: virtualized,
   });
+
+  const measuredProjectionRef = useRef<{
+    collapsedTurns: ReadonlySet<number>;
+    collapsedAssistants: ReadonlySet<string>;
+    searchMatchIndexes: ReadonlySet<number> | null;
+  } | null>(null);
+  useLayoutEffect(() => {
+    if (!virtualized) {
+      measuredProjectionRef.current = null;
+      return;
+    }
+    const measured = measuredProjectionRef.current;
+    if (
+      measured?.collapsedTurns === props.collapsedTurns &&
+      measured.collapsedAssistants === props.collapsedAssistants &&
+      measured.searchMatchIndexes === props.searchMatchIndexes
+    ) {
+      return;
+    }
+    measuredProjectionRef.current = {
+      collapsedTurns: props.collapsedTurns,
+      collapsedAssistants: props.collapsedAssistants,
+      searchMatchIndexes: props.searchMatchIndexes,
+    };
+    virtualizer.measure();
+  }, [
+    props.collapsedTurns,
+    props.collapsedAssistants,
+    props.searchMatchIndexes,
+    virtualized,
+    virtualizer,
+  ]);
 
   // 外部选中（时间轴点击、跨视图跳转）要把对应行带进视口——但只在**选中变化**时
   // 做。若跟着 items 变化一起触发，实时回合里每来一条事件都会把视口拽回选中行，
@@ -139,6 +171,8 @@ export function TrajectoryTable(props: {
             return (
               <div
                 key={virtualRow.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualRow.index}
                 className="absolute inset-x-0 top-0"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
@@ -174,7 +208,7 @@ function TurnHeader(props: {
       onClick={props.onToggle}
       aria-expanded={props.collapsible ? !props.collapsed : undefined}
       className={cn(
-        "flex h-[24px] w-full items-center gap-1 bg-muted/30 px-3 text-[11px] text-muted-foreground",
+        "flex h-[30px] w-full items-center gap-1 bg-muted/30 px-3 text-[11px] text-muted-foreground",
         props.collapsible && "hover:bg-muted/60 hover:text-foreground",
       )}
     >

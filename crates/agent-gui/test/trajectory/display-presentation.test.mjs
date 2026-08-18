@@ -146,21 +146,26 @@ test("a turn with a single visible row is not collapsible", () => {
   assert.equal(header.collapsible, false);
 });
 
-test("row heights differ between headers and records", () => {
+test("virtualized headers and records keep the same fixed row height", () => {
   const items = buildTrajectoryDisplayItems(twoTurnLayout(), NO_COLLAPSE);
   const header = items.find((item) => item.kind === "turnHeader");
   const record = items.find((item) => item.kind === "record");
-  assert.equal(trajectoryDisplayItemHeight(header), 24);
+  assert.equal(trajectoryDisplayItemHeight(header), 30);
   assert.equal(trajectoryDisplayItemHeight(record), 30);
 });
 
-test("the virtualized table keys height caches by stable display identity", () => {
+test("the virtualized table remeasures projected rows by stable display identity", () => {
   const source = readFileSync(
     new URL("../../../agent-ui/src/components/trajectory/TrajectoryTable.tsx", import.meta.url),
     "utf8",
   );
   assert.match(source, /getItemKey:\s*getDisplayItemKey/);
   assert.match(source, /key=\{virtualRow\.key\}/);
+  assert.match(source, /ref=\{virtualizer\.measureElement\}/);
+  assert.match(source, /data-index=\{virtualRow\.index\}/);
+  assert.match(source, /const measuredProjectionRef = useRef/);
+  assert.match(source, /useLayoutEffect\(\(\) => \{/);
+  assert.match(source, /virtualizer\.measure\(\);/);
 });
 
 test("system label follows the header change kind", () => {
