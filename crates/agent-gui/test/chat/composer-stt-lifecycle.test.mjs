@@ -34,6 +34,8 @@ function createHarness() {
   };
 
   const captures = [];
+  let deferCaptureStop = false;
+  let releaseCaptureStop = null;
   class FakeCapture {
     constructor(options) {
       this.options = options;
@@ -45,6 +47,11 @@ function createHarness() {
     }
     stop() {
       this.events.push("capture.stop");
+      if (deferCaptureStop) {
+        return new Promise((resolve) => {
+          releaseCaptureStop = resolve;
+        });
+      }
     }
     chunk(sequence, values = [sequence]) {
       this.options.onChunk({ sequence, pcm: new Int16Array(values), durationMs: 100 });
@@ -139,7 +146,23 @@ function createHarness() {
       disabled: false,
     });
   };
-  return { render, calls, callbacks, sessionIds, captures, composerEvents, effects };
+  return {
+    render,
+    calls,
+    callbacks,
+    sessionIds,
+    captures,
+    composerEvents,
+    effects,
+    deferCaptureStop() {
+      deferCaptureStop = true;
+    },
+    releaseCaptureStop() {
+      releaseCaptureStop?.();
+      releaseCaptureStop = null;
+      deferCaptureStop = false;
+    },
+  };
 }
 
 async function settle() {
@@ -189,6 +212,30 @@ test("stop halts capture, sends four 100 ms tail chunks, then finishes transport
   const audio = harness.calls.filter((call) => Array.isArray(call) && call[0] === "audio");
   assert.deepEqual(audio.map((call) => call[2]), [0, 1, 2, 3]);
   assert.deepEqual(harness.calls.filter((call) => Array.isArray(call) && call[0] === "stop").length, 1);
+});
+
+test("ready racing with capture stop waits for tail audio before finish", async () => {
+  const harness = createHarness();
+  let result = harness.render();
+  await result.toggle();
+  await settle();
+  harness.deferCaptureStop();
+  result = harness.render();
+  const stopping = result.toggle();
+  await settle();
+
+  harness.callbacks[0]({ type: "ready", sessionId: harness.sessionIds[0] });
+  await settle();
+  assert.equal(harness.calls.some((call) => Array.isArray(call) && call[0] === "stop"), false);
+
+  harness.releaseCaptureStop();
+  await stopping;
+  await settle();
+  const audioSequences = harness.calls
+    .filter((call) => Array.isArray(call) && call[0] === "audio")
+    .map((call) => call[2]);
+  assert.deepEqual(audioSequences, [0, 1, 2, 3]);
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "stop").length, 1);
 });
 
 test("final accepts only the active session and stale events cannot mutate the composer", async () => {

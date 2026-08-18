@@ -27,6 +27,18 @@ type StageError struct {
 	Err      error
 }
 
+// emitEvent never lets a provider goroutine block forever when its consumer
+// (usually the WebSocket writer) has stopped reading. Cancellation must be
+// able to unwind the provider and close its upstream connection.
+func emitEvent(ctx context.Context, events chan<- Event, event Event) bool {
+	select {
+	case events <- event:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func (e *StageError) Error() string {
 	return fmt.Sprintf("[%s/%s] %s", e.Provider, e.Stage, e.Err)
 }

@@ -251,7 +251,9 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 			}
 			if !ready {
 				ready = true
-				events <- Event{Type: "ready", SessionID: id}
+				if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
+					return ctx.Err()
+				}
 				for index, pcm := range pending {
 					if err := holdAudio(AudioChunk{Sequence: pendingSequences[index], PCM: pcm}); err != nil {
 						return err
@@ -269,14 +271,18 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 			if result, ok := message["result"].(map[string]any); ok {
 				if text, ok := result["text"].(string); ok {
 					lastText = text
-					events <- Event{Type: "partial", SessionID: id, Text: text}
+					if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: text}) {
+						return ctx.Err()
+					}
 				}
 			}
 			lastPackage, _ := message["is_last_package"].(bool)
 			lastFrame, _ := message["_last"].(bool)
 			if (lastPackage || lastFrame) && finishing {
 				if lastText != "" {
-					events <- Event{Type: "final", SessionID: id, Text: lastText}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: lastText}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}

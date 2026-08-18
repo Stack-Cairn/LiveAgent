@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import type {
@@ -328,7 +329,23 @@ export function SttSection({
     };
     try {
       const redacted = await service.update(payload);
-      setSettings((previous) => ({ ...previous, stt: redacted }));
+      // The service has already cleared the secret, but the host settings
+      // layer persists every local state change as well. Keep the explicit
+      // clear marker through that second write so an incomplete provider is
+      // not rejected as an accidental partial configuration.
+      setSettings((previous) => ({
+        ...previous,
+        stt: {
+          ...redacted,
+          providers: {
+            ...redacted.providers,
+            [definition.id]: {
+              ...redacted.providers[definition.id],
+              clearSecrets: true,
+            },
+          },
+        },
+      }));
       setDraftSecrets({});
       resetSecretVisibility();
     } catch (cause) {
@@ -381,6 +398,24 @@ export function SttSection({
             </p>
           ) : null}
         </div>
+      </div>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-background/60 px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">开启语音输入</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            开启后，聊天输入框会显示麦克风按钮；关闭后不会启用麦克风。
+          </p>
+        </div>
+        <Switch
+          checked={displayedStt.enabled}
+          onCheckedChange={(enabled) =>
+            setSettings((previous) => ({
+              ...previous,
+              stt: { ...previous.stt, enabled, allowIncomplete: true },
+            }))
+          }
+          aria-label="开启语音输入"
+        />
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {PROVIDERS.map((item) => {

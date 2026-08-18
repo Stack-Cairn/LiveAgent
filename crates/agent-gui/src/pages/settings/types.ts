@@ -1,6 +1,6 @@
 import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
 import type { AppUpdateController } from "../../lib/appUpdates";
-import type { AppSettings } from "../../lib/settings";
+import type { AppSettings, SttProviderId } from "../../lib/settings";
 import type { SettingsSaveState } from "../../lib/settings/storage";
 
 export type SetSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
@@ -29,6 +29,8 @@ export type SettingsPageProps = {
   hiddenSections?: SectionId[];
   appUpdate: AppUpdateController;
   sttSettingsService: SttSettingsService;
+  /** 临时切换语音输入运行供应商，不触发配置保存。 */
+  onSttProviderChange?: (provider: SttProviderId) => void;
   /** 绕过 setSettings 从 SQLite 重新载入（备份还原后用，见 SettingsSectionProps）。 */
   reloadSettings?: () => Promise<void>;
 };

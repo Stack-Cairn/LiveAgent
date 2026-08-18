@@ -53,6 +53,7 @@ import {
   updateExecutionModeFromChatSelection,
   updateWorkspaceResourceSettings,
 } from "@/lib/settings";
+import type { SttProviderId } from "@/lib/settings";
 import { createWebSttSettingsService } from "@/lib/stt/webSttSettingsService";
 import { webSttTransport } from "@/lib/stt/webSttTransport";
 import {
@@ -328,6 +329,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
+  useEffect(() => {
+    setSttProviderOverride(null);
+  }, [settings.stt.provider]);
   const sttSettingsService = useMemo(
     () =>
       createWebSttSettingsService(async (sttSecretUpdate) => {
@@ -367,6 +372,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
     [setSettings],
   );
+  // 语音输入失败（麦克风不可用等）以 toast 提示，不占用输入框区域。
+  const handleSttError = useCallback((message: string) => addNotify("error", message), [addNotify]);
   const resolveCheckpointAuthorizedRoots = useCallback(async () => {
     const roots: string[] = [];
     const push = (value?: string | null) => {
@@ -755,9 +762,19 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           isUploadingFiles={isUploadingFiles}
                           isInputDisabled={composerInputDisabled}
                           // WebUI 始终提供麦克风入口；供应商未配置或运行连接失败时，
-                          // 错误由点击后的 STT 会话直接反馈在 Composer 中。
-                          sttProvider={settings.stt.provider ?? "tencent_cloud"}
+                          // 错误由点击后的 STT 会话以 toast 反馈。
+                          sttProvider={
+                            settings.stt.enabled
+                              ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
+                              : null
+                          }
+                          sttProviderConfigured={
+                            settings.stt.providers[
+                              sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
+                            ]?.configured
+                          }
                           sttTransport={webSttTransport}
+                          onSttError={handleSttError}
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
@@ -1049,6 +1066,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialProviderId={settingsProviderId}
                 hiddenSections={["remote"]}
                 sttSettingsService={sttSettingsService}
+                onSttProviderChange={setSttProviderOverride}
                 onAgentDirectoryChanged={async () => {
                   if (!api) return;
                   await api.listAgents();

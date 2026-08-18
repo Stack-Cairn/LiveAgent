@@ -31,6 +31,7 @@ async function withNavigator(value, task) {
 test("gateway settings sync publishes redacted STT state and enables WebUI STT", () => {
   const desktop = settings.normalizeSettings({
     stt: {
+      enabled: true,
       provider: "aliyun_dashscope",
       providers: {
         aliyun_dashscope: {
@@ -46,11 +47,13 @@ test("gateway settings sync publishes redacted STT state and enables WebUI STT",
 
   const payload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
   assert.equal(payload.stt.provider, "aliyun_dashscope");
+  assert.equal(payload.stt.enabled, true);
   assert.equal(payload.stt.providers.aliyun_dashscope.configured, true);
   assert.equal(payload.stt.providers.aliyun_dashscope.apiKey, "");
 
   const web = settingsSync.applyGatewaySettingsSyncPayload(settings.normalizeSettings({}), payload);
   assert.equal(web.stt.provider, "aliyun_dashscope");
+  assert.equal(web.stt.enabled, true);
   assert.equal(web.stt.providers.aliyun_dashscope.configured, true);
   assert.equal(web.stt.providers.aliyun_dashscope.apiKey, "");
 });

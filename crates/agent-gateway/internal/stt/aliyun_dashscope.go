@@ -141,7 +141,9 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 			case "task-started":
 				if !ready {
 					ready = true
-					events <- Event{Type: "ready", SessionID: id}
+					if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
+						return ctx.Err()
+					}
 					for _, pcm := range pending {
 						if err := conn.WriteMessage(websocket.BinaryMessage, pcm); err != nil {
 							return stageError("DashScope", "send_audio", err)
@@ -158,14 +160,20 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 			case "result-generated":
 				if wire.Payload.Output.Sentence.End || wire.Payload.Output.Sentence.SentenceEnd {
 					finals += wire.Payload.Output.Sentence.Text
-					events <- Event{Type: "partial", SessionID: id, Text: finals}
+					if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: finals}) {
+						return ctx.Err()
+					}
 				} else {
-					events <- Event{Type: "partial", SessionID: id, Text: finals + wire.Payload.Output.Sentence.Text}
+					if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: finals + wire.Payload.Output.Sentence.Text}) {
+						return ctx.Err()
+					}
 				}
 			case "task-finished":
 				if finishing && finishSent {
 					if finals != "" {
-						events <- Event{Type: "final", SessionID: id, Text: finals}
+						if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: finals}) {
+							return ctx.Err()
+						}
 					}
 					return nil
 				}

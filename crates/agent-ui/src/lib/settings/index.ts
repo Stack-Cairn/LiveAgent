@@ -630,6 +630,7 @@ function defaultSttProvider(id: SttProviderId): SttProviderSettings {
 
 export function getDefaultSttSettings(): SttSettings {
   return {
+    enabled: false,
     provider: null,
     providers: Object.fromEntries(
       STT_PROVIDER_IDS.map((id) => [id, defaultSttProvider(id)]),
@@ -681,7 +682,12 @@ export function normalizeSttSettings(input: unknown): SttSettings {
       ];
     }),
   ) as Record<SttProviderId, SttProviderSettings>;
-  return { provider, providers };
+  return {
+    enabled: obj.enabled === true,
+    provider,
+    providers,
+    ...(obj.allowIncomplete === true ? { allowIncomplete: true } : {}),
+  };
 }
 
 function getKnownModelLimits(

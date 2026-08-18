@@ -95,6 +95,7 @@ func fixtureStore(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	settings := defaults()
+	settings.Enabled = true
 	settings.Providers["aliyun_dashscope"]["apiKey"] = "fixture-secret"
 	if _, err := store.Update(context.Background(), settings); err != nil {
 		t.Fatal(err)
@@ -105,6 +106,7 @@ func fixtureStore(t *testing.T) *Store {
 func TestSyncFromDesktopClearsStaleGatewaySecrets(t *testing.T) {
 	store := fixtureStore(t)
 	settings := defaults()
+	settings.Enabled = true
 	provider := "aliyun_dashscope"
 	settings.Provider = &provider
 	settings.Providers[provider]["apiKey"] = ""
@@ -117,6 +119,9 @@ func TestSyncFromDesktopClearsStaleGatewaySecrets(t *testing.T) {
 	}
 	if redacted.Providers[provider]["configured"] != false {
 		t.Fatalf("expected cleared provider to be unconfigured: %#v", redacted.Providers[provider])
+	}
+	if !redacted.Enabled {
+		t.Fatal("STT enabled flag was not synchronized from desktop")
 	}
 	if _, err := store.Provider(context.Background(), provider); err == nil {
 		t.Fatal("cleared desktop secret remained usable in Gateway runtime")
@@ -188,6 +193,24 @@ func TestManagerRejectsDuplicateUnknownAndMissingSessions(t *testing.T) {
 		t.Fatal("full write queue must be rejected")
 	}
 	manager.Cancel("session")
+}
+
+func TestEmitEventUnblocksWhenConsumerIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := make(chan Event)
+	done := make(chan bool, 1)
+	go func() {
+		done <- emitEvent(ctx, events, Event{Type: "partial", SessionID: "session"})
+	}()
+	cancel()
+	select {
+	case emitted := <-done:
+		if emitted {
+			t.Fatal("emitEvent reported delivery after context cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("emitEvent remained blocked after context cancellation")
+	}
 }
 
 func TestManagerCancelsAdapterAndRedactsProviderErrors(t *testing.T) {
@@ -661,6 +684,21 @@ func TestSettingsUpdateValidatesSelectedProviderOnly(t *testing.T) {
 	clear.Providers[provider]["clearSecrets"] = true
 	if _, err := store.Update(context.Background(), clear); err != nil {
 		t.Fatalf("explicit secret clearing must remain valid: %v", err)
+	}
+}
+
+func TestSettingsUpdateAllowsVoiceToggleWithIncompleteProvider(t *testing.T) {
+	store := fixtureStore(t)
+	provider := "tencent_cloud"
+	settings := defaults()
+	settings.Provider = &provider
+	settings.AllowIncomplete = true
+	settings.Providers[provider]["appId"] = ""
+	settings.Providers[provider]["engineModelType"] = "16k_zh"
+	settings.Providers[provider]["secretId"] = ""
+	settings.Providers[provider]["secretKey"] = ""
+	if _, err := store.Update(context.Background(), settings); err != nil {
+		t.Fatalf("voice-input toggle should persist with incomplete provider: %v", err)
 	}
 }
 

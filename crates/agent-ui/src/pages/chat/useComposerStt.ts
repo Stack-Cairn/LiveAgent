@@ -1,5 +1,6 @@
 import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
+import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import {
   appendTailSilence,
   type PcmChunk,
@@ -10,7 +11,6 @@ import {
   SttPcmFifo,
 } from "@liveagent/ui/lib/stt/audio";
 import type { SttRuntimeEvent, SttTransport, SttUiState } from "@liveagent/ui/lib/stt/types";
-import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -20,6 +20,7 @@ type ActiveSttSession = {
   fifo: SttPcmFifo;
   ready: boolean;
   stopping: boolean;
+  tailQueued: boolean;
   finishSent: boolean;
   lastText: string;
   sequence: number;
@@ -31,10 +32,13 @@ type ActiveSttSession = {
 export function useComposerStt(options: {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   provider: SttProviderId | null;
+  providerConfigured?: boolean;
   transport?: SttTransport;
   disabled: boolean;
+  /** 错误上报回调（如麦克风不可用）；由宿主决定展示方式（toast 等）。 */
+  onError?: (message: string) => void;
 }) {
-  const { composerRef, provider, transport, disabled } = options;
+  const { composerRef, provider, providerConfigured, transport, disabled, onError } = options;
   const [state, setState] = useState<SttUiState>("idle");
   const [error, setError] = useState<string | null>(null);
   const activeRef = useRef<ActiveSttSession | null>(null);
@@ -63,8 +67,9 @@ export function useComposerStt(options: {
       cleanup(preserve);
       setError(message);
       setState("error");
+      onError?.(message);
     },
-    [cleanup, transport],
+    [cleanup, onError, transport],
   );
 
   const sendChunk = useCallback(
@@ -101,6 +106,7 @@ export function useComposerStt(options: {
         activeRef.current !== active ||
         !active.ready ||
         !active.stopping ||
+        !active.tailQueued ||
         active.finishSent ||
         !transport
       ) {
@@ -145,7 +151,10 @@ export function useComposerStt(options: {
       });
     }
     if (activeRef.current === active && active.ready) {
+      active.tailQueued = true;
       await finishProvider(active);
+    } else if (activeRef.current === active) {
+      active.tailQueued = true;
     }
   }, [finishProvider, queueChunk, transport]);
 
@@ -158,7 +167,7 @@ export function useComposerStt(options: {
         active.ready = true;
         if (!active.stopping) setState("recognizing");
         for (const chunk of active.fifo.drain()) sendChunk(chunk.sequence, chunk.pcm);
-        if (active.stopping) void finishProvider(active);
+        if (active.stopping && active.tailQueued) void finishProvider(active);
       } else if (event.type === "partial") {
         active.lastText = event.text;
         composerRef.current?.updateTransientText(event.text);
@@ -183,11 +192,19 @@ export function useComposerStt(options: {
 
   const start = useCallback(async () => {
     if (!transport || !provider || disabled || activeRef.current) return;
+    if (providerConfigured === false) {
+      const message = "STT供应商配置不完整";
+      setError(message);
+      setState("error");
+      onError?.(message);
+      return;
+    }
     setError(null);
     setState("requesting-permission");
     if (!composerRef.current?.beginTransientText()) {
       setState("error");
       setError("无法锁定当前输入位置");
+      onError?.("无法锁定当前输入位置");
       return;
     }
 
@@ -205,6 +222,7 @@ export function useComposerStt(options: {
         fifo,
         ready: false,
         stopping: false,
+        tailQueued: false,
         finishSent: false,
         lastText: "",
         sequence: 0,
@@ -226,7 +244,18 @@ export function useComposerStt(options: {
     } catch (cause) {
       fail(errorMessageWithFallback(cause, "无法启动语音识别"));
     }
-  }, [composerRef, disabled, fail, onEvent, provider, queueChunk, stop, transport]);
+  }, [
+    composerRef,
+    disabled,
+    fail,
+    onError,
+    onEvent,
+    provider,
+    providerConfigured,
+    queueChunk,
+    stop,
+    transport,
+  ]);
 
   const toggle = useCallback(() => (activeRef.current ? void stop() : void start()), [start, stop]);
 
@@ -241,8 +270,8 @@ export function useComposerStt(options: {
   );
 
   useEffect(() => {
-    if (disabled && activeRef.current) void stop();
-  }, [disabled, stop]);
+    if ((disabled || !provider) && activeRef.current) void stop();
+  }, [disabled, provider, stop]);
 
   return {
     state,

@@ -12,7 +12,9 @@ const { getDefaultSttSettings, normalizeSttSettings } = loader.loadModule(
 );
 
 test("STT provider defaults match the four provider configuration forms", () => {
-  const providers = getDefaultSttSettings().providers;
+  const defaults = getDefaultSttSettings();
+  assert.equal(defaults.enabled, false);
+  const providers = defaults.providers;
   assert.deepEqual(Object.keys(providers), [
     "tencent_cloud",
     "volcengine_seed_v3",
@@ -35,6 +37,7 @@ test("STT provider defaults match the four provider configuration forms", () => 
 
 test("legacy STT settings gain protocol defaults without changing saved values", () => {
   const normalized = normalizeSttSettings({
+    enabled: true,
     provider: "volcengine_v2",
     providers: {
       aliyun_dashscope: {
@@ -46,6 +49,7 @@ test("legacy STT settings gain protocol defaults without changing saved values",
       volcengine_v2: { id: "volcengine_v2", cluster: "custom_cluster" },
     },
   });
+  assert.equal(normalized.enabled, true);
   assert.equal(normalized.provider, null);
   assert.equal(normalized.aliyun_dashscope, undefined);
   assert.equal(
@@ -96,6 +100,16 @@ test("STT connection test saves the current form and identifies the active runti
     ),
     "utf8",
   );
+  const desktopChatPage = readFileSync(
+    fileURLToPath(new URL("../../src/pages/ChatPage.tsx", import.meta.url)),
+    "utf8",
+  );
+  const composerBar = readFileSync(
+    fileURLToPath(
+      new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+    ),
+    "utf8",
+  );
   const webSettingsSync = readFileSync(
     fileURLToPath(
       new URL(
@@ -130,6 +144,8 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(section, /delete next\[definition\.id\]/);
   assert.doesNotMatch(section, /service\s*\.get\(\)/);
   assert.match(section, /const displayedStt = settings\.stt/);
+  assert.match(section, /checked=\{displayedStt\.enabled\}/);
+  assert.match(section, /stt: \{ \.\.\.previous\.stt, enabled, allowIncomplete: true \}/);
   assert.match(section, /className="w-full min-w-0 space-y-5"/);
   assert.doesNotMatch(webSettingsSync, /receivedSyncedStt/);
   assert.match(webSettingsSync, /const stt = await webSttSettingsService\.get\(\)/);
@@ -163,11 +179,40 @@ test("STT connection test saves the current form and identifies the active runti
   assert.ok(section.indexOf('id: "aliyun_dashscope"') < section.indexOf('id: "baidu_cloud"'));
   assert.doesNotMatch(section, />保存配置</);
   assert.match(section, /onClick=\{\(\) => void clearProviderSecrets\(\)\}/);
+  assert.match(section, /clearSecrets: true/);
   const selectProviderBlock = section.slice(
     section.indexOf("const selectProvider"),
     section.indexOf("const save"),
   );
   assert.doesNotMatch(selectProviderBlock, /setSettings/);
-  assert.match(gatewayView, /sttProvider=\{settings\.stt\.provider \?\? "tencent_cloud"\}/);
+  assert.match(
+    gatewayView,
+    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
+  );
+  assert.match(gatewayView, /onSttProviderChange=\{setSttProviderOverride\}/);
+  assert.match(gatewayView, /setSttProviderOverride\(null\)/);
   assert.doesNotMatch(gatewayView, /settings\.stt\.providers\[settings\.stt\.provider\]\.configured/);
+  assert.match(
+    desktopChatPage,
+    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
+  );
+  assert.match(desktopChatPage, /sttProviderOverride/);
+  assert.match(desktopChatPage, /sttProviderConfigured=/);
+  assert.doesNotMatch(
+    desktopChatPage,
+    /settings\.stt\.providers\[settings\.stt\.provider\]\.configured/,
+  );
+  assert.match(desktopChatPage, /onSttError=\{handleSttError\}/);
+  assert.match(gatewayView, /onSttError=\{handleSttError\}/);
+  assert.match(gatewayView, /sttProviderConfigured=/);
+  assert.match(composerBar, /onError: onSttError/);
+  assert.match(composerBar, /providerConfigured: sttProviderConfigured/);
+  assert.doesNotMatch(composerBar, /stt\.error \? \(/);
+  assert.match(
+    readFileSync(
+      fileURLToPath(new URL("../../../agent-ui/src/pages/chat/useComposerStt.ts", import.meta.url)),
+      "utf8",
+    ),
+    /STT供应商配置不完整/,
+  );
 });

@@ -31,8 +31,10 @@ func providerDefaults(id string) map[string]any {
 }
 
 type Settings struct {
-	Provider  *string                   `json:"provider"`
-	Providers map[string]map[string]any `json:"providers"`
+	Enabled         bool                      `json:"enabled"`
+	Provider        *string                   `json:"provider"`
+	Providers       map[string]map[string]any `json:"providers"`
+	AllowIncomplete bool                      `json:"allowIncomplete,omitempty"`
 }
 type Store struct{ pool *sql.DB }
 
@@ -50,7 +52,7 @@ func defaults() Settings {
 	for _, id := range providerIDs {
 		providers[id] = providerDefaults(id)
 	}
-	return Settings{Providers: providers}
+	return Settings{Enabled: false, Providers: providers}
 }
 
 func (s *Store) raw(ctx context.Context) (Settings, error) {
@@ -174,6 +176,7 @@ func stringValue(provider map[string]any, field string) string {
 }
 
 func redact(settings Settings) Settings {
+	settings.AllowIncomplete = false
 	for id, provider := range settings.Providers {
 		provider["configured"] = configured(id, provider)
 		for _, field := range secretFields {
@@ -225,7 +228,7 @@ func (s *Store) Update(ctx context.Context, incoming Settings) (Settings, error)
 		next["id"] = id
 		current.Providers[id] = next
 	}
-	if incoming.Provider != nil && !selectedCleared {
+	if incoming.Provider != nil && !selectedCleared && !incoming.AllowIncomplete {
 		provider, ok := current.Providers[*incoming.Provider]
 		if !ok {
 			return Settings{}, errors.New("selected STT provider is unknown")
@@ -234,7 +237,9 @@ func (s *Store) Update(ctx context.Context, incoming Settings) (Settings, error)
 			return Settings{}, err
 		}
 	}
+	current.Enabled = incoming.Enabled
 	current.Provider = incoming.Provider
+	current.AllowIncomplete = false
 	payload, err := json.Marshal(current)
 	if err != nil {
 		return Settings{}, err
@@ -276,6 +281,8 @@ func (s *Store) SyncFromDesktop(ctx context.Context, incoming Settings) (Setting
 		next.Providers[id] = provider
 	}
 	next.Provider = incoming.Provider
+	next.Enabled = incoming.Enabled
+	next.AllowIncomplete = false
 	payload, err := json.Marshal(next)
 	if err != nil {
 		return Settings{}, err

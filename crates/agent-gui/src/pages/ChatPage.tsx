@@ -169,6 +169,7 @@ export function ChatPage(props: ChatPageProps) {
   const {
     settings,
     setSettings,
+    sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
     context,
@@ -699,6 +700,8 @@ export function ChatPage(props: ChatPageProps) {
     (message: string) => addNotify("error", message),
     [addNotify],
   );
+  // 语音输入失败（麦克风不可用等）以 toast 提示，不占用输入框区域。
+  const handleSttError = useCallback((message: string) => addNotify("error", message), [addNotify]);
   const handleOpenChatFileLink = useChatFileLinkNavigation({
     conversationId: currentConversationId,
     conversationWorkdir: displayedConversationWorkdir,
@@ -1973,13 +1976,19 @@ export function ChatPage(props: ChatPageProps) {
                     isSending={isSending}
                     isUploadingFiles={isUploadingFiles}
                     isInputDisabled={isComposerInputDisabled}
+                    // 麦克风入口始终可用；未配置时在点击后由 STT 会话通过 toast 报错。
                     sttProvider={
-                      settings.stt.provider &&
-                      settings.stt.providers[settings.stt.provider].configured
-                        ? settings.stt.provider
+                      settings.stt.enabled
+                        ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
                         : null
                     }
+                    sttProviderConfigured={
+                      settings.stt.providers[
+                        sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
+                      ]?.configured
+                    }
                     sttTransport={desktopSttTransport}
+                    onSttError={handleSttError}
                     inputPlaceholder={composerPlaceholder}
                     workdir={displayedConversationWorkdir}
                     enabledSkills={enabledComposerSkills}

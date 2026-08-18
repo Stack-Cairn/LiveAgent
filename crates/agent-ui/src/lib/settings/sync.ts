@@ -190,8 +190,10 @@ export function redactSettingsForWebStorage(settings: AppSettings): AppSettings 
 }
 
 export function redactSttSettingsForWebStorage(stt: AppSettings["stt"]): AppSettings["stt"] {
+  const { allowIncomplete: _allowIncomplete, ...publicStt } = stt;
   return {
-    provider: stt.provider,
+    enabled: publicStt.enabled,
+    provider: publicStt.provider,
     providers: Object.fromEntries(
       Object.entries(stt.providers).map(([id, provider]) => {
         const { clearSecrets: _clearSecrets, ...publicProvider } = provider;
@@ -1160,6 +1162,10 @@ export function buildGatewaySettingsSyncPayload(
   settings: AppSettings,
   options: { includeProviderApiKeyUpdates?: boolean } = {},
 ): GatewaySettingsSyncPayload {
+  const stt = redactSttSettingsForWebStorage(settings.stt);
+  if (settings.stt.allowIncomplete === true) {
+    stt.allowIncomplete = true;
+  }
   const payload: GatewaySettingsSyncPayload = {
     system: syncableSystemSettings(settings.system),
     customProviders: redactCustomProvidersForGateway(settings.customProviders),
@@ -1172,7 +1178,7 @@ export function buildGatewaySettingsSyncPayload(
       enableWebGit: settings.remote.enableWebGit,
       enableWebTunnels: settings.remote.enableWebTunnels,
     },
-    stt: redactSttSettingsForWebStorage(settings.stt),
+    stt,
     memory: settings.memory,
     modelFailover: settings.modelFailover,
     customSettings: syncableCustomSettings(settings.customSettings),

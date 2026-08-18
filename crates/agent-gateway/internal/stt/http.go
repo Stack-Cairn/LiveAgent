@@ -107,6 +107,10 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 					return
 				case event := <-events:
 					if !writeSttEvent(conn, event) {
+						// Stop the read loop as soon as the client can no longer
+						// receive events; its deferred cleanup cancels the adapter
+						// context so event delivery cannot block the provider.
+						_ = conn.Close()
 						return
 					}
 				}

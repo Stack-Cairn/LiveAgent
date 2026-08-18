@@ -93,7 +93,9 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 	if err = conn.WriteJSON(baiduStartMessage(appid, uint32(pid), value(cfg, "baiduApiKey"), "LiveAgent-"+uuid.NewString())); err != nil {
 		return stageError("Baidu", "start", err)
 	}
-	events <- Event{Type: "ready", SessionID: id}
+	if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
+		return ctx.Err()
+	}
 	incoming := make(chan map[string]any, 8)
 	readErr := make(chan error, 1)
 	go func() {
@@ -116,7 +118,9 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 		case e := <-readErr:
 			if finishSent && baiduFinishedConnectionClosed(e) {
 				if finalText != "" {
-					events <- Event{Type: "final", SessionID: id, Text: finalText}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: finalText}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}
@@ -156,21 +160,30 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 			switch msg["type"] {
 			case "MID_TEXT":
 				textValue := baiduResultText(msg["result"])
-				events <- Event{Type: "partial", SessionID: id, Text: finalText + textValue}
+				eventsEvent := Event{Type: "partial", SessionID: id, Text: finalText + textValue}
+				if !emitEvent(ctx, events, eventsEvent) {
+					return ctx.Err()
+				}
 			case "FIN_TEXT":
 				textValue := baiduResultText(msg["result"])
 				finalText += textValue
-				events <- Event{Type: "partial", SessionID: id, Text: finalText}
+				if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: finalText}) {
+					return ctx.Err()
+				}
 				if finishSent {
 					if finalText != "" {
-						events <- Event{Type: "final", SessionID: id, Text: finalText}
+						if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: finalText}) {
+							return ctx.Err()
+						}
 					}
 					return nil
 				}
 			case "FINISH":
 				if finishSent {
 					if finalText != "" {
-						events <- Event{Type: "final", SessionID: id, Text: finalText}
+						if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: finalText}) {
+							return ctx.Err()
+						}
 					}
 					return nil
 				}

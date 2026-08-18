@@ -522,8 +522,11 @@ export type SttProviderSettings = {
 };
 
 export type SttSettings = {
+  enabled: boolean;
   provider: SttProviderId | null;
   providers: Record<SttProviderId, SttProviderSettings>;
+  /** 一次性允许仅切换语音输入开关，不因当前供应商未配置而拒绝保存。 */
+  allowIncomplete?: boolean;
 };
 
 export type AppSettings = {

@@ -68,7 +68,9 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 			incoming <- msg
 		}
 	}()
-	events <- Event{Type: "ready", SessionID: id}
+	if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
+		return ctx.Err()
+	}
 	fragments := map[int]string{}
 	finishSent := false
 	for {
@@ -78,7 +80,9 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 		case e := <-readErr:
 			if finishSent && isWebSocketCloseError(e, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				if len(fragments) > 0 {
-					events <- Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}
@@ -107,11 +111,15 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 			}
 			if idx, transcript, ok := tencentResult(msg); ok {
 				fragments[idx] = transcript
-				events <- Event{Type: "partial", SessionID: id, Text: mergeTencentFragments(fragments)}
+				if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: mergeTencentFragments(fragments)}) {
+					return ctx.Err()
+				}
 			}
 			if finishSent && tencentMessageComplete(msg) {
 				if len(fragments) > 0 {
-					events <- Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}

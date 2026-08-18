@@ -224,7 +224,9 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 		case e := <-readErr:
 			if finishing && finishSent && isWebSocketCloseError(e, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				if lastText != "" {
-					events <- Event{Type: "final", SessionID: id, Text: lastText}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: lastText}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}
@@ -267,7 +269,9 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 			}
 			if !ready {
 				ready = true
-				events <- Event{Type: "ready", SessionID: id}
+				if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
+					return ctx.Err()
+				}
 				for _, pcm := range pending {
 					compressed, compressErr := gzipBytes(pcm)
 					if compressErr != nil {
@@ -291,11 +295,15 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 			}
 			if text := volcV2ResultText(msg); text != "" {
 				lastText = text
-				events <- Event{Type: "partial", SessionID: id, Text: text}
+				if !emitEvent(ctx, events, Event{Type: "partial", SessionID: id, Text: text}) {
+					return ctx.Err()
+				}
 			}
 			if volcV2ResponseComplete(msg, finishing) {
 				if lastText != "" {
-					events <- Event{Type: "final", SessionID: id, Text: lastText}
+					if !emitEvent(ctx, events, Event{Type: "final", SessionID: id, Text: lastText}) {
+						return ctx.Err()
+					}
 				}
 				return nil
 			}

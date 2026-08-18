@@ -189,6 +189,10 @@ pub(crate) fn load_stt_provider_runtime(provider_id: &str) -> Result<Map<String,
 
 pub(crate) fn save_stt(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let mut next = expect_object(payload, "settings_save_stt payload")?;
+    let allow_incomplete = next
+        .remove("allowIncomplete")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
     let selected_provider = next
         .get("provider")
         .and_then(Value::as_str)
@@ -238,7 +242,7 @@ pub(crate) fn save_stt(conn: &mut Connection, payload: Value) -> Result<(), Stri
         }
     }
     if let Some(provider_id) = selected_provider.as_deref() {
-        if !selected_secrets_cleared {
+        if !selected_secrets_cleared && !allow_incomplete {
             let provider = next_providers
                 .get(provider_id)
                 .and_then(Value::as_object)
@@ -401,5 +405,24 @@ mod stt_tests {
         });
         save_stt(&mut conn, clear).expect("explicit secret clearing must remain valid");
         assert!(load_stt_raw(&conn).expect("load cleared settings").is_some());
+
+        // The UI may toggle the voice-input switch after the clear request.
+        // That follow-up metadata write must be allowed without re-validating
+        // the now intentionally incomplete provider.
+        let follow_up = json!({
+            "provider": "tencent_cloud",
+            "enabled": false,
+            "allowIncomplete": true,
+            "providers": {
+                "tencent_cloud": {
+                    "id": "tencent_cloud",
+                    "appId": "",
+                    "engineModelType": "16k_zh",
+                    "secretId": "",
+                    "secretKey": ""
+                }
+            }
+        });
+        save_stt(&mut conn, follow_up).expect("voice-input toggle persistence must remain valid");
     }
 }

@@ -81,14 +81,14 @@ func (m *Manager) Start(parent context.Context, sessionID, provider string, even
 	go func() {
 		err := adapter.Run(ctx, sessionID, cfg, active.commands, events)
 		if err != nil {
-			events <- Event{
+			emitEvent(ctx, events, Event{
 				Type:      "error",
 				SessionID: sessionID,
 				Code:      resultForError(err),
 				Message:   sanitizeError(err.Error(), cfg),
-			}
+			})
 		}
-		events <- Event{Type: "closed", SessionID: sessionID}
+		emitEvent(ctx, events, Event{Type: "closed", SessionID: sessionID})
 		m.mu.Lock()
 		delete(m.sessions, sessionID)
 		m.mu.Unlock()

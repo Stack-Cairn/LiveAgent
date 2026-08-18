@@ -43,6 +43,7 @@ export function SettingsPage(props: SettingsPageProps) {
     initialProviderId,
     hiddenSections = [],
     sttSettingsService,
+    onSttProviderChange,
   } = props;
   const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
   const [sttSelectedProvider, setSttSelectedProvider] = useState<SttProviderId>(
@@ -66,8 +67,9 @@ export function SettingsPage(props: SettingsPageProps) {
       sttSelectionChangedRef.current = true;
       STT_SELECTED_PROVIDER_CACHE.set(sttSettingsService, provider);
       setSttSelectedProvider(provider);
+      onSttProviderChange?.(provider);
     },
-    [sttSettingsService],
+    [onSttProviderChange, sttSettingsService],
   );
 
   const sections = useMemo<SettingsSectionDefinition<void>[]>(

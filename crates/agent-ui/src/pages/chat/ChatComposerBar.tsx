@@ -221,7 +221,10 @@ export type ChatComposerBarProps = {
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
   sttProvider?: SttProviderId | null;
+  sttProviderConfigured?: boolean;
   sttTransport?: SttTransport;
+  /** STT 失败（麦克风不可用、连接超时等）上报给宿主以 toast 形式提示。 */
+  onSttError?: (message: string) => void;
   /**
    * 只读视图（如轨迹页）挂起输入区：整体 display:none 但保持挂载，
    * 半打的草稿与队列状态在切回聊天页时原样恢复。
@@ -295,7 +298,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isUploadingFiles,
     isInputDisabled,
     sttProvider = null,
+    sttProviderConfigured,
     sttTransport,
+    onSttError,
     hidden = false,
     inputPlaceholder,
     workdir,
@@ -348,8 +353,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const stt = useComposerStt({
     composerRef,
     provider: sttProvider,
+    providerConfigured: sttProviderConfigured,
     transport: sttTransport,
     disabled: isInputDisabled,
+    onError: onSttError,
   });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const isComposerExpandedRef = useRef(false);
@@ -1004,9 +1011,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </RuntimeControlTooltip>
 
               {stt.available ? (
-                <RuntimeControlTooltip
-                  label={stt.error ?? (stt.active ? "停止语音输入" : "开始语音输入")}
-                >
+                <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>
                   <button
                     type="button"
                     disabled={isInputDisabled || stt.state === "stopping"}
@@ -1114,11 +1119,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </Button>
             </div>
           </div>
-          {stt.error ? (
-            <div className="px-4 pb-2 text-xs text-destructive" role="status" aria-live="polite">
-              {stt.error}
-            </div>
-          ) : null}
           {fileDropOverlay}
         </div>
       </div>
