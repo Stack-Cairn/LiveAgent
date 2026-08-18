@@ -625,6 +625,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.failoverQueueHint":
     "Fallback {vendor} providers in priority order (P1 first), tried with the conversation's current model when the active provider fails. Providers without that model active are skipped.",
   "settings.failoverQueueAdd": "Add a provider to the queue",
+  "settings.failoverQueueSearch": "Search providers...",
+  "settings.failoverQueueNoMatch": "No matching providers found",
+  "settings.failoverQueueUnavailableCandidates":
+    "{count} providers are hidden because their Base URL or API Key is missing.",
+  "settings.failoverQueueUnavailableExisting":
+    "{count} queued providers are missing a Base URL or API Key and will be skipped at runtime.",
   "settings.failoverQueueEmpty":
     "The queue is empty. Auto failover only takes effect after at least one fallback provider is added.",
   "settings.failoverQueueMoveUp": "Move up",

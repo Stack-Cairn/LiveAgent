@@ -8,6 +8,7 @@ function readShared(path) {
 }
 
 const providersSectionSource = readShared("pages/settings/ProvidersSection.tsx");
+const modelPickerSource = readShared("pages/settings/modelPicker.tsx");
 const baseStylesSource = readShared("styles/base.css");
 
 const popupPortalSources = [
@@ -43,10 +44,21 @@ function collectSourceFiles(directoryUrl) {
   return files;
 }
 
-test("the provider failover queue uses the shared portalled select", () => {
-  assert.match(providersSectionSource, /<Select value="" onValueChange=\{addQueueEntry\}>/);
-  assert.match(providersSectionSource, /aria-label=\{t\("settings\.failoverQueueAdd"\)\}/);
-  assert.match(providersSectionSource, /<SelectContent>/);
+test("the provider failover queue uses the shared model picker", () => {
+  assert.match(providersSectionSource, /<ModelPicker[\s\S]*options=\{addableProviderOptions\}/);
+  assert.match(providersSectionSource, /ariaLabel=\{t\("settings\.failoverQueueAdd"\)\}/);
+  assert.match(providersSectionSource, /placeholder=\{t\("settings\.failoverQueueAdd"\)\}/);
+  assert.match(providersSectionSource, /collapsibleGroups=\{false\}/);
+});
+
+test("the shared model picker can render options without a collapsible group", () => {
+  assert.match(modelPickerSource, /collapsibleGroups = true/);
+  assert.match(modelPickerSource, /\{collapsibleGroups \? \(/);
+  assert.match(modelPickerSource, /!collapsibleGroups \|\| expanded/);
+  assert.match(modelPickerSource, /searchPlaceholder\?: string/);
+  assert.match(modelPickerSource, /emptyLabel\?: string/);
+  assert.match(modelPickerSource, /option\.description/);
+  assert.match(providersSectionSource, /description: provider\.baseUrl/);
 });
 
 test("all shared popup primitives use the semantic popover layer", () => {
