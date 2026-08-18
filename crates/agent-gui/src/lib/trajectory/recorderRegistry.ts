@@ -15,11 +15,10 @@ import {
 import { appendDesktopLiveTrajectory, clearDesktopLiveTrajectory } from "./liveTrajectory";
 import { createTrajectoryRecorder, type TrajectoryRecorder } from "./recorder";
 import {
-  countPersistedTrajectoryUserTurns,
   createTauriTrajectoryPorts,
+  resolvePersistedTrajectoryTurnNumber,
   type TrajectoryPublish,
 } from "./tauriPorts";
-import { trajectoryTurnFromPersistedUserCount } from "./turnNumber";
 
 type Entry = {
   recorder: TrajectoryRecorder;
@@ -117,8 +116,8 @@ export function discardTrajectoryRecorder(conversationId: string): void {
  * Resolve the absolute turn number from all persisted segments.
  *
  * A history window may contain only the tail, so counting visible transcript rows can reuse
- * an old turn number and merge unrelated events. The fallback may contain gaps but is chosen
- * above the loaded message count, so a failed diagnostic IPC still cannot corrupt old turns.
+ * an old turn number and merge unrelated events. The backend also advances past the highest
+ * persisted trajectory turn, so a high fallback turn remains monotonic after IPC recovers.
  */
 export async function resolveTrajectoryTurnNumber(params: {
   conversationId: string;
@@ -126,10 +125,12 @@ export async function resolveTrajectoryTurnNumber(params: {
   fallbackTurn: number;
 }): Promise<number> {
   try {
-    const persisted = await countPersistedTrajectoryUserTurns(params.conversationId);
-    return trajectoryTurnFromPersistedUserCount(persisted, params.currentUserPersisted);
+    return await resolvePersistedTrajectoryTurnNumber(
+      params.conversationId,
+      params.currentUserPersisted,
+    );
   } catch (error) {
-    console.warn("[trajectory] failed to count persisted user turns; using safe fallback", error);
+    console.warn("[trajectory] failed to resolve persisted turn; using safe fallback", error);
     return Math.max(1, Math.trunc(params.fallbackTurn) || 1);
   }
 }

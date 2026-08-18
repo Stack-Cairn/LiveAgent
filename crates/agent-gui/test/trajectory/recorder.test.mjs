@@ -7,9 +7,6 @@ const loader = createTsModuleLoader();
 const { createTrajectoryRecorder, NOOP_TRAJECTORY_RECORDER } = loader.loadModule(
   "src/lib/trajectory/recorder.ts",
 );
-const { trajectoryTurnFromPersistedUserCount } = loader.loadModule(
-  "src/lib/trajectory/turnNumber.ts",
-);
 
 function harness(overrides = {}) {
   const persisted = [];
@@ -308,13 +305,6 @@ test("discard drops pending diagnostic data without issuing a write", async () =
   recorder.discard();
   await recorder.flush();
   assert.equal(persisted.length, 0);
-});
-
-test("absolute turn numbering does not depend on the loaded transcript window", () => {
-  assert.equal(trajectoryTurnFromPersistedUserCount(12, false), 13);
-  assert.equal(trajectoryTurnFromPersistedUserCount(13, true), 13);
-  assert.equal(trajectoryTurnFromPersistedUserCount(-3, false), 1);
-  assert.equal(trajectoryTurnFromPersistedUserCount(Number.NaN, true), 1);
 });
 
 test("events keep the segment that was active when they were emitted", async () => {

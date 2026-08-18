@@ -25,8 +25,14 @@ export function createTauriTrajectoryPorts(publish?: TrajectoryPublish): Traject
     ...(publish === undefined ? {} : { publish }),
   };
 }
-/** Count all persisted user messages, independent of the currently loaded history window. */
-export async function countPersistedTrajectoryUserTurns(conversationId: string): Promise<number> {
-  const value = await invoke<number>("trajectory_count_user_turns", { conversationId });
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+/** Resolve the next turn from persisted messages and the highest trajectory turn. */
+export async function resolvePersistedTrajectoryTurnNumber(
+  conversationId: string,
+  currentUserPersisted: boolean,
+): Promise<number> {
+  const value = await invoke<number>("trajectory_resolve_turn_number", {
+    conversationId,
+    currentUserPersisted,
+  });
+  return Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : 1;
 }

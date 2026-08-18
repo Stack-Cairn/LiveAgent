@@ -206,34 +206,72 @@ fn load_trajectory_events_sync(
     })
 }
 
-fn count_trajectory_user_turns_sync(
+fn resolve_trajectory_turn_number_sync(
     conn: &Connection,
     conversation_id: &str,
+    current_user_persisted: bool,
 ) -> Result<i64, String> {
+    let total_message_count = conn
+        .query_row(
+            "SELECT total_message_count FROM chatHistory WHERE id = ?1",
+            params![conversation_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| format!("读取轨迹轮次保守计数失败：{e}"))?
+        .unwrap_or(0)
+        .max(0);
     let mut stmt = conn
         .prepare(
-            "SELECT messages_json FROM chatHistorySegment
+            "SELECT messages_json, trajectory_json FROM chatHistorySegment
              WHERE conversation_id = ?1 ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备轨迹轮次统计失败：{e}"))?;
+        .map_err(|e| format!("准备轨迹轮次解析失败：{e}"))?;
     let rows = stmt
-        .query_map(params![conversation_id], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("查询轨迹轮次统计失败：{e}"))?;
-    let mut count = 0_i64;
+        .query_map(params![conversation_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| format!("查询轨迹轮次解析失败：{e}"))?;
+    let mut user_turns = 0_i64;
+    let mut max_event_turn = 0_i64;
+    let mut messages_complete = true;
     for row in rows {
-        let raw = row.map_err(|e| format!("读取轨迹轮次分段失败：{e}"))?;
-        for message in parse_event_array(&raw, "历史分段消息")? {
-            if message
-                .as_object()
-                .and_then(|object| object.get("role"))
-                .and_then(Value::as_str)
-                == Some("user")
-            {
-                count = count.saturating_add(1);
+        let (messages_raw, trajectory_raw) =
+            row.map_err(|e| format!("读取轨迹轮次分段失败：{e}"))?;
+        match parse_event_array(&messages_raw, "历史分段消息") {
+            Ok(messages) => {
+                for message in messages {
+                    if message
+                        .as_object()
+                        .and_then(|object| object.get("role"))
+                        .and_then(Value::as_str)
+                        == Some("user")
+                    {
+                        user_turns = user_turns.saturating_add(1);
+                    }
+                }
+            }
+            Err(_) => messages_complete = false,
+        }
+        if let Ok(events) = parse_event_array(&trajectory_raw, "轨迹事件") {
+            for turn in events.iter().filter_map(|event| {
+                event
+                    .as_object()
+                    .and_then(|object| object.get("t"))
+                    .and_then(Value::as_i64)
+                    .filter(|turn| *turn > 0)
+            }) {
+                max_event_turn = max_event_turn.max(turn);
             }
         }
     }
-    Ok(count)
+    if !messages_complete {
+        user_turns = user_turns.max(total_message_count);
+    }
+    let user_count_candidate = user_turns.saturating_add(i64::from(!current_user_persisted));
+    Ok(1_i64
+        .max(user_count_candidate)
+        .max(max_event_turn.saturating_add(1)))
 }
 
 const TRAJECTORY_SECTION_SLOT_NAMES: [&str; 7] = [
@@ -413,13 +451,16 @@ pub async fn trajectory_get_events(
 }
 
 #[tauri::command]
-pub async fn trajectory_count_user_turns(conversation_id: String) -> Result<i64, String> {
+pub async fn trajectory_resolve_turn_number(
+    conversation_id: String,
+    current_user_persisted: bool,
+) -> Result<i64, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
-        count_trajectory_user_turns_sync(&conn, &conversation_id)
+        resolve_trajectory_turn_number_sync(&conn, &conversation_id, current_user_persisted)
     })
     .await
-    .map_err(|e| format!("trajectory_count_user_turns join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_resolve_turn_number join 失败：{e}"))?
 }
 
 #[tauri::command]
@@ -803,7 +844,7 @@ mod trajectory_tests {
     }
 
     #[test]
-    fn counts_user_turns_across_all_segments() {
+    fn resolves_turn_from_user_count_across_all_segments() {
         let conn = open_trajectory_db();
         seed_conversation(&conn, "c1", &[0, 1]);
         conn.execute(
@@ -822,7 +863,58 @@ mod trajectory_tests {
             params!["c1", 1, r#"[{"role":"assistant"},{"role":"user"}]"#],
         )
         .expect("seed second messages");
-        assert_eq!(count_trajectory_user_turns_sync(&conn, "c1").unwrap(), 3);
+        assert_eq!(
+            resolve_trajectory_turn_number_sync(&conn, "c1", false).unwrap(),
+            4
+        );
+        assert_eq!(
+            resolve_trajectory_turn_number_sync(&conn, "c1", true).unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn persisted_event_turn_keeps_future_turns_monotonic_after_a_fallback() {
+        let conn = open_trajectory_db();
+        seed_conversation(&conn, "c1", &[0]);
+        conn.execute(
+            "UPDATE chatHistorySegment SET messages_json = ?3, message_count = 3,
+             trajectory_json = ?4 WHERE conversation_id = ?1 AND segment_index = ?2",
+            params![
+                "c1",
+                0,
+                r#"[{"role":"user"},{"role":"assistant"},{"role":"user"}]"#,
+                r#"[{"k":"user","t":21,"at":10},{"k":"turn_end","t":21,"at":20}]"#
+            ],
+        )
+        .expect("seed fallback trajectory turn");
+
+        assert_eq!(
+            resolve_trajectory_turn_number_sync(&conn, "c1", false).unwrap(),
+            22
+        );
+    }
+
+    #[test]
+    fn malformed_messages_use_total_message_count_as_a_conservative_candidate() {
+        let conn = open_trajectory_db();
+        seed_conversation(&conn, "c1", &[0]);
+        conn.execute(
+            "UPDATE chatHistory SET total_message_count = 17 WHERE id = 'c1'",
+            [],
+        )
+        .expect("seed total message count");
+        conn.execute(
+            "UPDATE chatHistorySegment SET messages_json = '{oops', message_count = 17
+             WHERE conversation_id = 'c1' AND segment_index = 0",
+            [],
+        )
+        .expect("seed malformed messages");
+
+        assert_eq!(
+            resolve_trajectory_turn_number_sync(&conn, "c1", false).unwrap(),
+            18
+        );
     }
 
     #[test]

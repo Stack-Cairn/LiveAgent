@@ -27,7 +27,7 @@ test("only trajectory events are absorbed; everything else passes through", () =
   assert.equal(live.liveTrajectoryEvents("c1").length, 1);
 });
 
-test("a rebase clears stale live trajectory but still reaches the transcript", () => {
+test("a rebase passes through until the transcript accepts it", () => {
   const live = freshModule();
   live.absorbTrajectoryChatEvent({
     type: "trajectory",
@@ -39,6 +39,8 @@ test("a rebase clears stale live trajectory but still reaches the transcript", (
     live.absorbTrajectoryChatEvent({ type: "rebased", conversation_id: "c1" }),
     false,
   );
+  assert.equal(live.liveTrajectoryEvents("c1").length, 1);
+  live.resetLiveTrajectoryForRebase("c1");
   assert.equal(live.liveTrajectoryEvents("c1").length, 0);
 });
 
@@ -204,7 +206,7 @@ test("rebasing clears the live tail and advances the authoritative refresh revis
     conversation_id: "rebase-revision-c",
     event: { k: "user", t: 1, at: 1 },
   });
-  live.absorbTrajectoryChatEvent({ type: "rebased", conversation_id: "rebase-revision-c" });
+  live.resetLiveTrajectoryForRebase("rebase-revision-c");
   assert.equal(live.liveTrajectoryEvents("rebase-revision-c").length, 0);
   assert.equal(live.liveTrajectoryRefreshRevision("rebase-revision-c"), before + 1);
 });

@@ -7,7 +7,10 @@ import type {
 import { readEventRunId, readEventSeq } from "@/lib/chat/stream/streamTypes";
 import { type ChatEntry, normalizeLiveUploadedFiles, readHistoryMessageRef } from "@/lib/chatUi";
 import type { ChatEvent } from "@/lib/gatewayTypes";
-import { absorbTrajectoryChatEvent } from "@/lib/trajectory/liveTrajectory";
+import {
+  absorbTrajectoryChatEvent,
+  resetLiveTrajectoryForRebase,
+} from "@/lib/trajectory/liveTrajectory";
 
 import { alignHistory } from "./historyAlignment";
 import {
@@ -981,6 +984,7 @@ export function createTranscriptStore(options?: {
         return;
       }
       case "rebased": {
+        resetLiveTrajectoryForRebase(event.conversation_id ?? "");
         applyRebased(event);
         return;
       }

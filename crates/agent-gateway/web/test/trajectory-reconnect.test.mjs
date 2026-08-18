@@ -14,6 +14,7 @@ const {
   clearLiveTrajectory,
   liveTrajectoryAuthoritativeRevision,
   liveTrajectoryEvents,
+  resetLiveTrajectoryForRebase,
 } = loader.loadModule("src/lib/trajectory/liveTrajectory.ts");
 
 test("rebase clears live events and invalidates the authoritative window", () => {
@@ -35,6 +36,7 @@ test("rebase clears live events and invalidates the authoritative window", () =>
     absorbTrajectoryChatEvent({ type: "rebased", conversation_id: conversationId }),
     false,
   );
+  resetLiveTrajectoryForRebase(conversationId);
   assert.deepEqual(liveTrajectoryEvents(conversationId), []);
   assert.equal(liveTrajectoryAuthoritativeRevision(conversationId), before + 1);
 });

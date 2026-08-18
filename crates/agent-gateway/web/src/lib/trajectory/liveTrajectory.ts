@@ -23,10 +23,6 @@ const resetRevisions = new Map<string, number>();
 export function absorbTrajectoryChatEvent(event: TrajectoryBearingEvent): boolean {
   const conversationId =
     typeof event.conversation_id === "string" ? event.conversation_id.trim() : "";
-  if (event.type === "rebased") {
-    if (conversationId !== "") resetLiveTrajectoryForRebase(conversationId);
-    return false;
-  }
   if (event.type !== "trajectory") return false;
   const payload = event.event;
   if (
@@ -55,7 +51,7 @@ export function liveTrajectoryRefreshRevision(conversationId: string): number {
 /** Backward-compatible name used by the view model for authoritative-tail invalidations. */
 export const liveTrajectoryAuthoritativeRevision = liveTrajectoryRefreshRevision;
 
-function resetLiveTrajectoryForRebase(conversationId: string): void {
+export function resetLiveTrajectoryForRebase(conversationId: string): void {
   const key = conversationId.trim();
   if (key === "") return;
   liveStore.clear(key);

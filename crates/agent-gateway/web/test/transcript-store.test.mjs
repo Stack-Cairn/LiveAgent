@@ -11,9 +11,11 @@ const loader = createWebModuleLoader({
 const { createTranscriptStore } = loader.loadModule(
   "src/lib/chat/transcript/transcriptStore.ts",
 );
-const { clearLiveTrajectory, liveTrajectoryEvents } = loader.loadModule(
-  "src/lib/trajectory/liveTrajectory.ts",
-);
+const {
+  clearLiveTrajectory,
+  liveTrajectoryEvents,
+  liveTrajectoryRefreshRevision,
+} = loader.loadModule("src/lib/trajectory/liveTrajectory.ts");
 
 function runStarted(runId, seq, extra = {}) {
   return { type: "run_started", conversation_id: "conv-1", run_id: runId, seq, ...extra };
@@ -104,6 +106,28 @@ test("trajectory replay bypasses the transcript cursor and deduplicates itself",
   store.applyEvent(event);
   store.applyEvent({ ...event, event: { ...event.event } });
   assert.equal(liveTrajectoryEvents("conv-1").length, 1);
+});
+
+test("only a rebased event accepted by the seq gate clears live trajectory", () => {
+  clearLiveTrajectory("conv-1");
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 10));
+  store.applyEvent({
+    type: "trajectory",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 5,
+    event: { k: "user", t: 1, at: 100 },
+  });
+  const before = liveTrajectoryRefreshRevision("conv-1");
+
+  store.applyEvent({ type: "rebased", conversation_id: "conv-1", seq: 5 });
+  assert.equal(liveTrajectoryEvents("conv-1").length, 1);
+  assert.equal(liveTrajectoryRefreshRevision("conv-1"), before);
+
+  store.applyEvent({ type: "rebased", conversation_id: "conv-1", seq: 11 });
+  assert.equal(liveTrajectoryEvents("conv-1").length, 0);
+  assert.equal(liveTrajectoryRefreshRevision("conv-1"), before + 1);
 });
 
 test("manual compaction terminal events retain status and stay conversation-scoped", () => {
