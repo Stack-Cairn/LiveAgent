@@ -10,6 +10,21 @@ import {
   type SelectedModel,
 } from "./types";
 
+/**
+ * Returns whether a provider has the minimum visible configuration required
+ * for a failover candidate. WebUI may redact the API key value while
+ * preserving the `apiKeyConfigured` marker, so that marker is treated as
+ * configured here; the runtime still requires the actual key value.
+ */
+export function hasProviderFailoverConfiguration(
+  provider: Pick<CustomProvider, "baseUrl" | "apiKey" | "apiKeyConfigured">,
+): boolean {
+  return (
+    provider.baseUrl.trim().length > 0 &&
+    (provider.apiKey.trim().length > 0 || provider.apiKeyConfigured === true)
+  );
+}
+
 function clampFailoverInteger(input: unknown, min: number, max: number, fallback: number): number {
   const value =
     typeof input === "number" && Number.isFinite(input)

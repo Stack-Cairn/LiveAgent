@@ -240,4 +240,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: git diff --check
+        with:
+          fetch-depth: 0
+      - name: Check committed diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git diff --check "${BASE_SHA}...${HEAD_SHA}"
+          else
+            git diff-tree --check --no-commit-id --root -r "${HEAD_SHA}"
+          fi

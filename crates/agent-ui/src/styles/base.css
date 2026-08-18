@@ -461,11 +461,11 @@
 
     --radius: 0.625rem;
 
-    /* Portal layers use semantic tokens and stay above page-local stacking contexts. */
+    /* Modal/popover portals share a plane so later nested portals stay interactive. */
     --layer-content: 1;
     --layer-raised: 10;
     --layer-panel: 20;
-    --layer-popover: 9999;
+    --layer-popover: 10000;
     --layer-modal: 10000;
     --layer-toast: 10010;
     --layer-critical: 10020;

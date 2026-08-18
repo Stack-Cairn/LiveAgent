@@ -66,14 +66,23 @@ pub(crate) fn chat_history_replace_from_message_sync(
     let source_segment = load_segment_by_index(&tx, chat_id, base_message_ref.segment_index)?;
     let location =
         locate_history_message_ref(std::slice::from_ref(&source_segment), base_message_ref)?;
+    let retained_user_turns = count_user_messages_before_position(
+        &tx,
+        chat_id,
+        source_segment.segment_index,
+        location.message_index,
+    )?;
+    let messages_before_segment =
+        load_message_count_before_segment(&tx, chat_id, source_segment.segment_index)?;
+    let trajectory_cutoff_message_index = messages_before_segment
+        .saturating_add(i64::try_from(location.message_index).unwrap_or(i64::MAX));
     let mut target_messages = location.messages[..location.message_index].to_vec();
     target_messages.push(replacement_message.clone());
 
     let active_segment_index = source_segment.segment_index;
     let total_segment_count = active_segment_index.saturating_add(1);
-    let total_message_count =
-        load_message_count_before_segment(&tx, chat_id, active_segment_index)?
-            .saturating_add(i64::try_from(target_messages.len()).unwrap_or(i64::MAX));
+    let total_message_count = messages_before_segment
+        .saturating_add(i64::try_from(target_messages.len()).unwrap_or(i64::MAX));
     let context_meta_json = patch_history_context_meta(
         &record.context_meta_json,
         active_segment_index,
@@ -120,6 +129,13 @@ pub(crate) fn chat_history_replace_from_message_sync(
     .map_err(|e| format!("删除 edit-resend 后续历史分段失败：{e}"))?;
     upsert_chat_history_header(&tx, &conversation_input)?;
     upsert_single_segment(&tx, chat_id, &target_segment)?;
+    truncate_conversation_trajectory_prefix(
+        &tx,
+        chat_id,
+        total_segment_count,
+        trajectory_cutoff_message_index,
+        retained_user_turns,
+    )?;
     verify_chat_history_consistency(&tx, chat_id)?;
 
     let updated_record = get_record_by_id(&tx, chat_id)?;

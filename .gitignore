@@ -45,6 +45,9 @@ chatroom
 .pnpm-store
 workspace.zip
 
+# Debug symbols (MSVC)
+*.pdb
+
 # Local workflow artifacts
 /.gitattributes
 /.trellis

@@ -266,6 +266,76 @@ pub async fn handle_history_workdirs() -> Result<proto::HistoryWorkdirsResponse,
     })
 }
 
+/// 轨迹按需拉取：事件窗口、Prompt 分段和子代理运行各用独立字段。
+///
+/// 三种只读诊断查询合并在一个信封臂里，因为调用方与生命周期完全一致（都只在
+/// WebUI 打开轨迹页后发生），同时保持 section id 与 subagent run id 的协议语义分离。
+pub async fn handle_trajectory_fetch(
+    request: proto::TrajectoryFetchRequest,
+) -> Result<proto::TrajectoryFetchResponse, String> {
+    let conversation_id = request.conversation_id.clone();
+    if request.include_subagent_runs {
+        let runs = chat_history::trajectory_get_subagent_runs_inner(
+            conversation_id.clone(),
+            request.subagent_run_ids,
+        )
+        .await?;
+        return Ok(proto::TrajectoryFetchResponse {
+            conversation_id,
+            events_json: String::new(),
+            truncated: false,
+            sections: Vec::new(),
+            oldest_segment_index: 0,
+            returned_segment_count: 0,
+            total_segment_count: 0,
+            has_more_before: false,
+            subagent_runs_json: runs.runs_json,
+        });
+    }
+    if !request.section_ids.is_empty() {
+        let sections =
+            chat_history::trajectory_get_sections(conversation_id.clone(), request.section_ids)
+                .await?;
+        return Ok(proto::TrajectoryFetchResponse {
+            conversation_id,
+            events_json: String::new(),
+            truncated: false,
+            sections: sections
+                .into_iter()
+                .map(|section| proto::TrajectorySectionPayload {
+                    section_id: section.section_id,
+                    slot: section.slot,
+                    content: section.content,
+                    bytes: section.bytes,
+                })
+                .collect(),
+            oldest_segment_index: 0,
+            returned_segment_count: 0,
+            total_segment_count: 0,
+            has_more_before: false,
+            subagent_runs_json: String::new(),
+        });
+    }
+
+    let events = chat_history::trajectory_get_window_inner(
+        conversation_id.clone(),
+        i64::from(request.max_segments),
+        request.before_segment_index.map(i64::from),
+    )
+    .await?;
+    Ok(proto::TrajectoryFetchResponse {
+        conversation_id,
+        events_json: events.events_json,
+        truncated: events.truncated,
+        sections: Vec::new(),
+        oldest_segment_index: i32::try_from(events.oldest_segment_index).unwrap_or(i32::MAX),
+        returned_segment_count: i32::try_from(events.returned_segment_count).unwrap_or(i32::MAX),
+        total_segment_count: i32::try_from(events.total_segment_count).unwrap_or(i32::MAX),
+        has_more_before: events.has_more_before,
+        subagent_runs_json: String::new(),
+    })
+}
+
 pub async fn handle_history_get(
     request: proto::HistoryGetRequest,
 ) -> Result<proto::HistoryGetResponse, String> {

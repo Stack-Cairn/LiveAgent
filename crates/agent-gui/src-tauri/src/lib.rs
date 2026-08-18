@@ -58,6 +58,14 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_share_get,
             commands::chat_history::chat_history_share_set,
             commands::chat_history::chat_history_delete,
+            // Trajectory (events ride the owning history segment)
+            commands::chat_history::trajectory_append_events,
+            commands::chat_history::trajectory_get_events,
+            commands::chat_history::trajectory_get_window,
+            commands::chat_history::trajectory_resolve_turn_number,
+            commands::chat_history::trajectory_get_subagent_runs,
+            commands::chat_history::trajectory_put_sections,
+            commands::chat_history::trajectory_get_sections,
             // Subagent store
             commands::subagent_store::subagent_identity_upsert,
             commands::subagent_store::subagent_identity_list,
@@ -154,6 +162,16 @@ macro_rules! app_invoke_handler {
             services::stt::stt_send_audio,
             services::stt::stt_stop,
             services::stt::stt_cancel,
+            commands::settings::settings_backup_export,
+            commands::settings::settings_backup_peek_import,
+            commands::settings::settings_backup_apply_import,
+            commands::settings::settings_backup_load_sync_config,
+            commands::settings::settings_backup_save_sync_config,
+            commands::settings::settings_backup_test_sync_connection,
+            commands::settings::settings_backup_fetch_remote_info,
+            commands::settings::settings_backup_upload,
+            commands::settings::settings_backup_download,
+            commands::settings::settings_backup_mark_dirty,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,
@@ -761,6 +779,9 @@ pub fn run() {
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
+                // 配置自动同步的后台任务：只消费脏信号并做防抖上传，
+                // 未开启自动同步时它会在每次唤醒后静默跳过。
+                services::webdav_auto_sync::start(app.handle().clone());
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
                     Arc::clone(&automation_store),

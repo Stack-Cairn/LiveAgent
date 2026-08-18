@@ -1304,7 +1304,8 @@ mod tests {
         )
         .map_err(|err| format!("failed to write worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
+        let result =
+            apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("git_apply"));
         assert_eq!(
@@ -1335,7 +1336,8 @@ mod tests {
         fs::write(repo.join("test/agent.md"), content)
             .map_err(|err| format!("failed to write parent file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
+        let result =
+            apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(!result.applied);
         assert_eq!(result.apply_method.as_deref(), Some("file_copy_fallback"));
         assert_eq!(result.skipped_reason.as_deref(), Some("already_applied"));
@@ -1365,7 +1367,8 @@ mod tests {
         fs::remove_file(worktree.join("obsolete.md"))
             .map_err(|err| format!("failed to delete worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
+        let result =
+            apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("obsolete.md").exists());
 
@@ -1390,7 +1393,8 @@ mod tests {
         fs::rename(worktree.join("docs/old.md"), worktree.join("docs/new.md"))
             .map_err(|err| format!("failed to rename worktree file: {err}"))?;
 
-        let result = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
+        let result =
+            apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)?;
         assert!(result.applied);
         assert!(!repo.join("docs/old.md").exists());
         assert_eq!(
@@ -1423,8 +1427,9 @@ mod tests {
         git(&repo, &["add", "file.txt"])?;
         git(&repo, &["commit", "-m", "parent update"])?;
 
-        let error = apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)
-            .expect_err("conflicting 3-way apply should fail");
+        let error =
+            apply_worktree_changes_blocking(display_path(&repo), display_path(&worktree), None)
+                .expect_err("conflicting 3-way apply should fail");
         assert!(error.contains("git apply --3way failed"));
         assert_eq!(
             fs::read_to_string(repo.join("file.txt"))

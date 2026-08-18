@@ -65,6 +65,7 @@ message GatewayEnvelope {
     WorkspaceRootGrantsRequest workspace_root_grants = 96;
     ImportDirectoryRequest import_directory = 97;
     CheckpointRequest checkpoint = 98;
+    TrajectoryFetchRequest trajectory_fetch = 99;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -143,6 +144,7 @@ message AgentEnvelope {
     WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
     ImportDirectoryResponse import_directory_resp = 102;
     CheckpointResponse checkpoint_resp = 103;
+    TrajectoryFetchResponse trajectory_fetch_resp = 104;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -741,6 +743,9 @@ message ChatEvent {
     TOOL_STATUS = 6;
     HOSTED_SEARCH = 7;
     USER_MESSAGE = 8;
+    // 轨迹骨架事件；data 是一条紧凑 TrajectoryEvent 的 JSON。分段全文不走这里，
+    // 由 TrajectoryFetchRequest 按需拉取，避免几十 KB 的 payload 撑爆中继窗口。
+    TRAJECTORY = 9;
   }
 }
 
@@ -840,6 +845,48 @@ message HistoryGetResponse {
   int32 returned_message_count = 4;
   bool has_more = 5;
   ConversationSummary conversation = 6;
+}
+
+// 轨迹按需拉取。这是一次只做一件事的 tagged union，不是可组合查询：
+//   include_subagent_runs=true → 只返回子代理运行，其余字段忽略；
+//   否则 section_ids 非空       → 只返回这些分段全文；
+//   否则                        → 只返回事件窗口。
+// 桌面端 handler 对三种形态互斥短路，组合字段不会得到合并结果 —— 调用方
+// 需要三类数据时必须分开请求。
+//
+// 刻意不把事件挂在 history_get 上：轨迹是偶尔打开的诊断视图，长会话的事件数组
+// 可达 MB 级，随每次开会话白传一遍不划算。分段更是只在展开 SYSTEM 行时才要。
+message TrajectoryFetchRequest {
+  string conversation_id = 1;
+  // 非空 → 本请求只查这些分段全文（与事件窗口互斥）。
+  repeated string section_ids = 2;
+  // 仅事件窗口形态生效：按 segment 逆向分页；0 由 Agent 使用默认窗口。
+  int32 max_segments = 3;
+  optional int32 before_segment_index = 4;
+  // true → 本请求只查子代理运行快照，优先级最高（section_ids 被忽略）。
+  bool include_subagent_runs = 5;
+  // include_subagent_runs=true 时按这些 run id 精确读取；与 prompt section id 分域。
+  repeated string subagent_run_ids = 6;
+}
+
+message TrajectorySectionPayload {
+  string section_id = 1;
+  string slot = 2;
+  string content = 3;
+  int64 bytes = 4;
+}
+
+message TrajectoryFetchResponse {
+  string conversation_id = 1;
+  string events_json = 2;
+  // 有分段损坏或触顶时为 true，UI 据此提示轨迹不完整。
+  bool truncated = 3;
+  repeated TrajectorySectionPayload sections = 4;
+  int32 oldest_segment_index = 5;
+  int32 returned_segment_count = 6;
+  int32 total_segment_count = 7;
+  bool has_more_before = 8;
+  string subagent_runs_json = 9;
 }
 
 message HistoryPrefixRequest {

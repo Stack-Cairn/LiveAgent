@@ -112,7 +112,6 @@ func TestWriteTunnelAcquireErrorStatusMapping(t *testing.T) {
 		{session.ErrTunnelNotFound, http.StatusNotFound},
 		{session.ErrTunnelExpired, http.StatusNotFound},
 		{session.ErrAgentOffline, http.StatusServiceUnavailable},
-		{session.ErrTunnelOverLimit, http.StatusTooManyRequests},
 	}
 	for _, tt := range tests {
 		recorder := httptest.NewRecorder()

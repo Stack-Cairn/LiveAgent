@@ -541,6 +541,7 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
       out.push({
         key: `assistant-${indexOffset + groupStartIndex}-${indexOffset + i}-${lastAssistantTimestamp}`,
         role: "assistant",
+        messageIndex: indexOffset + groupStartIndex,
         text: lastText,
         rounds,
         timestamp: lastAssistantTimestamp > 0 ? lastAssistantTimestamp : undefined,

@@ -2385,7 +2385,9 @@ mod tests {
         )
         .expect_err("window construction failure should roll back replace");
 
-        assert!(error.contains("parse history segment seg-0 failed"));
+        // 轨迹截断点统计在构造窗口前逐段解析消息，坏分段此刻最先暴露
+        // （旧流程要到 locate 才报英文格式；两条路径都在写库前失败，回滚等价）。
+        assert!(error.contains("解析历史分段 seg-0 失败"));
         let after_record = get_record_by_id(&conn, "conv-replace").expect("reload source");
         let after_segments = load_segments(&conn, "conv-replace").expect("reload source segments");
         assert_eq!(after_record.updated_at, before_record.updated_at);

@@ -18,6 +18,10 @@ const headerSource = readFileSync(
   new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
   "utf8",
 );
+const conversationViewTabsSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/ConversationViewTabs.tsx", import.meta.url),
+  "utf8",
+);
 const commonComponentsCss = readFileSync(
   new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
   "utf8",
@@ -58,6 +62,31 @@ test("application chrome is attached to the center column instead of the right d
   assert.doesNotMatch(chromeSource, /autoHideActions/);
   assert.doesNotMatch(headerSource, /autoHideActions|app-workbench-chrome-actions/);
   assert.doesNotMatch(commonComponentsCss, /\.app-workbench-chrome-actions/);
+});
+
+test("conversation view switcher lives in the chrome and waits for an assistant reply", () => {
+  const chromeIndex = chatPageSource.indexOf("<AppWorkbenchChrome");
+  const tabsIndex = chatPageSource.indexOf("<ConversationViewTabs");
+  const applicationViewIndex = chatPageSource.indexOf("<ApplicationView");
+
+  assert.ok(chromeIndex >= 0);
+  assert.ok(tabsIndex > chromeIndex);
+  assert.ok(tabsIndex < applicationViewIndex);
+  assert.equal(chatPageSource.match(/<ConversationViewTabs/g)?.length, 1);
+  assert.match(headerSource, /leadingActions\?: ReactNode/);
+  assert.match(headerSource, /<PanelLeft[\s\S]*?\{leadingActions\}/);
+  assert.match(
+    chatPageSource,
+    /const hasConversationReply =[\s\S]*?!isDraftConversation &&[\s\S]*?trajectoryMessages\.some\(\(message\) => message\.role === "assistant"\)/,
+  );
+  assert.match(chatPageSource, /activeView === "chat" && hasConversationReply/);
+  assert.match(
+    chatPageSource,
+    /if \(!hasConversationReply && activeConversationView !== "conversation"\)/,
+  );
+  assert.match(conversationViewTabsSource, /MessageSquareText, Waypoints/);
+  assert.match(conversationViewTabsSource, /icon: MessageSquareText/);
+  assert.match(conversationViewTabsSource, /icon: Waypoints/);
 });
 
 test("right dock width moves the center-column chrome with the panel", () => {

@@ -671,6 +671,7 @@ export default function App() {
                 initialProviderId={settingsProviderId}
                 appUpdate={appUpdate}
                 sttSettingsService={desktopSttSettingsService}
+                reloadSettings={reloadPersistedSettings}
               />
             </AppErrorBoundary>
           </div>

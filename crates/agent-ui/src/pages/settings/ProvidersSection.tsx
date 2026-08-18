@@ -7,6 +7,7 @@ import {
 } from "@liveagent/app/lib/providers/usageQuery";
 import {
   type CustomProvider,
+  hasProviderFailoverConfiguration,
   MODEL_FAILOVER_QUEUE_LIMIT,
   type ProviderFailoverSettings,
   type ProviderId,
@@ -30,13 +31,6 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@liveagent/ui/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -114,8 +108,40 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
 
   const queueValues = useMemo(() => new Set(failover.queue), [failover.queue]);
   const addableProviders = useMemo(
-    () => vendorProviders.filter((provider) => !queueValues.has(provider.id)),
+    () =>
+      vendorProviders.filter(
+        (provider) => !queueValues.has(provider.id) && hasProviderFailoverConfiguration(provider),
+      ),
     [vendorProviders, queueValues],
+  );
+  const unavailableProviderCount = useMemo(
+    () =>
+      vendorProviders.filter(
+        (provider) => !queueValues.has(provider.id) && !hasProviderFailoverConfiguration(provider),
+      ).length,
+    [vendorProviders, queueValues],
+  );
+  const unavailableQueuedProviderCount = useMemo(
+    () =>
+      failover.queue.filter((providerId) => {
+        const provider = settings.customProviders.find((item) => item.id === providerId);
+        return provider ? !hasProviderFailoverConfiguration(provider) : false;
+      }).length,
+    [failover.queue, settings.customProviders],
+  );
+  const addableProviderOptions = useMemo<ModelPickerOption[]>(
+    () =>
+      addableProviders.map((provider) => ({
+        value: provider.id,
+        label: provider.name,
+        description: provider.baseUrl,
+        // Keep all queue entries under the current vendor group, matching the
+        // grouping used by the title/commit model picker.
+        providerId: providerType,
+        providerName: getProviderLabel(providerType),
+        providerType,
+      })),
+    [addableProviders, providerType],
   );
 
   function patchFailover(patch: Partial<ProviderFailoverSettings>) {
@@ -245,28 +271,33 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
           </div>
         )}
         {failover.queue.length < MODEL_FAILOVER_QUEUE_LIMIT && addableProviders.length > 0 ? (
-          <Select value="" onValueChange={addQueueEntry}>
-            <SelectTrigger
-              aria-label={t("settings.failoverQueueAdd")}
-              className="h-9 w-full rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
-            >
-              <SelectValue>
-                <span className="text-muted-foreground">{t("settings.failoverQueueAdd")}</span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {addableProviders.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">{provider.name}</span>
-                    <span className="truncate text-[11px] text-muted-foreground/70">
-                      {provider.baseUrl}
-                    </span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ModelPicker
+            options={addableProviderOptions}
+            value=""
+            onChange={addQueueEntry}
+            placeholder={t("settings.failoverQueueAdd")}
+            ariaLabel={t("settings.failoverQueueAdd")}
+            collapsibleGroups={false}
+            searchPlaceholder={t("settings.failoverQueueSearch")}
+            emptyLabel={t("settings.failoverQueueNoMatch")}
+            triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+          />
+        ) : null}
+        {unavailableProviderCount > 0 ? (
+          <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+            {t("settings.failoverQueueUnavailableCandidates").replace(
+              "{count}",
+              String(unavailableProviderCount),
+            )}
+          </p>
+        ) : null}
+        {unavailableQueuedProviderCount > 0 ? (
+          <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+            {t("settings.failoverQueueUnavailableExisting").replace(
+              "{count}",
+              String(unavailableQueuedProviderCount),
+            )}
+          </p>
         ) : null}
       </div>
 

@@ -34,6 +34,7 @@ mod tests {
             MODEL_FAILOVER_SETTINGS_TABLE,
             SSH_PROJECT_HOST_ASSOCIATIONS_TABLE,
             SSH_KNOWN_HOSTS_TABLE,
+            BACKUP_SYNC_SETTINGS_TABLE,
         ] {
             let exists = conn
                 .query_row(
@@ -1878,5 +1879,610 @@ mod tests {
         assert_eq!(item.base_url, "");
         assert_eq!(item.api_key, "");
         assert_eq!(item.request_format, "openai-responses");
+    }
+
+    // ===== 配置备份：采集 / 校验 / 应用 =====
+
+    fn sample_backup_document() -> String {
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1", "name": "P1", "apiKey": "sk-plain" }])),
+            mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
+            system: Some(json!({ "executionMode": "tools" })),
+            skills: Some(json!({ "enabled": true, "selected": ["skill-a"] })),
+        };
+        let manifest = build_backup_manifest(&snapshot);
+        serialize_backup_document(&snapshot, &manifest).expect("serialize document")
+    }
+
+    #[test]
+    fn backup_document_round_trips_all_four_domains() {
+        let raw = sample_backup_document();
+        let (snapshot, manifest) = parse_backup_document(&raw).expect("parse document");
+
+        assert_eq!(manifest.protocol_version, BACKUP_PROTOCOL_VERSION);
+        assert_eq!(manifest.schema_version, BACKUP_SCHEMA_VERSION);
+        assert_eq!(manifest.encryption, "none");
+        // 计数用于 UI 摘要：mcp 数服务器条目，skills 数选中项。
+        assert_eq!(manifest.domains.providers, 1);
+        assert_eq!(manifest.domains.mcp, 1);
+        assert_eq!(manifest.domains.skills, 1);
+        assert_eq!(
+            snapshot.skills,
+            Some(json!({ "enabled": true, "selected": ["skill-a"] }))
+        );
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_future_versions() {
+        // 高版本必须拒绝，而不是把读不懂的域当成「空配置」写入而静默清库。
+        for field in ["protocolVersion", "schemaVersion"] {
+            let mut document: Value =
+                serde_json::from_str(&sample_backup_document()).expect("parse json");
+            document["_manifest"][field] = json!(99);
+            let err = parse_backup_document(&document.to_string())
+                .expect_err("future version must be rejected");
+            assert!(err.contains("99"), "错误信息应含版本号：{err}");
+        }
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_unknown_encryption() {
+        let mut document: Value =
+            serde_json::from_str(&sample_backup_document()).expect("parse json");
+        document["_manifest"]["encryption"] = json!("aes-256-gcm");
+
+        let err = parse_backup_document(&document.to_string())
+            .expect_err("unknown encryption must be rejected");
+        assert!(err.contains("aes-256-gcm"), "错误信息应含加密方式：{err}");
+    }
+
+    #[test]
+    fn parse_backup_document_rejects_missing_manifest_and_malformed_domains() {
+        // 缺 manifest：可能是随便一个 JSON 文件，不是我们导出的备份。
+        let err = parse_backup_document(r#"{"providers": []}"#).expect_err("manifest required");
+        assert!(err.contains("元信息"), "应提示缺少元信息：{err}");
+
+        // 域结构不符：providers 必须是数组。
+        let mut document: Value =
+            serde_json::from_str(&sample_backup_document()).expect("parse json");
+        document["providers"] = json!({ "not": "an array" });
+        let err =
+            parse_backup_document(&document.to_string()).expect_err("providers must be an array");
+        assert!(err.contains("providers"), "应指出出错的域：{err}");
+    }
+
+    #[test]
+    fn backup_snapshot_excludes_device_level_sync_config() {
+        // 同步配置（WebDAV 地址/凭据）是设备级的，若随快照流转会让 A 机器的
+        // 凭据覆盖 B 机器。它刻意存放在独立表，因此采集时天然取不到。
+        //
+        // 这条断言只有在库里**确实存着**一份凭据、且快照本身非空时才有意义：
+        // 对着空库采集，快照里当然搜不到密码，字段真被塞进去也照样通过。
+        let conn = open_memory_db();
+        let credentials = BackupSyncConfig {
+            url: "https://dav.example.com/dav/".to_string(),
+            username: "sentinel-user@example.com".to_string(),
+            password: "sentinel-password-must-not-leak".to_string(),
+            remote_dir: "liveagent".to_string(),
+            profile: "default".to_string(),
+            auto_sync: true,
+            last_sync_at: Some(1_700_000_000_000),
+            last_error: Some("sentinel-error".to_string()),
+        };
+        persist_backup_sync_config(&conn, &credentials).expect("persist sync config");
+        // 前提自检：凭据确实进了库，否则下面的断言又变回空转。
+        assert_eq!(
+            load_backup_sync_config(&conn)
+                .expect("reload sync config")
+                .password,
+            "sentinel-password-must-not-leak"
+        );
+
+        let mut conn = conn;
+        save_providers(&mut conn, json!([{ "id": "p-1", "name": "P1" }])).expect("seed providers");
+        save_mcp(&mut conn, json!({ "servers": [], "selected": [] })).expect("seed mcp");
+
+        let snapshot = collect_backup_snapshot(&conn, None).expect("collect snapshot");
+        let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        assert!(snapshot.providers.is_some(), "前提：快照非空");
+
+        assert!(!serialized.contains("backupSync"), "快照不应含同步配置");
+        for leaked in [
+            "sentinel-password-must-not-leak",
+            "sentinel-user@example.com",
+            "dav.example.com",
+            "sentinel-error",
+        ] {
+            assert!(
+                !serialized.contains(leaked),
+                "快照泄漏了设备级同步配置字段 {leaked}：{serialized}"
+            );
+        }
+        assert!(snapshot.skills.is_none(), "skills 只能由前端传入");
+    }
+
+    #[test]
+    fn normalize_sync_config_strips_dot_segments() {
+        // `..` 不在 `join_url` 的 percent-encode 集合里，会原样留在 URL 路径中
+        // 由服务器解析为上级目录，请求因此可以打到 WebDAV 根之外。
+        let normalized = normalize_backup_sync_config(BackupSyncConfig {
+            remote_dir: "../../etc".to_string(),
+            profile: "a/../../b".to_string(),
+            ..BackupSyncConfig::default()
+        });
+        assert_eq!(normalized.remote_dir, "etc");
+        assert_eq!(normalized.profile, "a/b");
+
+        // 全被剥掉时回落默认值，而不是留空拼出畸形 URL。
+        let emptied = normalize_backup_sync_config(BackupSyncConfig {
+            remote_dir: "..".to_string(),
+            profile: "./.".to_string(),
+            ..BackupSyncConfig::default()
+        });
+        assert_eq!(emptied.remote_dir, WEBDAV_DEFAULT_REMOTE_DIR);
+        assert_eq!(emptied.profile, WEBDAV_DEFAULT_PROFILE);
+    }
+
+    #[test]
+    fn apply_backup_snapshot_to_db_overwrites_all_domains() {
+        let mut conn = open_memory_db();
+        save_providers(&mut conn, json!([{ "id": "stale", "name": "Stale" }]))
+            .expect("seed providers");
+
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1", "name": "P1" }])),
+            mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
+            system: None,
+            skills: None,
+        };
+        apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
+
+        // 整域覆盖：导入侧原有的 stale provider 必须消失。
+        assert_eq!(
+            load_providers(&conn).expect("load providers"),
+            Some(json!([{ "id": "p-1", "name": "P1" }]))
+        );
+        let mcp = load_mcp(&conn).expect("load mcp").expect("mcp present");
+        assert_eq!(mcp["selected"], json!(["s-1"]));
+    }
+
+    #[test]
+    fn apply_backup_snapshot_to_db_leaves_config_intact_when_domain_absent() {
+        // 某域为 None 表示导出侧没有该配置，不应被当成「清空」。
+        let mut conn = open_memory_db();
+        save_providers(&mut conn, json!([{ "id": "keep", "name": "Keep" }]))
+            .expect("seed providers");
+
+        apply_backup_snapshot_to_db(&mut conn, &BackupSnapshot::default()).expect("apply empty");
+
+        assert_eq!(
+            load_providers(&conn).expect("load providers"),
+            Some(json!([{ "id": "keep", "name": "Keep" }]))
+        );
+    }
+
+    #[test]
+    fn validate_backup_snapshot_rejects_malformed_domains() {
+        let cases = [
+            (
+                BackupSnapshot {
+                    providers: Some(json!({})),
+                    ..Default::default()
+                },
+                "providers",
+            ),
+            (
+                BackupSnapshot {
+                    mcp: Some(json!({ "servers": "nope" })),
+                    ..Default::default()
+                },
+                "mcp.servers",
+            ),
+            (
+                BackupSnapshot {
+                    system: Some(json!([])),
+                    ..Default::default()
+                },
+                "system",
+            ),
+            (
+                BackupSnapshot {
+                    skills: Some(json!("nope")),
+                    ..Default::default()
+                },
+                "skills",
+            ),
+        ];
+
+        for (snapshot, expected) in cases {
+            let err =
+                validate_backup_snapshot(&snapshot).expect_err("malformed domain must be rejected");
+            assert!(err.contains(expected), "错误信息应含 {expected}：{err}");
+        }
+    }
+
+    // ===== WebDAV 同步：配置解析 / 远端路径 / 完整性校验 =====
+
+    fn sample_sync_config() -> BackupSyncConfig {
+        BackupSyncConfig {
+            url: "https://dav.example.com/dav".to_string(),
+            username: "alice".to_string(),
+            password: "stored-secret".to_string(),
+            remote_dir: "liveagent".to_string(),
+            profile: "work".to_string(),
+            auto_sync: false,
+            last_sync_at: Some(1_700_000_000_000),
+            last_error: None,
+        }
+    }
+
+    fn sync_request(password: &str, password_touched: bool) -> BackupSyncConfigRequest {
+        BackupSyncConfigRequest {
+            url: "https://dav.example.com/dav".to_string(),
+            username: "alice".to_string(),
+            password: password.to_string(),
+            password_touched,
+            remote_dir: "liveagent".to_string(),
+            profile: "work".to_string(),
+            auto_sync: true,
+        }
+    }
+
+    #[test]
+    fn sync_config_keeps_stored_password_when_untouched() {
+        let persisted = sample_sync_config();
+        // UI 用掩码占位符回填密码框；用户没动它时不能当成新密码写库。
+        let resolved = resolve_backup_sync_config(sync_request("••••••••", false), &persisted);
+        assert_eq!(resolved.password, "stored-secret");
+        assert!(resolved.auto_sync);
+        // 保存配置不应改动同步时间。
+        assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
+    }
+
+    #[test]
+    fn sync_config_takes_new_password_when_touched() {
+        let persisted = sample_sync_config();
+        let resolved = resolve_backup_sync_config(sync_request("fresh-secret", true), &persisted);
+        assert_eq!(resolved.password, "fresh-secret");
+    }
+
+    #[test]
+    fn sync_config_clearing_password_is_honored() {
+        let persisted = sample_sync_config();
+        // 用户主动清空密码框 —— 必须真的清掉，不能回退到旧值，否则无法换账号。
+        let resolved = resolve_backup_sync_config(sync_request("", true), &persisted);
+        assert!(resolved.password.is_empty());
+    }
+
+    /// 保存配置必须清掉遗留的自动同步错误。
+    ///
+    /// 那条错误描述的是改动**之前**的配置状态；继续挂在界面上，用户会以为
+    /// 刚填好的新地址也是坏的，从而反复折腾一个已经修好的问题。
+    #[test]
+    fn sync_config_save_clears_stale_auto_sync_error() {
+        let mut persisted = sample_sync_config();
+        persisted.last_error = Some("认证失败（401）：请检查用户名与密码".to_string());
+
+        let resolved = resolve_backup_sync_config(sync_request("fresh-secret", true), &persisted);
+        assert!(resolved.last_error.is_none(), "保存后不应残留旧错误");
+        // 同步时间是既成事实，不能跟着一起清掉。
+        assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
+    }
+
+    #[test]
+    fn sync_config_normalizes_paths_and_falls_back_to_defaults() {
+        let persisted = BackupSyncConfig::default();
+        let mut request = sync_request("x", true);
+        request.url = "  https://dav.example.com/dav/  ".to_string();
+        request.remote_dir = "  /backups/  ".to_string();
+        request.profile = "   ".to_string();
+
+        let resolved = resolve_backup_sync_config(request, &persisted);
+        assert_eq!(resolved.url, "https://dav.example.com/dav");
+        assert_eq!(resolved.remote_dir, "backups");
+        // 空 profile 回落默认值，否则远端路径会出现空段。
+        assert_eq!(resolved.profile, "default");
+    }
+
+    #[test]
+    fn remote_segments_are_versioned_and_profile_scoped() {
+        let config = sample_sync_config();
+        assert_eq!(
+            backup_remote_segments(&config),
+            vec!["liveagent", "v1", "work"]
+        );
+        assert_eq!(
+            backup_remote_file_segments(&config, "config.json"),
+            vec!["liveagent", "v1", "work", "config.json"]
+        );
+        // 不同 profile 必须落在不同远端目录，否则两套配置会互相覆盖。
+        let mut other = sample_sync_config();
+        other.profile = "personal".to_string();
+        assert_ne!(
+            backup_remote_segments(&config),
+            backup_remote_segments(&other)
+        );
+    }
+
+    #[test]
+    fn verify_payload_accepts_matching_size_and_hash() {
+        let body = b"{\"providers\":[]}";
+        let sha = backup_sha256_hex(body);
+        assert!(verify_backup_payload(body, body.len(), &sha).is_ok());
+    }
+
+    #[test]
+    fn verify_payload_rejects_truncated_or_corrupted_body() {
+        let body = b"{\"providers\":[]}";
+        let sha = backup_sha256_hex(body);
+
+        // PUT 中断留下的截断文件。
+        let truncated = verify_backup_payload(body, body.len() + 8, &sha)
+            .expect_err("size mismatch must be rejected");
+        assert!(truncated.contains("大小校验失败"), "{truncated}");
+
+        let corrupted = verify_backup_payload(body, body.len(), &"0".repeat(64))
+            .expect_err("hash mismatch must be rejected");
+        assert!(corrupted.contains("校验和不匹配"), "{corrupted}");
+    }
+
+    #[test]
+    fn verify_payload_rejects_manifest_without_size_or_hash() {
+        // 缺 size/sha256 不能当「无需校验」放行。`v1/` 布局随本功能一起引入，
+        // 没有写过无摘要 manifest 的历史版本，会命中这里的只有异常数据。
+        let err = verify_backup_payload(b"anything", 0, "")
+            .expect_err("manifest without size/sha256 must be rejected");
+        assert!(err.contains("缺少大小或校验和"), "{err}");
+
+        assert!(verify_backup_payload(b"anything", 8, "").is_err());
+        assert!(verify_backup_payload(b"anything", 0, "abc").is_err());
+    }
+
+    #[test]
+    fn remote_manifest_carries_size_and_hash_and_validates_version() {
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([{ "id": "p-1" }])),
+            ..Default::default()
+        };
+        let manifest = build_backup_manifest(&snapshot);
+        let body = json!({
+            "protocolVersion": manifest.protocol_version,
+            "schemaVersion": manifest.schema_version,
+            "snapshotId": manifest.snapshot_id,
+            "createdAt": manifest.created_at,
+            "deviceName": "box-a",
+            "appVersion": manifest.app_version,
+            "encryption": "none",
+            "domains": { "providers": 1, "mcp": 0, "system": 0, "skills": 0 },
+            "size": 42,
+            "sha256": "abc123",
+        })
+        .to_string();
+
+        let parsed = parse_backup_remote_manifest(body.as_bytes()).expect("parse remote manifest");
+        assert_eq!(parsed.size, 42);
+        assert_eq!(parsed.sha256, "abc123");
+        assert_eq!(parsed.manifest.device_name, "box-a");
+    }
+
+    #[test]
+    fn remote_manifest_rejects_future_protocol_version() {
+        let body = json!({
+            "protocolVersion": 99,
+            "schemaVersion": 1,
+            "snapshotId": "s-1",
+            "createdAt": "2026-08-17T00:00:00Z",
+            "deviceName": "box-a",
+            "appVersion": "1.0.0",
+            "encryption": "none",
+            "size": 1,
+            "sha256": "ab",
+        })
+        .to_string();
+
+        let err = parse_backup_remote_manifest(body.as_bytes())
+            .expect_err("future protocol version must be rejected");
+        assert!(err.contains("升级应用"), "{err}");
+    }
+
+    #[test]
+    fn sync_config_view_never_exposes_password() {
+        let view: BackupSyncConfigView = sample_sync_config().into();
+        let serialized = serde_json::to_string(&view).expect("serialize view");
+        assert!(!serialized.contains("stored-secret"), "{serialized}");
+        assert!(!serialized.contains("password\":"), "{serialized}");
+        assert!(view.has_password);
+
+        let empty = BackupSyncConfigView::from(BackupSyncConfig::default());
+        assert!(!empty.has_password);
+    }
+
+    /// `last_error` 要能穿过「序列化落库 → 反序列化读回」这条来回。
+    ///
+    /// 它是自动同步失败在页面卸载后唯一的留存处，序列化时丢掉就等于没做。
+    #[test]
+    fn sync_config_persists_auto_sync_error_across_serialization() {
+        let mut config = sample_sync_config();
+        config.last_error = Some("远端存储空间不足".to_string());
+
+        let json = serde_json::to_string(&config).expect("serialize config");
+        let restored: BackupSyncConfig = serde_json::from_str(&json).expect("deserialize config");
+        assert_eq!(restored.last_error.as_deref(), Some("远端存储空间不足"));
+
+        // 旧版本写入的记录没有这个字段，读回时必须回落 None 而不是解析失败。
+        let legacy = r#"{"url":"https://dav.example.com/dav","username":"alice",
+            "password":"s","remoteDir":"liveagent","profile":"work","autoSync":true}"#;
+        let parsed: BackupSyncConfig = serde_json::from_str(legacy).expect("parse legacy payload");
+        assert!(parsed.last_error.is_none());
+        assert!(parsed.last_sync_at.is_none());
+
+        // 错误必须随视图送到前端，否则 UI 仍然看不到。
+        let view: BackupSyncConfigView = config.into();
+        assert_eq!(view.last_error.as_deref(), Some("远端存储空间不足"));
+    }
+
+    /// 真实服务器上的「两台设备」往返。**默认不跑**（`#[ignore]`）。
+    ///
+    /// ```text
+    /// LIVEAGENT_WEBDAV_URL=... LIVEAGENT_WEBDAV_USER=... LIVEAGENT_WEBDAV_PASS=... \
+    /// cargo test --lib settings::tests::live -- --ignored --nocapture
+    /// ```
+    ///
+    /// 为什么不直接调 `settings_backup_upload` / `settings_backup_download`：
+    /// 那两个命令读写真实的 `~/.liveagent/config.sqlite`，跑测试会改掉开发者
+    /// 自己的配置。这里用两个内存库扮演设备 A / B，复用同一套采集、序列化、
+    /// manifest 构造与校验函数，网络部分则完全走真实 `services::webdav`。
+    /// 因此覆盖的是 AC7（跨设备一致）与 AC9（校验和把关），而非命令壳。
+    #[tokio::test]
+    #[ignore = "需要真实 WebDAV 账号，通过 LIVEAGENT_WEBDAV_* 环境变量提供"]
+    async fn live_cross_device_snapshot_round_trip() {
+        let (Ok(url), Ok(username), Ok(password)) = (
+            std::env::var("LIVEAGENT_WEBDAV_URL"),
+            std::env::var("LIVEAGENT_WEBDAV_USER"),
+            std::env::var("LIVEAGENT_WEBDAV_PASS"),
+        ) else {
+            eprintln!("跳过：未设置 LIVEAGENT_WEBDAV_URL / _USER / _PASS");
+            return;
+        };
+
+        let config = BackupSyncConfig {
+            url,
+            username,
+            password,
+            remote_dir: format!("liveagent-livetest-{}", std::process::id()),
+            profile: "default".to_string(),
+            auto_sync: false,
+            last_sync_at: None,
+            last_error: None,
+        };
+        let creds = backup_credentials(&config).expect("credentials");
+
+        // —— 设备 A：采集并上传 ——
+        let mut device_a = open_memory_db();
+        save_providers(
+            &mut device_a,
+            json!([{ "id": "p-live", "name": "实机 Provider", "apiKey": "sk-live-probe" }]),
+        )
+        .expect("seed providers on device A");
+        save_mcp(
+            &mut device_a,
+            json!({ "servers": [{ "id": "s-live" }], "selected": ["s-live"] }),
+        )
+        .expect("seed mcp on device A");
+
+        let snapshot = collect_backup_snapshot(&device_a, Some(json!({ "enabled": ["skill-x"] })))
+            .expect("collect snapshot");
+        let manifest = build_backup_manifest(&snapshot);
+        let document = serialize_backup_document(&snapshot, &manifest).expect("serialize");
+        let body = document.into_bytes();
+
+        let remote_manifest_body = serde_json::to_vec_pretty(&json!({
+            "protocolVersion": manifest.protocol_version,
+            "schemaVersion": manifest.schema_version,
+            "snapshotId": manifest.snapshot_id,
+            "createdAt": manifest.created_at,
+            "deviceName": manifest.device_name,
+            "appVersion": manifest.app_version,
+            "encryption": "none",
+            "domains": {
+                "providers": 1, "mcp": 1, "system": 0, "skills": 1,
+            },
+            "size": body.len(),
+            "sha256": backup_sha256_hex(&body),
+        }))
+        .expect("serialize remote manifest");
+
+        crate::services::webdav::ensure_remote_dirs(&creds, &backup_remote_segments(&config))
+            .await
+            .expect("ensure remote dirs");
+        // 与生产同序：先 config 再 manifest。
+        crate::services::webdav::put_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
+            body.clone(),
+            "application/json",
+        )
+        .await
+        .expect("put config.json");
+        crate::services::webdav::put_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
+            remote_manifest_body,
+            "application/json",
+        )
+        .await
+        .expect("put manifest.json");
+        eprintln!("上传完成：config {} 字节", body.len());
+
+        // —— 设备 B：拉 manifest → 拉 config → 校验 → 应用 ——
+        let manifest_bytes = crate::services::webdav::get_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
+            WEBDAV_MANIFEST_MAX_BYTES,
+            "远端备份元信息",
+        )
+        .await
+        .expect("get manifest")
+        .expect("manifest 必须存在");
+        let remote = parse_backup_remote_manifest(&manifest_bytes).expect("parse remote manifest");
+        eprintln!(
+            "远端 manifest：设备 {} / {} 字节",
+            remote.manifest.device_name, remote.size
+        );
+
+        let config_bytes = crate::services::webdav::get_bytes(
+            &creds,
+            &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
+            WEBDAV_CONFIG_MAX_BYTES,
+            "远端配置",
+        )
+        .await
+        .expect("get config")
+        .expect("config 必须存在");
+
+        // AC9 正向：真实服务器往返后校验和必须仍然吻合。
+        verify_backup_payload(&config_bytes, remote.size, &remote.sha256)
+            .expect("真实往返后校验和应吻合");
+        eprintln!("校验通过：sha256 {}", &remote.sha256[..16]);
+
+        // AC9 反向：篡改一个字节必须被拦下。
+        let mut tampered = config_bytes.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01;
+        let err = verify_backup_payload(&tampered, remote.size, &remote.sha256)
+            .expect_err("篡改后必须校验失败");
+        assert!(err.contains("校验和不匹配"), "{err}");
+
+        // AC7：应用到设备 B，四域应与设备 A 一致。
+        let text = String::from_utf8(config_bytes).expect("utf-8 config");
+        let (parsed_snapshot, _) = parse_backup_document(&text).expect("parse document");
+        let mut device_b = open_memory_db();
+        save_providers(&mut device_b, json!([{ "id": "stale-b", "name": "旧配置" }]))
+            .expect("seed providers on device B");
+        apply_backup_snapshot_to_db(&mut device_b, &parsed_snapshot).expect("apply on device B");
+
+        assert_eq!(
+            load_providers(&device_b).expect("load providers on B"),
+            load_providers(&device_a).expect("load providers on A"),
+            "设备 B 的 providers 应与设备 A 一致"
+        );
+        assert_eq!(
+            load_mcp(&device_b).expect("load mcp on B"),
+            load_mcp(&device_a).expect("load mcp on A"),
+            "设备 B 的 mcp 应与设备 A 一致"
+        );
+        // 技能启用态不落库，只随快照回传给前端。
+        assert_eq!(
+            parsed_snapshot.skills,
+            Some(json!({ "enabled": ["skill-x"] })),
+            "skills 应原样往返"
+        );
+        // 设备级凭据绝不能随快照流转（S2）。
+        assert!(
+            !text.contains(&config.username),
+            "快照不得含 WebDAV 用户名"
+        );
+        assert!(!text.contains("backupSync"), "快照不得含同步配置");
+        eprintln!("设备 B 还原一致，且快照不含 WebDAV 凭据");
     }
 }

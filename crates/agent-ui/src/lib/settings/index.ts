@@ -133,6 +133,7 @@ import {
 export { normalizeFontFamily } from "@liveagent/ui/lib/shared/fontFamily";
 export type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 export {
+  hasProviderFailoverConfiguration,
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
 } from "./modelFailover";
