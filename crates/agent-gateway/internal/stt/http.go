@@ -20,15 +20,15 @@ const connectionTestHTTPTimeout = 22 * time.Second
 func (m *Manager) SettingsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet:
+		switch r.Method {
+		case http.MethodGet:
 			settings, err := m.store.Get(r.Context())
 			if err != nil {
 				http.Error(w, "STT settings unavailable", 500)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(settings)
-		case r.Method == http.MethodPut:
+		case http.MethodPut:
 			var incoming Settings
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&incoming); err != nil {
 				http.Error(w, "invalid STT settings", 400)
@@ -78,7 +78,7 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		conn.SetReadLimit(64 << 10)
 		messageType, data, err := conn.ReadMessage()
 		if err != nil || messageType != websocket.BinaryMessage {

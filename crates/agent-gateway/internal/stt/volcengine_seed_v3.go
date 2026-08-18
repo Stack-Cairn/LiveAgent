@@ -80,11 +80,11 @@ func seedV3Headers(cfg map[string]any, connectID string) http.Header {
 
 func decodeSeedV3Frame(data []byte) (map[string]any, error) {
 	if len(data) < 8 || data[0]&0x0f < 1 {
-		return nil, errors.New("Seed v3 invalid frame")
+		return nil, errors.New("seed v3 invalid frame")
 	}
 	headerLength := int(data[0]&0x0f) * 4
 	if len(data) < headerLength+4 {
-		return nil, errors.New("Seed v3 invalid header")
+		return nil, errors.New("seed v3 invalid header")
 	}
 	messageType := data[1] >> 4
 	flags := data[1] & 0x0f
@@ -93,20 +93,20 @@ func decodeSeedV3Frame(data []byte) (map[string]any, error) {
 	var sequence int32
 	if messageType == 0x0f {
 		if len(data) < offset+8 {
-			return nil, errors.New("Seed v3 invalid error frame")
+			return nil, errors.New("seed v3 invalid error frame")
 		}
 		errorCode = binary.BigEndian.Uint32(data[offset : offset+4])
 		offset += 4
 	} else if flags&0x01 != 0 {
 		if len(data) < offset+8 {
-			return nil, errors.New("Seed v3 invalid sequence frame")
+			return nil, errors.New("seed v3 invalid sequence frame")
 		}
 		sequence = int32(binary.BigEndian.Uint32(data[offset : offset+4]))
 		offset += 4
 	}
 	payloadLength := int(binary.BigEndian.Uint32(data[offset : offset+4]))
 	if len(data) < offset+4+payloadLength {
-		return nil, errors.New("Seed v3 invalid payload")
+		return nil, errors.New("seed v3 invalid payload")
 	}
 	payload := data[offset+4 : offset+4+payloadLength]
 	if data[2]&0x0f == 1 {
@@ -143,7 +143,7 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 	if err != nil {
 		return stageError("VolcengineSeedV3", "connect", websocketConnectError(response, err))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	start, err := seedV3JSON(seedV3StartRequest(id))
 	if err != nil {
 		return stageError("VolcengineSeedV3", "start", err)
@@ -175,7 +175,6 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 	ready := false
 	finishing := false
 	finishSent := false
-	completed := false
 	pending := make([][]byte, 0, 32)
 	pendingSequences := make([]uint32, 0, 32)
 	var heldAudio *AudioChunk
@@ -218,9 +217,6 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 		case <-ctx.Done():
 			return nil
 		case readError := <-readErr:
-			if completed {
-				return nil
-			}
 			if finishing && finishSent {
 				return stageError("VolcengineSeedV3", "close", readError)
 			}
@@ -279,7 +275,6 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 			lastPackage, _ := message["is_last_package"].(bool)
 			lastFrame, _ := message["_last"].(bool)
 			if (lastPackage || lastFrame) && finishing {
-				completed = true
 				if lastText != "" {
 					events <- Event{Type: "final", SessionID: id, Text: lastText}
 				}

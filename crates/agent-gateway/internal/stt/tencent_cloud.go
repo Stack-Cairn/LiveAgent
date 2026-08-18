@@ -54,7 +54,7 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 	if err != nil {
 		return stageError("Tencent", "connect", websocketConnectError(response, err))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(25 * time.Millisecond)
 	incoming := make(chan map[string]any, 8)
 	readErr := make(chan error, 1)
@@ -71,13 +71,12 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 	events <- Event{Type: "ready", SessionID: id}
 	fragments := map[int]string{}
 	finishSent := false
-	endSeen := false
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-readErr:
-			if finishSent && (endSeen || isWebSocketCloseError(e, websocket.CloseNormalClosure, websocket.CloseGoingAway)) {
+			if finishSent && isWebSocketCloseError(e, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				if len(fragments) > 0 {
 					events <- Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}
 				}
@@ -111,7 +110,6 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 				events <- Event{Type: "partial", SessionID: id, Text: mergeTencentFragments(fragments)}
 			}
 			if finishSent && tencentMessageComplete(msg) {
-				endSeen = true
 				if len(fragments) > 0 {
 					events <- Event{Type: "final", SessionID: id, Text: mergeTencentFragments(fragments)}
 				}

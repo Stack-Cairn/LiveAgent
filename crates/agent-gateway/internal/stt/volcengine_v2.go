@@ -71,11 +71,11 @@ func volcV2ResponseNoSpeech(message map[string]any) bool {
 
 func decodeVolcV2Frame(data []byte) (map[string]any, error) {
 	if len(data) < 8 {
-		return nil, errors.New("Volcengine v2 short frame")
+		return nil, errors.New("volcengine v2 short frame")
 	}
 	headerLen := int(data[0]&0x0f) * 4
 	if headerLen < 4 || len(data) < headerLen+4 {
-		return nil, errors.New("Volcengine v2 invalid header")
+		return nil, errors.New("volcengine v2 invalid header")
 	}
 	messageType := data[1] >> 4
 	flags := data[1] & 0x0f
@@ -84,20 +84,20 @@ func decodeVolcV2Frame(data []byte) (map[string]any, error) {
 	var sequence int32
 	if messageType == 0x0f {
 		if len(data) < offset+8 {
-			return nil, errors.New("Volcengine v2 invalid error frame")
+			return nil, errors.New("volcengine v2 invalid error frame")
 		}
 		errorCode = binary.BigEndian.Uint32(data[offset : offset+4])
 		offset += 4
 	} else if messageType == 0x0b || flags&0x01 != 0 {
 		if len(data) < offset+8 {
-			return nil, errors.New("Volcengine v2 invalid sequence frame")
+			return nil, errors.New("volcengine v2 invalid sequence frame")
 		}
 		sequence = int32(binary.BigEndian.Uint32(data[offset : offset+4]))
 		offset += 4
 	}
 	payloadLen := int(binary.BigEndian.Uint32(data[offset : offset+4]))
 	if payloadLen < 0 || len(data) < offset+4+payloadLen {
-		return nil, errors.New("Volcengine v2 invalid payload")
+		return nil, errors.New("volcengine v2 invalid payload")
 	}
 	payload := append([]byte(nil), data[offset+4:offset+4+payloadLen]...)
 	if data[2]&0x0f == 1 {
@@ -179,7 +179,7 @@ func (a *VolcengineV2Adapter) Run(ctx context.Context, id string, cfg map[string
 	if err != nil {
 		return stageError("VolcengineV2", "connect", websocketConnectError(response, err))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	requestID := uuid.NewString()
 	first, err := gzipJSON(volcV2StartRequest(cfg, id, requestID))
 	if err != nil {
@@ -214,7 +214,6 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 	}()
 	finishing := false
 	finishSent := false
-	completed := false
 	ready := false
 	pending := make([][]byte, 0, 32)
 	lastText := ""
@@ -223,9 +222,6 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 		case <-ctx.Done():
 			return nil
 		case e := <-readErr:
-			if completed {
-				return nil
-			}
 			if finishing && finishSent && isWebSocketCloseError(e, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				if lastText != "" {
 					events <- Event{Type: "final", SessionID: id, Text: lastText}
@@ -298,7 +294,6 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 				events <- Event{Type: "partial", SessionID: id, Text: text}
 			}
 			if volcV2ResponseComplete(msg, finishing) {
-				completed = true
 				if lastText != "" {
 					events <- Event{Type: "final", SessionID: id, Text: lastText}
 				}

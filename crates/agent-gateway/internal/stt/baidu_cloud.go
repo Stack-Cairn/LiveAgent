@@ -79,17 +79,17 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 	}
 	appid, err := strconv.ParseUint(value(cfg, "baiduAppId"), 10, 64)
 	if err != nil {
-		return stageError("Baidu", "validate", &ResultError{Result: "authentication_failed", Err: errors.New("Baidu appid must be numeric")})
+		return stageError("Baidu", "validate", &ResultError{Result: "authentication_failed", Err: errors.New("appid must be numeric")})
 	}
 	pid, err := strconv.ParseUint(value(cfg, "devPid"), 10, 32)
 	if err != nil {
-		return stageError("Baidu", "validate", &ResultError{Result: "protocol_failed", Err: errors.New("Baidu dev_pid is required")})
+		return stageError("Baidu", "validate", &ResultError{Result: "protocol_failed", Err: errors.New("dev_pid is required")})
 	}
 	conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
 	if err != nil {
 		return stageError("Baidu", "connect", websocketConnectError(response, err))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err = conn.WriteJSON(baiduStartMessage(appid, uint32(pid), value(cfg, "baiduApiKey"), "LiveAgent-"+uuid.NewString())); err != nil {
 		return stageError("Baidu", "start", err)
 	}
@@ -107,7 +107,6 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 		}
 	}()
 	finishSent := false
-	finishAck := false
 	noSpeechSeen := false
 	finalText := ""
 	for {
@@ -115,7 +114,7 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 		case <-ctx.Done():
 			return nil
 		case e := <-readErr:
-			if finishSent && (finishAck || baiduFinishedConnectionClosed(e)) {
+			if finishSent && baiduFinishedConnectionClosed(e) {
 				if finalText != "" {
 					events <- Event{Type: "final", SessionID: id, Text: finalText}
 				}
@@ -163,7 +162,6 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 				finalText += textValue
 				events <- Event{Type: "partial", SessionID: id, Text: finalText}
 				if finishSent {
-					finishAck = true
 					if finalText != "" {
 						events <- Event{Type: "final", SessionID: id, Text: finalText}
 					}
@@ -171,7 +169,6 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 				}
 			case "FINISH":
 				if finishSent {
-					finishAck = true
 					if finalText != "" {
 						events <- Event{Type: "final", SessionID: id, Text: finalText}
 					}

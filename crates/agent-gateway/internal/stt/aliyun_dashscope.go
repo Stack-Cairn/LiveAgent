@@ -52,7 +52,7 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 	if err != nil {
 		return stageError("DashScope", "connect", websocketConnectError(response, err))
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	start := map[string]any{
 		"header": map[string]any{"action": "run-task", "task_id": wireTaskID, "streaming": "duplex"},
 		"payload": map[string]any{
@@ -84,7 +84,6 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 	}()
 	finishing := false
 	finishSent := false
-	taskFinished := false
 	ready := false
 	pending := make([][]byte, 0, 32)
 	finals := ""
@@ -93,9 +92,6 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 		case <-ctx.Done():
 			return nil
 		case err := <-readErr:
-			if taskFinished {
-				return nil
-			}
 			if finishing && finishSent && isWebSocketCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				return stageError("DashScope", "close", errors.New("connection closed before task-finished"))
 			}
@@ -168,7 +164,6 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 				}
 			case "task-finished":
 				if finishing && finishSent {
-					taskFinished = true
 					if finals != "" {
 						events <- Event{Type: "final", SessionID: id, Text: finals}
 					}
