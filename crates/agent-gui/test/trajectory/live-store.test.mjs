@@ -56,3 +56,16 @@ test("a throwing live listener cannot block healthy subscribers", async () => {
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(healthy, 1);
 });
+
+test("an external revision invalidation notifies subscribers without changing snapshots", async () => {
+  const store = createTrajectoryLiveStore({ notifyDelayMs: 0 });
+  let notifications = 0;
+  store.subscribe(() => {
+    notifications += 1;
+  });
+  const snapshot = store.getSnapshot("c1");
+  store.invalidate();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(notifications, 1);
+  assert.equal(store.getSnapshot("c1"), snapshot);
+});

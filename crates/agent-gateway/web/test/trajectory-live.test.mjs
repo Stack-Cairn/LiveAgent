@@ -174,6 +174,27 @@ test("exact replayed trajectory events are deduplicated in the live buffer", () 
   assert.equal(live.liveTrajectoryEvents("dedupe-c").length, 1);
 });
 
+test("the Web production store enforces the shared global event bound", () => {
+  const live = freshModule();
+  const conversationIds = Array.from({ length: 6 }, (_, index) => `global-bound-${index}`);
+  for (const [conversationIndex, conversationId] of conversationIds.entries()) {
+    for (let index = 0; index < 20_000; index += 1) {
+      live.absorbTrajectoryChatEvent({
+        type: "trajectory",
+        conversation_id: conversationId,
+        event: { k: "user", t: conversationIndex * 20_000 + index, at: index },
+      });
+    }
+  }
+  assert.equal(live.liveTrajectoryEvents(conversationIds[0]).length, 0);
+  assert.equal(
+    conversationIds
+      .slice(1)
+      .reduce((total, conversationId) => total + live.liveTrajectoryEvents(conversationId).length, 0),
+    100_000,
+  );
+});
+
 test("rebasing clears the live tail and advances the authoritative refresh revision", () => {
   const live = freshModule();
   live.clearLiveTrajectory("rebase-revision-c");

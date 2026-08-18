@@ -324,4 +324,3 @@ The production implementation additionally enforces the following invariants dis
 - The first assistant-side output can be text, thinking, hosted search, or a tool-call delta. All four close TTFT through the same idempotent first-token marker.
 - Provider/model/API metadata comes from the committed assistant response, so failover rounds identify the target that actually answered.
 - Record identity is independent of display index and disambiguates same-millisecond context events. Edit-resend clears live tails only after the database rebase succeeds and then forces an authoritative reload.
-

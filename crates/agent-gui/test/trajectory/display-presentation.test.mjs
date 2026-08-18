@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -151,6 +152,15 @@ test("row heights differ between headers and records", () => {
   const record = items.find((item) => item.kind === "record");
   assert.equal(trajectoryDisplayItemHeight(header), 24);
   assert.equal(trajectoryDisplayItemHeight(record), 30);
+});
+
+test("the virtualized table keys height caches by stable display identity", () => {
+  const source = readFileSync(
+    new URL("../../../agent-ui/src/components/trajectory/TrajectoryTable.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /getItemKey:\s*getDisplayItemKey/);
+  assert.match(source, /key=\{virtualRow\.key\}/);
 });
 
 test("system label follows the header change kind", () => {

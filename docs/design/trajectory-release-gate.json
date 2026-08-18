@@ -5,7 +5,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "git diff --check（ci.yml whitespace job）"
+  "basis": "git diff --check origin/main...HEAD（ci.yml 使用事件 base/head SHA）"
  },
  {
   "name": "trajectory-gui",

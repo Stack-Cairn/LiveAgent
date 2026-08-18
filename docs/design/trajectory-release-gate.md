@@ -9,7 +9,7 @@ Generated: 2026-08-18T08:32:16+08:00
 
 | Check | Result | Exit | Basis |
 |---|---:|---:|---|
-| `diff-check` | PASS | 0 | git diff --check（ci.yml whitespace job） |
+| `diff-check` | PASS | 0 | git diff --check origin/main...HEAD（ci.yml 使用事件 base/head SHA） |
 | `trajectory-gui` | PASS | 0 | cargo test trajectory --lib 28/28 |
 | `trajectory-web` | PASS | 0 | pnpm --filter @liveagent/gateway-webui test 587/587 |
 | `tsc-gui` | PASS | 0 | GUI 构建（vite build）通过 |

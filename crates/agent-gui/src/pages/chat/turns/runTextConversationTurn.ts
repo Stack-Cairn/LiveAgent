@@ -42,6 +42,7 @@ import {
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
 import type { ProviderId } from "../../../lib/settings";
+import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
 import {
   NOOP_TRAJECTORY_RECORDER,
   type TrajectoryRecorder,
@@ -451,8 +452,9 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
         });
         trajectory.firstToken(textRound);
         const trajectoryUsage = toTrajectoryUsage(finalAssistant.usage);
+        const terminalInfo = trajectoryTerminalInfo(finalAssistant);
         trajectory.stepEnd(textRound, {
-          status: finalAssistant.stopReason === "error" ? "error" : "complete",
+          ...terminalInfo,
           ...(trajectoryUsage === undefined ? {} : { usage: trajectoryUsage }),
           provider: finalAssistant.provider || providerId,
           model: finalAssistant.model || model,
@@ -559,7 +561,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     createdAt,
     titlePromise,
   });
-  trajectory.endTurn({ status: "complete" });
+  trajectory.endTurn(trajectoryTerminalInfo(finalAssistant));
   await trajectory.flush();
   // Only extract memory after durable history lands; otherwise memory can
   // retain the answer while a failed final persist leaves chat history on the

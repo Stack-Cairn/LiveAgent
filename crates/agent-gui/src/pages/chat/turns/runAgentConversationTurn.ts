@@ -88,6 +88,7 @@ import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/
 import { isSessionApproved, requestToolApproval } from "../../../lib/tools/toolApproval";
 import { resolveToolPolicy } from "../../../lib/tools/toolPolicy";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
+import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
 import {
   NOOP_TRAJECTORY_RECORDER,
   type TrajectoryRecorder,
@@ -1182,8 +1183,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           // stepEnd 记在这里而不是工具执行之后：这样 step 的耗时是纯模型时间，
           // 工具各有自己的区间，甘特图上不会把工具时间重复计进模型泳道。
           const trajectoryUsage = toTrajectoryUsage(assistant.usage);
+          const terminalInfo = trajectoryTerminalInfo(assistant);
           trajectory.stepEnd(round, {
-            status: assistant.stopReason === "error" ? "error" : "complete",
+            ...terminalInfo,
             ...(trajectoryUsage === undefined ? {} : { usage: trajectoryUsage }),
             provider: assistant.provider || providerId,
             model: assistant.model || model,
@@ -1429,7 +1431,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   freezeGatewayFinalProjection(finalState, true);
   settleLiveTranscript(transcriptStore);
   const historyPersisted = await persistCompletedState(finalState);
-  trajectory.endTurn({ status: "complete" });
+  trajectory.endTurn(
+    pendingTerminalAssistantMeta === null
+      ? { status: "complete" }
+      : trajectoryTerminalInfo(pendingTerminalAssistantMeta.assistant),
+  );
   // 落盘与历史写入对齐：turn 边界是账本的一致点，之后的记忆提取不属于本轮轨迹。
   await trajectory.flush();
 

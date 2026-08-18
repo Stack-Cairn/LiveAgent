@@ -22,6 +22,7 @@ export type TrajectoryLiveStore = {
   subscribe: (listener: Listener) => () => void;
   clear: (conversationId: string) => void;
   clearAll: () => void;
+  invalidate: () => void;
   stats: () => { conversations: number; events: number };
 };
 
@@ -187,6 +188,8 @@ export function createTrajectoryLiveStore(
       totalEvents = 0;
       notify();
     },
+
+    invalidate: notify,
 
     stats() {
       return { conversations: buckets.size, events: totalEvents };

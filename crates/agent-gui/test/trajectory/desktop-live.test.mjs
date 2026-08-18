@@ -29,6 +29,35 @@ test("desktop live trajectory snapshots update and clear per conversation", () =
   assert.equal(desktopLiveTrajectoryEvents("desktop-live-c1").length, 0);
 });
 
+test("desktop production store deduplicates replays and enforces the shared global bound", () => {
+  const prefix = "desktop-live-bounds";
+  const conversationIds = Array.from({ length: 6 }, (_, index) => `${prefix}-${index}`);
+  const events = (turnOffset) =>
+    Array.from({ length: 20_000 }, (_, index) => ({
+      k: "user",
+      t: turnOffset + index,
+      at: index,
+    }));
+
+  appendDesktopLiveTrajectory(conversationIds[0], [{ k: "user", t: -1, at: -1 }]);
+  appendDesktopLiveTrajectory(conversationIds[0], [{ k: "user", t: -1, at: -1 }]);
+  assert.equal(desktopLiveTrajectoryEvents(conversationIds[0]).length, 1);
+  clearDesktopLiveTrajectory(conversationIds[0]);
+
+  for (const [index, conversationId] of conversationIds.entries()) {
+    appendDesktopLiveTrajectory(conversationId, events(index * 20_000));
+  }
+  assert.equal(desktopLiveTrajectoryEvents(conversationIds[0]).length, 0);
+  assert.equal(
+    conversationIds
+      .slice(1)
+      .reduce((total, conversationId) => total + desktopLiveTrajectoryEvents(conversationId).length, 0),
+    100_000,
+  );
+
+  for (const conversationId of conversationIds) clearDesktopLiveTrajectory(conversationId);
+});
+
 test("the recorder appends locally and publishes each event once", () => {
   const conversationId = "desktop-live-recorder-c1";
   const published = [];

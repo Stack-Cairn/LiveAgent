@@ -6,7 +6,7 @@
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
 import {
@@ -52,6 +52,7 @@ export function TrajectoryTable(props: {
   itemsRef.current = items;
   const virtualizedRef = useRef(virtualized);
   virtualizedRef.current = virtualized;
+  const getDisplayItemKey = useCallback((index: number) => items[index]?.key ?? index, [items]);
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
@@ -61,6 +62,7 @@ export function TrajectoryTable(props: {
         ? TRAJECTORY_DISPLAY_HEIGHTS.record
         : trajectoryDisplayItemHeight(item);
     },
+    getItemKey: getDisplayItemKey,
     overscan: OVERSCAN_ROWS,
     enabled: virtualized,
   });
@@ -136,7 +138,7 @@ export function TrajectoryTable(props: {
             if (item === undefined) return null;
             return (
               <div
-                key={item.key}
+                key={virtualRow.key}
                 className="absolute inset-x-0 top-0"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >

@@ -6,7 +6,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const rootLoader = createTsModuleLoader();
 const resolve = (specifier) => rootLoader.resolveLocal(specifier);
 
-function assistant(text = "answer") {
+function assistant(text = "answer", stopReason = "stop", errorMessage) {
   return {
     role: "assistant",
     content: [{ type: "text", text }],
@@ -14,7 +14,8 @@ function assistant(text = "answer") {
     provider: "claude_code",
     model: "claude-test",
     usage: { input: 10, output: 4, totalTokens: 14 },
-    stopReason: "stop",
+    stopReason,
+    ...(errorMessage === undefined ? {} : { errorMessage }),
     timestamp: 20,
   };
 }
@@ -194,4 +195,34 @@ test("text mode records the exact request boundary, TTFT, terminal model and tur
     { status: "complete" },
   ]);
   assert.equal(calls.at(-1)[0], "flush");
+});
+
+test("text mode preserves error and aborted assistant outcomes at both terminal levels", async () => {
+  for (const [stopReason, expectedStatus] of [
+    ["error", "error"],
+    ["aborted", "aborted"],
+  ]) {
+    const final = assistant("request failed", stopReason, "provider exploded");
+    const { runTextConversationTurn } = loadTurn(async (params) => {
+      params.onRequestStart?.({ context: params.context });
+      return final;
+    });
+    const { recorder, calls } = recorderHarness();
+
+    await runTextConversationTurn(baseParams(recorder));
+
+    assert.deepEqual(calls.find((call) => call[0] === "stepEnd")?.[2], {
+      status: expectedStatus,
+      error: "provider exploded",
+      usage: { totalTokens: 14, input: 10, output: 4 },
+      provider: "claude_code",
+      model: "claude-test",
+      api: "anthropic-messages",
+      stopReason,
+    });
+    assert.deepEqual(calls.find((call) => call[0] === "endTurn"), [
+      "endTurn",
+      { status: expectedStatus, error: "provider exploded" },
+    ]);
+  }
 });
