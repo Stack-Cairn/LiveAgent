@@ -136,7 +136,7 @@ test("branch selector reuses the model trigger visual language", () => {
 test("composer dropdown portals stay above the composer surface", () => {
   assert.match(popoverSource, /className="layer-popover isolate"/);
   assert.match(selectSource, /className="layer-popover"/);
-  assert.match(baseStylesSource, /--layer-popover: 9999;/);
+  assert.match(baseStylesSource, /--layer-popover: 10000;/);
   assert.match(baseStylesSource, /--layer-modal: 10000;/);
 });
 
