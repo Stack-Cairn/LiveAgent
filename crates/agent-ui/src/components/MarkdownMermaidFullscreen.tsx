@@ -3,6 +3,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { mermaid } from "@streamdown/mermaid";
 import {
   type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useId,
@@ -135,17 +136,18 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
     });
   }, []);
 
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const handleWheel = (event: WheelEvent) => {
+  const handleWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
       if (event.deltaY === 0) return;
+      // Handle the event during capture so SVG/portal handlers cannot swallow it
+      // before it reaches the fullscreen viewport. The viewport itself is not
+      // scrollable, so the wheel gesture should always control Mermaid zoom.
       event.preventDefault();
+      event.stopPropagation();
       changeZoom(event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP);
-    };
-    viewport.addEventListener("wheel", handleWheel, { passive: false });
-    return () => viewport.removeEventListener("wheel", handleWheel);
-  }, [changeZoom]);
+    },
+    [changeZoom],
+  );
 
   const resetView = useCallback(() => {
     const originalViewBox = originalViewBoxRef.current;
@@ -179,6 +181,7 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
             "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
             dragging ? "cursor-grabbing" : "cursor-grab",
           )}
+          onWheelCapture={handleWheel}
           onPointerDown={(event) => {
             if (
               event.button !== 0 ||
