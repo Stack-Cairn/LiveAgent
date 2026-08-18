@@ -58,6 +58,14 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_share_get,
             commands::chat_history::chat_history_share_set,
             commands::chat_history::chat_history_delete,
+            // Trajectory (events ride the owning history segment)
+            commands::chat_history::trajectory_append_events,
+            commands::chat_history::trajectory_get_events,
+            commands::chat_history::trajectory_get_window,
+            commands::chat_history::trajectory_count_user_turns,
+            commands::chat_history::trajectory_get_subagent_runs,
+            commands::chat_history::trajectory_put_sections,
+            commands::chat_history::trajectory_get_sections,
             // Subagent store
             commands::subagent_store::subagent_identity_upsert,
             commands::subagent_store::subagent_identity_list,

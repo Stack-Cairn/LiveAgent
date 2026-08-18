@@ -127,6 +127,7 @@ export type RenderAssistantGroup = {
   kind: "assistant";
   key: string;
   segmentIndex: number;
+  messageIndex?: number;
   rounds: UiRound[];
   timestamp: number;
   isFromCompactedSegment: boolean;
@@ -705,6 +706,7 @@ function buildTimelineItemsForSlice(
       kind: "assistant",
       key: `segment-${slice.segmentId}-${uiMessage.key}`,
       segmentIndex: slice.segmentIndex,
+      messageIndex: uiMessage.messageIndex ?? slice.startMessageIndex,
       rounds: uiMessage.rounds ?? [],
       timestamp: uiMessage.timestamp ?? getMessageTimestamp(slice.messages.at(-1)),
       isFromCompactedSegment: isCompacted,

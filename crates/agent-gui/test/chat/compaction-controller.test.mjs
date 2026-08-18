@@ -250,6 +250,11 @@ test("single-flight: a concurrent trigger is rejected while a compaction is in f
 
 test("user stop chains into the summarizer; handleTurnAbort rolls back and persists", async () => {
   const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
   const state = bigState();
   const { cancellation, recorder } = bindController(controller, {
     complete: (params) =>
@@ -278,9 +283,100 @@ test("user stop chains into the summarizer; handleTurnAbort rolls back and persi
   assert.deepEqual(statuses, ["running", "idle"]);
   // 回滚后 bridge 状态已清，isCompaction 不悬挂。
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
+  assert.equal(observed.length, 2);
+  assert.equal(observed[0][0], "start");
+  assert.equal(observed[0][1].trigger, "mid-stream");
+  assert.equal(observed[1][0], "end");
+  assert.equal(observed[1][1].trigger, "mid-stream");
+  assert.equal(observed[1][1].status, "aborted");
+  assert.equal(observed[1][1].tokensBefore, observed[0][1].tokensBefore);
+  assert.equal(observed[1][1].tokensAfter, undefined);
 
-  // 快照消费后再次调用不再回滚。
+  // 快照与观察区间都已消费，再次调用不会重复发终态。
   assert.equal(await controller.handleTurnAbort(), false);
+  assert.equal(observed.length, 2);
+});
+
+test("unbindTurn closes an active compaction observer exactly once", async () => {
+  const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  bindController(controller, {
+    complete: async () => {
+      await gate;
+      return summaryResponse();
+    },
+  });
+  const pending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.unbindTurn();
+  assert.equal(observed.at(-1)[1].status, "aborted");
+  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
+  release();
+  await assert.rejects(pending, /abort/i);
+  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
+});
+
+test("a late result cannot settle a newer compaction with the same trigger", async () => {
+  const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
+
+  let releaseOld;
+  const oldGate = new Promise((resolve) => {
+    releaseOld = resolve;
+  });
+  const oldBinding = bindController(controller, {
+    complete: async () => {
+      await oldGate;
+      return summaryResponse();
+    },
+  });
+  const oldPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.unbindTurn();
+
+  let releaseNew;
+  const newGate = new Promise((resolve) => {
+    releaseNew = resolve;
+  });
+  const newBinding = bindController(controller, {
+    complete: async () => {
+      await newGate;
+      return summaryResponse("new summary");
+    },
+  });
+  const newPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  releaseOld();
+  await assert.rejects(oldPending, /abort/i);
+  assert.equal(oldBinding.recorder.byKind("persist").length, 0);
+  assert.equal(observed.at(-1)[0], "start");
+
+  releaseNew();
+  const result = await newPending;
+  assert.equal(result.outcome, "compacted");
+  assert.equal(newBinding.recorder.byKind("persist").length, 1);
+  assert.deepEqual(
+    observed.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "post-tool"],
+      ["end", "aborted"],
+      ["start", "post-tool"],
+      ["end", "complete"],
+    ],
+  );
 });
 
 test("summarizer failure degrades to prune and still returns a usable context", async () => {

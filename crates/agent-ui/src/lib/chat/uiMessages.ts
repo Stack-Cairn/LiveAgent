@@ -85,6 +85,7 @@ export type UiMessage = {
   attachments?: PendingUploadedFile[];
   rounds?: UiRound[];
   messageIndex?: number;
+  messageId?: string;
 };
 
 function cloneToolArgumentValue(value: unknown): unknown {
@@ -1489,6 +1490,7 @@ export function buildUiMessages(messages: Message[]): UiMessage[] {
       out.push({
         key: `assistant-${groupStartIndex}-${i}-${lastAssistantTimestamp}`,
         role: "assistant",
+        messageIndex: groupStartIndex,
         text: lastText,
         rounds,
       });

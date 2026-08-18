@@ -201,6 +201,37 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   }
 
   switch (command) {
+    // 轨迹是只读诊断视图；两端共用同一份宿主实现，差异只在这里的路由。
+    case "trajectory_get_events":
+      return (await getGatewayWebSocketClient(loadToken().trim()).trajectoryFetch<T>({
+        conversation_id: typeof args?.conversationId === "string" ? args.conversationId : "",
+      })) as T;
+    case "trajectory_get_window":
+      return (await getGatewayWebSocketClient(loadToken().trim()).trajectoryFetch<T>({
+        conversation_id: typeof args?.conversationId === "string" ? args.conversationId : "",
+        max_segments: typeof args?.maxSegments === "number" ? args.maxSegments : undefined,
+        before_segment_index:
+          typeof args?.beforeSegmentIndex === "number" ? args.beforeSegmentIndex : undefined,
+      })) as T;
+    case "trajectory_get_subagent_runs":
+      return (await getGatewayWebSocketClient(loadToken().trim()).trajectoryFetch<T>({
+        conversation_id: typeof args?.conversationId === "string" ? args.conversationId : "",
+        subagent_run_ids: Array.isArray(args?.runIds)
+          ? (args.runIds as unknown[]).filter((id): id is string => typeof id === "string")
+          : [],
+        include_subagent_runs: true,
+      })) as T;
+    case "trajectory_get_sections": {
+      const response = (await getGatewayWebSocketClient(loadToken().trim()).trajectoryFetch<{
+        sections?: unknown;
+      }>({
+        conversation_id: typeof args?.conversationId === "string" ? args.conversationId : "",
+        section_ids: Array.isArray(args?.sectionIds)
+          ? (args.sectionIds as unknown[]).filter((id): id is string => typeof id === "string")
+          : [],
+      })) as { sections?: unknown };
+      return (Array.isArray(response?.sections) ? response.sections : []) as T;
+    }
     case "system_pick_folder":
       return (await pickWorkdirInBrowser()) as T;
     case "system_pick_file":

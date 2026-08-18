@@ -32,6 +32,7 @@ import {
   type ConversationViewState,
   clearTaskListState,
   findHistoryMessageRefByMessageId,
+  getActiveSegment,
   type HistoryMessageRef,
   setTaskListState,
 } from "../../../lib/chat/conversation/conversationState";
@@ -77,6 +78,18 @@ import {
 import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { TaskStateStore } from "../../../lib/tools/taskTools";
+import {
+  appendDesktopLiveTrajectory,
+  clearLocalTrajectory,
+  invalidateDesktopTrajectory,
+} from "../../../lib/trajectory/liveTrajectory";
+import {
+  acquireTrajectoryRecorder,
+  releaseTrajectoryRecorder,
+  resolveTrajectoryTurnNumber,
+  trajectorySlotCapture,
+  updateTrajectoryRecorderSegment,
+} from "../../../lib/trajectory/recorderRegistry";
 import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 import { asErrorMessage } from "../chatPageUtils";
 import {
@@ -706,6 +719,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let nextConversationState = appendMessagesToConversation(baseConversationState, [
       pendingUserMessage,
     ]);
+    // Safe fallback only: the exact absolute number is resolved from every persisted segment
+    // before history persistence starts. totalMessageCount may leave gaps but cannot collide.
+    let trajectoryTurn = Math.max(1, baseConversationState.meta.totalMessageCount + 1);
+    let trajectoryMessageIndex = Math.max(0, baseConversationState.meta.totalMessageCount);
     let conversationRunStarted = false;
     let conversationUiReleased = false;
     let gatewayRunStarted = false;
@@ -952,6 +969,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     if (overrides?.editResendBaseMessageRef) {
       try {
+        // Flush and forget the old content-addressing state before the database truncates
+        // its suffix. Otherwise an unchanged header can reference a section pruned by rebase.
+        clearLocalTrajectory(conversationId);
+        await releaseTrajectoryRecorder(conversationId);
         // 重发同样是新用户消息开启新 Run:替换回来的历史 meta 可能带着上一
         // Run 持久化的 taskList,必须与常规发送一样在 Run 边界清除。
         nextConversationState = clearTaskListState(
@@ -962,6 +983,15 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           ),
         );
         initialUserTurnPersisted = true;
+        // The authoritative SQLite suffix has now been replaced; invalidate only after that
+        // barrier so an open trajectory view cannot race and reload the stale pre-rebase window.
+        invalidateDesktopTrajectory(conversationId);
+        trajectoryMessageIndex = Math.max(0, nextConversationState.meta.totalMessageCount - 1);
+        trajectoryTurn = await resolveTrajectoryTurnNumber({
+          conversationId,
+          currentUserPersisted: true,
+          fallbackTurn: nextConversationState.meta.totalMessageCount,
+        });
         const keepParentToolCallIds =
           collectRetainedSubagentParentToolCallIds(nextConversationState);
         subagentStoresRef.current.invalidate(conversationId);
@@ -1058,6 +1088,17 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         clearConversationStopHandler(conversationId, handleConversationStop);
         restoreComposerOnStartFailure();
         return false;
+      }
+    }
+
+    if (!initialUserTurnPersisted) {
+      trajectoryTurn = await resolveTrajectoryTurnNumber({
+        conversationId,
+        currentUserPersisted: false,
+        fallbackTurn: nextConversationState.meta.totalMessageCount,
+      });
+      if (await finishRequestedStopBeforeRuntime()) {
+        return true;
       }
     }
 
@@ -1173,6 +1214,44 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         }
       : undefined;
 
+    // recorder 跨轮存活：header 分段去重靠的就是「上一份 refs」，每轮新建会让
+    // 去重立刻失效。这里只更新本轮的活动 segment。
+    const trajectoryRecording = acquireTrajectoryRecorder(
+      conversationId,
+      getActiveSegment(nextConversationState)?.segmentIndex ??
+        nextConversationState.meta.activeSegmentIndex,
+      // 实时骨架下发给 WebUI；转录区忽略这个事件类型，只有轨迹页消费。
+      (events) => {
+        appendDesktopLiveTrajectory(conversationId, events);
+        for (const event of events) {
+          gatewayBridgeEvents.queueEvent({
+            type: "trajectory",
+            event,
+            conversation_id: conversationId,
+          });
+        }
+      },
+    );
+    // 压缩有四条触发路径，逐个调用点埋点必漏；订阅控制器生命周期一次覆盖全部。
+    // manual 发生在两轮之间，不属于任何 turn。
+    compaction.setObserver({
+      onStart: ({ trigger }) => {
+        trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
+      },
+      onEnd: ({ trigger, status, tokensBefore, tokensAfter, newSegmentIndex, error }) => {
+        trajectoryRecording.recorder.compactionEnd({
+          status,
+          standalone: trigger === "manual",
+          ...(tokensBefore === undefined ? {} : { tokensBefore }),
+          ...(tokensAfter === undefined ? {} : { tokensAfter }),
+          ...(error === undefined ? {} : { error }),
+        });
+        if (status === "complete" && newSegmentIndex !== undefined) {
+          updateTrajectoryRecorderSegment(conversationId, newSegmentIndex);
+        }
+      },
+    });
+
     function buildPreparedContext(
       state: ConversationViewState,
       tools?: Context["tools"],
@@ -1186,6 +1265,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         memoryPrompt,
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
+        captureSlots: trajectorySlotCapture(conversationId),
       });
     }
 
@@ -1204,6 +1284,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         memoryPrompt,
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
+        captureSlots: trajectorySlotCapture(conversationId),
       });
     }
 
@@ -1582,6 +1663,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             commitVisibleAbortedConversation,
             persistConversationWithHistorySync: persistTerminalConversation,
             freezeGatewayFinalProjection,
+            trajectory: trajectoryRecording.recorder,
+            trajectoryTurn,
+            trajectoryMessageIndex,
+            trajectoryMessageId: pendingUserMessage.id,
+            readTrajectorySlots: trajectoryRecording.readSlots,
           },
         });
       } else {
@@ -1622,6 +1708,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             commitVisibleAbortedConversation,
             persistConversationWithHistorySync: persistTerminalConversation,
             freezeGatewayFinalProjection,
+            trajectory: trajectoryRecording.recorder,
+            trajectoryTurn,
+            trajectoryMessageIndex,
+            trajectoryMessageId: pendingUserMessage.id,
+            readTrajectorySlots: trajectoryRecording.readSlots,
           },
         });
       }
@@ -1667,6 +1758,17 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         gatewayRuntimeFinalState = "cancelled";
         requestRemoteGatewayCancellation();
       }
+      const trajectoryStatus =
+        gatewayRuntimeFinalState === "completed"
+          ? "complete"
+          : gatewayRuntimeFinalState === "cancelled"
+            ? "aborted"
+            : "error";
+      trajectoryRecording.recorder.endTurn({
+        status: trajectoryStatus,
+        ...(gatewayRuntimeErrorMessage ? { error: gatewayRuntimeErrorMessage } : {}),
+      });
+      await trajectoryRecording.recorder.flush();
       await finalizeConversationRun(gatewayRuntimeFinalState);
       clearConversationStopHandler(conversationId, handleConversationStop);
       pruneIdleConversationCaches([conversationId]);

@@ -1,0 +1,206 @@
+[
+ {
+  "name": "diff-check",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "git diff --check（ci.yml whitespace job）"
+ },
+ {
+  "name": "trajectory-gui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "cargo test trajectory --lib 28/28"
+ },
+ {
+  "name": "trajectory-web",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm --filter @liveagent/gateway-webui test 587/587"
+ },
+ {
+  "name": "tsc-gui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "GUI 构建（vite build）通过"
+ },
+ {
+  "name": "tsc-web",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "WebUI 构建通过（含重新生成的 gateway_pb.ts）"
+ },
+ {
+  "name": "test-gui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm --filter liveagent test:frontend 1854/1854"
+ },
+ {
+  "name": "test-web",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "WebUI 测试 587/587"
+ },
+ {
+  "name": "build-gui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm tauri build（NSIS 安装包产出）"
+ },
+ {
+  "name": "build-web",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "WebUI 构建通过"
+ },
+ {
+  "name": "lint-ui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm lint:ui 退出码 0（仅告警，均为未改动文件）"
+ },
+ {
+  "name": "lint-gui",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm --filter liveagent lint 退出码 0（修复 useLiveTranscriptController.ts import 排序后）"
+ },
+ {
+  "name": "lint-web",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm --filter @liveagent/gateway-webui lint 退出码 0（仅告警）"
+ },
+ {
+  "name": "ui-boundaries",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "pnpm check:ui-boundaries 8/8"
+ },
+ {
+  "name": "rustfmt",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "cargo fmt --check"
+ },
+ {
+  "name": "cargo-check",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "cargo check --tests（5 条预存告警，均在未改动文件）"
+ },
+ {
+  "name": "cargo-trajectory-tests",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "cargo test trajectory --lib 28/28"
+ },
+ {
+  "name": "cargo-chat-history-tests",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "cargo test chat_history --lib 83/83（修正 replace 断言后）"
+ },
+ {
+  "name": "cargo-ci-suites",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "ssh_local_forward 7/7、shell_runner 10/10、integration_commands::mcp 15/15"
+ },
+ {
+  "name": "rust-harness",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "由 cargo-trajectory-tests 覆盖（trajectory 过滤器即 Rust 侧轨迹测试集）"
+ },
+ {
+  "name": "protocol-static",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "由 proto-check 与 generated-drift 覆盖（buf lint + breaking + 生成物一致）"
+ },
+ {
+  "name": "go-build",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "go build ./... 与 go vet ./..."
+ },
+ {
+  "name": "go-test",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "全部包通过；仅 agenttoken TestDBFilePermissionsAndNoPlaintext 在 Windows 失败（POSIX 0600 权限断言，CI 在 Linux 通过；文件未改动）"
+ },
+ {
+  "name": "proto-check",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "buf 1.71.0（与 CI 同版本）lint + breaking --against origin/main"
+ },
+ {
+  "name": "generated-drift",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "buf generate（protoc-gen-go v1.36.11 与 CI 同版本）后生成物与工作树逐字节一致"
+ },
+ {
+  "name": "web-smoke",
+  "required": true,
+  "status": "pass",
+  "exitCode": 0,
+  "seconds": 0,
+  "basis": "由 build-web + test-web 覆盖"
+ },
+ {
+  "verdict": "PASS",
+  "generated": "2026-08-18T08:32:16+08:00"
+ }
+]

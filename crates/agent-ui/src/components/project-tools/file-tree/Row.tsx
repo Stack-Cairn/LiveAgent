@@ -68,7 +68,8 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
       title={title}
       onClick={activateRow}
       onKeyDown={(event) => {
-        if (event.currentTarget !== event.target || (event.key !== "Enter" && event.key !== " ")) return;
+        if (event.currentTarget !== event.target || (event.key !== "Enter" && event.key !== " "))
+          return;
         event.preventDefault();
         activateRow();
       }}

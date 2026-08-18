@@ -10,6 +10,8 @@ import {
   type RetryAttemptRecord,
 } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { LiveRound } from "../../../lib/chat/messages/uiMessages";
+import { clearDesktopLiveTrajectory } from "../../../lib/trajectory/liveTrajectory";
+import { discardTrajectoryRecorder } from "../../../lib/trajectory/recorderRegistry";
 
 const LIVE_TRANSCRIPT_RAF_FALLBACK_MS = 96;
 const LIVE_TRANSCRIPT_BACKGROUND_BATCH_MS = 160;
@@ -223,6 +225,8 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       cancelPendingLiveUpdates(artifacts ?? null);
       liveTranscriptArtifactsRef.current.delete(key);
       compactionControllersRef.current.dispose(key);
+      discardTrajectoryRecorder(key);
+      clearDesktopLiveTrajectory(key);
     },
     [cancelPendingLiveUpdates],
   );

@@ -166,12 +166,25 @@ export async function streamAssistantMessage(params: {
   onHostedSearch?: (block: HostedSearchBlock) => void;
   onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
   onRetryRecovered?: () => void;
+  /** Exact text-only provider boundary after its mandatory system suffix is appended. */
+  onRequestStart?: (info: { context: Context; systemSuffix: string }) => void;
   failover?: TextStreamFailoverParams;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
   if (!params.runtime.baseUrl.trim()) throw new Error("Base URL cannot be empty");
   if (!params.runtime.apiKey.trim()) throw new Error("API Key cannot be empty");
+
+  const systemSuffix = buildTextOnlySystemSuffix(params.allowJsonOutput);
+  const callContext = buildTextOnlyCallContext(params.context, {
+    allowJsonOutput: params.allowJsonOutput,
+  });
+  try {
+    params.onRequestStart?.({ context: callContext, systemSuffix });
+  } catch (error) {
+    // Diagnostic observers must never stop the provider request.
+    console.warn("text-only request observer failed; continuing without diagnostics", error);
+  }
 
   const proxyRequest = await prepareProviderRequest(params.providerId, params.runtime, {
     sessionId: params.sessionId,
@@ -186,9 +199,6 @@ export async function streamAssistantMessage(params: {
     params.runtime.baseUrl.trim(),
   );
 
-  const callContext = buildTextOnlyCallContext(params.context, {
-    allowJsonOutput: params.allowJsonOutput,
-  });
   const shouldProbeHostedSearch =
     Boolean(params.nativeWebSearch) &&
     providerSupportsNativeWebSearch(params.providerId, m.api, {

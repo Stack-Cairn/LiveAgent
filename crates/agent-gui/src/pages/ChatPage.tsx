@@ -1,6 +1,10 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
+import {
+  type ConversationViewId,
+  ConversationViewTabs,
+} from "@liveagent/ui/components/chat/ConversationViewTabs";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
@@ -10,6 +14,7 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
+import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
@@ -38,10 +43,23 @@ import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
+import {
+  toTrajectoryLiveAssistantMessage,
+  toTrajectoryMessages,
+} from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import { listen } from "@tauri-apps/api/event";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
+import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
@@ -81,6 +99,11 @@ import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
+import {
+  desktopLiveTrajectoryEvents,
+  desktopTrajectoryReloadVersion,
+  subscribeDesktopLiveTrajectory,
+} from "../lib/trajectory/liveTrajectory";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
@@ -327,6 +350,14 @@ export function ChatPage(props: ChatPageProps) {
     [conversationState],
   );
   const loadComposerHistoryPrompts = useComposerHistoryPrompts(transcriptItems);
+  const liveTrajectory = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
+    desktopLiveTrajectoryEvents(currentConversationId),
+  );
+  const trajectoryAuthoritativeRevision = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
+    desktopTrajectoryReloadVersion(currentConversationId),
+  );
+  const [activeConversationView, setActiveConversationView] =
+    useState<ConversationViewId>("conversation");
   const currentRequestContext = useMemo(
     () => buildRequestContext(conversationState),
     [conversationState],
@@ -388,6 +419,31 @@ export function ChatPage(props: ChatPageProps) {
   } = useLiveTranscriptController({
     currentConversationId,
   });
+  // Persisted transcript rows provide stable historical content; the synthetic live assistant
+  // supplies current streaming text/thinking/tool payloads until the final history write lands.
+  const trajectoryPersistedMessages = useMemo(
+    () => toTrajectoryMessages(transcriptItems),
+    [transcriptItems],
+  );
+  const trajectoryLiveTranscriptSnapshot = useSyncExternalStore(
+    (listener) => liveTranscriptStore.subscribe(listener),
+    () => liveTranscriptStore.getSnapshot(),
+  );
+  const trajectoryLiveAssistantMessage = useMemo(
+    () =>
+      toTrajectoryLiveAssistantMessage(
+        trajectoryLiveTranscriptSnapshot,
+        `trajectory-live-${currentConversationId}`,
+      ),
+    [currentConversationId, trajectoryLiveTranscriptSnapshot],
+  );
+  const trajectoryMessages = useMemo(
+    () =>
+      trajectoryLiveAssistantMessage === undefined
+        ? trajectoryPersistedMessages
+        : [...trajectoryPersistedMessages, trajectoryLiveAssistantMessage],
+    [trajectoryLiveAssistantMessage, trajectoryPersistedMessages],
+  );
   const {
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
@@ -636,6 +692,10 @@ export function ChatPage(props: ChatPageProps) {
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
   });
+  const trajectoryHost = useMemo(
+    () => createTauriTrajectoryHost(handleOpenChatFileLink),
+    [handleOpenChatFileLink],
+  );
 
   const {
     isUploadingFiles,
@@ -1788,43 +1848,63 @@ export function ChatPage(props: ChatPageProps) {
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
             content: (
               <>
-                <ChangedFilesActionsProvider value={changedFilesActions}>
-                  <ChatTranscript
+                <ConversationViewTabs
+                  active={activeConversationView}
+                  onChange={setActiveConversationView}
+                />
+                {activeConversationView === "trajectory" ? (
+                  <TrajectoryView
                     conversationId={currentConversationId}
-                    workspaceRoot={currentConversationWorkspaceRoot}
-                    gitClient={tauriGitClient}
-                    followRef={scrollFollowRef}
-                    hasModels={hasModels}
-                    historyItems={transcriptItems}
-                    hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                    onLoadEarlierHistory={handleLoadEarlierHistory}
-                    isHistorySwitching={conversationOpenState.showOverlay}
-                    isSending={isSending}
-                    isAgentMode={isAgentMode}
-                    showUsage={isAgentDevExecutionMode}
-                    usageContextWindow={currentModelContextWindow}
-                    liveTranscriptStore={liveTranscriptStore}
-                    isCompactionRunning={isCompactionRunning}
-                    bottomReservePx={composerOverlayHeight}
-                    contentWidth={settings.customSettings.chatTranscript.width}
-                    onContentWidthChange={handleChatTranscriptWidthChange}
-                    onOpenFileLink={handleOpenChatFileLink}
-                    onResendFromEdit={handleResendFromEdit}
-                    onBranchConversation={
-                      // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
-                      isConversationHydrating || isConversationHydrationFailed
-                        ? undefined
-                        : handleBranchConversation
-                    }
-                    branchPendingMessageId={branchPendingMessageId}
-                    onOpenSettings={onOpenSettings}
-                    onSuggestionSelect={handleEmptyStateSuggestion}
-                    suggestionsDisabled={isSuggestionTyping}
+                    host={trajectoryHost}
+                    messages={trajectoryMessages}
+                    workdir={displayedConversationWorkdir}
+                    hasMoreMessages={conversationState.transcript.hasMoreBefore}
+                    loadEarlierMessages={handleLoadEarlierHistory}
+                    liveEvents={liveTrajectory}
+                    liveOwnership="authoritative"
+                    authoritativeRevision={trajectoryAuthoritativeRevision}
                   />
-                </ChangedFilesActionsProvider>
+                ) : (
+                  <ChangedFilesActionsProvider value={changedFilesActions}>
+                    <ChatTranscript
+                      conversationId={currentConversationId}
+                      workspaceRoot={currentConversationWorkspaceRoot}
+                      gitClient={tauriGitClient}
+                      followRef={scrollFollowRef}
+                      hasModels={hasModels}
+                      historyItems={transcriptItems}
+                      hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                      onLoadEarlierHistory={handleLoadEarlierHistory}
+                      isHistorySwitching={conversationOpenState.showOverlay}
+                      isSending={isSending}
+                      isAgentMode={isAgentMode}
+                      showUsage={isAgentDevExecutionMode}
+                      usageContextWindow={currentModelContextWindow}
+                      liveTranscriptStore={liveTranscriptStore}
+                      isCompactionRunning={isCompactionRunning}
+                      bottomReservePx={composerOverlayHeight}
+                      contentWidth={settings.customSettings.chatTranscript.width}
+                      onContentWidthChange={handleChatTranscriptWidthChange}
+                      onOpenFileLink={handleOpenChatFileLink}
+                      onResendFromEdit={handleResendFromEdit}
+                      onBranchConversation={
+                        // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
+                        isConversationHydrating || isConversationHydrationFailed
+                          ? undefined
+                          : handleBranchConversation
+                      }
+                      branchPendingMessageId={branchPendingMessageId}
+                      onOpenSettings={onOpenSettings}
+                      onSuggestionSelect={handleEmptyStateSuggestion}
+                      suggestionsDisabled={isSuggestionTyping}
+                    />
+                  </ChangedFilesActionsProvider>
+                )}
 
                 <ChatComposerBar
                   surface="desktop"
+                  // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
+                  hidden={activeConversationView === "trajectory"}
                   composerRef={composerRef}
                   isSending={isSending}
                   isUploadingFiles={isUploadingFiles}

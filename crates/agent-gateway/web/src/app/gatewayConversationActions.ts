@@ -13,6 +13,7 @@ import type { TranscriptStoreRegistry } from "@/lib/chat/stream/useConversationC
 import type { GatewayWebSocketClient } from "@/lib/gatewaySocket";
 import type { HistoryDetail } from "@/lib/gatewayTypes";
 import { normalizeGatewayConversationSummary } from "@/lib/sidebar/webSidebarBackend";
+import { clearLiveTrajectory } from "@/lib/trajectory/liveTrajectory";
 
 import { asErrorMessage } from "./chatEventUtils";
 import { PROTECTED_DRAFT_CONVERSATION } from "./constants";
@@ -151,6 +152,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
       if (options.isLocalDraftConversationId(id)) continue;
       removedIds.add(id);
       options.transcriptStoreRegistry.remove(id);
+      clearLiveTrajectory(id);
       options.historyWindowStatesRef.current.delete(id);
       options.conversationWorkdirsRef.current.delete(id);
       options.composerDraftCacheRef.current.delete(id);
@@ -168,6 +170,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
 
   const handleSidebarLocalDraftDeleted = (id: string) => {
     options.transcriptStoreRegistry.remove(id);
+    clearLiveTrajectory(id);
     options.historyWindowStatesRef.current.delete(id);
     options.conversationWorkdirsRef.current.delete(id);
     options.composerDraftCacheRef.current.delete(id);

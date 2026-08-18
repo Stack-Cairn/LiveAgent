@@ -1,4 +1,5 @@
 import type { ChatQueueItemDetail, ChatQueueSnapshot } from "@liveagent/ui/contracts/chatQueue";
+import type { TrajectoryEvent } from "@liveagent/ui/lib/trajectory/types";
 import type {
   ChatRuntimeControls,
   CodexRequestFormat,
@@ -169,6 +170,13 @@ export type ChatEvent = (
       conversation_id?: string;
     }
   | { type: "error"; message: string; round?: number; conversation_id?: string }
+  | {
+      // 轨迹骨架：`event` 是一条紧凑 TrajectoryEvent。转录区忽略它，只有轨迹页
+      // 消费；分段全文不在这里，由 trajectory.fetch 按需拉。
+      type: "trajectory";
+      event: TrajectoryEvent;
+      conversation_id?: string;
+    }
   | ChatUserMessageEvent
   | ChatRebasedEvent
 ) & { seq?: number; workdir?: string };

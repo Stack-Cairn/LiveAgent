@@ -419,6 +419,8 @@ export async function runAssistantWithTools(params: {
     signal?: AbortSignal,
     context?: ToolExecutionEventContext,
   ) => Promise<Message>;
+  /** Exact sanitized context immediately before a provider request starts. */
+  onRequestStart?: (info: { round: number; context: Context; toolsSuffix: string }) => void;
   onTurnStart?: (round: number) => void;
   onTextDelta: (delta: string, round: number) => void;
   onThinkingDelta?: (delta: string, round: number) => void;
@@ -1139,6 +1141,12 @@ export async function runAssistantWithTools(params: {
         messages: streamContext.messages.slice(),
         tools: filterRequestTools(streamTools),
       });
+      try {
+        params.onRequestStart?.({ round, context: effectiveContext, toolsSuffix });
+      } catch (error) {
+        // Request observers are diagnostics only and must never break generation.
+        console.warn("[agent-runner] request observer threw; request is unaffected", error);
+      }
 
       // pi-agent-core passes the agent-state model; honor it for the primary
       // target so external model swaps keep working through the failover path.

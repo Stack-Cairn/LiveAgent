@@ -426,6 +426,28 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     return this.request<T>("memory.manage", payload);
   }
 
+  async trajectoryFetch<T = unknown>(payload: {
+    conversation_id: string;
+    section_ids?: readonly string[];
+    subagent_run_ids?: readonly string[];
+    max_segments?: number;
+    before_segment_index?: number;
+    include_subagent_runs?: boolean;
+  }): Promise<T> {
+    return this.request<T>("trajectory.fetch", {
+      conversation_id: payload.conversation_id,
+      section_ids: payload.section_ids === undefined ? [] : [...payload.section_ids],
+      subagent_run_ids: payload.subagent_run_ids === undefined ? [] : [...payload.subagent_run_ids],
+      ...(payload.max_segments === undefined ? {} : { max_segments: payload.max_segments }),
+      ...(payload.before_segment_index === undefined
+        ? {}
+        : { before_segment_index: payload.before_segment_index }),
+      ...(payload.include_subagent_runs === undefined
+        ? {}
+        : { include_subagent_runs: payload.include_subagent_runs }),
+    });
+  }
+
   async gitRequest<T = unknown>(
     action: string,
     workdir: string,

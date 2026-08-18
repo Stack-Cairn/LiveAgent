@@ -11,6 +11,42 @@ export type ConversationContextBuildOptions = {
   includeUploadedFilesMetadata?: boolean;
 };
 
+/**
+ * 组成 system prompt 的各段原文。
+ *
+ * 轨迹按这些边界分段哈希去重：整文哈希在这里必然失效，因为 memory 段每轮重渲染，
+ * 会让每一轮都产生一份新的全文快照。
+ */
+export type PreparedSystemPromptSlots = {
+  base?: string;
+  agent?: string;
+  skills?: string;
+  memory?: string;
+  /** Dynamic run-only additions: roster, message bus, and authoritative task state. */
+  runtime?: string;
+};
+
+/**
+ * 收集最近一次上下文构建的分段原文。
+ *
+ * 用 holder 而不是返回值，是为了不改动 `buildPreparedContext` 的返回类型——它被
+ * 多处以 `Context` 直接消费。
+ *
+ * @returns capture 供构建器回调，read 供埋点读取最近一次结果。
+ */
+export function createPreparedSystemPromptSlotHolder(): {
+  capture: (slots: PreparedSystemPromptSlots) => void;
+  read: () => PreparedSystemPromptSlots;
+} {
+  let latest: PreparedSystemPromptSlots = {};
+  return {
+    capture: (slots) => {
+      latest = slots;
+    },
+    read: () => latest,
+  };
+}
+
 export function buildCompactionContext(
   state: ConversationViewState,
   tools?: Context["tools"],
@@ -33,12 +69,21 @@ export function buildPreparedContext(params: {
   memoryPrompt?: string;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
+  /** 轨迹埋点用的分段回调；不传时零开销。 */
+  captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
   // AGENTS / Skills prompts are fixed runtime instructions and should not be
   // folded into compaction input or token accounting.
   const withTools = buildCompactionContext(params.state, params.tools, {
     includeAbortedMessages: params.includeAbortedMessages,
     includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
+  });
+
+  params.captureSlots?.({
+    ...(typeof withTools.systemPrompt === "string" ? { base: withTools.systemPrompt } : {}),
+    ...(params.activeAgentPrompt ? { agent: params.activeAgentPrompt } : {}),
+    ...(params.skillsPrompt ? { skills: params.skillsPrompt } : {}),
+    ...(params.memoryPrompt ? { memory: params.memoryPrompt } : {}),
   });
 
   let systemPrompt = withTools.systemPrompt;
@@ -69,6 +114,7 @@ export function buildResumeContext(params: {
   memoryPrompt?: string;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
+  captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
   const baseContext = buildPreparedContext({
     ...params,
