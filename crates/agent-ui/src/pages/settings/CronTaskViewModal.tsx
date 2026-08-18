@@ -782,7 +782,7 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
         <DialogTitle className="sr-only">{task.name}</DialogTitle>
         {/* ── Left: task detail ── */}
         <DialogBody className="flex overflow-hidden p-0 max-[820px]:flex-col">
-          <div className="flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background max-[820px]:max-h-[42%] max-[820px]:w-full max-[820px]:border-b max-[820px]:border-r-0">
+          <div className="flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background max-[820px]:max-h-[55%] max-[820px]:w-full max-[820px]:border-b max-[820px]:border-r-0">
             <LeftPanel
               task={task}
               t={t}

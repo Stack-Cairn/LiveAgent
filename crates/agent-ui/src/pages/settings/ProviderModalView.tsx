@@ -247,7 +247,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               aria-current={activePanel === "request" ? "page" : undefined}
             >
               <Globe className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
-              <span className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
+              <span className="min-w-0 flex-1 max-[720px]:flex-none max-[720px]:basis-auto">
                 {t("settings.providerDialogRequest")}
               </span>
               {customHeaders.length > 0 ? (

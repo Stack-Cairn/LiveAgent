@@ -563,7 +563,7 @@ function ProviderList(props: {
                     key={provider.id}
                     {...getProviderReorderProps(provider.id)}
                     className={cn(
-                      "settings-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30",
+                      "settings-card-row settings-provider-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30",
                       draggingProviderId === provider.id && "bg-accent shadow-lg",
                     )}
                   >
@@ -571,7 +571,7 @@ function ProviderList(props: {
                     <div className="flex w-5 shrink-0 items-center justify-center text-lg text-foreground">
                       <ProviderBrandIcon type={type} />
                     </div>
-                    <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
+                    <div className="settings-provider-card-main min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-sm font-medium">{provider.name}</span>
                         {provider.useSystemProxy ? (
