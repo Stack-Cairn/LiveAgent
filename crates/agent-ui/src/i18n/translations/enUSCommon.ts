@@ -278,8 +278,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.safety.sandboxOffline": "Sandbox · offline",
   "chat.safety.sandboxOfflineDesc": "Sandbox plus no network access for commands",
   "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",
-  "chat.safety.sandboxOfflineUnavailable":
-    "Offline sandbox unavailable on this platform (no-admin Windows can't sever network)",
+  "chat.safety.sandboxOfflineUnavailable": "Offline sandbox unavailable on this platform",
   "chat.emptyRound": "(No reply)",
   "chat.inputHint": "Type a message, @ to reference files, prompts can be queued...",
   "chat.inputHintWithSkills":

@@ -237,8 +237,9 @@ export type ToolPolicy = "allow" | "ask" | "deny";
 // - auto:按工具审批策略直接执行(既有默认行为)。
 // - sandbox / sandboxOffline:Bash 与常驻进程在 OS 级沙箱内执行(macOS
 //   Seatbelt / Linux bubblewrap / Windows 受限令牌 WRITE_RESTRICTED),写入限
-//   工作区+临时目录;offline 变体额外断网。敏感目录读掩蔽与断网需 macOS/Linux —
-//   Windows 免管理员方案只围栏写,故 sandboxOffline 在 Windows 上不可用。
+//   工作区+临时目录;offline 变体额外断网。Windows 免管理员双后端:sandbox=受限
+//   令牌(只围栏写,读放行);sandboxOffline=AppContainer(WFP 内核级全断网含
+//   loopback,默认拒读 ⇒ 系统目录/工作区可读、用户主目录等敏感目录读掩蔽)。
 export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
 
 export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
