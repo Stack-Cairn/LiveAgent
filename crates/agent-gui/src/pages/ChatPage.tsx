@@ -2888,6 +2888,11 @@ export function ChatPage(props: ChatPageProps) {
       .replace("{workspace}", workspaceName);
   };
 
+  // 与 PaneSurfaceLayer 的 paneCount < 2(chromeless)判定保持同一口径:
+  // 只要画布上有 ≥2 个 Pane,Pane chrome 就会渲染,切换点随之下沉。
+  const workbenchHasMultiplePanes =
+    sessionWorkbench.enabled && Object.keys(workbench.layout.panes).length >= 2;
+
   const renderWorkbenchPaneChrome = (
     pane: PaneRecord,
     context: { isFocused: boolean; paneCount: number; isCompact: boolean },
@@ -2896,6 +2901,13 @@ export function ChatPage(props: ChatPageProps) {
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
     const title = workbenchPaneTitle(surface);
+    // 轨迹切换点只出现在聚焦的会话 Pane(与右上角关闭点左右对称)。
+    // 背景 Pane 没有轨迹渲染路径,不显示;草稿会话没有轨迹数据,同样不显示。
+    const showTrajectoryToggle =
+      context.isFocused &&
+      surface.kind === "conversation" &&
+      surface.conversationId === currentConversationId &&
+      hasConversationReply;
     return (
       <PaneChrome
         paneId={pane.paneId}
@@ -2905,6 +2917,21 @@ export function ChatPage(props: ChatPageProps) {
         dragHandleLabel={t("workbench.dragPane")}
         closeLabel={t("workbench.closePane")}
         onClose={() => handleWorkbenchClosePane(pane.paneId)}
+        trajectoryToggle={
+          showTrajectoryToggle
+            ? {
+                isTrajectory: renderedConversationView === "trajectory",
+                label:
+                  renderedConversationView === "trajectory"
+                    ? t("workbench.showConversation")
+                    : t("workbench.showTrajectory"),
+                onToggle: () =>
+                  setActiveConversationView(
+                    renderedConversationView === "trajectory" ? "conversation" : "trajectory",
+                  ),
+              }
+            : undefined
+        }
         onDragHandlePointerDown={(event) => {
           beginWorkbenchDrag(
             { kind: "pane", paneId: pane.paneId, surfaceKey: surfaceIdentityKey(surface), title },
@@ -3137,7 +3164,9 @@ export function ChatPage(props: ChatPageProps) {
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
           leadingActions={
-            activeView === "chat" && hasConversationReply ? (
+            // 多 Pane 时切换点内嵌在聚焦 Pane 的左上角(PaneChrome),顶栏
+            // 不再重复;单 Pane 无 Pane chrome,保留顶栏 Tabs。
+            activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
               <ConversationViewTabs
                 active={renderedConversationView}
                 onChange={setActiveConversationView}

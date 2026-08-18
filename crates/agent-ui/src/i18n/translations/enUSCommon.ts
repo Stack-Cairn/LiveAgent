@@ -1373,6 +1373,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.emptyDescription": "Drag a conversation from the sidebar to open it here.",
   "workbench.dragPane": "Move pane",
   "workbench.closePane": "Close pane view",
+  "workbench.showTrajectory": "Switch to trajectory view",
+  "workbench.showConversation": "Switch to conversation view",
   "workbench.loadConversation": "Load conversation",
   "workbench.openInSplit": "Open in split pane",
   "workbench.noSpaceForSplit": "Not enough space for another pane",

@@ -1,5 +1,13 @@
 import { cn } from "../../lib/shared/utils";
-import { X } from "../IconSet";
+import { MessageSquareText, Waypoints, X } from "../IconSet";
+
+export type PaneChromeTrajectoryToggle = {
+  /** Current view: true renders the "back to conversation" icon. */
+  isTrajectory: boolean;
+  /** Accessible label describing the view the click switches to. */
+  label: string;
+  onToggle: () => void;
+};
 
 export type PaneChromeProps = {
   paneId: string;
@@ -12,6 +20,11 @@ export type PaneChromeProps = {
   dragHandleLabel: string;
   closeLabel: string;
   onClose?: () => void;
+  /**
+   * Conversation/trajectory view switch, rendered as a top-left dot that
+   * mirrors the close dot. Only the focused conversation pane passes this.
+   */
+  trajectoryToggle?: PaneChromeTrajectoryToggle;
   /** Arms a workbench pane drag; activation happens after a move threshold. */
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
 };
@@ -32,6 +45,7 @@ export function PaneChrome(props: PaneChromeProps) {
     dragHandleLabel,
     closeLabel,
     onClose,
+    trajectoryToggle,
     onDragHandlePointerDown,
   } = props;
 
@@ -76,6 +90,29 @@ export function PaneChrome(props: PaneChromeProps) {
           )}
         />
       </button>
+      {trajectoryToggle ? (
+        <button
+          type="button"
+          data-workbench-pane-trajectory-toggle={paneId}
+          aria-label={trajectoryToggle.label}
+          aria-pressed={trajectoryToggle.isTrajectory}
+          title={trajectoryToggle.label}
+          onClick={trajectoryToggle.onToggle}
+          className={cn(
+            revealClass,
+            "absolute left-1.5 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center rounded-full",
+            "bg-muted-foreground/25 text-background",
+            "hover:bg-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
+        >
+          {/* Icon previews the view the click switches to, not the current one. */}
+          {trajectoryToggle.isTrajectory ? (
+            <MessageSquareText className="h-2 w-2" />
+          ) : (
+            <Waypoints className="h-2 w-2" />
+          )}
+        </button>
+      ) : null}
       {onClose ? (
         <button
           type="button"

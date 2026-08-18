@@ -1309,6 +1309,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.emptyDescription": "从左侧拖入一个会话即可在此打开。",
   "workbench.dragPane": "移动面板",
   "workbench.closePane": "关闭面板视图",
+  "workbench.showTrajectory": "切换到轨迹视图",
+  "workbench.showConversation": "切换到对话视图",
   "workbench.loadConversation": "加载会话",
   "workbench.openInSplit": "在分屏中打开",
   "workbench.noSpaceForSplit": "空间不足，无法再打开新面板",

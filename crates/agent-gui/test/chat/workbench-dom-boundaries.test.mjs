@@ -111,6 +111,42 @@ test("conversation view switcher lives in the chrome and waits for an assistant 
   assert.match(conversationViewTabsSource, /icon: Waypoints/);
 });
 
+test("multi-pane trajectory toggle lives in the focused pane's chrome, mirroring the close dot", () => {
+  const paneChromeSource = readFileSync(
+    new URL("../../../agent-ui/src/components/workbench/PaneChrome.tsx", import.meta.url),
+    "utf8",
+  );
+  // The toggle is a top-left dot styled exactly like the top-right close dot.
+  assert.match(paneChromeSource, /data-workbench-pane-trajectory-toggle/);
+  assert.match(
+    paneChromeSource,
+    /left-1\.5 top-1\/2 flex h-3\.5 w-3\.5 -translate-y-1\/2 items-center justify-center rounded-full/,
+  );
+  assert.match(
+    paneChromeSource,
+    /right-1\.5 top-1\/2 flex h-3\.5 w-3\.5 -translate-y-1\/2 items-center justify-center rounded-full/,
+  );
+  // Both dots share the hover-reveal treatment and palette.
+  assert.equal(
+    paneChromeSource.match(/bg-muted-foreground\/25 text-background/g)?.length,
+    2,
+  );
+  // Only the focused conversation pane with an assistant reply gets the toggle.
+  assert.match(
+    chatPageSource,
+    /const showTrajectoryToggle =[\s\S]*?context\.isFocused &&[\s\S]*?surface\.kind === "conversation" &&[\s\S]*?surface\.conversationId === currentConversationId &&[\s\S]*?hasConversationReply/,
+  );
+  // Multi-pane hides the chrome-level tabs; the pane dot owns the switch.
+  assert.match(
+    chatPageSource,
+    /activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes/,
+  );
+  assert.match(
+    chatPageSource,
+    /workbenchHasMultiplePanes =\s*sessionWorkbench\.enabled && Object\.keys\(workbench\.layout\.panes\)\.length >= 2/,
+  );
+});
+
 test("right dock width moves the center-column chrome with the panel", () => {
   assert.match(
     rightDockPanelSource,
