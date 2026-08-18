@@ -452,6 +452,15 @@ export function ChatPage(props: ChatPageProps) {
         : [...trajectoryPersistedMessages, trajectoryLiveAssistantMessage],
     [trajectoryLiveAssistantMessage, trajectoryPersistedMessages],
   );
+  const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
+  const hasConversationReply =
+    !isDraftConversation && trajectoryMessages.some((message) => message.role === "assistant");
+  const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
+  useEffect(() => {
+    if (!hasConversationReply && activeConversationView !== "conversation") {
+      setActiveConversationView("conversation");
+    }
+  }, [activeConversationView, hasConversationReply]);
   const {
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
@@ -553,8 +562,6 @@ export function ChatPage(props: ChatPageProps) {
     setHydratingConversationId(null);
     setHydrationFailedConversationId(null);
   }
-
-  const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
 
   const approvalBar = <PendingToolApprovalBar conversationId={currentConversationId} />;
   const currentConversationPersistedCwd =
@@ -1795,6 +1802,14 @@ export function ChatPage(props: ChatPageProps) {
           onOpenSettings={onOpenSettings}
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
+          leadingActions={
+            activeView === "chat" && hasConversationReply ? (
+              <ConversationViewTabs
+                active={renderedConversationView}
+                onChange={setActiveConversationView}
+              />
+            ) : null
+          }
           trailingActions={
             <>
               <ProjectToolsPanelToggle
@@ -1879,86 +1894,80 @@ export function ChatPage(props: ChatPageProps) {
               <ConversationSurface
                 conversationId={currentConversationId}
                 transcript={
-                  <>
-                    <ConversationViewTabs
-                      active={activeConversationView}
-                      onChange={setActiveConversationView}
+                  renderedConversationView === "trajectory" ? (
+                    <TrajectoryView
+                      conversationId={currentConversationId}
+                      host={trajectoryHost}
+                      messages={trajectoryMessages}
+                      workdir={displayedConversationWorkdir}
+                      hasMoreMessages={conversationState.transcript.hasMoreBefore}
+                      loadEarlierMessages={handleLoadEarlierHistory}
+                      liveEvents={liveTrajectory}
+                      liveOwnership="authoritative"
+                      authoritativeRevision={trajectoryAuthoritativeRevision}
                     />
-                    {activeConversationView === "trajectory" ? (
-                      <TrajectoryView
+                  ) : (
+                    <ChangedFilesActionsProvider value={changedFilesActions}>
+                      <DesktopCheckpointRewindProvider
                         conversationId={currentConversationId}
-                        host={trajectoryHost}
-                        messages={trajectoryMessages}
-                        workdir={displayedConversationWorkdir}
-                        hasMoreMessages={conversationState.transcript.hasMoreBefore}
-                        loadEarlierMessages={handleLoadEarlierHistory}
-                        liveEvents={liveTrajectory}
-                        liveOwnership="authoritative"
-                        authoritativeRevision={trajectoryAuthoritativeRevision}
-                      />
-                    ) : (
-                      <ChangedFilesActionsProvider value={changedFilesActions}>
-                        <DesktopCheckpointRewindProvider
+                        workspaceRoot={currentConversationWorkspaceRoot}
+                        project={activeWorkspaceProject}
+                        disabled={!currentConversationId || isSending}
+                        onRewound={(info) => {
+                          // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
+                          // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+                          //
+                          // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
+                          // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
+                          // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
+                          // 那要改写已落库的摘要才能修,不在本功能范围内。
+                          const notice = formatCheckpointRewoundNotification(
+                            info,
+                            locale === "zh-CN",
+                          );
+                          addNotify(notice.level, notice.message);
+                        }}
+                      >
+                        <ChatTranscript
                           conversationId={currentConversationId}
                           workspaceRoot={currentConversationWorkspaceRoot}
-                          project={activeWorkspaceProject}
-                          disabled={!currentConversationId || isSending}
-                          onRewound={(info) => {
-                            // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
-                            // 无需手动失效——注册表与 fileState 每用户轮都会重建。
-                            //
-                            // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
-                            // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
-                            // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
-                            // 那要改写已落库的摘要才能修,不在本功能范围内。
-                            const notice = formatCheckpointRewoundNotification(
-                              info,
-                              locale === "zh-CN",
-                            );
-                            addNotify(notice.level, notice.message);
-                          }}
-                        >
-                          <ChatTranscript
-                            conversationId={currentConversationId}
-                            workspaceRoot={currentConversationWorkspaceRoot}
-                            gitClient={tauriGitClient}
-                            followRef={scrollFollowRef}
-                            hasModels={hasModels}
-                            historyItems={transcriptItems}
-                            hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                            onLoadEarlierHistory={handleLoadEarlierHistory}
-                            isHistorySwitching={conversationOpenState.showOverlay}
-                            isSending={isSending}
-                            isAgentMode={isAgentMode}
-                            showUsage={isAgentDevExecutionMode}
-                            usageContextWindow={currentModelContextWindow}
-                            liveTranscriptStore={liveTranscriptStore}
-                            isCompactionRunning={isCompactionRunning}
-                            bottomReservePx={composerOverlayHeight}
-                            contentWidth={settings.customSettings.chatTranscript.width}
-                            onContentWidthChange={handleChatTranscriptWidthChange}
-                            onOpenFileLink={handleOpenChatFileLink}
-                            onResendFromEdit={handleResendFromEdit}
-                            onBranchConversation={
-                              isConversationHydrating || isConversationHydrationFailed
-                                ? undefined
-                                : handleBranchConversation
-                            }
-                            branchPendingMessageId={branchPendingMessageId}
-                            onOpenSettings={onOpenSettings}
-                            onSuggestionSelect={handleEmptyStateSuggestion}
-                            suggestionsDisabled={isSuggestionTyping}
-                          />
-                        </DesktopCheckpointRewindProvider>
-                      </ChangedFilesActionsProvider>
-                    )}
-                  </>
+                          gitClient={tauriGitClient}
+                          followRef={scrollFollowRef}
+                          hasModels={hasModels}
+                          historyItems={transcriptItems}
+                          hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                          onLoadEarlierHistory={handleLoadEarlierHistory}
+                          isHistorySwitching={conversationOpenState.showOverlay}
+                          isSending={isSending}
+                          isAgentMode={isAgentMode}
+                          showUsage={isAgentDevExecutionMode}
+                          usageContextWindow={currentModelContextWindow}
+                          liveTranscriptStore={liveTranscriptStore}
+                          isCompactionRunning={isCompactionRunning}
+                          bottomReservePx={composerOverlayHeight}
+                          contentWidth={settings.customSettings.chatTranscript.width}
+                          onContentWidthChange={handleChatTranscriptWidthChange}
+                          onOpenFileLink={handleOpenChatFileLink}
+                          onResendFromEdit={handleResendFromEdit}
+                          onBranchConversation={
+                            isConversationHydrating || isConversationHydrationFailed
+                              ? undefined
+                              : handleBranchConversation
+                          }
+                          branchPendingMessageId={branchPendingMessageId}
+                          onOpenSettings={onOpenSettings}
+                          onSuggestionSelect={handleEmptyStateSuggestion}
+                          suggestionsDisabled={isSuggestionTyping}
+                        />
+                      </DesktopCheckpointRewindProvider>
+                    </ChangedFilesActionsProvider>
+                  )
                 }
                 composer={
                   <ChatComposerBar
                     surface="desktop"
                     // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
-                    hidden={activeConversationView === "trajectory"}
+                    hidden={renderedConversationView === "trajectory"}
                     composerRef={composerRef}
                     isSending={isSending}
                     isUploadingFiles={isUploadingFiles}

@@ -143,9 +143,12 @@ export function TrajectoryTimeline(props: {
   return (
     <section
       aria-label={t("trajectory.timeline.aria")}
-      className="flex shrink-0 gap-2 border-b border-border/60 px-3 pt-1.5 pb-2"
+      className="flex shrink-0 gap-2 border-b border-border/60 px-3 pt-1.5 pb-2 max-[520px]:gap-1 max-[520px]:px-2"
     >
-      <div className="flex w-11 shrink-0 flex-col" style={{ paddingTop: TURN_BAND_HEIGHT }}>
+      <div
+        className="flex w-11 shrink-0 flex-col max-[520px]:w-8"
+        style={{ paddingTop: TURN_BAND_HEIGHT }}
+      >
         {LANE_LABEL_KEYS.map((key, lane) => (
           <div
             key={key}

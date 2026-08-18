@@ -732,6 +732,10 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   padding-bottom: var(--gateway-chat-composer-bottom, 16px);
 }
 
+.gateway-composer-layer.hidden {
+  display: none;
+}
+
 .gateway-composer-layer > .gateway-chat-column {
   grid-column: 2;
 }

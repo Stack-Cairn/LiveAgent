@@ -30,7 +30,7 @@ export function TrajectoryToolbar(props: {
     <div
       role="toolbar"
       aria-label={t("trajectory.toolbar.aria")}
-      className="flex shrink-0 items-center gap-1 border-b border-border/60 px-3 py-1.5"
+      className="flex shrink-0 items-center gap-1 border-b border-border/60 px-3 py-1.5 max-[520px]:flex-wrap max-[520px]:gap-y-1.5 max-[520px]:px-2"
     >
       <ToolbarButton
         pressed={props.actualDuration}
@@ -68,7 +68,7 @@ export function TrajectoryToolbar(props: {
         {t("trajectory.toolbar.calls")}
       </ToolbarButton>
 
-      <div className="ml-auto flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 focus-within:border-primary/60">
+      <div className="ml-auto flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 focus-within:border-primary/60 max-[520px]:order-last max-[520px]:ml-0 max-[520px]:w-full">
         <Search className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input
           type="search"
@@ -76,7 +76,7 @@ export function TrajectoryToolbar(props: {
           placeholder={t("trajectory.toolbar.searchPlaceholder")}
           value={props.searchQuery}
           onChange={(event) => props.onSearchQueryChange(event.currentTarget.value)}
-          className="w-40 min-w-0 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+          className="w-40 min-w-0 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground max-[520px]:w-full"
         />
       </div>
     </div>
@@ -99,7 +99,7 @@ function ToolbarButton(props: {
       disabled={props.disabled === true}
       onClick={props.onClick}
       className={cn(
-        "flex items-center gap-1 rounded-md px-2 py-1 text-[12px] transition-colors",
+        "flex items-center gap-1 rounded-md px-2 py-1 text-[12px] transition-colors max-[520px]:flex-1 max-[520px]:justify-center",
         "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         props.pressed && "bg-muted text-foreground",
         props.disabled === true && "pointer-events-none opacity-40",

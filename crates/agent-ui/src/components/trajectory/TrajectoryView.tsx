@@ -492,7 +492,7 @@ export function TrajectoryView(props: {
         onRecordSelect={selectRecordAtIndex}
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <TrajectoryTable
           turns={turns}
           collapsedTurns={collapsedTurns}

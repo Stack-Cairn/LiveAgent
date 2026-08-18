@@ -43,12 +43,12 @@ export function TrajectoryRow(props: {
       aria-current={props.selected ? "true" : undefined}
       onClick={() => props.onSelect(record.index)}
       className={cn(
-        "flex h-[30px] w-full min-w-0 items-center gap-2 px-3 text-left text-[12px] transition-colors",
+        "flex h-[30px] w-full min-w-0 items-center gap-2 px-3 text-left text-[12px] transition-colors max-[520px]:gap-1.5 max-[520px]:px-2",
         "border-l-2 border-transparent hover:bg-muted/50",
         props.selected && "border-primary bg-muted/70",
         props.focused && !props.selected && "bg-muted/40",
         props.dimmed && "opacity-35",
-        record.kind === "subtool" && "pl-8",
+        record.kind === "subtool" && "pl-8 max-[520px]:pl-5",
       )}
     >
       <span
@@ -85,7 +85,7 @@ export function TrajectoryRow(props: {
         </span>
       )}
 
-      <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+      <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground max-[520px]:w-12 max-[520px]:text-[11px]">
         {record.timeSeconds === null ? "" : formatTrajectorySeconds(record.timeSeconds, locale)}
       </span>
     </button>

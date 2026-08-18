@@ -38,7 +38,14 @@ import {
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import { type CSSProperties, useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import {
@@ -328,6 +335,16 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   );
   // 正文只在切到轨迹页时才需要；转换本身很轻，跟随转录行 memo 即可。
   const trajectoryMessages = useMemo(() => toTrajectoryMessages(transcriptRows), [transcriptRows]);
+  const hasConversationReply =
+    displayedConversationId !== "" &&
+    !isLocalDraftConversationId(displayedConversationId) &&
+    trajectoryMessages.some((message) => message.role === "assistant");
+  const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
+  useEffect(() => {
+    if (!hasConversationReply && activeConversationView !== "conversation") {
+      setActiveConversationView("conversation");
+    }
+  }, [activeConversationView, hasConversationReply]);
   // 实时骨架来自 ChatEvent 流；账本层按事件身份去重，所以与落盘那份合并安全。
   const liveTrajectory = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryEvents(displayedConversationId),
@@ -521,6 +538,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   }))
                 }
                 onOpenSidebar={() => setSidebarOpen(true)}
+                leadingActions={
+                  activeView === "chat" && hasConversationReply ? (
+                    <ConversationViewTabs
+                      active={renderedConversationView}
+                      onChange={setActiveConversationView}
+                    />
+                  ) : null
+                }
                 trailingActions={
                   <>
                     <ProjectToolsPanelToggle
@@ -602,11 +627,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           } as CSSProperties
                         }
                       >
-                        <ConversationViewTabs
-                          active={activeConversationView}
-                          onChange={setActiveConversationView}
-                        />
-                        {activeConversationView === "trajectory" ? (
+                        {renderedConversationView === "trajectory" ? (
                           <TrajectoryView
                             conversationId={displayedConversationId}
                             host={trajectoryHost}
@@ -704,7 +725,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             ) : null}
                           </div>
                         )}
-                        {activeConversationView === "conversation" && !transcriptFollowing ? (
+                        {renderedConversationView === "conversation" && !transcriptFollowing ? (
                           <button
                             type="button"
                             className="gateway-scroll-to-bottom"
@@ -718,7 +739,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                         <ChatComposerBar
                           surface="web"
                           // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
-                          hidden={activeConversationView === "trajectory"}
+                          hidden={renderedConversationView === "trajectory"}
                           composerRef={composerRef}
                           isSending={composerIsSending}
                           isUploadingFiles={isUploadingFiles}
