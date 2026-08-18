@@ -57,6 +57,10 @@
     width: 100%;
   }
 
+  .gateway-main-shell [data-app-workbench-chrome] {
+    z-index: var(--layer-raised);
+  }
+
   .gateway-chat-frame {
     height: 100%;
     --gateway-chat-column-gutter: 12px;

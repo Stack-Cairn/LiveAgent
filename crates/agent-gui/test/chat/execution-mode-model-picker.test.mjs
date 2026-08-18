@@ -63,7 +63,7 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("popover interactions preserve mode and model changes until an outside dismissal", () => {
+test("model selection closes the popover while group controls keep it open", () => {
   for (const source of pickerSources) {
     assert.match(source, /onClick=\{\(\) => toggleGroup\(group\.id\)\}/);
     assert.match(source, /const \[expandedGroupId, setExpandedGroupId\] = useState/);
@@ -74,8 +74,7 @@ test("popover interactions preserve mode and model changes until an outside dism
       source,
       /<Popover open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
     );
-    assert.match(source, /onSelectModel\(parsed\);/);
-    assert.doesNotMatch(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
+    assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
   }
 });
 
