@@ -143,6 +143,59 @@ test("hosted search fetch probe finish waits for delayed clone parsing", async (
   }
 });
 
+test("hosted search fetch probes capture multiple continuation requests in one round", async () => {
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(
+      sse({
+        type: "response.output_item.added",
+        item: {
+          type: "web_search_call",
+          id: `search-continuation-${callCount}`,
+          status: "completed",
+          action: { query: `continuation query ${callCount}` },
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+  };
+
+  const probe = hostedSearchEvents.startHostedSearchFetchProbe({
+    providerId: "codex",
+    sessionId: "session-continuation",
+    requestId: "probe-continuation",
+    enabled: true,
+    onRawEvent: (event) => events.push(event),
+  });
+
+  try {
+    const request = () =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [hostedSearchEvents.HOSTED_SEARCH_PROBE_HEADER]: "probe-continuation",
+        },
+        body: JSON.stringify({ prompt_cache_key: "session-continuation" }),
+      });
+    await request();
+    await request();
+    await probe.finish();
+
+    assert.deepEqual(
+      events.map((event) => event.item.id),
+      ["search-continuation-1", "search-continuation-2"],
+    );
+  } finally {
+    await probe.finish();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("hosted search aggregation ignores ordinary text that only mentions search tokens", () => {
   const emitted = [];
   const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({

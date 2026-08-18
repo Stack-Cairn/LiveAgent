@@ -1,8 +1,7 @@
-import type { Model, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { ProviderId } from "../settings";
 import { isRecord } from "./runtime/common";
-import { supportsAdaptiveAnthropicThinking } from "./runtime/thinkingLevels";
 
 export const HIDDEN_PROVIDER_NATIVE_WEB_SEARCH_TOOL_NAMES = [
   "WebSearch",
@@ -57,54 +56,10 @@ export function isProviderNativeWebFetchToolName(toolName: string | undefined) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Anthropic web search tool version: model-aware adaptive upgrade.
-// `dynamicFiltering` (20260318) is a superset of the 20260209 dynamic-filtering
-// capability plus `response_inclusion` control, and is the version the official
-// docs currently document/exemplify. Eligibility mirrors adaptive-thinking
-// support (`compat.forceAdaptiveThinking`) since both track the same "modern
-// Anthropic model" catalog boundary.
-// ---------------------------------------------------------------------------
-
-export const ANTHROPIC_WEB_SEARCH_TOOL_TYPES = {
-  legacy: "web_search_20250305",
-  dynamicFiltering: "web_search_20260318",
-} as const;
-
-export function supportsAnthropicDynamicFilteringWebSearch(model: Model<any>): boolean {
-  return supportsAdaptiveAnthropicThinking(model);
-}
-
-export function resolveAnthropicWebSearchToolType(
-  model: Model<any>,
-): (typeof ANTHROPIC_WEB_SEARCH_TOOL_TYPES)[keyof typeof ANTHROPIC_WEB_SEARCH_TOOL_TYPES] {
-  return supportsAnthropicDynamicFilteringWebSearch(model)
-    ? ANTHROPIC_WEB_SEARCH_TOOL_TYPES.dynamicFiltering
-    : ANTHROPIC_WEB_SEARCH_TOOL_TYPES.legacy;
-}
-
-// The web_fetch server tool (GA, no beta header) pairs with web_search: 20260318
-// matches the search version we request and is supported by exactly the
-// dynamic-filtering model set (Opus 4.6+/Sonnet 4.6+/Sonnet 5/Fable 5). It is
-// attached only for those models — older/unknown catalog entries (DeepSeek-style
-// relays running anthropic-messages) keep their current payload untouched and
-// rely on the hidden bridge when a model emits web_fetch anyway.
-export const ANTHROPIC_WEB_FETCH_TOOL_TYPES = {
-  legacy: "web_fetch_20250910",
-  dynamicFiltering: "web_fetch_20260318",
-} as const;
-
-export function supportsAnthropicNativeWebFetch(model: Model<any>): boolean {
-  return supportsAnthropicDynamicFilteringWebSearch(model);
-}
-
-export function resolveAnthropicWebFetchToolType(
-  model: Model<any>,
-): (typeof ANTHROPIC_WEB_FETCH_TOOL_TYPES)[keyof typeof ANTHROPIC_WEB_FETCH_TOOL_TYPES] {
-  return supportsAnthropicDynamicFilteringWebSearch(model)
-    ? ANTHROPIC_WEB_FETCH_TOOL_TYPES.dynamicFiltering
-    : ANTHROPIC_WEB_FETCH_TOOL_TYPES.legacy;
-}
+// Keep the Anthropic server tool on the stable GA contract. Dated dynamic
+// versions are intentionally not sent because compatible Claude relays do not
+// expose a reliable capability signal and reject unsupported versions with 400.
+export const ANTHROPIC_WEB_SEARCH_TOOL_TYPE = "web_search_20250305" as const;
 
 // ---------------------------------------------------------------------------
 // Request-payload tool detectors (single catalog source; consumed by
@@ -117,22 +72,9 @@ export function hasAnthropicWebSearchTool(tool: unknown) {
   const name = tool.name;
   return (
     name === "web_search" ||
-    type === ANTHROPIC_WEB_SEARCH_TOOL_TYPES.legacy ||
+    type === ANTHROPIC_WEB_SEARCH_TOOL_TYPE ||
     type === "web_search_20260209" ||
-    type === ANTHROPIC_WEB_SEARCH_TOOL_TYPES.dynamicFiltering
-  );
-}
-
-export function hasAnthropicWebFetchTool(tool: unknown) {
-  if (!isRecord(tool)) return false;
-  const type = tool.type;
-  const name = tool.name;
-  return (
-    name === "web_fetch" ||
-    type === ANTHROPIC_WEB_FETCH_TOOL_TYPES.legacy ||
-    type === "web_fetch_20260209" ||
-    type === "web_fetch_20260309" ||
-    type === ANTHROPIC_WEB_FETCH_TOOL_TYPES.dynamicFiltering
+    type === "web_search_20260318"
   );
 }
 

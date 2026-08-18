@@ -258,8 +258,9 @@ test("model request sanitizer drops aborted hosted search rounds", () => {
   assert.doesNotMatch(JSON.stringify(context.messages), /call_01_PIQ9ADQKpEaBFU6f38f19272/);
 });
 
-test("model request sanitizer strips DSML from text and thinking blocks", () => {
+test("model request sanitizer strips DSML from text but preserves signed thinking", () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
+  const thinking = `before <${dsml}tool_calls><${dsml}invoke name="Read"></${dsml}invoke></${dsml}tool_calls> after`;
   const context = requestContextSanitizer.sanitizeContextForModelRequest({
     messages: [
       user("search", 1),
@@ -268,7 +269,7 @@ test("model request sanitizer strips DSML from text and thinking blocks", () => 
         content: [
           {
             type: "thinking",
-            thinking: `before <${dsml}tool_calls><${dsml}invoke name="Read"></${dsml}invoke></${dsml}tool_calls> after`,
+            thinking,
           },
           {
             type: "text",
@@ -282,8 +283,8 @@ test("model request sanitizer strips DSML from text and thinking blocks", () => 
   });
 
   const serialized = JSON.stringify(context.messages);
-  assert.equal(serialized.includes("DSML"), false);
-  assert.equal(context.messages[1].content[0].thinking, "before  after");
+  assert.equal(serialized.includes("DSML"), true);
+  assert.equal(context.messages[1].content[0].thinking, thinking);
   assert.equal(context.messages[1].content[1].text, "visible  answer");
 });
 

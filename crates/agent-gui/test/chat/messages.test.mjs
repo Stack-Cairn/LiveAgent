@@ -1836,6 +1836,21 @@ After`,
   assert.equal(seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text), "Before\n\nAfter");
 });
 
+test("seed tool call recovery leaves signed Anthropic thinking untouched", () => {
+  const thinking = `before\n<seed:tool_call><function name="Read"></function></seed:tool_call>\nafter`;
+  const assistant = {
+    role: "assistant",
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    content: [{ type: "thinking", thinking, thinkingSignature: "sig" }],
+    timestamp: 1,
+  };
+
+  assert.equal(seedToolCalls.recoverAssistantSeedToolCalls(assistant), null);
+  assert.equal(assistant.content[0].thinking, thinking);
+});
+
 test("seed tool call recovery does not infer flattened text from DeepSeek metadata", () => {
   const assistant = {
     role: "assistant",
