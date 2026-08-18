@@ -10,6 +10,10 @@ const baseChatStyles = readFileSync(
   new URL("../src/styles/base-chat.css", import.meta.url),
   "utf8",
 );
+const responsiveStyles = readFileSync(
+  new URL("../src/styles/responsive.css", import.meta.url),
+  "utf8",
+);
 
 test("gateway mounts workbench chrome outside the shared application view", () => {
   assert.match(gatewayAppViewSource, /<main className="gateway-main-shell">/);
@@ -46,5 +50,16 @@ test("gateway shows the conversation view switcher in chrome only after an assis
   assert.match(
     baseChatStyles,
     /\.gateway-composer-layer\.hidden\s*\{\s*display: none;\s*\}/,
+  );
+});
+
+test("mobile sidebar stays above the interactive workbench header", () => {
+  assert.match(
+    responsiveStyles,
+    /@media \(max-width: 820px\) \{[\s\S]*?\.gateway-main-shell \[data-app-workbench-chrome\] \{\s*z-index: var\(--layer-raised\);/,
+  );
+  assert.match(
+    responsiveStyles,
+    /@media \(max-width: 820px\) \{[\s\S]*?\.gateway-editor-host > \.chat-history-sidebar \{[\s\S]*?z-index: var\(--layer-panel\);/,
   );
 });

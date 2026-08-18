@@ -30,8 +30,7 @@ type FetchProbe = {
   sessionId?: string;
   requestId?: string;
   active: boolean;
-  claimed: boolean;
-  parseDone?: Promise<void>;
+  parseTasks: Promise<void>[];
   onRawEvent: (event: unknown) => void;
 };
 
@@ -166,7 +165,7 @@ function requestMatchesProbe(
   init: RequestInit | undefined,
   response: Response,
 ) {
-  if (!probe.active || probe.claimed || !isStreamLikeResponse(response)) return false;
+  if (!probe.active || !isStreamLikeResponse(response)) return false;
   const url = getRequestUrl(input);
   if (!url.includes(getProviderPath(probe.providerId))) return false;
   const requestId = getRequestHeader(input, init, HOSTED_SEARCH_PROBE_HEADER);
@@ -181,14 +180,16 @@ function installFetchProbe() {
   if (originalFetch || typeof globalThis.fetch !== "function") return;
   originalFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await originalFetch!(input, init);
+    const fetchImpl = originalFetch;
+    if (!fetchImpl) throw new Error("Hosted search fetch probe is not installed");
+    const response = await fetchImpl(input, init);
     const probe = [...activeFetchProbes].find((candidate) =>
       requestMatchesProbe(candidate, input, init, response),
     );
     if (probe) {
-      probe.claimed = true;
-      probe.parseDone = parseResponseClone(response, probe);
-      void probe.parseDone;
+      const parseTask = parseResponseClone(response, probe);
+      probe.parseTasks.push(parseTask);
+      void parseTask;
     }
     return response;
   }) as typeof globalThis.fetch;
@@ -272,7 +273,7 @@ export function startHostedSearchFetchProbe(params: {
     sessionId: params.sessionId,
     requestId: params.requestId,
     active: true,
-    claimed: false,
+    parseTasks: [],
     onRawEvent: params.onRawEvent,
   };
   activeFetchProbes.add(probe);
@@ -283,7 +284,7 @@ export function startHostedSearchFetchProbe(params: {
       probe.active = false;
       activeFetchProbes.delete(probe);
       uninstallFetchProbeIfIdle();
-      await probe.parseDone;
+      await Promise.all(probe.parseTasks);
     },
   };
 }

@@ -82,6 +82,38 @@ test("model failover defaults are off with an empty queue for every vendor", () 
   });
 });
 
+test("failover credential readiness accepts GUI keys and WebUI redacted-key markers", () => {
+  assert.equal(
+    settings.hasProviderFailoverConfiguration({
+      baseUrl: "https://provider.example.com",
+      apiKey: "secret",
+    }),
+    true,
+  );
+  assert.equal(
+    settings.hasProviderFailoverConfiguration({
+      baseUrl: "https://provider.example.com",
+      apiKey: "",
+      apiKeyConfigured: true,
+    }),
+    true,
+  );
+  assert.equal(
+    settings.hasProviderFailoverConfiguration({
+      baseUrl: "https://provider.example.com",
+      apiKey: "",
+    }),
+    false,
+  );
+  assert.equal(
+    settings.hasProviderFailoverConfiguration({
+      baseUrl: "",
+      apiKey: "secret",
+    }),
+    false,
+  );
+});
+
 test("queue entries are validated against same-vendor providers, deduped, and capped", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {

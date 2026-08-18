@@ -796,8 +796,8 @@ test("provider payload finalization enables native web search for hosted search 
     { type: "web_search_20250305", name: "web_search" },
   ]);
 
-  // Modern Anthropic models get the paired web_fetch server tool alongside
-  // web_search; legacy/unknown catalog entries (above) keep search-only.
+  // Keep the stable GA tool for modern models too. This is accepted by the
+  // official API and avoids dated-tool incompatibilities in Anthropic relays.
   const anthropicModernPayload = await anthropicOptions.onPayload(
     { messages: [{ role: "user", content: "hello" }] },
     {
@@ -808,13 +808,26 @@ test("provider payload finalization enables native web search for hosted search 
     },
   );
   assert.deepEqual(anthropicModernPayload.tools, [
-    { type: "web_search_20260318", name: "web_search" },
+    { type: "web_search_20250305", name: "web_search" },
+  ]);
+
+  const anthropicRelayOptions = providers.finalizeProviderStreamOptions({
+    providerId: "claude_code",
+    baseUrl: "https://relay.example.test/v1",
+    nativeWebSearch: true,
+    options: {},
+  });
+  const anthropicRelayPayload = await anthropicRelayOptions.onPayload(
+    { messages: [{ role: "user", content: "hello" }] },
     {
-      type: "web_fetch_20260318",
-      name: "web_fetch",
-      max_uses: 10,
-      max_content_tokens: 50_000,
+      api: "anthropic-messages",
+      provider: "anthropic",
+      id: "claude-sonnet-5",
+      compat: { forceAdaptiveThinking: true },
     },
+  );
+  assert.deepEqual(anthropicRelayPayload.tools, [
+    { type: "web_search_20250305", name: "web_search" },
   ]);
 
   const geminiOptions = providers.finalizeProviderStreamOptions({

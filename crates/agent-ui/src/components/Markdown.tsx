@@ -37,6 +37,7 @@ import {
 } from "../lib/markdownCodeBlockPolicy";
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
+import { MermaidFullscreenButton } from "./MarkdownMermaidFullscreen";
 import { Button } from "./ui/button";
 import { CopyButton } from "./ui/copy-button";
 import {
@@ -362,6 +363,7 @@ function MarkdownReadOnlyLink(props: MarkdownAnchorFallbackProps) {
 export const markdownReadOnlyComponents: Components = {
   ...markdownComponents,
   a: MarkdownReadOnlyLink,
+  pre: ReadOnlyCollapsibleCodePre,
 };
 
 function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
@@ -441,7 +443,16 @@ function CodeBlockActions({ code }: { code: string }) {
   );
 }
 
-export function CollapsibleCodePre({ children }: MarkdownPreProps) {
+type CollapsibleCodePreProps = MarkdownPreProps & { allowMermaidFullscreen?: boolean };
+
+function ReadOnlyCollapsibleCodePre(props: MarkdownPreProps) {
+  return <CollapsibleCodePre {...props} allowMermaidFullscreen={false} />;
+}
+
+export function CollapsibleCodePre({
+  children,
+  allowMermaidFullscreen = true,
+}: CollapsibleCodePreProps) {
   const { t } = useLocale();
   const childElement = isValidElement<StreamdownCodeChildProps>(children)
     ? ensureCodeBlockLanguage(children)
@@ -450,6 +461,7 @@ export function CollapsibleCodePre({ children }: MarkdownPreProps) {
   const language = childElement ? getCodeLanguage(childElement.props.className) : "";
   const { lineCount, shouldCollapse } = resolveCodeBlockRenderPolicy(codeContent);
   const isMermaid = language === "mermaid" || language === "mmd";
+  const isRenderedMermaid = language === "mermaid";
   const isCollapsible = Boolean(childElement && !isMermaid && shouldCollapse);
   const [expanded, setExpanded] = useState(false);
 
@@ -459,6 +471,9 @@ export function CollapsibleCodePre({ children }: MarkdownPreProps) {
     const codeBlock = cloneElement(childElement, { "data-block": "true" });
     return (
       <div className="relative w-full">
+        {isRenderedMermaid && allowMermaidFullscreen ? (
+          <MermaidFullscreenButton chart={codeContent} className="absolute right-7 top-1.5 z-30" />
+        ) : null}
         {isMermaid ? null : <CodeBlockActions code={codeContent} />}
         {codeBlock}
       </div>
@@ -720,7 +735,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
           mermaid: {
             copy: !readOnly,
             download: false,
-            fullscreen: !readOnly,
+            fullscreen: false,
             panZoom: !readOnly,
           },
           table: false,

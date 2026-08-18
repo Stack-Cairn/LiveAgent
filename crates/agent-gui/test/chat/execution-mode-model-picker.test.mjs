@@ -63,7 +63,7 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("popover interactions preserve mode and model changes until an outside dismissal", () => {
+test("model selection closes the popover while group controls keep it open", () => {
   for (const source of pickerSources) {
     assert.match(source, /onClick=\{\(\) => toggleGroup\(group\.id\)\}/);
     assert.match(source, /const \[expandedGroupId, setExpandedGroupId\] = useState/);
@@ -74,8 +74,7 @@ test("popover interactions preserve mode and model changes until an outside dism
       source,
       /<Popover open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
     );
-    assert.match(source, /onSelectModel\(parsed\);/);
-    assert.doesNotMatch(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
+    assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
   }
 });
 
@@ -136,7 +135,7 @@ test("branch selector reuses the model trigger visual language", () => {
 test("composer dropdown portals stay above the composer surface", () => {
   assert.match(popoverSource, /className="layer-popover isolate"/);
   assert.match(selectSource, /className="layer-popover"/);
-  assert.match(baseStylesSource, /--layer-popover: 9999;/);
+  assert.match(baseStylesSource, /--layer-popover: 10000;/);
   assert.match(baseStylesSource, /--layer-modal: 10000;/);
 });
 
