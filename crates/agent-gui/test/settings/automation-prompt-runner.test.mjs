@@ -176,6 +176,13 @@ test("Auto Prompt run prefers the queue-time workdir with a global fallback", ()
   );
 });
 
+test("Auto Prompt applies the system command safety mode to its shell registry", () => {
+  assert.match(
+    runnerSource,
+    /sandbox:\s*resolveShellSandboxSettings\(settings\.system\.commandSafetyMode\)/,
+  );
+});
+
 test("Cron workspace pin stays wired in shared UI", () => {
   for (const source of [cronModalSource]) {
     // Radix SelectItem rejects empty-string values, so "follow active" must

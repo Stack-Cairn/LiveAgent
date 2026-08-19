@@ -365,6 +365,23 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.runtime.tunnelRemoteOffline": "Remote Gateway is offline",
   "chat.runtime.tunnelSettingsSyncing": "Syncing desktop settings",
   "chat.runtime.reasoning": "Thinking effort",
+  "chat.safety.label": "Command execution mode",
+  "chat.safety.ask": "Approve each",
+  "chat.safety.askDesc": "Ask before every command or write; read-only tools run freely",
+  "chat.safety.auto": "Auto",
+  "chat.safety.autoDesc": "Run directly per the tool permission policies in Settings",
+  "chat.safety.sandbox": "Sandbox",
+  "chat.safety.sandboxDesc":
+    "Commands run in an OS sandbox: writes limited to the project folder, sensitive dirs like ~/.ssh unreadable",
+  // The Windows networked backend (WRITE_RESTRICTED token) fences writes only; reads stay
+  // broadly allowed, so this platform must not promise credential read masking. Masking is
+  // only real on the offline (AppContainer) backend.
+  "chat.safety.sandboxDescNoReadMask":
+    "Commands run in an OS sandbox: writes limited to the project folder. Reads are not masked on this platform, so ~/.ssh and other sensitive dirs stay readable",
+  "chat.safety.sandboxOffline": "Sandbox · offline",
+  "chat.safety.sandboxOfflineDesc": "Sandbox plus no network access for commands",
+  "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",
+  "chat.safety.sandboxOfflineUnavailable": "Offline sandbox unavailable on this platform",
   "chat.emptyRound": "(No reply)",
   "chat.inputHint": "Type a message, @ to reference files, prompts can be queued...",
   "chat.inputHintWithSkills":

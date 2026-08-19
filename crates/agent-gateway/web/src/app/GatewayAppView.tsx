@@ -50,6 +50,7 @@ import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
+  updateSystem,
   updateWorkspaceResourceSettings,
 } from "@/lib/settings";
 import { createWebSttSettingsService } from "@/lib/stt/webSttSettingsService";
@@ -778,6 +779,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           modelOptions={modelOptions}
                           selectedValue={selectedValue}
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                          commandSafetyMode={settings.system.commandSafetyMode}
+                          onCommandSafetyModeChange={(mode) =>
+                            setSettings((prev) =>
+                              prev.system.commandSafetyMode === mode
+                                ? prev
+                                : updateSystem(prev, { commandSafetyMode: mode }),
+                            )
+                          }
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
                           contextUsageTokensSource={contextUsageTokensSource}

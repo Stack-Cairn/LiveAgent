@@ -124,11 +124,14 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 			}
 		}()
 		defer func() {
+			// Stop the writer before cancelling the adapter. Cancel can still
+			// emit error/closed events; if the writer is running those frames
+			// race out after a protocol violation and look like a live session.
+			close(writerStop)
+			<-writerDone
 			if activeID != "" {
 				m.Cancel(activeID)
 			}
-			close(writerStop)
-			<-writerDone
 		}()
 		windowStart := time.Now()
 		frames := 0
@@ -172,6 +175,7 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 				nextSequence = 0
 			case *gatewayv2.SttClientFrame_Audio:
 				if activeID == "" || payload.Audio.GetSessionId() != activeID || payload.Audio.GetSequence() != nextSequence || len(payload.Audio.GetPcm()) == 0 || len(payload.Audio.GetPcm())%2 != 0 || len(payload.Audio.GetPcm()) > 6400 || m.Send(activeID, Command{Audio: &AudioChunk{Sequence: payload.Audio.GetSequence(), PCM: append([]byte(nil), payload.Audio.GetPcm()...)}}) != nil {
+					_ = conn.Close()
 					return
 				}
 				nextSequence++

@@ -82,6 +82,7 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
@@ -284,6 +285,8 @@ export type RunAgentConversationTurnParams = {
   getMcpSettings: () => AppSettings["mcp"];
   /** 工具审批策略的实时读取(权威 settingsRef,非 turn 级快照),缺省视为空表。 */
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
+  /** 命令执行方式(turn 级快照):ask 全量审批 / auto 按策略 / sandbox(±断网)。 */
+  commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
@@ -371,6 +374,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     agentTemplates,
     getMcpSettings,
     getToolPolicies,
+    commandSafetyMode,
     applyMcpOps,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
@@ -579,12 +583,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   const subagentScheduler = createSubagentScheduler();
   const runtimePlatform = await resolveRuntimePlatform();
   const buildRegistryStartedAt = perfNowMs();
+  const safetyMode = commandSafetyMode ?? "auto";
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir: effectiveWorkdir,
     additionalRoots,
     providerId,
     runtimePlatform,
     fileState,
+    sandbox: resolveShellSandboxSettings(safetyMode),
     taskStateStore,
     askUserQuestionConversationId: conversationId,
     checkpoint: {
@@ -672,22 +678,21 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
   // 工具审批门:按实时策略裁决每次调用。deny → 直接拦;ask → 挂起等用户在
   // 聊天审批卡片作决定(本会话已“记住”的工具免审);allow → 放行。
+  // 命令执行方式为 ask 时,非只读工具无论策略如何都升级为 ask(deny 仍拦)。
   const resolveToolGate = async (
     toolCall: ToolCall,
     signal?: AbortSignal,
   ): Promise<{ allow: true } | { allow: false; reason: string }> => {
-    const policy = resolveToolPolicy(
-      toolCall.name,
-      builtinRegistry.metadataByName.get(toolCall.name),
-      getToolPolicies?.(),
-    );
+    const metadata = builtinRegistry.metadataByName.get(toolCall.name);
+    const policy = resolveToolPolicy(toolCall.name, metadata, getToolPolicies?.());
     if (policy === "deny") {
       return {
         allow: false,
         reason: `工具 ${toolCall.name} 已被用户的权限策略禁止(deny)。不要重试;如确需使用,请让用户在设置的工具权限中放行。`,
       };
     }
-    if (policy !== "ask") {
+    const effectivePolicy = safetyMode === "ask" && !metadata?.isReadOnly ? "ask" : policy;
+    if (effectivePolicy !== "ask") {
       return { allow: true };
     }
     if (isSessionApproved(conversationId, toolCall.name)) {

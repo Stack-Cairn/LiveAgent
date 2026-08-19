@@ -6669,8 +6669,11 @@ type ChatRequest struct {
 	ClientRequestId string                 `protobuf:"bytes,8,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	RuntimeControls *ChatRuntimeControls   `protobuf:"bytes,9,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
 	QueuePolicy     string                 `protobuf:"bytes,10,opt,name=queue_policy,json=queuePolicy,proto3" json:"queue_policy,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// 命令安全模式(ask/auto/sandbox/sandboxOffline)。远端 WebUI 直带,桌面端据此
+	// 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
+	CommandSafetyMode string `protobuf:"bytes,11,opt,name=command_safety_mode,json=commandSafetyMode,proto3" json:"command_safety_mode,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -6762,6 +6765,13 @@ func (x *ChatRequest) GetRuntimeControls() *ChatRuntimeControls {
 func (x *ChatRequest) GetQueuePolicy() string {
 	if x != nil {
 		return x.QueuePolicy
+	}
+	return ""
+}
+
+func (x *ChatRequest) GetCommandSafetyMode() string {
+	if x != nil {
+		return x.CommandSafetyMode
 	}
 	return ""
 }
@@ -14571,7 +14581,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\vGitResponse\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1f\n" +
 	"\vresult_json\x18\x02 \x01(\tR\n" +
-	"resultJson\"\xf2\x03\n" +
+	"resultJson\"\xa2\x04\n" +
 	"\vChatRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12N\n" +
@@ -14582,7 +14592,8 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x11client_request_id\x18\b \x01(\tR\x0fclientRequestId\x12T\n" +
 	"\x10runtime_controls\x18\t \x01(\v2).liveagent.gateway.v2.ChatRuntimeControlsR\x0fruntimeControls\x12!\n" +
 	"\fqueue_policy\x18\n" +
-	" \x01(\tR\vqueuePolicyJ\x04\b\x06\x10\aR\x15selected_system_tools\"\xcf\x01\n" +
+	" \x01(\tR\vqueuePolicy\x12.\n" +
+	"\x13command_safety_mode\x18\v \x01(\tR\x11commandSafetyModeJ\x04\b\x06\x10\aR\x15selected_system_tools\"\xcf\x01\n" +
 	"\x0eChatMessageRef\x12#\n" +
 	"\rsegment_index\x18\x01 \x01(\x05R\fsegmentIndex\x12#\n" +
 	"\rmessage_index\x18\x02 \x01(\x05R\fmessageIndex\x12\x1d\n" +

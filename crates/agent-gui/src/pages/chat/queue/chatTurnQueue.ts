@@ -7,7 +7,7 @@ export type {
 } from "@liveagent/ui/contracts/chatQueue";
 
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
-import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
+import type { ChatRuntimeControls, CommandSafetyMode, ExecutionMode } from "../../../lib/settings";
 import type {
   GatewayChatRuntimeControlsEvent,
   GatewaySelectedModelEvent,
@@ -31,6 +31,7 @@ export type QueuedChatTurn = {
   uploadedFiles: PendingUploadedFile[];
   executionMode: ExecutionMode;
   workdir: string;
+  commandSafetyMode: CommandSafetyMode;
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
   gatewayRequest?: QueuedGatewayChatRequest;
@@ -57,6 +58,7 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
     uploadedFiles: input.uploadedFiles.slice(),
     executionMode: input.executionMode,
     workdir: input.workdir.trim(),
+    commandSafetyMode: input.commandSafetyMode,
     runtimeControls: { ...input.runtimeControls },
     createdAt,
     gatewayRequest: input.gatewayRequest ? { ...input.gatewayRequest } : undefined,

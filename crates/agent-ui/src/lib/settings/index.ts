@@ -66,6 +66,7 @@ import type {
   ChatRuntimeReasoningProviderKey,
   CloseWindowBehavior,
   CodexRequestFormat,
+  CommandSafetyMode,
   CustomProvider,
   CustomSettings,
   EffectiveWorkspaceResources,
@@ -107,6 +108,7 @@ import type {
   WorkspaceResourceSettings,
 } from "./types";
 import {
+  COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
   PROMPT_CACHE_HINT_MODES,
@@ -1283,12 +1285,59 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   };
 }
 
+/**
+ * 命令安全模式归一。
+ *
+ * - 缺失 / null / 空串:沿用默认 `auto`(全新配置与旧快照的正常形态)。
+ * - **存在但无法识别:收敛到最严格的 `ask`**(P2#6)。该设置全部意义在于约束,
+ *   未来新增的模式值、回退到旧版本、手改配置的笔误若静默降级成最宽松的非 ask 值,
+ *   等于悄悄放宽用户的约束选择;Rust 侧 normalize_command_safety_mode_value 同语义。
+ */
+export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
+  if (input === undefined || input === null) return "auto";
+  if (typeof input !== "string") {
+    console.warn(`[settings] non-string commandSafetyMode; failing closed to "ask"`, input);
+    return "ask";
+  }
+  const mode = input.trim();
+  if (mode === "") return "auto";
+  if ((COMMAND_SAFETY_MODES as readonly string[]).includes(mode)) {
+    return mode as CommandSafetyMode;
+  }
+  console.warn(`[settings] unrecognized commandSafetyMode "${mode}"; failing closed to "ask"`);
+  return "ask";
+}
+
+/**
+ * 严格度序:`auto` < `sandbox` < `sandboxOffline` < `ask`(逐次人工放行最严)。
+ * 供“取更严格者”的钳制使用,不参与持久化。
+ */
+const COMMAND_SAFETY_MODE_STRICTNESS: Record<CommandSafetyMode, number> = {
+  auto: 0,
+  sandbox: 1,
+  sandboxOffline: 2,
+  ask: 3,
+};
+
+/**
+ * 取更严格的一方(P3#9)。远端(WebUI / 网关)与排队快照携带的模式只允许“收紧”本地
+ * 设置,绝不允许用一份陈旧快照把桌面用户刻意选择的 `sandboxOffline` 放宽成 `auto`
+ * —— 桌面端是工具唯一执行处,约束强度不能由远端取值决定。
+ */
+export function strictestCommandSafetyMode(
+  a: CommandSafetyMode,
+  b: CommandSafetyMode,
+): CommandSafetyMode {
+  return COMMAND_SAFETY_MODE_STRICTNESS[a] >= COMMAND_SAFETY_MODE_STRICTNESS[b] ? a : b;
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
+    commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     activeWorkspaceProjectId:
@@ -1491,6 +1540,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
+      commandSafetyMode: "auto",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

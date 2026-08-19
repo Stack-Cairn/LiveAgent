@@ -1181,12 +1181,13 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 11);
+        assert_eq!(row_count, 12);
         assert_eq!(
             keys,
             vec![
                 SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY.to_string(),
                 SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+                SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
@@ -1207,6 +1208,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
+                "commandSafetyMode": "auto",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": default_workdir.clone(),
                 "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
@@ -1505,6 +1507,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
+                "commandSafetyMode": "auto",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1558,6 +1561,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
+                "commandSafetyMode": "auto",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1578,9 +1582,44 @@ mod tests {
         );
     }
 
+    // P2#6:未识别的命令安全模式必须向严格侧(ask)收敛,不能静默降级成 auto ——
+    // save_system 会把归一结果破坏性地写回磁盘。
     #[test]
-    fn load_system_with_defaults_returns_agent_mode_and_default_project() {
-        let conn = open_memory_db();
+    fn command_safety_mode_unrecognized_value_fails_closed_to_ask() {
+        // 缺失 / null / 空串:正常缺省形态,沿用 auto。
+        assert_eq!(normalize_command_safety_mode_value(None), json!("auto"));
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&Value::Null)),
+            json!("auto")
+        );
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&json!("   "))),
+            json!("auto")
+        );
+        // 合法值原样保留(含空白裁剪)。
+        for mode in ["ask", "auto", "sandbox", "sandboxOffline"] {
+            assert_eq!(
+                normalize_command_safety_mode_value(Some(&json!(format!(" {mode} ")))),
+                json!(mode)
+            );
+        }
+        // 未来新增的模式值 / 回退旧版本 / 手改笔误 / 类型错误:一律收敛到 ask。
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&json!("sandboxStrictest"))),
+            json!("ask")
+        );
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&json!("Auto"))),
+            json!("ask")
+        );
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&json!(1))),
+            json!("ask")
+        );
+    }
+
+    #[test]
+    fn load_system_with_defaults_returns_agent_mode_and_default_project() {        let conn = open_memory_db();
         let loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
             .expect("load system");
 
@@ -1593,6 +1632,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
+                "commandSafetyMode": "auto",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "workspaceProjects": [

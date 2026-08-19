@@ -67,6 +67,8 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.provider_id, "claude_code");
   assert.equal(calls[0].args.max_timeout_ms, 600_000);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
   assert.match(result.content[0].text, /platform: windows/);
   assert.match(result.content[0].text, /profile: windows-git-bash/);
 });
@@ -116,6 +118,100 @@ test("Bash tool uses the same Git Bash-first policy for Codex", async () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.provider_id, "codex");
   assert.equal(calls[0].args.max_timeout_ms, 30_000);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+});
+
+test("sandboxed one-shot Bash forwards the offline sandbox contract", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "shell_run");
+          return {
+            exit_code: 0,
+            shell: "zsh",
+            platform: "macos",
+            profile: "posix-zsh",
+            shell_family: "posix",
+            sandbox: "seatbelt",
+            stdout: "ready\n",
+            stderr: "",
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: false,
+            cancelled: false,
+            effective_timeout_ms: args.timeout_ms,
+            duration_ms: 12,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "macos",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+
+  const result = await bundle.executeToolCall(createBashCall());
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, false);
+  assert.match(result.content[0].text, /sandbox: seatbelt/);
+});
+
+test("sandboxed Bash describes credential masking only when the backend can mask reads", async () => {
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke() {
+          throw new Error("should not invoke");
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+
+  const windowsOnline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  assert.match(windowsOnline.tools[0].description, /Sandbox mode is ON/);
+  assert.doesNotMatch(windowsOnline.tools[0].description, /credential dirs/);
+
+  const windowsOffline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+  assert.match(windowsOffline.tools[0].description, /credential dirs \(~\/\.ssh etc\.\) are masked/);
+
+  const macosOnline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "macos",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  assert.match(macosOnline.tools[0].description, /credential dirs \(~\/\.ssh etc\.\) are masked/);
 });
 
 test("Bash tool schema allows larger timeout values but clamps for Codex", async () => {
@@ -536,9 +632,122 @@ test("ManagedProcess starts foreground commands through process manager", async 
   assert.equal(result.isError, false);
   assert.match(result.content[0].text, /ManagedProcess started/);
   assert.match(result.content[0].text, /id=proc-1/);
+  assert.match(result.content[0].text, /action="wait"/);
+  assert.match(result.content[0].text, /Do not use ProcessWait/);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.workdir, "/repo");
   assert.equal(calls[0].args.cwd, "app");
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+});
+
+test("ManagedProcess wait blocks through process manager", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "managed_process_wait");
+          return {
+            process: {
+              id: "proc-1",
+              label: "dev",
+              command: "echo ready; sleep 30",
+              cwd: "/repo",
+              shell: "zsh",
+              pid: 123,
+              log_path: "/Users/me/.liveagent/process-logs/proc-1.log",
+              started_at: 10,
+              finished_at: null,
+              exit_code: null,
+              running: true,
+            },
+            log_path: "/Users/me/.liveagent/process-logs/proc-1.log",
+            content: "ready\n",
+            truncated: false,
+            bytes: 6,
+            cursor: 6,
+            timed_out: false,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-wait",
+    name: "ManagedProcess",
+    arguments: {
+      action: "wait",
+      process_id: "proc-1",
+      cursor: 0,
+    },
+  });
+
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /ManagedProcess wait/);
+  assert.match(result.content[0].text, /cursor=6/);
+  assert.match(result.content[0].text, /ready/);
+  assert.match(result.content[0].text, /action="wait".*cursor=6/);
+  assert.equal(calls[0].args.process_id, "proc-1");
+  assert.equal(calls[0].args.cursor, 0);
+  assert.equal(calls[0].args.yield_time_ms, 30_000);
+});
+
+test("sandboxed ManagedProcess forwards the offline sandbox contract", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "managed_process_start");
+          return {
+            process: {
+              id: "proc-sandboxed",
+              label: null,
+              command: args.command,
+              cwd: "/repo",
+              shell: "zsh",
+              pid: 124,
+              log_path: "/tmp/proc-sandboxed.log",
+              started_at: 10,
+              finished_at: null,
+              exit_code: null,
+              running: true,
+            },
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-sandboxed",
+    name: "ManagedProcess",
+    arguments: { action: "start", command: "pnpm dev" },
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, false);
 });
 
 test("ManagedProcess abort stops a process returned after cancellation", async () => {
@@ -1054,12 +1263,66 @@ test("resumable Bash yields a session without applying an implicit hard timeout"
   // 都按全局上限（600s）收敛，避免 codex 系 30s cap 误杀长任务。
   assert.equal(calls[0].args.max_timeout_ms, 600_000);
   assert.equal(calls[0].args.provider_id, undefined);
+  assert.equal(calls[0].args.sandbox, false);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
   assert.match(result.content[0].text, /status: running/);
   assert.match(result.content[0].text, /session_duration_ms: 10003/);
   assert.doesNotMatch(result.content[0].text, /^duration_ms:/m);
   assert.equal(result.details.duration_ms, 10_003);
   assert.match(result.content[0].text, /Continue with ProcessWait/);
   assert.doesNotMatch(result.content[0].text, /Bash sleep 10/);
+});
+
+test("sandboxed resumable Bash forwards the sandbox contract to the session", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "shell_session_start");
+          return {
+            status: "completed",
+            session_id: args.session_id,
+            cursor: 0,
+            output: [],
+            output_truncated: false,
+            has_more: false,
+            exit_code: 0,
+            duration_ms: 5,
+            shell: "bash",
+            platform: "windows",
+            profile: "windows-git-bash",
+            shell_family: "posix",
+            sandbox: "low-integrity-token",
+            timeout_ms: null,
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "D:/workspace/project",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: true,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "sandboxed-session",
+    name: "Bash",
+    arguments: { command: "echo probe" },
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.sandbox, true);
+  assert.equal(calls[0].args.sandbox_allow_network, true);
+  assert.match(result.content[0].text, /sandbox: low-integrity-token/);
 });
 
 test("resumable Bash stops a running session returned after cancellation", async () => {

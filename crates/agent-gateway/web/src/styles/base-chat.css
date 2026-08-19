@@ -29,7 +29,9 @@ html[data-liveagent-webui="gateway"] .composer-model-trigger,
 html[data-liveagent-webui="gateway"] .composer-model-label,
 html[data-liveagent-webui="gateway"] .model-selector-dropdown,
 html[data-liveagent-webui="gateway"] .model-selector-group-label,
-html[data-liveagent-webui="gateway"] .model-selector-item {
+html[data-liveagent-webui="gateway"] .model-selector-item,
+html[data-liveagent-webui="gateway"] .composer-safety-dropdown,
+html[data-liveagent-webui="gateway"] .composer-safety-item {
   font-family: var(--app-font-family);
 }
 

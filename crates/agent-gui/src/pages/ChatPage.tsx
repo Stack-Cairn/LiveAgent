@@ -115,6 +115,7 @@ import {
   resolveEffectiveTheme,
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
+  updateSystem,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
   workspaceProjectPathKey,
@@ -1954,6 +1955,13 @@ export function ChatPage(props: ChatPageProps) {
       modelOptions,
       selectedValue,
       chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+      commandSafetyMode: settings.system.commandSafetyMode,
+      onCommandSafetyModeChange: (mode) =>
+        setSettings((prev) =>
+          prev.system.commandSafetyMode === mode
+            ? prev
+            : updateSystem(prev, { commandSafetyMode: mode }),
+        ),
       reasoningOptions: chatRuntimeReasoningOptions,
       thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
       contextUsageTokensSource,
@@ -2768,6 +2776,13 @@ export function ChatPage(props: ChatPageProps) {
         modelOptions,
         selectedValue: paneSelectedValue,
         chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+        commandSafetyMode: settings.system.commandSafetyMode,
+        onCommandSafetyModeChange: (mode) =>
+          setSettings((prev) =>
+            prev.system.commandSafetyMode === mode
+              ? prev
+              : updateSystem(prev, { commandSafetyMode: mode }),
+          ),
         reasoningOptions: chatRuntimeReasoningOptions,
         thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
         contextUsageTokensSource: paneContextUsageTokensSource,

@@ -28,7 +28,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
-import { createShellTools } from "./shellTools";
+import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
@@ -157,6 +157,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   providerId: ProviderId;
   runtimePlatform?: RuntimePlatform;
   fileState: FileToolState;
+  /** OS 级沙箱设置;透传给 Bash / ManagedProcess 执行层。 */
+  sandbox?: ShellSandboxSettings;
   skillsEnabled: boolean;
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
@@ -214,6 +216,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       managedProcessEnabled: params.runtimeScope === "chat",
       resumableShellEnabled: params.runtimeScope === "chat",
       resolveHomeDir,
+      sandbox: params.sandbox,
     }),
     ...(params.skillsEnabled
       ? [
@@ -233,6 +236,9 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       getMcpSettings: params.getMcpSettings,
       applyMcpOps: params.applyMcpOps,
       runtimeScope: params.runtimeScope,
+      // 沙箱模式下 McpManager 不得成为无围栏的 stdio spawn 入口(P1#1):
+      // 运行时探测与 create/update/enable 写入路径一律拒绝 stdio。
+      sandbox: params.sandbox,
       resolveHomeDir,
     }),
     createMemoryTools({

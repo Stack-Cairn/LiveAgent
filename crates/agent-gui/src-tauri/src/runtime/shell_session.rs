@@ -10,9 +10,10 @@ use std::time::{Duration, Instant};
 
 use crate::runtime::platform::shell_basename;
 use crate::runtime::process::{terminate_child_process_tree, terminate_process_tree_by_pid};
+use crate::runtime::sandbox::{SandboxOptions, SandboxSpec};
 use crate::runtime::shell_runner::{
-    resolve_shell_cwd, spawn_platform_shell_command, ShellExecutionProfile, MAX_SHELL_TIMEOUT_MS,
-    MIN_SHELL_TIMEOUT_MS,
+    canonical_workdir, resolve_shell_cwd, spawn_platform_shell_command, ShellExecutionProfile,
+    MAX_SHELL_TIMEOUT_MS, MIN_SHELL_TIMEOUT_MS,
 };
 
 const DEFAULT_START_YIELD_MS: u64 = 10_000;
@@ -72,6 +73,9 @@ pub struct ShellSessionResponse {
     pub platform: String,
     pub profile: String,
     pub shell_family: String,
+    /// 生效的沙箱机制;None 表示未启用沙箱。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<String>,
     pub timeout_ms: Option<u64>,
 }
 
@@ -139,6 +143,7 @@ struct ShellSession {
     pid: u32,
     started_at: Instant,
     profile: ShellExecutionProfile,
+    sandbox: Option<String>,
     timeout_ms: Option<u64>,
     output_capacity_bytes: usize,
     response_capacity_bytes: usize,
@@ -152,6 +157,7 @@ impl ShellSession {
         id: String,
         pid: u32,
         profile: ShellExecutionProfile,
+        sandbox: Option<String>,
         timeout_ms: Option<u64>,
         config: &ShellSessionConfig,
     ) -> Self {
@@ -160,6 +166,7 @@ impl ShellSession {
             pid,
             started_at: Instant::now(),
             profile,
+            sandbox,
             timeout_ms,
             output_capacity_bytes: config.output_capacity_bytes.max(1),
             response_capacity_bytes: config.response_capacity_bytes.max(4),
@@ -378,6 +385,7 @@ impl ShellSession {
             platform: self.profile.platform.to_string(),
             profile: self.profile.profile.to_string(),
             shell_family: self.profile.shell_family.to_string(),
+            sandbox: self.sandbox.clone(),
             timeout_ms: self.timeout_ms,
         }
     }
@@ -416,6 +424,7 @@ impl ShellSessionManager {
         yield_time_ms: Option<u64>,
         timeout_ms: Option<u64>,
         max_timeout_ms: Option<u64>,
+        sandbox_options: Option<SandboxOptions>,
     ) -> Result<ShellSessionResponse, String> {
         let session_id = normalize_session_id(&session_id)?;
         let command = command.trim();
@@ -424,6 +433,16 @@ impl ShellSessionManager {
         }
         let actual_cwd = resolve_shell_cwd(&workdir, cwd.as_deref())?;
         let effective_timeout_ms = normalize_explicit_timeout(timeout_ms, max_timeout_ms);
+        // 沙箱写围栏始终锚定 workdir(工作区根),即使 cwd 指向工作区子目录。
+        // 与一次性 shell_run 使用同一 canonicalize/构造逻辑,避免两个执行入口
+        // 的围栏语义漂移。
+        let sandbox_spec = match sandbox_options {
+            Some(options) => Some(SandboxSpec::from_options(
+                canonical_workdir(&workdir)?,
+                options,
+            )),
+            None => None,
+        };
 
         let session = {
             let mut sessions = self
@@ -436,9 +455,15 @@ impl ShellSessionManager {
             }
             self.make_room_locked(&mut sessions)?;
 
-            let spawned = spawn_platform_shell_command(command, &actual_cwd, &[], || {
-                Ok((Stdio::piped(), Stdio::piped()))
-            })?;
+            let spawned = spawn_platform_shell_command(
+                command,
+                &actual_cwd,
+                &[],
+                sandbox_spec.as_ref(),
+                false,
+                None,
+                || Ok((Stdio::piped(), Stdio::piped())),
+            )?;
             let mut child = spawned.child;
             let stdout = child
                 .stdout
@@ -452,6 +477,7 @@ impl ShellSessionManager {
                 session_id.clone(),
                 child.id(),
                 spawned.profile,
+                spawned.sandbox.map(str::to_string),
                 effective_timeout_ms,
                 &self.config,
             ));
@@ -546,7 +572,7 @@ impl ShellSessionManager {
         sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| format!("shell session not found or expired: {session_id}"))
+            .ok_or_else(|| shell_session_not_found_message(&session_id))
     }
 
     fn cleanup_locked(&self, sessions: &mut HashMap<String, Arc<ShellSession>>, now: Instant) {
@@ -601,6 +627,19 @@ fn normalize_session_id(value: &str) -> Result<String, String> {
         return Err("session_id must be 1-128 ASCII letters, digits, '-', '_', or ':'".to_string());
     }
     Ok(value.to_string())
+}
+
+fn shell_session_not_found_message(session_id: &str) -> String {
+    if uuid::Uuid::parse_str(session_id).is_ok() {
+        format!(
+            "shell session not found or expired: {session_id}. \
+             ProcessWait/ProcessStop only accept Bash session_id values. \
+             If this is a ManagedProcess process_id, use \
+             ManagedProcess(action=\"wait\"|\"read_log\"|\"stop\", process_id=\"{session_id}\")."
+        )
+    } else {
+        format!("shell session not found or expired: {session_id}")
+    }
 }
 
 fn normalize_explicit_timeout(timeout_ms: Option<u64>, max_timeout_ms: Option<u64>) -> Option<u64> {
@@ -768,6 +807,21 @@ mod tests {
     }
 
     #[test]
+    fn uuid_session_miss_points_at_managed_process_wait() {
+        let id = "c7c220e6-bd2a-4fb5-9ffa-35634c22c79d";
+        let message = shell_session_not_found_message(id);
+        assert!(message.contains(id));
+        assert!(message.contains("ManagedProcess"));
+        assert!(message.contains("action=\"wait\""));
+        let bash_id = "bash-05a08b61-7863-4469-96cf-772bfb0f31a0";
+        let bash_message = shell_session_not_found_message(bash_id);
+        assert_eq!(
+            bash_message,
+            format!("shell session not found or expired: {bash_id}")
+        );
+    }
+
+    #[test]
     fn short_command_completes_during_initial_yield() {
         let manager = ShellSessionManager::default();
         let response = manager
@@ -779,6 +833,7 @@ mod tests {
                 Some(2_000),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("short command should run");
         assert_eq!(response.status, ShellSessionStatus::Completed);
@@ -798,6 +853,7 @@ mod tests {
                 Some(20),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("long command should start");
         assert_eq!(first.status, ShellSessionStatus::Running);
@@ -824,6 +880,7 @@ mod tests {
                 Some(20),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("command should start without a hard timeout");
         assert_eq!(first.status, ShellSessionStatus::Running);
@@ -847,6 +904,7 @@ mod tests {
                 Some(50),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("command should start");
         assert_eq!(first.status, ShellSessionStatus::Running);
@@ -872,6 +930,7 @@ mod tests {
                 shell_family: "posix",
                 display_shell: "sh",
             },
+            None,
             None,
             &config,
         );
@@ -899,6 +958,7 @@ mod tests {
                 shell_family: "posix",
                 display_shell: "sh",
             },
+            None,
             None,
             &config,
         );
@@ -934,6 +994,7 @@ mod tests {
                 display_shell: "sh",
             },
             None,
+            None,
             &config,
         );
         session.append_output(ShellOutputStream::Stdout, "a".to_string());
@@ -967,6 +1028,7 @@ mod tests {
                 display_shell: "sh",
             },
             None,
+            None,
             &config,
         );
         session.finish(ShellSessionStatus::Completed, Some(0));
@@ -975,6 +1037,114 @@ mod tests {
         let second = session.wait(None, Duration::ZERO);
 
         assert_eq!(second.duration_ms, first.duration_ms);
+    }
+
+    #[test]
+    fn response_preserves_the_effective_sandbox_mechanism() {
+        let config = ShellSessionConfig::default();
+        let session = ShellSession::new(
+            "sandbox-response".to_string(),
+            1,
+            ShellExecutionProfile {
+                platform: "test",
+                profile: "test",
+                shell_family: "posix",
+                display_shell: "sh",
+            },
+            Some("low-integrity-token".to_string()),
+            None,
+            &config,
+        );
+        session.finish(ShellSessionStatus::Completed, Some(0));
+
+        let response = session.wait(None, Duration::ZERO);
+        assert_eq!(response.sandbox.as_deref(), Some("low-integrity-token"));
+    }
+
+    /// Exercise the production session manager with an explicit sandbox option.
+    /// The sibling directory deliberately lives outside the workspace but outside
+    /// the platform-approved temp roots as well, so a successful write there
+    /// would prove that the session lost its fence.
+    #[cfg(unix)]
+    #[test]
+    fn sandboxed_session_enforces_workspace_write_fence() {
+        use crate::runtime::sandbox::{self, SandboxOptions};
+
+        let capability = sandbox::capability();
+        if !capability.supported {
+            let error = ShellSessionManager::default()
+                .start(
+                    "sandbox-unavailable".to_string(),
+                    workdir(),
+                    "printf should-not-run".to_string(),
+                    None,
+                    Some(2_000),
+                    None,
+                    Some(30_000),
+                    Some(SandboxOptions {
+                        allow_network: true,
+                    }),
+                )
+                .expect_err("sandbox startup must fail closed when the backend is unavailable");
+            assert!(
+                error.contains("Sandbox mode is enabled but unavailable")
+                    || error.contains("sandbox")
+                    || error.contains("bubblewrap"),
+                "unexpected fail-closed error: {error}"
+            );
+            return;
+        }
+
+        let home = dirs::home_dir().expect("home directory");
+        let outer = tempfile::Builder::new()
+            .prefix(".liveagent-sandbox-session-")
+            .tempdir_in(home)
+            .expect("temporary sandbox parent");
+        let workspace = outer.path().join("workspace");
+        let sibling = outer.path().join("sibling");
+        std::fs::create_dir(&workspace).expect("workspace directory");
+        std::fs::create_dir(&sibling).expect("sibling directory");
+
+        let manager = ShellSessionManager::default();
+        let first = manager
+            .start(
+                "sandbox-fence".to_string(),
+                workspace.display().to_string(),
+                "set -e; printf inside > inside.txt; printf outside > ../sibling/outside.txt"
+                    .to_string(),
+                None,
+                Some(2_000),
+                None,
+                Some(30_000),
+                Some(SandboxOptions {
+                    allow_network: true,
+                }),
+            )
+            .expect("sandboxed session should start");
+        let response = if first.status == ShellSessionStatus::Running {
+            manager
+                .wait("sandbox-fence", Some(first.cursor), Some(5_000))
+                .expect("sandboxed session should remain waitable")
+        } else {
+            first
+        };
+
+        assert_eq!(response.sandbox.as_deref(), Some(capability.mechanism));
+        assert_eq!(response.status, ShellSessionStatus::Failed);
+        assert_ne!(
+            response.exit_code,
+            Some(0),
+            "sibling write unexpectedly succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("inside.txt")).expect("workspace write"),
+            "inside"
+        );
+        assert!(
+            !sibling.join("outside.txt").exists(),
+            "sandboxed session wrote outside its workspace"
+        );
+        manager.shutdown_cleanup();
     }
 
     #[test]
@@ -989,6 +1159,7 @@ mod tests {
                 Some(250),
                 Some(1_000),
                 Some(30_000),
+                None,
             )
             .expect("timed command should start");
         assert_eq!(first.status, ShellSessionStatus::Running);
@@ -1014,6 +1185,7 @@ mod tests {
                 Some(300),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("process tree should start");
         let child_pid = collect_text(&first)
@@ -1053,6 +1225,7 @@ mod tests {
                 Some(1_500),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("background child should not hold session response forever");
         assert_eq!(response.status, ShellSessionStatus::Completed);
@@ -1076,6 +1249,7 @@ mod tests {
                 Some(2_000),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("terminal session should start");
         assert_eq!(response.status, ShellSessionStatus::Completed);
@@ -1110,6 +1284,7 @@ mod tests {
                 Some(20),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("first session should start");
         assert_eq!(running.status, ShellSessionStatus::Running);
@@ -1122,6 +1297,7 @@ mod tests {
                 Some(20),
                 None,
                 Some(30_000),
+                None,
             )
             .expect_err("all-running limit should reject a new session");
         assert!(error.contains("session limit reached"));
@@ -1136,6 +1312,7 @@ mod tests {
                 Some(2_000),
                 None,
                 Some(30_000),
+                None,
             )
             .expect("terminal session should be evicted for replacement");
         assert_eq!(replacement.status, ShellSessionStatus::Completed);

@@ -209,6 +209,7 @@ macro_rules! app_invoke_handler {
             commands::process::managed_process_status,
             commands::process::managed_process_stop,
             commands::process::managed_process_read_log,
+            commands::process::managed_process_wait,
             commands::process::managed_process_snapshot,
             commands::process::managed_process_clear,
             commands::terminal::terminal_shell_options,
@@ -284,6 +285,7 @@ macro_rules! app_invoke_handler {
             commands::system::system_resolve_dropped_workspace_folders,
             commands::system::system_classify_dropped_paths,
             commands::system::system_pick_file,
+            commands::system::system_sandbox_capability,
             commands::system::system_save_preview_file,
             commands::system::system_create_project_folder,
             commands::system::system_import_pasted_texts,
@@ -699,6 +701,11 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 最早期钩子:若本进程是 Windows 沙箱的自我再执行启动器(__sandbox_exec),
+    // 就在此建立受限令牌并运行真实命令,以其退出码退出——绝不继续初始化 Tauri。
+    // 非 Windows 平台为空操作。
+    runtime::windows_sandbox::run_sandbox_launcher_if_requested();
+
     let automation_store = Arc::new(
         services::automation::AutomationStore::open()
             .expect("failed to initialize LiveAgent automation store"),
