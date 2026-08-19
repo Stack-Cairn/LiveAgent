@@ -395,11 +395,11 @@ function CustomSettingsDrawer(
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         variant="inset"
-        className="max-w-none border-border bg-background sm:max-w-[440px]"
+        className="settings-provider-custom-sheet max-w-none border-border bg-background sm:max-w-[440px]"
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
       >
-        <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
+        <div className="settings-provider-custom-sheet-header relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
           <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
             <SheetTitle className="text-[17px] leading-tight tracking-tight text-foreground/95">
               {t("settings.customSettings")}
@@ -421,7 +421,7 @@ function CustomSettingsDrawer(
           className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         />
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        <div className="settings-provider-custom-sheet-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
           <div className="divide-y divide-foreground/[0.08]">
             <CustomSettingsModelField
               label={t("settings.conversationTitleModel")}
@@ -455,6 +455,66 @@ function CustomSettingsDrawer(
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+const PROVIDER_ACTION_CLASS =
+  "settings-provider-action h-full min-w-0 gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium shadow-none";
+
+function ProviderActionGroup(props: {
+  activeTab: ProviderId;
+  settings: SettingsSectionProps["settings"];
+  setSettings: SettingsSectionProps["setSettings"];
+  customSettingsOpen: boolean;
+  onAdd: () => void;
+  onOpenCustomSettings: () => void;
+}) {
+  const { t } = useLocale();
+  const { activeTab, settings, setSettings, customSettingsOpen, onAdd, onOpenCustomSettings } =
+    props;
+
+  return (
+    <div
+      className="settings-provider-action-group"
+      role="group"
+      aria-label={t("settings.providerActionGroup")}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(PROVIDER_ACTION_CLASS, "settings-provider-action--primary")}
+        onClick={onAdd}
+        title={t("settings.addProvider")}
+        aria-label={t("settings.addProvider")}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        <span className="settings-provider-action-label">{t("settings.addProviderShort")}</span>
+      </Button>
+      <ProviderSettingsExtension
+        activeTab={activeTab}
+        settings={settings}
+        setSettings={setSettings}
+        triggerClassName={PROVIDER_ACTION_CLASS}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(
+          PROVIDER_ACTION_CLASS,
+          customSettingsOpen && "settings-provider-action-active",
+        )}
+        onClick={onOpenCustomSettings}
+        title={t("settings.openCustomSettings")}
+        aria-label={t("settings.openCustomSettings")}
+      >
+        <Settings className="h-3.5 w-3.5" />
+        <span className="settings-provider-action-label">
+          {t("settings.providerActionSettings")}
+        </span>
+      </Button>
+    </div>
   );
 }
 
@@ -515,31 +575,32 @@ function ProviderList(props: {
 
   return (
     <div className="settings-provider-list flex h-full min-h-0 flex-col gap-4">
-      <div className="settings-section-heading-row flex shrink-0 items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">
-          {filtered.length === 0
-            ? t("settings.noProviders")
-            : `${filtered.length} ${t("settings.navProviders")}`}
+      {filtered.length > 0 ? (
+        <div className="shrink-0 text-sm text-muted-foreground">
+          {`${filtered.length} ${t("settings.navProviders")}`}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="settings-section-action gap-1.5"
-          onClick={onAdd}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("settings.addProvider")}
-        </Button>
-      </div>
+      ) : null}
 
-      <div ref={providerScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div
+        ref={providerScrollContainerRef}
+        className="settings-provider-list-scroll min-h-0 flex-1 overflow-y-auto pr-1"
+      >
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
+          <div className="settings-provider-empty flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
             <div className="mb-3 flex items-center justify-center text-3xl text-foreground">
               <ProviderBrandIcon type={type} />
             </div>
             <p className="text-sm font-medium">{t("settings.noProvidersHint")}</p>
             <p className="mt-1 text-xs text-muted-foreground">{t("settings.noProvidersAdd")}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="settings-provider-empty-add mt-4 gap-1.5"
+              onClick={onAdd}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("settings.addProvider")}
+            </Button>
           </div>
         ) : (
           <div className="space-y-2 pb-1">
@@ -772,70 +833,62 @@ export function ProvidersSection(
 
   return (
     <>
-      <div className="settings-provider-tabs-wrap mb-4 flex shrink-0 items-center justify-between gap-3">
-        <div className="settings-provider-tabs inline-flex h-9 items-center rounded-lg bg-muted p-1 text-muted-foreground">
-          {PROVIDER_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
-                activeTab === tab
-                  ? "bg-background text-foreground shadow"
-                  : "hover:text-foreground/80",
-              )}
-            >
-              <ProviderBrandIcon type={tab} />
-              {getProviderLabel(tab)}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          <ProviderSettingsExtension
+      <div className="settings-provider-section flex min-h-0 flex-1 flex-col">
+        <div className="settings-provider-tabs-wrap mb-4 flex shrink-0 items-center justify-between gap-3">
+          <div className="settings-provider-tabs inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground">
+            {PROVIDER_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "settings-provider-tab inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
+                  activeTab === tab
+                    ? "bg-background text-foreground shadow"
+                    : "hover:text-foreground/80",
+                )}
+              >
+                <ProviderBrandIcon type={tab} />
+                {getProviderLabel(tab)}
+              </button>
+            ))}
+          </div>
+          <ProviderActionGroup
             activeTab={activeTab}
             settings={settings}
             setSettings={setSettings}
+            customSettingsOpen={customSettingsOpen}
+            onAdd={openAdd}
+            onOpenCustomSettings={() => setCustomSettingsOpen(true)}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setCustomSettingsOpen(true)}
-            title={t("settings.openCustomSettings")}
-            aria-label={t("settings.openCustomSettings")}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
         </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <div
-          className="flex h-full transition-transform duration-300 ease-in-out"
-          style={{ transform: `translateX(-${activeTabIndex * 100}%)` }}
-        >
-          {PROVIDER_TABS.map((tab) => (
-            <div
-              key={tab}
-              className="w-full shrink-0 overflow-hidden"
-              aria-hidden={activeTab !== tab}
-              inert={activeTab !== tab}
-            >
-              <ProviderList
-                type={tab}
-                providers={settings.customProviders}
-                onAdd={openAdd}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onReorder={handleProviderReorder}
-                usageByProvider={usageByProvider}
-                refreshingProviderIds={refreshingProviderIds}
-                onRefreshUsage={(providerId) => void refreshProvider(providerId)}
-              />
-            </div>
-          ))}
+        <div className="settings-provider-panels min-h-0 flex-1 overflow-hidden">
+          <div
+            className="flex h-full transition-transform duration-300 ease-in-out"
+            style={{ transform: `translateX(-${activeTabIndex * 100}%)` }}
+          >
+            {PROVIDER_TABS.map((tab) => (
+              <div
+                key={tab}
+                className="w-full shrink-0 overflow-hidden"
+                aria-hidden={activeTab !== tab}
+                inert={activeTab !== tab}
+              >
+                <ProviderList
+                  type={tab}
+                  providers={settings.customProviders}
+                  onAdd={openAdd}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onReorder={handleProviderReorder}
+                  usageByProvider={usageByProvider}
+                  refreshingProviderIds={refreshingProviderIds}
+                  onRefreshUsage={(providerId) => void refreshProvider(providerId)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
