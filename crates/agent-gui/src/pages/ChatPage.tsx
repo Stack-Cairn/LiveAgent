@@ -169,6 +169,7 @@ export function ChatPage(props: ChatPageProps) {
   const {
     settings,
     setSettings,
+    sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
     context,
@@ -1975,13 +1976,17 @@ export function ChatPage(props: ChatPageProps) {
                     isSending={isSending}
                     isUploadingFiles={isUploadingFiles}
                     isInputDisabled={isComposerInputDisabled}
-                    // 麦克风在开启语音输入后显示；供应商以已保存配置为准。
+                    // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
                     sttSessionKey={currentConversationId}
                     sttProvider={
-                      settings.stt.enabled ? (settings.stt.provider ?? "tencent_cloud") : null
+                      settings.stt.enabled
+                        ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
+                        : null
                     }
                     sttProviderConfigured={
-                      settings.stt.providers[settings.stt.provider ?? "tencent_cloud"]?.configured
+                      settings.stt.providers[
+                        sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
+                      ]?.configured
                     }
                     sttTransport={desktopSttTransport}
                     onSttError={handleSttError}

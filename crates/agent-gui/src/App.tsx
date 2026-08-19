@@ -28,6 +28,7 @@ import {
   normalizeSettings,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
+  type SttProviderId,
   subscribeToSystemThemePreference,
   THEME_OPTIONS,
   type Theme,
@@ -191,6 +192,7 @@ export default function App() {
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getDefaultSettings());
+  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
   });
@@ -208,6 +210,10 @@ export default function App() {
   // crypto.randomUUID() inside caller updaters) twice per call.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
+  useEffect(() => {
+    setSttProviderOverride(null);
+  }, [settings.stt.provider]);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
   const effectiveTheme = useMemo(
     () => resolveEffectiveTheme(settings.theme),
@@ -643,6 +649,7 @@ export default function App() {
           <ChatPage
             settings={settings}
             setSettings={setSettings}
+            sttProviderOverride={sttProviderOverride}
             getMcpSettings={getMcpSettings}
             getToolPolicies={getToolPolicies}
             context={context}
@@ -671,6 +678,7 @@ export default function App() {
                 initialProviderId={settingsProviderId}
                 appUpdate={appUpdate}
                 sttSettingsService={desktopSttSettingsService}
+                onSttProviderChange={setSttProviderOverride}
                 reloadSettings={reloadPersistedSettings}
               />
             </AppErrorBoundary>

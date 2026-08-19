@@ -48,6 +48,7 @@ import {
 } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
@@ -328,6 +329,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
+  useEffect(() => {
+    setSttProviderOverride(null);
+  }, [settings.stt.provider]);
   const sttSettingsService = useMemo(
     () =>
       createWebSttSettingsService(async (sttSecretUpdate) => {
@@ -756,14 +762,17 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           isSending={composerIsSending}
                           isUploadingFiles={isUploadingFiles}
                           isInputDisabled={composerInputDisabled}
-                          // 麦克风在开启语音输入后显示；供应商以已保存配置为准。
+                          // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
                           sttSessionKey={displayedConversationId}
                           sttProvider={
-                            settings.stt.enabled ? (settings.stt.provider ?? "tencent_cloud") : null
+                            settings.stt.enabled
+                              ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
+                              : null
                           }
                           sttProviderConfigured={
-                            settings.stt.providers[settings.stt.provider ?? "tencent_cloud"]
-                              ?.configured
+                            settings.stt.providers[
+                              sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
+                            ]?.configured
                           }
                           sttTransport={webSttTransport}
                           onSttError={handleSttError}
@@ -1058,6 +1067,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialProviderId={settingsProviderId}
                 hiddenSections={["remote"]}
                 sttSettingsService={sttSettingsService}
+                onSttProviderChange={setSttProviderOverride}
                 onAgentDirectoryChanged={async () => {
                   if (!api) return;
                   await api.listAgents();

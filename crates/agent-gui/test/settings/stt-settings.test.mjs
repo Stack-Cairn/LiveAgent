@@ -104,6 +104,10 @@ test("STT connection test saves the current form and identifies the active runti
     fileURLToPath(new URL("../../src/pages/ChatPage.tsx", import.meta.url)),
     "utf8",
   );
+  const desktopApp = readFileSync(
+    fileURLToPath(new URL("../../src/App.tsx", import.meta.url)),
+    "utf8",
+  );
   const composerBar = readFileSync(
     fileURLToPath(
       new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
@@ -193,16 +197,19 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(saveBlock, /delete nextProvider\.clearSecrets/);
   assert.match(
     gatewayView,
-    /settings\.stt\.enabled \? \(settings\.stt\.provider \?\? "tencent_cloud"\) : null/,
+    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
   );
-  assert.doesNotMatch(gatewayView, /sttProviderOverride/);
-  assert.doesNotMatch(gatewayView, /onSttProviderChange=\{setSttProviderOverride\}/);
+  assert.match(gatewayView, /onSttProviderChange=\{setSttProviderOverride\}/);
+  assert.match(gatewayView, /setSttProviderOverride\(null\)/);
   assert.doesNotMatch(gatewayView, /settings\.stt\.providers\[settings\.stt\.provider\]\.configured/);
   assert.match(
     desktopChatPage,
-    /settings\.stt\.enabled \? \(settings\.stt\.provider \?\? "tencent_cloud"\) : null/,
+    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
   );
-  assert.doesNotMatch(desktopChatPage, /sttProviderOverride/);
+  assert.match(desktopChatPage, /sttProviderOverride/);
+  assert.match(desktopApp, /sttProviderOverride=\{sttProviderOverride\}/);
+  assert.match(desktopApp, /onSttProviderChange=\{setSttProviderOverride\}/);
+  assert.match(desktopApp, /setSttProviderOverride\(null\)/);
   assert.match(desktopChatPage, /sttSessionKey=\{currentConversationId\}/);
   assert.match(gatewayView, /sttSessionKey=\{displayedConversationId\}/);
   assert.match(desktopChatPage, /sttProviderConfigured=/);
