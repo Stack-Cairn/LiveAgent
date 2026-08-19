@@ -543,6 +543,7 @@ pub(crate) fn darwin_user_temp_parent(tmpdir: &Path) -> Option<PathBuf> {
 
 /// 临时写根是否安全:不得等于或包住 `/`、`$HOME`、或任一敏感目录,否则后置
 /// write-allow / bwrap `--bind` 会重新暴露凭据(与 `validate_workspace` 同一理由)。
+#[cfg(any(not(windows), test))]
 pub(crate) fn temp_write_root_is_safe(path: &Path) -> bool {
     let root = canonical_or_self(path);
     let cmp = normalize_for_compare(&root);
@@ -603,6 +604,7 @@ pub(crate) fn resolve_bwrap_executable(
 /// 临时目录允许写入集合:TMPDIR(仅 Darwin 用户私有 `/var/folders/.../T` 才提升
 /// 到父级以覆盖 confstr 缓存目录)、std::env::temp_dir、以及系统级 tmp。
 /// 会包住 `/` 或 `$HOME` 的根一律丢弃,绝不写进 Seatbelt allow / bwrap `--bind`。
+#[cfg(not(windows))]
 fn writable_temp_dirs() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     let mut push_canonical = |path: PathBuf| {
