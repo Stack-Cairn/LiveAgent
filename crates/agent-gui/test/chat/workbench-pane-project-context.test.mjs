@@ -4,8 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // 不变量:「focusedPane → activeProject → dock 数据源」的解析
-// (docs/design/session-workbench-multi-conversation-implementation-task.md §7.4,
-//  session-workbench-remaining-work.md §四)。聚焦 Pane 携带的 projectPathKey
+// (docs/design/session-workbench-pane-architecture.md §30.2)。聚焦 Pane 携带的 projectPathKey
 // 只在指向一个已知、非 archived、非 missing 的工作区项目时才切换 Right Dock;
 // 陈旧/合成 key 绝不回退到别的项目。
 

@@ -10,8 +10,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // 2. syncVisibleConversationRuntime 只同步仍镜像的 5 个瞬态字段;
 // 3. 非当前会话的 runtime 写入绝不触碰可见 state(双 Pane 隔离);
 // 4. Send/Stop/Compact/Retry 按显式 conversationId 路由,不经全局 current ref。
-// (docs/design/session-workbench-multi-conversation-implementation-task.md
-//  §312-317、§568;session-workbench-remaining-work.md R-2)
+// (docs/design/session-workbench-pane-architecture.md §30.3)
 
 function createHookHarness() {
   const refs = [];

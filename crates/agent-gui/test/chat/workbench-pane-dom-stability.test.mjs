@@ -3,7 +3,7 @@ import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
 // 核心验收「Pane 移动/缩放不重挂 DOM」的 DOM 级验证
-// (docs/design/session-workbench-remaining-work.md R-1,任务文档 §7.2)。
+// (docs/design/session-workbench-pane-architecture.md §30.2)。
 // 此前仅有源码正则保护(PaneSurfaceLayer 按 paneId 排序 + key);本测试用
 // jsdom + 真实 react-dom 渲染 PaneSurfaceLayer,以 Object.is 比对节点实例:
 // MOVE/RESIZE 后存活 Pane 的内容 DOM 不得重挂(草稿/滚动/流才能存活),

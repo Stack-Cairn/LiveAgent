@@ -4,8 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // 不变量:「点击 Right Dock 内的控件不改变 focusedPaneId」
-// (docs/design/session-workbench-pane-architecture.md §验收 10、
-//  session-workbench-multi-conversation-implementation-task.md §7.4)。
+// (docs/design/session-workbench-pane-architecture.md §28、§30.2)。
 // Dock 位于 Canvas 之外,只做会话列表/工具面板;它既不持有布局命令通路
 // (源码层断言),reducer 也只在显式 FOCUS/OPEN 上改焦点(模型层断言)。
 //

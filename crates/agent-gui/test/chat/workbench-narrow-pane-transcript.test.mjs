@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // 不变量:窄 Pane 下转录区随 Pane(容器)退化,而不是随视口
-// (docs/design/session-workbench-remaining-work.md §四)。分屏里 360px 的
+// (docs/design/session-workbench-pane-architecture.md §22)。分屏里 360px 的
 // Pane 在 2560px 的窗口上,楼层导航与宽度手柄必须表现得像一个 360px 的窗口。
 //
 // 三道闸:

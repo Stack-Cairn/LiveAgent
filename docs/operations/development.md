@@ -4,7 +4,7 @@
 
 | 命令 | 作用 |
 |---|---|
-| `make dev` | 启动桌面 GUI 开发模式。 |
+| `make dev` | 启动桌面 GUI 开发模式，Session Workbench 正式路径默认开启。 |
 | `make build` | 构建桌面 GUI。 |
 | `make desktop-build-macos` | macOS 普通桌面打包。 |
 | `make desktop-build-macos-release` | macOS Developer ID 签名、公证相关 release 打包。 |
@@ -14,6 +14,14 @@
 | `make desktop-build-linux` | Linux 桌面目标构建。 |
 | `make dev-gateway` | 本地启动 Go Gateway 开发服务。 |
 | `make dev-webui` | 本地启动 Gateway WebUI Vite 开发服务。 |
+| `make dev-stack` | 后台启动 Gateway、WebUI、桌面 LiveAgent 三端。 |
+| `make dev-stack-stop` | 停止由三端脚本启动的进程，不终止外部同端口进程。 |
+| `make dev-stack-restart` | 重启由三端脚本管理的进程。 |
+| `make dev-stack-status` | 检查三端、HTTP 入口与 MCP Bridge 状态。 |
+| `make dev-stack-logs` | 输出三端最近日志。 |
+| `make check-fast` | 编译前后端、运行 lint、Go 基础测试与 diff 检查。 |
+| `make check-all` | 在 fast 基础上运行完整前端/Rust 测试与 Proto 检查。 |
+| `make check-strict` | 在 all 基础上运行 rustfmt，并将 Biome/Rust 告警升级为错误。 |
 | `make proto` | 生成 Gateway proto。 |
 | `make webui` | 构建 Gateway WebUI 静态资源。 |
 | `make gateway-build` | proto + webui + Gateway 构建。 |
@@ -45,6 +53,93 @@
 工具链版本由根 `mise.toml` 固定（git 跟踪），`mise install` 一键对齐，CI 使用相同版本。
 
 实际脚本名称可能随 package.json 调整，运行前以当前 manifest 为准。
+
+## 三端本地启动脚本
+
+统一入口是 `scripts/dev-stack.sh`。默认 Gateway 为 `http://localhost:50052`，WebUI 为
+`http://localhost:5173`，桌面前端为 `http://localhost:1420`，Gateway token 为
+`dev-token`。运行日志与 PID 默认写入 `$TMPDIR/liveagent-dev-stack-$UID`，不会写入仓库。
+
+```bash
+make dev-stack
+make dev-stack-status
+make dev-stack-logs
+make dev-stack-restart
+make dev-stack-stop
+```
+
+可以只操作一端：
+
+```bash
+./scripts/dev-stack.sh restart webui
+./scripts/dev-stack.sh logs gateway
+```
+
+自定义 token 与端口时使用环境变量，token 不会保存到仓库文件：
+
+```bash
+LIVEAGENT_GATEWAY_TOKEN='replace-with-a-local-secret' \
+LIVEAGENT_DEV_GATEWAY_PORT=50052 \
+LIVEAGENT_DEV_WEBUI_PORT=5173 \
+make dev-stack
+```
+
+桌面端设置中的 Gateway 地址、端口和 token 必须与脚本一致。默认填写
+`http://localhost`、`50052`、`dev-token`。脚本发现目标端口已有外部进程时会复用并标记为
+`external`，`stop` 不会终止该进程。
+
+## 编译与告警检查脚本
+
+统一检查入口是跨平台 Node 脚本 `scripts/check.mjs`。macOS、Linux 和 Windows 都可以通过
+pnpm 调用；`scripts/check.sh` 仅作为 macOS/Linux 与 Git Bash 的兼容包装：
+
+```bash
+make check-fast
+make check-all
+make check-strict
+```
+
+脚本实时输出每项 PASS/FAIL，并将完整运行日志写入操作系统临时目录下的
+`liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log`。默认在首个失败处停止；
+需要一次收集全部失败时使用：
+
+```bash
+LIVEAGENT_CHECK_KEEP_GOING=1 make check-all
+```
+
+三个级别的边界：
+
+| 级别 | 检查范围 |
+|---|---|
+| `fast` | diff、UI 边界、GUI/WebUI TypeScript + Vite 构建与 lint、Rust check、golangci-lint 和 Go tests。 |
+| `all` | `fast` + GUI/WebUI/release 测试、Rust library tests 与 Proto lint/breaking。 |
+| `strict` | `all` + Shared UI lint，并将 Biome/Rust warning 视为错误，额外执行 rustfmt 与 Clippy。 |
+
+跨平台推荐入口：
+
+```bash
+pnpm check:fast
+pnpm check:all
+pnpm check:strict
+```
+
+Windows PowerShell 一次收集全部失败：
+
+```powershell
+$env:LIVEAGENT_CHECK_KEEP_GOING = "1"
+pnpm check:all
+```
+
+平台边界：检查脚本不依赖 POSIX Shell，设计为支持 macOS、Linux 和原生 Windows；当前已在
+macOS ARM64 实跑验证，Windows 仍需对应机器或 CI 验证。`scripts/dev-stack.sh` 使用 POSIX
+进程组、`lsof`、`nohup` 和信号管理，只支持 macOS/Linux。macOS 发布脚本和 Linux AppImage
+后处理脚本也分别保持其目标平台限定，不属于通用跨平台入口。
+
+## Session Workbench 正式版契约
+
+正式版桌面构建沿用 `VITE_LIVEAGENT_SESSION_WORKBENCH` 的默认值 `true`，安装包直接进入
+Session Workbench 产品路径。`make dev DEV_SESSION_WORKBENCH=0` 只用于本地兼容性回归，不应
+用于发布产物；当前版本冷启动创建单 Root Pane，不恢复历史多 Pane 布局。
 
 ## 运行时路径
 

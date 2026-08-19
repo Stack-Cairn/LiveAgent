@@ -2,12 +2,14 @@
 
 | 元数据 | 内容 |
 |---|---|
-| 状态 | Reviewed Draft / 已按多会话、窗口级工作台方案完成第四轮审查 |
+| 状态 | Release baseline / 正式版实现基线（目标架构与当前实现边界分列记录） |
 | 版本 | v0.5 |
-| 日期 | 2026-08-16 |
-| 适用基线 | 本地 `main`，审查时 HEAD 为 `4f6bf8482839`；保留当前未提交 Native Drop 调整 |
+| 日期 | 2026-08-20 |
+| 适用基线 | PR #521 HEAD `31244950e56d18f454b7c230c2f1c3bfff9efbae`；Native Drop 跨 Pane 目标会话仍待修复 |
 
 研究依据：[OTTY 多会话、分块、焦点与文件 Pane 架构拆解](../reverse-engineering/otty/1.3.1/pane-architecture.md) · [OTTY 当前实现](../reverse-engineering/otty/1.3.1/current-state.md)
+
+> **当前实现说明**：本文件保留窗口级布局持久化、恢复和完整三平台验收等目标设计，不能将这些目标段落视为当前代码已启用的能力。正式版当前默认开启 Workbench，但启动时创建单 Root Pane，不恢复历史多 Pane 布局；`VITE_LIVEAGENT_SESSION_WORKBENCH=0` 仅用于回退。Native Drop 的命中坐标已覆盖多 Pane，但最终 upload 目标仍需在 drop 时同步绑定 `conversationId`，完成前不应宣称发布验收全部通过。
 
 ## 1. 本轮需求结论
 
@@ -60,7 +62,7 @@ LiveAgent 会话页应从：
 | Right Dock 项目 | 当前激活项目 | 当前聚焦 Surface 的显式项目引用 |
 | 实施顺序 | 先 Active Conversation Host | 先拆 Conversation Controller，再开放多会话 Pane |
 
-保留 v0.4 中正确的边界：PaneTree/Runtime 分离、唯一交互 View Lease、整数几何、Revision CAS、未知 Surface 无损往返、Native Drop 坐标适配、三平台实机门槛和本机持久化。
+保留 v0.4 中正确的边界：PaneTree/Runtime 分离、唯一交互 View Lease、整数几何、Revision CAS、未知 Surface 无损往返、Native Drop 坐标适配和三平台实机门槛。本机布局持久化仍是目标设计，当前正式版不启用。
 
 ## 3. 产品交互定义
 
@@ -152,7 +154,7 @@ Pane 压缩不使用 `transform: scale()`：
 6. 右上角文件按钮始终可找到，并默认在固定 Right Dock 打开 File Tree。
 7. 工作区拖入创建新会话；会话拖入复用既有会话。
 8. Right Dock 始终使用聚焦 Pane 的受校验项目上下文。
-9. 本机恢复布局，异常引用可修复，新旧 UI 可 Feature Flag 回退。
+9. **目标架构**支持本机恢复布局，异常引用可修复；当前正式版从单 Root Pane 启动，新旧 UI 可由 Feature Flag 回退。
 10. macOS、Windows、Linux 共用布局内核并通过实机矩阵。
 
 ### 4.2 首期非目标
@@ -970,7 +972,39 @@ Surface Registry 统一 Renderer、尺寸、关闭、唯一性和 Context，避�
 | Windows/Linux 差异 | Adapter + 安装包实机门槛 |
 | 一次性重构不可回退 | Phase 0～7 + 本机 Feature Flag |
 
-## 30. 最终推荐
+## 30. 当前正式版实现与剩余工作
+
+### 30.1 发布基线
+
+- Session Workbench 正式版默认启用；`VITE_LIVEAGENT_SESSION_WORKBENCH=0` 仅回退旧单 Pane 路径。
+- 冷启动从当前会话创建单 Root Pane；当前版本不持久化或恢复历史多 Pane 布局。
+- T-1 cwd 范围校验已完成：Rust 双边 canonicalize + containment，前端 drop/restore/invariant 三道护栏。
+- 终端 Pane、Runtime/草稿/队列/审批隔离、Right Dock 项目上下文和核心回归测试已落地。
+
+### 30.2 已完成交付项
+
+| 范围 | 当前状态 |
+|---|---|
+| PaneTree、Geometry、Divider、Focus、Move、Swap、Close、Resize | 已完成并有模型/合同测试 |
+| Conversation、Local Terminal、SSH Terminal 宿主 | 已完成，租约与绑定保证单宿主 |
+| Runtime、Draft、Upload、Queue、Approval、Model、Streaming 存储隔离 | 已完成，按 `conversationId` 分桶；Native Drop 的最终目标绑定仍是合入阻塞 |
+| T-1 cwd 校验、T-2 stale 恢复、T-3 拖入入口、T-4 关闭语义 | 已完成 |
+| T-5 Right Dock 互斥、T-6 resize 去重、T-7 几何 context | 已完成 |
+| GUI/WebUI/TypeScript/UI boundary/Tauri Rust Check | 当前 PR CI 全部通过 |
+
+### 30.3 合入前阻塞与后续验证
+
+1. **Native Drop P1**：坐标命中已覆盖多 Pane，但异步聚焦完成前，上传管线仍可能读取旧 `currentConversationIdRef`，导致附件写入错误会话。必须在 drop 时同步携带目标 Pane 的 `conversationId`，并补真实 upload-store 断言。
+2. **实机矩阵**：macOS Retina、Windows 混合 DPI、Linux X11/Wayland，以及 IME、键盘、Forced Colors、读屏器和双流式性能冒烟仍需完成。
+3. **独立重构**：剩余的五个页面级瞬态镜像、完整 Composer Controller 化和更深的性能收敛不属于本次正式版合入范围。
+
+### 30.4 当前验证边界
+
+- 当前代码验证覆盖核心模型、Runtime 隔离、终端租约、拖拽状态机、最小尺寸、项目上下文和安全边界。
+- 通过回退开关可验证旧单 Pane 路径；回退不删除或迁移布局数据，因为当前版本没有窗口级布局持久化。
+- 本节是当前实现的唯一发布状态来源；下方 Phase 与验收条目保留为目标架构和后续演进记录。
+
+## 31. 最终推荐
 
 ```text
 App Chrome + Composer Model Picker
