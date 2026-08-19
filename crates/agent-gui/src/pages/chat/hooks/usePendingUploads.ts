@@ -150,32 +150,37 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     setPendingUploadsForConversation(conversationId, []);
   }, [isAgentMode, workdir, conversationId, setPendingUploadsForConversation, uploadStore]);
 
-  const captureUploadTarget = useCallback((requested?: ConversationUploadTarget): UploadTarget | null => {
-    const targetConversationId = (requested?.conversationId ?? currentConversationIdRef.current).trim();
-    if (!targetConversationId) {
-      setErrorMessage("请先选择或创建会话后再上传文件。");
-      return null;
-    }
+  const captureUploadTarget = useCallback(
+    (requested?: ConversationUploadTarget): UploadTarget | null => {
+      const targetConversationId = (
+        requested?.conversationId ?? currentConversationIdRef.current
+      ).trim();
+      if (!targetConversationId) {
+        setErrorMessage("请先选择或创建会话后再上传文件。");
+        return null;
+      }
 
-    const currentTargetUploads = getPendingUploadsForConversation(targetConversationId);
-    const remainingFileSlots = Math.max(0, MAX_UPLOAD_FILES - currentTargetUploads.length);
-    if (remainingFileSlots === 0) {
-      addNotify("warning", `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略多余文件`);
-      return null;
-    }
+      const currentTargetUploads = getPendingUploadsForConversation(targetConversationId);
+      const remainingFileSlots = Math.max(0, MAX_UPLOAD_FILES - currentTargetUploads.length);
+      if (remainingFileSlots === 0) {
+        addNotify("warning", `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略多余文件`);
+        return null;
+      }
 
-    return {
-      targetConversationId,
-      targetWorkdir: (requested?.workdir ?? workdir).trim(),
-      remainingFileSlots,
-    };
-  }, [
-    addNotify,
-    currentConversationIdRef,
-    getPendingUploadsForConversation,
-    setErrorMessage,
-    workdir,
-  ]);
+      return {
+        targetConversationId,
+        targetWorkdir: (requested?.workdir ?? workdir).trim(),
+        remainingFileSlots,
+      };
+    },
+    [
+      addNotify,
+      currentConversationIdRef,
+      getPendingUploadsForConversation,
+      setErrorMessage,
+      workdir,
+    ],
+  );
 
   const appendImportedFiles = useCallback(
     (
@@ -234,11 +239,14 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   // Shared import skeleton: single-flight guard, mode/workdir preconditions,
   // busy state, result merge, and error routing to the owning conversation.
   const runUploadTask = useCallback(
-    async (task: {
-      emptySelectionMessage: string;
-      errorFallback: string;
-      importer: (target: UploadTarget) => Promise<SystemPickReadableFilesResponse>;
-    }, requestedTarget?: ConversationUploadTarget) => {
+    async (
+      task: {
+        emptySelectionMessage: string;
+        errorFallback: string;
+        importer: (target: UploadTarget) => Promise<SystemPickReadableFilesResponse>;
+      },
+      requestedTarget?: ConversationUploadTarget,
+    ) => {
       if (uploadTaskActiveRef.current) {
         addNotify("warning", "当前正在上传文件，请稍候");
         return;
@@ -302,16 +310,19 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const importReadableFilePaths = useCallback(
     async (paths: string[], target?: ConversationUploadTarget) => {
       if (paths.length === 0) return;
-      await runUploadTask({
-        emptySelectionMessage: "拖入文件均不受当前 Read 支持",
-        errorFallback: "导入文件失败",
-        importer: ({ targetWorkdir, remainingFileSlots }) =>
-          invoke<SystemPickReadableFilesResponse>("system_import_readable_file_paths", {
-            workdir: targetWorkdir,
-            paths,
-            maxFiles: remainingFileSlots,
-          }),
-      }, target);
+      await runUploadTask(
+        {
+          emptySelectionMessage: "拖入文件均不受当前 Read 支持",
+          errorFallback: "导入文件失败",
+          importer: ({ targetWorkdir, remainingFileSlots }) =>
+            invoke<SystemPickReadableFilesResponse>("system_import_readable_file_paths", {
+              workdir: targetWorkdir,
+              paths,
+              maxFiles: remainingFileSlots,
+            }),
+        },
+        target,
+      );
     },
     [runUploadTask],
   );
