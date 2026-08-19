@@ -526,7 +526,9 @@ pub(crate) struct SpawnedPlatformShell {
     pub sandbox: Option<&'static str>,
 }
 
-fn platform_shell_candidates(cmd: &str) -> Vec<ShellCandidate> {
+/// 平台 shell 候选链。`sandboxed` 只影响 Windows 顺序(见下),其余平台忽略。
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn platform_shell_candidates(cmd: &str, sandboxed: bool) -> Vec<ShellCandidate> {
     #[cfg(windows)]
     {
         let mut candidates = Vec::new();
@@ -597,6 +599,20 @@ fn platform_shell_candidates(cmd: &str) -> Vec<ShellCandidate> {
             ],
             augment_macos_path: false,
         });
+        // 沙箱下把 cmd.exe 提到队首:它是候选里**唯一的纯原生 PE**,不依赖 msys 运行时
+        // (Git Bash)、不依赖托管运行时(pwsh=CoreCLR、powershell.exe=.NET Framework),
+        // 因而是受限令牌/AppContainer 下唯一确定能起来的 shell。此前的顺序会让前三个候选
+        // 依次启动即死,每个白付一次 ≤2s 探测(首条命令最坏 ~6s),且任何探测漏判都会把
+        // 一个必死 shell 交给模型。非沙箱路径顺序不变(Git Bash 优先,POSIX 语义更好)。
+        if sandboxed {
+            if let Some(cmd_index) = candidates
+                .iter()
+                .position(|candidate| candidate.profile.profile == "windows-cmd")
+            {
+                let cmd_candidate = candidates.remove(cmd_index);
+                candidates.insert(0, cmd_candidate);
+            }
+        }
         return candidates;
     }
 
@@ -681,7 +697,7 @@ fn platform_shell_candidates(cmd: &str) -> Vec<ShellCandidate> {
 
 #[cfg(test)]
 fn default_platform_shell_profile() -> ShellExecutionProfile {
-    platform_shell_candidates("")
+    platform_shell_candidates("", false)
         .into_iter()
         .next()
         .map(|candidate| candidate.profile)
@@ -703,26 +719,60 @@ static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
 
 /// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码:0xC0000142(DLL 初始化失败,
 /// msys/cygwin 系 shell 在沙箱下的典型死法)、0xC0000135(DLL 缺失)、0xC0000022(拒绝
-/// 访问)。命中 ⇒ 该候选在此沙箱机制下根本起不来。
+/// 访问)。命中 ⇒ 该候选在此沙箱机制下连 loader 都过不去。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_loader_failure_exit(code: i32) -> bool {
     matches!(code as u32, 0xC000_0142 | 0xC000_0135 | 0xC000_0022)
 }
 
-/// 探测裁决:给定探测进程的退出码(None = 超时/被杀/无退出码),该候选是否可用。
-/// 只有明确的 loader NTSTATUS 判不可用;其余(超时、普通非零退出)一律放行,由真实
-/// spawn 自行失败并走既有错误链——探测只负责识别“启动即死”这一类硬不兼容。
+/// CLR 未处理托管异常(0xE0434352 = `COMPLUS_E_UNHANDLED`)。
+///
+/// **与 loader 失败是不同的失败层**:该码意味着 PE loader 已通过、CoreCLR/.NET
+/// Framework 的原生部分已成功起来,随后在托管层抛异常且无人处理。托管 shell
+/// (pwsh 是 CoreCLR、powershell.exe 5.1 是 .NET Framework)在受限令牌下的典型死法:
+/// 托管初始化要经 CNG 取加密原语,而 `WRITE_RESTRICTED` 令牌下 `\Device\CNG` 的写类
+/// 打开过不了第二遍判定(其 DACL 不含我们的限制性 SID)⇒ `BCrypt.dll` 初始化失败 ⇒
+/// 托管异常 ⇒ 0xE0434352。Chromium 靠“降权前先 warmup CNG”规避,但那要求进程先以
+/// 正常令牌启动再自我降权;我们是父进程造好受限令牌再 `CreateProcessAsUserW` 拉起
+/// 全新 shell,子进程从第一条指令起就受限,**不存在 warmup 窗口** —— 故对沙箱而言这
+/// 是结构性不兼容,只能换候选,不能修好。
 #[cfg_attr(not(windows), allow(dead_code))]
-fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
-    !exit_code.is_some_and(is_loader_failure_exit)
+fn is_managed_runtime_init_failure_exit(code: i32) -> bool {
+    code as u32 == 0xE043_4352
 }
 
-/// Windows 沙箱下探测某 shell 候选能否活过 loader(结果进程级缓存)。
+/// 该候选 shell 是否在当前沙箱机制下“启动即死”(不区分死在 loader 还是托管初始化)。
 ///
-/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中 loader NTSTATUS
-/// (典型:Git Bash 的 msys-2.0.dll 在受限令牌下 0xC0000142)⇒ 不可用,调用方落到
-/// 下一候选(pwsh/powershell/cmd,均原生 PE,必然可用)。探测本身失败(wrap/spawn
-/// 出错)判可用:让真实 spawn 复现错误并走既有 fail-closed/错误报告路径,探测不吞错。
+/// 两类都必须纳入,否则候选回退链不推进:此前只认 loader NTSTATUS,pwsh 的
+/// 0xE0434352 被判“可用”,于是一个必死的 shell 被交给模型,后续每条命令都以同一
+/// 退出码失败;更糟的是该裁决会进 `SANDBOX_SHELL_PROBE_CACHE`(进程级),错误结论
+/// 被固化到重启为止。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_sandbox_incompatible_exit(code: i32) -> bool {
+    is_loader_failure_exit(code) || is_managed_runtime_init_failure_exit(code)
+}
+
+/// 探测裁决:给定探测进程的退出码(None = 超时/被杀/无退出码),该候选是否可用。
+/// 只有明确的“启动即死”退出码判不可用;其余(超时、普通非零退出)一律放行,由真实
+/// spawn 自行失败并走既有错误链——探测只负责识别启动即死这一类硬不兼容。
+///
+/// 机制无关:受限令牌与 AppContainer 两个后端共用本裁决(缓存 key 已含机制,两边
+/// 各自独立记录),故新增的托管初始化失败在 sandbox 与 sandboxOffline 下同样生效。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
+    !exit_code.is_some_and(is_sandbox_incompatible_exit)
+}
+
+/// Windows 沙箱下探测某 shell 候选能否活到能执行命令(结果进程级缓存)。
+///
+/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中“启动即死”集合
+/// (Git Bash 的 msys-2.0.dll 在受限令牌下 0xC0000142;pwsh/powershell 的 CNG 初始化
+/// 失败 0xE0434352)⇒ 不可用,调用方落到下一候选。探测本身失败(wrap/spawn 出错)判
+/// 可用:让真实 spawn 复现错误并走既有 fail-closed/错误报告路径,探测不吞错。
+///
+/// 注意候选里**只有 cmd.exe 是纯原生 PE**:Git Bash 依赖 msys 运行时,pwsh 是 CoreCLR,
+/// powershell.exe 是 .NET Framework —— 三者在沙箱下都可能启动即死,不能假定“非 Git Bash
+/// 的候选必然可用”。故沙箱下候选顺序已把 cmd.exe 提前(见 `platform_shell_candidates`)。
 #[cfg(windows)]
 fn sandbox_candidate_usable(
     spec: &SandboxSpec,
@@ -792,7 +842,7 @@ where
     let mut errors: Vec<String> = Vec::new();
     let system_proxy_envs = crate::services::system_proxy::shell_proxy_envs()?;
 
-    for candidate in platform_shell_candidates(command) {
+    for candidate in platform_shell_candidates(command, sandbox_spec.is_some()) {
         // 沙箱包裹在 shell candidate 选定后、spawn 前进行,fail-closed:包裹
         // 失败(平台不支持/依赖缺失)直接报错,绝不回退为无沙箱执行。
         // sandbox-exec/bwrap 按名字解析 shell 时同样遵循 PATH,语义不变。
@@ -805,15 +855,16 @@ where
             None => (candidate.program.clone(), candidate.args.clone(), None),
         };
         // Windows 沙箱专属:候选回退链平时靠 spawn 失败推进,但沙箱下 spawn 的永远是
-        // LiveAgent.exe 启动器(总能成功),loader 级不兼容(如 Git Bash 的 msys 依赖
-        // 在受限令牌下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
-        // (`exit 0`)提前识别,落到下一候选(pwsh/powershell),不给模型返回死 shell。
+        // LiveAgent.exe 启动器(总能成功),启动即死型不兼容只体现为命令“执行了但立即死”:
+        // Git Bash 的 msys 依赖在受限令牌下 0xC0000142,pwsh/powershell 的 CNG 初始化失败
+        // 0xE0434352。用一次缓存的探测(`exit 0`)提前识别并落到下一候选,不给模型返回死 shell。
         #[cfg(windows)]
         if let (Some(spec), Some(mechanism)) = (sandbox_spec, sandbox_mechanism) {
             if !sandbox_candidate_usable(spec, &candidate, mechanism) {
                 errors.push(format!(
-                    "{} ({}) skipped: incompatible with the {mechanism} sandbox (loader-level \
-                     startup failure, e.g. STATUS_DLL_INIT_FAILED)",
+                    "{} ({}) skipped: the shell dies at startup under the {mechanism} sandbox \
+                     (STATUS_DLL_INIT_FAILED for MSYS-based shells, or CLR/CNG init failure \
+                     0xE0434352 for managed shells such as pwsh)",
                     candidate.profile.profile, candidate.profile.display_shell
                 ));
                 continue;
@@ -1027,7 +1078,8 @@ process output to a log file, for example: `nohup command > /tmp/liveagent-task.
 #[cfg(test)]
 mod tests {
     use super::{
-        default_platform_shell_profile, is_loader_failure_exit, normalize_timeout_ms,
+        default_platform_shell_profile, is_loader_failure_exit,
+        is_managed_runtime_init_failure_exit, is_sandbox_incompatible_exit, normalize_timeout_ms,
         run_shell_script, sandbox_probe_verdict, sanitize_rel_path_core, ShellRunRegistry,
         DEFAULT_SHELL_TIMEOUT_MS, MAX_SHELL_TIMEOUT_MS, MIN_SHELL_TIMEOUT_MS,
     };
@@ -1036,10 +1088,10 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有 loader 级 NTSTATUS 判不可用;
+    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有“启动即死”判不可用;
     // 超时/普通失败一律放行交由真实 spawn 走既有错误链。
     #[test]
-    fn sandbox_probe_verdict_only_rejects_loader_ntstatus() {
+    fn sandbox_probe_verdict_rejects_startup_death_exit_codes() {
         // loader 死亡三码(as i32 后为负数,与 std ExitStatus::code() 的表示一致)。
         assert!(is_loader_failure_exit(0xC000_0142_u32 as i32)); // STATUS_DLL_INIT_FAILED
         assert!(is_loader_failure_exit(0xC000_0135_u32 as i32)); // STATUS_DLL_NOT_FOUND
@@ -1051,6 +1103,44 @@ mod tests {
         assert!(sandbox_probe_verdict(Some(127)));
         assert!(sandbox_probe_verdict(Some(0xC000_0005_u32 as i32))); // ACCESS_VIOLATION:运行期崩溃,非启动即死
         assert!(sandbox_probe_verdict(None));
+    }
+
+    // CLR 未处理异常(pwsh 在受限令牌下 CNG 初始化失败的死法)必须让候选链推进。
+    // 曾漏判 ⇒ 必死的 pwsh 被交给模型,且错误裁决进进程级缓存固化到重启。
+    #[test]
+    fn sandbox_probe_verdict_rejects_clr_unhandled_exception() {
+        let clr = 0xE043_4352_u32 as i32;
+        assert_eq!(clr, -532_462_766); // 与真机报告的退出码一致
+        assert!(is_managed_runtime_init_failure_exit(clr));
+        assert!(is_sandbox_incompatible_exit(clr));
+        assert!(!sandbox_probe_verdict(Some(clr)));
+        // 它不是 loader 失败:分层必须保持可区分(诊断文案据此选词)。
+        assert!(!is_loader_failure_exit(clr));
+        // loader 三码同样落在合并判定里。
+        assert!(is_sandbox_incompatible_exit(0xC000_0142_u32 as i32));
+        // 邻近的 CLR 相关码不应被误判(只认未处理异常这一个)。
+        assert!(sandbox_probe_verdict(Some(0xE043_4353_u32 as i32)));
+    }
+
+    // 沙箱下 cmd.exe 必须排在队首:它是唯一纯原生 PE 候选,而 Git Bash(msys)、
+    // pwsh(CoreCLR)、powershell.exe(.NET Framework)在沙箱下都可能启动即死。
+    #[cfg(windows)]
+    #[test]
+    fn windows_sandboxed_chain_puts_cmd_first() {
+        let sandboxed: Vec<&'static str> = super::platform_shell_candidates("echo hi", true)
+            .iter()
+            .map(|candidate| candidate.profile.profile)
+            .collect();
+        assert_eq!(sandboxed[0], "windows-cmd");
+        // 回退尾巴保留(cmd 若因故不可用仍有候选),且不重复、不丢失。
+        let unsandboxed: Vec<&'static str> = super::platform_shell_candidates("echo hi", false)
+            .iter()
+            .map(|candidate| candidate.profile.profile)
+            .collect();
+        assert_eq!(sandboxed.len(), unsandboxed.len());
+        for profile in &unsandboxed {
+            assert!(sandboxed.contains(profile), "missing candidate {profile}");
+        }
     }
 
     #[test]
@@ -1110,7 +1200,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_shell_chain_orders_git_bash_before_powershell_fallbacks() {
-        let profiles: Vec<&'static str> = super::platform_shell_candidates("echo hi")
+        let profiles: Vec<&'static str> = super::platform_shell_candidates("echo hi", false)
             .iter()
             .map(|candidate| candidate.profile.profile)
             .collect();

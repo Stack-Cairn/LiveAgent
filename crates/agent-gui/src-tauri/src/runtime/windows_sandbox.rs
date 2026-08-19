@@ -40,8 +40,22 @@
 //! std 句柄(取代 `bInheritHandles=TRUE` 的全句柄表继承,收敛句柄泄漏面);显式
 //! `lpDesktop = winsta0\default`(受限令牌/AC 启动必须显式设桌面,否则句柄站点解析歧义);
 //! Job Object `KILL_ON_JOB_CLOSE` 在非 isolated 时兜底级联杀,isolated 常驻进程则跳过
-//!(对齐 Linux bwrap 省略 `--die-with-parent`);loader 失败退出码(0xC0000142/0135/0022)
-//! 转可读中英诊断经既有管道上传。
+//!(对齐 Linux bwrap 省略 `--die-with-parent`);“启动即死”退出码转可读中英诊断经既有
+//! 管道上传 —— 含 loader NTSTATUS(0xC0000142/0135/0022)与 CLR 托管初始化失败
+//! (0xE0434352)。
+//!
+//! # 已知限制:两个后端都跑不了托管 shell
+//!
+//! `WRITE_RESTRICTED` 令牌下,写类访问要过第二遍判定(对象 DACL 必须显式授权给我们的
+//! 限制性 SID);`\Device\CNG` 的 DACL 不含它们,故 CNG 初始化失败 ⇒ `BCrypt.dll` 起不来
+//! ⇒ 托管运行时抛未处理异常退出 0xE0434352。AppContainer 后端零 capability,同类风险。
+//! 受影响的是 pwsh(CoreCLR)与 powershell.exe(.NET Framework);cmd.exe 是纯原生 PE,
+//! 不受影响,故沙箱下候选顺序把它提到队首(见 `shell_runner::platform_shell_candidates`)。
+//!
+//! Chromium 的规避手法(降权前先 warmup RNG/CNG)在此**不适用**:那要求进程先以正常令牌
+//! 启动再自我降权,而我们是父进程造好受限令牌后 `CreateProcessAsUserW` 拉起全新 shell,
+//! 子进程从第一条指令起就受限,不存在 warmup 窗口。把 `Everyone`(S-1-1-0)塞进限制性 SID
+//! 能让 CNG 通过,但那等于第二遍判定对几乎所有对象放行 —— 写围栏当场失效,绝不可取。
 
 /// 非 Windows:自我再执行启动器不存在,空操作。
 #[cfg(not(windows))]
@@ -182,10 +196,12 @@ mod win {
     const WRITE_RESTRICTED_SID: &str = "S-1-5-33";
 
     // loader 早期失败的 NTSTATUS 退出码——子进程根本没进 main 就被内核/加载器杀死。
-    // 用于把裸退出码翻成可读诊断(见 loader_failure_hint)。
+    // 用于把裸退出码翻成可读诊断(见 sandbox_exit_hint)。
     const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
     const STATUS_DLL_NOT_FOUND: u32 = 0xC000_0135;
     const STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
+    /// CLR 未处理托管异常。loader 已通过、CLR 原生部分已起来,死在托管层。
+    const COMPLUS_E_UNHANDLED: u32 = 0xE043_4352;
 
     /// PSID 别名(windows-sys 里就是 `*mut c_void`),提升可读性。
     type PSID = *mut c_void;
@@ -616,9 +632,12 @@ mod win {
         }
     }
 
-    /// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码 → 可读诊断(中英双语,
-    /// 经 stderr 走既有管道上传给模型/UI;裸退出码对用户与模型都不可行动)。
-    fn loader_failure_hint(exit_code: u32) -> Option<&'static str> {
+    /// 子进程“启动即死”的退出码 → 可读诊断(中英双语,经 stderr 走既有管道上传给
+    /// 模型/UI;裸退出码对用户与模型都不可行动)。
+    ///
+    /// 覆盖两个失败层:loader 早期死亡(未进 main 的 NTSTATUS),以及 CLR 托管初始化
+    /// 失败(0xE0434352,loader 已过)。两者 `shell_runner` 侧都算沙箱不兼容并推进候选链。
+    fn sandbox_exit_hint(exit_code: u32) -> Option<&'static str> {
         match exit_code {
             STATUS_DLL_INIT_FAILED => Some(
                 "a DLL failed to initialize under the sandbox (STATUS_DLL_INIT_FAILED); \
@@ -635,6 +654,19 @@ mod win {
                 "the sandbox denied access while starting the process (STATUS_ACCESS_DENIED); the \
                  program or its directory is not readable in this mode / 沙箱拒绝了进程启动所需的访问\
                  (0xC0000022):该程序或其目录在此模式下不可读",
+            ),
+            COMPLUS_E_UNHANDLED => Some(
+                "the .NET runtime threw an unhandled exception during startup (0xE0434352). This is \
+                 not a broken install: the loader and the native CLR came up fine, then managed \
+                 init failed - typically BCrypt/CNG, which a WRITE_RESTRICTED token or an \
+                 AppContainer cannot open for write. Managed shells (pwsh = CoreCLR, \
+                 powershell.exe = .NET Framework) are therefore structurally unreliable in this \
+                 mode; the shell runner falls back to cmd.exe, the only fully native candidate. \
+                 / .NET 运行时在启动阶段抛出未处理异常(0xE0434352)。这不是安装损坏:loader 与 \
+                 CLR 原生部分都已正常起来,随后托管初始化失败——通常是 BCrypt/CNG,而受限令牌\
+                 (WRITE_RESTRICTED)或 AppContainer 无法以写方式打开它。故托管 shell(pwsh 为 \
+                 CoreCLR、powershell.exe 为 .NET Framework)在此模式下结构性不可靠,shell 将回退到\
+                 唯一纯原生的候选 cmd.exe",
             ),
             _ => None,
         }
@@ -1112,9 +1144,10 @@ mod win {
             if !ok(got) {
                 return Err(last_error("GetExitCodeProcess"));
             }
-            // loader 早期死亡(0xC0000142 等)只体现为裸退出码;补一条可读诊断,经
-            // stderr 走既有管道上传(shell_runner 的候选探测回退也依赖这个退出码)。
-            if let Some(hint) = loader_failure_hint(exit_code) {
+            // 启动即死(0xC0000142 等 loader NTSTATUS、或 CLR 的 0xE0434352)只体现为裸
+            // 退出码;补一条可读诊断,经 stderr 走既有管道上传(shell_runner 的候选探测
+            // 回退也依赖这个退出码)。
+            if let Some(hint) = sandbox_exit_hint(exit_code) {
                 eprintln!("liveagent sandbox: process exited with {exit_code:#010X}: {hint}");
             }
             exit_code as i32
