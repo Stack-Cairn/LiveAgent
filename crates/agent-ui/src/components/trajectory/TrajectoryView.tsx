@@ -14,6 +14,7 @@ import type { TrajectoryHost } from "../../contracts/trajectory";
 import { useLocale } from "../../i18n/index";
 import type { UiMessage } from "../../lib/chat/uiMessages";
 import { buildTrajectoryContentIndex } from "../../lib/trajectory/contentIndex";
+import { DEFAULT_TRAJECTORY_DETAILS_WIDTH } from "../../lib/trajectory/detailsResize";
 import {
   collapsibleTrajectoryAssistants,
   collapsibleTrajectoryTurns,
@@ -96,6 +97,7 @@ export function TrajectoryView(props: {
   // Numeric row indexes shift when older pages are prepended; selection must follow the
   // business-stable recordId instead.
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [detailsWidth, setDetailsWidth] = useState(DEFAULT_TRAJECTORY_DETAILS_WIDTH);
 
   const { host, conversationId } = props;
   const loadGeneration = useRef(0);
@@ -105,6 +107,7 @@ export function TrajectoryView(props: {
   const subagentLoadEpoch = useRef(0);
   const requestedSubagentRunIds = useRef(new Set<string>());
   const subagentRetryCounts = useRef(new Map<string, number>());
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
@@ -443,7 +446,7 @@ export function TrajectoryView(props: {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="@container flex min-h-0 flex-1 flex-col">
       <TrajectoryToolbar
         actualDuration={actualDuration}
         hasTiming={hasTiming}
@@ -492,7 +495,7 @@ export function TrajectoryView(props: {
         onRecordSelect={selectRecordAtIndex}
       />
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div ref={contentRef} className="relative flex min-h-0 flex-1 overflow-hidden">
         <TrajectoryTable
           turns={turns}
           collapsedTurns={collapsedTurns}
@@ -526,6 +529,9 @@ export function TrajectoryView(props: {
           workdir={props.workdir}
           onOpenFileLink={host.openFileLink}
           onClose={() => setSelectedRecordId(null)}
+          containerRef={contentRef}
+          width={detailsWidth}
+          onWidthChange={setDetailsWidth}
         />
       </div>
     </div>

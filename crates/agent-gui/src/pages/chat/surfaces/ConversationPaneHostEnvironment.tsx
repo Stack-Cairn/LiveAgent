@@ -4,7 +4,10 @@ import type { ProjectRef } from "@liveagent/ui/lib/workbench/types";
 import type { ChatComposerBarProps } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { createContext, type ReactNode, useContext } from "react";
 import type { WorkspaceProject } from "../../../lib/settings";
-import type { ConversationSurfaceController } from "../conversations/conversationControllerTypes";
+import type {
+  ConversationSurfaceController,
+  ConversationSurfaceSnapshot,
+} from "../conversations/conversationControllerTypes";
 import type { ChatTranscriptProps } from "../transcript/ChatTranscript";
 
 export type ConversationTranscriptBindings = Omit<
@@ -55,9 +58,9 @@ export type ConversationPaneCheckpointRewind = {
 };
 
 export type ConversationPaneTrajectory = {
-  /** 视图开关跟随全局 Tabs;仅当前会话的 Pane 会拿到 active=true。 */
+  /** 每个会话独立持有视图状态；后台 Pane 也能保持自己的轨迹投影。 */
   active: boolean;
-  content: ReactNode;
+  renderContent: (snapshot: ConversationSurfaceSnapshot) => ReactNode;
 };
 
 export type ConversationPaneBinding = {
@@ -68,7 +71,7 @@ export type ConversationPaneBinding = {
   checkpointRewind: ConversationPaneCheckpointRewind;
   isConversationRunning: boolean;
   fileDrop: ConversationPaneFileDropState;
-  /** 轨迹视图(只读分析);背景 Pane 不提供,始终渲染常规转录。 */
+  /** 轨迹视图（只读分析），按会话实例独立绑定。 */
   trajectory?: ConversationPaneTrajectory;
 };
 

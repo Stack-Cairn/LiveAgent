@@ -47,6 +47,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "trajectory.partialTiming": "部分旧操作或不完整操作没有时间记录，耗时模式仅展示已记录部分。",
   "trajectory.truncated": "部分轨迹数据缺失或已被裁剪，展示可能不完整。",
   "trajectory.details.close": "关闭详情",
+  "trajectory.details.resize": "调整轨迹详情宽度",
+  "trajectory.details.resizeReset": "双击恢复默认宽度",
   "trajectory.details.empty": "选择左侧任意一行查看详情",
   "trajectory.details.tab.overview": "概要",
   "trajectory.details.tab.input": "输入",

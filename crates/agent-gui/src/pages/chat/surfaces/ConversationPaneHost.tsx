@@ -166,7 +166,7 @@ export const ConversationPaneHost = forwardRef<
 
         return {
           transcript: trajectoryActive ? (
-            trajectory?.content
+            trajectory?.renderContent(snapshot)
           ) : (
             <ChangedFilesActionsProvider value={changedFilesActions}>
               <DesktopCheckpointRewindProvider

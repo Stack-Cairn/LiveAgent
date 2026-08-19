@@ -22,7 +22,8 @@ export type PaneChromeProps = {
   onClose?: () => void;
   /**
    * Conversation/trajectory view switch, rendered as a top-left dot that
-   * mirrors the close dot. Only the focused conversation pane passes this.
+   * mirrors the close dot. Every conversation pane passes its own switch so
+   * both edge controls share the same pane-level reveal lifecycle.
    */
   trajectoryToggle?: PaneChromeTrajectoryToggle;
   /** Arms a workbench pane drag; activation happens after a move threshold. */

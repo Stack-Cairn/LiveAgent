@@ -52,6 +52,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "trajectory.truncated":
     "Some trajectory data is missing or was trimmed; this view may be partial.",
   "trajectory.details.close": "Close details",
+  "trajectory.details.resize": "Resize trajectory details",
+  "trajectory.details.resizeReset": "Double-click to reset width",
   "trajectory.details.empty": "Select a row to inspect it",
   "trajectory.details.tab.overview": "Summary",
   "trajectory.details.tab.input": "Input",

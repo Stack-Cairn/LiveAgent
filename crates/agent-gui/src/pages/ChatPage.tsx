@@ -1,10 +1,7 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
-import {
-  type ConversationViewId,
-  ConversationViewTabs,
-} from "@liveagent/ui/components/chat/ConversationViewTabs";
+import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
@@ -12,7 +9,6 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
-import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
@@ -55,6 +51,7 @@ import {
   toTrajectoryLiveAssistantMessage,
   toTrajectoryMessages,
 } from "@liveagent/ui/lib/trajectory/transcriptMessages";
+import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
   findAdjacentPaneId,
@@ -129,11 +126,6 @@ import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
-import {
-  desktopLiveTrajectoryEvents,
-  desktopTrajectoryReloadVersion,
-  subscribeDesktopLiveTrajectory,
-} from "../lib/trajectory/liveTrajectory";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
@@ -196,6 +188,7 @@ import {
   type ConversationPaneRegistration,
   createConversationPaneHostEnvironment,
 } from "./chat/surfaces/ConversationPaneHostEnvironment";
+import { ConversationTrajectorySurface } from "./chat/surfaces/ConversationTrajectorySurface";
 import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
 import { resolveWorkbenchPaneProject } from "./chat/workbench/paneProjectContext";
 import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
@@ -407,14 +400,12 @@ export function ChatPage(props: ChatPageProps) {
     [conversationState],
   );
   const loadComposerHistoryPrompts = useComposerHistoryPrompts(transcriptItems);
-  const liveTrajectory = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
-    desktopLiveTrajectoryEvents(currentConversationId),
-  );
-  const trajectoryAuthoritativeRevision = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
-    desktopTrajectoryReloadVersion(currentConversationId),
-  );
-  const [activeConversationView, setActiveConversationView] =
-    useState<ConversationViewId>("conversation");
+  const {
+    activeConversationView,
+    setActiveConversationView,
+    viewForConversation,
+    setConversationView,
+  } = useConversationViewState(currentConversationId);
   const currentRequestContext = useMemo(
     () => buildRequestContext(conversationState),
     [conversationState],
@@ -510,11 +501,6 @@ export function ChatPage(props: ChatPageProps) {
   const hasConversationReply =
     !isDraftConversation && trajectoryMessages.some((message) => message.role === "assistant");
   const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
-  useEffect(() => {
-    if (!hasConversationReply && activeConversationView !== "conversation") {
-      setActiveConversationView("conversation");
-    }
-  }, [activeConversationView, hasConversationReply]);
   const {
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
@@ -1907,21 +1893,18 @@ export function ChatPage(props: ChatPageProps) {
       description: fileDropDescription,
       limitHint: fileDropLimitHint,
     },
-    // 轨迹视图只跟随当前会话:全局 Tabs 切换到 trajectory 时,聚焦 Pane 的
-    // 转录槽位换成 TrajectoryView;背景 Pane 不提供该字段,始终渲染常规转录。
+    // 每个会话独立保存视图；当前 Pane 使用页面级实时数据渲染自己的轨迹。
     trajectory: {
       active: renderedConversationView === "trajectory",
-      content: (
-        <TrajectoryView
+      renderContent: () => (
+        <ConversationTrajectorySurface
           conversationId={currentConversationId}
           host={trajectoryHost}
-          messages={trajectoryMessages}
+          transcriptItems={transcriptItems}
+          liveTranscriptStore={liveTranscriptStore}
           workdir={displayedConversationWorkdir}
           hasMoreMessages={conversationState.transcript.hasMoreBefore}
           loadEarlierMessages={handleLoadEarlierHistory}
-          liveEvents={liveTrajectory}
-          liveOwnership="authoritative"
-          authoritativeRevision={trajectoryAuthoritativeRevision}
         />
       ),
     },
@@ -2096,6 +2079,11 @@ export function ChatPage(props: ChatPageProps) {
     (paneId: string) => {
       const pane = workbench.layoutRef.current.panes[paneId];
       const result = workbench.closePane(paneId);
+      // Pane 关闭即结束这次会话视图投影。只有布局确认移除成功后才清理，
+      // 避免失败的关闭操作把仍在画布上的轨迹视图强制切回会话。
+      if (pane?.surface.kind === "conversation" && !workbench.layoutRef.current.panes[paneId]) {
+        setConversationView(pane.surface.conversationId, "conversation");
+      }
       // 终端 Pane 的关闭是 Detach:进程保留,租约随宿主卸载释放,会话回到
       // Right Dock;绑定一并回收,再次拖入走全新 surface 身份。先关 Pane 再删
       // 绑定,同一事件批处理内宿主已卸载,不会把空绑定误判为待新建。
@@ -2111,7 +2099,7 @@ export function ChatPage(props: ChatPageProps) {
         );
       }
     },
-    [selectWorkbenchConversation, workbench],
+    [selectWorkbenchConversation, setConversationView, workbench],
   );
 
   const workbenchProjectForConversation = useCallback(
@@ -2543,12 +2531,13 @@ export function ChatPage(props: ChatPageProps) {
       if (conversationId === currentConversationId) continue;
       const item = sidebarConversationsById.get(conversationId);
       if (!item && conversationPersistenceCursorRef.current.has(conversationId)) {
-        workbench.closePane(pane.paneId);
+        handleWorkbenchClosePane(pane.paneId);
       }
     }
   }, [
     conversationPersistenceCursorRef,
     currentConversationId,
+    handleWorkbenchClosePane,
     sidebarConversationsById,
     workbench,
   ]);
@@ -2693,6 +2682,7 @@ export function ChatPage(props: ChatPageProps) {
       liveTranscriptStore: getConversationLiveTranscriptStore(conversationId),
       getCompactionController,
     });
+    const paneTrajectoryActive = viewForConversation(conversationId) === "trajectory";
     const focusGuard = <Args extends unknown[]>(fn: (...args: Args) => void) => {
       return (...args: Args) => {
         if (currentConversationIdRef.current !== conversationId) {
@@ -2720,6 +2710,20 @@ export function ChatPage(props: ChatPageProps) {
         title: "",
         description: "",
         limitHint: "",
+      },
+      trajectory: {
+        active: paneTrajectoryActive,
+        renderContent: (snapshot) => (
+          <ConversationTrajectorySurface
+            conversationId={conversationId}
+            host={trajectoryHost}
+            transcriptItems={snapshot.runtime?.state.transcript.items ?? []}
+            liveTranscriptStore={getConversationLiveTranscriptStore(conversationId)}
+            workdir={workspaceRoot}
+            hasMoreMessages={snapshot.runtime?.state.transcript.hasMoreBefore ?? false}
+            loadEarlierMessages={() => loadEarlierHistoryActionRef.current(conversationId)}
+          />
+        ),
       },
       transcript: {
         workspaceRoot,
@@ -2873,13 +2877,10 @@ export function ChatPage(props: ChatPageProps) {
     if (context.paneCount < 2) return null;
     const surface = pane.surface;
     const title = workbenchPaneTitle(surface);
-    // 轨迹切换点只出现在聚焦的会话 Pane(与右上角关闭点左右对称)。
-    // 背景 Pane 没有轨迹渲染路径,不显示;草稿会话没有轨迹数据,同样不显示。
-    const showTrajectoryToggle =
-      context.isFocused &&
-      surface.kind === "conversation" &&
-      surface.conversationId === currentConversationId &&
-      hasConversationReply;
+    const paneConversationView =
+      surface.kind === "conversation"
+        ? viewForConversation(surface.conversationId)
+        : "conversation";
     return (
       <PaneChrome
         paneId={pane.paneId}
@@ -2890,17 +2891,20 @@ export function ChatPage(props: ChatPageProps) {
         closeLabel={t("workbench.closePane")}
         onClose={() => handleWorkbenchClosePane(pane.paneId)}
         trajectoryToggle={
-          showTrajectoryToggle
+          surface.kind === "conversation"
             ? {
-                isTrajectory: renderedConversationView === "trajectory",
+                isTrajectory: paneConversationView === "trajectory",
                 label:
-                  renderedConversationView === "trajectory"
+                  paneConversationView === "trajectory"
                     ? t("workbench.showConversation")
                     : t("workbench.showTrajectory"),
-                onToggle: () =>
-                  setActiveConversationView(
-                    renderedConversationView === "trajectory" ? "conversation" : "trajectory",
-                  ),
+                onToggle: () => {
+                  if (surface.kind !== "conversation") return;
+                  setConversationView(
+                    surface.conversationId,
+                    paneConversationView === "trajectory" ? "conversation" : "trajectory",
+                  );
+                },
               }
             : undefined
         }

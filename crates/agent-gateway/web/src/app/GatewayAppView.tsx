@@ -2,10 +2,7 @@ import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
-import {
-  type ConversationViewId,
-  ConversationViewTabs,
-} from "@liveagent/ui/components/chat/ConversationViewTabs";
+import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
@@ -31,6 +28,7 @@ import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
+import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import {
@@ -343,8 +341,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     [api],
   );
 
-  const [activeConversationView, setActiveConversationView] =
-    useState<ConversationViewId>("conversation");
+  const { activeConversationView, setActiveConversationView } =
+    useConversationViewState(displayedConversationId);
   const trajectoryHost = useMemo(
     () => createGatewayTrajectoryHost(api, handleOpenChatFileLink),
     [api, handleOpenChatFileLink],
@@ -356,11 +354,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     !isLocalDraftConversationId(displayedConversationId) &&
     trajectoryMessages.some((message) => message.role === "assistant");
   const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
-  useEffect(() => {
-    if (!hasConversationReply && activeConversationView !== "conversation") {
-      setActiveConversationView("conversation");
-    }
-  }, [activeConversationView, hasConversationReply]);
   // 实时骨架来自 ChatEvent 流；账本层按事件身份去重，所以与落盘那份合并安全。
   const liveTrajectory = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryEvents(displayedConversationId),

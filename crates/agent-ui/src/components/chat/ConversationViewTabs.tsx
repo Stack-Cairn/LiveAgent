@@ -1,8 +1,9 @@
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
+import type { ConversationViewId } from "../../lib/trajectory/conversationViewState";
 import { MessageSquareText, Waypoints } from "../IconSet";
 
-export type ConversationViewId = "conversation" | "trajectory";
+export type { ConversationViewId } from "../../lib/trajectory/conversationViewState";
 
 export function ConversationViewTabs(props: {
   active: ConversationViewId;

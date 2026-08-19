@@ -41,8 +41,9 @@ test("gateway shows the conversation view switcher in chrome only after an assis
   assert.match(gatewayAppViewSource, /activeView === "chat" && hasConversationReply/);
   assert.match(
     gatewayAppViewSource,
-    /if \(!hasConversationReply && activeConversationView !== "conversation"\)/,
+    /useConversationViewState\(displayedConversationId\)/,
   );
+  assert.doesNotMatch(gatewayAppViewSource, /useState<ConversationViewId>/);
   assert.match(
     gatewayAppViewSource,
     /hidden=\{renderedConversationView === "trajectory"\}/,

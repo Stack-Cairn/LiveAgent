@@ -126,7 +126,7 @@ export function TrajectoryTable(props: {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-[13px] text-muted-foreground">
+      <div className="flex min-w-0 flex-1 items-center justify-center p-6 text-[13px] text-muted-foreground">
         {props.searchMatchIndexes === null
           ? t("trajectory.empty.title")
           : t("trajectory.empty.noMatch")}
@@ -162,7 +162,7 @@ export function TrajectoryTable(props: {
   };
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
       {virtualized ? (
         <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {

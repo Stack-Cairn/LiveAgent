@@ -28,6 +28,15 @@ const { buildTrajectorySubagentRun, concatSubagentSegmentMessages, extractSubage
 const { toTrajectoryMessages } = loader.loadModule(
   "@liveagent/ui/lib/trajectory/transcriptMessages.ts",
 );
+const {
+  clampTrajectoryDetailsWidth,
+  resolveTrajectoryDetailsDragWidth,
+  resolveTrajectoryDetailsKeyboardWidth,
+  trajectoryDetailsWidthBounds,
+} = loader.loadModule("@liveagent/ui/lib/trajectory/detailsResize.ts");
+const { conversationViewForId, updateConversationViewState } = loader.loadModule(
+  "@liveagent/ui/lib/trajectory/conversationViewState.ts",
+);
 
 const BASE = 1_700_000_000_000;
 
@@ -166,6 +175,38 @@ test("the virtualized table remeasures projected rows by stable display identity
   assert.match(source, /const measuredProjectionRef = useRef/);
   assert.match(source, /useLayoutEffect\(\(\) => \{/);
   assert.match(source, /virtualizer\.measure\(\);/);
+});
+
+test("trajectory details resizing preserves usable list and panel widths", () => {
+  assert.deepEqual(trajectoryDetailsWidthBounds(1400), { min: 160, max: 720 });
+  assert.deepEqual(trajectoryDetailsWidthBounds(465), { min: 160, max: 325 });
+  assert.deepEqual(trajectoryDetailsWidthBounds(320), { min: 160, max: 180 });
+  assert.equal(clampTrajectoryDetailsWidth(100, 1400), 160);
+  assert.equal(clampTrajectoryDetailsWidth(900, 1400), 720);
+  assert.equal(clampTrajectoryDetailsWidth(420, 465), 325);
+  assert.equal(resolveTrajectoryDetailsDragWidth(420, -100, 1000), 520);
+  assert.equal(resolveTrajectoryDetailsDragWidth(420, 300, 1000), 160);
+});
+
+test("trajectory details separator supports accessible keyboard resizing", () => {
+  assert.equal(resolveTrajectoryDetailsKeyboardWidth("ArrowLeft", 420, 1000, false), 444);
+  assert.equal(resolveTrajectoryDetailsKeyboardWidth("ArrowRight", 420, 1000, true), 348);
+  assert.equal(resolveTrajectoryDetailsKeyboardWidth("Home", 420, 1000, false), 160);
+  assert.equal(resolveTrajectoryDetailsKeyboardWidth("End", 420, 1000, false), 720);
+  assert.equal(resolveTrajectoryDetailsKeyboardWidth("Enter", 420, 1000, false), null);
+});
+
+test("conversation trajectory selection is isolated by conversation id", () => {
+  const empty = new Map();
+  const conversationA = updateConversationViewState(empty, "conversation-a", "trajectory");
+  assert.equal(conversationViewForId(conversationA, "conversation-a"), "trajectory");
+  assert.equal(conversationViewForId(conversationA, "conversation-b"), "conversation");
+  assert.equal(conversationViewForId(empty, "conversation-a"), "conversation");
+
+  const both = updateConversationViewState(conversationA, "conversation-b", "trajectory");
+  const resetA = updateConversationViewState(both, "conversation-a", "conversation");
+  assert.equal(conversationViewForId(resetA, "conversation-a"), "conversation");
+  assert.equal(conversationViewForId(resetA, "conversation-b"), "trajectory");
 });
 
 test("system label follows the header change kind", () => {

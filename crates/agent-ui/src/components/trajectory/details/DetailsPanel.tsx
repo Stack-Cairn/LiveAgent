@@ -1,4 +1,11 @@
-import { type ComponentType, useEffect, useMemo, useState } from "react";
+import {
+  type ComponentType,
+  type CSSProperties,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useLocale } from "../../../i18n/index";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import { cn } from "../../../lib/shared/utils";
@@ -9,6 +16,7 @@ import type {
   TrajectorySection,
 } from "../../../lib/trajectory/types";
 import { X } from "../../IconSet";
+import { DetailsResizeHandle } from "./DetailsResizeHandle";
 import { DiffTab } from "./tabs/DiffTab";
 import { InputTab } from "./tabs/InputTab";
 import { OptionsTab } from "./tabs/OptionsTab";
@@ -78,6 +86,9 @@ export function DetailsPanel(props: {
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
   onClose: () => void;
+  containerRef: RefObject<HTMLDivElement | null>;
+  width: number;
+  onWidthChange: (width: number) => void;
 }) {
   const { t, locale } = useLocale();
   const { record } = props;
@@ -136,7 +147,15 @@ export function DetailsPanel(props: {
 
   if (record === null) {
     return (
-      <aside className="flex w-[420px] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground max-[820px]:hidden">
+      <aside
+        className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground @max-[520px]:p-3"
+        style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
+      >
+        <DetailsResizeHandle
+          containerRef={props.containerRef}
+          width={props.width}
+          onWidthChange={props.onWidthChange}
+        />
         {t("trajectory.details.empty")}
       </aside>
     );
@@ -162,7 +181,15 @@ export function DetailsPanel(props: {
   };
 
   return (
-    <aside className="flex w-[420px] shrink-0 flex-col border-l border-border/60 max-[820px]:absolute max-[820px]:inset-0 max-[820px]:z-20 max-[820px]:w-full max-[820px]:border-l-0 max-[820px]:bg-background">
+    <aside
+      className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 flex-col border-l border-border/60 bg-background"
+      style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
+    >
+      <DetailsResizeHandle
+        containerRef={props.containerRef}
+        width={props.width}
+        onWidthChange={props.onWidthChange}
+      />
       <header className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
         <span className="truncate text-[12px] font-medium">
           {t(trajectoryKindLabelKey(record.kind))}
@@ -180,7 +207,7 @@ export function DetailsPanel(props: {
 
       <div
         role="tablist"
-        className="flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1 max-[520px]:flex-nowrap max-[520px]:overflow-x-auto"
+        className="flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1 @max-[520px]:flex-nowrap @max-[520px]:overflow-x-auto"
       >
         {tabs.map((tab) => (
           <button
@@ -201,7 +228,7 @@ export function DetailsPanel(props: {
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-[12px] max-[520px]:p-2.5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-[12px] @max-[520px]:p-2.5">
         {ActiveTab === null ? null : <ActiveTab {...tabProps} />}
       </div>
     </aside>

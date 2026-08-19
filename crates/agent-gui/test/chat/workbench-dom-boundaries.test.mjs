@@ -104,14 +104,15 @@ test("conversation view switcher lives in the chrome and waits for an assistant 
   assert.match(chatPageSource, /activeView === "chat" && hasConversationReply/);
   assert.match(
     chatPageSource,
-    /if \(!hasConversationReply && activeConversationView !== "conversation"\)/,
+    /useConversationViewState\(currentConversationId\)/,
   );
+  assert.doesNotMatch(chatPageSource, /useState<ConversationViewId>/);
   assert.match(conversationViewTabsSource, /MessageSquareText, Waypoints/);
   assert.match(conversationViewTabsSource, /icon: MessageSquareText/);
   assert.match(conversationViewTabsSource, /icon: Waypoints/);
 });
 
-test("multi-pane trajectory toggle lives in the focused pane's chrome, mirroring the close dot", () => {
+test("multi-pane conversation panes reveal trajectory and close controls together", () => {
   const paneChromeSource = readFileSync(
     new URL("../../../agent-ui/src/components/workbench/PaneChrome.tsx", import.meta.url),
     "utf8",
@@ -131,10 +132,16 @@ test("multi-pane trajectory toggle lives in the focused pane's chrome, mirroring
     paneChromeSource.match(/bg-muted-foreground\/25 text-background/g)?.length,
     2,
   );
-  // Only the focused conversation pane with an assistant reply gets the toggle.
+  // Every conversation pane mounts its own toggle. Focus only selects the pane;
+  // it must not remove the left control while the right close control remains.
   assert.match(
     chatPageSource,
-    /const showTrajectoryToggle =[\s\S]*?context\.isFocused &&[\s\S]*?surface\.kind === "conversation" &&[\s\S]*?surface\.conversationId === currentConversationId &&[\s\S]*?hasConversationReply/,
+    /trajectoryToggle=\{[\s\S]*?surface\.kind === "conversation"[\s\S]*?setConversationView\([\s\S]*?surface\.conversationId/,
+  );
+  assert.doesNotMatch(chatPageSource, /const showTrajectoryToggle/);
+  assert.doesNotMatch(
+    chatPageSource,
+    /trajectoryToggle=\{[\s\S]{0,240}context\.isFocused/,
   );
   // Multi-pane hides the chrome-level tabs; the pane dot owns the switch.
   assert.match(
@@ -144,6 +151,21 @@ test("multi-pane trajectory toggle lives in the focused pane's chrome, mirroring
   assert.match(
     chatPageSource,
     /workbenchHasMultiplePanes =\s*sessionWorkbench\.enabled && Object\.keys\(workbench\.layout\.panes\)\.length >= 2/,
+  );
+  assert.match(chatPageSource, /viewForConversation\(conversationId\) === "trajectory"/);
+  assert.match(chatPageSource, /active: paneTrajectoryActive/);
+  assert.match(chatPageSource, /<ConversationTrajectorySurface/);
+  assert.match(conversationPaneHostSource, /trajectory\?\.renderContent\(snapshot\)/);
+});
+
+test("closing a conversation pane resets its trajectory projection", () => {
+  assert.match(
+    chatPageSource,
+    /const handleWorkbenchClosePane =[\s\S]*?const pane = workbench\.layoutRef\.current\.panes\[paneId\];[\s\S]*?workbench\.closePane\(paneId\);[\s\S]*?pane\?\.surface\.kind === "conversation"[\s\S]*?!workbench\.layoutRef\.current\.panes\[paneId\][\s\S]*?setConversationView\(pane\.surface\.conversationId, "conversation"\)/,
+  );
+  assert.match(
+    chatPageSource,
+    /if \(!item && conversationPersistenceCursorRef\.current\.has\(conversationId\)\) \{\s*handleWorkbenchClosePane\(pane\.paneId\);/,
   );
 });
 
