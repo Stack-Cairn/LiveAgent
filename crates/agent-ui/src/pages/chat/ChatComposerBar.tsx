@@ -223,6 +223,8 @@ export type ChatComposerBarProps = {
   sttProvider?: SttProviderId | null;
   sttProviderConfigured?: boolean;
   sttTransport?: SttTransport;
+  /** 当前会话身份；切换会话时取消进行中的语音识别。 */
+  sttSessionKey?: string;
   /** STT 失败（麦克风不可用、连接超时等）上报给宿主以 toast 形式提示。 */
   onSttError?: (message: string) => void;
   /**
@@ -300,6 +302,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     sttProvider = null,
     sttProviderConfigured,
     sttTransport,
+    sttSessionKey,
     onSttError,
     hidden = false,
     inputPlaceholder,
@@ -356,6 +359,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     providerConfigured: sttProviderConfigured,
     transport: sttTransport,
     disabled: isInputDisabled,
+    sessionKey: sttSessionKey,
+    hidden,
     onError: onSttError,
   });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);

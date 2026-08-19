@@ -169,7 +169,6 @@ export function ChatPage(props: ChatPageProps) {
   const {
     settings,
     setSettings,
-    sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
     context,
@@ -1976,16 +1975,13 @@ export function ChatPage(props: ChatPageProps) {
                     isSending={isSending}
                     isUploadingFiles={isUploadingFiles}
                     isInputDisabled={isComposerInputDisabled}
-                    // 麦克风入口始终可用；未配置时在点击后由 STT 会话通过 toast 报错。
+                    // 麦克风在开启语音输入后显示；供应商以已保存配置为准。
+                    sttSessionKey={currentConversationId}
                     sttProvider={
-                      settings.stt.enabled
-                        ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
-                        : null
+                      settings.stt.enabled ? (settings.stt.provider ?? "tencent_cloud") : null
                     }
                     sttProviderConfigured={
-                      settings.stt.providers[
-                        sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
-                      ]?.configured
+                      settings.stt.providers[settings.stt.provider ?? "tencent_cloud"]?.configured
                     }
                     sttTransport={desktopSttTransport}
                     onSttError={handleSttError}

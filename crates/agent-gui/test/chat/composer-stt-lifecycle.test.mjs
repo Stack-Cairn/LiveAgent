@@ -8,6 +8,7 @@ function createHarness() {
   const refs = [];
   const state = [];
   const effects = [];
+  const layoutEffects = [];
   const react = {
     useCallback(fn) {
       hookCursor += 1;
@@ -16,6 +17,10 @@ function createHarness() {
     useEffect(fn) {
       hookCursor += 1;
       effects.push(fn);
+    },
+    useLayoutEffect(fn) {
+      hookCursor += 1;
+      layoutEffects.push(fn);
     },
     useRef(initial) {
       return (refs[hookCursor] ??= { current: initial });
@@ -29,6 +34,7 @@ function createHarness() {
     },
     render() {
       hookCursor = 0;
+      layoutEffects.length = 0;
     },
     effects,
   };
@@ -58,6 +64,9 @@ function createHarness() {
     }
     silence() {
       this.options.onSilenceTimeout?.();
+    }
+    resetSilenceClock() {
+      this.events.push("capture.resetSilenceClock");
     }
   }
   class FakeFifo {
@@ -137,13 +146,16 @@ function createHarness() {
     setTimeout: () => 1,
     clearTimeout: () => {},
   };
-  const render = () => {
+  const render = (overrides = {}) => {
     react.render();
     return useComposerStt({
       composerRef,
       provider: "aliyun_dashscope",
       transport,
       disabled: false,
+      sessionKey: "conversation-a",
+      hidden: false,
+      ...overrides,
     });
   };
   return {
@@ -161,6 +173,9 @@ function createHarness() {
       releaseCaptureStop?.();
       releaseCaptureStop = null;
       deferCaptureStop = false;
+    },
+    flushLayoutEffects() {
+      for (const effect of [...layoutEffects]) effect();
     },
   };
 }
@@ -184,6 +199,7 @@ test("useComposerStt starts permission, capture, then cloud open and drains FIFO
   const sessionId = harness.sessionIds[0];
   harness.callbacks[0]({ type: "ready", sessionId });
   await settle();
+  assert.ok(harness.captures[0].events.includes("capture.resetSilenceClock"));
   const audioCalls = harness.calls.filter((call) => Array.isArray(call) && call[0] === "audio");
   assert.deepEqual(audioCalls.map((call) => call[2]), [0, 1]);
 
@@ -208,7 +224,10 @@ test("stop halts capture, sends four 100 ms tail chunks, then finishes transport
   result = harness.render();
   await result.toggle();
   await settle();
-  assert.deepEqual(harness.captures[0].events, ["capture.start", "capture.stop"]);
+  assert.deepEqual(
+    harness.captures[0].events.filter((event) => event !== "capture.resetSilenceClock"),
+    ["capture.start", "capture.stop"],
+  );
   const audio = harness.calls.filter((call) => Array.isArray(call) && call[0] === "audio");
   assert.deepEqual(audio.map((call) => call[2]), [0, 1, 2, 3]);
   assert.deepEqual(harness.calls.filter((call) => Array.isArray(call) && call[0] === "stop").length, 1);
@@ -251,4 +270,45 @@ test("final accepts only the active session and stale events cannot mutate the c
   await settle();
   assert.deepEqual(harness.composerEvents.at(-1), ["cancel", { preserveLastText: true }]);
   assert.ok(harness.composerEvents.some((event) => event[0] === "final" && event[1] === "done"));
+});
+
+test("silence during buffering does not finish; ready resets the clock then silence stops", async () => {
+  const harness = createHarness();
+  let result = harness.render();
+  await result.toggle();
+  await settle();
+  harness.captures[0].silence();
+  await settle();
+  assert.equal(harness.calls.some((call) => Array.isArray(call) && call[0] === "stop"), false);
+
+  harness.callbacks[0]({ type: "ready", sessionId: harness.sessionIds[0] });
+  await settle();
+  assert.ok(harness.captures[0].events.includes("capture.resetSilenceClock"));
+  harness.captures[0].silence();
+  await settle();
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "stop").length, 1);
+  result = harness.render();
+  assert.equal(result.state, "stopping");
+});
+
+test("changing sessionKey or hiding the composer cancels the active session", async () => {
+  const harness = createHarness();
+  let result = harness.render({ sessionKey: "conversation-a" });
+  await result.toggle();
+  await settle();
+  harness.callbacks[0]({ type: "partial", sessionId: harness.sessionIds[0], text: "keep" });
+
+  harness.render({ sessionKey: "conversation-b" });
+  harness.flushLayoutEffects();
+  await settle();
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "cancel").length, 1);
+  assert.deepEqual(harness.composerEvents.at(-1), ["cancel", { preserveLastText: true }]);
+
+  result = harness.render({ sessionKey: "conversation-b" });
+  await result.toggle();
+  await settle();
+  harness.render({ sessionKey: "conversation-b", hidden: true });
+  harness.flushLayoutEffects();
+  await settle();
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "cancel").length, 2);
 });

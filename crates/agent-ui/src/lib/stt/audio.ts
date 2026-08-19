@@ -236,7 +236,7 @@ export class SttAudioCapture {
       this.processor.connect(this.context.destination);
       this.stopped = false;
       this.baselineSamples = [];
-      this.lastVoiceAt = performance.now();
+      this.resetSilenceClock();
       this.silenceTimer = window.setInterval(() => {
         if (!this.stopped && performance.now() - this.lastVoiceAt >= STT_SILENCE_TIMEOUT_MS)
           this.options.onSilenceTimeout?.();
@@ -245,6 +245,10 @@ export class SttAudioCapture {
       await this.releaseResources();
       throw new Error(mediaCaptureErrorMessage(cause));
     }
+  }
+
+  resetSilenceClock() {
+    this.lastVoiceAt = performance.now();
   }
 
   private readonly handleTrackEnded = () => {

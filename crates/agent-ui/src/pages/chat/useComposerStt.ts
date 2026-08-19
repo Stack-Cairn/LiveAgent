@@ -12,7 +12,7 @@ import {
 } from "@liveagent/ui/lib/stt/audio";
 import type { SttRuntimeEvent, SttTransport, SttUiState } from "@liveagent/ui/lib/stt/types";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type ActiveSttSession = {
   id: string;
@@ -35,10 +35,23 @@ export function useComposerStt(options: {
   providerConfigured?: boolean;
   transport?: SttTransport;
   disabled: boolean;
+  /** 当前会话或视图身份；变化时取消进行中的识别，避免写进已切换的输入框。 */
+  sessionKey?: string;
+  /** 输入区被挂起（如轨迹页）时取消识别，避免用户无法点停止。 */
+  hidden?: boolean;
   /** 错误上报回调（如麦克风不可用）；由宿主决定展示方式（toast 等）。 */
   onError?: (message: string) => void;
 }) {
-  const { composerRef, provider, providerConfigured, transport, disabled, onError } = options;
+  const {
+    composerRef,
+    provider,
+    providerConfigured,
+    transport,
+    disabled,
+    sessionKey,
+    hidden = false,
+    onError,
+  } = options;
   const [state, setState] = useState<SttUiState>("idle");
   const [error, setError] = useState<string | null>(null);
   const activeRef = useRef<ActiveSttSession | null>(null);
@@ -128,6 +141,14 @@ export function useComposerStt(options: {
     [fail, transport],
   );
 
+  const abortActiveSession = useCallback(() => {
+    const active = activeRef.current;
+    if (!active) return;
+    void transport?.cancel(active.id).catch(() => undefined);
+    cleanup(Boolean(active.lastText.trim()));
+    setState("idle");
+  }, [cleanup, transport]);
+
   const stop = useCallback(async () => {
     const active = activeRef.current;
     if (!active || active.stopping || !transport) return;
@@ -156,7 +177,7 @@ export function useComposerStt(options: {
     } else if (activeRef.current === active) {
       active.tailQueued = true;
     }
-  }, [finishProvider, queueChunk, transport]);
+  }, [fail, finishProvider, queueChunk, transport]);
 
   const onEvent = useCallback(
     (event: SttRuntimeEvent) => {
@@ -165,6 +186,9 @@ export function useComposerStt(options: {
       if (event.type === "ready") {
         window.clearTimeout(active.connectTimer);
         active.ready = true;
+        // Silence must be measured from recognition start, not mic-open /
+        // cloud-connect. Otherwise a slow handshake auto-stops immediately.
+        active.capture.resetSilenceClock();
         if (!active.stopping) setState("recognizing");
         for (const chunk of active.fifo.drain()) sendChunk(chunk.sequence, chunk.pcm);
         if (active.stopping && active.tailQueued) void finishProvider(active);
@@ -213,7 +237,11 @@ export function useComposerStt(options: {
       const fifo = new SttPcmFifo();
       const capture = new SttAudioCapture({
         onChunk: (chunk) => queueChunk(chunk),
-        onSilenceTimeout: () => void stop(),
+        onSilenceTimeout: () => {
+          const current = activeRef.current;
+          if (!current?.ready || current.stopping) return;
+          void stop();
+        },
         onCaptureError: (message) => fail(message),
       });
       const active: ActiveSttSession = {
@@ -258,6 +286,17 @@ export function useComposerStt(options: {
   ]);
 
   const toggle = useCallback(() => (activeRef.current ? void stop() : void start()), [start, stop]);
+
+  const sessionKeyRef = useRef(sessionKey);
+  useLayoutEffect(() => {
+    if (sessionKeyRef.current === sessionKey) return;
+    sessionKeyRef.current = sessionKey;
+    abortActiveSession();
+  }, [abortActiveSession, sessionKey]);
+
+  useLayoutEffect(() => {
+    if (hidden) abortActiveSession();
+  }, [abortActiveSession, hidden]);
 
   useEffect(
     () => () => {

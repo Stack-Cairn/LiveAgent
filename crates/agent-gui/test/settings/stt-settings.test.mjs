@@ -185,18 +185,22 @@ test("STT connection test saves the current form and identifies the active runti
     section.indexOf("const save"),
   );
   assert.doesNotMatch(selectProviderBlock, /setSettings/);
+  const saveBlock = section.slice(section.indexOf("const save ="), section.indexOf("const clearProviderSecrets"));
+  assert.match(saveBlock, /delete nextProvider\.clearSecrets/);
   assert.match(
     gatewayView,
-    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
+    /settings\.stt\.enabled \? \(settings\.stt\.provider \?\? "tencent_cloud"\) : null/,
   );
-  assert.match(gatewayView, /onSttProviderChange=\{setSttProviderOverride\}/);
-  assert.match(gatewayView, /setSttProviderOverride\(null\)/);
+  assert.doesNotMatch(gatewayView, /sttProviderOverride/);
+  assert.doesNotMatch(gatewayView, /onSttProviderChange=\{setSttProviderOverride\}/);
   assert.doesNotMatch(gatewayView, /settings\.stt\.providers\[settings\.stt\.provider\]\.configured/);
   assert.match(
     desktopChatPage,
-    /settings\.stt\.enabled\s*\?\s*\(\s*sttProviderOverride\s*\?\?\s*settings\.stt\.provider\s*\?\?\s*"tencent_cloud"\s*\)\s*:\s*null/,
+    /settings\.stt\.enabled \? \(settings\.stt\.provider \?\? "tencent_cloud"\) : null/,
   );
-  assert.match(desktopChatPage, /sttProviderOverride/);
+  assert.doesNotMatch(desktopChatPage, /sttProviderOverride/);
+  assert.match(desktopChatPage, /sttSessionKey=\{currentConversationId\}/);
+  assert.match(gatewayView, /sttSessionKey=\{displayedConversationId\}/);
   assert.match(desktopChatPage, /sttProviderConfigured=/);
   assert.doesNotMatch(
     desktopChatPage,
@@ -207,12 +211,15 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(gatewayView, /sttProviderConfigured=/);
   assert.match(composerBar, /onError: onSttError/);
   assert.match(composerBar, /providerConfigured: sttProviderConfigured/);
+  assert.match(composerBar, /sessionKey: sttSessionKey/);
+  assert.match(composerBar, /hidden,/);
   assert.doesNotMatch(composerBar, /stt\.error \? \(/);
-  assert.match(
-    readFileSync(
-      fileURLToPath(new URL("../../../agent-ui/src/pages/chat/useComposerStt.ts", import.meta.url)),
-      "utf8",
-    ),
-    /STT供应商配置不完整/,
+  const composerStt = readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/pages/chat/useComposerStt.ts", import.meta.url)),
+    "utf8",
   );
+  assert.match(composerStt, /STT供应商配置不完整/);
+  assert.match(composerStt, /resetSilenceClock/);
+  assert.match(composerStt, /abortActiveSession/);
+  assert.match(composerStt, /if \(!current\?\.ready \|\| current\.stopping\) return;/);
 });

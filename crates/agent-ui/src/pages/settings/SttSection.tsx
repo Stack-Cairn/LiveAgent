@@ -284,6 +284,9 @@ export function SttSection({
       ...provider,
       ...draftSecrets,
     } as SttProviderSettings;
+    // save() is never a clear: leftover clearSecrets from the previous
+    // empty-key write would wipe newly typed credentials.
+    delete nextProvider.clearSecrets;
     const payload = {
       ...displayedStt,
       provider: definition.id,
