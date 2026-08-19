@@ -210,14 +210,15 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(desktopApp, /sttProviderOverride=\{sttProviderOverride\}/);
   assert.match(desktopApp, /onSttProviderChange=\{setSttProviderOverride\}/);
   assert.match(desktopApp, /setSttProviderOverride\(null\)/);
-  assert.match(desktopChatPage, /sttSessionKey=\{currentConversationId\}/);
+  assert.match(desktopChatPage, /sttSessionKey:\s*currentConversationId/);
+  assert.match(desktopChatPage, /sttSessionKey:\s*conversationId/);
   assert.match(gatewayView, /sttSessionKey=\{displayedConversationId\}/);
-  assert.match(desktopChatPage, /sttProviderConfigured=/);
+  assert.match(desktopChatPage, /sttProviderConfigured:/);
   assert.doesNotMatch(
     desktopChatPage,
     /settings\.stt\.providers\[settings\.stt\.provider\]\.configured/,
   );
-  assert.match(desktopChatPage, /onSttError=\{handleSttError\}/);
+  assert.match(desktopChatPage, /onSttError:\s*handleSttError/);
   assert.match(gatewayView, /onSttError=\{handleSttError\}/);
   assert.match(gatewayView, /sttProviderConfigured=/);
   assert.match(composerBar, /onError: onSttError/);
