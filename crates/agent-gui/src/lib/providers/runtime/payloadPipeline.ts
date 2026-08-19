@@ -11,6 +11,7 @@ import { attachAnthropicAutomaticCaching } from "./anthropicCache";
 import { attachAnthropicLongContextBeta } from "./anthropicLongContext";
 import { attachCodexPromptCacheHint } from "./codexPromptCache";
 import { attachCodexResponsesStorage } from "./codexStorage";
+import { attachDeepSeekResponsesPayloadCompat } from "./deepSeekResponsesPayload";
 import { attachGeminiThoughtSignatureGuard } from "./geminiToolPayload";
 import { attachProviderNativeWebSearch } from "./nativeSearchPayload";
 import type { StreamOptionsEx } from "./types";
@@ -108,6 +109,12 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
     attachXaiResponsesPayloadCompat(options, {
       providerId: params.providerId,
       baseUrl: params.baseUrl,
+    }),
+  (options, params) =>
+    attachDeepSeekResponsesPayloadCompat(options, {
+      providerId: params.providerId,
+      model: params.model,
+      context: params.context,
     }),
   (options, params) => {
     if (!params.context || !params.model) return options;

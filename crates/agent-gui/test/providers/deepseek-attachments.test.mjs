@@ -2,10 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+const realOpenAIResponses = await import(
+  new URL(
+    "../../node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+    import.meta.url,
+  ).href
+);
+
 function createLoader(contentsByPath) {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
+      "@earendil-works/pi-ai/api/openai-responses": {
+        stream: realOpenAIResponses.stream,
+      },
       "@tauri-apps/api/core": {
         async invoke(command, args) {
           calls.push({ command, args });
@@ -25,11 +35,11 @@ function createLoader(contentsByPath) {
 
 function createModel(api) {
   return {
-    id: "deepseek-chat",
-    name: "DeepSeek Chat",
+    id: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
     api,
     provider: "deepseek",
-    baseUrl: "https://api.deepseek.com/v1",
+    baseUrl: "https://api.deepseek.com",
     input: ["text"],
     reasoning: true,
     contextWindow: 128_000,
@@ -46,9 +56,6 @@ test("DeepSeek inlines multiple large pastes while preserving ordinary Read atta
   const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
   const { inlineDeepSeekLargePastes } = loader.loadModule(
     "src/lib/providers/deepSeekAttachments.ts",
-  );
-  const { DEEPSEEK_CHAT_COMPLETIONS_API, serializeDeepSeekRequest } = loader.loadModule(
-    "src/lib/providers/deepSeekNative.ts",
   );
   const files = [
     {
@@ -103,12 +110,7 @@ test("DeepSeek inlines multiple large pastes while preserving ordinary Read atta
   assert.match(content, /\/workspace\/docs\/report\.pdf \(pdf\)/);
   assert.match(content, /\/workspace\/docs\/notes\.txt \(text\)/);
 
-  const request = serializeDeepSeekRequest(
-    createModel(DEEPSEEK_CHAT_COMPLETIONS_API),
-    context,
-    {},
-  );
-  const wire = JSON.stringify(request);
+  const wire = JSON.stringify(context);
   assert.doesNotMatch(wire, /input_file/);
   assert.doesNotMatch(wire, /file_data/);
   assert.match(wire, /first pasted body/);
@@ -178,7 +180,7 @@ test("DeepSeek native stream inlines a large paste before payload hooks and fetc
     "/workspace/.liveagent/paste.txt": "native stream pasted body",
   });
   const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
-  const { DEEPSEEK_CHAT_COMPLETIONS_API, streamDeepSeekNative } = loader.loadModule(
+  const { DEEPSEEK_RESPONSES_API, streamDeepSeekResponses } = loader.loadModule(
     "src/lib/providers/deepSeekNative.ts",
   );
   const message = uploadedFiles.createUserMessageWithUploads(
@@ -198,8 +200,8 @@ test("DeepSeek native stream inlines a large paste before payload hooks and fetc
   );
   let hookPayload;
   let fetchPayload;
-  const stream = streamDeepSeekNative(
-    createModel(DEEPSEEK_CHAT_COMPLETIONS_API),
+  const stream = streamDeepSeekResponses(
+    createModel(DEEPSEEK_RESPONSES_API),
     { messages: [message] },
     {
       apiKey: "sk-test",
@@ -209,10 +211,29 @@ test("DeepSeek native stream inlines a large paste before payload hooks and fetc
       },
       async fetch(_url, options) {
         fetchPayload = JSON.parse(options.body);
+        const message = {
+          type: "message",
+          id: "msg_inlined",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "inlined", annotations: [] }],
+        };
         return new Response(
-          `data: ${JSON.stringify({
-            choices: [{ delta: { content: "inlined" }, finish_reason: "stop" }],
-          })}\n\ndata: [DONE]\n\n`,
+          [
+            { type: "response.output_item.added", output_index: 0, item: message },
+            { type: "response.output_item.done", output_index: 0, item: message },
+            {
+              type: "response.completed",
+              response: {
+                id: "resp_inlined",
+                status: "completed",
+                output: [message],
+                usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+              },
+            },
+          ]
+            .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+            .join(""),
           {
             status: 200,
             headers: { "Content-Type": "text/event-stream" },
@@ -227,8 +248,8 @@ test("DeepSeek native stream inlines a large paste before payload hooks and fetc
   }
   const result = await stream.result();
 
-  assert.match(hookPayload.messages[0].content, /native stream pasted body/);
-  assert.match(fetchPayload.messages[0].content, /native stream pasted body/);
+  assert.match(JSON.stringify(hookPayload.input), /native stream pasted body/);
+  assert.match(JSON.stringify(fetchPayload.input), /native stream pasted body/);
   assert.doesNotMatch(JSON.stringify(fetchPayload), /\[Pasted text|input_file|file_data/);
   assert.equal(result.stopReason, "stop");
   assert.equal(result.content[0].text, "inlined");

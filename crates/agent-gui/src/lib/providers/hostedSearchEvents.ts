@@ -146,6 +146,10 @@ function requestBodyMatchesProbe(probe: FetchProbe, body: unknown) {
     return userId === probe.sessionId;
   }
 
+  // DeepSeek Responses strips prompt_cache_key / metadata. When the probe
+  // header is absent, accept the stream rather than dropping search events.
+  if (probe.providerId === "deepseek") return true;
+
   return false;
 }
 
@@ -201,37 +205,51 @@ function uninstallFetchProbeIfIdle() {
   originalFetch = null;
 }
 
-function emitJsonCandidate(text: string, probe: FetchProbe) {
+function attachSseEventType(value: unknown, sseEventType: string): unknown {
+  if (!sseEventType || !isRecord(value)) return value;
+  if (readString(value.type) || readString(value.event)) return value;
+  return { ...value, type: sseEventType };
+}
+
+function emitJsonCandidate(text: string, probe: FetchProbe, sseEventType = "") {
   const trimmed = text.trim();
   if (!trimmed || trimmed === "[DONE]") return;
   const parsed = maybeParseJson(trimmed);
   if (Array.isArray(parsed)) {
     parsed.forEach((item) => {
-      probe.onRawEvent(item);
+      probe.onRawEvent(attachSseEventType(item, sseEventType));
     });
     return;
   }
   if (parsed !== undefined) {
-    probe.onRawEvent(parsed);
+    probe.onRawEvent(attachSseEventType(parsed, sseEventType));
   }
 }
 
 function consumeTextBuffer(buffer: string, probe: FetchProbe, final = false): string {
   const lines = buffer.split(/\r?\n/g);
   const tail = final ? "" : (lines.pop() ?? "");
+  let sseEventType = "";
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      sseEventType = "";
+      continue;
+    }
+    if (trimmed.startsWith("event:")) {
+      sseEventType = trimmed.slice(6).trim();
+      continue;
+    }
     if (trimmed.startsWith("data:")) {
-      emitJsonCandidate(trimmed.slice(5), probe);
+      emitJsonCandidate(trimmed.slice(5), probe, sseEventType);
       continue;
     }
     if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      emitJsonCandidate(trimmed, probe);
+      emitJsonCandidate(trimmed, probe, sseEventType);
     }
   }
   if (final && tail.trim()) {
-    emitJsonCandidate(tail, probe);
+    emitJsonCandidate(tail, probe, sseEventType);
   }
   return tail;
 }
@@ -324,6 +342,11 @@ function mapOpenAIWebSearchCallStatus(rawStatus: string, isDoneEvent: boolean): 
 }
 
 function extractResponsesSourceList(raw: unknown): HostedSearchSource[] {
+  if (typeof raw === "string") {
+    const url = raw.trim();
+    return url && isHttpUrl(url) ? [{ url, sourceType: "source" }] : [];
+  }
+  if (isRecord(raw)) return extractResponsesSourceList([raw]);
   if (!Array.isArray(raw)) return [];
   const sources: HostedSearchSource[] = [];
   for (const entry of raw) {
@@ -333,11 +356,79 @@ function extractResponsesSourceList(raw: unknown): HostedSearchSource[] {
       continue;
     }
     if (!isRecord(entry)) continue;
-    const url = readString(entry.url ?? entry.uri);
+    const url = readString(entry.url ?? entry.uri ?? entry.link);
     if (!url || !isHttpUrl(url)) continue;
-    const title = readString(entry.title);
+    const title = readString(entry.title ?? entry.name);
     sources.push({ url, ...(title ? { title } : {}), sourceType: "source" });
   }
+  return sources;
+}
+
+function resolveResponsesAction(value: unknown): Record<string, unknown> {
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return {};
+  const parsed = maybeParseJson(value);
+  return isRecord(parsed) ? parsed : {};
+}
+
+function readSearchQueries(item: Record<string, unknown>, action: Record<string, unknown>) {
+  const queries: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text && !queries.includes(text)) queries.push(text);
+      return;
+    }
+    if (Array.isArray(value)) value.forEach(add);
+  };
+  add(action.query);
+  add(action.queries);
+  add(action.search_query);
+  add(item.query);
+  add(item.queries);
+  return queries;
+}
+
+function extractResponsesActionSources(
+  item: Record<string, unknown>,
+  action: Record<string, unknown>,
+) {
+  const sources = [
+    ...extractResponsesSourceList(action.sources),
+    ...extractResponsesSourceList(action.output),
+    ...extractResponsesSourceList(action.results),
+    ...extractResponsesSourceList(item.sources),
+    ...extractResponsesSourceList(item.output),
+    ...extractResponsesSourceList(item.results),
+  ];
+  const pageUrl = readString(action.url ?? action.uri ?? item.url ?? item.uri);
+  if (pageUrl && isHttpUrl(pageUrl)) {
+    const title = readString(action.title ?? item.title);
+    sources.push({ url: pageUrl, ...(title ? { title } : {}), sourceType: "source" });
+  }
+  return sources;
+}
+
+function extractUrlCitationSources(value: unknown): HostedSearchSource[] {
+  if (Array.isArray(value)) return value.flatMap(extractUrlCitationSources);
+  if (!isRecord(value)) return [];
+  const type = readString(value.type).toLowerCase();
+  if (type && type !== "url_citation" && type !== "citation") return [];
+  const url = readString(value.url ?? value.uri ?? value.link);
+  if (!url || !isHttpUrl(url)) return [];
+  const title = readString(value.title ?? value.name);
+  return [{ url, ...(title ? { title } : {}), sourceType: "citation" }];
+}
+
+function extractMessageAnnotationSources(item: Record<string, unknown>): HostedSearchSource[] {
+  const content = Array.isArray(item.content) ? item.content : [];
+  const sources: HostedSearchSource[] = [];
+  for (const part of content) {
+    if (!isRecord(part)) continue;
+    sources.push(...extractUrlCitationSources(part.annotations));
+    sources.push(...extractUrlCitationSources(part.annotation));
+  }
+  sources.push(...extractUrlCitationSources(item.annotations));
   return sources;
 }
 
@@ -356,6 +447,57 @@ function readXaiCustomSearchQuery(item: Record<string, unknown>) {
   return isRecord(parsed) ? readString(parsed.query) : "";
 }
 
+function parseResponsesSearchCallItem(
+  item: Record<string, unknown>,
+  isDoneEvent: boolean,
+): HostedSearchUpdate | null {
+  const itemType = readString(item.type);
+  if (itemType === "web_search_call" || isXaiSearchCallItemType(itemType)) {
+    const action = resolveResponsesAction(item.action);
+    const id = readString(item.id) || readString(item.call_id) || readString(item.x_search_call_id);
+    return {
+      ...(id ? { id } : {}),
+      provider: "codex",
+      status: mapOpenAIWebSearchCallStatus(
+        readString(item.status),
+        isDoneEvent || itemType.endsWith("_output"),
+      ),
+      queries: readSearchQueries(item, action),
+      sources: extractResponsesActionSources(item, action),
+    };
+  }
+
+  if (itemType === "custom_tool_call" && isXaiCustomSearchToolName(readString(item.name))) {
+    const query = readXaiCustomSearchQuery(item);
+    const id = readString(item.id) || readString(item.call_id) || readString(item.item_id);
+    return {
+      ...(id ? { id } : {}),
+      provider: "codex",
+      status: mapOpenAIWebSearchCallStatus(readString(item.status), isDoneEvent),
+      queries: query ? [query] : [],
+      sources: [],
+    };
+  }
+
+  return null;
+}
+
+function parseResponsesOutputItem(item: Record<string, unknown>, isDoneEvent: boolean) {
+  const updates: HostedSearchUpdate[] = [];
+  const searchUpdate = parseResponsesSearchCallItem(item, isDoneEvent);
+  if (searchUpdate) updates.push(searchUpdate);
+  const citations = extractMessageAnnotationSources(item);
+  if (citations.length > 0) {
+    updates.push({
+      provider: "codex",
+      status: "completed",
+      queries: [],
+      sources: citations,
+    });
+  }
+  return updates;
+}
+
 const RESPONSES_SEARCH_CALL_LIFECYCLE_PREFIXES = [
   "response.web_search_call.",
   "response.x_search_call.",
@@ -363,94 +505,81 @@ const RESPONSES_SEARCH_CALL_LIFECYCLE_PREFIXES = [
 
 function parseOpenAIResponsesSearchEvent(raw: unknown): HostedSearchUpdate[] {
   if (!isRecord(raw)) return [];
-  const type = readString(raw.type);
+  const type = readString(raw.type) || readString(raw.event);
 
   if (type === "response.output_item.added" || type === "response.output_item.done") {
     const item = isRecord(raw.item) ? raw.item : {};
-    const itemType = readString(item.type);
-    const isDoneEvent = type.endsWith(".done");
-
-    if (itemType === "web_search_call" || isXaiSearchCallItemType(itemType)) {
-      const action = isRecord(item.action) ? item.action : {};
-      const query = readString(action.query);
-      const id =
-        readString(item.id) || readString(item.call_id) || readString(item.x_search_call_id);
-      return [
-        {
-          ...(id ? { id } : {}),
-          provider: "codex",
-          status: mapOpenAIWebSearchCallStatus(
-            readString(item.status),
-            isDoneEvent || itemType.endsWith("_output"),
-          ),
-          queries: query ? [query] : [],
-          sources: [
-            ...extractResponsesSourceList(action.sources),
-            ...extractResponsesSourceList(item.sources),
-          ],
-        },
-      ];
-    }
-
-    if (itemType === "custom_tool_call" && isXaiCustomSearchToolName(readString(item.name))) {
-      const query = readXaiCustomSearchQuery(item);
-      const id = readString(item.id) || readString(item.call_id) || readString(item.item_id);
-      return [
-        {
-          ...(id ? { id } : {}),
-          provider: "codex",
-          status: mapOpenAIWebSearchCallStatus(readString(item.status), isDoneEvent),
-          queries: query ? [query] : [],
-          sources: [],
-        },
-      ];
-    }
-
-    return [];
+    return parseResponsesOutputItem(item, type.endsWith(".done"));
   }
 
   // Defensive coverage for the dedicated response.web_search_call.* /
   // response.x_search_call.* lifecycle events (in_progress/searching/completed)
   // some OpenAI-compatible gateways emit alongside (or instead of) output_item
-  // add/done.
+  // add/done. DeepSeek in particular often puts query/sources on `item` here
+  // and never emits response.output_text.annotation.added.
   const lifecyclePrefix = RESPONSES_SEARCH_CALL_LIFECYCLE_PREFIXES.find((prefix) =>
     type.startsWith(prefix),
   );
   if (lifecyclePrefix) {
     const suffix = type.slice(lifecyclePrefix.length).toLowerCase();
-    const id = readString(raw.item_id) || readString(raw.output_item_id);
+    const item = isRecord(raw.item) ? raw.item : {};
+    const action = resolveResponsesAction(item.action ?? raw.action);
+    const id =
+      readString(raw.item_id) ||
+      readString(raw.output_item_id) ||
+      readString(item.id) ||
+      readString(item.call_id);
+    const status = /fail|error|cancel/.test(suffix)
+      ? "failed"
+      : /complete|completed|done/.test(suffix)
+        ? "completed"
+        : "searching";
     return [
       {
         ...(id ? { id } : {}),
         provider: "codex",
-        status: /fail|error|cancel/.test(suffix)
-          ? "failed"
-          : /complete|completed|done/.test(suffix)
-            ? "completed"
-            : "searching",
-        queries: [],
-        sources: [],
+        status: mapOpenAIWebSearchCallStatus(
+          readString(item.status) || status,
+          status === "completed",
+        ),
+        queries: readSearchQueries(item, action),
+        sources: extractResponsesActionSources(item, action),
       },
     ];
   }
 
-  if (type === "response.output_text.annotation.added") {
-    const annotation = isRecord(raw.annotation) ? raw.annotation : {};
-    if (readString(annotation.type) !== "url_citation") return [];
-    const url = readString(annotation.url ?? annotation.uri);
-    if (!url || !isHttpUrl(url)) return [];
-    const title = readString(annotation.title);
-    return [
-      {
-        provider: "codex",
-        status: "completed",
-        queries: [],
-        sources: [{ url, ...(title ? { title } : {}), sourceType: "citation" }],
-      },
-    ];
+  if (
+    type === "response.completed" ||
+    type === "response.incomplete" ||
+    type === "response.failed"
+  ) {
+    const response = isRecord(raw.response) ? raw.response : {};
+    const output = Array.isArray(response.output) ? response.output : [];
+    return output.flatMap((item) => (isRecord(item) ? parseResponsesOutputItem(item, true) : []));
   }
 
-  return [];
+  if (type === "response.content_part.added" || type === "response.content_part.done") {
+    const part = isRecord(raw.part) ? raw.part : {};
+    const sources = extractMessageAnnotationSources({ content: [part] });
+    if (sources.length === 0) return [];
+    return [{ provider: "codex", status: "completed", queries: [], sources }];
+  }
+
+  if (type === "response.output_text.annotation.added" || type === "response.output_text.done") {
+    const sources = [
+      ...extractUrlCitationSources(raw.annotation),
+      ...extractUrlCitationSources(raw.annotations),
+    ];
+    if (sources.length === 0) return [];
+    return [{ provider: "codex", status: "completed", queries: [], sources }];
+  }
+
+  if (isRecord(raw.item)) {
+    const nested = parseResponsesOutputItem(raw.item, true);
+    if (nested.length > 0) return nested;
+  }
+
+  return parseResponsesOutputItem(raw, readString(raw.status) === "completed");
 }
 
 function createOpenAIResponsesSearchEventParser(): SearchEventParser {
@@ -731,6 +860,15 @@ function createGeminiSearchEventParser(): SearchEventParser {
 function createHostedSearchEventParser(providerId: ProviderId): SearchEventParser {
   if (providerId === "codex" || providerId === "xai") {
     return createOpenAIResponsesSearchEventParser();
+  }
+  if (providerId === "deepseek") {
+    return {
+      parse: (raw) =>
+        parseOpenAIResponsesSearchEvent(raw).map((update) => ({
+          ...update,
+          provider: "deepseek",
+        })),
+    };
   }
   if (providerId === "claude_code") return createAnthropicSearchEventParser();
   if (providerId === "gemini") return createGeminiSearchEventParser();

@@ -12,7 +12,7 @@ test("DeepSeek cache diagnostics describe provider-managed prefix caching", () =
     describeProviderCacheShape({
       providerId: "deepseek",
       baseUrl: "https://api.deepseek.com",
-      modelApi: "deepseek-chat-completions",
+      modelApi: "deepseek-responses",
       sessionId: "conversation-1",
       cacheRetention: "long",
       headers: { "x-session-id": "ignored" },

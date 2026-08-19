@@ -317,7 +317,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       activeModels: [],
       reasoning: "high",
       promptCachingEnabled: false,
-      nativeWebSearchEnabled: false,
+      nativeWebSearchEnabled: true,
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
     },
@@ -985,7 +985,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ...(type === "claude_code" && obj.promptCacheRetention === "long"
       ? { promptCacheRetention: "long" as const }
       : {}),
-    nativeWebSearchEnabled: type === "deepseek" ? false : obj.nativeWebSearchEnabled !== false,
+    nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
     usageQuery: normalizeUsageQueryConfig(obj.usageQuery),
   };
