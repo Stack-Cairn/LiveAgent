@@ -28,6 +28,9 @@ const MAX_LOG_BYTES: u64 = 512 * 1024;
 const STOP_GRACE_MS: u64 = 500;
 const SHUTDOWN_GRACE_MS: u64 = 1200;
 const MONITOR_INTERVAL_MS: u64 = 2000;
+const DEFAULT_WAIT_MS: u64 = 30_000;
+const MAX_WAIT_MS: u64 = 300_000;
+const WAIT_POLL_MS: u64 = 50;
 /// Rate limit for pid-probing restored entries (no Child handle to poll).
 const RESTORED_PROBE_INTERVAL_MS: u128 = 2000;
 /// `ps -o etime` has second granularity; a restored pid whose probed start
@@ -163,6 +166,17 @@ pub struct ManagedProcessLogResponse {
     pub bytes: u64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ManagedProcessWaitResponse {
+    pub process: ManagedProcessRecord,
+    pub log_path: String,
+    pub content: String,
+    pub truncated: bool,
+    pub bytes: u64,
+    pub cursor: u64,
+    pub timed_out: bool,
+}
+
 fn now_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -254,23 +268,62 @@ fn spawn_shell_command(
     command: &str,
     cwd: &Path,
     log: File,
+    log_path: &Path,
     sandbox_spec: Option<&SandboxSpec>,
 ) -> Result<(Child, String), String> {
     let stderr = log
         .try_clone()
         .map_err(|err| format!("Failed to clone process log: {err}"))?;
 
-    let spawned = spawn_platform_shell_command(command, cwd, &[], sandbox_spec, || {
-        Ok((
-            Stdio::from(log.try_clone()?),
-            Stdio::from(stderr.try_clone()?),
-        ))
-    })?;
+    // POSIX(Git Bash) 不会把继承的 Win32 文件句柄接到 fd 1/2,所以把日志路径
+    // 交给脚本用 POSIX 路径自己打开,并用 stdbuf 按行刷盘。PowerShell/cmd 仍走
+    // 继承句柄。映像仍是平台 shell,Windows 沙箱对 Git Bash 的 SID 判定不变。
+    let spawned = spawn_platform_shell_command(
+        command,
+        cwd,
+        &[],
+        sandbox_spec,
+        true,
+        Some(log_path),
+        || {
+            Ok((
+                Stdio::from(log.try_clone()?),
+                Stdio::from(stderr.try_clone()?),
+            ))
+        },
+    )?;
     Ok((spawned.child, spawned.profile.display_shell.to_string()))
 }
 
 fn entry_running(entry: &ManagedProcessEntry) -> bool {
     entry.finished_at.is_none()
+}
+
+fn read_log_from_cursor(
+    log_path: &Path,
+    cursor: u64,
+    max_bytes: u64,
+) -> Result<(String, u64, u64, bool), String> {
+    let mut file =
+        File::open(log_path).map_err(|err| format!("Failed to open process log: {err}"))?;
+    let len = file.metadata().map_err(|err| err.to_string())?.len();
+    let start = cursor.min(len);
+    let remaining = len.saturating_sub(start);
+    let truncated = remaining > max_bytes;
+    let read_len = remaining.min(max_bytes);
+    file.seek(SeekFrom::Start(start))
+        .map_err(|err| format!("Failed to seek process log: {err}"))?;
+    let mut bytes = vec![0_u8; read_len as usize];
+    if read_len > 0 {
+        file.read_exact(&mut bytes)
+            .map_err(|err| format!("Failed to read process log: {err}"))?;
+    }
+    Ok((
+        String::from_utf8_lossy(&bytes).to_string(),
+        start.saturating_add(read_len),
+        read_len,
+        truncated,
+    ))
 }
 
 enum RecordProbe {
@@ -546,7 +599,8 @@ impl ManagedProcessRegistry {
             spec.isolated = isolated;
             spec
         });
-        let (child, shell) = spawn_shell_command(&command, &cwd, log, sandbox_spec.as_ref())?;
+        let (child, shell) =
+            spawn_shell_command(&command, &cwd, log, &log_path, sandbox_spec.as_ref())?;
         let pid = child.id();
         let entry = ManagedProcessEntry {
             id: id.clone(),
@@ -708,6 +762,81 @@ impl ManagedProcessRegistry {
             truncated: start > 0,
             bytes: bytes.len() as u64,
         })
+    }
+
+    /// Blocks until the process exits, the log grows past `cursor`, or
+    /// `yield_time_ms` elapses. `cursor` is the absolute byte offset already
+    /// consumed (same idea as ProcessWait); omit it to start from 0.
+    pub fn wait(
+        &self,
+        id: String,
+        cursor: Option<u64>,
+        yield_time_ms: Option<u64>,
+        max_bytes: Option<u64>,
+    ) -> Result<ManagedProcessWaitResponse, String> {
+        let id = id.trim().to_string();
+        if id.is_empty() {
+            return Err("process_id is required".to_string());
+        }
+        let yield_for = Duration::from_millis(
+            yield_time_ms
+                .unwrap_or(DEFAULT_WAIT_MS)
+                .clamp(1, MAX_WAIT_MS),
+        );
+        let limit = max_bytes
+            .unwrap_or(DEFAULT_LOG_BYTES)
+            .clamp(1, MAX_LOG_BYTES);
+        let cursor = cursor.unwrap_or(0);
+        let deadline = Instant::now() + yield_for;
+
+        loop {
+            let _ = self.sync();
+            let (running, log_path) = {
+                let processes = self.lock_processes()?;
+                let Some(entry) = processes.get(&id) else {
+                    return Err(format!("Managed process not found: {id}"));
+                };
+                (entry_running(entry), entry.log_path.clone())
+            };
+            let len = fs::metadata(&log_path).map(|meta| meta.len()).unwrap_or(0);
+            if !running || len > cursor {
+                let (content, new_cursor, bytes, truncated) =
+                    read_log_from_cursor(&log_path, cursor, limit)?;
+                let process = self
+                    .status(Some(id))?
+                    .processes
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "Managed process disappeared during wait".to_string())?;
+                return Ok(ManagedProcessWaitResponse {
+                    process,
+                    log_path: log_path.display().to_string(),
+                    content,
+                    truncated,
+                    bytes,
+                    cursor: new_cursor,
+                    timed_out: false,
+                });
+            }
+            if Instant::now() >= deadline {
+                let process = self
+                    .status(Some(id))?
+                    .processes
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "Managed process disappeared during wait".to_string())?;
+                return Ok(ManagedProcessWaitResponse {
+                    process,
+                    log_path: log_path.display().to_string(),
+                    content: String::new(),
+                    truncated: false,
+                    bytes: 0,
+                    cursor,
+                    timed_out: true,
+                });
+            }
+            std::thread::sleep(Duration::from_millis(WAIT_POLL_MS));
+        }
     }
 
     /// Reconciles journal rows left by the previous run: isolated rows whose
@@ -950,16 +1079,60 @@ mod tests {
         let mut last_log = registry
             .read_log(process_id.to_string(), Some(1024))
             .expect("log should be readable");
-        for _ in 0..50 {
+        for _ in 0..150 {
             if last_log.content.contains(expected) {
                 return last_log;
             }
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(50));
             last_log = registry
                 .read_log(process_id.to_string(), Some(1024))
                 .expect("log should be readable");
         }
         last_log
+    }
+
+    #[test]
+    fn managed_process_echo_is_visible_while_running() {
+        let temp_dir = temp_workdir("echo-flush");
+        let registry = ManagedProcessRegistry::default();
+        let started = registry
+            .start(
+                temp_dir.display().to_string(),
+                "echo liveagent-managed-process-ready; sleep 30".to_string(),
+                None,
+                Some("flush test".to_string()),
+                false,
+                None,
+            )
+            .expect("process should start");
+        let process_id = started.process.id.clone();
+        let log = wait_for_log_content(&registry, &process_id, "liveagent-managed-process-ready");
+        let status = registry
+            .status(Some(process_id.clone()))
+            .expect("status should work");
+        assert!(
+            log.content.contains("liveagent-managed-process-ready"),
+            "periodic/early echo must appear in the log before the process exits; \
+             running={} exit={:?} shell={} pid={} content={:?}",
+            status.processes[0].running,
+            status.processes[0].exit_code,
+            started.process.shell,
+            started.process.pid,
+            log.content
+        );
+        assert!(
+            status.processes[0].running,
+            "echo should be visible while the managed process is still running"
+        );
+        let waited = registry
+            .wait(process_id.clone(), Some(0), Some(5_000), Some(4096))
+            .expect("wait should work");
+        assert!(waited.content.contains("liveagent-managed-process-ready"));
+        assert!(!waited.timed_out);
+        assert!(waited.cursor > 0);
+
+        let _ = registry.stop(process_id);
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[cfg(unix)]

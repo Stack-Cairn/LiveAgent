@@ -5,6 +5,7 @@ use tauri::State;
 use crate::runtime::managed_process::{
     ManagedProcessLogResponse, ManagedProcessRegistry, ManagedProcessSnapshot,
     ManagedProcessStartResponse, ManagedProcessStatusResponse, ManagedProcessStopResponse,
+    ManagedProcessWaitResponse,
 };
 use crate::runtime::sandbox::{resolve_effective_options, SandboxOptions};
 
@@ -57,6 +58,22 @@ pub fn managed_process_read_log(
     max_bytes: Option<u64>,
 ) -> Result<ManagedProcessLogResponse, String> {
     registry.read_log(process_id, max_bytes)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn managed_process_wait(
+    registry: State<'_, Arc<ManagedProcessRegistry>>,
+    process_id: String,
+    cursor: Option<u64>,
+    yield_time_ms: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<ManagedProcessWaitResponse, String> {
+    let registry = Arc::clone(registry.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        registry.wait(process_id, cursor, yield_time_ms, max_bytes)
+    })
+    .await
+    .map_err(|error| format!("managed_process_wait join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]

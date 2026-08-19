@@ -460,6 +460,8 @@ impl ShellSessionManager {
                 &actual_cwd,
                 &[],
                 sandbox_spec.as_ref(),
+                false,
+                None,
                 || Ok((Stdio::piped(), Stdio::piped())),
             )?;
             let mut child = spawned.child;
@@ -570,7 +572,7 @@ impl ShellSessionManager {
         sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| format!("shell session not found or expired: {session_id}"))
+            .ok_or_else(|| shell_session_not_found_message(&session_id))
     }
 
     fn cleanup_locked(&self, sessions: &mut HashMap<String, Arc<ShellSession>>, now: Instant) {
@@ -625,6 +627,19 @@ fn normalize_session_id(value: &str) -> Result<String, String> {
         return Err("session_id must be 1-128 ASCII letters, digits, '-', '_', or ':'".to_string());
     }
     Ok(value.to_string())
+}
+
+fn shell_session_not_found_message(session_id: &str) -> String {
+    if uuid::Uuid::parse_str(session_id).is_ok() {
+        format!(
+            "shell session not found or expired: {session_id}. \
+             ProcessWait/ProcessStop only accept Bash session_id values. \
+             If this is a ManagedProcess process_id, use \
+             ManagedProcess(action=\"wait\"|\"read_log\"|\"stop\", process_id=\"{session_id}\")."
+        )
+    } else {
+        format!("shell session not found or expired: {session_id}")
+    }
 }
 
 fn normalize_explicit_timeout(timeout_ms: Option<u64>, max_timeout_ms: Option<u64>) -> Option<u64> {
@@ -789,6 +804,21 @@ mod tests {
             .iter()
             .map(|chunk| chunk.text.as_str())
             .collect()
+    }
+
+    #[test]
+    fn uuid_session_miss_points_at_managed_process_wait() {
+        let id = "c7c220e6-bd2a-4fb5-9ffa-35634c22c79d";
+        let message = shell_session_not_found_message(id);
+        assert!(message.contains(id));
+        assert!(message.contains("ManagedProcess"));
+        assert!(message.contains("action=\"wait\""));
+        let bash_id = "bash-05a08b61-7863-4469-96cf-772bfb0f31a0";
+        let bash_message = shell_session_not_found_message(bash_id);
+        assert_eq!(
+            bash_message,
+            format!("shell session not found or expired: {bash_id}")
+        );
     }
 
     #[test]
@@ -1021,14 +1051,14 @@ mod tests {
                 shell_family: "posix",
                 display_shell: "sh",
             },
-            Some("restricted-token".to_string()),
+            Some("low-integrity-token".to_string()),
             None,
             &config,
         );
         session.finish(ShellSessionStatus::Completed, Some(0));
 
         let response = session.wait(None, Duration::ZERO);
-        assert_eq!(response.sandbox.as_deref(), Some("restricted-token"));
+        assert_eq!(response.sandbox.as_deref(), Some("low-integrity-token"));
     }
 
     /// Exercise the production session manager with an explicit sandbox option.
@@ -1101,7 +1131,11 @@ mod tests {
 
         assert_eq!(response.sandbox.as_deref(), Some(capability.mechanism));
         assert_eq!(response.status, ShellSessionStatus::Failed);
-        assert_ne!(response.exit_code, Some(0), "sibling write unexpectedly succeeded");
+        assert_ne!(
+            response.exit_code,
+            Some(0),
+            "sibling write unexpectedly succeeded"
+        );
         assert_eq!(
             std::fs::read_to_string(workspace.join("inside.txt")).expect("workspace write"),
             "inside"

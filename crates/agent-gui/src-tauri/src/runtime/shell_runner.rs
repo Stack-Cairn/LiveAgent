@@ -112,7 +112,8 @@ pub struct ShellRunResponse {
     pub platform: String,
     pub profile: String,
     pub shell_family: String,
-    /// 沙箱机制("seatbelt"/"bubblewrap"),未启用沙箱时为 None。
+    /// 沙箱机制("seatbelt"/"bubblewrap"/"low-integrity-token"/"appcontainer"),
+    /// 未启用沙箱时为 None。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox: Option<String>,
     pub stdout: String,
@@ -383,6 +384,9 @@ fn windows_powershell_command(cmd: &str) -> String {
         "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
         "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
         "$OutputEncoding = [Console]::OutputEncoding",
+        // 重定向到文件时 PowerShell 的 Console.Out 默认块缓冲,ManagedProcess
+        // 周期性 Write-Output/echo 在进程退出前不会出现在日志里。
+        "try { [Console]::Out.AutoFlush = $true; [Console]::Error.AutoFlush = $true } catch {}",
         cmd,
     ]
     .join("; ")
@@ -694,7 +698,7 @@ fn default_platform_shell_profile() -> ShellExecutionProfile {
 }
 
 /// 沙箱下 shell 候选可用性的进程级缓存。key = (候选程序路径, 沙箱机制):同一 shell 在
-/// 受限令牌与 AppContainer 两种机制下兼容性可能不同,须分别记录;探测结果与工作区无关
+/// Low IL token 与 AppContainer 两种机制下兼容性可能不同,须分别记录;探测结果与工作区无关
 /// (loader 死亡源于令牌/内核对象语义,非路径),故 key 不含 write_root。
 #[cfg(windows)]
 static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
@@ -702,19 +706,29 @@ static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 
 /// 子进程启动即死、不能当沙箱 shell 的退出码:
-/// - 0xC0000142 DLL 初始化失败(msys/cygwin 在受限令牌下的典型死法)
+/// - 0xC0000142 DLL 初始化失败(msys/cygwin 在沙箱上下文下的典型死法)
 /// - 0xC0000135 DLL 缺失
-/// - 0xC0000022 拒绝访问
+/// - 0xC0000022 拒绝访问(NTSTATUS)
 /// - 0xE0434352 CLR 未处理异常(PowerShell 把 CNG NTE_PROVIDER_DLL_FAIL 包装成
 ///   “BCrypt.dll 加载失败”;进程已进 CLR,故不是 NTSTATUS loader 码)
 /// - 0x8009001D NTE_PROVIDER_DLL_FAIL 本体
+/// - 0x80070005 HRESULT E_ACCESSDENIED(Windows PowerShell / .NET Framework
+///   写 CLR 用户缓存失败;与 0xC0000022 / 0xE0434352 不是同一条路径)
+/// - 0xFFFF0000 PowerShell 宿主在 CLR 初始化失败(内部 HRESULT 80070005)时的
+///   包装退出码。漏掉这两个码会把已崩溃的 powershell.exe 探测成可用
 ///
 /// 命中 ⇒ 该候选在此沙箱机制下起不来,落到下一候选。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_loader_failure_exit(code: i32) -> bool {
     matches!(
         code as u32,
-        0xC000_0142 | 0xC000_0135 | 0xC000_0022 | 0xE043_4352 | 0x8009_001D
+        0xC000_0142
+            | 0xC000_0135
+            | 0xC000_0022
+            | 0xE043_4352
+            | 0x8009_001D
+            | 0x8007_0005
+            | 0xFFFF_0000
     )
 }
 
@@ -726,7 +740,7 @@ fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
     !exit_code.is_some_and(is_loader_failure_exit)
 }
 
-/// PATH 上的第一个同名二进制若落在 WindowsApps,受限令牌无法启动它。
+/// PATH 上的第一个同名二进制若落在 WindowsApps,沙箱安全上下文无法直接启动它。
 #[cfg(windows)]
 fn candidate_resolves_to_windowsapps(program: &Path) -> bool {
     if sandbox::is_msix_windowsapps_path(program) {
@@ -741,7 +755,7 @@ fn candidate_resolves_to_windowsapps(program: &Path) -> bool {
 /// Windows 沙箱下探测某 shell 候选能否活过启动(结果进程级缓存)。
 ///
 /// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中启动即死
-/// (Git Bash 的 0xC0000142,或 PowerShell/CNG 的 0xE0434352)⇒ 不可用,调用方落到
+/// (Git Bash 的 0xC0000142,PowerShell/CNG 的 0xE0434352,或 CLR 的 0x80070005)⇒ 不可用,调用方落到
 /// 下一候选。pwsh/powershell 在写围栏下并不必然可用;cmd.exe 不走 CNG,通常是最后
 /// 兜底。探测本身失败(wrap/spawn 出错)判可用:让真实 spawn 复现错误并走既有
 /// fail-closed/错误报告路径,探测不吞错。
@@ -807,11 +821,123 @@ fn sandbox_candidate_usable(
     usable
 }
 
+/// `stdbuf` 在 Git Bash 上通常位于 `Git\usr\bin`,与 `Git\bin\bash.exe` 不在同一目录。
+fn find_stdbuf_near(shell: &Path) -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["stdbuf.exe", "stdbuf"]
+    } else {
+        &["stdbuf"]
+    };
+    let mut dirs = Vec::new();
+    if let Some(parent) = shell.parent().filter(|p| !p.as_os_str().is_empty()) {
+        dirs.push(parent.to_path_buf());
+        dirs.push(parent.join("usr").join("bin"));
+        if let Some(grand) = parent.parent() {
+            dirs.push(grand.join("usr").join("bin"));
+        }
+    }
+    dirs.push(PathBuf::from("/usr/bin"));
+    dirs.push(PathBuf::from("/bin"));
+    for dir in dirs {
+        for name in names {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Quote a string for POSIX `sh` single quotes so it can be embedded in `-c`.
+fn posix_single_quote(value: &str) -> String {
+    let mut out = String::from("'");
+    let mut first = true;
+    for part in value.split('\'') {
+        if !first {
+            out.push_str("'\\''");
+        }
+        first = false;
+        out.push_str(part);
+    }
+    out.push('\'');
+    out
+}
+
+fn path_for_posix_shell(path: &Path) -> String {
+    #[cfg(windows)]
+    {
+        let raw = path.to_string_lossy();
+        let trimmed = raw.trim().trim_start_matches(r"\\?\");
+        let bytes = trimmed.as_bytes();
+        if bytes.len() >= 2 && bytes[1] == b':' {
+            let drive = (bytes[0] as char).to_ascii_lowercase();
+            let rest = trimmed[2..].replace('\\', "/");
+            return format!("/{drive}{rest}");
+        }
+        trimmed.replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_string_lossy().into_owned()
+    }
+}
+
+/// POSIX 托管进程用 `stdbuf -oL` 包一层,让 echo 循环等周期输出在重定向到
+/// 日志文件时按行可见。映像仍是 bash/zsh/sh,Windows 沙箱对 Git Bash 的
+/// Everyone SID / msys 盖章才能继续命中。
+fn posix_line_buffered_script(
+    shell: &str,
+    command: &str,
+    stdbuf: Option<&Path>,
+    log_path: Option<&Path>,
+) -> String {
+    let quoted = posix_single_quote(command);
+    let redirect = log_path
+        .map(|path| {
+            format!(
+                " >> {} 2>&1",
+                posix_single_quote(&path_for_posix_shell(path))
+            )
+        })
+        .unwrap_or_default();
+    if let Some(stdbuf) = stdbuf {
+        let stdbuf_q = posix_single_quote(&path_for_posix_shell(stdbuf));
+        return format!("exec {stdbuf_q} -oL -eL {shell} -c {quoted}{redirect}");
+    }
+    format!(
+        "if command -v stdbuf >/dev/null 2>&1; then exec stdbuf -oL -eL {shell} -c {quoted}{redirect}; fi\n{{ {command}; }}{redirect}"
+    )
+}
+
+fn apply_line_buffered_stdio(
+    command: &str,
+    candidate: &ShellCandidate,
+    log_path: Option<&Path>,
+) -> (Vec<String>, Vec<(String, String)>) {
+    let mut args = candidate.args.clone();
+    let extra_envs = vec![("PYTHONUNBUFFERED".to_string(), "1".to_string())];
+    if candidate.profile.shell_family == "posix" {
+        let stdbuf = find_stdbuf_near(&candidate.program);
+        if let Some(script) = args.last_mut() {
+            *script = posix_line_buffered_script(
+                candidate.profile.display_shell,
+                command,
+                stdbuf.as_deref(),
+                log_path,
+            );
+        }
+    }
+    (args, extra_envs)
+}
+
 pub(crate) fn spawn_platform_shell_command<F>(
     command: &str,
     cwd: &Path,
     envs: &[(String, String)],
     sandbox_spec: Option<&SandboxSpec>,
+    line_buffered: bool,
+    log_path: Option<&Path>,
     mut stdio_factory: F,
 ) -> Result<SpawnedPlatformShell, String>
 where
@@ -821,20 +947,25 @@ where
     let system_proxy_envs = crate::services::system_proxy::shell_proxy_envs()?;
 
     for candidate in platform_shell_candidates(command) {
+        let (candidate_args, extra_envs) = if line_buffered {
+            apply_line_buffered_stdio(command, &candidate, log_path)
+        } else {
+            (candidate.args.clone(), Vec::new())
+        };
         // 沙箱包裹在 shell candidate 选定后、spawn 前进行,fail-closed:包裹
         // 失败(平台不支持/依赖缺失)直接报错,绝不回退为无沙箱执行。
         // sandbox-exec/bwrap 按名字解析 shell 时同样遵循 PATH,语义不变。
         let (spawn_program, spawn_args, sandbox_mechanism) = match sandbox_spec {
             Some(spec) => {
                 let (program, args, mechanism) =
-                    sandbox::wrap_command(spec, &candidate.program, &candidate.args)?;
+                    sandbox::wrap_command(spec, &candidate.program, &candidate_args)?;
                 (program, args, Some(mechanism))
             }
-            None => (candidate.program.clone(), candidate.args.clone(), None),
+            None => (candidate.program.clone(), candidate_args, None),
         };
         // Windows 沙箱专属:候选回退链平时靠 spawn 失败推进,但沙箱下 spawn 的永远是
         // LiveAgent.exe 启动器(总能成功),loader 级不兼容(如 Git Bash 的 msys 依赖
-        // 在受限令牌下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
+        // 在沙箱上下文下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
         // (`exit 0`)提前识别,落到下一候选,不给模型返回死 shell。pwsh 在沙箱里也会
         // 因 CNG 用户证书库不可写而以 CLR 0xE0434352 崩溃,不能假定“原生 PE 必然可用”。
         #[cfg(windows)]
@@ -842,8 +973,8 @@ where
             if !sandbox_candidate_usable(spec, &candidate, mechanism) {
                 errors.push(format!(
                     "{} ({}) skipped: incompatible with the {mechanism} sandbox (startup \
-                     failure under the restricted token, e.g. STATUS_DLL_INIT_FAILED or CLR \
-                     0xE0434352 / BCrypt provider init)",
+                     failure under the sandbox security context, e.g. STATUS_DLL_INIT_FAILED, CLR \
+                     0xE0434352 / 0xFFFF0000, or HRESULT 0x80070005)",
                     candidate.profile.profile, candidate.profile.display_shell
                 ));
                 continue;
@@ -859,6 +990,7 @@ where
         }
         c.envs(
             envs.iter()
+                .chain(extra_envs.iter())
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         );
         if candidate.augment_macos_path {
@@ -952,10 +1084,15 @@ pub(crate) fn run_shell_script_with_envs(
         }
         None => None,
     };
-    let spawned =
-        spawn_platform_shell_command(cmd, &actual_cwd, envs, sandbox_spec.as_ref(), || {
-            Ok((Stdio::piped(), Stdio::piped()))
-        })?;
+    let spawned = spawn_platform_shell_command(
+        cmd,
+        &actual_cwd,
+        envs,
+        sandbox_spec.as_ref(),
+        false,
+        None,
+        || Ok((Stdio::piped(), Stdio::piped())),
+    )?;
     let mut child = spawned.child;
     let shell_profile = spawned.profile;
     let sandbox_mechanism = spawned.sandbox;
@@ -1081,6 +1218,14 @@ mod tests {
         assert!(!sandbox_probe_verdict(Some(-532_462_766)));
         assert!(is_loader_failure_exit(0x8009_001D_u32 as i32)); // NTE_PROVIDER_DLL_FAIL
         assert!(!sandbox_probe_verdict(Some(0x8009_001D_u32 as i32)));
+        // Windows PowerShell / .NET Framework:CLR 用户缓存写拒绝是 HRESULT,不是 NTSTATUS。
+        assert_eq!((-2_147_024_891i32) as u32, 0x8007_0005);
+        assert!(is_loader_failure_exit(-2_147_024_891));
+        assert!(!sandbox_probe_verdict(Some(-2_147_024_891)));
+        // PowerShell 宿主把 CLR 80070005 包装成 0xFFFF0000(-65536)。
+        assert_eq!((-65536i32) as u32, 0xFFFF_0000);
+        assert!(is_loader_failure_exit(-65536));
+        assert!(!sandbox_probe_verdict(Some(-65536)));
         // 正常退出、普通失败、其它 NTSTATUS、超时(None)都不构成“候选不可用”。
         assert!(sandbox_probe_verdict(Some(0)));
         assert!(sandbox_probe_verdict(Some(1)));
@@ -1418,5 +1563,26 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&workdir);
+    }
+
+    #[test]
+    fn posix_line_buffered_script_embeds_quoted_command_and_stdbuf() {
+        let stdbuf = PathBuf::from(r"C:\Program Files\Git\usr\bin\stdbuf.exe");
+        let log_path = PathBuf::from(r"C:\Users\me\.liveagent\process-logs\proc.log");
+        let script = super::posix_line_buffered_script(
+            "bash",
+            "echo ready; sleep 1",
+            Some(stdbuf.as_path()),
+            Some(log_path.as_path()),
+        );
+        assert!(script.contains("stdbuf.exe"));
+        assert!(script.contains("-oL -eL bash -c"));
+        assert!(script.contains("'echo ready; sleep 1'"));
+        assert!(script.contains(" >> "));
+        #[cfg(windows)]
+        {
+            assert!(script.contains("/c/Program Files/Git/usr/bin/stdbuf.exe"));
+            assert!(script.contains("/c/Users/me/.liveagent/process-logs/proc.log"));
+        }
     }
 }

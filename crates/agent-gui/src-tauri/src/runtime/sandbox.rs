@@ -1,7 +1,7 @@
 //! OS 级沙箱(沙箱模式 v1):模型驱动的 Bash / ManagedProcess 在生成子进程前
 //! 由平台原生机制包裹——macOS 走 Seatbelt(/usr/bin/sandbox-exec),Linux 走
-//! bubblewrap(bwrap),Windows 走受限令牌(CreateRestrictedToken WRITE_RESTRICTED
-//! + 工作区继承写 ACE + Job Object,免管理员/免 UAC)。
+//! bubblewrap(bwrap),Windows 联网模式走 Low Integrity 主令牌,断网模式走
+//! AppContainer(均带工作区写围栏 + Job Object,免管理员/免 UAC)。
 //!
 //! 语义为 workspace-write:读默认放行(工具链/依赖散布全盘,default-deny 不现实),
 //! 写仅限工作区根 + 临时目录,敏感目录(~/.ssh、应用配置库等)读写全掩蔽,网络可
@@ -9,8 +9,8 @@
 //! 无沙箱执行。
 //!
 //! Windows 双后端(均免管理员/免 UAC,见 memory windows-sandbox-facts):
-//! - sandbox(联网):受限令牌(WRITE_RESTRICTED)只围栏“写”,读广泛放行保工具链
-//!   可用;读掩蔽在此模式下不可得(免管理员边界)。
+//! - sandbox(联网):当前用户主令牌副本降到 Low IL,网络能力与无沙箱进程一致；
+//!   工作区/TEMP 同步标 Low,由 MIC NoWriteUp 围栏写入。
 //! - sandboxOffline(断网):AppContainer(零 capability)。WFP 对无网络 capability
 //!   的 AppContainer 默认拒绝全部网络含 loopback ⇒ 内核级强制断网,无需提权(对比
 //!   Codex:unelevated 仅 env 级软断网,强制断网须提权建专用账号+防火墙)。AC 默认
@@ -23,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 /// 自我再执行启动器子命令标记:Windows `wrap_command` 把 (program, args) 包成
 /// `current_exe __sandbox_exec --write-root <root> --net on|off [--isolated] -- <program> <args...>`;
 /// 进程启动最早期 `windows_sandbox::run_sandbox_launcher_if_requested` 识别它,
-/// 按 --net 建受限令牌(联网)或 AppContainer(断网)后执行真实命令。
+/// 按 --net 建 Low IL 主令牌(联网)或 AppContainer(断网)后执行真实命令。
 /// 非 Windows 平台不产生该标记。
 pub(crate) const SANDBOX_EXEC_SUBCOMMAND: &str = "__sandbox_exec";
 
@@ -32,7 +32,7 @@ pub(crate) const SANDBOX_EXEC_SUBCOMMAND: &str = "__sandbox_exec";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LauncherInvocation {
     pub write_root: PathBuf,
-    /// 网络放行与否决定后端:true → 受限令牌(联网),false → AppContainer(断网)。
+    /// 网络放行与否决定后端:true → Low IL 主令牌(联网),false → AppContainer(断网)。
     pub allow_network: bool,
     /// isolated 常驻进程须在启动器死亡后继续存活 ⇒ 启动器不得给子进程挂
     /// KILL_ON_JOB_CLOSE 的 Job Object(对齐 Linux bwrap 省略 --die-with-parent)。
@@ -150,7 +150,7 @@ pub(crate) fn synthetic_workspace_sid(write_root: &Path) -> String {
 }
 
 /// 按 Windows(CommandLineToArgvW)规则拼装命令行,并以 NUL 结尾成 UTF-16。
-/// 算法逐字复刻 Rust 标准库 `make_command_line`/`append_arg`,以保证受限令牌下
+/// 算法逐字复刻 Rust 标准库 `make_command_line`/`append_arg`,以保证 Low IL token 下
 /// `CreateProcessAsUserW` 的子进程收到与非沙箱 `std::process::Command` 完全一致的
 /// argv —— 行为对齐,不引入解析差异。纯逻辑,跨平台可测。
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -247,8 +247,8 @@ pub(crate) fn resolve_program_in_path(
     None
 }
 
-/// Microsoft Store / MSIX 执行别名位于 `WindowsApps`。受限令牌下
-/// `CreateProcessAsUserW` 对打包二进制会返回 5 (Access denied),不能当沙箱 shell。
+/// Microsoft Store / MSIX 执行别名位于 `WindowsApps`。沙箱安全上下文不能直接
+/// 通过 `CreateProcess*` 启动这类打包二进制,因此不能把它当作 shell。
 /// 同时按 `/` 与 `\` 分段,以便在非 Windows 宿主上用 Windows 路径字面量做单测。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn is_msix_windowsapps_path(path: &Path) -> bool {
@@ -258,8 +258,8 @@ pub(crate) fn is_msix_windowsapps_path(path: &Path) -> bool {
 }
 
 /// HKCU 子键:CAPI/CNG 在 provider 初始化时会对它们 `RegCreateKey`(创建即写)。
-/// WRITE_RESTRICTED 第二遍写检查若 DACL 上没有限制性 SID,就会 ACCESS DENIED,
-/// 最终被 PowerShell/.NET 误报成 “BCrypt.dll 加载失败”(exit `0xE0434352`)。
+/// Low IL token 若面对 Medium 标签会被 NoWriteUp 拒绝，最终被 PowerShell/.NET
+/// 误报成 “BCrypt.dll 加载失败”(exit `0xE0434352`)。
 /// 这是用户证书/密钥库的窄例外,不是放开整个 HKCU。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const CNG_USER_REGISTRY_SUBKEYS: &[&str] = &[
@@ -285,6 +285,41 @@ pub(crate) fn cng_user_file_dirs(appdata: &Path, localappdata: &Path) -> Vec<Pat
         appdata.join("Microsoft").join("Crypto"),
         appdata.join("Microsoft").join("Protect"),
         localappdata.join("Microsoft").join("CryptnetUrlCache"),
+    ]
+}
+
+/// HKCU 子键:Windows PowerShell 5.1 / .NET Framework CLR 启动会 `RegCreateKey`。
+/// 与 CNG 证书库是另一条失败面——这里被拒时进程以 HRESULT `0x80070005`
+/// (E_ACCESSDENIED)退出,而不是 `0xE0434352` / `NTE_PROVIDER_DLL_FAIL`。
+/// 仍是用户运行时缓存的窄例外,不是放开整个 HKCU。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const CLR_USER_REGISTRY_SUBKEYS: &[&str] = &[
+    r"Software\Microsoft\PowerShell",
+    r"Software\Microsoft\PowerShell\1",
+    r"Software\Microsoft\Windows\PowerShell",
+    r"Software\Microsoft\.NETFramework",
+];
+
+/// .NET Framework / Windows PowerShell 启动还会写用户 CLR 缓存与模块分析目录
+/// (Fusion、UsageLogs、ModuleAnalysisCache)。不盖这些路径时,powershell.exe
+/// 在 Low IL token 下不可写时会以 `0x80070005` 立即崩溃。
+///
+/// 故意不含 `%LOCALAPPDATA%\Temp`:TEMP 已重定向到围栏目录,给用户真实 Temp
+/// 盖写 ACE 会把围栏撕开。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn clr_user_file_dirs(appdata: &Path, localappdata: &Path) -> Vec<PathBuf> {
+    vec![
+        localappdata.join("Microsoft").join("CLR_v4.0"),
+        localappdata.join("Microsoft").join("CLR_v4.0_32"),
+        localappdata.join("assembly"),
+        localappdata
+            .join("Microsoft")
+            .join("Windows")
+            .join("PowerShell"),
+        localappdata.join("Microsoft").join("PowerShell"),
+        appdata.join("Microsoft").join("Windows").join("PowerShell"),
+        appdata.join("Microsoft").join("CLR Security Config"),
+        localappdata.join("IsolatedStorage"),
     ]
 }
 
@@ -859,14 +894,14 @@ mod platform {
     static CAPABILITY: OnceLock<SandboxCapability> = OnceLock::new();
 
     /// 运行时探测(P1#4):不再硬编码"恒可用"。两个后端都实际建一次安全上下文——
-    /// 联网后端建 WRITE_RESTRICTED 受限令牌并补 default DACL,断网后端派生
+    /// 联网后端复制当前用户主令牌并降到 Low IL,断网后端派生
     /// AppContainer SID。组策略、EDR hook、受限 SKU 会让这些调用在真机上失败;
     /// 探测把失败提前暴露成 `supported=false` / `network_control=false`,
     /// `wrap_command` 的 fail-closed 守卫因而在 Windows 上真正可达。
     fn probe() -> SandboxCapability {
         let unsupported = |reason: String| SandboxCapability {
             supported: false,
-            mechanism: "restricted-token",
+            mechanism: "low-integrity-token",
             platform: "windows",
             network_control: false,
             reason: Some(reason),
@@ -875,13 +910,13 @@ mod platform {
         if let Err(err) = std::env::current_exe() {
             return unsupported(format!("cannot resolve current executable: {err}"));
         }
-        let (restricted_token, appcontainer) = crate::runtime::windows_sandbox::probe_backends();
-        if let Err(err) = restricted_token {
-            return unsupported(format!("restricted-token backend unavailable: {err}"));
+        let (networked_token, appcontainer) = crate::runtime::windows_sandbox::probe_backends();
+        if let Err(err) = networked_token {
+            return unsupported(format!("low-integrity token backend unavailable: {err}"));
         }
         SandboxCapability {
             supported: true,
-            mechanism: "restricted-token",
+            mechanism: "low-integrity-token",
             platform: "windows",
             // 断网变体走 AppContainer:派生不出 AC SID ⇒ 仅 sandboxOffline 不可用,
             // 联网写围栏仍然可用(UI 据此只禁用断网项)。
@@ -902,7 +937,7 @@ mod platform {
         args: &[String],
     ) -> Result<(PathBuf, Vec<String>, &'static str), String> {
         // 自我再执行:把真实命令包进 current_exe 的 __sandbox_exec 启动器。启动器在
-        // 进程最早期按 --net 选后端:on → 受限令牌(CreateProcessAsUserW),off →
+        // 进程最早期按 --net 选后端:on → Low IL 主令牌(CreateProcessAsUserW),off →
         // AppContainer(CreateProcessW + SECURITY_CAPABILITIES);见 windows_sandbox。
         if !spec.allow_network && !capability().network_control {
             return Err(format!(
@@ -924,7 +959,7 @@ machine: {}. Switch to the networked sandbox mode or resolve the issue and retry
             args,
         );
         let mechanism = if spec.allow_network {
-            "restricted-token"
+            "low-integrity-token"
         } else {
             "appcontainer"
         };
@@ -1335,6 +1370,36 @@ mod tests {
         assert!(!dirs
             .iter()
             .any(|path| path == Path::new("/roaming") || path == Path::new("/local")));
+    }
+
+    #[test]
+    fn clr_user_write_surface_is_narrow_runtime_cache_not_home() {
+        assert!(CLR_USER_REGISTRY_SUBKEYS
+            .iter()
+            .all(|key| key.starts_with(r"Software\Microsoft\")));
+        assert!(CLR_USER_REGISTRY_SUBKEYS
+            .iter()
+            .all(|key| { key.contains("PowerShell") || key.contains(".NETFramework") }));
+        let dirs = clr_user_file_dirs(Path::new("/roaming"), Path::new("/local"));
+        assert_eq!(
+            dirs,
+            vec![
+                PathBuf::from("/local/Microsoft/CLR_v4.0"),
+                PathBuf::from("/local/Microsoft/CLR_v4.0_32"),
+                PathBuf::from("/local/assembly"),
+                PathBuf::from("/local/Microsoft/Windows/PowerShell"),
+                PathBuf::from("/local/Microsoft/PowerShell"),
+                PathBuf::from("/roaming/Microsoft/Windows/PowerShell"),
+                PathBuf::from("/roaming/Microsoft/CLR Security Config"),
+                PathBuf::from("/local/IsolatedStorage"),
+            ]
+        );
+        assert!(!dirs.iter().any(|path| {
+            path == Path::new("/roaming")
+                || path == Path::new("/local")
+                || path == Path::new("/local/Temp")
+                || path == Path::new("/local/Microsoft")
+        }));
     }
 
     #[test]

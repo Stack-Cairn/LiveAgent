@@ -63,7 +63,7 @@ type ShellSessionResponse = {
   platform?: string;
   profile?: string;
   shell_family?: string;
-  /** Effective OS sandbox mechanism (for example seatbelt/bubblewrap/restricted-token). */
+  /** Effective OS sandbox mechanism (for example seatbelt/bubblewrap/low-integrity-token). */
   sandbox?: string;
   timeout_ms?: number | null;
 };
@@ -103,6 +103,16 @@ type ManagedProcessLogResponse = {
   content: string;
   truncated: boolean;
   bytes: number;
+};
+
+type ManagedProcessWaitResponse = {
+  process: ManagedProcessRecord;
+  log_path: string;
+  content: string;
+  truncated: boolean;
+  bytes: number;
+  cursor: number;
+  timed_out: boolean;
 };
 
 type SystemListSkillFilesResponse = {
@@ -396,10 +406,16 @@ function buildShellSessionToolResult(params: {
 
 function normalizeProcessAction(input: unknown) {
   const action = typeof input === "string" ? input.trim().toLowerCase() : "";
-  if (action === "start" || action === "status" || action === "read_log" || action === "stop") {
+  if (
+    action === "start" ||
+    action === "status" ||
+    action === "read_log" ||
+    action === "wait" ||
+    action === "stop"
+  ) {
     return action;
   }
-  throw new Error("ManagedProcess.action must be one of: start, status, read_log, stop");
+  throw new Error("ManagedProcess.action must be one of: start, status, read_log, wait, stop");
 }
 
 function formatManagedProcessRecord(process: ManagedProcessRecord) {
@@ -514,7 +530,7 @@ export function createShellTools(params: {
   const platformLabel = runtimePlatformLabel(runtimePlatform);
   const sandboxEnabled = params.sandbox?.enabled === true;
   const sandboxAllowNetwork = params.sandbox?.allowNetwork !== false;
-  // Windows 联网沙箱是 WRITE_RESTRICTED:只围写、不掩读。模型描述不得承诺 ~/.ssh
+  // Windows 联网沙箱是 Low IL token:只围写、不掩读。模型描述不得承诺 ~/.ssh
   // 被掩蔽;断网(AppContainer)以及 macOS/Linux 才有读掩蔽。
   const sandboxMasksCredentials =
     sandboxEnabled && !(runtimePlatform === "windows" && sandboxAllowNetwork);
@@ -815,7 +831,7 @@ export function createShellTools(params: {
   const toolProcessWait: Tool = {
     name: "ProcessWait",
     description:
-      "Wait for an existing Bash session and read its next output page without starting another shell command. Use the latest cursor returned by Bash or ProcessWait. The wait is event-driven and returns when the command finishes, 64KiB of output is ready, or yield_time_ms elapses. session_duration_ms is cumulative from the original Bash start and must not be added across responses. Terminal statuses are completed, failed, cancelled, and timed_out.",
+      "Wait for an existing Bash session and read its next output page without starting another shell command. Use the latest cursor returned by Bash or ProcessWait. session_id must be a Bash session_id (typically prefixed with bash-), not a ManagedProcess process_id. The wait is event-driven and returns when the command finishes, 64KiB of output is ready, or yield_time_ms elapses. session_duration_ms is cumulative from the original Bash start and must not be added across responses. Terminal statuses are completed, failed, cancelled, and timed_out.",
     parameters: strictToolParameters({
       session_id: Type.String({ description: "Bash session_id to continue waiting for." }),
       cursor: Type.Optional(
@@ -845,13 +861,14 @@ export function createShellTools(params: {
 
   const toolManagedProcess: Tool = {
     name: "ManagedProcess",
-    description: `Start, inspect, read logs for, or stop a long-running local process such as a dev server, watcher, or preview server. Runtime platform: ${platformLabel}; commands use the same platform shell policy as Bash. Use this instead of detached shell/background syntax, but never use it to intentionally delete workspace or enabled Skill paths; use Delete so LiveAgent can track the deletion. action="start" runs a foreground command under LiveAgent process management, redirects stdout/stderr to a log file, and returns immediately with process_id, pid, and log_path. By default managed processes are terminated automatically when LiveAgent exits; pass isolated=true only when the user explicitly wants the service to outlive LiveAgent. Use action="status" to list or inspect processes, action="read_log" to read recent log output, and action="stop" to terminate the process tree.`,
+    description: `Start, inspect, wait for, read logs for, or stop a long-running local process such as a dev server, watcher, or preview server. Runtime platform: ${platformLabel}; commands use the same platform shell policy as Bash. Use this instead of detached shell/background syntax, but never use it to intentionally delete workspace or enabled Skill paths; use Delete so LiveAgent can track the deletion. action="start" runs a foreground command under LiveAgent process management, redirects stdout/stderr to a log file (line-buffered), and returns immediately with process_id, pid, and log_path. Do not use ProcessWait with that process_id — ProcessWait only accepts Bash session_id values. Use action="wait" to block until new log output arrives, the process exits, or yield_time_ms elapses. By default managed processes are terminated automatically when LiveAgent exits; pass isolated=true only when the user explicitly wants the service to outlive LiveAgent. Use action="status" to list or inspect processes, action="read_log" to read recent log output, and action="stop" to terminate the process tree.`,
     parameters: strictToolParameters({
       action: Type.Union(
         [
           Type.Literal("start"),
           Type.Literal("status"),
           Type.Literal("read_log"),
+          Type.Literal("wait"),
           Type.Literal("stop"),
         ],
         {
@@ -885,7 +902,22 @@ export function createShellTools(params: {
       process_id: Type.Optional(
         Type.String({
           description:
-            'Required for action="read_log" and action="stop"; optional filter for action="status".',
+            'Required for action="read_log", action="wait", and action="stop"; optional filter for action="status".',
+        }),
+      ),
+      cursor: Type.Optional(
+        Type.Number({
+          minimum: 0,
+          description:
+            'Latest absolute log-byte offset already consumed, for action="wait". Omit to start from 0. Pass the cursor returned by the previous wait.',
+        }),
+      ),
+      yield_time_ms: Type.Optional(
+        Type.Number({
+          minimum: 5_000,
+          maximum: 300_000,
+          description:
+            'Maximum wait duration for action="wait" (default 30000ms, range 5000-300000ms). Returns earlier when new log output arrives or the process exits.',
         }),
       ),
       max_bytes: Type.Optional(
@@ -893,7 +925,7 @@ export function createShellTools(params: {
           minimum: 1,
           maximum: 512 * 1024,
           description:
-            'Maximum recent log bytes to return for action="read_log" (default 65536, maximum 524288).',
+            'Maximum recent log bytes to return for action="read_log" and action="wait" (default 65536, maximum 524288).',
         }),
       ),
     }),
@@ -910,7 +942,17 @@ export function createShellTools(params: {
       : ["command", "cwd", "timeout_ms"],
     ProcessWait: ["session_id", "cursor", "yield_time_ms"],
     ProcessStop: ["session_id", "cursor"],
-    ManagedProcess: ["action", "command", "cwd", "label", "isolated", "process_id", "max_bytes"],
+    ManagedProcess: [
+      "action",
+      "command",
+      "cwd",
+      "label",
+      "isolated",
+      "process_id",
+      "max_bytes",
+      "cursor",
+      "yield_time_ms",
+    ],
   };
   const sessionAbortHandlers = new Map<string, { signal: AbortSignal; handler: () => void }>();
 
@@ -1117,6 +1159,7 @@ export function createShellTools(params: {
             formatManagedProcessRecord(response.process),
             "",
             `Read logs with ManagedProcess(action="read_log", process_id="${response.process.id}")`,
+            `Wait for output with ManagedProcess(action="wait", process_id="${response.process.id}", cursor=0). Do not use ProcessWait; that tool only accepts Bash session_id values.`,
             `Stop it with ManagedProcess(action="stop", process_id="${response.process.id}")`,
           ].join("\n"),
         });
@@ -1168,6 +1211,50 @@ export function createShellTools(params: {
             "",
             response.content || "(empty log)",
           ].join("\n"),
+        });
+      }
+
+      if (action === "wait") {
+        const cursor = normalizeCursor(toolCall.arguments?.cursor) ?? 0;
+        const yieldTimeMs = normalizeIntegerInRange(
+          toolCall.arguments?.yield_time_ms,
+          30_000,
+          5_000,
+          300_000,
+        );
+        const maxBytes =
+          typeof toolCall.arguments?.max_bytes === "number"
+            ? Math.floor(toolCall.arguments.max_bytes)
+            : undefined;
+        const response = await invokeWithAbort<ManagedProcessWaitResponse>(
+          "managed_process_wait",
+          {
+            process_id: processId,
+            cursor,
+            yield_time_ms: yieldTimeMs,
+            max_bytes: maxBytes,
+          },
+          signal,
+        );
+        const lines = [
+          `ManagedProcess wait id=${response.process.id}`,
+          formatManagedProcessRecord(response.process),
+          `timed_out=${response.timed_out}`,
+          `cursor=${response.cursor}`,
+          `bytes=${response.bytes}${response.truncated ? " truncated=true" : ""}`,
+          "",
+          response.content || "(no new log output)",
+        ];
+        if (response.process.running) {
+          lines.push(
+            "",
+            `Continue with ManagedProcess(action="wait", process_id="${response.process.id}", cursor=${response.cursor}).`,
+          );
+        }
+        return buildManagedProcessToolResult({
+          toolCall,
+          details: response,
+          text: lines.join("\n"),
         });
       }
 

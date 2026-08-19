@@ -632,11 +632,74 @@ test("ManagedProcess starts foreground commands through process manager", async 
   assert.equal(result.isError, false);
   assert.match(result.content[0].text, /ManagedProcess started/);
   assert.match(result.content[0].text, /id=proc-1/);
+  assert.match(result.content[0].text, /action="wait"/);
+  assert.match(result.content[0].text, /Do not use ProcessWait/);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.workdir, "/repo");
   assert.equal(calls[0].args.cwd, "app");
   assert.equal(calls[0].args.sandbox, false);
   assert.equal(calls[0].args.sandbox_allow_network, true);
+});
+
+test("ManagedProcess wait blocks through process manager", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          assert.equal(command, "managed_process_wait");
+          return {
+            process: {
+              id: "proc-1",
+              label: "dev",
+              command: "echo ready; sleep 30",
+              cwd: "/repo",
+              shell: "zsh",
+              pid: 123,
+              log_path: "/Users/me/.liveagent/process-logs/proc-1.log",
+              started_at: 10,
+              finished_at: null,
+              exit_code: null,
+              running: true,
+            },
+            log_path: "/Users/me/.liveagent/process-logs/proc-1.log",
+            content: "ready\n",
+            truncated: false,
+            bytes: 6,
+            cursor: 6,
+            timed_out: false,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-wait",
+    name: "ManagedProcess",
+    arguments: {
+      action: "wait",
+      process_id: "proc-1",
+      cursor: 0,
+    },
+  });
+
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /ManagedProcess wait/);
+  assert.match(result.content[0].text, /cursor=6/);
+  assert.match(result.content[0].text, /ready/);
+  assert.match(result.content[0].text, /action="wait".*cursor=6/);
+  assert.equal(calls[0].args.process_id, "proc-1");
+  assert.equal(calls[0].args.cursor, 0);
+  assert.equal(calls[0].args.yield_time_ms, 30_000);
 });
 
 test("sandboxed ManagedProcess forwards the offline sandbox contract", async () => {
@@ -1231,7 +1294,7 @@ test("sandboxed resumable Bash forwards the sandbox contract to the session", as
             platform: "windows",
             profile: "windows-git-bash",
             shell_family: "posix",
-            sandbox: "restricted-token",
+            sandbox: "low-integrity-token",
             timeout_ms: null,
           };
         },
@@ -1259,7 +1322,7 @@ test("sandboxed resumable Bash forwards the sandbox contract to the session", as
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.sandbox, true);
   assert.equal(calls[0].args.sandbox_allow_network, true);
-  assert.match(result.content[0].text, /sandbox: restricted-token/);
+  assert.match(result.content[0].text, /sandbox: low-integrity-token/);
 });
 
 test("resumable Bash stops a running session returned after cancellation", async () => {

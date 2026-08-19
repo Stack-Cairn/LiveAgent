@@ -215,6 +215,7 @@ export function buildToolsSuffix(
               "- Session responses use completed, failed, cancelled, or timed_out as terminal statuses. The reported session_duration_ms is cumulative from the original Bash start; never add values from multiple responses.",
               "- Omit Bash.timeout_ms when the command should run until completion. Set it only when a real hard runtime limit is desired; ProcessWait does not restart or extend that limit.",
               "- Use ProcessStop with session_id to terminate the complete process tree when the command is no longer needed.",
+              "- ProcessWait session_id values come from Bash/ProcessWait, not from ManagedProcess.process_id.",
             ]
           : []),
         "- Use ManagedProcess instead of Bash for dev servers, watchers, preview servers, or anything that should keep running.",
@@ -257,7 +258,8 @@ export function buildToolsSuffix(
         "## ManagedProcess",
         '- Use ManagedProcess(action="start") for dev servers, preview servers, watchers, or other long-running foreground commands that should continue while you run tests.',
         "- Do not append `&` to ManagedProcess.command. It starts the process in the background, redirects stdout/stderr to a log file, and returns process_id/pid/log_path.",
-        '- Use ManagedProcess(action="status") to inspect running processes, action="read_log" to inspect recent output, and action="stop" to terminate the process tree.',
+        '- Use ManagedProcess(action="status") to inspect running processes, action="wait" to block until new log output or exit (not ProcessWait), action="read_log" to inspect recent output, and action="stop" to terminate the process tree.',
+        "- ProcessWait/ProcessStop only accept Bash session_id values. A ManagedProcess process_id is a UUID and must stay on the ManagedProcess tool.",
         managedProcessPreference,
       ].join("\n"),
     );

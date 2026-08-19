@@ -94,6 +94,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_System_Environment",
     "Win32_System_Registry",
+    "Win32_System_LibraryLoader",
 ] }
 
 [dev-dependencies]
