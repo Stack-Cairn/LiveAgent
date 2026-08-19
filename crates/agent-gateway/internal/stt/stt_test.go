@@ -364,8 +364,12 @@ func TestSttServerEventMappingAndWebSocketSequenceValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	conn.SetReadDeadline(time.Now().Add(time.Second))
-	if _, _, err := conn.ReadMessage(); err == nil {
-		t.Fatal("duplicate sequence must close the connection")
+	kind, data, err := conn.ReadMessage()
+	if err == nil {
+		t.Fatalf("duplicate sequence must close the connection, got kind=%d payload=%x", kind, data)
+	}
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		t.Fatal("duplicate sequence left the connection open until the read deadline")
 	}
 }
 
