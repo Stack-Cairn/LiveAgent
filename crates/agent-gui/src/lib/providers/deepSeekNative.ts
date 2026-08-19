@@ -100,16 +100,17 @@ function assertTextOnlyContext(context: Context) {
         throw new Error("DeepSeek Responses does not support image input.");
       }
     }
-    if (
-      message.role === "toolResult" &&
-      message.content.some((block) => block.type === "image")
-    ) {
+    if (message.role === "toolResult" && message.content.some((block) => block.type === "image")) {
       throw new Error("DeepSeek Responses does not support image tool results.");
     }
   }
 }
 
-function createErrorAssistant(model: Model<any>, error: unknown, aborted: boolean): AssistantMessage {
+function createErrorAssistant(
+  model: Model<any>,
+  error: unknown,
+  aborted: boolean,
+): AssistantMessage {
   return {
     role: "assistant",
     content: [],
@@ -153,10 +154,7 @@ function toReplayableOutputItem(value: unknown): Record<string, unknown> | undef
   return value;
 }
 
-function captureDeepSeekResponseEvent(
-  capture: DeepSeekResponseCapture,
-  event: unknown,
-) {
+function captureDeepSeekResponseEvent(capture: DeepSeekResponseCapture, event: unknown) {
   if (!isRecord(event)) return;
   if (event.type === "response.output_item.added" || event.type === "response.output_item.done") {
     const item = toReplayableOutputItem(event.item);
@@ -178,10 +176,7 @@ function captureDeepSeekResponseEvent(
   }
 }
 
-async function captureDeepSeekResponse(
-  response: Response,
-  capture: DeepSeekResponseCapture,
-) {
+async function captureDeepSeekResponse(response: Response, capture: DeepSeekResponseCapture) {
   const reader = response.clone().body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();

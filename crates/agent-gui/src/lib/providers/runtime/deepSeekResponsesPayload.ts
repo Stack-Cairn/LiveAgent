@@ -1,9 +1,6 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
 import type { ProviderId } from "../../settings";
-import {
-  DEEPSEEK_RESPONSES_API,
-  type DeepSeekAssistantMessage,
-} from "../deepSeekNative";
+import { DEEPSEEK_RESPONSES_API, type DeepSeekAssistantMessage } from "../deepSeekNative";
 import { isRecord } from "./common";
 import type { StreamOptionsEx } from "./types";
 

@@ -459,7 +459,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     ["minimal", "low", "medium", "high"],
   );
   // 中转挂载的国产厂商模型走跨供应商回查命中真实形态；DeepSeek 正式供应商
-  // 直接读取自己的目录。
+  // 只暴露 Responses V4 模型，档位为官方 none/low/high/max 映射。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -471,17 +471,17 @@ test("web chat runtime controls default and follow model-aware reasoning support
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
-      modelId: "deepseek-reasoner",
+      modelId: "deepseek-v4-flash",
     }),
-    [],
+    ["low", "high", "max"],
   );
-  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-v4-flash"), false);
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
-      modelId: "deepseek-chat",
+      modelId: "deepseek-v4-pro",
     }),
-    [],
+    ["low", "high", "max"],
   );
 
   assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "claude-fable-5"), true);
