@@ -48,12 +48,12 @@ import {
 } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   updateExecutionModeFromChatSelection,
   updateWorkspaceResourceSettings,
 } from "@/lib/settings";
-import type { SttProviderId } from "@/lib/settings";
 import { createWebSttSettingsService } from "@/lib/stt/webSttSettingsService";
 import { webSttTransport } from "@/lib/stt/webSttTransport";
 import {

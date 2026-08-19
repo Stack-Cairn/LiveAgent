@@ -28,8 +28,8 @@ import {
   normalizeSettings,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
-  subscribeToSystemThemePreference,
   type SttProviderId,
+  subscribeToSystemThemePreference,
   THEME_OPTIONS,
   type Theme,
 } from "./lib/settings";
