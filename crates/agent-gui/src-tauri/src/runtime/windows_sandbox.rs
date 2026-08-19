@@ -18,6 +18,12 @@
 //!   会让进程连自己的线程/管道都建不了而启动即死。
 //! - 在工作区根 + 一个受围栏的临时目录上盖“可继承(OI)(CI)”的合成-SID 授权写 ACE。
 //!   合成 SID 只匹配此工作区,遗留 ACE 惰性无害;绝不移除 ACE(空 DACL 陷阱)。
+//! - **CNG/BCrypt 用户面**(PowerShell/.NET `0xE0434352` / `NTE_PROVIDER_DLL_FAIL`):
+//!   WRITE_RESTRICTED 的第二遍写检查会拒绝 `HKCU\...\SystemCertificates` 与
+//!   `%APPDATA%\Microsoft\Crypto` 上的 `RegCreateKey`/密钥文件写入,CAPI 于是报告
+//!   “BCrypt.dll 加载失败”——DLL 其实已映射,失败发生在 provider 初始化。启动器在
+//!   `CreateProcess*` 前用同一 `fence_sid` 给这些用户证书/密钥位置盖写 ACE(不放开
+//!   整个 HKCU / AppData)。MSIX `WindowsApps\pwsh.exe` 在受限令牌下无法启动,直接拒绝。
 //! - **令牌 default DACL 补授权(修 0xC0000142)**:`CreateRestrictedToken` 后,受限
 //!   令牌的 default DACL 仍只含用户 SID + SYSTEM。子进程新建的命名内核对象(msys/cygwin
 //!   的共享内存、signal pipe 等)继承此 DACL;而 msys `DllMain` 需以“写”重开这些对象,
@@ -40,22 +46,8 @@
 //! std 句柄(取代 `bInheritHandles=TRUE` 的全句柄表继承,收敛句柄泄漏面);显式
 //! `lpDesktop = winsta0\default`(受限令牌/AC 启动必须显式设桌面,否则句柄站点解析歧义);
 //! Job Object `KILL_ON_JOB_CLOSE` 在非 isolated 时兜底级联杀,isolated 常驻进程则跳过
-//!(对齐 Linux bwrap 省略 `--die-with-parent`);“启动即死”退出码转可读中英诊断经既有
-//! 管道上传 —— 含 loader NTSTATUS(0xC0000142/0135/0022)与 CLR 托管初始化失败
-//! (0xE0434352)。
-//!
-//! # 已知限制:两个后端都跑不了托管 shell
-//!
-//! `WRITE_RESTRICTED` 令牌下,写类访问要过第二遍判定(对象 DACL 必须显式授权给我们的
-//! 限制性 SID);`\Device\CNG` 的 DACL 不含它们,故 CNG 初始化失败 ⇒ `BCrypt.dll` 起不来
-//! ⇒ 托管运行时抛未处理异常退出 0xE0434352。AppContainer 后端零 capability,同类风险。
-//! 受影响的是 pwsh(CoreCLR)与 powershell.exe(.NET Framework);cmd.exe 是纯原生 PE,
-//! 不受影响,故沙箱下候选顺序把它提到队首(见 `shell_runner::platform_shell_candidates`)。
-//!
-//! Chromium 的规避手法(降权前先 warmup RNG/CNG)在此**不适用**:那要求进程先以正常令牌
-//! 启动再自我降权,而我们是父进程造好受限令牌后 `CreateProcessAsUserW` 拉起全新 shell,
-//! 子进程从第一条指令起就受限,不存在 warmup 窗口。把 `Everyone`(S-1-1-0)塞进限制性 SID
-//! 能让 CNG 通过,但那等于第二遍判定对几乎所有对象放行 —— 写围栏当场失效,绝不可取。
+//!(对齐 Linux bwrap 省略 `--die-with-parent`);启动失败退出码(0xC0000142/0135/0022
+//! 以及 CLR `0xE0434352`)转可读中英诊断经既有管道上传。
 
 /// 非 Windows:自我再执行启动器不存在,空操作。
 #[cfg(not(windows))]
@@ -134,6 +126,9 @@ mod win {
         AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     };
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, HKEY, HKEY_CURRENT_USER,
+    };
     use windows_sys::Win32::System::Threading::{
         CreateProcessAsUserW, CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess,
         GetExitCodeProcess, InitializeProcThreadAttributeList, OpenProcessToken, ResumeThread,
@@ -158,6 +153,10 @@ mod win {
     const TOKEN_DEFAULT_DACL_CLASS: i32 = 6; // TOKEN_INFORMATION_CLASS::TokenDefaultDacl
 
     const SE_FILE_OBJECT: i32 = 1; // SE_OBJECT_TYPE
+    const SE_REGISTRY_KEY: i32 = 4;
+    const KEY_READ: u32 = 0x0002_0019;
+    const KEY_WRITE: u32 = 0x0002_0006;
+    const KEY_ALL_ACCESS: u32 = 0x000F_003F;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
     const OBJECT_INHERIT_ACE: u32 = 0x1;
     const CONTAINER_INHERIT_ACE: u32 = 0x2;
@@ -196,12 +195,14 @@ mod win {
     const WRITE_RESTRICTED_SID: &str = "S-1-5-33";
 
     // loader 早期失败的 NTSTATUS 退出码——子进程根本没进 main 就被内核/加载器杀死。
-    // 用于把裸退出码翻成可读诊断(见 sandbox_exit_hint)。
+    // 用于把裸退出码翻成可读诊断(见 loader_failure_hint)。
     const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
     const STATUS_DLL_NOT_FOUND: u32 = 0xC000_0135;
     const STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
-    /// CLR 未处理托管异常。loader 已通过、CLR 原生部分已起来,死在托管层。
-    const COMPLUS_E_UNHANDLED: u32 = 0xE043_4352;
+    // CLR 未处理异常:PowerShell 把 CNG `NTE_PROVIDER_DLL_FAIL` 包装成“BCrypt 加载失败”
+    // 后以此码退出。不是 NTSTATUS,shell 探测原先漏掉它,会把已崩溃的 pwsh 当成可用。
+    const CLR_UNHANDLED_EXCEPTION: u32 = 0xE043_4352;
+    const NTE_PROVIDER_DLL_FAIL: u32 = 0x8009_001D;
 
     /// PSID 别名(windows-sys 里就是 `*mut c_void`),提升可读性。
     type PSID = *mut c_void;
@@ -346,7 +347,9 @@ mod win {
             let mut len: u32 = 0;
             GetTokenInformation(token, TOKEN_DEFAULT_DACL_CLASS, null_mut(), 0, &mut len);
             if len == 0 {
-                return Err(last_error("GetTokenInformation(TokenDefaultDacl) size probe"));
+                return Err(last_error(
+                    "GetTokenInformation(TokenDefaultDacl) size probe",
+                ));
             }
             let mut buf: Vec<u64> = vec![0u64; ((len as usize) + 7) / 8];
             if !ok(GetTokenInformation(
@@ -603,7 +606,12 @@ mod win {
             }
             let mut buf: Vec<u64> = vec![0u64; (size + 7) / 8];
             let r = unsafe {
-                InitializeProcThreadAttributeList(buf.as_mut_ptr() as *mut c_void, count, 0, &mut size)
+                InitializeProcThreadAttributeList(
+                    buf.as_mut_ptr() as *mut c_void,
+                    count,
+                    0,
+                    &mut size,
+                )
             };
             if !ok(r) {
                 return Err(last_error("InitializeProcThreadAttributeList"));
@@ -615,7 +623,13 @@ mod win {
             self.buf.as_mut_ptr() as *mut c_void
         }
 
-        fn set(&mut self, attribute: usize, value: *const c_void, size: usize, ctx: &str) -> Result<(), String> {
+        fn set(
+            &mut self,
+            attribute: usize,
+            value: *const c_void,
+            size: usize,
+            ctx: &str,
+        ) -> Result<(), String> {
             let r = unsafe {
                 UpdateProcThreadAttribute(self.ptr(), 0, attribute, value, size, null_mut(), null())
             };
@@ -632,12 +646,9 @@ mod win {
         }
     }
 
-    /// 子进程“启动即死”的退出码 → 可读诊断(中英双语,经 stderr 走既有管道上传给
-    /// 模型/UI;裸退出码对用户与模型都不可行动)。
-    ///
-    /// 覆盖两个失败层:loader 早期死亡(未进 main 的 NTSTATUS),以及 CLR 托管初始化
-    /// 失败(0xE0434352,loader 已过)。两者 `shell_runner` 侧都算沙箱不兼容并推进候选链。
-    fn sandbox_exit_hint(exit_code: u32) -> Option<&'static str> {
+    /// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码 → 可读诊断(中英双语,
+    /// 经 stderr 走既有管道上传给模型/UI;裸退出码对用户与模型都不可行动)。
+    fn loader_failure_hint(exit_code: u32) -> Option<&'static str> {
         match exit_code {
             STATUS_DLL_INIT_FAILED => Some(
                 "a DLL failed to initialize under the sandbox (STATUS_DLL_INIT_FAILED); \
@@ -655,18 +666,12 @@ mod win {
                  program or its directory is not readable in this mode / 沙箱拒绝了进程启动所需的访问\
                  (0xC0000022):该程序或其目录在此模式下不可读",
             ),
-            COMPLUS_E_UNHANDLED => Some(
-                "the .NET runtime threw an unhandled exception during startup (0xE0434352). This is \
-                 not a broken install: the loader and the native CLR came up fine, then managed \
-                 init failed - typically BCrypt/CNG, which a WRITE_RESTRICTED token or an \
-                 AppContainer cannot open for write. Managed shells (pwsh = CoreCLR, \
-                 powershell.exe = .NET Framework) are therefore structurally unreliable in this \
-                 mode; the shell runner falls back to cmd.exe, the only fully native candidate. \
-                 / .NET 运行时在启动阶段抛出未处理异常(0xE0434352)。这不是安装损坏:loader 与 \
-                 CLR 原生部分都已正常起来,随后托管初始化失败——通常是 BCrypt/CNG,而受限令牌\
-                 (WRITE_RESTRICTED)或 AppContainer 无法以写方式打开它。故托管 shell(pwsh 为 \
-                 CoreCLR、powershell.exe 为 .NET Framework)在此模式下结构性不可靠,shell 将回退到\
-                 唯一纯原生的候选 cmd.exe",
+            CLR_UNHANDLED_EXCEPTION | NTE_PROVIDER_DLL_FAIL => Some(
+                "the runtime failed during crypto provider init under the write-restricted token \
+                 (CLR 0xE0434352 / NTE_PROVIDER_DLL_FAIL); this is usually HKCU certificate-store \
+                 or %APPDATA%\\Microsoft\\Crypto being unwritable, not a broken BCrypt.dll. The \
+                 shell runner will try the next candidate / 沙箱内加密提供程序初始化失败(0xE0434352):\
+                 通常是用户证书库或 Crypto 目录不可写,并非本机 pwsh/BCrypt.dll 损坏,shell 将尝试下一候选",
             ),
             _ => None,
         }
@@ -699,15 +704,15 @@ mod win {
         Ok(())
     }
 
-    /// 目录根 DACL 上是否已含合成 SID 的 ACE。命中即认为整棵树已盖章(可继承 ACE 会
-    /// 自动传播到后建的文件),跳过昂贵的重新传播。任何探测失败按“未盖章”处理。
-    fn root_has_ace(path_wide: &[u16], sid: PSID) -> bool {
+    /// 命名对象 DACL 上是否已含受托 SID 的 ACE。命中即认为已盖章(可继承 ACE 会
+    /// 自动传播到后建的子对象),跳过昂贵的重新传播。任何探测失败按“未盖章”处理。
+    fn named_has_ace(object_type: i32, path_wide: &[u16], sid: PSID) -> bool {
         unsafe {
             let mut dacl: *mut ACL = null_mut();
             let mut psd: *mut c_void = null_mut();
             let rc = GetNamedSecurityInfoW(
                 path_wide.as_ptr(),
-                SE_FILE_OBJECT,
+                object_type,
                 DACL_SECURITY_INFORMATION,
                 null_mut(),
                 null_mut(),
@@ -754,10 +759,10 @@ mod win {
         }
     }
 
-    /// 在 path 上盖“可继承(OI)(CI)”的合成-SID 授权写 ACE(不存在才盖)。
+    /// 在命名对象上盖“可继承(OI)(CI)”的授权写 ACE(不存在才盖)。
     ///
     /// 为何只授不撤(P3#8,已知取舍,非疏漏):
-    /// - 受托 SID 由工作区路径确定性推导 ⇒ 每个工作区**最多一条** ACE(`root_has_ace`
+    /// - 受托 SID 由工作区路径确定性推导 ⇒ 每个工作区**最多一条** ACE(`named_has_ace`
     ///   幂等守卫),不随运行次数累积;
     /// - 该 SID 不映射任何活跃主体,遗留 ACE 不授予任何真实用户额外权限(惰性无害);
     /// - 同一工作区可能有多个沙箱进程并发存活(Bash + ManagedProcess + resumable
@@ -765,12 +770,17 @@ mod win {
     /// - `SetNamedSecurityInfoW` 回写“撤销后的 DACL”还会踩空 DACL 陷阱(见上方
     ///   `old_dacl.is_null()` 分支)。
     ///
-    /// 代价是资源管理器的权限页会显示一个无法解析的 S-1-5-21-* 项,且卸载不清理。
+    /// 代价是资源管理器/注册表权限页会显示一个无法解析的 S-1-5-21-* 项,且卸载不清理。
     /// 若要提供清理,应做成显式的“清理沙箱 ACE”运维动作(遍历工作区列表按合成 SID
     /// 精确删除),而不是塞进单次命令的生命周期里。
-    fn ensure_write_ace(path: &Path, sid: PSID) -> Result<(), String> {
-        let mut path_wide = to_wide(&path.to_string_lossy());
-        if root_has_ace(&path_wide, sid) {
+    fn ensure_named_write_ace(
+        object_type: i32,
+        name: &str,
+        sid: PSID,
+        access: u32,
+    ) -> Result<(), String> {
+        let mut path_wide = to_wide(name);
+        if named_has_ace(object_type, &path_wide, sid) {
             return Ok(());
         }
         unsafe {
@@ -778,7 +788,7 @@ mod win {
             let mut psd: *mut c_void = null_mut();
             let rc = GetNamedSecurityInfoW(
                 path_wide.as_ptr(),
-                SE_FILE_OBJECT,
+                object_type,
                 DACL_SECURITY_INFORMATION,
                 null_mut(),
                 null_mut(),
@@ -787,7 +797,7 @@ mod win {
                 &mut psd,
             );
             if rc != 0 {
-                return Err(format!("GetNamedSecurityInfoW failed (error={rc})"));
+                return Err(format!("GetNamedSecurityInfoW({name}) failed (error={rc})"));
             }
 
             // NULL DACL = 隐式“everyone 全权”:受限令牌的合成 SID 本就被授予写,无需盖章;
@@ -801,8 +811,7 @@ mod win {
             }
 
             let mut ea: EXPLICIT_ACCESS_W = std::mem::zeroed();
-            ea.grfAccessPermissions =
-                FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE_RIGHT;
+            ea.grfAccessPermissions = access;
             ea.grfAccessMode = GRANT_ACCESS;
             ea.grfInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
             ea.Trustee = TRUSTEE_W {
@@ -819,12 +828,12 @@ mod win {
                 if !psd.is_null() {
                     LocalFree(psd as _);
                 }
-                return Err(format!("SetEntriesInAclW failed (error={rc})"));
+                return Err(format!("SetEntriesInAclW({name}) failed (error={rc})"));
             }
 
             let rc = SetNamedSecurityInfoW(
                 path_wide.as_mut_ptr(),
-                SE_FILE_OBJECT,
+                object_type,
                 DACL_SECURITY_INFORMATION,
                 null_mut(),
                 null_mut(),
@@ -836,36 +845,108 @@ mod win {
                 LocalFree(psd as _);
             }
             if rc != 0 {
-                return Err(format!("SetNamedSecurityInfoW failed (error={rc})"));
+                return Err(format!("SetNamedSecurityInfoW({name}) failed (error={rc})"));
             }
         }
         Ok(())
     }
 
+    fn ensure_write_ace(path: &Path, sid: PSID) -> Result<(), String> {
+        ensure_named_write_ace(
+            SE_FILE_OBJECT,
+            &path.to_string_lossy(),
+            sid,
+            FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE_RIGHT,
+        )
+    }
+
+    fn create_hkcu_key(subkey: &str) -> Result<(), String> {
+        let wide = to_wide(subkey);
+        let mut hkey: HKEY = null_mut();
+        let mut disposition: u32 = 0;
+        let rc = unsafe {
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                wide.as_ptr(),
+                0,
+                null(),
+                0,
+                KEY_READ | KEY_WRITE,
+                null(),
+                &mut hkey,
+                &mut disposition,
+            )
+        };
+        if rc != 0 {
+            return Err(format!("RegCreateKeyExW({subkey}) failed (error={rc})"));
+        }
+        unsafe {
+            let _ = RegCloseKey(hkey);
+        }
+        Ok(())
+    }
+
+    fn ensure_plain_directory(path: &Path) -> Result<(), String> {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        std::fs::create_dir_all(path)
+            .map_err(|err| format!("create dir {path:?} failed: {err}"))?;
+        let meta = std::fs::symlink_metadata(path)
+            .map_err(|err| format!("stat {path:?} failed: {err}"))?;
+        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(format!("{path:?} is a reparse point; refusing to stamp"));
+        }
+        Ok(())
+    }
+
+    /// 给 CAPI/CNG 用户证书库与密钥容器盖 fence_sid 写 ACE。
+    ///
+    /// 启动器此时仍持完整用户令牌,盖章发生在 `CreateProcessAsUserW` 之前。
+    /// 单项失败只告警:探测层会把仍然崩溃的 pwsh(0xE0434352)跳过,落到 cmd,
+    /// 不因证书库策略把整个沙箱判死。绝不 stamp HKLM(需管理员)。
+    fn ensure_cng_user_write_surface(sid: PSID) {
+        use crate::runtime::sandbox::{
+            cng_named_registry_object, cng_user_file_dirs, CNG_USER_REGISTRY_SUBKEYS,
+        };
+        for subkey in CNG_USER_REGISTRY_SUBKEYS {
+            if let Err(err) = create_hkcu_key(subkey) {
+                eprintln!("liveagent sandbox: CNG registry create skipped ({subkey}): {err}");
+                continue;
+            }
+            let name = cng_named_registry_object(subkey);
+            if let Err(err) = ensure_named_write_ace(SE_REGISTRY_KEY, &name, sid, KEY_ALL_ACCESS) {
+                eprintln!("liveagent sandbox: CNG registry ACE skipped ({name}): {err}");
+            }
+        }
+        let (Some(appdata), Some(local)) = (dirs::data_dir(), dirs::data_local_dir()) else {
+            return;
+        };
+        for dir in cng_user_file_dirs(&appdata, &local) {
+            if let Err(err) = ensure_plain_directory(&dir).and_then(|_| ensure_write_ace(&dir, sid))
+            {
+                eprintln!("liveagent sandbox: CNG dir ACE skipped ({dir:?}): {err}");
+            }
+        }
+    }
+
     /// 创建并盖章一个受围栏的临时目录(系统 temp 下,按工作区确定性命名),把
     /// TEMP/TMP/TMPDIR 指向它——否则沙箱进程写默认 %TEMP% 会被限制性判定拒绝。
     fn setup_fenced_temp(write_root: &Path, sid: PSID, dir_key: &str) -> Result<(), String> {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-
         let base = std::env::temp_dir().join(format!("liveagent-sandbox-{dir_key}"));
-        std::fs::create_dir_all(&base)
-            .map_err(|err| format!("create fenced temp dir failed: {err}"))?;
         // 路径确定性且可预测 ⇒ 另一同用户进程可能抢先把它建成 junction/symlink 指向敏感
         // 目录,使授权写 ACE 盖到目标、TEMP 重定向落进目标。拒绝 reparse point 以堵此路
         //(残留 TOCTOU:盖章/使用之间的替换需另一恶意同用户进程,严重度低)。
-        let meta = std::fs::symlink_metadata(&base)
-            .map_err(|err| format!("stat fenced temp dir failed: {err}"))?;
-        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return Err("fenced temp dir is a reparse point; refusing to stamp".to_string());
-        }
+        ensure_plain_directory(&base)?;
         ensure_write_ace(&base, sid)?;
         let _ = write_root; // 保留签名清晰度;temp 独立于工作区。
         let base_wide = to_wide(&base.to_string_lossy());
         for name in ["TEMP", "TMP", "TMPDIR"] {
             let name_wide = to_wide(name);
             unsafe {
-                if !ok(SetEnvironmentVariableW(name_wide.as_ptr(), base_wide.as_ptr())) {
+                if !ok(SetEnvironmentVariableW(
+                    name_wide.as_ptr(),
+                    base_wide.as_ptr(),
+                )) {
                     return Err(last_error(&format!("SetEnvironmentVariableW({name})")));
                 }
             }
@@ -940,8 +1021,8 @@ mod win {
         args: &[String],
     ) -> Result<i32, String> {
         use crate::runtime::sandbox::{
-            build_command_line, resolve_program_in_path, synthetic_workspace_sid,
-            validate_workspace,
+            build_command_line, is_msix_windowsapps_path, resolve_program_in_path,
+            synthetic_workspace_sid, validate_workspace,
         };
 
         // P3#8:启动器是独立进程,不能依赖父进程侧 wrap_command 已做过校验——两个入口
@@ -951,7 +1032,9 @@ mod win {
 
         let synthetic_str = synthetic_workspace_sid(write_root);
         // temp 目录 / AC profile 名沿用合成 SID 的数值段,确定性且文件系统安全。
-        let dir_key = synthetic_str.trim_start_matches("S-1-5-21-").replace('-', "_");
+        let dir_key = synthetic_str
+            .trim_start_matches("S-1-5-21-")
+            .replace('-', "_");
 
         // --- 后端安全上下文 ---
         // fence_sid = 文件写 ACE 的受托 SID(联网=合成 SID,断网=AC SID)。持有其内存的
@@ -987,6 +1070,9 @@ mod win {
         // --- 文件系统写围栏(受托人 = fence_sid) ---
         ensure_write_ace(write_root, fence_sid)?;
         setup_fenced_temp(write_root, fence_sid, &dir_key)?;
+        // CNG/BCrypt:PowerShell 启动会写用户证书库。写围栏默认不含 HKCU/AppData,
+        // 不盖这一窄面就会在 runtime init 以 0xE0434352 崩,被误报成 BCrypt.dll 损坏。
+        ensure_cng_user_write_surface(fence_sid);
 
         // --- 标准句柄 + 命令行 ---
         let (h_in, h_out, h_err) = inheritable_std_handles()?;
@@ -1004,6 +1090,14 @@ mod win {
                      PATH directory (the workspace cwd is intentionally never searched)"
                 )
             })?;
+        if is_msix_windowsapps_path(&resolved) {
+            return Err(format!(
+                "sandbox refuses Microsoft Store / MSIX program {resolved:?}: WindowsApps \
+                 binaries cannot be started under a restricted token or AppContainer \
+                 (CreateProcessAsUserW returns 5). Install PowerShell via MSI or use \
+                 powershell.exe / cmd.exe"
+            ));
+        }
         let program_str = program.to_string_lossy(); // argv[0] 保留原始名(对齐非沙箱路径)
         let app_wide = to_wide(&resolved.to_string_lossy()); // lpApplicationName = 解析出的绝对路径
         let mut cmdline = build_command_line(&program_str, args); // 已含结尾 NUL
@@ -1125,7 +1219,9 @@ mod win {
                 if !ok(AssignProcessToJobObject(job, pi.hProcess)) {
                     eprintln!(
                         "liveagent sandbox: {}",
-                        last_error("AssignProcessToJobObject (continuing; taskkill /T still cascades)")
+                        last_error(
+                            "AssignProcessToJobObject (continuing; taskkill /T still cascades)"
+                        )
                     );
                 }
             }
@@ -1144,10 +1240,9 @@ mod win {
             if !ok(got) {
                 return Err(last_error("GetExitCodeProcess"));
             }
-            // 启动即死(0xC0000142 等 loader NTSTATUS、或 CLR 的 0xE0434352)只体现为裸
-            // 退出码;补一条可读诊断,经 stderr 走既有管道上传(shell_runner 的候选探测
-            // 回退也依赖这个退出码)。
-            if let Some(hint) = sandbox_exit_hint(exit_code) {
+            // loader 早期死亡(0xC0000142 等)只体现为裸退出码;补一条可读诊断,经
+            // stderr 走既有管道上传(shell_runner 的候选探测回退也依赖这个退出码)。
+            if let Some(hint) = loader_failure_hint(exit_code) {
                 eprintln!("liveagent sandbox: process exited with {exit_code:#010X}: {hint}");
             }
             exit_code as i32
@@ -1164,7 +1259,9 @@ mod tests {
     /// 镜像 `win::appcontainer_profile_name` + `execute` 里的 dir_key 推导:
     /// AppContainer profile 名硬限制 64 字符,字符集须落在 [0-9A-Za-z._]。
     fn profile_name_for(synthetic_sid: &str) -> String {
-        let dir_key = synthetic_sid.trim_start_matches("S-1-5-21-").replace('-', "_");
+        let dir_key = synthetic_sid
+            .trim_start_matches("S-1-5-21-")
+            .replace('-', "_");
         format!("LiveAgent.Sandbox.{dir_key}")
     }
 
@@ -1172,8 +1269,15 @@ mod tests {
     fn appcontainer_profile_name_is_deterministic_and_within_limits() {
         // 合成 SID 是 4 段 u32(Codex 形式 S-1-5-21-{4×u32}),取各段极值验证最坏长度。
         let worst = profile_name_for("S-1-5-21-4294967295-4294967295-4294967295-4294967295");
-        assert_eq!(worst, "LiveAgent.Sandbox.4294967295_4294967295_4294967295_4294967295");
-        assert!(worst.len() <= 64, "profile name exceeds AC 64-char limit: {}", worst.len());
+        assert_eq!(
+            worst,
+            "LiveAgent.Sandbox.4294967295_4294967295_4294967295_4294967295"
+        );
+        assert!(
+            worst.len() <= 64,
+            "profile name exceeds AC 64-char limit: {}",
+            worst.len()
+        );
         assert!(worst
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_'));
@@ -1182,7 +1286,10 @@ mod tests {
             profile_name_for("S-1-5-21-1-2-3-4"),
             profile_name_for("S-1-5-21-1-2-3-4")
         );
-        assert_eq!(profile_name_for("S-1-5-21-1-2-3-4"), "LiveAgent.Sandbox.1_2_3_4");
+        assert_eq!(
+            profile_name_for("S-1-5-21-1-2-3-4"),
+            "LiveAgent.Sandbox.1_2_3_4"
+        );
     }
 
     #[cfg(windows)]
@@ -1195,7 +1302,10 @@ mod tests {
         fn derive_appcontainer_sid_is_deterministic() {
             let a = win::appcontainer_profile_sid_for_test("LiveAgent.Sandbox.test_1_2_3_4");
             let b = win::appcontainer_profile_sid_for_test("LiveAgent.Sandbox.test_1_2_3_4");
-            assert!(a.is_some(), "DeriveAppContainerSidFromAppContainerName failed");
+            assert!(
+                a.is_some(),
+                "DeriveAppContainerSidFromAppContainerName failed"
+            );
             assert_eq!(a, b);
             // AC SID 固定以 S-1-15-2- 开头(APPLICATION PACKAGE AUTHORITY)。
             assert!(a.unwrap().starts_with("S-1-15-2-"));
@@ -1209,7 +1319,10 @@ mod tests {
             let (before, after) =
                 win::default_dacl_fix_roundtrip_for_test().expect("roundtrip failed");
             println!("default DACL contained logon SID before append: {before}");
-            assert!(after, "append_sid_to_default_dacl did not add the logon SID");
+            assert!(
+                after,
+                "append_sid_to_default_dacl did not add the logon SID"
+            );
         }
     }
 }

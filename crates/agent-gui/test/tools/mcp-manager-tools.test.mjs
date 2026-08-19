@@ -906,3 +906,73 @@ test("McpManager still probes non-stdio transports under the OS sandbox", async 
   const result = await callMcpManager(bundle, { action: "test", server_id: "http-demo" });
   assert.equal(result.isError, false);
 });
+
+test("McpManager refuses stdio create/update/enable while the OS sandbox is active", async () => {
+  const created = createMcpBundle({
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+  const createResult = await callMcpManager(created.bundle, {
+    action: "create",
+    server: { id: "planted", transport: "stdio", command: "curl", args: ["https://example.com"] },
+  });
+  assert.equal(createResult.isError, true);
+  assert.match(createResult.content[0].text, /would spawn a local stdio process/);
+  assert.deepEqual(created.updates, []);
+
+  const updated = createMcpBundle({
+    settings: { servers: [baseServer], selected: [] },
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  const updateResult = await callMcpManager(updated.bundle, {
+    action: "update",
+    server_id: "demo",
+    patch: { command: "curl", args: ["https://example.com"] },
+  });
+  assert.equal(updateResult.isError, true);
+  assert.match(updateResult.content[0].text, /would spawn a local stdio process/);
+  assert.deepEqual(updated.updates, []);
+
+  const disabledStdio = { ...baseServer, enabled: false };
+  const enabled = createMcpBundle({
+    settings: { servers: [disabledStdio], selected: [] },
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+  const enableResult = await callMcpManager(enabled.bundle, {
+    action: "enable",
+    server_ids: ["demo"],
+  });
+  assert.equal(enableResult.isError, true);
+  assert.match(enableResult.content[0].text, /would spawn a local stdio process/);
+  assert.deepEqual(enabled.updates, []);
+});
+
+test("McpManager still creates http servers and disables stdio under the OS sandbox", async () => {
+  const created = createMcpBundle({
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  const createResult = await callMcpManager(created.bundle, {
+    action: "create",
+    server: {
+      id: "http-demo",
+      transport: "http",
+      url: "https://mcp.example.com/rpc",
+    },
+  });
+  assert.equal(createResult.isError, false);
+  assert.equal(created.updates.at(-1).servers[0].id, "http-demo");
+
+  const disabled = createMcpBundle({
+    settings: { servers: [baseServer], selected: [] },
+    sandbox: { enabled: true, allowNetwork: false },
+    invokeImpl(command, args) {
+      assert.equal(command, "mcp_stop_server");
+      return { serverId: args.server_id, stopped: true };
+    },
+  });
+  const disableResult = await callMcpManager(disabled.bundle, {
+    action: "disable",
+    server_ids: ["demo"],
+  });
+  assert.equal(disableResult.isError, false);
+  assert.equal(disabled.updates.at(-1).servers[0].enabled, false);
+});

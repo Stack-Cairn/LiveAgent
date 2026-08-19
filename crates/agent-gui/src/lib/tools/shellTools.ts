@@ -505,7 +505,7 @@ export function createShellTools(params: {
   managedProcessEnabled?: boolean;
   resumableShellEnabled?: boolean;
   resolveHomeDir?: () => Promise<string>;
-  /** OS 级沙箱(macOS Seatbelt / Linux bwrap);undefined 或 enabled=false 时直跑。 */
+  /** OS 级沙箱;undefined 或 enabled=false 时直跑。Windows 联网后端不掩蔽凭据目录。 */
   sandbox?: ShellSandboxSettings;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
@@ -514,8 +514,14 @@ export function createShellTools(params: {
   const platformLabel = runtimePlatformLabel(runtimePlatform);
   const sandboxEnabled = params.sandbox?.enabled === true;
   const sandboxAllowNetwork = params.sandbox?.allowNetwork !== false;
+  // Windows 联网沙箱是 WRITE_RESTRICTED:只围写、不掩读。模型描述不得承诺 ~/.ssh
+  // 被掩蔽;断网(AppContainer)以及 macOS/Linux 才有读掩蔽。
+  const sandboxMasksCredentials =
+    sandboxEnabled && !(runtimePlatform === "windows" && sandboxAllowNetwork);
   const sandboxPolicy = sandboxEnabled
-    ? ` Sandbox mode is ON: commands run inside an OS-level sandbox — writes are limited to the workspace and temp dirs, credential dirs (~/.ssh etc.) are masked${sandboxAllowNetwork ? "" : ", and network access is blocked"}. "Operation not permitted" outside the workspace means the sandbox blocked it; do not retry with sudo — ask the user instead.`
+    ? ` Sandbox mode is ON: commands run inside an OS-level sandbox — writes are limited to the workspace and temp dirs${
+        sandboxMasksCredentials ? ", credential dirs (~/.ssh etc.) are masked" : ""
+      }${sandboxAllowNetwork ? "" : ", and network access is blocked"}. "Operation not permitted" outside the workspace means the sandbox blocked it; do not retry with sudo — ask the user instead.`
     : "";
   const shellPolicy =
     runtimePlatform === "windows"
