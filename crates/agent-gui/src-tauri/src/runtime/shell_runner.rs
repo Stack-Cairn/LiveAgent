@@ -708,6 +708,7 @@ static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
 /// - 0xE0434352 CLR 未处理异常(PowerShell 把 CNG NTE_PROVIDER_DLL_FAIL 包装成
 ///   “BCrypt.dll 加载失败”;进程已进 CLR,故不是 NTSTATUS loader 码)
 /// - 0x8009001D NTE_PROVIDER_DLL_FAIL 本体
+///
 /// 命中 ⇒ 该候选在此沙箱机制下起不来,落到下一候选。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_loader_failure_exit(code: i32) -> bool {
