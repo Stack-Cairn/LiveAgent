@@ -248,6 +248,10 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.safety.autoDesc": "按设置中的工具权限策略直接执行",
   "chat.safety.sandbox": "沙箱",
   "chat.safety.sandboxDesc": "命令在 OS 沙箱内执行：写入限项目文件夹，~/.ssh 等敏感目录不可读",
+  // Windows 联网后端（受限令牌 WRITE_RESTRICTED）只围栏“写”，读广泛放行 ⇒ 该平台不得
+  // 承诺敏感目录不可读；读掩蔽只在断网后端（AppContainer）成立。
+  "chat.safety.sandboxDescNoReadMask":
+    "命令在 OS 沙箱内执行：写入限项目文件夹；本平台（免管理员）不屏蔽读取，~/.ssh 等敏感目录仍可读",
   "chat.safety.sandboxOffline": "沙箱·断网",
   "chat.safety.sandboxOfflineDesc": "在沙箱基础上进一步禁止命令联网",
   "chat.safety.sandboxUnavailable": "当前平台沙箱机制不可用",

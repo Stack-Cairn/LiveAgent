@@ -15,6 +15,7 @@ import {
   type McpManagerResultDetails,
 } from "./builtinTypes";
 import { ToolPathResolver } from "./pathUtils";
+import type { ShellSandboxSettings } from "./shellTools";
 
 type McpManagerAction =
   | "list"
@@ -99,6 +100,17 @@ const WRITE_ACTIONS = new Set<McpManagerAction>([
 // Restarting or killing a pooled runtime instance affects every conversation
 // sharing the process-wide runtime manager, so it is gated like a write.
 const RUNTIME_MUTATING_ACTIONS = new Set<McpManagerAction>(["restart", "stop"]);
+
+// Actions that connect to a server runtime. For `transport: "stdio"` that means
+// spawning a local child process from a free-form `command`/`args` pair, i.e. a
+// general-purpose process spawn primitive that the OS sandbox does not cover
+// (MCP runtimes are pooled process-wide and started outside the shell funnel).
+const RUNTIME_CONNECTING_ACTIONS = new Set<McpManagerAction>([
+  "test",
+  "tools",
+  "restart",
+  "diagnose",
+]);
 
 const MCP_STRING_MAP_SCHEMA = Type.Record(Type.String(), Type.String());
 
@@ -630,6 +642,11 @@ export function createMcpManagerTools(params: {
   /** Id-keyed merge commit; absent means this scope cannot modify settings. */
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   runtimeScope: SystemToolRuntimeScope;
+  /**
+   * 本轮的 OS 沙箱设置(与 Bash / ManagedProcess 同一份契约)。启用时,本工具的
+   * stdio 运行时探测一律拒绝(P1#1)。
+   */
+  sandbox?: ShellSandboxSettings;
   resolveHomeDir?: () => Promise<string>;
 }): BuiltinToolBundle {
   const pathResolver = new ToolPathResolver({
@@ -669,6 +686,31 @@ export function createMcpManagerTools(params: {
       throw new Error("McpManager cannot modify MCP settings in this runtime scope.");
     }
     return params.applyMcpOps;
+  }
+
+  /**
+   * 沙箱围栏的对称性守卫(P1#1)。
+   *
+   * `transport: "stdio"` 的运行时探测最终走到 Rust `build_stdio_command` 的裸
+   * `Command::new`,不带任何 SandboxSpec;而 `action: "test"` 允许模型传入自由格式的
+   * `command`/`args`,既不写配置也不持久化 —— 等于在"选了最严格模式"的会话里留下一个
+   * 与 Bash 同样通用、却完全无围栏的进程 spawn 入口(sandboxOffline 下尤其矛盾:
+   * 该模式的全部意义就是内核级断网)。MCP 运行时是进程级共享池,且 http/sse 传输根本
+   * 不落到 shell funnel 上,无法复用同一套沙箱包装,故在沙箱模式下一律 fail-closed 拒绝。
+   *
+   * 非 stdio 传输不 spawn 进程,不在本守卫范围内;用户在设置界面里手动测试 MCP 服务器
+   * 也不受影响(那是显式用户操作,与 hooks / 用户自建 Cron 脚本同一豁免)。
+   */
+  function assertRuntimeSpawnAllowed(action: McpManagerAction, server: McpServerConfig) {
+    if (!params.sandbox?.enabled) return;
+    if (server.transport !== "stdio") return;
+    throw new Error(
+      `McpManager action=${action} would spawn a local stdio process for "${server.id}" ` +
+        `(command: ${server.command || "<empty>"}), but the current command mode runs model-driven ` +
+        `processes inside the OS sandbox and MCP runtimes cannot be fenced. Refused. ` +
+        `Use Bash for sandboxed commands; if this MCP server really needs probing, ask the user ` +
+        `to switch the command mode in the composer, or to test it from Settings → MCP.`,
+    );
   }
 
   // Write commits are deliberately synchronous: each one re-reads the live
@@ -867,12 +909,13 @@ export function createMcpManagerTools(params: {
       return { action, serverId, stopped: stopped.stopped, changed: false };
     }
 
-    if (action === "test" || action === "tools" || action === "restart" || action === "diagnose") {
+    if (RUNTIME_CONNECTING_ACTIONS.has(action)) {
       const hasInlineServer = Boolean(args.server);
       const server = hasInlineServer
         ? await resolveServerCwd(normalizeServerInput(args.server), "McpManager.server.cwd")
         : requireExistingServer(currentSettings(), requireServerId(args.server_id));
       throwIfAborted(signal);
+      assertRuntimeSpawnAllowed(action, server);
       const validation = validateServer(server, hasInlineServer ? undefined : currentSettings());
       let runtime: McpRuntimeStatus | null = null;
       if (!hasInlineServer) {

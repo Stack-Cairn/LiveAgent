@@ -47,6 +47,13 @@
 #[cfg(not(windows))]
 pub fn run_sandbox_launcher_if_requested() {}
 
+/// 运行时探测两个 Windows 后端能否真的建出安全上下文(P1#4)。
+/// 返回 (受限令牌后端, AppContainer 后端);非 Windows 平台不参与编译。
+#[cfg(windows)]
+pub(crate) fn probe_backends() -> (Result<(), String>, Result<(), String>) {
+    (win::probe_restricted_token(), win::probe_appcontainer())
+}
+
 /// Windows:若本次进程是 `__sandbox_exec` 启动器,执行真实命令并以其退出码退出;
 /// 否则原样返回,交由正常的 Tauri 启动流程继续。
 #[cfg(windows)]
@@ -716,6 +723,19 @@ mod win {
     }
 
     /// 在 path 上盖“可继承(OI)(CI)”的合成-SID 授权写 ACE(不存在才盖)。
+    ///
+    /// 为何只授不撤(P3#8,已知取舍,非疏漏):
+    /// - 受托 SID 由工作区路径确定性推导 ⇒ 每个工作区**最多一条** ACE(`root_has_ace`
+    ///   幂等守卫),不随运行次数累积;
+    /// - 该 SID 不映射任何活跃主体,遗留 ACE 不授予任何真实用户额外权限(惰性无害);
+    /// - 同一工作区可能有多个沙箱进程并发存活(Bash + ManagedProcess + resumable
+    ///   session),按进程退出撤销会打断仍在运行的兄弟进程的写围栏;
+    /// - `SetNamedSecurityInfoW` 回写“撤销后的 DACL”还会踩空 DACL 陷阱(见上方
+    ///   `old_dacl.is_null()` 分支)。
+    ///
+    /// 代价是资源管理器的权限页会显示一个无法解析的 S-1-5-21-* 项,且卸载不清理。
+    /// 若要提供清理,应做成显式的“清理沙箱 ACE”运维动作(遍历工作区列表按合成 SID
+    /// 精确删除),而不是塞进单次命令的生命周期里。
     fn ensure_write_ace(path: &Path, sid: PSID) -> Result<(), String> {
         let mut path_wide = to_wide(&path.to_string_lossy());
         if root_has_ace(&path_wide, sid) {
@@ -840,6 +860,46 @@ mod win {
         }
     }
 
+    /// 运行时探测:联网后端(受限令牌)能否真的建起来。
+    ///
+    /// 走与 `execute` 完全相同的调用序列(打开主令牌 → 读登录 SID →
+    /// `CreateRestrictedToken(WRITE_RESTRICTED)` → 补 default DACL),只是不启动进程。
+    /// 组策略、EDR hook、受限 SKU 会让其中任一步在真机失败;探测把失败提前反映到
+    /// `capability().supported`,从而让 `wrap_command` 的 fail-closed 守卫在 Windows
+    /// 上真正可达(此前硬编码 `supported: true`,该守卫恒不触发)。
+    /// 令牌句柄经 `OwnedHandle` 立即释放,无系统级副作用。
+    pub(super) fn probe_restricted_token() -> Result<(), String> {
+        // 探测用合成 SID:任取一个确定性路径键即可,不落任何文件系统 ACE。
+        let synthetic_str =
+            crate::runtime::sandbox::synthetic_workspace_sid(Path::new("liveagent-sandbox-probe"));
+        let synthetic = string_to_sid(&synthetic_str)?;
+        let write_restricted = string_to_sid(WRITE_RESTRICTED_SID)?;
+        let token = OwnedHandle(open_process_token()?);
+        let logon = logon_sid_bytes(token.0)?;
+        let logon_ptr = logon.as_ptr() as PSID;
+        let restricting: [PSID; 3] = [logon_ptr, write_restricted.0, synthetic.0];
+        let restricted = OwnedHandle(create_restricted_token(token.0, &restricting)?);
+        append_sid_to_default_dacl(restricted.0, logon_ptr)?;
+        Ok(())
+    }
+
+    /// 运行时探测:断网后端(AppContainer)能否派生 AC SID。纯派生,不创建 profile,
+    /// 无系统副作用;失败 ⇒ 仅 `network_control=false`(联网写围栏仍可用)。
+    pub(super) fn probe_appcontainer() -> Result<(), String> {
+        let name = appcontainer_profile_name("probe");
+        let name_w = to_wide(&name);
+        let mut sid: PSID = null_mut();
+        let derived =
+            unsafe { DeriveAppContainerSidFromAppContainerName(name_w.as_ptr(), &mut sid) };
+        if derived != 0 || sid.is_null() {
+            return Err(format!(
+                "DeriveAppContainerSidFromAppContainerName hr={derived:#010X}"
+            ));
+        }
+        let _sid = AcSid(sid); // RAII:FreeSid
+        Ok(())
+    }
+
     pub(super) fn execute(
         write_root: &Path,
         allow_network: bool,
@@ -849,7 +909,13 @@ mod win {
     ) -> Result<i32, String> {
         use crate::runtime::sandbox::{
             build_command_line, resolve_program_in_path, synthetic_workspace_sid,
+            validate_workspace,
         };
+
+        // P3#8:启动器是独立进程,不能依赖父进程侧 wrap_command 已做过校验——两个入口
+        // 必须共用同一套前置条件,否则任一侧演进就会漂移出 fail-closed 不对称。
+        // (幂等纯校验,重复执行无副作用。)
+        validate_workspace(write_root)?;
 
         let synthetic_str = synthetic_workspace_sid(write_root);
         // temp 目录 / AC profile 名沿用合成 SID 的数值段,确定性且文件系统安全。

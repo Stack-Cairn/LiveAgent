@@ -5,7 +5,10 @@ export type SandboxCapability = {
   supported: boolean;
   mechanism: string;
   platform: string;
-  /** 是否支持断网变体(sandboxOffline)。Windows 免管理员方案恒为 false。 */
+  /**
+   * 是否支持断网变体(sandboxOffline)。macOS/Linux 在 supported 时为 true;
+   * Windows 取决于运行时探测(能否派生 AppContainer SID)。
+   */
   network_control: boolean;
   reason?: string;
 };

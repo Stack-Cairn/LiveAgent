@@ -276,14 +276,60 @@ impl SandboxSpec {
     }
 }
 
+/// 命令安全模式 → 沙箱参数。`ask`/`auto` 不启用 OS 沙箱(`ask` 是前端的逐次人工放行
+/// 闸门,不改变执行隔离),`sandbox` 联网、`sandboxOffline` 断网。
+pub(crate) fn options_from_mode(mode: &str) -> Option<SandboxOptions> {
+    match mode.trim() {
+        "sandbox" => Some(SandboxOptions {
+            allow_network: true,
+        }),
+        "sandboxOffline" => Some(SandboxOptions {
+            allow_network: false,
+        }),
+        _ => None,
+    }
+}
+
+/// 取更严格的一方。严格度:无沙箱 < 联网沙箱 < 断网沙箱。
+pub(crate) fn strictest(
+    a: Option<SandboxOptions>,
+    b: Option<SandboxOptions>,
+) -> Option<SandboxOptions> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(SandboxOptions {
+            allow_network: x.allow_network && y.allow_network,
+        }),
+        (Some(only), None) | (None, Some(only)) => Some(only),
+        (None, None) => None,
+    }
+}
+
+/// 后端独立下限(P1#3):渲染进程送来的 `sandbox` / `sandbox_allow_network` 只能"加严",
+/// 绝不能放宽。后端在命令边界回查持久化的 `settings.system.commandSafetyMode` 自行推出
+/// 下限,并与请求值取更严格者——不论请求来自桌面 UI、网关(远端 WebUI)还是 Cron 调度器,
+/// 同一下限强制生效(对齐 `load_runtime_ssh_host` 的"服务端重解析持久化配置"范式)。
+///
+/// 读取持久化配置失败 ⇒ 直接报错(fail-closed),绝不因为读不到设置就无沙箱执行。
+pub(crate) fn resolve_effective_options(
+    requested: Option<SandboxOptions>,
+) -> Result<Option<SandboxOptions>, String> {
+    let mode = crate::commands::settings::load_runtime_command_safety_mode().map_err(|err| {
+        format!(
+            "Cannot verify the persisted sandbox floor (settings.system.commandSafetyMode): {err}. \
+Refusing to run the command unsandboxed."
+        )
+    })?;
+    Ok(strictest(requested, options_from_mode(&mode)))
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SandboxCapability {
     pub supported: bool,
     pub mechanism: &'static str,
     pub platform: &'static str,
     /// 是否支持断网变体(sandboxOffline)。macOS/Linux 在 `supported` 时为 true;
-    /// Windows 亦为 true(AppContainer 后端,内核级断网)。`supported=false` 时该
-    /// 字段无意义(整体不可用)。
+    /// Windows 由运行时探测决定(能否派生 AppContainer SID)。`supported=false` 时
+    /// 该字段无意义(整体不可用)。
     pub network_control: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -317,6 +363,35 @@ fn canonical_or_self(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// 词法比较前的路径归一(P2#5)。
+///
+/// `canonical_or_self` 只在路径存在时才 canonicalize,而 Windows 的 canonicalize 会
+/// 加上 verbatim 前缀(`\\?\C:\...`、UNC 形式 `\\?\UNC\server\share`);不存在的路径
+/// 则保持原始形态。`Path::starts_with` 是纯词法的组件比较,不做前缀归一,于是两侧
+/// 前缀形态不一致时(write_root 存在而某敏感目录不存在,或反之)比较恒为 false ——
+/// 围栏校验被静默跳过,属 fail-open。这里统一剥掉 verbatim 前缀,并在 Windows 上折叠
+/// 大小写(NTFS 路径大小写不敏感),让比较在两种形态下都成立。
+fn normalize_for_compare(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    let stripped: String = if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        text.to_string()
+    };
+    if cfg!(windows) {
+        PathBuf::from(stripped.to_lowercase())
+    } else {
+        PathBuf::from(stripped)
+    }
+}
+
+/// `ancestor` 是否包含或等于 `descendant`(归一后按组件比较)。
+fn path_encloses(ancestor: &Path, descendant: &Path) -> bool {
+    normalize_for_compare(descendant).starts_with(normalize_for_compare(ancestor))
+}
+
 /// fail-closed 工作区校验(P1#2):拒绝会让写围栏重新暴露敏感目录的工作区。
 ///
 /// 写围栏对 write_root 有后置 re-allow(macOS)/后置 --bind(Linux),因此:
@@ -325,13 +400,16 @@ fn canonical_or_self(path: &Path) -> PathBuf {
 /// - **后代**:工作区落在敏感目录内部。凭据目录(~/.ssh/.aws/.gnupg/.config/gh)
 ///   下的工作区一律拒绝;应用配置目录(~/.liveagent)豁免——默认工作区
 ///   ~/.liveagent/default-project 正位于其内,拒绝它会直接打断开箱即用。
-fn validate_workspace(write_root: &Path) -> Result<(), String> {
+///
+/// wrap 路径(`wrap_command`)与 Windows 自我再执行启动器(`windows_sandbox::win::execute`)
+/// 两个入口都必须调用它,否则同一 write_root 在两条链上前置条件不对称(P3#8)。
+pub(crate) fn validate_workspace(write_root: &Path) -> Result<(), String> {
     let root = canonical_or_self(write_root);
     let app_config = app_config_dir().map(|p| canonical_or_self(&p));
 
     for dir in sensitive_dirs() {
         let dir = canonical_or_self(&dir);
-        if dir.starts_with(&root) {
+        if path_encloses(&root, &dir) {
             return Err(format!(
                 "Sandbox refuses workspace \"{}\": it encloses or equals the sensitive directory \
 \"{}\", which the workspace write fence would re-expose. Choose a workspace that does not \
@@ -340,9 +418,13 @@ contain credential or app-config directories.",
                 dir.display()
             ));
         }
-        if root.starts_with(&dir) {
+        if path_encloses(&dir, &root) {
             // 应用配置目录内部豁免(默认工作区在此),其余敏感目录内部一律拒绝。
-            if app_config.as_deref() == Some(dir.as_path()) {
+            let dir_key = normalize_for_compare(&dir);
+            if app_config
+                .as_deref()
+                .is_some_and(|config| normalize_for_compare(config) == dir_key)
+            {
                 continue;
             }
             return Err(format!(
@@ -603,18 +685,46 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use std::sync::OnceLock;
 
-    pub(super) fn capability() -> SandboxCapability {
-        // 双后端均免依赖/免提权,恒可用:sandbox → 受限令牌写围栏;sandboxOffline →
-        // AppContainer(零 capability,WFP 默认拒网 ⇒ 内核级断网 + 默认拒读掩蔽)。
-        // mechanism 报联网后端名;断网命令实际生效的机制经 wrap_command 返回值上报。
+    static CAPABILITY: OnceLock<SandboxCapability> = OnceLock::new();
+
+    /// 运行时探测(P1#4):不再硬编码"恒可用"。两个后端都实际建一次安全上下文——
+    /// 联网后端建 WRITE_RESTRICTED 受限令牌并补 default DACL,断网后端派生
+    /// AppContainer SID。组策略、EDR hook、受限 SKU 会让这些调用在真机上失败;
+    /// 探测把失败提前暴露成 `supported=false` / `network_control=false`,
+    /// `wrap_command` 的 fail-closed 守卫因而在 Windows 上真正可达。
+    fn probe() -> SandboxCapability {
+        let unsupported = |reason: String| SandboxCapability {
+            supported: false,
+            mechanism: "restricted-token",
+            platform: "windows",
+            network_control: false,
+            reason: Some(reason),
+        };
+        // 自我再执行启动器以 current_exe 为壳,解析不出来则整体不可用。
+        if let Err(err) = std::env::current_exe() {
+            return unsupported(format!("cannot resolve current executable: {err}"));
+        }
+        let (restricted_token, appcontainer) = crate::runtime::windows_sandbox::probe_backends();
+        if let Err(err) = restricted_token {
+            return unsupported(format!("restricted-token backend unavailable: {err}"));
+        }
         SandboxCapability {
             supported: true,
             mechanism: "restricted-token",
             platform: "windows",
-            network_control: true,
-            reason: None,
+            // 断网变体走 AppContainer:派生不出 AC SID ⇒ 仅 sandboxOffline 不可用,
+            // 联网写围栏仍然可用(UI 据此只禁用断网项)。
+            network_control: appcontainer.is_ok(),
+            reason: appcontainer
+                .err()
+                .map(|err| format!("offline (AppContainer) backend unavailable: {err}")),
         }
+    }
+
+    pub(super) fn capability() -> SandboxCapability {
+        CAPABILITY.get_or_init(probe).clone()
     }
 
     pub(super) fn wrap_command(
@@ -625,6 +735,16 @@ mod platform {
         // 自我再执行:把真实命令包进 current_exe 的 __sandbox_exec 启动器。启动器在
         // 进程最早期按 --net 选后端:on → 受限令牌(CreateProcessAsUserW),off →
         // AppContainer(CreateProcessW + SECURITY_CAPABILITIES);见 windows_sandbox。
+        if !spec.allow_network && !capability().network_control {
+            return Err(format!(
+                "Offline sandbox is enabled but the AppContainer backend is unavailable on this \
+machine: {}. Switch to the networked sandbox mode or resolve the issue and retry.",
+                capability()
+                    .reason
+                    .as_deref()
+                    .unwrap_or("AppContainer SID could not be derived")
+            ));
+        }
         let current_exe = std::env::current_exe()
             .map_err(|err| format!("failed to resolve current executable for sandbox: {err}"))?;
         let launcher_args = build_launcher_args(
@@ -759,6 +879,87 @@ mod tests {
     }
 
     // --- 跨平台纯逻辑(Windows 启动器所依赖,可在任意宿主上运行) ---
+
+    // P2#5:verbatim 前缀必须在词法比较前剥掉,否则 canonicalize 过的一侧与未
+    // canonicalize 的一侧永不匹配(fail-open)。
+    #[test]
+    fn normalize_for_compare_strips_verbatim_prefixes() {
+        assert_eq!(
+            normalize_for_compare(Path::new(r"\\?\C:\ws\proj")).to_string_lossy(),
+            if cfg!(windows) {
+                r"c:\ws\proj".to_string()
+            } else {
+                r"C:\ws\proj".to_string()
+            }
+        );
+        assert_eq!(
+            normalize_for_compare(Path::new(r"\\?\UNC\server\share\ws")).to_string_lossy(),
+            r"\\server\share\ws"
+        );
+    }
+
+    #[test]
+    fn path_encloses_matches_ancestor_and_self() {
+        assert!(path_encloses(
+            Path::new("/home/user"),
+            Path::new("/home/user/.ssh")
+        ));
+        assert!(path_encloses(Path::new("/home/user"), Path::new("/home/user")));
+        assert!(!path_encloses(
+            Path::new("/home/user/.ssh"),
+            Path::new("/home/user")
+        ));
+        // 前缀形态不同(一侧 canonicalize 过)仍须匹配。
+        #[cfg(windows)]
+        {
+            assert!(path_encloses(
+                Path::new(r"C:\Users\Me"),
+                Path::new(r"\\?\C:\Users\Me\.ssh")
+            ));
+            assert!(path_encloses(
+                Path::new(r"\\?\C:\Users\Me"),
+                Path::new(r"c:\users\me\.aws")
+            ));
+        }
+    }
+
+    // P1#3:下限与请求值取更严格者;两者皆无沙箱才不围栏。
+    #[test]
+    fn strictest_takes_the_tighter_side() {
+        let online = Some(SandboxOptions {
+            allow_network: true,
+        });
+        let offline = Some(SandboxOptions {
+            allow_network: false,
+        });
+        assert!(strictest(None, None).is_none());
+        assert_eq!(strictest(None, online).map(|o| o.allow_network), Some(true));
+        assert_eq!(strictest(online, None).map(|o| o.allow_network), Some(true));
+        // 一侧断网 ⇒ 结果断网(不允许被另一侧放宽回联网)。
+        assert_eq!(
+            strictest(online, offline).map(|o| o.allow_network),
+            Some(false)
+        );
+        assert_eq!(
+            strictest(offline, online).map(|o| o.allow_network),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn options_from_mode_only_sandbox_modes_fence() {
+        assert!(options_from_mode("auto").is_none());
+        assert!(options_from_mode("ask").is_none());
+        assert!(options_from_mode("nonsense").is_none());
+        assert_eq!(
+            options_from_mode("sandbox").map(|o| o.allow_network),
+            Some(true)
+        );
+        assert_eq!(
+            options_from_mode("sandboxOffline").map(|o| o.allow_network),
+            Some(false)
+        );
+    }
 
     #[test]
     fn launcher_args_roundtrip() {

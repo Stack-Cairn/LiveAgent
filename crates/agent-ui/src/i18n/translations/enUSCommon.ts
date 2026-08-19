@@ -275,6 +275,11 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.safety.sandbox": "Sandbox",
   "chat.safety.sandboxDesc":
     "Commands run in an OS sandbox: writes limited to the project folder, sensitive dirs like ~/.ssh unreadable",
+  // The Windows networked backend (WRITE_RESTRICTED token) fences writes only; reads stay
+  // broadly allowed, so this platform must not promise credential read masking. Masking is
+  // only real on the offline (AppContainer) backend.
+  "chat.safety.sandboxDescNoReadMask":
+    "Commands run in an OS sandbox: writes limited to the project folder. Reads are not masked on this platform, so ~/.ssh and other sensitive dirs stay readable",
   "chat.safety.sandboxOffline": "Sandbox · offline",
   "chat.safety.sandboxOfflineDesc": "Sandbox plus no network access for commands",
   "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",

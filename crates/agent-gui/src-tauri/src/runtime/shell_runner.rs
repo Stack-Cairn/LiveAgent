@@ -865,6 +865,9 @@ where
     Err(ShellError::Other(format!("Failed to start command: {detail}")).to_string())
 }
 
+/// 无 env 注入、无沙箱的最简入口。生产链路一律走 `run_shell_script_with_envs` 并显式
+/// 传入沙箱参数(P1#2:Cron 曾因这里的 `None` 而恒以无沙箱方式执行),故此入口仅供测试。
+#[cfg(test)]
 pub(crate) fn run_shell_script(
     workdir: String,
     command: String,

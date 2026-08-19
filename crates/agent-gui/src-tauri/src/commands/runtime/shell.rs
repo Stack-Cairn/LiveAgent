@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
-use crate::runtime::sandbox::SandboxOptions;
+use crate::runtime::sandbox::{resolve_effective_options, SandboxOptions};
 use crate::runtime::shell_runner::{
     run_shell_script_with_envs, ShellRunRegistry, ShellRunResponse,
 };
@@ -12,6 +12,17 @@ use crate::runtime::shell_session::{ShellSessionManager, ShellSessionResponse};
 #[derive(Debug, Serialize)]
 pub struct ShellCancelResponse {
     cancelled: bool,
+}
+
+/// 请求侧的沙箱声明只是"上限之下的加严",最终生效值由后端与持久化的
+/// commandSafetyMode 取更严格者(P1#3)。任何 host 都无法靠传 `sandbox=false` 绕过围栏。
+fn effective_sandbox_options(
+    sandbox: bool,
+    sandbox_allow_network: bool,
+) -> Result<Option<SandboxOptions>, String> {
+    resolve_effective_options(sandbox.then_some(SandboxOptions {
+        allow_network: sandbox_allow_network,
+    }))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -28,14 +39,12 @@ pub async fn shell_run(
     sandbox: bool,
     sandbox_allow_network: bool,
 ) -> Result<ShellRunResponse, String> {
+    let sandbox_options = effective_sandbox_options(sandbox, sandbox_allow_network)?;
     let normalized_run_id = run_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let cancel_token = normalized_run_id.as_deref().map(|id| registry.register(id));
     let registered_token = cancel_token.clone();
-    let sandbox_options = sandbox.then_some(SandboxOptions {
-        allow_network: sandbox_allow_network,
-    });
 
     let join_result = tauri::async_runtime::spawn_blocking(move || {
         run_shell_script_with_envs(
@@ -86,9 +95,7 @@ pub async fn shell_session_start(
     sandbox_allow_network: bool,
 ) -> Result<ShellSessionResponse, String> {
     let manager = Arc::clone(manager.inner());
-    let sandbox_options = sandbox.then_some(SandboxOptions {
-        allow_network: sandbox_allow_network,
-    });
+    let sandbox_options = effective_sandbox_options(sandbox, sandbox_allow_network)?;
     tauri::async_runtime::spawn_blocking(move || {
         manager.start(
             session_id,
