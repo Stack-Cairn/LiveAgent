@@ -701,28 +701,49 @@ static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
     Mutex<HashMap<(PathBuf, &'static str), bool>>,
 > = std::sync::OnceLock::new();
 
-/// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码:0xC0000142(DLL 初始化失败,
-/// msys/cygwin 系 shell 在沙箱下的典型死法)、0xC0000135(DLL 缺失)、0xC0000022(拒绝
-/// 访问)。命中 ⇒ 该候选在此沙箱机制下根本起不来。
+/// 子进程启动即死、不能当沙箱 shell 的退出码:
+/// - 0xC0000142 DLL 初始化失败(msys/cygwin 在受限令牌下的典型死法)
+/// - 0xC0000135 DLL 缺失
+/// - 0xC0000022 拒绝访问
+/// - 0xE0434352 CLR 未处理异常(PowerShell 把 CNG NTE_PROVIDER_DLL_FAIL 包装成
+///   “BCrypt.dll 加载失败”;进程已进 CLR,故不是 NTSTATUS loader 码)
+/// - 0x8009001D NTE_PROVIDER_DLL_FAIL 本体
+/// 命中 ⇒ 该候选在此沙箱机制下起不来,落到下一候选。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_loader_failure_exit(code: i32) -> bool {
-    matches!(code as u32, 0xC000_0142 | 0xC000_0135 | 0xC000_0022)
+    matches!(
+        code as u32,
+        0xC000_0142 | 0xC000_0135 | 0xC000_0022 | 0xE043_4352 | 0x8009_001D
+    )
 }
 
 /// 探测裁决:给定探测进程的退出码(None = 超时/被杀/无退出码),该候选是否可用。
-/// 只有明确的 loader NTSTATUS 判不可用;其余(超时、普通非零退出)一律放行,由真实
+/// 只有明确的启动即死码判不可用;其余(超时、普通非零退出)一律放行,由真实
 /// spawn 自行失败并走既有错误链——探测只负责识别“启动即死”这一类硬不兼容。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
     !exit_code.is_some_and(is_loader_failure_exit)
 }
 
-/// Windows 沙箱下探测某 shell 候选能否活过 loader(结果进程级缓存)。
+/// PATH 上的第一个同名二进制若落在 WindowsApps,受限令牌无法启动它。
+#[cfg(windows)]
+fn candidate_resolves_to_windowsapps(program: &Path) -> bool {
+    if sandbox::is_msix_windowsapps_path(program) {
+        return true;
+    }
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    sandbox::resolve_program_in_path(program, &path_env, &pathext, &|p| p.is_file())
+        .is_some_and(|p| sandbox::is_msix_windowsapps_path(&p))
+}
+
+/// Windows 沙箱下探测某 shell 候选能否活过启动(结果进程级缓存)。
 ///
-/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中 loader NTSTATUS
-/// (典型:Git Bash 的 msys-2.0.dll 在受限令牌下 0xC0000142)⇒ 不可用,调用方落到
-/// 下一候选(pwsh/powershell/cmd,均原生 PE,必然可用)。探测本身失败(wrap/spawn
-/// 出错)判可用:让真实 spawn 复现错误并走既有 fail-closed/错误报告路径,探测不吞错。
+/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中启动即死
+/// (Git Bash 的 0xC0000142,或 PowerShell/CNG 的 0xE0434352)⇒ 不可用,调用方落到
+/// 下一候选。pwsh/powershell 在写围栏下并不必然可用;cmd.exe 不走 CNG,通常是最后
+/// 兜底。探测本身失败(wrap/spawn 出错)判可用:让真实 spawn 复现错误并走既有
+/// fail-closed/错误报告路径,探测不吞错。
 #[cfg(windows)]
 fn sandbox_candidate_usable(
     spec: &SandboxSpec,
@@ -730,6 +751,10 @@ fn sandbox_candidate_usable(
     mechanism: &'static str,
 ) -> bool {
     use wait_timeout::ChildExt;
+
+    if candidate_resolves_to_windowsapps(&candidate.program) {
+        return false;
+    }
 
     let cache = SANDBOX_SHELL_PROBE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let key = (candidate.program.clone(), mechanism);
@@ -761,14 +786,16 @@ fn sandbox_candidate_usable(
                 .stderr(Stdio::null())
                 .spawn()
                 .ok()
-                .and_then(|mut child| match child.wait_timeout(Duration::from_secs(2)) {
-                    Ok(Some(status)) => status.code(),
-                    _ => {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        None
-                    }
-                });
+                .and_then(
+                    |mut child| match child.wait_timeout(Duration::from_secs(2)) {
+                        Ok(Some(status)) => status.code(),
+                        _ => {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            None
+                        }
+                    },
+                );
             sandbox_probe_verdict(exit_code)
         }
         Err(_) => true,
@@ -807,13 +834,15 @@ where
         // Windows 沙箱专属:候选回退链平时靠 spawn 失败推进,但沙箱下 spawn 的永远是
         // LiveAgent.exe 启动器(总能成功),loader 级不兼容(如 Git Bash 的 msys 依赖
         // 在受限令牌下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
-        // (`exit 0`)提前识别,落到下一候选(pwsh/powershell),不给模型返回死 shell。
+        // (`exit 0`)提前识别,落到下一候选,不给模型返回死 shell。pwsh 在沙箱里也会
+        // 因 CNG 用户证书库不可写而以 CLR 0xE0434352 崩溃,不能假定“原生 PE 必然可用”。
         #[cfg(windows)]
         if let (Some(spec), Some(mechanism)) = (sandbox_spec, sandbox_mechanism) {
             if !sandbox_candidate_usable(spec, &candidate, mechanism) {
                 errors.push(format!(
-                    "{} ({}) skipped: incompatible with the {mechanism} sandbox (loader-level \
-                     startup failure, e.g. STATUS_DLL_INIT_FAILED)",
+                    "{} ({}) skipped: incompatible with the {mechanism} sandbox (startup \
+                     failure under the restricted token, e.g. STATUS_DLL_INIT_FAILED or CLR \
+                     0xE0434352 / BCrypt provider init)",
                     candidate.profile.profile, candidate.profile.display_shell
                 ));
                 continue;
@@ -1036,7 +1065,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有 loader 级 NTSTATUS 判不可用;
+    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有启动即死码判不可用;
     // 超时/普通失败一律放行交由真实 spawn 走既有错误链。
     #[test]
     fn sandbox_probe_verdict_only_rejects_loader_ntstatus() {
@@ -1045,6 +1074,12 @@ mod tests {
         assert!(is_loader_failure_exit(0xC000_0135_u32 as i32)); // STATUS_DLL_NOT_FOUND
         assert!(is_loader_failure_exit(0xC000_0022_u32 as i32)); // STATUS_ACCESS_DENIED
         assert!(!sandbox_probe_verdict(Some(0xC000_0142_u32 as i32)));
+        // PowerShell/CNG:BCrypt“加载失败”其实是 CLR 未处理异常,不是 NTSTATUS。
+        assert_eq!((-532_462_766i32) as u32, 0xE043_4352);
+        assert!(is_loader_failure_exit(-532_462_766));
+        assert!(!sandbox_probe_verdict(Some(-532_462_766)));
+        assert!(is_loader_failure_exit(0x8009_001D_u32 as i32)); // NTE_PROVIDER_DLL_FAIL
+        assert!(!sandbox_probe_verdict(Some(0x8009_001D_u32 as i32)));
         // 正常退出、普通失败、其它 NTSTATUS、超时(None)都不构成“候选不可用”。
         assert!(sandbox_probe_verdict(Some(0)));
         assert!(sandbox_probe_verdict(Some(1)));

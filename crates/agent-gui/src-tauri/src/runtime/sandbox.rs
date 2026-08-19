@@ -247,6 +247,47 @@ pub(crate) fn resolve_program_in_path(
     None
 }
 
+/// Microsoft Store / MSIX 执行别名位于 `WindowsApps`。受限令牌下
+/// `CreateProcessAsUserW` 对打包二进制会返回 5 (Access denied),不能当沙箱 shell。
+/// 同时按 `/` 与 `\` 分段,以便在非 Windows 宿主上用 Windows 路径字面量做单测。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn is_msix_windowsapps_path(path: &Path) -> bool {
+    path.to_string_lossy()
+        .split(['\\', '/'])
+        .any(|seg| seg.eq_ignore_ascii_case("WindowsApps"))
+}
+
+/// HKCU 子键:CAPI/CNG 在 provider 初始化时会对它们 `RegCreateKey`(创建即写)。
+/// WRITE_RESTRICTED 第二遍写检查若 DACL 上没有限制性 SID,就会 ACCESS DENIED,
+/// 最终被 PowerShell/.NET 误报成 “BCrypt.dll 加载失败”(exit `0xE0434352`)。
+/// 这是用户证书/密钥库的窄例外,不是放开整个 HKCU。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const CNG_USER_REGISTRY_SUBKEYS: &[&str] = &[
+    r"Software\Microsoft\SystemCertificates",
+    r"Software\Microsoft\SystemCertificates\CA",
+    r"Software\Microsoft\SystemCertificates\Root",
+    r"Software\Microsoft\SystemCertificates\My",
+    r"Software\Policies\Microsoft\SystemCertificates",
+    r"Software\Policies\Microsoft\SystemCertificates\CA",
+    r"Software\Microsoft\Cryptography",
+];
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn cng_named_registry_object(subkey: &str) -> String {
+    format!("CURRENT_USER\\{subkey}")
+}
+
+/// CNG 还会把密钥容器 / DPAPI / 证书 URL 缓存写到用户配置目录
+/// (非 TEMP;沙箱的 TEMP 重定向覆盖不到这里)。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn cng_user_file_dirs(appdata: &Path, localappdata: &Path) -> Vec<PathBuf> {
+    vec![
+        appdata.join("Microsoft").join("Crypto"),
+        appdata.join("Microsoft").join("Protect"),
+        localappdata.join("Microsoft").join("CryptnetUrlCache"),
+    ]
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SandboxOptions {
     pub allow_network: bool,
@@ -1252,6 +1293,48 @@ mod tests {
         let is_file = |_: &Path| panic!("absolute input must not be probed");
         let got = resolve_program_in_path(Path::new("/bin/sh"), "/other", ".EXE", &is_file);
         assert_eq!(got, Some(PathBuf::from("/bin/sh")));
+    }
+
+    #[test]
+    fn msix_windowsapps_path_is_detected_case_insensitively() {
+        assert!(is_msix_windowsapps_path(Path::new(
+            r"C:\Users\Me\AppData\Local\Microsoft\WindowsApps\pwsh.exe"
+        )));
+        assert!(is_msix_windowsapps_path(Path::new(
+            r"C:\Program Files\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe"
+        )));
+        assert!(!is_msix_windowsapps_path(Path::new(
+            r"C:\Program Files\PowerShell\7\pwsh.exe"
+        )));
+        assert!(!is_msix_windowsapps_path(Path::new(
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        )));
+    }
+
+    #[test]
+    fn cng_user_write_surface_is_narrow_user_store_not_home() {
+        assert!(CNG_USER_REGISTRY_SUBKEYS
+            .iter()
+            .all(|key| key.starts_with(r"Software\")));
+        assert!(CNG_USER_REGISTRY_SUBKEYS
+            .iter()
+            .all(|key| { key.contains("SystemCertificates") || key.contains("Cryptography") }));
+        assert_eq!(
+            cng_named_registry_object(r"Software\Microsoft\SystemCertificates"),
+            r"CURRENT_USER\Software\Microsoft\SystemCertificates"
+        );
+        let dirs = cng_user_file_dirs(Path::new("/roaming"), Path::new("/local"));
+        assert_eq!(
+            dirs,
+            vec![
+                PathBuf::from("/roaming/Microsoft/Crypto"),
+                PathBuf::from("/roaming/Microsoft/Protect"),
+                PathBuf::from("/local/Microsoft/CryptnetUrlCache"),
+            ]
+        );
+        assert!(!dirs
+            .iter()
+            .any(|path| path == Path::new("/roaming") || path == Path::new("/local")));
     }
 
     #[test]
