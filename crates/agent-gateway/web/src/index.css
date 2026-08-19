@@ -88,18 +88,21 @@
       inset 0 0 0 1px rgba(167, 139, 250, 0.12);
   }
 
-  .composer-branch-dropdown[data-state="open"] {
+  .composer-branch-dropdown[data-state="open"],
+  .composer-safety-dropdown[data-state="open"] {
     animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: var(--transform-origin, bottom left);
   }
 
-  .composer-branch-dropdown[data-state="closed"] {
+  .composer-branch-dropdown[data-state="closed"],
+  .composer-safety-dropdown[data-state="closed"] {
     animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
     transform-origin: var(--transform-origin, bottom left);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .composer-branch-dropdown {
+    .composer-branch-dropdown,
+    .composer-safety-dropdown {
       animation: none !important;
     }
 

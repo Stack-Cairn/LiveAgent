@@ -1069,7 +1069,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
 
               {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
                 <CommandSafetyModeSelector
-                  surface={surface}
                   value={commandSafetyMode}
                   disabled={controlsDisabled}
                   onChange={onCommandSafetyModeChange}
