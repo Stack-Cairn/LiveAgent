@@ -148,7 +148,7 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 	if err != nil {
 		return stageError("VolcengineSeedV3", "start", err)
 	}
-	if err = conn.WriteMessage(websocket.BinaryMessage, seedV3Frame(1, 0, 1, start)); err != nil {
+	if err = writeProviderMessage(conn, websocket.BinaryMessage, seedV3Frame(1, 0, 1, start)); err != nil {
 		return stageError("VolcengineSeedV3", "start", err)
 	}
 	incoming := make(chan map[string]any, 8)
@@ -169,7 +169,9 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 				readErr <- stageError("VolcengineSeedV3", "parse", decodeError)
 				return
 			}
-			incoming <- message
+			if !emitIncoming(ctx, incoming, message) {
+				return
+			}
 		}
 	}()
 	ready := false
@@ -185,7 +187,7 @@ func (a *VolcengineSeedV3Adapter) Run(ctx context.Context, id string, cfg map[st
 			return stageError("VolcengineSeedV3", "send_audio", compressError)
 		}
 		frame := seedV3AudioFrame(last, compressed)
-		if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
+		if err := writeProviderMessage(conn, websocket.BinaryMessage, frame); err != nil {
 			stage := "send_audio"
 			if last {
 				stage = "finish"

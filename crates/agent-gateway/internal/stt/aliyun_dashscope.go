@@ -67,7 +67,7 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 			"input": map[string]any{},
 		},
 	}
-	if err = conn.WriteJSON(start); err != nil {
+	if err = writeProviderJSON(conn, start); err != nil {
 		return stageError("DashScope", "start", err)
 	}
 	incoming := make(chan map[string]any, 8)
@@ -79,7 +79,9 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 				readErr <- stageError("DashScope", "receive", err)
 				return
 			}
-			incoming <- msg
+			if !emitIncoming(ctx, incoming, msg) {
+				return
+			}
 		}
 	}()
 	finishing := false
@@ -103,14 +105,14 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 			if cmd.Audio != nil {
 				if !ready {
 					pending = append(pending, append([]byte(nil), cmd.Audio.PCM...))
-				} else if err := conn.WriteMessage(websocket.BinaryMessage, cmd.Audio.PCM); err != nil {
+				} else if err := writeProviderMessage(conn, websocket.BinaryMessage, cmd.Audio.PCM); err != nil {
 					return stageError("DashScope", "send_audio", err)
 				}
 			}
 			if cmd.Finish {
 				finishing = true
 				if ready && !finishSent {
-					if err := conn.WriteJSON(dashScopeFinish(wireTaskID)); err != nil {
+					if err := writeProviderJSON(conn, dashScopeFinish(wireTaskID)); err != nil {
 						return stageError("DashScope", "finish", err)
 					}
 					finishSent = true
@@ -145,13 +147,13 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 						return ctx.Err()
 					}
 					for _, pcm := range pending {
-						if err := conn.WriteMessage(websocket.BinaryMessage, pcm); err != nil {
+						if err := writeProviderMessage(conn, websocket.BinaryMessage, pcm); err != nil {
 							return stageError("DashScope", "send_audio", err)
 						}
 					}
 					pending = nil
 					if finishing && !finishSent {
-						if err := conn.WriteJSON(dashScopeFinish(wireTaskID)); err != nil {
+						if err := writeProviderJSON(conn, dashScopeFinish(wireTaskID)); err != nil {
 							return stageError("DashScope", "finish", err)
 						}
 						finishSent = true

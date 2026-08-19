@@ -7,6 +7,7 @@ import {
   pcm16ToLittleEndianBytes,
   STT_CONNECT_TIMEOUT_MS,
   STT_SAMPLES_PER_CHUNK,
+  STT_SEND_QUEUE_TIMEOUT_MS,
   SttAudioCapture,
   SttPcmFifo,
 } from "@liveagent/ui/lib/stt/audio";
@@ -126,7 +127,23 @@ export function useComposerStt(options: {
         return;
       }
       active.finishSent = true;
-      await active.queue;
+      let queueTimer = 0;
+      try {
+        await Promise.race([
+          active.queue,
+          new Promise<never>((_, reject) => {
+            queueTimer = window.setTimeout(
+              () => reject(new Error("发送语音数据超时")),
+              STT_SEND_QUEUE_TIMEOUT_MS,
+            );
+          }),
+        ]);
+      } catch (cause) {
+        fail(errorMessageWithFallback(cause, "发送语音数据超时"), active.id);
+        return;
+      } finally {
+        window.clearTimeout(queueTimer);
+      }
       if (activeRef.current !== active) return;
       try {
         await transport.stop(active.id);
@@ -151,7 +168,11 @@ export function useComposerStt(options: {
 
   const stop = useCallback(async () => {
     const active = activeRef.current;
-    if (!active || active.stopping || !transport) return;
+    if (!active || !transport) return;
+    if (active.stopping) {
+      abortActiveSession();
+      return;
+    }
     active.stopping = true;
     setState("stopping");
 
@@ -177,7 +198,7 @@ export function useComposerStt(options: {
     } else if (activeRef.current === active) {
       active.tailQueued = true;
     }
-  }, [fail, finishProvider, queueChunk, transport]);
+  }, [abortActiveSession, fail, finishProvider, queueChunk, transport]);
 
   const onEvent = useCallback(
     (event: SttRuntimeEvent) => {

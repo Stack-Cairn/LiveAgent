@@ -17,6 +17,11 @@ import (
 
 const connectionTestHTTPTimeout = 22 * time.Second
 
+// sttHelloTimeout is the maximum time a client may wait after the WebSocket
+// upgrade before sending a hello frame. It is a package var so tests can
+// shorten it without exposing an unauthenticated Slowloris window in production.
+var sttHelloTimeout = 10 * time.Second
+
 func (m *Manager) SettingsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -80,6 +85,7 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 		}
 		defer func() { _ = conn.Close() }()
 		conn.SetReadLimit(64 << 10)
+		_ = conn.SetReadDeadline(time.Now().Add(sttHelloTimeout))
 		messageType, data, err := conn.ReadMessage()
 		if err != nil || messageType != websocket.BinaryMessage {
 			return
@@ -94,6 +100,7 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 		if !writeSttFrame(conn, &gatewayv2.SttServerFrame{Payload: &gatewayv2.SttServerFrame_Hello{Hello: &gatewayv2.SttServerHello{Ok: true}}}) {
 			return
 		}
+		_ = conn.SetReadDeadline(time.Time{})
 		events := make(chan Event, 64)
 		writerStop := make(chan struct{})
 		writerDone := make(chan struct{})
@@ -147,7 +154,18 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 			}
 			switch payload := frame.GetPayload().(type) {
 			case *gatewayv2.SttClientFrame_Start:
-				if activeID != "" || payload.Start.GetSessionId() == "" || m.Start(r.Context(), payload.Start.GetSessionId(), payload.Start.GetProvider(), events) != nil {
+				if activeID != "" || payload.Start.GetSessionId() == "" {
+					return
+				}
+				if err := m.Start(r.Context(), payload.Start.GetSessionId(), payload.Start.GetProvider(), events); err != nil {
+					// Writer is idle until the adapter emits; send the error
+					// directly so the client is not left with a silent close.
+					_ = writeSttEvent(conn, Event{
+						Type:      "error",
+						SessionID: payload.Start.GetSessionId(),
+						Code:      resultForError(err),
+						Message:   err.Error(),
+					})
 					return
 				}
 				activeID = payload.Start.GetSessionId()

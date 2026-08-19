@@ -65,7 +65,9 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 				readErr <- stageError("Tencent", "receive", e)
 				return
 			}
-			incoming <- msg
+			if !emitIncoming(ctx, incoming, msg) {
+				return
+			}
 		}
 	}()
 	if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
@@ -95,13 +97,13 @@ func (a *TencentCloudAdapter) Run(ctx context.Context, id string, cfg map[string
 				return nil
 			}
 			if cmd.Audio != nil {
-				if e := conn.WriteMessage(websocket.BinaryMessage, cmd.Audio.PCM); e != nil {
+				if e := writeProviderMessage(conn, websocket.BinaryMessage, cmd.Audio.PCM); e != nil {
 					return stageError("Tencent", "send_audio", e)
 				}
 			}
 			if cmd.Finish {
 				finishSent = true
-				if e := conn.WriteJSON(map[string]any{"type": "end"}); e != nil {
+				if e := writeProviderJSON(conn, map[string]any{"type": "end"}); e != nil {
 					return stageError("Tencent", "finish", e)
 				}
 			}

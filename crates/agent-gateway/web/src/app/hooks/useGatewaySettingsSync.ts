@@ -219,10 +219,12 @@ export function useGatewaySettingsSync(params: {
     // Best-effort: the desktop may be offline; the settings-sync push
     // populates the store once it connects.
     void initAutomation().catch(() => undefined);
+    const liveSyncEpochRef = { current: 0 };
     const applySyncedSettings = (payload: GatewaySettingsSyncUpdatePayload) => {
       if (cancelled) {
         return;
       }
+      liveSyncEpochRef.current += 1;
       applyGatewaySettings(payload);
       setSettingsSyncError(null);
     };
@@ -232,14 +234,21 @@ export function useGatewaySettingsSync(params: {
       .getSettings()
       .then(async (payload) => {
         if (!cancelled) {
-          applySyncedSettings(payload);
+          // A live WS push that arrived while GET was in flight is newer.
+          if (liveSyncEpochRef.current === 0) {
+            applySyncedSettings(payload);
+          }
           // The Gateway STT store is the WebUI runtime authority for whether
           // redacted credentials are configured. A cached desktop snapshot may
           // contain an older configured=false value even though Gateway still
           // has the credentials, so hydrate this once before the app is ready.
+          // Skip the HTTP result if a newer settings push landed during fetch.
           try {
+            const sttEpoch = liveSyncEpochRef.current;
             const stt = await webSttSettingsService.get();
-            if (!cancelled) applyGatewaySettings({ stt });
+            if (!cancelled && liveSyncEpochRef.current === sttEpoch) {
+              applyGatewaySettings({ stt });
+            }
           } catch {
             // General settings sync remains usable when STT is unavailable.
           }

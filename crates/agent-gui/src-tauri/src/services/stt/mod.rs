@@ -2,9 +2,10 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock, Mutex},
+    time::Duration,
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 mod aliyun_dashscope;
@@ -71,6 +72,7 @@ fn ensure_stt_crypto_provider() {
 struct ActiveSttSession {
     sender: mpsc::Sender<SttCommand>,
     next_sequence: u32,
+    cancel: Option<oneshot::Sender<()>>,
 }
 
 #[derive(Default)]
@@ -109,6 +111,7 @@ impl SttManager {
         let config = crate::commands::settings::load_stt_provider_runtime(&provider)?;
         let secrets = config.clone();
         let (tx, rx) = mpsc::channel(64);
+        let (cancel_tx, cancel_rx) = oneshot::channel();
         let mut sessions_guard = self
             .sessions
             .lock()
@@ -121,6 +124,7 @@ impl SttManager {
             ActiveSttSession {
                 sender: tx,
                 next_sequence: 0,
+                cancel: Some(cancel_tx),
             },
         );
         drop(sessions_guard);
@@ -132,23 +136,30 @@ impl SttManager {
         }
         let sessions = self.sessions.clone();
         tokio::spawn(async move {
-            let result = match provider.as_str() {
-                "aliyun_dashscope" => {
-                    aliyun_dashscope::run(app.clone(), session_id.clone(), config, rx).await
+            let run_fut = async {
+                match provider.as_str() {
+                    "aliyun_dashscope" => {
+                        aliyun_dashscope::run(app.clone(), session_id.clone(), config, rx).await
+                    }
+                    "tencent_cloud" => {
+                        tencent_cloud::run(app.clone(), session_id.clone(), config, rx).await
+                    }
+                    "volcengine_v2" => {
+                        volcengine_v2::run(app.clone(), session_id.clone(), config, rx).await
+                    }
+                    "volcengine_seed_v3" => {
+                        volcengine_seed_v3::run(app.clone(), session_id.clone(), config, rx).await
+                    }
+                    "baidu_cloud" => {
+                        baidu_cloud::run(app.clone(), session_id.clone(), config, rx).await
+                    }
+                    _ => Err("未知 STT 供应商".to_string()),
                 }
-                "tencent_cloud" => {
-                    tencent_cloud::run(app.clone(), session_id.clone(), config, rx).await
-                }
-                "volcengine_v2" => {
-                    volcengine_v2::run(app.clone(), session_id.clone(), config, rx).await
-                }
-                "volcengine_seed_v3" => {
-                    volcengine_seed_v3::run(app.clone(), session_id.clone(), config, rx).await
-                }
-                "baidu_cloud" => {
-                    baidu_cloud::run(app.clone(), session_id.clone(), config, rx).await
-                }
-                _ => Err("未知 STT 供应商".to_string()),
+            };
+            let result = tokio::select! {
+                biased;
+                _ = cancel_rx => Ok(()),
+                result = run_fut => result,
             };
             if let Err(message) = result {
                 let safe_message = sanitize_error(&message, &secrets);
@@ -197,7 +208,21 @@ impl SttManager {
             .map_err(|_| "STT session 已关闭".to_string())
     }
     pub async fn cancel(&self, session_id: &str) -> Result<(), String> {
-        self.send(session_id, SttCommand::Cancel).await
+        let (sender, cancel) = {
+            let mut sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| "STT session lock poisoned")?;
+            let active = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| "STT session 不存在".to_string())?;
+            (active.sender.clone(), active.cancel.take())
+        };
+        if let Some(cancel) = cancel {
+            let _ = cancel.send(());
+        }
+        let _ = sender.try_send(SttCommand::Cancel);
+        Ok(())
     }
 }
 
@@ -571,6 +596,33 @@ fn provider_failure(provider: &str, code: &str, message: &str) -> String {
 /// credentials to the manager's existing redaction pass.
 pub(crate) fn stage_failure(provider: &str, stage: &str, message: impl AsRef<str>) -> String {
     format!("[{provider}/{stage}] {}", message.as_ref().trim())
+}
+
+pub(crate) const PROVIDER_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub(crate) async fn send_provider_message<W>(
+    write: &mut W,
+    message: tokio_tungstenite::tungstenite::Message,
+    provider: &str,
+    stage: &str,
+) -> Result<(), String>
+where
+    W: futures_util::Sink<tokio_tungstenite::tungstenite::Message> + Unpin,
+    W::Error: std::fmt::Display,
+{
+    use futures_util::SinkExt;
+    tokio::time::timeout(PROVIDER_WRITE_TIMEOUT, write.send(message))
+        .await
+        .map_err(|_| stage_failure(provider, stage, "写入供应商超时"))?
+        .map_err(|error| stage_failure(provider, stage, error.to_string()))
+}
+
+pub(crate) async fn close_provider_socket<W>(write: &mut W)
+where
+    W: futures_util::Sink<tokio_tungstenite::tungstenite::Message> + Unpin,
+{
+    use futures_util::SinkExt;
+    let _ = tokio::time::timeout(PROVIDER_WRITE_TIMEOUT, write.close()).await;
 }
 
 pub(crate) fn sanitize_error(

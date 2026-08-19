@@ -185,7 +185,7 @@ func (a *VolcengineV2Adapter) Run(ctx context.Context, id string, cfg map[string
 	if err != nil {
 		return stageError("VolcengineV2", "start", err)
 	}
-	if err = conn.WriteMessage(websocket.BinaryMessage, volcV2Frame(1, 0, 1, 1, first)); err != nil {
+	if err = writeProviderMessage(conn, websocket.BinaryMessage, volcV2Frame(1, 0, 1, 1, first)); err != nil {
 		return stageError("VolcengineV2", "start", err)
 	}
 	return runVolcV2Loop(ctx, conn, id, commands, events)
@@ -209,7 +209,9 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 				readErr <- stageError("VolcengineV2", "parse", e)
 				return
 			}
-			incoming <- msg
+			if !emitIncoming(ctx, incoming, msg) {
+				return
+			}
 		}
 	}()
 	finishing := false
@@ -243,7 +245,7 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 					pending = append(pending, append([]byte(nil), cmd.Audio.PCM...))
 				} else if compressed, e := gzipBytes(cmd.Audio.PCM); e != nil {
 					return stageError("VolcengineV2", "send_audio", e)
-				} else if e := conn.WriteMessage(websocket.BinaryMessage, volcV2Frame(2, 0, 0, 1, compressed)); e != nil {
+				} else if e := writeProviderMessage(conn, websocket.BinaryMessage, volcV2Frame(2, 0, 0, 1, compressed)); e != nil {
 					return stageError("VolcengineV2", "send_audio", e)
 				}
 			}
@@ -254,7 +256,7 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 					if compressErr != nil {
 						return stageError("VolcengineV2", "finish", compressErr)
 					}
-					if e := conn.WriteMessage(websocket.BinaryMessage, volcV2Frame(2, 2, 0, 1, compressed)); e != nil {
+					if e := writeProviderMessage(conn, websocket.BinaryMessage, volcV2Frame(2, 2, 0, 1, compressed)); e != nil {
 						return stageError("VolcengineV2", "finish", e)
 					}
 					finishSent = true
@@ -277,7 +279,7 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 					if compressErr != nil {
 						return stageError("VolcengineV2", "send_audio", compressErr)
 					}
-					if e := conn.WriteMessage(websocket.BinaryMessage, volcV2Frame(2, 0, 0, 1, compressed)); e != nil {
+					if e := writeProviderMessage(conn, websocket.BinaryMessage, volcV2Frame(2, 0, 0, 1, compressed)); e != nil {
 						return stageError("VolcengineV2", "send_audio", e)
 					}
 				}
@@ -287,7 +289,7 @@ func runVolcV2Loop(ctx context.Context, conn *websocket.Conn, id string, command
 					if compressErr != nil {
 						return stageError("VolcengineV2", "finish", compressErr)
 					}
-					if e := conn.WriteMessage(websocket.BinaryMessage, volcV2Frame(2, 2, 0, 1, compressed)); e != nil {
+					if e := writeProviderMessage(conn, websocket.BinaryMessage, volcV2Frame(2, 2, 0, 1, compressed)); e != nil {
 						return stageError("VolcengineV2", "finish", e)
 					}
 					finishSent = true

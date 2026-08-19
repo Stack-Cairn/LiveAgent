@@ -213,6 +213,44 @@ func TestEmitEventUnblocksWhenConsumerIsCancelled(t *testing.T) {
 	}
 }
 
+func TestEmitIncomingUnblocksWhenConsumerIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	incoming := make(chan map[string]any)
+	done := make(chan bool, 1)
+	go func() {
+		done <- emitIncoming(ctx, incoming, map[string]any{"type": "partial"})
+	}()
+	cancel()
+	select {
+	case emitted := <-done:
+		if emitted {
+			t.Fatal("emitIncoming reported delivery after context cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("emitIncoming remained blocked after context cancellation")
+	}
+}
+
+func TestSttHelloTimesOutWithoutFirstFrame(t *testing.T) {
+	previous := sttHelloTimeout
+	sttHelloTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { sttHelloTimeout = previous })
+
+	manager := NewManager(fixtureStore(t))
+	server := httptest.NewServer(manager.WebSocketHandler("token"))
+	t.Cleanup(server.Close)
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("hello timeout must close the connection before any server frame")
+	}
+}
+
 func TestManagerCancelsAdapterAndRedactsProviderErrors(t *testing.T) {
 	manager := NewManager(fixtureStore(t))
 	withFixtureAdapter(t, errorAdapter{})

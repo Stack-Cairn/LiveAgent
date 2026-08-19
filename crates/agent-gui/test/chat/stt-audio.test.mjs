@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../../../agent-gateway/test/helpers/load-web-module.mjs";
@@ -136,4 +137,16 @@ test("partial audio fragments do not make FIFO helpers throw", () => {
     fifo.clear();
     appendTailSilence(0.5);
   });
+});
+
+test("microphone capture is wired through a muted gain node instead of speakers", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/lib/stt/audio.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.match(source, /this\.sink = this\.context\.createGain\(\)/);
+  assert.match(source, /this\.sink\.gain\.value = 0/);
+  assert.match(source, /this\.processor\.connect\(this\.sink\)/);
+  assert.match(source, /this\.sink\.connect\(this\.context\.destination\)/);
+  assert.doesNotMatch(source, /this\.processor\.connect\(this\.context\.destination\)/);
 });

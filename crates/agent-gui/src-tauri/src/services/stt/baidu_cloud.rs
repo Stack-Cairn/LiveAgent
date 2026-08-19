@@ -1,7 +1,8 @@
 use super::{
-    emit, provider_failure, stage_failure, text, websocket_endpoint, SttCommand, SttEvent,
+    close_provider_socket, emit, provider_failure, send_provider_message, stage_failure, text,
+    websocket_endpoint, SttCommand, SttEvent,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 use tokio::sync::mpsc::Receiver;
@@ -57,20 +58,7 @@ pub async fn run<R: Runtime>(
         .await
         .map_err(|e| stage_failure("Baidu", "connect", format!("网络错误: {e}")))?;
     let (mut write, mut read) = socket.split();
-    write
-        .send(Message::Text(
-            serde_json::json!({
-                "type":"START",
-                "data": {
-                    "appid":app_id, "appkey":app_key, "dev_pid":dev_pid,
-                    "cuid":format!("LiveAgent-{}", uuid::Uuid::new_v4()), "format":"pcm", "sample":16000
-                }
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .map_err(|e| stage_failure("Baidu", "start", e.to_string()))?;
+    send_provider_message(&mut write, Message::Text( serde_json::json!({ "type":"START", "data": { "appid":app_id, "appkey":app_key, "dev_pid":dev_pid, "cuid":format!("LiveAgent-{}", uuid::Uuid::new_v4()), "format":"pcm", "sample":16000 } }) .to_string() .into(), ), "Baidu", "start").await?;
     // 百度协议没有 READY 消息，START 写入后即可发送已缓存音频。
     emit(
         &app,
@@ -84,9 +72,9 @@ pub async fn run<R: Runtime>(
     loop {
         tokio::select! {
             Some(command) = rx.recv() => match command {
-                SttCommand::Audio { pcm, .. } => { if !finish_sent { write.send(Message::Binary(pcm.into())).await.map_err(|e| stage_failure("Baidu", "send_audio", e.to_string()))?; } }
-                SttCommand::Finish => { if !finish_sent { finish_sent = true; write.send(Message::Text(serde_json::json!({"type":"FINISH"}).to_string().into())).await.map_err(|e| stage_failure("Baidu", "finish", e.to_string()))?; if no_speech_seen { return Ok(()); } } }
-                SttCommand::Cancel => { let _ = write.close().await; return Ok(()); }
+                SttCommand::Audio { pcm, .. } => { if !finish_sent { send_provider_message(&mut write, Message::Binary(pcm.into()), "Baidu", "send_audio").await?; } }
+                SttCommand::Finish => { if !finish_sent { finish_sent = true; send_provider_message(&mut write, Message::Text(serde_json::json!({"type":"FINISH"}).to_string().into()), "Baidu", "finish").await?; if no_speech_seen { return Ok(()); } } }
+                SttCommand::Cancel => { close_provider_socket(&mut write).await; return Ok(()); }
             },
             Some(message) = read.next() => {
                 let message = match message {
@@ -118,11 +106,11 @@ pub async fn run<R: Runtime>(
                                 emit(&app, SttEvent::Partial { session_id: session.clone(), text: final_text.clone() });
                                 if finish_sent {
                                     if !final_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: final_text.clone() }); }
-                                    let _ = write.close().await;
+                                    close_provider_socket(&mut write).await;
                                     return Ok(());
                                 }
                             }
-                            Some("FINISH") if finish_sent => { if !final_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: final_text.clone() }); } let _ = write.close().await; return Ok(()); }
+                            Some("FINISH") if finish_sent => { if !final_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: final_text.clone() }); } close_provider_socket(&mut write).await; return Ok(()); }
                             _ => {}
                         }
                     }

@@ -5,6 +5,7 @@ export const STT_SAMPLES_PER_CHUNK = (STT_SAMPLE_RATE * STT_CHUNK_MS) / 1000;
 export const STT_TAIL_SILENCE_MS = 400;
 export const STT_SILENCE_TIMEOUT_MS = 3_000;
 export const STT_CONNECT_TIMEOUT_MS = 10_000;
+export const STT_SEND_QUEUE_TIMEOUT_MS = 10_000;
 export const STT_MAX_BUFFER_BYTES = STT_SAMPLE_RATE * 2 * 10;
 
 export type PcmChunk = { sequence: number; pcm: Int16Array; durationMs: number };
@@ -189,6 +190,7 @@ export class SttAudioCapture {
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private processor: ScriptProcessorNode | null = null;
+  private sink: GainNode | null = null;
   private resampler: SttStreamingResampler | null = null;
   private pending = new Float32Array(0);
   private sequence = 0;
@@ -232,8 +234,13 @@ export class SttAudioCapture {
       for (const track of this.stream.getAudioTracks()) {
         track.addEventListener("ended", this.handleTrackEnded, { once: true });
       }
+      // ScriptProcessor must stay in the graph to receive callbacks, but
+      // connecting it to destination would play the microphone through speakers.
+      this.sink = this.context.createGain();
+      this.sink.gain.value = 0;
       this.source.connect(this.processor);
-      this.processor.connect(this.context.destination);
+      this.processor.connect(this.sink);
+      this.sink.connect(this.context.destination);
       this.stopped = false;
       this.baselineSamples = [];
       this.resetSilenceClock();
@@ -316,8 +323,10 @@ export class SttAudioCapture {
     if (this.silenceTimer !== null) window.clearInterval(this.silenceTimer);
     this.silenceTimer = null;
     this.processor?.disconnect();
+    this.sink?.disconnect();
     this.source?.disconnect();
     this.processor = null;
+    this.sink = null;
     this.source = null;
     this.stream?.getTracks().forEach((track) => {
       track.removeEventListener("ended", this.handleTrackEnded);

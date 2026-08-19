@@ -90,7 +90,7 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 		return stageError("Baidu", "connect", websocketConnectError(response, err))
 	}
 	defer func() { _ = conn.Close() }()
-	if err = conn.WriteJSON(baiduStartMessage(appid, uint32(pid), value(cfg, "baiduApiKey"), "LiveAgent-"+uuid.NewString())); err != nil {
+	if err = writeProviderJSON(conn, baiduStartMessage(appid, uint32(pid), value(cfg, "baiduApiKey"), "LiveAgent-"+uuid.NewString())); err != nil {
 		return stageError("Baidu", "start", err)
 	}
 	if !emitEvent(ctx, events, Event{Type: "ready", SessionID: id}) {
@@ -105,7 +105,9 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 				readErr <- stageError("Baidu", "receive", e)
 				return
 			}
-			incoming <- msg
+			if !emitIncoming(ctx, incoming, msg) {
+				return
+			}
 		}
 	}()
 	finishSent := false
@@ -133,13 +135,13 @@ func (a *BaiduCloudAdapter) Run(ctx context.Context, id string, cfg map[string]a
 				return nil
 			}
 			if cmd.Audio != nil {
-				if e := conn.WriteMessage(websocket.BinaryMessage, cmd.Audio.PCM); e != nil {
+				if e := writeProviderMessage(conn, websocket.BinaryMessage, cmd.Audio.PCM); e != nil {
 					return stageError("Baidu", "send_audio", e)
 				}
 			}
 			if cmd.Finish {
 				finishSent = true
-				if e := conn.WriteJSON(map[string]any{"type": "FINISH"}); e != nil {
+				if e := writeProviderJSON(conn, map[string]any{"type": "FINISH"}); e != nil {
 					return stageError("Baidu", "finish", e)
 				}
 				if noSpeechSeen {

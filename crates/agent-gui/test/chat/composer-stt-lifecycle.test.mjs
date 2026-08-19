@@ -3,7 +3,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../../../agent-gateway/test/helpers/load-web-module.mjs";
 
-function createHarness() {
+function createHarness(options = {}) {
+  const hangSendAudio = options.hangSendAudio === true;
   let hookCursor = 0;
   const refs = [];
   const state = [];
@@ -114,6 +115,9 @@ function createHarness() {
     },
     async sendAudio(sessionId, sequence, bytes) {
       calls.push(["audio", sessionId, sequence, bytes.byteLength]);
+      if (hangSendAudio) {
+        return new Promise(() => {});
+      }
     },
     async stop(sessionId) {
       calls.push(["stop", sessionId]);
@@ -142,9 +146,17 @@ function createHarness() {
     },
   };
   const composerRef = { current: composer };
+  const timeoutCallbacks = new Map();
+  let timeoutId = 0;
   globalThis.window = {
-    setTimeout: () => 1,
-    clearTimeout: () => {},
+    setTimeout: (fn) => {
+      const id = ++timeoutId;
+      timeoutCallbacks.set(id, fn);
+      return id;
+    },
+    clearTimeout: (id) => {
+      timeoutCallbacks.delete(id);
+    },
   };
   const render = (overrides = {}) => {
     react.render();
@@ -176,6 +188,14 @@ function createHarness() {
     },
     flushLayoutEffects() {
       for (const effect of [...layoutEffects]) effect();
+    },
+    fireTimeout(id) {
+      const fn = timeoutCallbacks.get(id);
+      timeoutCallbacks.delete(id);
+      fn?.();
+    },
+    pendingTimeoutIds() {
+      return [...timeoutCallbacks.keys()];
     },
   };
 }
@@ -311,4 +331,27 @@ test("changing sessionKey or hiding the composer cancels the active session", as
   harness.flushLayoutEffects();
   await settle();
   assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "cancel").length, 2);
+});
+
+test("a second stop while audio send is stuck force-cancels instead of remaining in stopping", async () => {
+  const harness = createHarness({ hangSendAudio: true });
+  let result = harness.render();
+  await result.toggle();
+  await settle();
+  harness.callbacks[0]({ type: "ready", sessionId: harness.sessionIds[0] });
+  await settle();
+  harness.captures[0].chunk(0, [1]);
+  await settle();
+  result = harness.render();
+  result.toggle();
+  await settle();
+  result = harness.render();
+  assert.equal(result.state, "stopping");
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "stop").length, 0);
+
+  result.toggle();
+  await settle();
+  result = harness.render();
+  assert.equal(result.state, "idle");
+  assert.equal(harness.calls.filter((call) => Array.isArray(call) && call[0] === "cancel").length, 1);
 });

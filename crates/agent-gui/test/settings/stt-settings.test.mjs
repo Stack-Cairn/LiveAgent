@@ -149,7 +149,11 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(section, /className="w-full min-w-0 space-y-5"/);
   assert.doesNotMatch(webSettingsSync, /receivedSyncedStt/);
   assert.match(webSettingsSync, /const stt = await webSttSettingsService\.get\(\)/);
-  assert.match(webSettingsSync, /if \(!cancelled\) applyGatewaySettings\(\{ stt \}\)/);
+  assert.match(
+    webSettingsSync,
+    /if \(!cancelled && liveSyncEpochRef\.current === sttEpoch\)/,
+  );
+  assert.match(webSettingsSync, /if \(liveSyncEpochRef\.current === 0\)/);
   assert.match(webSettingsSync, /persistWebSettings\(next\)/);
   assert.doesNotMatch(
     webSettingsSync,
@@ -222,4 +226,10 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(composerStt, /resetSilenceClock/);
   assert.match(composerStt, /abortActiveSession/);
   assert.match(composerStt, /if \(!current\?\.ready \|\| current\.stopping\) return;/);
+  assert.match(composerStt, /if \(active\.stopping\) \{/);
+  assert.match(composerStt, /STT_SEND_QUEUE_TIMEOUT_MS/);
+  assert.doesNotMatch(
+    composerBar,
+    /disabled=\{isInputDisabled \|\| stt\.state === "stopping"\}/,
+  );
 });

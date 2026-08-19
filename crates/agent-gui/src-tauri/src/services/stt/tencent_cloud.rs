@@ -1,5 +1,8 @@
-use super::{emit, provider_failure, stage_failure, text, SttCommand, SttEvent};
-use futures_util::{SinkExt, StreamExt};
+use super::{
+    close_provider_socket, emit, provider_failure, send_provider_message, stage_failure, text,
+    SttCommand, SttEvent,
+};
+use futures_util::StreamExt;
 use hmac::{Hmac, Mac};
 use serde_json::Value;
 use sha1::Sha1;
@@ -86,9 +89,9 @@ pub async fn run<R: Runtime>(
     loop {
         tokio::select! {
             Some(command) = rx.recv() => match command {
-                SttCommand::Audio { pcm, .. } => { if !finish_sent { write.send(Message::Binary(pcm.into())).await.map_err(|e| stage_failure("Tencent", "send_audio", e.to_string()))?; } }
-                SttCommand::Finish => { if !finish_sent { finish_sent = true; write.send(Message::Text(serde_json::json!({"type":"end"}).to_string().into())).await.map_err(|e| stage_failure("Tencent", "finish", e.to_string()))?; } }
-                SttCommand::Cancel => { let _ = write.close().await; return Ok(()); }
+                SttCommand::Audio { pcm, .. } => { if !finish_sent { send_provider_message(&mut write, Message::Binary(pcm.into()), "Tencent", "send_audio").await?; } }
+                SttCommand::Finish => { if !finish_sent { finish_sent = true; send_provider_message(&mut write, Message::Text(serde_json::json!({"type":"end"}).to_string().into()), "Tencent", "finish").await?; } }
+                SttCommand::Cancel => { close_provider_socket(&mut write).await; return Ok(()); }
             },
             Some(message) = read.next() => {
                 let message = message.map_err(|e| stage_failure("Tencent", "receive", e.to_string()))?;
@@ -115,7 +118,7 @@ pub async fn run<R: Runtime>(
                             if !final_text.is_empty() {
                                 emit(&app, SttEvent::Final { session_id: session.clone(), text: final_text });
                             }
-                            let _ = write.close().await;
+                            close_provider_socket(&mut write).await;
                             return Ok(());
                         }
                     }

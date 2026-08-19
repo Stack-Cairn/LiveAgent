@@ -1,7 +1,8 @@
 use super::{
-    emit, provider_failure, stage_failure, text, websocket_endpoint, SttCommand, SttEvent,
+    close_provider_socket, emit, provider_failure, send_provider_message, stage_failure, text,
+    websocket_endpoint, SttCommand, SttEvent,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 use tokio::sync::mpsc::Receiver;
@@ -55,28 +56,7 @@ pub async fn run<R: Runtime>(
         .await
         .map_err(|e| stage_failure("DashScope", "connect", format!("网络错误: {e}")))?;
     let (mut write, mut read) = socket.split();
-    write
-        .send(Message::Text(
-            serde_json::json!({
-                "header":{"action":"run-task","task_id":task_id,"streaming":"duplex"},
-                "payload":{
-                    "task_group":"audio","task":"asr","function":"recognition",
-                    "model":&model,
-                    "parameters":{
-                        "format":"pcm",
-                        "sample_rate":16000,
-                        "language_hints":["zh", "en"],
-                        "max_sentence_silence":2000,
-                        "disfluency_removal_enabled":false
-                    },
-                    "input":{}
-                }
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .map_err(|e| stage_failure("DashScope", "start", e.to_string()))?;
+    send_provider_message(&mut write, Message::Text( serde_json::json!({ "header":{"action":"run-task","task_id":task_id,"streaming":"duplex"}, "payload":{ "task_group":"audio","task":"asr","function":"recognition", "model":&model, "parameters":{ "format":"pcm", "sample_rate":16000, "language_hints":["zh", "en"], "max_sentence_silence":2000, "disfluency_removal_enabled":false }, "input":{} } }) .to_string() .into(), ), "DashScope", "start").await?;
     let mut ready = false;
     let mut finishing = false;
     let mut finish_sent = false;
@@ -85,11 +65,11 @@ pub async fn run<R: Runtime>(
     loop {
         tokio::select! {
             Some(command) = rx.recv() => match command {
-                SttCommand::Audio { pcm, .. } => { if ready { write.send(Message::Binary(pcm.into())).await.map_err(|e| stage_failure("DashScope", "send_audio", e.to_string()))?; } else { pending.push(pcm); } }
+                SttCommand::Audio { pcm, .. } => { if ready { send_provider_message(&mut write, Message::Binary(pcm.into()), "DashScope", "send_audio").await?; } else { pending.push(pcm); } }
                 SttCommand::Finish => {
-                    if !finishing { finishing = true; if ready { write.send(Message::Text(finish_message(&task_id).to_string().into())).await.map_err(|e| stage_failure("DashScope", "finish", e.to_string()))?; finish_sent = true; } }
+                    if !finishing { finishing = true; if ready { send_provider_message(&mut write, Message::Text(finish_message(&task_id).to_string().into()), "DashScope", "finish").await?; finish_sent = true; } }
                 }
-                SttCommand::Cancel => { let _ = write.close().await; return Ok(()); }
+                SttCommand::Cancel => { close_provider_socket(&mut write).await; return Ok(()); }
             },
             Some(message) = read.next() => {
                 let message = message.map_err(|e| stage_failure("DashScope", "receive", e.to_string()))?;
@@ -100,9 +80,9 @@ pub async fn run<R: Runtime>(
                         if !ready {
                             ready = true;
                             emit(&app, SttEvent::Ready { session_id: session.clone() });
-                            for pcm in pending.drain(..) { write.send(Message::Binary(pcm.into())).await.map_err(|e| stage_failure("DashScope", "send_audio", e.to_string()))?; }
+                            for pcm in pending.drain(..) { send_provider_message(&mut write, Message::Binary(pcm.into()), "DashScope", "send_audio").await?; }
                             if finishing && !finish_sent {
-                                write.send(Message::Text(finish_message(&task_id).to_string().into())).await.map_err(|e| stage_failure("DashScope", "finish", e.to_string()))?;
+                                send_provider_message(&mut write, Message::Text(finish_message(&task_id).to_string().into()), "DashScope", "finish").await?;
                                 finish_sent = true;
                             }
                         }
@@ -117,7 +97,7 @@ pub async fn run<R: Runtime>(
                     }
                     "task-finished" if finish_sent => {
                         if !finals.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: finals.clone() }); }
-                        let _ = write.close().await;
+                        close_provider_socket(&mut write).await;
                         return Ok(());
                     }
                     "task-failed" => return Err(stage_failure("DashScope", "provider_response", provider_failure(

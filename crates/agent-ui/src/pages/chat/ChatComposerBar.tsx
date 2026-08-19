@@ -1019,7 +1019,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>
                   <button
                     type="button"
-                    disabled={isInputDisabled || stt.state === "stopping"}
+                    disabled={isInputDisabled}
                     onClick={stt.toggle}
                     aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
                     aria-pressed={stt.active}

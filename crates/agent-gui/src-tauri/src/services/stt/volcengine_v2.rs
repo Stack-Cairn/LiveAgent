@@ -1,8 +1,9 @@
 use super::{
-    emit, provider_failure, stage_failure, text, websocket_endpoint, SttCommand, SttEvent,
+    close_provider_socket, emit, provider_failure, send_provider_message, stage_failure, text,
+    websocket_endpoint, SttCommand, SttEvent,
 };
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json::Value;
 use std::io::{Read, Write};
 use tauri::{AppHandle, Runtime};
@@ -153,10 +154,13 @@ pub async fn run<R: Runtime>(
     let (mut write, mut read) = socket.split();
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = gzip_json(start_request(&config, &session, &request_id))?;
-    write
-        .send(Message::Binary(frame(1, 0, 1, 1, &start).into()))
-        .await
-        .map_err(|e| stage_failure("VolcengineV2", "start", e.to_string()))?;
+    send_provider_message(
+        &mut write,
+        Message::Binary(frame(1, 0, 1, 1, &start).into()),
+        "VolcengineV2",
+        "start",
+    )
+    .await?;
 
     let mut ready = false;
     let mut pending = Vec::<Vec<u8>>::new();
@@ -167,18 +171,18 @@ pub async fn run<R: Runtime>(
         tokio::select! {
             Some(command) = rx.recv() => match command {
                 SttCommand::Audio { pcm, .. } => {
-                    if ready { let compressed = gzip_bytes(&pcm).map_err(|e| stage_failure("VolcengineV2", "send_audio", e))?; write.send(Message::Binary(frame(2, 0, 0, 1, &compressed).into())).await.map_err(|e| stage_failure("VolcengineV2", "send_audio", e.to_string()))?; }
+                    if ready { let compressed = gzip_bytes(&pcm).map_err(|e| stage_failure("VolcengineV2", "send_audio", e))?; send_provider_message(&mut write, Message::Binary(frame(2, 0, 0, 1, &compressed).into()), "VolcengineV2", "send_audio").await?; }
                     else { pending.push(pcm); }
                 }
                 SttCommand::Finish => {
                     finishing = true;
                     if ready && !finish_sent {
                         let compressed = gzip_bytes(&[]).map_err(|e| stage_failure("VolcengineV2", "finish", e))?;
-                        write.send(Message::Binary(frame(2, 2, 0, 1, &compressed).into())).await.map_err(|e| stage_failure("VolcengineV2", "finish", e.to_string()))?;
+                        send_provider_message(&mut write, Message::Binary(frame(2, 2, 0, 1, &compressed).into()), "VolcengineV2", "finish").await?;
                         finish_sent = true;
                     }
                 }
-                SttCommand::Cancel => { let _ = write.close().await; return Ok(()); }
+                SttCommand::Cancel => { close_provider_socket(&mut write).await; return Ok(()); }
             },
             Some(message) = read.next() => {
                 let message = message.map_err(|e| stage_failure("VolcengineV2", "receive", e.to_string()))?;
@@ -195,17 +199,17 @@ pub async fn run<R: Runtime>(
                 let code = value.get("code").and_then(Value::as_i64).unwrap_or(0);
                 let success = code == 0 || code == 1000 || value.get("message").and_then(Value::as_str) == Some("Success");
                 if response_is_no_speech(&value) {
-                    let _ = write.close().await;
+                    close_provider_socket(&mut write).await;
                     return Ok(());
                 }
                 if !success { return Err(stage_failure("VolcengineV2", "provider_response", provider_failure("火山 v2", &code.to_string(), value.get("message").and_then(Value::as_str).unwrap_or_default()))); }
                 if !ready {
                     ready = true;
                     emit(&app, SttEvent::Ready { session_id: session.clone() });
-                    for pcm in pending.drain(..) { let compressed = gzip_bytes(&pcm).map_err(|e| stage_failure("VolcengineV2", "send_audio", e))?; write.send(Message::Binary(frame(2, 0, 0, 1, &compressed).into())).await.map_err(|e| stage_failure("VolcengineV2", "send_audio", e.to_string()))?; }
+                    for pcm in pending.drain(..) { let compressed = gzip_bytes(&pcm).map_err(|e| stage_failure("VolcengineV2", "send_audio", e))?; send_provider_message(&mut write, Message::Binary(frame(2, 0, 0, 1, &compressed).into()), "VolcengineV2", "send_audio").await?; }
                     if finishing && !finish_sent {
                         let compressed = gzip_bytes(&[]).map_err(|e| stage_failure("VolcengineV2", "finish", e))?;
-                        write.send(Message::Binary(frame(2, 2, 0, 1, &compressed).into())).await.map_err(|e| stage_failure("VolcengineV2", "finish", e.to_string()))?;
+                        send_provider_message(&mut write, Message::Binary(frame(2, 2, 0, 1, &compressed).into()), "VolcengineV2", "finish").await?;
                         finish_sent = true;
                     }
                 }
@@ -219,7 +223,7 @@ pub async fn run<R: Runtime>(
                 }
                 let completed = value.get("is_last_package").and_then(Value::as_bool).unwrap_or(false)
                     || value.get("_last").and_then(Value::as_bool).unwrap_or(false);
-                if finishing && completed { if !last_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: last_text.clone() }); } let _ = write.close().await; return Ok(()); }
+                if finishing && completed { if !last_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: last_text.clone() }); } close_provider_socket(&mut write).await; return Ok(()); }
             }
             else => {
                 if finishing && finish_sent {

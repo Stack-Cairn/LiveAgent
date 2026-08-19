@@ -13,6 +13,46 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const providerWriteTimeout = 10 * time.Second
+
+// emitEvent never lets a provider goroutine block forever when its consumer
+// (usually the WebSocket writer) has stopped reading. Cancellation must be
+// able to unwind the provider and close its upstream connection.
+func emitEvent(ctx context.Context, events chan<- Event, event Event) bool {
+	select {
+	case events <- event:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// emitIncoming is the adapter-local counterpart of emitEvent: the provider
+// read goroutine must not stay blocked on a full incoming channel after the
+// session context is cancelled.
+func emitIncoming(ctx context.Context, incoming chan<- map[string]any, msg map[string]any) bool {
+	select {
+	case incoming <- msg:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func writeProviderMessage(conn *websocket.Conn, messageType int, data []byte) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(providerWriteTimeout)); err != nil {
+		return err
+	}
+	return conn.WriteMessage(messageType, data)
+}
+
+func writeProviderJSON(conn *websocket.Conn, value any) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(providerWriteTimeout)); err != nil {
+		return err
+	}
+	return conn.WriteJSON(value)
+}
+
 type ResultError struct {
 	Result string
 	Err    error
@@ -25,18 +65,6 @@ type StageError struct {
 	Provider string
 	Stage    string
 	Err      error
-}
-
-// emitEvent never lets a provider goroutine block forever when its consumer
-// (usually the WebSocket writer) has stopped reading. Cancellation must be
-// able to unwind the provider and close its upstream connection.
-func emitEvent(ctx context.Context, events chan<- Event, event Event) bool {
-	select {
-	case events <- event:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }
 
 func (e *StageError) Error() string {
