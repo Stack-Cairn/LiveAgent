@@ -218,6 +218,7 @@ function prefersReducedMotion() {
 
 export type ChatComposerBarProps = {
   surface: "desktop" | "web";
+  conversationId: string;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   isSending: boolean;
   isUploadingFiles: boolean;
@@ -300,6 +301,7 @@ export type ChatComposerBarProps = {
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
   const {
     surface,
+    conversationId,
     composerRef,
     isSending,
     isUploadingFiles,
@@ -865,6 +867,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         <div
           ref={glassCardRef}
           data-file-upload-drop-zone=""
+          data-file-upload-conversation-id={conversationId}
           onKeyDown={
             isComposerExpanded
               ? (event) => {

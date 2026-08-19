@@ -1,4 +1,5 @@
 import type { ChangedFilesActions } from "@liveagent/ui/components/chat/ChangedFilesCard";
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import type { CheckpointRewoundInfo } from "@liveagent/ui/lib/chat/checkpointRewind";
 import type { ProjectRef } from "@liveagent/ui/lib/workbench/types";
 import type { ChatComposerBarProps } from "@liveagent/ui/pages/chat/ChatComposerBar";
@@ -73,6 +74,12 @@ export type ConversationPaneBinding = {
   fileDrop: ConversationPaneFileDropState;
   /** 轨迹视图（只读分析），按会话实例独立绑定。 */
   trajectory?: ConversationPaneTrajectory;
+  /**
+   * 背景 Pane 的发送通路：按本 Pane 的 conversationId 路由（运行中则入队），
+   * 与 Stop 的按会话路由语义一致。未提供时沿用 composer.onSend（焦点 Pane
+   * 走页面级 handleSend 管线）。
+   */
+  sendDraft?: (draft: MentionComposerDraft) => Promise<boolean>;
 };
 
 export type ConversationPaneHostEnvironment = {

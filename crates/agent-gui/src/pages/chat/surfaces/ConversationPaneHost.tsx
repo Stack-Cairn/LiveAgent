@@ -10,6 +10,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -23,6 +24,7 @@ import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
 import { ChatTranscript } from "../transcript/ChatTranscript";
 import { useConversationPaneBinding } from "./ConversationPaneHostEnvironment";
 import { ConversationSurface } from "./ConversationSurface";
+import { createPaneComposerSendHandler } from "./paneComposerSend";
 
 export type ConversationPaneHostProps = {
   paneId: string;
@@ -112,10 +114,25 @@ export const ConversationPaneHost = forwardRef<
     isConversationRunning,
     fileDrop,
     trajectory,
+    sendDraft,
   } = useConversationPaneBinding({ paneId, conversationId, project });
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
+  // Background panes send through their own conversation-scoped pipeline; the
+  // handler owns clear-on-send/restore-on-failure for this pane's composer.
+  const paneSendHandler = useMemo(
+    () =>
+      sendDraft
+        ? createPaneComposerSendHandler({
+            composerRef,
+            clearConversationDraft: () => controller.clearDraft(),
+            restoreConversationDraft: (draft) => controller.setDraft(draft),
+            sendDraft,
+          })
+        : null,
+    [controller, sendDraft],
+  );
 
   useImperativeHandle(
     forwardedRef,
@@ -192,6 +209,8 @@ export const ConversationPaneHost = forwardRef<
           composer: (
             <ChatComposerBar
               {...composer}
+              {...(paneSendHandler ? { onSend: paneSendHandler } : {})}
+              conversationId={snapshot.conversationId}
               // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
               hidden={trajectoryActive}
               composerRef={composerRef}

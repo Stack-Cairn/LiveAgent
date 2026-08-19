@@ -36,6 +36,11 @@ type UploadTarget = {
   remainingFileSlots: number;
 };
 
+export type ConversationUploadTarget = {
+  conversationId: string;
+  workdir: string;
+};
+
 type UsePendingUploadsParams = {
   isAgentMode: boolean;
   workdir: string;
@@ -145,8 +150,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     setPendingUploadsForConversation(conversationId, []);
   }, [isAgentMode, workdir, conversationId, setPendingUploadsForConversation, uploadStore]);
 
-  const captureUploadTarget = useCallback((): UploadTarget | null => {
-    const targetConversationId = currentConversationIdRef.current.trim();
+  const captureUploadTarget = useCallback((requested?: ConversationUploadTarget): UploadTarget | null => {
+    const targetConversationId = (requested?.conversationId ?? currentConversationIdRef.current).trim();
     if (!targetConversationId) {
       setErrorMessage("请先选择或创建会话后再上传文件。");
       return null;
@@ -161,7 +166,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
     return {
       targetConversationId,
-      targetWorkdir: workdir,
+      targetWorkdir: (requested?.workdir ?? workdir).trim(),
       remainingFileSlots,
     };
   }, [
@@ -233,7 +238,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       emptySelectionMessage: string;
       errorFallback: string;
       importer: (target: UploadTarget) => Promise<SystemPickReadableFilesResponse>;
-    }) => {
+    }, requestedTarget?: ConversationUploadTarget) => {
       if (uploadTaskActiveRef.current) {
         addNotify("warning", "当前正在上传文件，请稍候");
         return;
@@ -242,12 +247,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         setErrorMessage("文件上传仅在 tools 模式可用。");
         return;
       }
-      if (!workdir) {
+      if (!(requestedTarget?.workdir ?? workdir).trim()) {
         setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
         return;
       }
 
-      const uploadTarget = captureUploadTarget();
+      const uploadTarget = captureUploadTarget(requestedTarget);
       if (!uploadTarget) {
         return;
       }
@@ -295,7 +300,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   );
 
   const importReadableFilePaths = useCallback(
-    async (paths: string[]) => {
+    async (paths: string[], target?: ConversationUploadTarget) => {
       if (paths.length === 0) return;
       await runUploadTask({
         emptySelectionMessage: "拖入文件均不受当前 Read 支持",
@@ -306,7 +311,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             paths,
             maxFiles: remainingFileSlots,
           }),
-      });
+      }, target);
     },
     [runUploadTask],
   );

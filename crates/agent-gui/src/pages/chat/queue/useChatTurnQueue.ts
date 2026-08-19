@@ -467,6 +467,52 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     return true;
   }
 
+  /**
+   * Enqueue a composer turn for an explicit conversation (workbench panes
+   * sending into a busy background conversation). Unlike the current-composer
+   * path it never touches the page composer or edit slots; the caller owns
+   * clearing its own composer. The turn's workdir comes from the target
+   * conversation's runtime entry, never from the visible conversation.
+   */
+  function enqueueComposerTurnForConversation(input: {
+    conversationId: string;
+    draft: MentionComposerDraft | null;
+    uploadedFiles: PendingUploadedFile[];
+  }) {
+    const conversationId = input.conversationId.trim();
+    const uploadedFiles = input.uploadedFiles.slice();
+    if (!conversationId || !queuedChatTurnHasContent(input.draft, uploadedFiles)) {
+      return false;
+    }
+    const runtimeEntry =
+      conversationRuntimeCacheRef.current.get(conversationId) ??
+      (conversationId === currentConversationIdRef.current
+        ? buildRuntimeEntryFromVisibleState()
+        : null);
+    const executionMode = settings.system.executionMode;
+    const workdirForTurn = isAgentExecutionMode(executionMode)
+      ? (
+          runtimeEntry?.workdir ??
+          (conversationId === currentConversationIdRef.current
+            ? displayedConversationWorkdir
+            : settings.system.workdir)
+        ).trim()
+      : "";
+    const queuedTurn = createQueuedChatTurn({
+      conversationId,
+      draft: input.draft,
+      uploadedFiles,
+      executionMode,
+      workdir: workdirForTurn,
+      commandSafetyMode: settings.system.commandSafetyMode,
+      runtimeControls: settings.chatRuntimeControls,
+    });
+    setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
+    setPendingUploadsForConversation(conversationId, []);
+    clearCachedComposerDraft(conversationId);
+    return true;
+  }
+
   function isQueuedChatTurnEditBlockingProcessing(conversationId: string) {
     const slot = queuedChatTurnEditSlotRef.current;
     if (!slot || slot.conversationId !== conversationId.trim()) return false;
@@ -1167,6 +1213,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     stopConversation,
     stopSending,
     enqueueCurrentComposerTurn,
+    enqueueComposerTurnForConversation,
     requestQueuedChatTurnProcessing,
     runQueuedTurnNow,
     moveQueuedTurnUp,

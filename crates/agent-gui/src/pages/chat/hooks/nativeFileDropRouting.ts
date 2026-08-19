@@ -1,5 +1,6 @@
 export const WORKSPACE_FOLDER_DROP_ZONE_SELECTOR = "[data-workspace-folder-drop-zone]";
 export const FILE_UPLOAD_DROP_ZONE_SELECTOR = "[data-file-upload-drop-zone]";
+export const FILE_UPLOAD_CONVERSATION_ATTRIBUTE = "data-file-upload-conversation-id";
 
 export type NativeFileDropTarget = "workspace" | "upload" | null;
 
@@ -9,6 +10,7 @@ type DropPosition = {
 };
 
 type DropZoneElement = {
+  getAttribute?: (name: string) => string | null;
   getBoundingClientRect: () => {
     left: number;
     top: number;
@@ -79,6 +81,16 @@ function pointIntersectsSelector(
   return pointIntersectsDropZone(point, combinedZone, tolerancePx);
 }
 
+function intersectingDropZone(
+  point: DropPosition,
+  targetDocument: DropTargetDocument,
+  selector: string,
+) {
+  return Array.from(targetDocument.querySelectorAll(selector)).find((zone) =>
+    pointIntersectsDropZone(point, zone, 0),
+  );
+}
+
 /**
  * Normalize a native drag position before DOM hit testing. The caller supplies
  * the platform-specific position scale returned by
@@ -122,6 +134,20 @@ export function resolveFinalNativeFileDropTarget(
   },
 ) {
   return resolveNativeFileDropTarget(dropPosition, options);
+}
+
+export function resolveNativeUploadConversationId(
+  position: DropPosition,
+  options?: {
+    scaleFactor?: number;
+    document?: DropTargetDocument;
+  },
+) {
+  const targetDocument = options?.document ?? document;
+  const scaleFactor = options?.scaleFactor ?? window.devicePixelRatio;
+  const point = logicalDropPoint(position, scaleFactor);
+  const zone = intersectingDropZone(point, targetDocument, FILE_UPLOAD_DROP_ZONE_SELECTOR);
+  return zone?.getAttribute?.(FILE_UPLOAD_CONVERSATION_ATTRIBUTE)?.trim() || null;
 }
 
 export function isWorkspaceFolderDropTarget(

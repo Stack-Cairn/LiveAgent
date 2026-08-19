@@ -750,6 +750,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                         ) : null}
                         <ChatComposerBar
                           surface="web"
+                          conversationId={displayedConversationId}
                           // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
                           hidden={renderedConversationView === "trajectory"}
                           composerRef={composerRef}

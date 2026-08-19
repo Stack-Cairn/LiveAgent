@@ -6,10 +6,11 @@ import {
   nativeDropPositionScaleFactor,
   resolveFinalNativeFileDropTarget,
   resolveNativeFileDropTarget,
+  resolveNativeUploadConversationId,
 } from "./nativeFileDropRouting";
 
 type UseTauriFileDropParams = {
-  importUploadZonePaths: (paths: string[]) => Promise<void>;
+  importUploadZonePaths: (paths: string[], targetConversationId?: string) => Promise<void>;
   importWorkspaceFolderPaths: (paths: string[]) => Promise<void>;
   /**
    * Logical (CSS pixel) hover position while a native drag is over the
@@ -77,7 +78,11 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             return;
           }
           if (dropTarget !== "upload") return;
-          void importUploadZonePaths(event.payload.paths);
+          const targetConversationId = resolveNativeUploadConversationId(event.payload.position, {
+            scaleFactor,
+          });
+          if (!targetConversationId) return;
+          void importUploadZonePaths(event.payload.paths, targetConversationId);
           return;
         }
 

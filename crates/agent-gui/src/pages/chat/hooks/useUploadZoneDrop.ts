@@ -4,6 +4,7 @@ import { type Dispatch, type SetStateAction, useCallback } from "react";
 import { desktopWorkspaceProjectRootClient } from "../../../agent-ui-adapters/workspaceProjectRoots";
 import type { WorkspaceProject } from "../../../lib/settings";
 import { asErrorMessage } from "../chatPageUtils";
+import type { ConversationUploadTarget } from "./usePendingUploads";
 
 type SystemClassifiedDroppedPaths = {
   files: string[];
@@ -11,10 +12,14 @@ type SystemClassifiedDroppedPaths = {
 };
 
 type UseUploadZoneDropParams = {
+  isAgentMode: boolean;
   canDropUpload: boolean;
   fileDropTitle: string;
   activeWorkspaceProject: WorkspaceProject | undefined;
-  importReadableFilePaths: (paths: string[]) => Promise<void>;
+  importReadableFilePaths: (paths: string[], target?: ConversationUploadTarget) => Promise<void>;
+  resolveConversationTarget: (
+    conversationId: string,
+  ) => (ConversationUploadTarget & { project?: WorkspaceProject }) | null;
   addNotify: (type: "success" | "warning" | "error", message: string) => void;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   t: (key: string) => string;
@@ -27,17 +32,19 @@ type UseUploadZoneDropParams = {
 export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
   const {
     canDropUpload,
+    isAgentMode,
     fileDropTitle,
     activeWorkspaceProject,
     importReadableFilePaths,
+    resolveConversationTarget,
     addNotify,
     setErrorMessage,
     t,
   } = params;
 
   const mountDroppedFolders = useCallback(
-    async (dirs: string[]) => {
-      const project = activeWorkspaceProject;
+    async (dirs: string[], targetProject?: WorkspaceProject) => {
+      const project = targetProject ?? activeWorkspaceProject;
       if (!project?.path.trim()) {
         addNotify("warning", t("chat.workspaceMountDropNoProject"));
         return;
@@ -77,21 +84,28 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
   );
 
   const importUploadZonePaths = useCallback(
-    async (paths: string[]) => {
+    async (paths: string[], targetConversationId?: string) => {
       try {
+        const target = targetConversationId
+          ? resolveConversationTarget(targetConversationId)
+          : null;
+        if (targetConversationId && !target) {
+          addNotify("warning", "文件投放目标会话已失效，请重试");
+          return;
+        }
         const classified = await invoke<SystemClassifiedDroppedPaths>(
           "system_classify_dropped_paths",
           { paths },
         );
         if (classified.dirs.length > 0) {
-          await mountDroppedFolders(classified.dirs);
+          await mountDroppedFolders(classified.dirs, target?.project);
         }
         if (classified.files.length === 0) return;
-        if (!canDropUpload) {
+        if (target ? !isAgentMode || !target.workdir.trim() : !canDropUpload) {
           setErrorMessage(fileDropTitle);
           return;
         }
-        await importReadableFilePaths(classified.files);
+        await importReadableFilePaths(classified.files, target ?? undefined);
       } catch (error) {
         setErrorMessage(asErrorMessage(error, t("chat.workspaceMountDropFailed")));
       }
@@ -100,7 +114,9 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
       canDropUpload,
       fileDropTitle,
       importReadableFilePaths,
+      isAgentMode,
       mountDroppedFolders,
+      resolveConversationTarget,
       setErrorMessage,
       t,
     ],

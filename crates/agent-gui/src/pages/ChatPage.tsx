@@ -3,6 +3,7 @@ import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
@@ -853,6 +854,7 @@ export function ChatPage(props: ChatPageProps) {
     stopSending,
     stopConversation,
     enqueueCurrentComposerTurn,
+    enqueueComposerTurnForConversation,
     requestQueuedChatTurnProcessing,
     runQueuedTurnNow,
     moveQueuedTurnUp,
@@ -1445,10 +1447,18 @@ export function ChatPage(props: ChatPageProps) {
         }
       },
       async send({ conversationId, draft }) {
-        await sendActionRef.current({
+        // Uploads must come from the target conversation's own store — the
+        // page-level pending list belongs to the focused conversation and
+        // would cross-attach on a background send.
+        const uploads = conversationRuntimeRegistry.uploads.getSnapshot(conversationId).slice();
+        const accepted = await sendActionRef.current({
           conversationIdOverride: conversationId,
           composerDraftOverride: draft,
+          uploadedFilesOverride: uploads,
         });
+        if (accepted) {
+          conversationRuntimeRegistry.uploads.set(conversationId, []);
+        }
       },
       stop({ conversationId }) {
         stopConversationActionRef.current(conversationId);
@@ -1819,18 +1829,45 @@ export function ChatPage(props: ChatPageProps) {
     ? t("chat.upload.dropHint")
     : t("chat.upload.dropDisabledHint");
   const fileDropLimitHint = t("chat.upload.dropLimit").replace("{max}", String(MAX_UPLOAD_FILES));
+  const resolveNativeUploadConversationTarget = useCallback(
+    (conversationId: string) => {
+      const key = conversationId.trim();
+      if (!key) return null;
+      const persistedWorkdir = sidebarConversationsById.get(key)?.cwd?.trim() || "";
+      const runtimeWorkdir = conversationRuntimeCacheRef.current.get(key)?.workdir?.trim() || "";
+      const targetWorkdir =
+        persistedWorkdir ||
+        runtimeWorkdir ||
+        (key === currentConversationIdRef.current ? displayedConversationWorkdir.trim() : "");
+      if (!targetWorkdir) return null;
+      const targetProjectPathKey = workspaceProjectPathKey(targetWorkdir);
+      const project = workspaceProjects.find(
+        (entry) => workspaceProjectPathKey(entry.path) === targetProjectPathKey,
+      );
+      return { conversationId: key, workdir: targetWorkdir, project };
+    },
+    [
+      conversationRuntimeCacheRef,
+      currentConversationIdRef,
+      displayedConversationWorkdir,
+      sidebarConversationsById,
+      workspaceProjects,
+    ],
+  );
   const { importUploadZonePaths } = useUploadZoneDrop({
+    isAgentMode,
     canDropUpload,
     fileDropTitle,
     activeWorkspaceProject,
     importReadableFilePaths,
+    resolveConversationTarget: resolveNativeUploadConversationTarget,
     addNotify,
     setErrorMessage,
     t,
   });
-  // Late-bound: the workbench focuses the conversation pane under a native
-  // file drag so the drop lands in the hovered pane's composer. Assigned
-  // after the workbench block below.
+  // Late-bound hover focus keeps visual feedback and keyboard context aligned.
+  // The final upload owner is read directly from the composer under the drop
+  // point, so routing never depends on this asynchronous focus transition.
   const workbenchNativeDropHoverRef = useRef<(point: { x: number; y: number } | null) => void>(
     () => undefined,
   );
@@ -1934,6 +1971,7 @@ export function ChatPage(props: ChatPageProps) {
     },
     composer: {
       surface: "desktop",
+      conversationId: currentConversationId,
       isUploadingFiles,
       isInputDisabled: isComposerInputDisabled,
       // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
@@ -2450,9 +2488,9 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  // Native file drag hover: focus the conversation pane under the cursor so
-  // the drop's attachments land in that pane's composer (the drop pipeline
-  // targets the focused pane's conversation).
+  // Native file drag hover: focus the conversation pane under the cursor for
+  // visual and keyboard continuity. Final attachment ownership is carried by
+  // the composer's data-file-upload-conversation-id marker at drop time.
   const lastNativeDropHoverPaneRef = useRef<string | null>(null);
   workbenchNativeDropHoverRef.current = (point) => {
     if (!sessionWorkbench.enabled || !point) {
@@ -2700,6 +2738,30 @@ export function ChatPage(props: ChatPageProps) {
         fn(...args);
       };
     };
+    // Send routes by this pane's conversationId (mirroring Stop), never by the
+    // page's focused conversation: a busy conversation enqueues the turn, an
+    // idle one sends immediately. Uploads come from the pane conversation's
+    // own store — the focused pane's pending files must never ride along.
+    const paneSendDraft = async (draft: MentionComposerDraft) => {
+      const uploads = conversationRuntimeRegistry.uploads.getSnapshot(conversationId).slice();
+      const runtime = conversationRuntimeRegistry.getSnapshot(conversationId);
+      if (isConversationRunning(conversationId) || runtime?.isSending) {
+        return enqueueComposerTurnForConversation({
+          conversationId,
+          draft,
+          uploadedFiles: uploads,
+        });
+      }
+      const accepted = await sendActionRef.current({
+        conversationIdOverride: conversationId,
+        composerDraftOverride: draft,
+        uploadedFilesOverride: uploads,
+      });
+      if (accepted) {
+        conversationRuntimeRegistry.uploads.set(conversationId, []);
+      }
+      return accepted;
+    };
     return {
       controller,
       changedFilesActions,
@@ -2755,6 +2817,7 @@ export function ChatPage(props: ChatPageProps) {
       },
       composer: {
         surface: "desktop",
+        conversationId,
         isUploadingFiles: false,
         isInputDisabled: false,
         // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
@@ -2791,7 +2854,9 @@ export function ChatPage(props: ChatPageProps) {
         workspaceActivityClient: tauriWorkspaceActivityClient,
         onOpenWorktree: handleOpenWorktree,
         onWorktreeRemoved: handleWorktreeRemoved,
-        onSend: focusGuard(handleSend),
+        // Overridden by ConversationPaneHost with a pane-scoped handler built
+        // from sendDraft (below); only the host holds this pane's composer.
+        onSend: () => undefined,
         onComposerBusyChange: () => undefined,
         onSelectModel: focusGuard(handleSelectModel),
         onSelectExecutionMode: handleSelectExecutionMode,
@@ -2807,6 +2872,7 @@ export function ChatPage(props: ChatPageProps) {
         onEditQueuedTurn: focusGuard(editQueuedTurn),
         onRemoveQueuedTurn: removeQueuedTurn,
       },
+      sendDraft: paneSendDraft,
     };
   };
 
