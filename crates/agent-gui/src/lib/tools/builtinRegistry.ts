@@ -236,8 +236,8 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       getMcpSettings: params.getMcpSettings,
       applyMcpOps: params.applyMcpOps,
       runtimeScope: params.runtimeScope,
-      // 沙箱模式下 McpManager 的 stdio 运行时探测一律拒绝:那是一个与 Bash 同样通用
-      // 却无围栏的进程 spawn 入口(P1#1)。
+      // 沙箱模式下 McpManager 不得成为无围栏的 stdio spawn 入口(P1#1):
+      // 运行时探测与 create/update/enable 写入路径一律拒绝 stdio。
       sandbox: params.sandbox,
       resolveHomeDir,
     }),

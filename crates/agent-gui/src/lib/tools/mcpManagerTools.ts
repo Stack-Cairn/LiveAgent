@@ -698,6 +698,10 @@ export function createMcpManagerTools(params: {
    * 该模式的全部意义就是内核级断网)。MCP 运行时是进程级共享池,且 http/sse 传输根本
    * 不落到 shell funnel 上,无法复用同一套沙箱包装,故在沙箱模式下一律 fail-closed 拒绝。
    *
+   * create / update / enable 同样会把 stdio `command`/`args` 写入设置,下一轮
+   * registry 构建(或同轮 subagent)经 `createMcpTools` → `mcp_list_tools` 自动拉起
+   * 该进程,所以配置写入路径必须走同一守卫,不能只拦运行时探测。
+   *
    * 非 stdio 传输不 spawn 进程,不在本守卫范围内;用户在设置界面里手动测试 MCP 服务器
    * 也不受影响(那是显式用户操作,与 hooks / 用户自建 Cron 脚本同一豁免)。
    */
@@ -827,6 +831,7 @@ export function createMcpManagerTools(params: {
       }
 
       const conflict = args.conflict === "overwrite" ? "overwrite" : "fail";
+      assertRuntimeSpawnAllowed(action, server);
       const { existed } = commitCreate(server, conflict);
       const runtimeWarnings: string[] = [];
       const stopped = existed
@@ -847,6 +852,9 @@ export function createMcpManagerTools(params: {
       const serverId = requireServerId(args.server_id);
       const patch = await resolvePatchCwd(normalizePatch(args.patch), "McpManager.patch.cwd");
       throwIfAborted(signal);
+      const existing = requireExistingServer(currentSettings(), serverId);
+      const updatedPreview = normalizeMcpServerConfig({ ...existing, ...patch, id: existing.id });
+      assertRuntimeSpawnAllowed(action, updatedPreview);
       const { server, validation, changed } = commitUpdate(serverId, patch);
       if (!changed) {
         return {
@@ -881,6 +889,12 @@ export function createMcpManagerTools(params: {
     if (action === "enable" || action === "disable") {
       const ids = targetServerIds(args);
       const enable = action === "enable";
+      if (enable) {
+        const settings = currentSettings();
+        for (const id of ids) {
+          assertRuntimeSpawnAllowed(action, requireExistingServer(settings, id));
+        }
+      }
       commitSetEnabled(ids, enable);
       const runtimeWarnings: string[] = [];
       const stopped = enable ? false : await stopRuntimeAfterCommit(ids, runtimeWarnings, signal);

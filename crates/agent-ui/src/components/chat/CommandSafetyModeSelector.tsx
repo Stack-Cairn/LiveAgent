@@ -62,9 +62,10 @@ export function CommandSafetyModeSelector(props: {
     ? t("chat.safety.sandboxUnavailable")
     : t("chat.safety.sandboxOfflineUnavailable");
   // 联网写围栏后端是否缺失读掩蔽(Windows 受限令牌);缺失时 sandbox 项换用不承诺
-  // “敏感目录不可读”的文案。探测返回前(null)保守按缺失处理,避免先给出过强承诺。
+  // “敏感目录不可读”的文案。探测返回前(null)以及 WebUI(永远拿不到桌面 mechanism)
+  // 保守按缺失处理,避免先给出过强承诺。
   const sandboxLacksReadMasking =
-    capability === null ? false : MECHANISMS_WITHOUT_READ_MASKING.has(capability.mechanism);
+    capability === null ? true : MECHANISMS_WITHOUT_READ_MASKING.has(capability.mechanism);
   const modeDescKey = (mode: CommandSafetyMode) =>
     mode === "sandbox" && sandboxLacksReadMasking
       ? "chat.safety.sandboxDescNoReadMask"

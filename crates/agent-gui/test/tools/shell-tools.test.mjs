@@ -170,6 +170,50 @@ test("sandboxed one-shot Bash forwards the offline sandbox contract", async () =
   assert.match(result.content[0].text, /sandbox: seatbelt/);
 });
 
+test("sandboxed Bash describes credential masking only when the backend can mask reads", async () => {
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke() {
+          throw new Error("should not invoke");
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+
+  const windowsOnline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  assert.match(windowsOnline.tools[0].description, /Sandbox mode is ON/);
+  assert.doesNotMatch(windowsOnline.tools[0].description, /credential dirs/);
+
+  const windowsOffline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "windows",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: false },
+  });
+  assert.match(windowsOffline.tools[0].description, /credential dirs \(~\/\.ssh etc\.\) are masked/);
+
+  const macosOnline = createShellTools({
+    workdir: "/repo",
+    providerId: "codex",
+    runtimePlatform: "macos",
+    managedProcessEnabled: false,
+    resumableShellEnabled: false,
+    sandbox: { enabled: true, allowNetwork: true },
+  });
+  assert.match(macosOnline.tools[0].description, /credential dirs \(~\/\.ssh etc\.\) are masked/);
+});
+
 test("Bash tool schema allows larger timeout values but clamps for Codex", async () => {
   const calls = [];
   const loader = createTsModuleLoader({

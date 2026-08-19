@@ -18,7 +18,7 @@
 //!   默认不可读 ⇒ 断网变体顺带获得敏感目录读掩蔽;读收紧对 offline 场景可接受。
 
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// 自我再执行启动器子命令标记:Windows `wrap_command` 把 (program, args) 包成
 /// `current_exe __sandbox_exec --write-root <root> --net on|off [--isolated] -- <program> <args...>`;
@@ -88,7 +88,9 @@ pub(crate) fn parse_launcher_args(payload: &[String]) -> Result<LauncherInvocati
                 write_root = Some(PathBuf::from(value));
             }
             "--net" => {
-                let value = it.next().ok_or_else(|| "--net requires a value".to_string())?;
+                let value = it
+                    .next()
+                    .ok_or_else(|| "--net requires a value".to_string())?;
                 allow_network = Some(match value.as_str() {
                     "on" => true,
                     "off" => false,
@@ -438,12 +440,103 @@ Choose a workspace outside credential directories.",
     Ok(())
 }
 
-/// 临时目录允许写入集合:TMPDIR(macOS 上归并到 /var/folders 的用户私有目录,
-/// 取其父级同时覆盖 confstr 缓存目录)、std::env::temp_dir、以及系统级 tmp。
+/// Darwin 用户临时目录形如 `/var/folders/<xx>/<rand>/T`(或 `/private/var/folders/.../T`)。
+/// 只有这种布局才允许把写放行提升到父目录,以同时覆盖 confstr 的 `T` 与 `C`
+/// (clang 模块缓存等)。对 `/tmp`、`/private/tmp`、`$HOME` 做 `parent()` 会得到
+/// `/` 或 `$HOME`,Seatbelt last-match-wins 会把整盘(含 ~/.ssh)重新放行。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn darwin_user_temp_parent(tmpdir: &Path) -> Option<PathBuf> {
+    let mut names: Vec<&str> = Vec::new();
+    for component in tmpdir.components() {
+        match component {
+            Component::RootDir => {}
+            Component::Normal(name) => names.push(name.to_str()?),
+            _ => return None,
+        }
+    }
+    let n = names.len();
+    if n < 4 || names[n - 1] != "T" || names[n - 4] != "folders" {
+        return None;
+    }
+    let prefix = &names[..n - 4];
+    if prefix != ["var"] && prefix != ["private", "var"] {
+        return None;
+    }
+    tmpdir.parent().map(Path::to_path_buf)
+}
+
+/// 临时写根是否安全:不得等于或包住 `/`、`$HOME`、或任一敏感目录,否则后置
+/// write-allow / bwrap `--bind` 会重新暴露凭据(与 `validate_workspace` 同一理由)。
+pub(crate) fn temp_write_root_is_safe(path: &Path) -> bool {
+    let root = canonical_or_self(path);
+    let cmp = normalize_for_compare(&root);
+    if cmp == Path::new("/") || cmp.as_os_str().is_empty() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        if cmp.components().count() <= 1 {
+            return false;
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        if path_encloses(&root, &canonical_or_self(&home)) {
+            return false;
+        }
+    }
+    for dir in sensitive_dirs() {
+        if path_encloses(&root, &canonical_or_self(&dir)) {
+            return false;
+        }
+    }
+    true
+}
+
+/// 把 `bwrap` 解析成绝对路径,绝不搜索 cwd / 相对 PATH。
+///
+/// 优先 `/usr/bin/bwrap` 与 `/usr/local/bin/bwrap`,避免项目 PATH 前缀
+/// (`node_modules/.bin`、`.venv/bin`)里的同名投毒二进制胜出。随后只走绝对 PATH
+/// 目录;`skip_under` 用于 wrap 时跳过工作区(模型可写)内的命中。
+#[cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
+pub(crate) fn resolve_bwrap_executable(
+    path_env: &str,
+    is_file: &dyn Fn(&Path) -> bool,
+    skip_under: Option<&Path>,
+) -> Option<PathBuf> {
+    const PINNED: &[&str] = &["/usr/bin/bwrap", "/usr/local/bin/bwrap"];
+    let skipped = |candidate: &Path| skip_under.is_some_and(|root| path_encloses(root, candidate));
+    for candidate in PINNED {
+        let path = Path::new(candidate);
+        if is_file(path) && !skipped(path) {
+            return Some(path.to_path_buf());
+        }
+    }
+    for dir in path_env.split(':').map(str::trim) {
+        let dir_path = Path::new(dir);
+        if !dir_path.is_absolute() || skipped(dir_path) {
+            continue;
+        }
+        let candidate = dir_path.join("bwrap");
+        if is_file(&candidate) && !skipped(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// 临时目录允许写入集合:TMPDIR(仅 Darwin 用户私有 `/var/folders/.../T` 才提升
+/// 到父级以覆盖 confstr 缓存目录)、std::env::temp_dir、以及系统级 tmp。
+/// 会包住 `/` 或 `$HOME` 的根一律丢弃,绝不写进 Seatbelt allow / bwrap `--bind`。
 fn writable_temp_dirs() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     let mut push_canonical = |path: PathBuf| {
+        if !temp_write_root_is_safe(&path) {
+            return;
+        }
         let canonical = std::fs::canonicalize(&path).unwrap_or(path);
+        if !temp_write_root_is_safe(&canonical) {
+            return;
+        }
         if !out.iter().any(|existing| *existing == canonical) {
             out.push(canonical);
         }
@@ -453,10 +546,10 @@ fn writable_temp_dirs() -> Vec<PathBuf> {
         let tmpdir = PathBuf::from(tmpdir.trim_end_matches('/'));
         if tmpdir.is_absolute() && tmpdir.is_dir() {
             // /var/folders/xx/yyy/T → 放行父级 /var/folders/xx/yyy,同时覆盖
-            // DARWIN_USER_CACHE_DIR(…/C,clang 模块缓存等会写它)。
+            // DARWIN_USER_CACHE_DIR(…/C)。其它布局(含 TMPDIR=/tmp)禁止提升。
             #[cfg(target_os = "macos")]
-            if let Some(parent) = tmpdir.parent() {
-                push_canonical(parent.to_path_buf());
+            if let Some(parent) = darwin_user_temp_parent(&tmpdir) {
+                push_canonical(parent);
             }
             push_canonical(tmpdir);
         }
@@ -487,7 +580,10 @@ pub(crate) fn wrap_command(
         return Err(format!(
             "Sandbox mode is enabled but unavailable on this platform: {}. \
 Disable sandbox mode in Settings → System, or resolve the issue and retry.",
-            capability.reason.as_deref().unwrap_or("unsupported platform")
+            capability
+                .reason
+                .as_deref()
+                .unwrap_or("unsupported platform")
         ));
     }
     validate_workspace(&spec.write_root)?;
@@ -522,7 +618,9 @@ mod platform {
 
     /// Seatbelt 字符串字面量转义:反斜杠与双引号。
     fn escape(path: &Path) -> String {
-        path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"")
+        path.to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
     }
 
     fn subpath_filters(paths: &[PathBuf]) -> String {
@@ -542,7 +640,10 @@ mod platform {
         writable.extend(writable_temp_dirs());
 
         let mut profile = String::from("(version 1)\n(allow default)\n(deny file-write*)\n");
-        profile.push_str(&format!("(allow file-write* {})\n", subpath_filters(&writable)));
+        profile.push_str(&format!(
+            "(allow file-write* {})\n",
+            subpath_filters(&writable)
+        ));
         profile.push_str(
             "(allow file-write-data file-ioctl (literal \"/dev/null\") (literal \"/dev/zero\") \
 (literal \"/dev/tty\") (literal \"/dev/stdout\") (literal \"/dev/stderr\") \
@@ -550,7 +651,10 @@ mod platform {
         );
         let sensitive = sensitive_dirs();
         if !sensitive.is_empty() {
-            profile.push_str(&format!("(deny file-read* {})\n", subpath_filters(&sensitive)));
+            profile.push_str(&format!(
+                "(deny file-read* {})\n",
+                subpath_filters(&sensitive)
+            ));
         }
         profile.push_str(&format!(
             "(allow file-read* file-write* (subpath \"{}\"))\n",
@@ -582,6 +686,14 @@ mod platform {
 
     static CAPABILITY: OnceLock<SandboxCapability> = OnceLock::new();
 
+    fn resolve_installed_bwrap() -> Option<PathBuf> {
+        resolve_bwrap_executable(
+            &std::env::var("PATH").unwrap_or_default(),
+            &|path| path.is_file(),
+            None,
+        )
+    }
+
     fn probe() -> SandboxCapability {
         let unsupported = |reason: String| SandboxCapability {
             supported: false,
@@ -590,8 +702,15 @@ mod platform {
             network_control: false,
             reason: Some(reason),
         };
+        let Some(bwrap) = resolve_installed_bwrap() else {
+            return unsupported(
+                "bubblewrap (bwrap) is not available. Install it, e.g. `apt install bubblewrap`."
+                    .to_string(),
+            );
+        };
         // 探测真实可用性(容器/受限内核里 bwrap 可能存在但无法建 namespace)。
-        match Command::new("bwrap")
+        // 必须用解析出的绝对路径,绝不用 PATH 上的相对名(工作区可写目录可能抢先)。
+        match Command::new(&bwrap)
             .args([
                 "--die-with-parent",
                 "--unshare-pid",
@@ -618,9 +737,7 @@ mod platform {
                 "bubblewrap probe failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             )),
-            Err(err) => unsupported(format!(
-                "bubblewrap (bwrap) is not available: {err}. Install it, e.g. `apt install bubblewrap`."
-            )),
+            Err(err) => unsupported(format!("bubblewrap (bwrap) is not available: {err}.")),
         }
     }
 
@@ -675,10 +792,21 @@ mod platform {
         program: &Path,
         args: &[String],
     ) -> Result<(PathBuf, Vec<String>, &'static str), String> {
+        let bwrap = resolve_bwrap_executable(
+            &std::env::var("PATH").unwrap_or_default(),
+            &|path| path.is_file(),
+            Some(&spec.write_root),
+        )
+        .ok_or_else(|| {
+            "Sandbox mode is enabled but bwrap was not found outside the workspace. \
+Install bubblewrap to a system path such as /usr/bin/bwrap (a binary inside the \
+project folder is never used)."
+                .to_string()
+        })?;
         let mut out = bwrap_args(spec);
         out.push(program.to_string_lossy().into_owned());
         out.extend(args.iter().cloned());
-        Ok((PathBuf::from("bwrap"), out, "bubblewrap"))
+        Ok((bwrap, out, "bubblewrap"))
     }
 }
 
@@ -780,7 +908,9 @@ mod tests {
         assert!(profile.contains("liveagent \\\"quoted\\\" ws"));
         assert!(profile.ends_with("(deny network*)\n"));
         // 工作区 re-allow 必须位于敏感目录 deny 之后(最后命中者优先)。
-        let deny_read = profile.find("(deny file-read*").expect("deny file-read rule");
+        let deny_read = profile
+            .find("(deny file-read*")
+            .expect("deny file-read rule");
         let reallow = profile
             .find("(allow file-read* file-write*")
             .expect("workspace re-allow rule");
@@ -904,7 +1034,10 @@ mod tests {
             Path::new("/home/user"),
             Path::new("/home/user/.ssh")
         ));
-        assert!(path_encloses(Path::new("/home/user"), Path::new("/home/user")));
+        assert!(path_encloses(
+            Path::new("/home/user"),
+            Path::new("/home/user")
+        ));
         assert!(!path_encloses(
             Path::new("/home/user/.ssh"),
             Path::new("/home/user")
@@ -968,8 +1101,13 @@ mod tests {
         for (allow_network, isolated) in
             [(true, false), (false, false), (true, true), (false, true)]
         {
-            let built =
-                build_launcher_args(Path::new(r"C:\ws\proj"), allow_network, isolated, &program, &args);
+            let built = build_launcher_args(
+                Path::new(r"C:\ws\proj"),
+                allow_network,
+                isolated,
+                &program,
+                &args,
+            );
             assert_eq!(built[0], SANDBOX_EXEC_SUBCOMMAND);
             // payload = built[1..](去掉 argv[1] 子命令标记),即启动器实际解析的部分。
             let parsed = parse_launcher_args(&built[1..]).expect("parse");
@@ -1047,7 +1185,11 @@ mod tests {
     fn command_line_quotes_spaces_and_escapes_quotes() {
         let line = build_command_line(
             r"C:\Program Files\App\app.exe",
-            &["--flag".to_string(), "a b".to_string(), r#"say "hi""#.to_string()],
+            &[
+                "--flag".to_string(),
+                "a b".to_string(),
+                r#"say "hi""#.to_string(),
+            ],
         );
         assert_eq!(line.last(), Some(&0u16), "须以 NUL 结尾");
         let decoded = String::from_utf16(&line[..line.len() - 1]).unwrap();
@@ -1077,12 +1219,8 @@ mod tests {
         let present: std::collections::HashSet<PathBuf> =
             [PathBuf::from("/usr/bin/sh")].into_iter().collect();
         let is_file = |p: &Path| present.contains(p);
-        let got = resolve_program_in_path(
-            Path::new("sh"),
-            "/nonexist;/usr/bin;/bin",
-            ".EXE",
-            &is_file,
-        );
+        let got =
+            resolve_program_in_path(Path::new("sh"), "/nonexist;/usr/bin;/bin", ".EXE", &is_file);
         assert_eq!(got, Some(PathBuf::from("/usr/bin/sh")));
     }
 
@@ -1099,7 +1237,10 @@ mod tests {
     fn resolve_program_never_probes_relative_or_dot_dirs() {
         // PATH 里的 "." 与相对项绝不被探测:谓词只应收到绝对候选。
         let is_file = |p: &Path| {
-            assert!(p.is_absolute(), "resolver probed a non-absolute path: {p:?}");
+            assert!(
+                p.is_absolute(),
+                "resolver probed a non-absolute path: {p:?}"
+            );
             false
         };
         let got = resolve_program_in_path(Path::new("cmd.exe"), ".;rel/dir;/abs", ".EXE", &is_file);
@@ -1111,5 +1252,77 @@ mod tests {
         let is_file = |_: &Path| panic!("absolute input must not be probed");
         let got = resolve_program_in_path(Path::new("/bin/sh"), "/other", ".EXE", &is_file);
         assert_eq!(got, Some(PathBuf::from("/bin/sh")));
+    }
+
+    #[test]
+    fn darwin_user_temp_parent_only_matches_var_folders_layout() {
+        assert_eq!(
+            darwin_user_temp_parent(Path::new("/var/folders/zz/abc123/T")),
+            Some(PathBuf::from("/var/folders/zz/abc123"))
+        );
+        assert_eq!(
+            darwin_user_temp_parent(Path::new("/private/var/folders/zz/abc123/T")),
+            Some(PathBuf::from("/private/var/folders/zz/abc123"))
+        );
+        // /tmp 的父级是 `/`,绝不能提升。
+        assert_eq!(darwin_user_temp_parent(Path::new("/tmp")), None);
+        assert_eq!(darwin_user_temp_parent(Path::new("/private/tmp")), None);
+        assert_eq!(darwin_user_temp_parent(Path::new("/var/tmp")), None);
+        assert_eq!(darwin_user_temp_parent(Path::new("/tmp/T")), None);
+        assert_eq!(
+            darwin_user_temp_parent(Path::new("/var/folders/zz/abc123")),
+            None
+        );
+    }
+
+    #[test]
+    fn temp_write_root_rejects_filesystem_root_and_home() {
+        assert!(!temp_write_root_is_safe(Path::new("/")));
+        if let Some(home) = dirs::home_dir() {
+            assert!(!temp_write_root_is_safe(&home));
+        }
+        assert!(temp_write_root_is_safe(Path::new("/tmp")));
+        assert!(temp_write_root_is_safe(Path::new("/var/folders/zz/abc123")));
+    }
+
+    #[test]
+    fn resolve_bwrap_prefers_system_path_over_workspace_path_prefix() {
+        let present: std::collections::HashSet<PathBuf> = [
+            PathBuf::from("/workspace/node_modules/.bin/bwrap"),
+            PathBuf::from("/usr/bin/bwrap"),
+        ]
+        .into_iter()
+        .collect();
+        let is_file = |p: &Path| present.contains(p);
+        let got = resolve_bwrap_executable("/workspace/node_modules/.bin:/usr/bin", &is_file, None);
+        assert_eq!(got, Some(PathBuf::from("/usr/bin/bwrap")));
+    }
+
+    #[test]
+    fn resolve_bwrap_skips_workspace_and_relative_path_entries() {
+        let present: std::collections::HashSet<PathBuf> = [
+            PathBuf::from("/workspace/node_modules/.bin/bwrap"),
+            PathBuf::from("/opt/nix/bin/bwrap"),
+        ]
+        .into_iter()
+        .collect();
+        let is_file = |p: &Path| present.contains(p);
+        let got = resolve_bwrap_executable(
+            ".:/workspace/node_modules/.bin:/opt/nix/bin",
+            &is_file,
+            Some(Path::new("/workspace")),
+        );
+        assert_eq!(got, Some(PathBuf::from("/opt/nix/bin/bwrap")));
+    }
+
+    #[test]
+    fn resolve_bwrap_refuses_when_only_workspace_copy_exists() {
+        let is_file = |p: &Path| p == Path::new("/workspace/.venv/bin/bwrap");
+        let got = resolve_bwrap_executable(
+            "/workspace/.venv/bin",
+            &is_file,
+            Some(Path::new("/workspace")),
+        );
+        assert_eq!(got, None);
     }
 }
