@@ -2866,7 +2866,7 @@ export function ChatPage(props: ChatPageProps) {
         onPasteFiles: importReadableFiles,
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
-        onRemovePendingUpload: removePendingUpload,
+        onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,
         onEditQueuedTurn: focusGuard(editQueuedTurn),

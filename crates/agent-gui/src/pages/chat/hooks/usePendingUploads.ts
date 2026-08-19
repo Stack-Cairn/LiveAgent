@@ -355,8 +355,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   );
 
   const removePendingUpload = useCallback(
-    (relativePath: string) => {
-      const targetConversationId = currentConversationIdRef.current.trim();
+    (relativePath: string, conversationId?: string) => {
+      const targetConversationId = (conversationId ?? currentConversationIdRef.current).trim();
+      if (!targetConversationId) return;
       const next = getPendingUploadsForConversation(targetConversationId).filter(
         (file) => file.relativePath !== relativePath,
       );

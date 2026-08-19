@@ -128,6 +128,7 @@ export const ConversationPaneHost = forwardRef<
             composerRef,
             clearConversationDraft: () => controller.clearDraft(),
             restoreConversationDraft: (draft) => controller.setDraft(draft),
+            hasPendingUploads: () => controller.getSnapshot().uploads.length > 0,
             sendDraft,
           })
         : null,

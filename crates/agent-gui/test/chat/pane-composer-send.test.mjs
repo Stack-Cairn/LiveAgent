@@ -32,7 +32,11 @@ function fakeComposer(initialDraft) {
   };
 }
 
-function mountHandler({ sendDraft, draft = textDraft("hello from pane B") }) {
+function mountHandler({
+  sendDraft,
+  draft = textDraft("hello from pane B"),
+  hasPendingUploads = false,
+}) {
   const composer = fakeComposer(draft);
   const clearedDrafts = [];
   const restoredDrafts = [];
@@ -40,6 +44,7 @@ function mountHandler({ sendDraft, draft = textDraft("hello from pane B") }) {
     composerRef: { current: composer },
     clearConversationDraft: () => clearedDrafts.push(true),
     restoreConversationDraft: (value) => restoredDrafts.push(value),
+    hasPendingUploads: () => hasPendingUploads,
     sendDraft,
   });
   return { handler, composer, clearedDrafts, restoredDrafts };
@@ -109,6 +114,26 @@ test("an empty composer sends nothing", async () => {
   assert.equal(sent.length, 0);
 });
 
+test("an empty composer still sends when the pane has staged uploads", async () => {
+  const sent = [];
+  const { handler, composer, clearedDrafts } = mountHandler({
+    draft: textDraft(""),
+    hasPendingUploads: true,
+    sendDraft: async (draft) => {
+      sent.push(draft);
+      return true;
+    },
+  });
+
+  handler();
+  await tick();
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].isEmpty, true);
+  assert.equal(composer.hasContent(), false);
+  assert.equal(clearedDrafts.length, 1);
+});
+
 test("a second click while the first send is in flight is ignored", async () => {
   let resolveSend;
   const sent = [];
@@ -173,4 +198,7 @@ test("background pane bindings route Send by conversationId, not through focusGu
 
   const paneHost = readSource("../../src/pages/chat/surfaces/ConversationPaneHost.tsx");
   assert.match(paneHost, /createPaneComposerSendHandler/);
+  assert.match(paneHost, /hasPendingUploads:\s*\(\)\s*=>\s*controller\.getSnapshot\(\)\.uploads\.length\s*>\s*0/);
+  // Chip removal must name this pane's conversation, not the focused one.
+  assert.match(builder, /removePendingUpload\(relativePath,\s*conversationId\)/);
 });

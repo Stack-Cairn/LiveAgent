@@ -205,6 +205,29 @@ test("without an explicit target the import still lands in the focused conversat
   );
 });
 
+test("removing a chip targets the owning conversation, not the focused pane", async () => {
+  const { hook, uploadStore, currentConversationIdRef } = mountPendingUploads({
+    invokeImpl: () => ({ files: [], skipped: [] }),
+  });
+  uploadStore.set("conv-a", [uploadedFile("a.txt")]);
+  uploadStore.set("conv-b", [uploadedFile("b.txt"), uploadedFile("shared.txt")]);
+  currentConversationIdRef.current = "conv-a";
+
+  hook.removePendingUpload("shared.txt", "conv-b");
+
+  assert.deepEqual(
+    uploadStore.getSnapshot("conv-b").map((file) => file.relativePath),
+    ["b.txt"],
+  );
+  assert.deepEqual(
+    uploadStore.getSnapshot("conv-a").map((file) => file.relativePath),
+    ["a.txt"],
+  );
+
+  hook.removePendingUpload("a.txt");
+  assert.deepEqual(uploadStore.getSnapshot("conv-a"), []);
+});
+
 test("the per-conversation upload cap is measured on the drop target, not the focused pane", async () => {
   const { hook, uploadStore, notifications, invokeCalls } = mountPendingUploads({
     invokeImpl: () => ({ files: [], skipped: [] }),
