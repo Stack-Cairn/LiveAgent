@@ -14,6 +14,13 @@
 | `make desktop-build-linux` | Linux 桌面目标构建。 |
 | `make dev-gateway` | 本地启动 Go Gateway 开发服务。 |
 | `make dev-webui` | 本地启动 Gateway WebUI Vite 开发服务。 |
+| `make dev-stack` | 后台一键启动 Gateway、WebUI、桌面 LiveAgent 三端。 |
+| `make dev-stack-status` | 检查三端和 MCP Bridge 状态。 |
+| `make dev-stack-logs` | 查看三端最近日志。 |
+| `make dev-stack-stop` | 停止由三端脚本管理的进程。 |
+| `make check-fast` | 编译、lint、基础测试与错误检查。 |
+| `make check-all` | 执行 fast、完整测试与 Proto 契约检查。 |
+| `make check-strict` | 执行 all，并将 Biome/Rust warning 视为错误。 |
 | `make proto` | 生成 Gateway proto。 |
 | `make webui` | 构建 Gateway WebUI 静态资源。 |
 | `make gateway-build` | proto + webui + Gateway 构建。 |
@@ -45,6 +52,54 @@
 工具链版本由根 `mise.toml` 固定（git 跟踪），`mise install` 一键对齐，CI 使用相同版本。
 
 实际脚本名称可能随 package.json 调整，运行前以当前 manifest 为准。
+
+## 一键启动三端
+
+跨平台脚本 `scripts/dev-stack.mjs` 统一管理 Gateway、Gateway WebUI 和桌面 LiveAgent：
+
+```bash
+make dev-stack
+make dev-stack-status
+make dev-stack-logs
+make dev-stack-stop
+```
+
+也可以在 macOS、Linux 和 Windows 直接通过 pnpm 调用：
+
+```bash
+pnpm dev:stack
+pnpm dev:stack:status
+pnpm dev:stack:logs
+pnpm dev:stack:stop
+```
+
+默认端口为 Gateway `50052`、WebUI `5173`、桌面前端 `1420`、MCP Bridge `9223`，默认本地
+Gateway token 为 `dev-token`。脚本遇到已由外部进程占用且健康的端口时只复用，不会在 stop 时
+终止该外部进程。进程检测、HTTP 健康检查、日志和状态文件均由 Node 实现；Windows 停止托管进程
+时调用系统自带的 `taskkill`，macOS/Linux 使用进程组信号。
+
+## 统一编译与检查
+
+跨平台主入口为 `scripts/check.mjs`，macOS、Linux 和 Windows 推荐通过 pnpm 调用：
+
+```bash
+pnpm check:fast
+pnpm check:all
+pnpm check:strict
+```
+
+也可以在提供 Make 的环境中运行 `make check-fast`、`make check-all`、`make check-strict`。
+
+| 级别 | 检查范围 |
+|---|---|
+| `fast` | diff、UI 边界、GUI/WebUI build+lint、Rust check、golangci-lint、Go tests。 |
+| `all` | `fast` + GUI/WebUI/release 测试、Rust library tests、Proto lint/breaking。 |
+| `strict` | `all` + Shared UI lint、rustfmt、Clippy，并将 Biome/Rust warning 视为错误。 |
+
+完整日志写入操作系统临时目录下的
+`liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log`。需要失败后继续执行其他检查时设置
+`LIVEAGENT_CHECK_KEEP_GOING=1`。当前已在 macOS ARM64 实跑验证；Windows/Linux 仍应在对应机器
+或 CI 上完成平台验证。
 
 ## 运行时路径
 

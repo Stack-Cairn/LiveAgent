@@ -32,9 +32,10 @@ GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 RELEASE_TAG ?=
 
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
-.PHONY: dev-gateway dev-webui ensure-webui-embed-stub
+.PHONY: dev-gateway dev-webui ensure-webui-embed-stub dev-stack dev-stack-stop dev-stack-restart dev-stack-status dev-stack-logs
 .PHONY: proto proto-check webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
 .PHONY: clean check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
+.PHONY: check-fast check-all check-strict
 
 all: build gateway-build
 
@@ -115,6 +116,30 @@ dev-gateway: ensure-webui-embed-stub
 
 dev-webui:
 	npm_config_proxy_api=$(DEV_WEBUI_PROXY_API) pnpm --dir $(AGENT_GATEWAY_WEB_DIR) dev
+
+dev-stack:
+	node scripts/dev-stack.mjs start
+
+dev-stack-stop:
+	node scripts/dev-stack.mjs stop
+
+dev-stack-restart:
+	node scripts/dev-stack.mjs restart
+
+dev-stack-status:
+	node scripts/dev-stack.mjs status
+
+dev-stack-logs:
+	node scripts/dev-stack.mjs logs
+
+check-fast:
+	node scripts/check.mjs fast
+
+check-all:
+	node scripts/check.mjs all
+
+check-strict:
+	node scripts/check.mjs strict
 
 ensure-webui-embed-stub:
 	@if [ ! -f "$(AGENT_GATEWAY_WEB_DIR)/dist/index.html" ]; then \
@@ -232,6 +257,13 @@ help:
 	@printf "\n%s\n" "Desktop"
 	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（Session Workbench 已默认启用）"
 	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "回退旧单会话布局启动 Tauri（逃生开关）"
+	@printf "  %-34s %s\n" "make dev-stack" "后台启动 Gateway、WebUI、桌面 LiveAgent 三端"
+	@printf "  %-34s %s\n" "make dev-stack-status" "检查三端与 MCP Bridge 状态"
+	@printf "  %-34s %s\n" "make dev-stack-logs" "查看三端最近日志"
+	@printf "  %-34s %s\n" "make dev-stack-stop" "停止脚本管理的三端进程"
+	@printf "  %-34s %s\n" "make check-fast" "编译、lint、基础测试与错误检查"
+	@printf "  %-34s %s\n" "make check-all" "执行 fast、完整测试与 Proto 检查"
+	@printf "  %-34s %s\n" "make check-strict" "执行 all，并将 Biome/Rust 告警视为错误"
 	@printf "  %-34s %s\n" "make build" "构建当前平台 Tauri 应用"
 	@printf "  %-34s %s\n" "make desktop-build-macos" "构建当前 Mac 芯片架构"
 	@printf "  %-34s %s\n" "make desktop-build-macos-release" "签名、公证并验证 macOS DMG"
