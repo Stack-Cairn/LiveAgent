@@ -12,7 +12,7 @@ import {
   type OpenAIResponsesOptions,
   stream as streamOpenAIResponses,
 } from "@earendil-works/pi-ai/api/openai-responses";
-import { DEEPSEEK_CHAT_COMPLETIONS_API, streamDeepSeekNative } from "../deepSeekNative";
+import { DEEPSEEK_RESPONSES_API, streamDeepSeekResponses } from "../deepSeekNative";
 import { resolveMaxTokens } from "./common";
 import { rejectEmptyOpenAICompletionsResponse } from "./openAICompletionsStream";
 import { withStreamRetry } from "./streamRetry";
@@ -110,8 +110,8 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
         { signal: options.signal, ...options.streamRetry },
       );
     }
-    case DEEPSEEK_CHAT_COMPLETIONS_API:
-      return withStreamRetry(() => streamDeepSeekNative(model, context, options), {
+    case DEEPSEEK_RESPONSES_API:
+      return withStreamRetry(() => streamDeepSeekResponses(model, context, options), {
         signal: options.signal,
         ...options.streamRetry,
       });

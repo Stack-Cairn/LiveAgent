@@ -9,6 +9,10 @@ import {
 import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { CodexRequestFormat, ProviderId, ReasoningLevel } from "../../settings";
+import {
+  normalizeDeepSeekResponsesBaseUrl,
+  normalizeDeepSeekResponsesEndpoint,
+} from "../deepSeekNative";
 import { normalizeSessionId } from "./common";
 import type { ProviderRuntimeConfig } from "./types";
 
@@ -78,9 +82,15 @@ export async function prepareProviderRequest(
   runtime: ProviderRuntimeConfig,
   options?: { sessionId?: string },
 ): Promise<PreparedProxyRequest> {
+  const upstreamBaseUrl =
+    providerId === "deepseek"
+      ? runtime.isFullUrl
+        ? normalizeDeepSeekResponsesEndpoint(runtime.baseUrl)
+        : normalizeDeepSeekResponsesBaseUrl(runtime.baseUrl)
+      : runtime.baseUrl;
   return prepareProxyRequest(
     providerId,
-    runtime.baseUrl.trim(),
+    upstreamBaseUrl.trim(),
     mergeCustomHeaders(
       buildProviderRequestHeaders(
         providerId,

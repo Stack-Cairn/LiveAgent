@@ -170,6 +170,7 @@ pub(crate) fn chat_history_branch_sync(
     }
 
     let (segments, total_message_count) = build_branch_segments(&source_segments, anchor)?;
+    let retained_user_turns = count_user_messages_in_segment_inputs(&segments)?;
     let total_segment_count = segments.len() as i64;
     let active_segment_index = total_segment_count - 1;
     let context_meta_json = patch_history_context_meta(
@@ -202,6 +203,14 @@ pub(crate) fn chat_history_branch_sync(
     for segment in &segments {
         insert_single_segment(&tx, &new_id, segment)?;
     }
+    copy_branch_trajectory_prefix(
+        &tx,
+        source_id,
+        &new_id,
+        total_segment_count,
+        total_message_count,
+        retained_user_turns,
+    )?;
     verify_chat_history_consistency(&tx, &new_id)?;
 
     tx.commit()

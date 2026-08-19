@@ -28,6 +28,74 @@ async function withNavigator(value, task) {
   }
 }
 
+test("gateway settings sync publishes redacted STT state and enables WebUI STT", () => {
+  const desktop = settings.normalizeSettings({
+    stt: {
+      enabled: true,
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          websocketUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/",
+          model: "paraformer-realtime-v2",
+          apiKey: "desktop-secret",
+        },
+      },
+    },
+  });
+
+  const payload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
+  assert.equal(payload.stt.provider, "aliyun_dashscope");
+  assert.equal(payload.stt.enabled, true);
+  assert.equal(payload.stt.providers.aliyun_dashscope.configured, true);
+  assert.equal(payload.stt.providers.aliyun_dashscope.apiKey, "");
+
+  const web = settingsSync.applyGatewaySettingsSyncPayload(settings.normalizeSettings({}), payload);
+  assert.equal(web.stt.provider, "aliyun_dashscope");
+  assert.equal(web.stt.enabled, true);
+  assert.equal(web.stt.providers.aliyun_dashscope.configured, true);
+  assert.equal(web.stt.providers.aliyun_dashscope.apiKey, "");
+});
+
+test("WebUI STT secret sidecar reaches desktop state but never enters public payload", () => {
+  const current = settings.normalizeSettings({
+    stt: {
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          apiKey: "existing-desktop-secret",
+        },
+      },
+    },
+  });
+  const incoming = settings.normalizeSettings({
+    stt: {
+      provider: "aliyun_dashscope",
+      providers: {
+        aliyun_dashscope: {
+          id: "aliyun_dashscope",
+          configured: true,
+          apiKey: "",
+          clearSecrets: true,
+        },
+      },
+    },
+  }).stt;
+
+  const desktop = settingsSync.applyGatewaySettingsSyncPayload(current, {
+    sttSecretUpdate: incoming,
+  });
+  assert.equal(desktop.stt.providers.aliyun_dashscope.clearSecrets, true);
+  assert.equal(desktop.stt.providers.aliyun_dashscope.apiKey, "");
+
+  const publicPayload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
+  assert.equal(publicPayload.stt.providers.aliyun_dashscope.clearSecrets, undefined);
+  assert.equal(publicPayload.stt.providers.aliyun_dashscope.apiKey, "");
+});
+
 test("web settings normalize and preserve workspace project groups", () => {
   const normalized = settings.normalizeSettings({
     system: {
@@ -459,7 +527,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     ["minimal", "low", "medium", "high"],
   );
   // 中转挂载的国产厂商模型走跨供应商回查命中真实形态；DeepSeek 正式供应商
-  // 直接读取自己的目录。
+  // 只暴露 Responses V4 模型，档位为官方 none/low/high/max 映射。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -471,17 +539,17 @@ test("web chat runtime controls default and follow model-aware reasoning support
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
-      modelId: "deepseek-reasoner",
+      modelId: "deepseek-v4-flash",
     }),
-    [],
+    ["low", "high", "max"],
   );
-  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-v4-flash"), false);
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
-      modelId: "deepseek-chat",
+      modelId: "deepseek-v4-pro",
     }),
-    [],
+    ["low", "high", "max"],
   );
 
   assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "claude-fable-5"), true);

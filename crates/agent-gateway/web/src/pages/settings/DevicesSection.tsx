@@ -660,7 +660,7 @@ function DeviceRow(props: {
 
   return (
     <div className="group rounded-xl border border-border/60 bg-card transition-colors hover:border-border hover:bg-accent/20">
-      <div className="settings-card-row flex items-center gap-3 px-4 py-3">
+      <div className="settings-card-row settings-devices-card-row flex items-center gap-3 px-4 py-3">
         <div
           className={
             agent.online
@@ -675,10 +675,13 @@ function DeviceRow(props: {
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="settings-devices-card-main min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={cn("truncate text-sm font-medium", displayName ? "" : "font-mono")}
+              className={cn(
+                "min-w-0 max-w-full truncate text-sm font-medium",
+                displayName ? "" : "font-mono",
+              )}
               title={displayName || agent.agent_id}
             >
               {displayName || agent.agent_id}
@@ -695,8 +698,12 @@ function DeviceRow(props: {
                 : t("settings.devicesOfflineStatus")}
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {displayName ? <span className="font-mono">{agent.agent_id}</span> : null}
+          <div className="settings-devices-card-meta mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {displayName ? (
+              <span className="settings-devices-card-agent-id min-w-0 max-w-full truncate font-mono">
+                {agent.agent_id}
+              </span>
+            ) : null}
             {agent.agent_version ? <span>{agent.agent_version}</span> : null}
             <span>
               {t(
@@ -709,7 +716,7 @@ function DeviceRow(props: {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        <div className="settings-devices-card-actions flex shrink-0 flex-wrap items-center justify-end gap-1">
           {agent.has_token ? (
             <ConfirmActionPopover
               title={t("settings.devicesRotateTitle")}

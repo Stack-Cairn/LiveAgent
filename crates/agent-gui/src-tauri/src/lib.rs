@@ -58,6 +58,14 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_share_get,
             commands::chat_history::chat_history_share_set,
             commands::chat_history::chat_history_delete,
+            // Trajectory (events ride the owning history segment)
+            commands::chat_history::trajectory_append_events,
+            commands::chat_history::trajectory_get_events,
+            commands::chat_history::trajectory_get_window,
+            commands::chat_history::trajectory_resolve_turn_number,
+            commands::chat_history::trajectory_get_subagent_runs,
+            commands::chat_history::trajectory_put_sections,
+            commands::chat_history::trajectory_get_sections,
             // Subagent store
             commands::subagent_store::subagent_identity_upsert,
             commands::subagent_store::subagent_identity_list,
@@ -146,6 +154,24 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
             commands::settings::settings_save_model_failover,
+            commands::settings::settings_save_stt,
+            commands::settings::settings_reveal_stt_secret,
+            services::stt::settings_test_stt,
+            services::stt::stt_request_microphone_permission,
+            services::stt::stt_start,
+            services::stt::stt_send_audio,
+            services::stt::stt_stop,
+            services::stt::stt_cancel,
+            commands::settings::settings_backup_export,
+            commands::settings::settings_backup_peek_import,
+            commands::settings::settings_backup_apply_import,
+            commands::settings::settings_backup_load_sync_config,
+            commands::settings::settings_backup_save_sync_config,
+            commands::settings::settings_backup_test_sync_connection,
+            commands::settings::settings_backup_fetch_remote_info,
+            commands::settings::settings_backup_upload,
+            commands::settings::settings_backup_download,
+            commands::settings::settings_backup_mark_dirty,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,
@@ -699,6 +725,7 @@ pub fn run() {
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
+    let stt_manager = Arc::new(services::stt::SttManager::default());
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -735,6 +762,7 @@ pub fn run() {
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
+        .manage(stt_manager)
         .setup({
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);
@@ -757,6 +785,9 @@ pub fn run() {
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
+                // 配置自动同步的后台任务：只消费脏信号并做防抖上传，
+                // 未开启自动同步时它会在每次唤醒后静默跳过。
+                services::webdav_auto_sync::start(app.handle().clone());
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
                     Arc::clone(&automation_store),

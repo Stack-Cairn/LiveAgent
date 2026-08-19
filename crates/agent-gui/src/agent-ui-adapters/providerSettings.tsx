@@ -153,7 +153,7 @@ export function providerFromCcs(
       item.providerType !== "gemini" &&
       item.providerType !== "xai" &&
       item.providerType !== "deepseek",
-    nativeWebSearchEnabled: item.providerType !== "deepseek",
+    nativeWebSearchEnabled: true,
     useSystemProxy: false,
     usageQuery: getDefaultUsageQueryConfig(),
   };
@@ -213,8 +213,7 @@ export function providerFromCherry(
         ? false
         : (existing?.promptCachingEnabled ??
           (item.providerType !== "gemini" && item.providerType !== "xai")),
-    nativeWebSearchEnabled:
-      item.providerType === "deepseek" ? false : (existing?.nativeWebSearchEnabled ?? true),
+    nativeWebSearchEnabled: existing?.nativeWebSearchEnabled ?? true,
     useSystemProxy: existing?.useSystemProxy ?? false,
     usageQuery: existing?.usageQuery ?? getDefaultUsageQueryConfig(),
   };

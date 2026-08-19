@@ -36,6 +36,7 @@ chatroom
 !.vscode/extensions.json
 .idea
 .DS_Store
+._*
 *.suo
 *.ntvs*
 *.njsproj
@@ -43,6 +44,9 @@ chatroom
 *.sw?
 .pnpm-store
 workspace.zip
+
+# Debug symbols (MSVC)
+*.pdb
 
 # Local workflow artifacts
 /.gitattributes

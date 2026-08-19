@@ -32,11 +32,15 @@ test("non-reasoning models expose no thinking controls", () => {
   assert.deepEqual(result, { reasoning: false, levels: [], alwaysOn: false, fromCatalog: true });
 });
 
-test("always-on non-tunable models: reasoning with empty levels", () => {
-  const reasoner = resolveModelThinking("deepseek", "deepseek-reasoner");
-  assert.equal(reasoner.reasoning, true);
-  assert.deepEqual(reasoner.levels, []);
-  assert.equal(reasoner.alwaysOn, true);
+test("DeepSeek Responses models expose their documented reasoning levels", () => {
+  const flash = resolveModelThinking("deepseek", "deepseek-v4-flash");
+  assert.equal(flash.reasoning, true);
+  assert.deepEqual(flash.levels, ["low", "high", "max"]);
+  assert.equal(flash.alwaysOn, false);
+
+  const pro = resolveModelThinking("deepseek", "deepseek-v4-pro");
+  assert.deepEqual(pro.levels, ["low", "high", "max"]);
+  assert.equal(pro.alwaysOn, false);
 });
 
 test("decorated ids resolve through the candidate chain", () => {

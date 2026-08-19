@@ -13,7 +13,7 @@ const MIN_MODELS_PER_PROVIDER = {
   google: 15,
   openai: 20,
   xai: 3,
-  deepseek: 3,
+  deepseek: 2,
   zhipuai: 10,
   moonshotai: 8,
   minimax: 5,
@@ -95,6 +95,15 @@ test("openai catalog prefers Codex metadata and keeps models.dev supplements", (
   assert.equal(catalog.findCatalogModel("codex", "gpt-5.6")?.contextWindow, 1_050_000);
 });
 
+test("formal DeepSeek catalog only exposes models documented for Responses", () => {
+  assert.deepEqual(
+    catalog.MODEL_CATALOG.deepseek.map((entry) => entry.id),
+    ["deepseek-v4-flash", "deepseek-v4-pro"],
+  );
+  assert.equal(catalog.findCatalogModel("deepseek", "deepseek-chat"), undefined);
+  assert.equal(catalog.findCatalogModel("deepseek", "deepseek-reasoner"), undefined);
+});
+
 test("normalizeModelLimits repairs degenerate pairs uniformly and leaves valid pairs alone", () => {
   // 退化（输出吃满窗口）：钳到 min(32K, ⌊窗口/4⌋)。
   assert.deepEqual(
@@ -158,7 +167,7 @@ test("cross-provider lookup resolves models configured under a foreign provider"
   });
   assert.equal(catalog.resolveModelLimitsAcrossProviders("model-not-in-catalog"), undefined);
   // 国内厂商分区（无对应应用供应商类型）经跨供应商回查可命中。
-  assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-chat")?.id, "deepseek-chat");
+  assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-v4-pro")?.id, "deepseek-v4-pro");
   assert.equal(catalog.findCatalogModelAcrossProviders("glm-4.6")?.id, "glm-4.6");
   assert.equal(catalog.findCatalogModelAcrossProviders("qwen-max")?.id, "qwen-max");
   assert.equal(catalog.findCatalogModelAcrossProviders("kimi-k2.5")?.id, "kimi-k2.5");

@@ -1,7 +1,8 @@
 use super::{
-    build_gateway_runtime_status_envelope, build_local_settings_update_event_payload,
-    effective_agent_id, gateway_connection_needs_restart, gateway_connection_stale_after,
-    gateway_reconnect_backoff, history_share_resolve_error_code, is_chat_runtime_wake_request_id,
+    attach_stt_secret_sync, build_gateway_runtime_status_envelope,
+    build_local_settings_update_event_payload, effective_agent_id,
+    gateway_connection_needs_restart, gateway_connection_stale_after, gateway_reconnect_backoff,
+    history_share_resolve_error_code, is_chat_runtime_wake_request_id,
     merge_settings_sync_snapshot, merge_settings_update_into_snapshot, proto,
     removed_workspace_project_ids, required_terminal_project_path_key, set_disconnected_status,
     GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
@@ -382,6 +383,46 @@ fn merge_settings_sync_snapshot_without_cache_leaves_ui_only_fields_absent() {
     assert!(!merged_map.contains_key("locale"));
     assert!(!merged_map.contains_key("selectedModel"));
     assert_eq!(merged["system"], json!({ "executionMode": "agent-dev" }));
+}
+
+#[test]
+fn settings_sync_attaches_private_stt_only_to_the_outbound_payload() {
+    let public_snapshot = json!({
+        "theme": "dark",
+        "stt": {
+            "provider": "tencent_cloud",
+            "providers": {
+                "tencent_cloud": {
+                    "id": "tencent_cloud",
+                    "configured": true,
+                    "appId": "123",
+                    "secretId": "",
+                    "secretKey": ""
+                }
+            }
+        }
+    });
+    let raw_stt = json!({
+        "provider": "tencent_cloud",
+        "providers": {
+            "tencent_cloud": {
+                "id": "tencent_cloud",
+                "appId": "123",
+                "secretId": "desktop-secret-id",
+                "secretKey": "desktop-secret-key"
+            }
+        }
+    });
+
+    let outbound = attach_stt_secret_sync(public_snapshot.clone(), Some(raw_stt.clone()))
+        .expect("attach private STT settings");
+
+    assert_eq!(outbound["sttSecretSync"], raw_stt);
+    assert_eq!(
+        public_snapshot["stt"]["providers"]["tencent_cloud"]["secretId"],
+        ""
+    );
+    assert!(public_snapshot.get("sttSecretSync").is_none());
 }
 
 #[test]

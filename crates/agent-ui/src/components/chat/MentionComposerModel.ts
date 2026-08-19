@@ -100,6 +100,10 @@ export interface MentionComposerHandle {
    * has landed in the editor (or the run was cancelled).
    */
   typeText: (text: string) => Promise<void>;
+  beginTransientText: () => boolean;
+  updateTransientText: (text: string) => void;
+  commitTransientText: (text?: string) => void;
+  cancelTransientText: (options?: { preserveLastText?: boolean }) => void;
 }
 
 export type MentionComposerLargePaste = {

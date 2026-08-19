@@ -18,12 +18,16 @@ import { memoryTurnInjection } from "../../../lib/chat/memory/injectionControlle
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import type { AppSettings } from "../../../lib/settings";
+import {
+  acquireTrajectoryRecorder,
+  updateTrajectoryRecorderSegment,
+} from "../../../lib/trajectory/recorderRegistry";
 import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
 import type {
   FinishGatewayRunMirrorInput,
   RegisterGatewayRunMirrorInput,
 } from "../gateway/useGatewayRunMirrorCoordinator";
-import type { PersistConversationParams } from "../history/useConversationHistoryActions";
+import type { PersistConversationAction } from "../history/useConversationHistoryActions";
 import type { ConversationRuntimeEntry } from "./chatPageRuntime";
 import {
   buildPreparedContext as buildPreparedConversationContext,
@@ -123,7 +127,7 @@ export function useManualCompaction(params: {
   flushGatewayBridgeEventsForRequest: (requestId: string) => Promise<void>;
   registerGatewayRunMirror: (input: RegisterGatewayRunMirrorInput) => void;
   finishGatewayRunMirror: (input: FinishGatewayRunMirrorInput) => Promise<void>;
-  persistConversation: (params: PersistConversationParams) => Promise<boolean>;
+  persistConversation: PersistConversationAction;
   setErrorMessage: (message: string | null) => void;
   activeAgentPrompt: string;
   // 与发送链路同源的提示词构建：当前会话据当前工作区解析 skills/memory 提示词；
@@ -195,6 +199,7 @@ export function useManualCompaction(params: {
       let runningStateClaimed = false;
       let stopHandlerRegistered = false;
       let stopRequestVersion: number | null = null;
+      let flushTrajectory: (() => Promise<void>) | null = null;
       // 停止处理器与发送链路 handleConversationStop 同款：记录版本号供 finally
       // 消费 stop intent；abort 使 compactManually 中止（controller 返回 aborted）。
       const handleStop: ConversationStopHandler = (options) => {
@@ -354,6 +359,38 @@ export function useManualCompaction(params: {
         };
 
         const compactionController = getCompactionController(conversationId);
+        const trajectoryRecording = acquireTrajectoryRecorder(
+          conversationId,
+          getActiveSegment(runtimeEntry.state)?.segmentIndex ??
+            runtimeEntry.state.meta.activeSegmentIndex,
+          (events) => {
+            for (const event of events) {
+              gatewayBridgeEvents.queueEvent({
+                type: "trajectory",
+                event,
+                conversation_id: conversationId,
+              });
+            }
+          },
+        );
+        flushTrajectory = trajectoryRecording.recorder.flush;
+        compactionController.setObserver({
+          onStart: ({ trigger }) => {
+            trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
+          },
+          onEnd: ({ trigger, status, tokensBefore, tokensAfter, newSegmentIndex, error }) => {
+            trajectoryRecording.recorder.compactionEnd({
+              status,
+              standalone: trigger === "manual",
+              ...(tokensBefore === undefined ? {} : { tokensBefore }),
+              ...(tokensAfter === undefined ? {} : { tokensAfter }),
+              ...(error === undefined ? {} : { error }),
+            });
+            if (status === "complete" && newSegmentIndex !== undefined) {
+              updateTrajectoryRecorderSegment(conversationId, newSegmentIndex);
+            }
+          },
+        });
         const outcome = await compactionController.compactManually(
           {
             providerId,
@@ -445,6 +482,10 @@ export function useManualCompaction(params: {
         result = { status: "failed", message };
         return result;
       } finally {
+        const flushRecordedTrajectory = flushTrajectory as (() => Promise<void>) | null;
+        if (flushRecordedTrajectory !== null) {
+          await flushRecordedTrajectory();
+        }
         if (stopHandlerRegistered) {
           clearConversationStopHandler(conversationId, handleStop);
           setConversationAbortController(conversationId, null);

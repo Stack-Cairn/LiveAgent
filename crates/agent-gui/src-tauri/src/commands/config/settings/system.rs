@@ -587,6 +587,7 @@ fn save_system_with_default_workdir(
 
     tx.commit()
         .map_err(|e| format!("提交 {SYSTEM_SETTINGS_TABLE} 事务失败：{e}"))?;
+    crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }
 

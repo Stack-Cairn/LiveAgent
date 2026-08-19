@@ -378,6 +378,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 const parsed = parseModelValue(option.value);
                                 if (!parsed) return;
                                 onSelectModel(parsed);
+                                setIsModelPickerOpen(false);
                               }}
                               className={cn(
                                 "model-selector-item flex h-[30px] w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-md py-0 pl-6 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-none hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white",

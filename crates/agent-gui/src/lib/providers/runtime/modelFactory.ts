@@ -18,7 +18,11 @@ import {
   resolveAnthropicContextWindow,
   resolveAnthropicWireModelId,
 } from "../anthropicModels";
-import { DEEPSEEK_CHAT_COMPLETIONS_API, normalizeDeepSeekBaseUrl } from "../deepSeekNative";
+import {
+  DEEPSEEK_RESPONSES_API,
+  isOfficialDeepSeekBaseUrl,
+  normalizeDeepSeekResponsesBaseUrl,
+} from "../deepSeekNative";
 import { isXaiProviderTarget } from "./xaiResponsesPayload";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +34,14 @@ import { isXaiProviderTarget } from "./xaiResponsesPayload";
 /** Grok / xAI wire 值：官方 effort 无 minimal，向上取 low。 */
 const XAI_THINKING_WIRE_VALUES: ThinkingLevelMap = {
   minimal: "low",
+};
+
+/** DeepSeek Responses accepts none/low/high/max; medium/xhigh map to high. */
+const DEEPSEEK_THINKING_WIRE_VALUES: ThinkingLevelMap = {
+  off: "none",
+  minimal: "low",
+  medium: "high",
+  xhigh: "high",
 };
 
 function resolveModelThinkingFields(
@@ -328,15 +340,21 @@ export function createModelFromConfig(
     return {
       id: modelId,
       name: modelId,
-      api: DEEPSEEK_CHAT_COMPLETIONS_API,
+      api: DEEPSEEK_RESPONSES_API,
       provider: "deepseek",
-      baseUrl: normalizeDeepSeekBaseUrl(baseUrl),
-      ...resolveModelThinkingFields(thinking),
+      baseUrl: normalizeDeepSeekResponsesBaseUrl(baseUrl, {
+        officialHost: isOfficialDeepSeekBaseUrl(upstreamBaseUrl?.trim() || baseUrl),
+      }),
+      ...resolveModelThinkingFields(thinking, DEEPSEEK_THINKING_WIRE_VALUES),
       input: ["text"],
       cost: zeroCost,
       contextWindow,
       maxTokens,
-      deepSeekThinkingAlwaysOn: thinking.alwaysOn,
+      compat: {
+        supportsDeveloperRole: true,
+        supportsLongCacheRetention: false,
+        supportsStrictMode: false,
+      },
     } as Model<any>;
   }
 

@@ -50,7 +50,15 @@ export type CompactionSinks = {
   publishStatus?: (status: CompactionStatus) => void;
   setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
   queueCheckpoint?: (state: ConversationViewState, contextUsageTokens: number) => void;
-  persist?: (state: ConversationViewState) => Promise<boolean | undefined>;
+  // false/null 表示持久化失败（压缩中止回滚）。成功可返回"盖好 revision 的持
+  // 久化状态"——finalizeCheckpoint 会落地这一份而非入参状态：checkpoint 状态
+  // 出自 appendMessagesToConversation，revision 恒为 null，若照原样 apply，
+  // 运行时缓存会失去 replace/分页所需的 CAS 令牌（压缩后 edit-resend 报
+  // "历史会话缺少 revision"即源于此）。返回 true/undefined 则沿用入参状态
+  //（子代理的 fire-and-forget persist 走这条）。
+  persist?: (
+    state: ConversationViewState,
+  ) => Promise<ConversationViewState | boolean | null | undefined>;
   restoreComposer?: (
     composerText: string | undefined,
     uploadedFiles: PendingUploadedFile[],
@@ -114,6 +122,27 @@ export type ManualContextUsageSnapshot = {
   fixedTokens?: number;
 };
 
+/**
+ * 压缩生命周期的旁观者，供轨迹埋点订阅。
+ *
+ * 挂在控制器上而不是各调用点：压缩有 pre-send / mid-stream / post-tool / manual
+ * 四个触发路径，逐个调用点埋会漏，也会随新增触发方式失配。控制器内部只有
+ * `publishRunning` 一个开始点和 `settleCompleted`/`settleFailed`/`settleAborted` 三个终点。
+ *
+ * 刻意不引用轨迹类型：控制器不该知道消费者是谁。
+ */
+export type CompactionObserver = {
+  onStart: (info: { trigger: CompactionTrigger; tokensBefore?: number }) => void;
+  onEnd: (info: {
+    trigger: CompactionTrigger;
+    status: "complete" | "error" | "aborted";
+    tokensBefore?: number;
+    tokensAfter?: number;
+    newSegmentIndex?: number;
+    error?: string;
+  }) => void;
+};
+
 function withActiveSummaryContextTokens(
   state: ConversationViewState,
   contextUsageTokens: number,
@@ -161,14 +190,38 @@ export class CompactionController {
   private inFlight = false;
   private statusPhase: CompactionStatus["phase"] = "idle";
   private turnMeta = { activeMessageCount: 0, userMessageCount: 0, lastSummaryAt: 0 };
+  private observer: CompactionObserver | null = null;
+  /** 本次压缩开始时的上下文 token，供结束事件补齐前后对比。 */
+  private observedTokensBefore: number | undefined;
+  /** checkpoint 落地后的上下文 token；只有成功路径才有值。 */
+  private observedTokensAfter: number | undefined;
+  /** 已发出 onStart、尚未闭合的压缩触发类型。 */
+  private observedTrigger: CompactionTrigger | undefined;
+  /** 区分同 trigger 的前后两次异步压缩，拒绝旧 summarizer 的晚到结果。 */
+  private observedOperationId: number | undefined;
+  private nextObservedOperationId = 0;
+
+  /**
+   * 订阅压缩生命周期。
+   *
+   * @param observer - 旁观者；传 null 取消订阅。
+   */
+  setObserver(observer: CompactionObserver | null) {
+    this.observer = observer;
+  }
 
   bindTurn(binding: CompactionTurnBinding) {
+    // A defensive rebind must not strand the previous observer interval.
+    this.settleAbortedIfRunning();
     this.binding = binding;
     this.rollbackSnapshot = null;
     this.inFlight = false;
   }
 
   unbindTurn() {
+    // Every published start receives exactly one terminal notification, even when a caller
+    // tears down the turn without first reaching the ordinary completion path.
+    this.settleAbortedIfRunning();
     this.binding = null;
     this.rollbackSnapshot = null;
     this.inFlight = false;
@@ -178,11 +231,16 @@ export class CompactionController {
     return { compactionsApplied: this.pressure.compactionsApplied };
   }
 
-  private async persistCheckpoint(binding: CompactionTurnBinding, state: ConversationViewState) {
+  private async persistCheckpoint(
+    binding: CompactionTurnBinding,
+    state: ConversationViewState,
+  ): Promise<ConversationViewState> {
     const persisted = await binding.sinks.persist?.(state);
-    if (persisted === false) {
+    if (persisted === false || persisted === null) {
       throw new Error("compaction checkpoint persistence failed");
     }
+    // 持久化钩子返回的盖章状态（带重建的 revision）优先；布尔/undefined 回落入参。
+    return typeof persisted === "object" ? persisted : state;
   }
 
   // 压缩成功后的统一收尾（pre-send 与 during-run 共用同一顺序不变量）：
@@ -198,9 +256,11 @@ export class CompactionController {
     tools?: Context["tools"];
     buildOptions: ContextBuildOptions;
     fixedTokens?: number;
+    operationId: number;
     // 在 persist 屏障之后、completed 终态之前同步执行的状态落地钩子。
     apply: (checkpointState: ConversationViewState) => void;
   }): Promise<{ checkpointState: ConversationViewState; checkpointTokens: number }> {
+    this.assertObservedOperation(params.operationId);
     const checkpointContext = params.binding.buildPreparedContext(
       params.state,
       params.tools,
@@ -209,11 +269,17 @@ export class CompactionController {
     const checkpointTokens = deriveContextTokens(checkpointContext, {
       fixedTokens: params.fixedTokens,
     });
-    const checkpointState = withActiveSummaryContextTokens(params.state, checkpointTokens);
-    await this.persistCheckpoint(params.binding, checkpointState);
+    this.assertObservedOperation(params.operationId);
+    const checkpointState = await this.persistCheckpoint(
+      params.binding,
+      withActiveSummaryContextTokens(params.state, checkpointTokens),
+    );
+    this.assertObservedOperation(params.operationId);
     this.rollbackSnapshot = null;
     params.apply(checkpointState);
-    this.settleCompleted(params.trigger, params.newSegmentIndex);
+    // settleCompleted 读它，所以必须在其之前落定。
+    this.observedTokensAfter = checkpointTokens;
+    this.settleCompleted(params.trigger, params.newSegmentIndex, params.operationId);
     params.binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
     // 放在最后:checkpoint 上下文估值仍需按压缩前的注入状态计算,通知只影响
     // 下一轮 planTurn 的走向。
@@ -300,7 +366,11 @@ export class CompactionController {
       uploadedFiles: presend.uploadedFiles,
     };
     this.inFlight = true;
-    this.publishRunning("pre-send", workingState.meta.activeSegmentIndex, decision);
+    const operationId = this.publishRunning(
+      "pre-send",
+      workingState.meta.activeSegmentIndex,
+      decision,
+    );
 
     const scope = binding.cancellation.deriveScope();
     try {
@@ -327,8 +397,19 @@ export class CompactionController {
         newSegmentIndex: outcome.newSegmentIndex,
         tools: params.tools,
         buildOptions,
+        operationId,
         apply: (checkpointState) => {
           appliedState = presend.composeAppliedState(checkpointState);
+          // compose 走 appendMessagesToConversation 会把刚盖上的 revision 清掉。
+          // 追加只发生在内存，DB 仍停在 checkpoint 持久化那一刻，CAS 令牌依旧
+          // 指向当前库版本，补回；下一次成功 persist 会重新盖章。
+          const revision = checkpointState.transcript.revision;
+          if (revision && !appliedState.transcript.revision) {
+            appliedState = {
+              ...appliedState,
+              transcript: { ...appliedState.transcript, revision },
+            };
+          }
           binding.sinks.applyState?.(appliedState);
         },
       });
@@ -347,12 +428,16 @@ export class CompactionController {
         pruned ?? pruneConversationState(presend.baseState, resolvePruneOptions(this.pressure));
       if (fallback.applied) {
         binding.sinks.applyState?.(presend.composeAppliedState(fallback.state));
-        this.settleFailed("pre-send", PRUNE_FALLBACK_NOTICE);
+        this.settleFailed("pre-send", PRUNE_FALLBACK_NOTICE, operationId);
         binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
         return true;
       }
       console.warn("发送前上下文压缩失败，继续使用原始上下文", error);
-      this.settleFailed("pre-send", error instanceof Error ? error.message : String(error));
+      this.settleFailed(
+        "pre-send",
+        error instanceof Error ? error.message : String(error),
+        operationId,
+      );
       return false;
     } finally {
       scope.release();
@@ -457,7 +542,11 @@ export class CompactionController {
 
     this.rollbackSnapshot = { state: params.state, persistOnRollback: true };
     this.inFlight = true;
-    this.publishRunning(params.trigger, workingState.meta.activeSegmentIndex, decision);
+    const operationId = this.publishRunning(
+      params.trigger,
+      workingState.meta.activeSegmentIndex,
+      decision,
+    );
 
     const scope = binding.cancellation.deriveScope();
     try {
@@ -482,6 +571,7 @@ export class CompactionController {
         tools: params.tools,
         buildOptions,
         fixedTokens: manualFixedTokens,
+        operationId,
         apply: (state) => binding.sinks.applyStateMidRun?.(state),
       });
 
@@ -515,7 +605,7 @@ export class CompactionController {
           pruned ?? pruneConversationState(workingState, resolvePruneOptions(this.pressure));
         if (fallback.applied) {
           binding.sinks.applyStateMidRun?.(fallback.state);
-          this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE);
+          this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE, operationId);
           binding.sinks.setBridgeToolStatus?.(
             buildPruneFallbackStatus(fallback.prunedMessageCount),
           );
@@ -529,6 +619,7 @@ export class CompactionController {
       this.settleFailed(
         params.trigger,
         (error instanceof Error ? error.message : String(error)) || "压缩失败",
+        operationId,
       );
       return params.trigger === "mid-stream"
         ? {
@@ -635,18 +726,13 @@ export class CompactionController {
     const snapshot = this.rollbackSnapshot;
     this.rollbackSnapshot = null;
     this.inFlight = false;
+    this.settleAbortedIfRunning();
     if (!binding) return false;
 
-    if (!snapshot) {
-      if (this.statusPhase === "running") {
-        this.publishStatus({ phase: "idle" });
-      }
-      return false;
-    }
+    if (!snapshot) return false;
 
     binding.sinks.applyStateMidRun?.(snapshot.state);
     binding.sinks.setBridgeToolStatus?.(null, false);
-    this.publishStatus({ phase: "idle" });
     binding.sinks.restoreComposer?.(snapshot.composerText, snapshot.uploadedFiles ?? []);
     if (snapshot.persistOnRollback) {
       await binding.sinks.persistRollback?.(snapshot.state);
@@ -726,7 +812,14 @@ export class CompactionController {
     trigger: CompactionTrigger,
     sourceSegmentIndex: number,
     decision: CompactionDecision,
-  ) {
+  ): number {
+    const operationId = ++this.nextObservedOperationId;
+    this.observedOperationId = operationId;
+    this.observedTrigger = trigger;
+    this.observedTokensBefore = decision.totalTokens;
+    this.notifyObserver(() =>
+      this.observer?.onStart({ trigger, tokensBefore: decision.totalTokens }),
+    );
     this.publishStatus({
       phase: "running",
       trigger,
@@ -737,9 +830,31 @@ export class CompactionController {
       buildCompactionRunningStatus(decision, this.pressure),
       true,
     );
+    return operationId;
   }
 
-  private settleCompleted(trigger: CompactionTrigger, newSegmentIndex: number) {
+  private settleCompleted(
+    trigger: CompactionTrigger,
+    newSegmentIndex: number,
+    operationId: number,
+  ) {
+    // A prior abort/unbind may already have closed this interval while the async summarizer
+    // was unwinding. Late completion is then operationally stale and must not emit a second end.
+    if (this.observedTrigger !== trigger || this.observedOperationId !== operationId) return;
+    this.notifyObserver(() =>
+      this.observer?.onEnd({
+        trigger,
+        status: "complete",
+        ...(this.observedTokensBefore === undefined
+          ? {}
+          : { tokensBefore: this.observedTokensBefore }),
+        ...(this.observedTokensAfter === undefined
+          ? {}
+          : { tokensAfter: this.observedTokensAfter }),
+        newSegmentIndex,
+      }),
+    );
+    this.clearObservedCompaction();
     this.publishStatus({
       phase: "completed",
       trigger,
@@ -748,8 +863,60 @@ export class CompactionController {
     });
   }
 
-  private settleFailed(trigger: CompactionTrigger, message: string) {
+  private settleFailed(trigger: CompactionTrigger, message: string, operationId: number) {
+    if (this.observedTrigger !== trigger || this.observedOperationId !== operationId) return;
+    this.notifyObserver(() =>
+      this.observer?.onEnd({
+        trigger,
+        status: "error",
+        ...(this.observedTokensBefore === undefined
+          ? {}
+          : { tokensBefore: this.observedTokensBefore }),
+        error: message,
+      }),
+    );
+    this.clearObservedCompaction();
     this.publishStatus({ phase: "failed", trigger, failedAt: Date.now(), message });
+  }
+
+  private settleAbortedIfRunning(): boolean {
+    const trigger = this.observedTrigger;
+    if (trigger === undefined) {
+      if (this.statusPhase === "running") this.publishStatus({ phase: "idle" });
+      return false;
+    }
+    this.notifyObserver(() =>
+      this.observer?.onEnd({
+        trigger,
+        status: "aborted",
+        ...(this.observedTokensBefore === undefined
+          ? {}
+          : { tokensBefore: this.observedTokensBefore }),
+      }),
+    );
+    this.clearObservedCompaction();
+    this.publishStatus({ phase: "idle" });
+    return true;
+  }
+
+  private assertObservedOperation(operationId: number) {
+    if (this.observedOperationId !== operationId) throw createCompactionAbortError();
+  }
+
+  private clearObservedCompaction() {
+    this.observedOperationId = undefined;
+    this.observedTrigger = undefined;
+    this.observedTokensBefore = undefined;
+    this.observedTokensAfter = undefined;
+  }
+
+  /** 旁观者是诊断通道，它抛错绝不能把压缩这条主路径带崩。 */
+  private notifyObserver(run: () => void) {
+    try {
+      run();
+    } catch (error) {
+      console.warn("[compaction] observer threw; compaction is unaffected", error);
+    }
   }
 
   private logDecision(decision: CompactionDecision) {

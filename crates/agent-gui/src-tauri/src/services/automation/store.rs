@@ -120,7 +120,11 @@ impl AutomationStore {
     /// Test-only: force a run's lease deadline so sweeps can be exercised
     /// without waiting.
     #[cfg(test)]
-    pub fn debug_set_run_lease(&self, execution_id: &str, lease_expires_at: i64) -> Result<(), String> {
+    pub fn debug_set_run_lease(
+        &self,
+        execution_id: &str,
+        lease_expires_at: i64,
+    ) -> Result<(), String> {
         let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE automation_cron_runs SET lease_expires_at = ?2 WHERE execution_id = ?1",

@@ -175,6 +175,15 @@ export function recoverAssistantSeedToolCalls(
 
   for (const block of assistant.content) {
     if (block.type === "thinking") {
+      // Anthropic thinking is signed protocol state. Never strip markup or
+      // re-order blocks inside a signed (or redacted) thinking block: either
+      // change makes the next request fail with "thinking blocks cannot be
+      // modified". Unsigned thinking from compatibility models can still use
+      // the legacy seed-call recovery below.
+      if (block.thinkingSignature || block.redacted) {
+        nextContent.push(block);
+        continue;
+      }
       const recovered = recoverToolCallsFromBlockText(block.thinking);
       if (recovered.cleanedText !== block.thinking) {
         changed = true;

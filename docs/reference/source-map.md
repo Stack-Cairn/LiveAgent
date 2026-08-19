@@ -36,6 +36,7 @@
 | Gateway bridge hooks | `crates/agent-gui/src/pages/chat/gateway/useGatewayBridgeListeners.ts`、`useGatewayBridgeReadiness.ts` |
 | Context builders | `crates/agent-gui/src/pages/chat/runtime/conversationContextBuilders.ts` |
 | GUI Settings 扩展 | `crates/agent-gui/src/pages/settings/*` |
+| 备份与同步设置分区 | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx`、`backupSyncForm.ts` |
 | 共享 UI 适配器 | `crates/agent-gui/src/agent-ui-adapters/*` |
 | i18n | `crates/agent-gui/src/i18n/*` |
 
@@ -46,6 +47,7 @@
 | Model provider layer | `crates/agent-gui/src/lib/providers/llm.ts` |
 | Provider proxy helpers | `crates/agent-ui/src/lib/providers/proxy.ts` |
 | Settings defaults/storage/sync | `crates/agent-gui/src/lib/settings/*` |
+| 配置备份/同步 IPC | `crates/agent-gui/src/lib/backup/index.ts` |
 | Builtin tool registry | `crates/agent-gui/src/lib/tools/builtinRegistry.ts` |
 | FS tools | `crates/agent-gui/src/lib/tools/fsTools.ts` |
 | 项目附加目录策略 | `crates/agent-gui/src/lib/tools/fsTools.ts`、`src/lib/tools/pathUtils.ts` |
@@ -69,6 +71,8 @@
 | App builder/invoke handler | `crates/agent-gui/src-tauri/src/lib.rs` |
 | Chat history commands | `crates/agent-gui/src-tauri/src/commands/history/chat_history/*` |
 | Settings commands | `crates/agent-gui/src-tauri/src/commands/config/settings/*` |
+| 配置快照/本地导入导出 | `crates/agent-gui/src-tauri/src/commands/config/settings/backup_snapshot.rs`、`backup_io.rs` |
+| WebDAV 同步编排 | `crates/agent-gui/src-tauri/src/commands/config/settings/webdav_sync.rs` |
 | Memory commands | `crates/agent-gui/src-tauri/src/commands/integration/memory.rs` |
 | MCP commands/runtime | `crates/agent-gui/src-tauri/src/commands/integration/mcp.rs` |
 | File commands | `crates/agent-gui/src-tauri/src/commands/workspace/fs.rs` |
@@ -81,6 +85,7 @@
 | Skills service | `crates/agent-gui/src-tauri/src/services/skills/*` |
 | Gateway service | `crates/agent-gui/src-tauri/src/services/gateway/*`、`gateway_bridge.rs` |
 | Automation service | `crates/agent-gui/src-tauri/src/services/automation/*` |
+| WebDAV 传输/自动同步 | `crates/agent-gui/src-tauri/src/services/webdav.rs`、`webdav_auto_sync.rs` |
 | Runtime shell/process | `crates/agent-gui/src-tauri/src/runtime/*` |
 
 ## Gateway

@@ -178,6 +178,12 @@ func TestVetAgentRequestRejectsMalformedCheckpoint(t *testing.T) {
 			TurnSeq:        1,
 			Expected:       []*gatewayv2.CheckpointExpectedEntry{{Key: " ", CurrentHash: "abc"}},
 		},
+		{
+			Action:         "rewind",
+			ConversationId: "conversation-1",
+			TurnSeq:        1,
+			Expected:       []*gatewayv2.CheckpointExpectedEntry{{Key: "/work\x01a.txt"}},
+		},
 	}
 
 	for _, request := range requests {

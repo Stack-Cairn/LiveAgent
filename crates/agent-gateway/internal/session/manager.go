@@ -1,6 +1,8 @@
 package session
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -13,7 +15,6 @@ var ErrAgentOffline = errors.New("agent offline")
 var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update LiveAgent desktop")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
-var ErrTunnelOverLimit = errors.New("tunnel connection limit exceeded")
 
 const (
 	chatRuntimeReadyTTL      = 15 * time.Second
@@ -35,6 +36,7 @@ type Manager struct {
 	workspaceHub     *workspaceActivityHub
 	managedProcesses *managedProcessHub
 	statusSubs       *statusSubscriberHub
+	sttSettingsSync  func(context.Context, json.RawMessage) (any, error)
 }
 
 type AgentSession struct {

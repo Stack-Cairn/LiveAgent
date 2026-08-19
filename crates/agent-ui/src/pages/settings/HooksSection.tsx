@@ -396,7 +396,7 @@ export function HooksSection(_props: SettingsSectionProps) {
 
         <section className="settings-hooks-detail flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card">
           <div className="settings-hooks-detail-header shrink-0 border-b border-border/40 px-5 py-4">
-            <div className="settings-section-heading-row flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="settings-section-heading-row settings-hooks-detail-heading flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="settings-section-title-group flex items-center gap-3">
                 {(() => {
                   const phase = orderedEvents.find((item) => item.event === activeEvent)?.phase;
@@ -424,10 +424,15 @@ export function HooksSection(_props: SettingsSectionProps) {
                   </p>
                 </div>
               </div>
-              <Button className="settings-section-action gap-1.5 self-start" onClick={openAdd}>
-                <Plus className="h-3.5 w-3.5" />
-                {t("settings.hooksAdd")}
-              </Button>
+              {activeHooks.length > 0 ? (
+                <Button
+                  className="settings-section-action settings-hooks-detail-add gap-1.5 self-start"
+                  onClick={openAdd}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("settings.hooksAdd")}
+                </Button>
+              ) : null}
             </div>
           </div>
 

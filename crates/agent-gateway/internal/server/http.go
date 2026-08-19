@@ -20,10 +20,11 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"github.com/liveagent/agent-gateway/internal/stt"
 )
 
 // NewHTTPServer 构造 HTTP 路由；生产启动时 tokens 始终是已初始化的 Agent 目录与凭证存储。
-func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store) http.Handler {
+func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, sttManagers ...*stt.Manager) http.Handler {
 	rootMux := http.NewServeMux()
 	rootMux.HandleFunc("GET /healthz", handler.Health())
 
@@ -32,6 +33,13 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	rootMux.Handle("/ws/v2", v2.BrowserHandler())
 	rootMux.Handle("/ws/v2/agent", v2.AgentHandler())
 	rootMux.Handle("/ws/v2/terminal", v2.TerminalHandler())
+	var sttManager *stt.Manager
+	if len(sttManagers) > 0 {
+		sttManager = sttManagers[0]
+	}
+	if sttManager != nil {
+		rootMux.Handle("/ws/v2/stt", sttManager.WebSocketHandler(cfg.Token))
+	}
 
 	rootMux.HandleFunc("/t/", publicTunnelProxy(sm))
 	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
@@ -46,6 +54,10 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	apiMux.HandleFunc("POST /api/agents/{id}/token", handler.IssueAgentToken(sm, tokens))
 	apiMux.HandleFunc("PATCH /api/agents/{id}", handler.UpdateAgentName(tokens))
 	apiMux.HandleFunc("DELETE /api/agents/{id}", handler.DeleteAgent(sm, tokens))
+	if sttManager != nil {
+		apiMux.Handle("/api/v2/stt/settings", sttManager.SettingsHandler())
+		apiMux.Handle("/api/v2/stt/settings/test", sttManager.TestHandler())
+	}
 	rootMux.Handle("/api/", auth.HTTPMiddleware(cfg.Token, apiMux))
 
 	webFS, err := fs.Sub(gateway.WebUIAssets, "web/dist")

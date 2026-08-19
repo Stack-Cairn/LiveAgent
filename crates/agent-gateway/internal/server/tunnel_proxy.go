@@ -542,8 +542,6 @@ func writeTunnelAcquireError(w http.ResponseWriter, err error) {
 		writeTunnelError(w, http.StatusNotFound, "tunnel not found")
 	case errors.Is(err, session.ErrAgentOffline):
 		writeTunnelError(w, http.StatusServiceUnavailable, "agent offline")
-	case errors.Is(err, session.ErrTunnelOverLimit):
-		writeTunnelError(w, http.StatusTooManyRequests, "tunnel connection limit exceeded")
 	default:
 		writeTunnelError(w, http.StatusBadGateway, err.Error())
 	}

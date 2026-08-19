@@ -271,6 +271,18 @@ test("checkpoint requests and responses round-trip through the agent-scoped gate
     assert.equal(Number(frame.payload.value.payload.value.turnSeq), common.turn_seq);
     assert.deepEqual(frame.payload.value.payload.value.authorizedRoots, common.authorized_roots);
     assert.equal(frame.payload.value.payload.value.expected.length, expectedCount);
+    if (expectedCount > 0) {
+      assert.deepEqual(
+        {
+          key: frame.payload.value.payload.value.expected[0].key,
+          currentHash: frame.payload.value.payload.value.expected[0].currentHash,
+        },
+        {
+          key: "C:/work/project\u0001src/a.ts",
+          currentHash: "hash-at-preview",
+        },
+      );
+    }
   }
 
   const decoded = decodeServerFrame(
@@ -570,4 +582,26 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
     () => encodeRequestFrame("req-4", "not.a.request", {}),
     /unsupported gateway request type/,
   );
+});
+
+test("trajectory fetch keeps prompt section ids and subagent run ids in separate proto fields", () => {
+  const frame = decodeClientFrame(
+    encodeRequestFrame(
+      "trajectory-1",
+      "trajectory.fetch",
+      {
+        conversation_id: "conversation-1",
+        section_ids: ["section-a"],
+        subagent_run_ids: ["run-a", "run-b"],
+        include_subagent_runs: true,
+      },
+      "agent-a",
+    ),
+  );
+
+  assert.equal(frame.payload.value.payload.case, "trajectoryFetch");
+  const request = frame.payload.value.payload.value;
+  assert.deepEqual(request.sectionIds, ["section-a"]);
+  assert.deepEqual(request.subagentRunIds, ["run-a", "run-b"]);
+  assert.equal(request.includeSubagentRuns, true);
 });

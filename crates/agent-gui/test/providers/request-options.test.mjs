@@ -205,6 +205,14 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     true,
   );
   assert.equal(
+    providers.providerSupportsNativeWebSearch("deepseek", "deepseek-responses"),
+    true,
+  );
+  assert.equal(
+    providers.providerSupportsNativeWebSearch("deepseek", "openai-completions"),
+    false,
+  );
+  assert.equal(
     providers.providerSupportsNativeWebSearch("codex", "openai-completions"),
     false,
   );
@@ -715,6 +723,108 @@ test("provider native web search injection is opt-in", async () => {
   assert.equal(geminiResult, geminiPayload);
 });
 
+test("DeepSeek Responses native web search is injected once and can be disabled", async () => {
+  const model = {
+    api: "deepseek-responses",
+    provider: "deepseek",
+    id: "deepseek-v4-flash",
+  };
+  const enabledOptions = providers.finalizeProviderStreamOptions({
+    providerId: "deepseek",
+    baseUrl: "https://api.deepseek.com",
+    nativeWebSearch: true,
+    model,
+    options: {},
+  });
+
+  const injected = await enabledOptions.onPayload({ input: "hello" }, model);
+  assert.deepEqual(injected.tools, [{ type: "web_search" }]);
+
+  const preserved = await enabledOptions.onPayload(
+    { input: "hello", tools: [{ type: "web_search_2025_08_26" }] },
+    model,
+  );
+  assert.deepEqual(preserved.tools, [{ type: "web_search_2025_08_26" }]);
+
+  const disabledOptions = providers.finalizeProviderStreamOptions({
+    providerId: "deepseek",
+    baseUrl: "https://api.deepseek.com",
+    nativeWebSearch: false,
+    model,
+    options: {},
+  });
+  const disabled = await disabledOptions.onPayload({ input: "hello" }, model);
+  assert.equal(disabled.tools, undefined);
+});
+
+test("DeepSeek full URL requests normalize legacy endpoints to /responses", async () => {
+  const localLoader = createTsModuleLoader({
+    mocks: {
+      "@liveagent/app/shims/tauriCore": {
+        async invoke(command) {
+          assert.equal(command, "proxy_get_server_info");
+          return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
+        },
+      },
+    },
+  });
+  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const prepared = await localProviders.prepareProviderRequest("deepseek", {
+    baseUrl: "https://relay.example.com/custom/chat/completions?region=cn",
+    isFullUrl: true,
+    apiKey: "secret",
+    requestFormat: "deepseek-responses",
+  });
+
+  assert.equal(prepared.baseUrl, "http://127.0.0.1:18080/proxy/deepseek");
+  assert.equal(
+    prepared.headers["x-liveagent-upstream-url"],
+    "https://relay.example.com/custom/v1/responses?region=cn",
+  );
+  assert.equal(prepared.headers["x-liveagent-upstream-origin"], "https://relay.example.com");
+});
+
+test("DeepSeek relay base URLs append /v1 while official DeepSeek stays at the root", async () => {
+  const localLoader = createTsModuleLoader({
+    mocks: {
+      "@liveagent/app/shims/tauriCore": {
+        async invoke(command) {
+          assert.equal(command, "proxy_get_server_info");
+          return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
+        },
+      },
+    },
+  });
+  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+
+  const official = await localProviders.prepareProviderRequest("deepseek", {
+    baseUrl: "https://api.deepseek.com",
+    apiKey: "secret",
+  });
+  assert.equal(official.baseUrl, "http://127.0.0.1:18080/proxy/deepseek");
+  assert.equal(official.headers["x-liveagent-upstream-origin"], "https://api.deepseek.com");
+  assert.equal(official.headers["x-liveagent-upstream-url"], undefined);
+
+  const officialWithVersion = await localProviders.prepareProviderRequest("deepseek", {
+    baseUrl: "https://api.deepseek.com/v1",
+    apiKey: "secret",
+  });
+  assert.equal(officialWithVersion.baseUrl, "http://127.0.0.1:18080/proxy/deepseek");
+
+  const relay = await localProviders.prepareProviderRequest("deepseek", {
+    baseUrl: "https://relay.example.com",
+    apiKey: "secret",
+  });
+  assert.equal(relay.baseUrl, "http://127.0.0.1:18080/proxy/deepseek/v1");
+  assert.equal(relay.headers["x-liveagent-upstream-origin"], "https://relay.example.com");
+
+  const relayWithVersion = await localProviders.prepareProviderRequest("deepseek", {
+    baseUrl: "https://relay.example.com/v1",
+    apiKey: "secret",
+  });
+  assert.equal(relayWithVersion.baseUrl, "http://127.0.0.1:18080/proxy/deepseek/v1");
+});
+
 test("provider payload finalization enables native web search for hosted search providers", async () => {
   const codexOptions = providers.finalizeProviderStreamOptions({
     providerId: "codex",
@@ -796,8 +906,8 @@ test("provider payload finalization enables native web search for hosted search 
     { type: "web_search_20250305", name: "web_search" },
   ]);
 
-  // Modern Anthropic models get the paired web_fetch server tool alongside
-  // web_search; legacy/unknown catalog entries (above) keep search-only.
+  // Keep the stable GA tool for modern models too. This is accepted by the
+  // official API and avoids dated-tool incompatibilities in Anthropic relays.
   const anthropicModernPayload = await anthropicOptions.onPayload(
     { messages: [{ role: "user", content: "hello" }] },
     {
@@ -808,13 +918,26 @@ test("provider payload finalization enables native web search for hosted search 
     },
   );
   assert.deepEqual(anthropicModernPayload.tools, [
-    { type: "web_search_20260318", name: "web_search" },
+    { type: "web_search_20250305", name: "web_search" },
+  ]);
+
+  const anthropicRelayOptions = providers.finalizeProviderStreamOptions({
+    providerId: "claude_code",
+    baseUrl: "https://relay.example.test/v1",
+    nativeWebSearch: true,
+    options: {},
+  });
+  const anthropicRelayPayload = await anthropicRelayOptions.onPayload(
+    { messages: [{ role: "user", content: "hello" }] },
     {
-      type: "web_fetch_20260318",
-      name: "web_fetch",
-      max_uses: 10,
-      max_content_tokens: 50_000,
+      api: "anthropic-messages",
+      provider: "anthropic",
+      id: "claude-sonnet-5",
+      compat: { forceAdaptiveThinking: true },
     },
+  );
+  assert.deepEqual(anthropicRelayPayload.tools, [
+    { type: "web_search_20250305", name: "web_search" },
   ]);
 
   const geminiOptions = providers.finalizeProviderStreamOptions({

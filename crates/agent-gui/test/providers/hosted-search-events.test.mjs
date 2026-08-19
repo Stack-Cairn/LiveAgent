@@ -143,6 +143,59 @@ test("hosted search fetch probe finish waits for delayed clone parsing", async (
   }
 });
 
+test("hosted search fetch probes capture multiple continuation requests in one round", async () => {
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    return new Response(
+      sse({
+        type: "response.output_item.added",
+        item: {
+          type: "web_search_call",
+          id: `search-continuation-${callCount}`,
+          status: "completed",
+          action: { query: `continuation query ${callCount}` },
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+  };
+
+  const probe = hostedSearchEvents.startHostedSearchFetchProbe({
+    providerId: "codex",
+    sessionId: "session-continuation",
+    requestId: "probe-continuation",
+    enabled: true,
+    onRawEvent: (event) => events.push(event),
+  });
+
+  try {
+    const request = () =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [hostedSearchEvents.HOSTED_SEARCH_PROBE_HEADER]: "probe-continuation",
+        },
+        body: JSON.stringify({ prompt_cache_key: "session-continuation" }),
+      });
+    await request();
+    await request();
+    await probe.finish();
+
+    assert.deepEqual(
+      events.map((event) => event.item.id),
+      ["search-continuation-1", "search-continuation-2"],
+    );
+  } finally {
+    await probe.finish();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("hosted search aggregation ignores ordinary text that only mentions search tokens", () => {
   const emitted = [];
   const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
@@ -379,6 +432,215 @@ test("hosted search aggregation extracts OpenAI url_citation annotations and mar
     block.sources.map((source) => ({ url: source.url, sourceType: source.sourceType })),
     [{ url: "https://example.com/openai", sourceType: "citation" }],
   );
+});
+
+test("DeepSeek Responses search events recover query and citations without annotation.added", () => {
+  const deepseek = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "deepseek",
+  });
+
+  deepseek.accept({
+    event: "response.web_search_call.in_progress",
+    item_id: "deepseek-search-completed",
+  });
+  assert.equal(deepseek.getBlocks()[0].queries.length, 0);
+  assert.equal(deepseek.getBlocks()[0].sources.length, 0);
+
+  deepseek.accept({
+    event: "response.web_search_call.completed",
+    item_id: "deepseek-search-completed",
+    item: {
+      type: "web_search_call",
+      id: "deepseek-search-completed",
+      status: "completed",
+      action: { type: "search", query: "DeepSeek V4 release" },
+    },
+  });
+  deepseek.accept({
+    type: "response.completed",
+    response: {
+      output: [
+        {
+          type: "web_search_call",
+          id: "deepseek-search-completed",
+          status: "completed",
+          action: { type: "search", query: "DeepSeek V4 release" },
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "V4 is generally available.",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://api-docs.deepseek.com/news",
+                  title: "DeepSeek News",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const block = deepseek.getBlocks()[0];
+  assert.equal(block.provider, "deepseek");
+  assert.equal(block.status, "completed");
+  assert.deepEqual(block.queries, ["DeepSeek V4 release"]);
+  assert.deepEqual(
+    block.sources.map((source) => ({
+      url: source.url,
+      title: source.title,
+      sourceType: source.sourceType,
+    })),
+    [
+      {
+        url: "https://api-docs.deepseek.com/news",
+        title: "DeepSeek News",
+        sourceType: "citation",
+      },
+    ],
+  );
+});
+
+test("Responses search parser extracts DeepSeek open_page urls as sources", () => {
+  const deepseek = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "deepseek",
+  });
+
+  deepseek.accept({
+    type: "response.output_item.done",
+    item: {
+      type: "web_search_call",
+      id: "deepseek-open-page",
+      status: "completed",
+      action: { type: "open_page", url: "https://api-docs.deepseek.com/guides/responses_api" },
+    },
+  });
+
+  const block = deepseek.getBlocks()[0];
+  assert.equal(block.status, "completed");
+  assert.deepEqual(
+    block.sources.map((source) => source.url),
+    ["https://api-docs.deepseek.com/guides/responses_api"],
+  );
+});
+
+test("hosted search fetch probe attaches SSE event names when data JSON omits type", async () => {
+  const originalFetch = globalThis.fetch;
+  const events = [];
+
+  globalThis.fetch = async () =>
+    new Response(
+      [
+        "event: response.output_item.done",
+        `data: ${JSON.stringify({
+          item: {
+            type: "web_search_call",
+            id: "deepseek-sse-event",
+            status: "completed",
+            action: { query: "DeepSeek SSE event field" },
+          },
+        })}`,
+        "",
+      ].join("\n"),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+
+  const probe = hostedSearchEvents.startHostedSearchFetchProbe({
+    providerId: "deepseek",
+    sessionId: "session-sse-event",
+    requestId: "probe-sse-event",
+    enabled: true,
+    onRawEvent: (event) => events.push(event),
+  });
+
+  try {
+    await fetch("http://127.0.0.1:18080/proxy/deepseek/responses", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        [hostedSearchEvents.HOSTED_SEARCH_PROBE_HEADER]: "probe-sse-event",
+      },
+      body: JSON.stringify({ model: "deepseek-v4-flash" }),
+    });
+    await probe.finish();
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "response.output_item.done");
+    assert.equal(events[0].item.id, "deepseek-sse-event");
+
+    const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
+      providerId: "deepseek",
+    });
+    aggregator.accept(events[0]);
+    assert.deepEqual(aggregator.getBlocks()[0].queries, ["DeepSeek SSE event field"]);
+  } finally {
+    await probe.finish();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("DeepSeek Responses search events retain DeepSeek provider attribution", () => {
+  const emitted = [];
+  const deepseek = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "deepseek",
+    onHostedSearch: (block) => emitted.push(block),
+  });
+
+  deepseek.accept({
+    type: "response.output_item.added",
+    item: {
+      type: "web_search_call",
+      id: "deepseek-search-1",
+      status: "in_progress",
+      action: {
+        query: "DeepSeek Responses API",
+        sources: [{ url: "https://example.com/deepseek-source", title: "DeepSeek Source" }],
+      },
+    },
+  });
+  deepseek.accept({
+    type: "response.web_search_call.completed",
+    item_id: "deepseek-search-1",
+  });
+  deepseek.accept({
+    type: "response.output_text.annotation.added",
+    annotation: {
+      type: "url_citation",
+      url: "https://example.com/deepseek-citation",
+      title: "DeepSeek Citation",
+    },
+  });
+
+  const block = deepseek.getBlocks()[0];
+  assert.equal(block.provider, "deepseek");
+  assert.equal(block.status, "completed");
+  assert.deepEqual(block.queries, ["DeepSeek Responses API"]);
+  assert.deepEqual(
+    block.sources.map((source) => ({
+      url: source.url,
+      title: source.title,
+      sourceType: source.sourceType,
+    })),
+    [
+      {
+        url: "https://example.com/deepseek-source",
+        title: "DeepSeek Source",
+        sourceType: "source",
+      },
+      {
+        url: "https://example.com/deepseek-citation",
+        title: "DeepSeek Citation",
+        sourceType: "citation",
+      },
+    ],
+  );
+  assert.ok(emitted.every((candidate) => candidate.provider === "deepseek"));
 });
 
 test("codex aggregator tracks xAI x_search_call items and extracts action sources", () => {

@@ -81,6 +81,7 @@ import {
   SkillTextReadRequestSchema,
   TerminalRequestSchema,
   TerminalStreamFrameSchema,
+  TrajectoryFetchRequestSchema,
   TunnelMutationSchema,
   UploadedImagePreviewRequestSchema,
   WorkspaceRootGrantDraftSchema,
@@ -683,6 +684,26 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "fs.roots":
       return { case: "fsRoots", value: create(FsRootsRequestSchema, {}) };
+    case "trajectory.fetch":
+      return {
+        case: "trajectoryFetch",
+        value: create(TrajectoryFetchRequestSchema, {
+          conversationId: trimStr(body.conversation_id),
+          sectionIds: Array.isArray(body.section_ids)
+            ? body.section_ids.filter((id): id is string => typeof id === "string")
+            : [],
+          subagentRunIds: Array.isArray(body.subagent_run_ids)
+            ? body.subagent_run_ids.filter((id): id is string => typeof id === "string")
+            : [],
+          maxSegments: n32(body.max_segments),
+          beforeSegmentIndex:
+            typeof body.before_segment_index === "number" &&
+            Number.isFinite(body.before_segment_index)
+              ? Math.trunc(body.before_segment_index)
+              : undefined,
+          includeSubagentRuns: body.include_subagent_runs === true,
+        }),
+      };
     case "workspace_root_grants.list":
       return {
         case: "workspaceRootGrants",
@@ -1190,6 +1211,23 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       return { mimeType: payload.value.mimeType, data: payload.value.data };
     case "memoryManageResp":
       return unmarshalJsonPayload(payload.value.resultJson);
+    case "trajectoryFetchResp":
+      return {
+        conversation_id: payload.value.conversationId,
+        events_json: payload.value.eventsJson,
+        truncated: payload.value.truncated,
+        oldest_segment_index: payload.value.oldestSegmentIndex,
+        returned_segment_count: payload.value.returnedSegmentCount,
+        total_segment_count: payload.value.totalSegmentCount,
+        has_more_before: payload.value.hasMoreBefore,
+        subagent_runs_json: payload.value.subagentRunsJson,
+        sections: payload.value.sections.map((section) => ({
+          sectionId: section.sectionId,
+          slot: section.slot,
+          content: section.content,
+          bytes: Number(section.bytes),
+        })),
+      };
     case "cronManageResp":
       return { action: payload.value.action, result_json: payload.value.resultJson };
     case "fsRootsResp":
@@ -1430,7 +1468,7 @@ function statusPayload(status: StatusEvent): J {
 
 // 对应 websocketRunActivityPayload（updated_at 为 Unix 毫秒）。
 function runActivityPayload(activity: ChatRunActivity | undefined): J | null {
-  if (!activity || !activity.runId) return null;
+  if (!activity?.runId) return null;
   const payload: J = {
     run_id: activity.runId,
     state: activity.state,
@@ -1448,7 +1486,7 @@ function runActivityPayload(activity: ChatRunActivity | undefined): J | null {
 }
 
 function runSnapshotPayload(snapshot: ChatRunSnapshot | undefined): J | null {
-  if (!snapshot || !snapshot.runId) return null;
+  if (!snapshot?.runId) return null;
   return {
     run_id: snapshot.runId,
     revision: num(snapshot.revision),

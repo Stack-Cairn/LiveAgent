@@ -250,6 +250,11 @@ test("single-flight: a concurrent trigger is rejected while a compaction is in f
 
 test("user stop chains into the summarizer; handleTurnAbort rolls back and persists", async () => {
   const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
   const state = bigState();
   const { cancellation, recorder } = bindController(controller, {
     complete: (params) =>
@@ -278,9 +283,100 @@ test("user stop chains into the summarizer; handleTurnAbort rolls back and persi
   assert.deepEqual(statuses, ["running", "idle"]);
   // 回滚后 bridge 状态已清，isCompaction 不悬挂。
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
+  assert.equal(observed.length, 2);
+  assert.equal(observed[0][0], "start");
+  assert.equal(observed[0][1].trigger, "mid-stream");
+  assert.equal(observed[1][0], "end");
+  assert.equal(observed[1][1].trigger, "mid-stream");
+  assert.equal(observed[1][1].status, "aborted");
+  assert.equal(observed[1][1].tokensBefore, observed[0][1].tokensBefore);
+  assert.equal(observed[1][1].tokensAfter, undefined);
 
-  // 快照消费后再次调用不再回滚。
+  // 快照与观察区间都已消费，再次调用不会重复发终态。
   assert.equal(await controller.handleTurnAbort(), false);
+  assert.equal(observed.length, 2);
+});
+
+test("unbindTurn closes an active compaction observer exactly once", async () => {
+  const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  bindController(controller, {
+    complete: async () => {
+      await gate;
+      return summaryResponse();
+    },
+  });
+  const pending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.unbindTurn();
+  assert.equal(observed.at(-1)[1].status, "aborted");
+  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
+  release();
+  await assert.rejects(pending, /abort/i);
+  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
+});
+
+test("a late result cannot settle a newer compaction with the same trigger", async () => {
+  const controller = new CompactionController();
+  const observed = [];
+  controller.setObserver({
+    onStart: (info) => observed.push(["start", info]),
+    onEnd: (info) => observed.push(["end", info]),
+  });
+
+  let releaseOld;
+  const oldGate = new Promise((resolve) => {
+    releaseOld = resolve;
+  });
+  const oldBinding = bindController(controller, {
+    complete: async () => {
+      await oldGate;
+      return summaryResponse();
+    },
+  });
+  const oldPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.unbindTurn();
+
+  let releaseNew;
+  const newGate = new Promise((resolve) => {
+    releaseNew = resolve;
+  });
+  const newBinding = bindController(controller, {
+    complete: async () => {
+      await newGate;
+      return summaryResponse("new summary");
+    },
+  });
+  const newPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  releaseOld();
+  await assert.rejects(oldPending, /abort/i);
+  assert.equal(oldBinding.recorder.byKind("persist").length, 0);
+  assert.equal(observed.at(-1)[0], "start");
+
+  releaseNew();
+  const result = await newPending;
+  assert.equal(result.outcome, "compacted");
+  assert.equal(newBinding.recorder.byKind("persist").length, 1);
+  assert.deepEqual(
+    observed.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "post-tool"],
+      ["end", "aborted"],
+      ["start", "post-tool"],
+      ["end", "complete"],
+    ],
+  );
 });
 
 test("summarizer failure degrades to prune and still returns a usable context", async () => {
@@ -865,4 +961,107 @@ test("compactManually reports aborted=true when the user stops mid-compaction", 
   assert.deepEqual(statuses, ["running", "idle"]);
   assert.equal(recorder.byKind("persistRollback").length, 1);
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
+});
+
+// —— revision 盖章：persist sink 返回带 revision 的持久化状态时，落地（apply/
+// queueCheckpoint）的必须是那份盖章状态。压缩 checkpoint 状态出自
+// appendMessagesToConversation（revision 恒 null），若照原样 apply，运行时缓存
+// 失去 replace/分页的 CAS 令牌，压缩后 edit-resend 报"历史会话缺少 revision"。
+
+function stampingPersist(recorder, revision) {
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    return {
+      ...state,
+      transcript: { ...state.transcript, revision },
+    };
+  };
+}
+
+test("during-run compaction applies the revision-stamped state returned by persist", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  stampingPersist(recorder, "conv:100:1:2:4");
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.ok(result.context);
+  const [, persistedState] = recorder.byKind("persist")[0];
+  assert.equal(persistedState.transcript.revision, null);
+  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
+  assert.equal(appliedState.transcript.revision, "conv:100:1:2:4");
+  const [, checkpointState] = recorder.byKind("queueCheckpoint")[0];
+  assert.equal(checkpointState.transcript.revision, "conv:100:1:2:4");
+});
+
+test("pre-send compaction re-stamps the revision after composeAppliedState clears it", async () => {
+  const controller = new CompactionController();
+  const pendingUserMessage = user("next question", 9);
+  const baseState = bigState();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+    presend: {
+      baseState,
+      pendingUserText: "next question",
+      composeAppliedState: (state) =>
+        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
+    },
+  });
+  stampingPersist(recorder, "conv:200:1:2:4");
+
+  const applied = await controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(baseState),
+  });
+
+  assert.equal(applied, true);
+  const [, appliedState] = recorder.byKind("applyState")[0];
+  // compose 补回了用户消息（内存追加，DB 仍是 checkpoint 版本），revision 保留。
+  assert.equal(appliedState.segments.at(-1).messages.at(-1).content, "next question");
+  assert.equal(appliedState.transcript.revision, "conv:200:1:2:4");
+});
+
+test("boolean persist keeps the legacy pass-through contract", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.ok(result.context);
+  const [, persistedState] = recorder.byKind("persist")[0];
+  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
+  assert.equal(appliedState, persistedState);
+});
+
+test("a null persist result aborts the checkpoint like false", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    return null;
+  };
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.equal(result.context, null);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+  assert.ok(
+    recorder
+      .byKind("applyStateMidRun")
+      .every(([, state]) => state.meta.activeSegmentIndex === 0),
+  );
 });

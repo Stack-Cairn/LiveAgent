@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -839,6 +839,107 @@ pub(crate) fn load_subagent_run_sync(
     Ok(Some(SubagentRunStateRecord { run, segments }))
 }
 
+const SUBAGENT_RUN_BATCH_MAX_IDS: usize = 256;
+
+/// Load exactly the runs referenced by a trajectory window in two queries (headers + segments).
+/// This deliberately bypasses the user-facing recent-run list limit: an old retained parent tool
+/// call must still be expandable, and silently taking the latest 64 corrupts that relationship.
+pub(crate) fn load_subagent_run_states_by_ids_sync(
+    conn: &Connection,
+    parent_conversation_id: &str,
+    run_ids: &[String],
+) -> Result<Vec<SubagentRunStateRecord>, String> {
+    let parent = require_non_empty(parent_conversation_id, "parentConversationId")?;
+    let mut seen = HashSet::new();
+    let mut ids = Vec::new();
+    for raw in run_ids {
+        let id = raw.trim();
+        if id.is_empty() || !seen.insert(id.to_string()) {
+            continue;
+        }
+        ids.push(id.to_string());
+        if ids.len() > SUBAGENT_RUN_BATCH_MAX_IDS {
+            return Err(format!(
+                "too many subagent run ids: maximum is {SUBAGENT_RUN_BATCH_MAX_IDS}"
+            ));
+        }
+    }
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let header_sql = format!(
+        "SELECT {RUN_HEADER_COLUMNS} FROM subagentRun
+         WHERE parent_conversation_id = ? AND id IN ({placeholders})"
+    );
+    let mut header_stmt = conn
+        .prepare(&header_sql)
+        .map_err(|e| format!("failed to prepare trajectory subagent header query: {e}"))?;
+    let mut header_bindings: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(ids.len() + 1);
+    header_bindings.push(&parent);
+    for id in &ids {
+        header_bindings.push(id);
+    }
+    let header_rows = header_stmt
+        .query_map(header_bindings.as_slice(), row_to_run)
+        .map_err(|e| format!("failed to query trajectory subagent headers: {e}"))?;
+    let mut runs = HashMap::new();
+    for row in header_rows {
+        let run = row.map_err(|e| format!("failed to read trajectory subagent header: {e}"))?;
+        runs.insert(run.id.clone(), run);
+    }
+    drop(header_stmt);
+    if runs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let segment_sql = format!(
+        "SELECT
+             run_id,
+             segment_index,
+             segment_id,
+             summary_json,
+             messages_json,
+             message_count,
+             start_message_id,
+             end_message_id,
+             created_at,
+             updated_at
+         FROM subagentRunSegment
+         WHERE run_id IN ({placeholders})
+         ORDER BY run_id ASC, segment_index ASC"
+    );
+    let mut segment_stmt = conn
+        .prepare(&segment_sql)
+        .map_err(|e| format!("failed to prepare trajectory subagent segment query: {e}"))?;
+    let segment_bindings: Vec<&dyn rusqlite::ToSql> =
+        ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+    let segment_rows = segment_stmt
+        .query_map(segment_bindings.as_slice(), |row| {
+            Ok((row.get::<_, String>("run_id")?, row_to_segment(row)?))
+        })
+        .map_err(|e| format!("failed to query trajectory subagent segments: {e}"))?;
+    let mut segments_by_run: HashMap<String, Vec<SubagentRunSegmentRecord>> = HashMap::new();
+    for row in segment_rows {
+        let (run_id, segment) =
+            row.map_err(|e| format!("failed to read trajectory subagent segment: {e}"))?;
+        segments_by_run.entry(run_id).or_default().push(segment);
+    }
+
+    Ok(ids
+        .into_iter()
+        .filter_map(|id| {
+            runs.remove(&id).map(|run| SubagentRunStateRecord {
+                segments: segments_by_run.remove(&id).unwrap_or_default(),
+                run,
+            })
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Prune / delete
 // ---------------------------------------------------------------------------
@@ -1639,6 +1740,52 @@ mod tests {
         assert_eq!(
             state.segments[1].start_message_id.as_deref(),
             Some("m-1-start")
+        );
+    }
+
+    #[test]
+    fn trajectory_batch_load_is_explicit_unlimited_by_recent_list_and_preserves_request_order() {
+        let mut conn = open_test_db();
+        for index in 0..70 {
+            save_subagent_run_sync(
+                &mut conn,
+                &sample_save_input(&format!("run-{index}"), &format!("call-{index}")),
+            )
+            .expect("save batch run");
+        }
+        let requested = (0..70)
+            .rev()
+            .map(|index| format!("run-{index}"))
+            .collect::<Vec<_>>();
+        let loaded = load_subagent_run_states_by_ids_sync(&conn, "conv-1", &requested)
+            .expect("batch load trajectory runs");
+        assert_eq!(loaded.len(), 70);
+        assert_eq!(
+            loaded.first().map(|state| state.run.id.as_str()),
+            Some("run-69")
+        );
+        assert_eq!(
+            loaded.last().map(|state| state.run.id.as_str()),
+            Some("run-0")
+        );
+        assert!(loaded.iter().all(|state| state.segments.len() == 1));
+
+        let explicit = load_subagent_run_states_by_ids_sync(
+            &conn,
+            "conv-1",
+            &[
+                "run-3".to_string(),
+                "run-missing".to_string(),
+                "run-1".to_string(),
+            ],
+        )
+        .expect("load explicit subset");
+        assert_eq!(
+            explicit
+                .iter()
+                .map(|state| state.run.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["run-3", "run-1"]
         );
     }
 

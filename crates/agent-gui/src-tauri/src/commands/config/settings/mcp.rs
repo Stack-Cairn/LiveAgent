@@ -88,5 +88,6 @@ fn save_mcp(conn: &mut Connection, payload: Value) -> Result<(), String> {
 
     tx.commit()
         .map_err(|e| format!("提交 {MCP_SETTINGS_TABLE} 事务失败：{e}"))?;
+    crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }

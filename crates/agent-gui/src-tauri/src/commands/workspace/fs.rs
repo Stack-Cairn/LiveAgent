@@ -3398,7 +3398,10 @@ pub async fn fs_delete(
     path: String,
     checkpoint: Option<CheckpointCtx>,
 ) -> Result<DeleteResponse, FsCommandError> {
-    run_blocking_fs("fs_delete", move || fs_delete_sync(workdir, path, checkpoint)).await
+    run_blocking_fs("fs_delete", move || {
+        fs_delete_sync(workdir, path, checkpoint)
+    })
+    .await
 }
 
 #[derive(Debug, Serialize)]
@@ -5644,18 +5647,21 @@ mod tests {
         fs::write(workdir.join("file.txt"), "file").expect("write file");
         fs::write(workdir.join("nested/child/file.txt"), "file").expect("write nested file");
 
-        let file_response = fs_delete_sync(workdir.display().to_string(), "file.txt".to_string(), None)
-            .expect("delete file should succeed");
+        let file_response =
+            fs_delete_sync(workdir.display().to_string(), "file.txt".to_string(), None)
+                .expect("delete file should succeed");
         assert_eq!(file_response.kind, "file");
         assert!(!workdir.join("file.txt").exists());
 
-        let empty_response = fs_delete_sync(workdir.display().to_string(), "empty".to_string(), None)
-            .expect("delete empty dir should succeed");
+        let empty_response =
+            fs_delete_sync(workdir.display().to_string(), "empty".to_string(), None)
+                .expect("delete empty dir should succeed");
         assert_eq!(empty_response.kind, "dir");
         assert!(!workdir.join("empty").exists());
 
-        let nested_response = fs_delete_sync(workdir.display().to_string(), "nested".to_string(), None)
-            .expect("delete non-empty dir should succeed");
+        let nested_response =
+            fs_delete_sync(workdir.display().to_string(), "nested".to_string(), None)
+                .expect("delete non-empty dir should succeed");
         assert_eq!(nested_response.kind, "dir");
         assert!(!workdir.join("nested").exists());
 

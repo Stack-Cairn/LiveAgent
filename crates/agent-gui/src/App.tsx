@@ -28,6 +28,7 @@ import {
   normalizeSettings,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
+  type SttProviderId,
   subscribeToSystemThemePreference,
   THEME_OPTIONS,
   type Theme,
@@ -40,6 +41,7 @@ import {
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
+import { desktopSttSettingsService } from "./lib/stt/desktopSttSettingsService";
 import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
 
@@ -104,8 +106,16 @@ function hasSensitiveSettingsUpdatesPayload(payload: unknown) {
           providerApiKeyUpdates?: unknown;
           providerUsageQuerySecretUpdates?: unknown;
           sshSecretUpdates?: unknown;
+          sttSecretUpdate?: unknown;
         })
       : {};
+  if (
+    source.sttSecretUpdate &&
+    typeof source.sttSecretUpdate === "object" &&
+    !Array.isArray(source.sttSecretUpdate)
+  ) {
+    return true;
+  }
   const providerUpdates = source.providerApiKeyUpdates;
   if (
     providerUpdates &&
@@ -182,6 +192,7 @@ export default function App() {
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getDefaultSettings());
+  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
   });
@@ -199,6 +210,10 @@ export default function App() {
   // crypto.randomUUID() inside caller updaters) twice per call.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
+  useEffect(() => {
+    setSttProviderOverride(null);
+  }, [settings.stt.provider]);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
   const effectiveTheme = useMemo(
     () => resolveEffectiveTheme(settings.theme),
@@ -332,16 +347,19 @@ export default function App() {
         .catch(() => undefined)
         .then(() => persistSettings(prev, next))
         .then(async (persistResult) => {
-          const publishTarget = persistResult.ssh
-            ? normalizeSettings({
-                ...next,
-                ssh: persistResult.ssh,
-              })
-            : next;
-          if (persistResult.ssh && saveSequenceRef.current === saveSequence) {
+          const publishTarget = normalizeSettings({
+            ...next,
+            ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
+            ...(persistResult.stt ? { stt: persistResult.stt } : {}),
+          });
+          if (
+            (persistResult.ssh || persistResult.stt) &&
+            saveSequenceRef.current === saveSequence
+          ) {
             const merged = normalizeSettings({
               ...settingsRef.current,
-              ssh: persistResult.ssh,
+              ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
+              ...(persistResult.stt ? { stt: persistResult.stt } : {}),
             });
             settingsRef.current = merged;
             setSettingsState(merged);
@@ -631,6 +649,7 @@ export default function App() {
           <ChatPage
             settings={settings}
             setSettings={setSettings}
+            sttProviderOverride={sttProviderOverride}
             getMcpSettings={getMcpSettings}
             getToolPolicies={getToolPolicies}
             context={context}
@@ -658,6 +677,9 @@ export default function App() {
                 initialSection={settingsSection}
                 initialProviderId={settingsProviderId}
                 appUpdate={appUpdate}
+                sttSettingsService={desktopSttSettingsService}
+                onSttProviderChange={setSttProviderOverride}
+                reloadSettings={reloadPersistedSettings}
               />
             </AppErrorBoundary>
           </div>

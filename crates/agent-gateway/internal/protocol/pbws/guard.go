@@ -64,6 +64,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_FsDelete,
 		*gatewayv2.GatewayEnvelope_FsReadEditableText,
 		*gatewayv2.GatewayEnvelope_FsReadWorkspaceImage,
+		// 轨迹只读：不含任何写能力，也不触碰工作区，直通即可。
+		*gatewayv2.GatewayEnvelope_TrajectoryFetch,
 		*gatewayv2.GatewayEnvelope_ChatQueue:
 		return nil
 	case *gatewayv2.GatewayEnvelope_ChatFileOpen:
@@ -145,7 +147,11 @@ func vetCheckpoint(req *gatewayv2.CheckpointRequest) error {
 		return errors.New("too many checkpoint expected entries")
 	}
 	for _, entry := range req.GetExpected() {
-		if entry == nil || strings.TrimSpace(entry.GetKey()) == "" || len(entry.GetKey()) > 65536 || len(entry.GetCurrentHash()) > 256 {
+		if entry == nil ||
+			strings.TrimSpace(entry.GetKey()) == "" ||
+			len(entry.GetKey()) > 65536 ||
+			strings.TrimSpace(entry.GetCurrentHash()) == "" ||
+			len(entry.GetCurrentHash()) > 256 {
 			return errors.New("checkpoint expected entry is invalid")
 		}
 	}
