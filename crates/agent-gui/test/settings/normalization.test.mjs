@@ -277,7 +277,7 @@ test("gemini provider normalization keeps native routing and model limits", () =
   assert.equal(provider.models[0].maxOutputToken, 65_536);
 });
 
-test("DeepSeek is the fifth built-in provider with native-only defaults", () => {
+test("DeepSeek is the fifth built-in provider with Responses search enabled", () => {
   const providers = settings.getBuiltinCustomProviders();
   assert.deepEqual(
     providers.map((provider) => provider.type),
@@ -291,11 +291,11 @@ test("DeepSeek is the fifth built-in provider with native-only defaults", () => 
   assert.equal(provider.reasoning, "high");
   assert.equal(provider.promptCachingEnabled, false);
   assert.equal(provider.promptCacheHintMode, undefined);
-  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.nativeWebSearchEnabled, true);
   assert.equal(provider.requestFormat, undefined);
 });
 
-test("DeepSeek provider normalization keeps native routing and disables unsupported toggles", () => {
+test("DeepSeek provider normalization keeps native routing and native search", () => {
   const provider = settings.normalizeCustomProvider({
     id: "deepseek-1",
     name: " DeepSeek Relay ",
@@ -305,8 +305,8 @@ test("DeepSeek provider normalization keeps native routing and disables unsuppor
     promptCachingEnabled: true,
     promptCacheHintMode: "openai-key",
     nativeWebSearchEnabled: true,
-    models: ["deepseek-chat", "deepseek-reasoner"],
-    activeModels: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
+    activeModels: ["deepseek-v4-flash", "deepseek-v4-pro"],
   });
 
   assert.equal(provider.type, "deepseek");
@@ -314,7 +314,7 @@ test("DeepSeek provider normalization keeps native routing and disables unsuppor
   assert.equal(provider.requestFormat, undefined);
   assert.equal(provider.promptCachingEnabled, false);
   assert.equal(provider.promptCacheHintMode, undefined);
-  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.nativeWebSearchEnabled, true);
   assert.equal(provider.models[0].contextWindow, 1_000_000);
   assert.equal(provider.models[0].maxOutputToken, 384_000);
 });
@@ -650,29 +650,22 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["high"],
   );
-  // DeepSeek 正式供应商直接读取自己的目录：chat 无思考，reasoner 恒开不可调，
-  // v4-pro 提供 high/max 两档。
+  // DeepSeek 正式供应商只暴露 Responses 模型：Flash 与 Pro 都遵循
+  // 官方 none/low/high/max 映射，并支持关闭思考。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
-      modelId: "deepseek-chat",
+      modelId: "deepseek-v4-flash",
     }),
-    [],
+    ["low", "high", "max"],
   );
-  assert.deepEqual(
-    settings.getChatRuntimeReasoningLevelsForProvider({
-      providerId: "deepseek",
-      modelId: "deepseek-reasoner",
-    }),
-    [],
-  );
-  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-v4-flash"), false);
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
       modelId: "deepseek-v4-pro",
     }),
-    ["high", "max"],
+    ["low", "high", "max"],
   );
 
   assert.deepEqual(
@@ -2656,9 +2649,12 @@ test("cross-provider models resolve real catalog limits instead of provider fall
     settings.getProviderModelDefaults("claude_code", "GROK-4.5@prod").contextWindow,
     500_000,
   );
-  // 国内厂商模型（deepseek/glm/qwen/kimi/MiniMax 等分区）没有自己的应用供应商
-  // 类型，配在任一类型下都经跨供应商回查取真实限额。
-  const deepseekUnderClaude = settings.getProviderModelDefaults("claude_code", "deepseek-chat");
+  // 国内厂商模型（deepseek/glm/qwen/kimi/MiniMax 等分区）配在任一类型下，
+  // 都经跨供应商回查取真实限额。
+  const deepseekUnderClaude = settings.getProviderModelDefaults(
+    "claude_code",
+    "deepseek-v4-flash",
+  );
   assert.equal(deepseekUnderClaude.contextWindow, 1_000_000);
   assert.equal(deepseekUnderClaude.maxOutputToken, 384_000);
   const glmUnderCodex = settings.getProviderModelDefaults("codex", "glm-4.7");

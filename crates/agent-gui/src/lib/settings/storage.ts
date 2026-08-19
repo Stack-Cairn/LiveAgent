@@ -37,6 +37,7 @@ type PersistedSettingsResponse = {
   agents?: unknown | null;
   ssh?: unknown | null;
   remote?: unknown | null;
+  stt?: unknown | null;
   memory?: unknown | null;
   modelFailover?: unknown | null;
   defaultWorkdir?: unknown | null;
@@ -67,6 +68,7 @@ type SshPatchApplyResponse = {
 
 export type PersistSettingsResult = {
   ssh?: AppSettings["ssh"];
+  stt?: AppSettings["stt"];
   conflict?: "ssh_settings_changed";
 };
 
@@ -252,6 +254,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     agents: (persisted?.agents ?? defaults.agents) as AppSettings["agents"],
     ssh: (persisted?.ssh ?? defaults.ssh) as AppSettings["ssh"],
     remote: (persisted?.remote ?? defaults.remote) as AppSettings["remote"],
+    stt: (persisted?.stt ?? defaults.stt) as AppSettings["stt"],
     memory: (persisted?.memory ?? defaults.memory) as AppSettings["memory"],
     skills: localUi.skills,
     chatRuntimeControls: localUi.chatRuntimeControls,
@@ -360,6 +363,16 @@ export async function persistSettings(
     tasks.push(
       invokeSettingsCommand("save_failed", "settings_save_model_failover", {
         payload: next.modelFailover,
+      }),
+    );
+  }
+
+  if (hasChanged(prev.stt, next.stt)) {
+    tasks.push(
+      invoke<unknown>("settings_save_stt", { payload: next.stt } as any).then((response) => {
+        if (response) {
+          result.stt = normalizeSettings({ stt: response as AppSettings["stt"] }).stt;
+        }
       }),
     );
   }

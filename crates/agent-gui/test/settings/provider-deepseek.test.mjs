@@ -30,7 +30,7 @@ test("desktop gateway bridge accepts DeepSeek and still rejects unknown provider
   assert.equal(gatewayTypes.normalizeGatewayProviderType("grok"), null);
 });
 
-test("CC Switch imports DeepSeek without Codex request fields or unsupported toggles", () => {
+test("CC Switch imports DeepSeek with native search enabled", () => {
   const provider = providerImports.providerFromCcs(
     {
       sourceId: "deepseek-official",
@@ -41,7 +41,7 @@ test("CC Switch imports DeepSeek without Codex request fields or unsupported tog
       isFullUrl: false,
       apiKey: "sk-test",
       requestFormat: "openai-completions",
-      models: ["deepseek-chat"],
+      models: ["deepseek-v4-flash"],
     },
     new Set(),
   );
@@ -49,11 +49,11 @@ test("CC Switch imports DeepSeek without Codex request fields or unsupported tog
   assert.equal(provider.type, "deepseek");
   assert.equal(provider.requestFormat, undefined);
   assert.equal(provider.promptCachingEnabled, false);
-  assert.equal(provider.nativeWebSearchEnabled, false);
-  assert.deepEqual(provider.activeModels, ["deepseek-chat"]);
+  assert.equal(provider.nativeWebSearchEnabled, true);
+  assert.deepEqual(provider.activeModels, ["deepseek-v4-flash"]);
 });
 
-test("Cherry DeepSeek imports override stale cache and native-search preferences", () => {
+test("Cherry DeepSeek imports disable cache but preserve explicit native-search preferences", () => {
   const item = {
     sourceId: "deepseek-source::deepseek-chat",
     sourceVersion: "2.x",
@@ -85,5 +85,5 @@ test("Cherry DeepSeek imports override stale cache and native-search preferences
   assert.equal(provider.type, "deepseek");
   assert.equal(provider.requestFormat, undefined);
   assert.equal(provider.promptCachingEnabled, false);
-  assert.equal(provider.nativeWebSearchEnabled, false);
+  assert.equal(provider.nativeWebSearchEnabled, true);
 });

@@ -65,7 +65,10 @@ func (s *Server) serverHello(ok bool, message string, sessionID string, maxMessa
 		ServerTime:             time.Now().Unix(),
 		HeartbeatPeriodSeconds: uint32(s.heartbeatPeriod() / time.Second),
 		MaxMessageBytes:        uint64(maxMessageBytes),
-		Capabilities:           []string{gatewayv2.ChatIngressV1Capability},
+		Capabilities: []string{
+			gatewayv2.ChatIngressV1Capability,
+			gatewayv2.SttStreamV1Capability,
+		},
 	}
 }
 

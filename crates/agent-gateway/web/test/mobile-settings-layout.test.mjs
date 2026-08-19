@@ -14,6 +14,10 @@ const cronSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/CronTaskViewModal.tsx", import.meta.url),
   "utf8",
 );
+const providersSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
+  "utf8",
+);
 const responsiveStylesSource = readFileSync(
   new URL("../src/styles/responsive.css", import.meta.url),
   "utf8",
@@ -54,5 +58,27 @@ test("mobile cron details give configuration more room and compact log summaries
   assert.match(
     responsiveStylesSource,
     /\.settings-log-row\s*> span:first-of-type\s*\{[\s\S]*text-overflow:\s*ellipsis;/,
+  );
+});
+
+test("mobile provider toolbar stacks tabs above a full-width action group", () => {
+  assert.match(providersSource, /settings-provider-section/);
+  assert.match(providersSource, /settings-provider-action-group/);
+  assert.match(providersSource, /settings-provider-empty-add/);
+  assert.match(
+    responsiveStylesSource,
+    /\.settings-provider-tabs-wrap\s*\{[\s\S]*flex-direction:\s*column;/,
+  );
+  assert.match(
+    responsiveStylesSource,
+    /\.settings-provider-action-group\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*42px;/,
+  );
+  assert.match(
+    responsiveStylesSource,
+    /\.settings-provider-action-label\s*\{[\s\S]*display:\s*inline;/,
+  );
+  assert.match(
+    responsiveStylesSource,
+    /\.settings-provider-custom-sheet\s*\{[\s\S]*inset:\s*0;/,
   );
 });

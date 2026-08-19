@@ -124,6 +124,7 @@ import {
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
+import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -228,6 +229,7 @@ export function ChatPage(props: ChatPageProps) {
   const {
     settings,
     setSettings,
+    sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
     context,
@@ -783,6 +785,8 @@ export function ChatPage(props: ChatPageProps) {
     (message: string) => addNotify("error", message),
     [addNotify],
   );
+  // 语音输入失败（麦克风不可用等）以 toast 提示，不占用输入框区域。
+  const handleSttError = useCallback((message: string) => addNotify("error", message), [addNotify]);
   const handleOpenChatFileLink = useChatFileLinkNavigation({
     conversationId: currentConversationId,
     conversationWorkdir: displayedConversationWorkdir,
@@ -1948,6 +1952,16 @@ export function ChatPage(props: ChatPageProps) {
       surface: "desktop",
       isUploadingFiles,
       isInputDisabled: isComposerInputDisabled,
+      // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
+      sttSessionKey: currentConversationId,
+      sttProvider: settings.stt.enabled
+        ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
+        : null,
+      sttProviderConfigured:
+        settings.stt.providers[sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"]
+          ?.configured,
+      sttTransport: desktopSttTransport,
+      onSttError: handleSttError,
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
@@ -2731,6 +2745,16 @@ export function ChatPage(props: ChatPageProps) {
         surface: "desktop",
         isUploadingFiles: false,
         isInputDisabled: false,
+        // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
+        sttSessionKey: conversationId,
+        sttProvider: settings.stt.enabled
+          ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
+          : null,
+        sttProviderConfigured:
+          settings.stt.providers[sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"]
+            ?.configured,
+        sttTransport: desktopSttTransport,
+        onSttError: handleSttError,
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,

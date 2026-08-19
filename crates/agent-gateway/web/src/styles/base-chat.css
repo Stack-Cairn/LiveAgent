@@ -329,8 +329,7 @@ html[data-liveagent-webui="gateway"] .scroll-area-thumb:active {
 }
 
 html[data-liveagent-webui="gateway"] .tool-text-scroll,
-html[data-liveagent-webui="gateway"] .mention-popup-scroll,
-html[data-liveagent-webui="gateway"] .settings-provider-tabs-wrap {
+html[data-liveagent-webui="gateway"] .mention-popup-scroll {
   scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
 }
 
@@ -344,10 +343,6 @@ html[data-liveagent-webui="gateway"] .upload-file-list::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
-}
-
-html[data-liveagent-webui="gateway"] .settings-provider-tabs-wrap::-webkit-scrollbar {
-  height: 8px;
 }
 
 html[data-liveagent-webui="gateway"] .tool-text-scroll::-webkit-scrollbar,

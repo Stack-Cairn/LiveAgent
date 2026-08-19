@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"github.com/liveagent/agent-gateway/internal/stt"
 )
 
 // fatal 记录错误并以非零码退出（slog 没有 Fatal 级别，集中在此处理）。
@@ -43,10 +45,22 @@ func main() {
 	}
 	slog.Info("agent registry db ready", "path", cfg.AgentDB)
 	slog.Info("agent authentication accepts gateway token or per-agent token")
+	sttStore, err := stt.NewStore(database)
+	if err != nil {
+		fatal("init STT settings store failed", "err", err)
+	}
+	sm.SetSTTSettingsSyncHandler(func(ctx context.Context, raw json.RawMessage) (any, error) {
+		var settings stt.Settings
+		if err := json.Unmarshal(raw, &settings); err != nil {
+			return nil, err
+		}
+		return sttStore.SyncFromDesktop(ctx, settings)
+	})
+	sttManager := stt.NewManager(sttStore)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewHTTPServer(cfg, sm, tokens),
+		Handler:           server.NewHTTPServer(cfg, sm, tokens, sttManager),
 		ReadHeaderTimeout: 10 * time.Second,
 		// 空闲 keep-alive 连接必须回收，否则 REST/静态资源访问方挂住连接会把 fd
 		// 慢性耗尽到 ulimit。刻意不设全局 Read/WriteTimeout：流式上传与隧道长响应

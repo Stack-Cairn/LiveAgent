@@ -1,6 +1,8 @@
 package session
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -34,6 +36,7 @@ type Manager struct {
 	workspaceHub     *workspaceActivityHub
 	managedProcesses *managedProcessHub
 	statusSubs       *statusSubscriberHub
+	sttSettingsSync  func(context.Context, json.RawMessage) (any, error)
 }
 
 type AgentSession struct {

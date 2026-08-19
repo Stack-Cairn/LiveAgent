@@ -70,6 +70,71 @@ message AckResult {
 }
 
 // ---------------------------------------------------------------------------
+// 独立语音识别链路（/ws/v2/stt）
+// ---------------------------------------------------------------------------
+
+message SttClientHello {
+  uint32 protocol_version = 1;
+  string token = 2;
+}
+
+message SttStart {
+  string session_id = 1;
+  string provider = 2;
+}
+
+message SttAudio {
+  string session_id = 1;
+  uint32 sequence = 2;
+  bytes pcm = 3;
+}
+
+message SttSessionControl {
+  string session_id = 1;
+}
+
+message SttClientFrame {
+  oneof payload {
+    SttClientHello hello = 1;
+    SttStart start = 2;
+    SttAudio audio = 3;
+    SttSessionControl stop = 4;
+    SttSessionControl cancel = 5;
+  }
+}
+
+message SttServerHello {
+  bool ok = 1;
+  string message = 2;
+}
+
+message SttTextEvent {
+  string session_id = 1;
+  string text = 2;
+}
+
+message SttError {
+  string session_id = 1;
+  string code = 2;
+  string message = 3;
+}
+
+message SttClosed {
+  string session_id = 1;
+}
+
+message SttServerFrame {
+  oneof payload {
+    SttServerHello hello = 1;
+    SttTextEvent ready = 2;
+    SttTextEvent partial = 3;
+    SttTextEvent final = 4;
+    SttError error = 5;
+    SttClosed closed = 6;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 浏览器链路（/ws/v2）
 // ---------------------------------------------------------------------------
 

@@ -8,6 +8,7 @@ pub mod provider_models;
 pub mod provider_usage;
 pub mod proxy;
 pub mod skills;
+pub mod stt;
 pub mod system_proxy;
 pub mod tray;
 pub mod tunnel;

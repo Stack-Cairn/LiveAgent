@@ -34,9 +34,13 @@ test("web thinking wrappers delegate to the shared resolver", () => {
   assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.5"), true);
   assert.equal(settings.isThinkingAlwaysOnForModel("codex", "gpt-5"), true);
   assert.deepEqual(settings.getKnownModelThinkingLevels("codex", "gpt-4o"), []);
-  // DeepSeek 正式供应商的恒开不可调模型：无档位但思考恒开。
-  assert.deepEqual(settings.getKnownModelThinkingLevels("deepseek", "deepseek-reasoner"), []);
-  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-reasoner"), true);
+  // DeepSeek 正式供应商的 V4 Responses 模型：low/high/max，思考可关。
+  assert.deepEqual(settings.getKnownModelThinkingLevels("deepseek", "deepseek-v4-flash"), [
+    "low",
+    "high",
+    "max",
+  ]);
+  assert.equal(settings.isThinkingAlwaysOnForModel("deepseek", "deepseek-v4-flash"), false);
 });
 
 test("web resolver honors decorated ids and heuristics like the GUI", () => {

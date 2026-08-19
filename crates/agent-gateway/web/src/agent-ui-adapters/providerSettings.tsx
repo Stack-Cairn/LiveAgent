@@ -5,6 +5,7 @@ export function ProviderSettingsExtension(_props: {
   activeTab: ProviderId;
   settings: AppSettings;
   setSettings: SettingsSectionProps["setSettings"];
+  triggerClassName?: string;
 }) {
   return null;
 }

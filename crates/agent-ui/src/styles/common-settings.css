@@ -283,3 +283,145 @@
     }
   }
 }
+
+/*
+ * Provider toolbar — unlayered so these win over Button's Tailwind utilities
+ * (rounded-md / border / ghost hover) and keep the cluster aligned with the
+ * vendor tab track on the same row.
+ */
+.settings-provider-tabs-wrap {
+  min-width: 0;
+}
+
+.settings-provider-tabs {
+  min-width: 0;
+  scrollbar-width: none;
+}
+
+.settings-provider-tabs::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.settings-provider-action-group {
+  display: inline-flex;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: stretch;
+  gap: 1px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.settings-provider-action-slot {
+  display: flex;
+  min-width: 0;
+  align-self: stretch;
+}
+
+.settings-provider-action-group > :not(.settings-provider-action):not(.settings-provider-action-slot) {
+  display: contents;
+}
+
+.settings-provider-action-group .settings-provider-action {
+  display: inline-flex;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.settings-provider-action-slot .settings-provider-action {
+  flex: 1;
+}
+
+@media (hover: hover) {
+  .settings-provider-action-group .settings-provider-action:hover {
+    background: hsl(var(--background) / 0.72);
+    color: hsl(var(--foreground));
+  }
+
+  .settings-provider-action-group .settings-provider-action--primary:hover {
+    background: hsl(var(--primary) / 0.9);
+    color: hsl(var(--primary-foreground));
+  }
+}
+
+.settings-provider-action-group .settings-provider-action[data-popup-open],
+.settings-provider-action-group .settings-provider-action[data-open],
+.settings-provider-action-group .settings-provider-action-active {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.06);
+}
+
+.settings-provider-action-group .settings-provider-action--primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 1px 2px hsl(var(--primary) / 0.28);
+}
+
+.settings-provider-action-group .settings-provider-action:focus-visible {
+  z-index: 1;
+  outline: none;
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--ring));
+}
+
+@media (max-width: 860px) {
+  .settings-provider-action-label {
+    display: none;
+  }
+
+  .settings-provider-action-group .settings-provider-action {
+    min-width: 32px;
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-provider-tabs-wrap {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-provider-tabs {
+    width: 100%;
+  }
+
+  .settings-provider-action-group {
+    width: 100%;
+    flex: none;
+  }
+
+  .settings-provider-action-group > .settings-provider-action-slot,
+  .settings-provider-action-group > .settings-provider-action {
+    flex: 1 1 0;
+  }
+
+  .settings-provider-action-label {
+    display: inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-provider-action-group .settings-provider-action {
+    transition: none;
+  }
+}

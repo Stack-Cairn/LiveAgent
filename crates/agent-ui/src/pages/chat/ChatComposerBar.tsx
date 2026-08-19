@@ -5,6 +5,7 @@ import {
   type ProviderId,
   type ReasoningLevel,
   type SelectedModel,
+  type SttProviderId,
 } from "@liveagent/app/lib/settings";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
 import { ComposerModelControls } from "@liveagent/ui/components/chat/ComposerModelControls";
@@ -22,6 +23,7 @@ import {
   Clock3,
   Loader2,
   Maximize2,
+  Mic,
   Minimize2,
   Paperclip,
   Play,
@@ -36,6 +38,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { SttTransport } from "@liveagent/ui/lib/stt/types";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import {
   type MutableRefObject,
@@ -56,6 +59,7 @@ import {
   type UploadedImagePreviewLoader,
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
+import { useComposerStt } from "./useComposerStt";
 
 function useComposerUploadedImagePreview(
   file: PendingUploadedFile,
@@ -216,6 +220,13 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
+  sttProvider?: SttProviderId | null;
+  sttProviderConfigured?: boolean;
+  sttTransport?: SttTransport;
+  /** 当前会话身份；切换会话时取消进行中的语音识别。 */
+  sttSessionKey?: string;
+  /** STT 失败（麦克风不可用、连接超时等）上报给宿主以 toast 形式提示。 */
+  onSttError?: (message: string) => void;
   /**
    * 只读视图（如轨迹页）挂起输入区：整体 display:none 但保持挂载，
    * 半打的草稿与队列状态在切回聊天页时原样恢复。
@@ -288,6 +299,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
+    sttProvider = null,
+    sttProviderConfigured,
+    sttTransport,
+    sttSessionKey,
+    onSttError,
     hidden = false,
     inputPlaceholder,
     workdir,
@@ -337,6 +353,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
+  const stt = useComposerStt({
+    composerRef,
+    provider: sttProvider,
+    providerConfigured: sttProviderConfigured,
+    transport: sttTransport,
+    disabled: isInputDisabled,
+    sessionKey: sttSessionKey,
+    hidden,
+    onError: onSttError,
+  });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const isComposerExpandedRef = useRef(false);
   const glassCardRef = useRef<HTMLDivElement | null>(null);
@@ -361,10 +387,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
   const isAgentMode = isAgentExecutionMode(executionMode);
-  const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
-  const controlsDisabled = isInputDisabled;
+  const uploadDisabled =
+    isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
+  const controlsDisabled = isInputDisabled || stt.active;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
-  const sendDisabled = isInputDisabled || isUploadingFiles || !hasSendableDraft;
+  const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   const primaryActionTitle = canQueueDraftWhileSending
     ? t("chat.queue.addToQueue")
@@ -872,7 +899,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   key={`${file.relativePath}-${file.absolutePath ?? file.fileName}`}
                   file={file}
                   workdir={workdir}
-                  disabled={isInputDisabled}
+                  disabled={controlsDisabled}
                   removeLabel={t("chat.upload.removeFile")}
                   previewLabel={t("chat.upload.previewImage")}
                   closePreviewLabel={t("chat.upload.closePreview")}
@@ -935,7 +962,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               onPasteFiles={onPasteFiles}
               loadHistoryPrompts={loadHistoryPrompts}
               placeholder={inputPlaceholder}
-              disabled={isInputDisabled}
+              disabled={isInputDisabled || stt.active}
               workdir={workdir}
               enabledSkills={enabledSkills}
               className={cn(
@@ -987,6 +1014,35 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   ) : null}
                 </button>
               </RuntimeControlTooltip>
+
+              {stt.available ? (
+                <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>
+                  <button
+                    type="button"
+                    disabled={isInputDisabled}
+                    onClick={stt.toggle}
+                    aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
+                    aria-pressed={stt.active}
+                    className={cn(
+                      "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                      stt.active
+                        ? "bg-red-500/10 text-red-600"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {stt.state === "requesting-permission" ||
+                    stt.state === "buffering" ||
+                    stt.state === "stopping" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : stt.active ? (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </button>
+                </RuntimeControlTooltip>
+              ) : null}
 
               <ComposerModelControls
                 executionMode={executionMode}

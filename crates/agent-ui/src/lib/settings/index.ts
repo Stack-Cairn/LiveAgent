@@ -93,6 +93,9 @@ import type {
   SshProxyConfig,
   SshProxyType,
   SshSettings,
+  SttProviderId,
+  SttProviderSettings,
+  SttSettings,
   SystemProxyConfig,
   SystemSettings,
   ToolPolicy,
@@ -317,7 +320,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       activeModels: [],
       reasoning: "high",
       promptCachingEnabled: false,
-      nativeWebSearchEnabled: false,
+      nativeWebSearchEnabled: true,
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
     },
@@ -581,6 +584,109 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
     enableWebSshTerminal: obj.enableWebSshTerminal === true,
     enableWebGit: obj.enableWebGit === true,
     enableWebTunnels: obj.enableWebTunnels === true,
+  };
+}
+
+export const STT_PROVIDER_IDS: readonly SttProviderId[] = [
+  "tencent_cloud",
+  "volcengine_seed_v3",
+  "aliyun_dashscope",
+  "baidu_cloud",
+];
+
+function defaultSttProvider(id: SttProviderId): SttProviderSettings {
+  const providerDefaults: Partial<SttProviderSettings> =
+    id === "aliyun_dashscope"
+      ? {
+          websocketUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/",
+          model: "paraformer-realtime-v2",
+        }
+      : id === "volcengine_seed_v3"
+        ? {
+            websocketUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+          }
+        : id === "baidu_cloud"
+          ? { websocketUrl: "wss://vop.baidu.com/realtime_asr" }
+          : {};
+  return {
+    id,
+    configured: false,
+    websocketUrl: "",
+    model: "",
+    apiKey: "",
+    appId: "",
+    secretId: "",
+    secretKey: "",
+    accessToken: "",
+    cluster: "",
+    resourceId: "",
+    engineModelType: "16k_zh",
+    baiduAppId: "",
+    baiduApiKey: "",
+    devPid: "",
+    ...providerDefaults,
+  };
+}
+
+export function getDefaultSttSettings(): SttSettings {
+  return {
+    enabled: false,
+    provider: null,
+    providers: Object.fromEntries(
+      STT_PROVIDER_IDS.map((id) => [id, defaultSttProvider(id)]),
+    ) as Record<SttProviderId, SttProviderSettings>,
+  };
+}
+
+export function normalizeSttSettings(input: unknown): SttSettings {
+  const defaults = getDefaultSttSettings();
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const provider = STT_PROVIDER_IDS.includes(obj.provider as SttProviderId)
+    ? (obj.provider as SttProviderId)
+    : null;
+  const rawProviders =
+    obj.providers && typeof obj.providers === "object"
+      ? (obj.providers as Record<string, unknown>)
+      : {};
+  const providers = Object.fromEntries(
+    STT_PROVIDER_IDS.map((id) => {
+      const raw =
+        rawProviders[id] && typeof rawProviders[id] === "object"
+          ? (rawProviders[id] as Record<string, unknown>)
+          : {};
+      const base = defaults.providers[id];
+      const text = (key: string) => (typeof raw[key] === "string" ? raw[key].trim() : "");
+      return [
+        id,
+        {
+          ...base,
+          configured: raw.configured === true,
+          websocketUrl: text("websocketUrl") || base.websocketUrl,
+          model:
+            text("model") === "paraformer-realtime-8k-v2"
+              ? "paraformer-realtime-v2"
+              : text("model") || base.model,
+          apiKey: text("apiKey"),
+          appId: text("appId"),
+          secretId: text("secretId"),
+          secretKey: text("secretKey"),
+          accessToken: text("accessToken"),
+          cluster: text("cluster"),
+          resourceId: text("resourceId"),
+          engineModelType: text("engineModelType") || base.engineModelType,
+          baiduAppId: text("baiduAppId"),
+          baiduApiKey: text("baiduApiKey"),
+          devPid: text("devPid"),
+          ...(raw.clearSecrets === true ? { clearSecrets: true } : {}),
+        } satisfies SttProviderSettings,
+      ];
+    }),
+  ) as Record<SttProviderId, SttProviderSettings>;
+  return {
+    enabled: obj.enabled === true,
+    provider,
+    providers,
+    ...(obj.allowIncomplete === true ? { allowIncomplete: true } : {}),
   };
 }
 
@@ -985,7 +1091,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ...(type === "claude_code" && obj.promptCacheRetention === "long"
       ? { promptCacheRetention: "long" as const }
       : {}),
-    nativeWebSearchEnabled: type === "deepseek" ? false : obj.nativeWebSearchEnabled !== false,
+    nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
     usageQuery: normalizeUsageQueryConfig(obj.usageQuery),
   };
@@ -1417,6 +1523,7 @@ export function getDefaultSettings(): AppSettings {
       enableWebGit: false,
       enableWebTunnels: false,
     },
+    stt: getDefaultSttSettings(),
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
     modelFailover: normalizeModelFailoverSettings({}, customProviders),
@@ -1452,6 +1559,7 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     agents: normalizeAgentPromptTemplates(obj.agents ?? defaults.agents),
     ssh: normalizeSshSettings(obj.ssh ?? defaults.ssh),
     remote: normalizeRemoteSettings(obj.remote ?? defaults.remote),
+    stt: normalizeSttSettings(obj.stt ?? defaults.stt),
     memory: normalizeMemorySettings(obj.memory ?? defaults.memory, customProviders),
     customSettings: normalizeCustomSettings(
       obj.customSettings ?? defaults.customSettings,

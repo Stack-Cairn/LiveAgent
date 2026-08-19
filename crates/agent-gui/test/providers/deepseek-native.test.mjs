@@ -2,29 +2,51 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const loader = createTsModuleLoader();
-const {
-  DEEPSEEK_CHAT_COMPLETIONS_API,
-  normalizeDeepSeekBaseUrl,
-  serializeDeepSeekMessages,
-  serializeDeepSeekRequest,
-  streamDeepSeekNative,
-} = loader.loadModule("src/lib/providers/deepSeekNative.ts");
-const { createModelFromConfig } = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
-const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
+const realOpenAIResponses = await import(
+  new URL(
+    "../../node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+    import.meta.url,
+  ).href
+);
+const loader = createTsModuleLoader({
+  mocks: {
+    "@earendil-works/pi-ai/api/openai-responses": {
+      stream: realOpenAIResponses.stream,
+    },
+  },
+});
+const deepseek = loader.loadModule("src/lib/providers/deepSeekNative.ts");
+const payloadCompat = loader.loadModule(
+  "src/lib/providers/runtime/deepSeekResponsesPayload.ts",
+);
+const { createModelFromConfig } = loader.loadModule(
+  "src/lib/providers/runtime/modelFactory.ts",
+);
+const { finalizeProviderStreamOptions } = loader.loadModule(
+  "src/lib/providers/runtime/payloadPipeline.ts",
+);
+const { streamSimpleByApi } = loader.loadModule(
+  "src/lib/providers/runtime/streamByApi.ts",
+);
 
 function createModel(overrides = {}) {
   return {
-    id: "deepseek-chat",
-    name: "DeepSeek Chat",
-    api: DEEPSEEK_CHAT_COMPLETIONS_API,
+    id: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
+    api: deepseek.DEEPSEEK_RESPONSES_API,
     provider: "deepseek",
-    baseUrl: "https://api.deepseek.com/v1",
+    baseUrl: "https://api.deepseek.com",
     input: ["text"],
     reasoning: true,
-    contextWindow: 128_000,
-    maxTokens: 8_192,
+    thinkingLevelMap: { off: "none", low: "low", high: "high", max: "max" },
+    contextWindow: 1_000_000,
+    maxTokens: 384_000,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    compat: {
+      supportsDeveloperRole: true,
+      supportsLongCacheRetention: false,
+      supportsStrictMode: false,
+    },
     ...overrides,
   };
 }
@@ -32,35 +54,50 @@ function createModel(overrides = {}) {
 function createContext(overrides = {}) {
   return {
     systemPrompt: "You are precise.",
-    messages: [{ role: "user", content: [{ type: "text", text: "Hello" }], timestamp: 1 }],
+    messages: [{ role: "user", content: "Find current release news.", timestamp: 1 }],
     ...overrides,
   };
 }
 
-function sseData(payload) {
-  return `data: ${typeof payload === "string" ? payload : JSON.stringify(payload)}\n\n`;
-}
-
-function responseFromBytes(parts, init = {}) {
-  const { headers, ...responseInit } = init;
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        for (const part of parts) controller.enqueue(part);
-        controller.close();
-      },
-    }),
-    {
-      status: 200,
-      ...responseInit,
-      headers: { "Content-Type": "text/event-stream", ...headers },
+function assistant({
+  model = "deepseek-v4-flash",
+  content,
+  state,
+  provider = "deepseek",
+  api = deepseek.DEEPSEEK_RESPONSES_API,
+  stopReason = "stop",
+  timestamp = 2,
+}) {
+  return {
+    role: "assistant",
+    content,
+    api,
+    provider,
+    model,
+    usage: {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
-  );
+    stopReason,
+    timestamp,
+    ...(state ? { deepSeekResponseState: { output: state } } : {}),
+  };
 }
 
-function responseFromSse(parts, init = {}) {
-  const encoder = new TextEncoder();
-  return responseFromBytes(parts.map((part) => encoder.encode(part)), init);
+function sse(event) {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+function responseFromEvents(events, init = {}) {
+  return new Response(events.map(sse).join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream; charset=utf-8" },
+    ...init,
+  });
 }
 
 async function consume(stream) {
@@ -69,258 +106,565 @@ async function consume(stream) {
   return { events, result: await stream.result() };
 }
 
-async function runStream({ model = createModel(), context = createContext(), fetch, ...options }) {
-  return consume(
-    streamDeepSeekNative(model, context, {
-      apiKey: "sk-test",
-      fetch,
-      ...options,
-    }),
-  );
+function completedSearchResponseEvents({ includeFunctionCall = true, terminalOutput = true } = {}) {
+  const reasoning = {
+    type: "reasoning",
+    id: "rs_1",
+    status: "completed",
+    summary: [],
+    content: [{ type: "reasoning_text", text: "Check current sources." }],
+  };
+  const search = {
+    type: "web_search_call",
+    id: "ws_1",
+    status: "completed",
+    action: {
+      type: "search",
+      query: "DeepSeek V4 release",
+      sources: [{ url: "https://api-docs.deepseek.com/news", title: "DeepSeek News" }],
+    },
+  };
+  const message = {
+    type: "message",
+    id: "msg_1",
+    role: "assistant",
+    status: "completed",
+    content: [
+      {
+        type: "output_text",
+        text: "The current V4 models support server-side search.",
+        annotations: [
+          {
+            type: "url_citation",
+            url: "https://api-docs.deepseek.com/guides/responses_api",
+            title: "Responses API",
+            start_index: 0,
+            end_index: 7,
+          },
+        ],
+      },
+    ],
+  };
+  const functionCall = {
+    type: "function_call",
+    id: "fc_1",
+    call_id: "call_1",
+    name: "lookup_local",
+    arguments: '{"key":"release"}',
+    status: "completed",
+  };
+  const output = includeFunctionCall
+    ? [reasoning, search, message, functionCall]
+    : [reasoning, search, message];
+  const events = [{ type: "response.created", response: { id: "resp_1" } }];
+  for (const [outputIndex, item] of output.entries()) {
+    events.push(
+      { type: "response.output_item.added", output_index: outputIndex, item },
+      { type: "response.output_item.done", output_index: outputIndex, item },
+    );
+  }
+  events.push({
+    type: "response.completed",
+    response: {
+      id: "resp_1",
+      model: "deepseek-v4-flash",
+      status: "completed",
+      ...(terminalOutput ? { output } : {}),
+      usage: {
+        input_tokens: 18,
+        output_tokens: 12,
+        total_tokens: 30,
+        input_tokens_details: { cached_tokens: 3 },
+        output_tokens_details: { reasoning_tokens: 4 },
+      },
+    },
+  });
+  return { events, output };
 }
 
-test("DeepSeek request serialization preserves native message and tool semantics", () => {
-  const context = createContext({
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "first" },
-          { type: "text", text: " second" },
-        ],
-        timestamp: 1,
-      },
-      {
-        role: "assistant",
-        content: [
-          { type: "thinking", thinking: "inspect" },
-          { type: "text", text: "calling" },
-          { type: "toolCall", id: "call-1", name: "lookup", arguments: { q: "value" } },
-        ],
-        api: DEEPSEEK_CHAT_COMPLETIONS_API,
-        provider: "deepseek",
-        model: "deepseek-chat",
-        usage: {
-          input: 1,
-          output: 1,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 2,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: "toolUse",
-        timestamp: 2,
-      },
-      {
-        role: "toolResult",
-        toolCallId: "call-1",
-        toolName: "lookup",
-        content: [],
-        isError: false,
-        timestamp: 3,
-      },
-      {
-        role: "assistant",
-        content: [{ type: "thinking", thinking: "private plain-turn reasoning" }],
-        api: DEEPSEEK_CHAT_COMPLETIONS_API,
-        provider: "deepseek",
-        model: "deepseek-chat",
-        usage: {
-          input: 1,
-          output: 1,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 2,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: "stop",
-        timestamp: 4,
-      },
-    ],
-    tools: [
-      {
-        name: "lookup",
-        description: "Look up a value",
-        parameters: {
-          type: "object",
-          properties: { q: { type: "string" } },
-          required: ["q"],
-        },
-      },
-    ],
-  });
-
-  assert.deepEqual(serializeDeepSeekMessages(context), [
-    { role: "system", content: "You are precise." },
-    { role: "user", content: "first second" },
-    {
-      role: "assistant",
-      content: "calling",
-      reasoning_content: "inspect",
-      tool_calls: [
-        {
-          id: "call-1",
-          type: "function",
-          function: { name: "lookup", arguments: '{"q":"value"}' },
-        },
-      ],
-    },
-    { role: "tool", tool_call_id: "call-1", content: "(no output)" },
-    { role: "assistant", content: "" },
-  ]);
-
-  const request = serializeDeepSeekRequest(createModel(), context, {
-    reasoning: "xhigh",
-    maxTokens: 20_000,
-    temperature: 0.25,
-    toolChoice: { type: "tool", name: "lookup" },
-  });
-  assert.deepEqual(request.thinking, { type: "enabled" });
-  assert.equal(request.reasoning_effort, "max");
-  assert.equal(request.max_tokens, 8_192);
-  assert.equal(request.temperature, 0.25);
-  assert.deepEqual(request.tool_choice, {
-    type: "function",
-    function: { name: "lookup" },
-  });
-  assert.equal(request.tools?.[0].function.name, "lookup");
-  assert.equal("prompt_cache_key" in request, false);
-  assert.equal("cache_control" in request, false);
-});
-
-test("DeepSeek model factory is independent from Codex and Claude protocol selection", () => {
-  const deepseek = createModelFromConfig(
-    "deepseek",
-    "deepseek-reasoner",
-    "https://api.deepseek.com/v1/chat/completions/",
-    "openai-responses",
+test("DeepSeek formal provider normalizes onto the native Responses API", () => {
+  assert.equal(deepseek.DEEPSEEK_RESPONSES_API, "deepseek-responses");
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://api.deepseek.com/v1/chat/completions/"),
+    "https://api.deepseek.com",
   );
-  assert.equal(deepseek.api, DEEPSEEK_CHAT_COMPLETIONS_API);
-  assert.equal(deepseek.provider, "deepseek");
-  assert.equal(deepseek.baseUrl, "https://api.deepseek.com/v1/chat/completions");
-  assert.deepEqual(deepseek.input, ["text"]);
-  assert.equal(deepseek.deepSeekThinkingAlwaysOn, true);
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://api.deepseek.com/v1/responses"),
+    "https://api.deepseek.com",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://api.deepseek.com"),
+    "https://api.deepseek.com",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://relay.example.test"),
+    "https://relay.example.test/v1",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://relay.example.test/deepseek"),
+    "https://relay.example.test/deepseek/v1",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("https://relay.example.test/deepseek/v1"),
+    "https://relay.example.test/deepseek/v1",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl(
+      "https://relay.example.test/deepseek/v1/chat/completions",
+    ),
+    "https://relay.example.test/deepseek/v1",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesEndpoint("https://relay.example.test"),
+    "https://relay.example.test/v1/responses",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesEndpoint(
+      "https://relay.example.test/deepseek/v1/chat/completions",
+    ),
+    "https://relay.example.test/deepseek/v1/responses",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("http://127.0.0.1:18080/proxy/deepseek", {
+      officialHost: true,
+    }),
+    "http://127.0.0.1:18080/proxy/deepseek",
+  );
+  assert.equal(
+    deepseek.normalizeDeepSeekResponsesBaseUrl("http://127.0.0.1:18080/proxy/deepseek", {
+      officialHost: false,
+    }),
+    "http://127.0.0.1:18080/proxy/deepseek/v1",
+  );
+
+  const model = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-pro",
+    "https://api.deepseek.com/v1/chat/completions/",
+    "openai-completions",
+  );
+  assert.equal(model.api, deepseek.DEEPSEEK_RESPONSES_API);
+  assert.equal(model.provider, "deepseek");
+  assert.equal(model.baseUrl, "https://api.deepseek.com");
+  assert.deepEqual(model.input, ["text"]);
+  assert.equal(model.compat.supportsStrictMode, false);
+
+  const officialViaProxy = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "http://127.0.0.1:18080/proxy/deepseek",
+    "deepseek-responses",
+    undefined,
+    "https://api.deepseek.com",
+  );
+  assert.equal(officialViaProxy.baseUrl, "http://127.0.0.1:18080/proxy/deepseek");
+
+  const relayViaProxy = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "http://127.0.0.1:18080/proxy/deepseek",
+    "deepseek-responses",
+    undefined,
+    "https://relay.example.test",
+  );
+  assert.equal(relayViaProxy.baseUrl, "http://127.0.0.1:18080/proxy/deepseek/v1");
+
+  const relayBare = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "https://relay.example.test",
+  );
+  assert.equal(relayBare.baseUrl, "https://relay.example.test/v1");
 
   const codex = createModelFromConfig(
     "codex",
-    "deepseek-chat",
-    "https://api.deepseek.com/v1/chat/completions",
+    "deepseek-v4-flash",
+    "https://relay.example.test/v1",
     "openai-completions",
   );
   assert.equal(codex.api, "openai-completions");
   assert.equal(codex.provider, "openai");
-  assert.equal(codex.deepSeekThinkingAlwaysOn, undefined);
 
   const claude = createModelFromConfig(
     "claude_code",
-    "deepseek-chat",
+    "deepseek-v4-flash",
     "https://api.deepseek.com/anthropic",
   );
   assert.equal(claude.api, "anthropic-messages");
   assert.equal(claude.provider, "anthropic");
-  assert.equal(claude.deepSeekThinkingAlwaysOn, undefined);
 });
 
-test("streamSimpleByApi dispatches the formal DeepSeek API to the native stream", async () => {
-  const model = createModelFromConfig(
-    "deepseek",
-    "deepseek-chat",
-    "https://api.deepseek.com/v1",
-  );
-  const urls = [];
-  const stream = streamSimpleByApi(model, createContext(), {
-    apiKey: "sk-test",
-    streamRetry: { disabled: true },
-    fetch: async (url) => {
-      urls.push(String(url));
-      return responseFromSse([
-        sseData({ choices: [{ delta: { content: "native" }, finish_reason: "stop" }] }),
-        sseData("[DONE]"),
-      ]);
+test("DeepSeek streams official Responses SSE without DONE and preserves search output", async () => {
+  const model = createModel();
+  const context = createContext({
+    tools: [
+      {
+        name: "lookup_local",
+        description: "Look up local metadata",
+        parameters: {
+          type: "object",
+          properties: { key: { type: "string" } },
+          required: ["key"],
+        },
+      },
+    ],
+  });
+  const { events: wireEvents, output } = completedSearchResponseEvents();
+  const calls = [];
+  const responses = [];
+  const options = finalizeProviderStreamOptions({
+    providerId: "deepseek",
+    baseUrl: model.baseUrl,
+    model,
+    context,
+    nativeWebSearch: true,
+    options: {
+      apiKey: "sk-test",
+      reasoning: "high",
+      maxTokens: 4_096,
+      toolChoice: "auto",
+      streamRetry: { disabled: true },
+      onResponse(response) {
+        responses.push(response);
+      },
+      async fetch(url, init) {
+        calls.push({
+          url: String(url),
+          init,
+          payload: JSON.parse(String(init.body)),
+        });
+        return responseFromEvents(wireEvents);
+      },
     },
   });
 
-  const { result } = await consume(stream);
+  const { events, result } = await consume(streamSimpleByApi(model, context, options));
 
-  assert.deepEqual(urls, ["https://api.deepseek.com/v1/chat/completions"]);
-  assert.equal(result.content[0].text, "native");
-  assert.equal(result.provider, "deepseek");
-  assert.equal(result.api, DEEPSEEK_CHAT_COMPLETIONS_API);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.deepseek.com/responses");
+  assert.equal(new Headers(calls[0].init.headers).get("authorization"), "Bearer sk-test");
+  assert.equal(calls[0].payload.model, "deepseek-v4-flash");
+  assert.equal(calls[0].payload.stream, true);
+  assert.equal(calls[0].payload.max_output_tokens, 4_096);
+  assert.deepEqual(calls[0].payload.reasoning, { effort: "high" });
+  assert.deepEqual(
+    calls[0].payload.tools.map((tool) => tool.type),
+    ["function", "web_search"],
+  );
+  for (const unsupported of [
+    "store",
+    "include",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "prompt_cache_options",
+    "stream_options",
+  ]) {
+    assert.equal(unsupported in calls[0].payload, false, unsupported);
+  }
+  assert.equal(responses.length, 1);
+  assert.equal(responses[0].status, 200);
+  assert.equal(events.at(-1).type, "done");
+  assert.equal(result.stopReason, "toolUse");
+  assert.equal(result.responseId, "resp_1");
+  assert.deepEqual(
+    result.content.map((block) => block.type),
+    ["thinking", "text", "toolCall"],
+  );
+  assert.equal(result.content[1].text, "The current V4 models support server-side search.");
+  assert.deepEqual(result.content[2].arguments, { key: "release" });
+  assert.deepEqual(result.deepSeekResponseState, { output });
+  assert.deepEqual(result.usage, {
+    input: 15,
+    output: 12,
+    cacheRead: 3,
+    cacheWrite: 0,
+    reasoning: 4,
+    totalTokens: 30,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  });
 });
 
-test("DeepSeek thinking mapping supports disabled, high, max, and always-on models", () => {
-  const context = createContext();
-  assert.deepEqual(serializeDeepSeekRequest(createModel(), context, {}).thinking, {
-    type: "disabled",
+test("DeepSeek disabled thinking sends official Responses effort none", async () => {
+  const model = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "https://api.deepseek.com",
+  );
+  const calls = [];
+  const options = finalizeProviderStreamOptions({
+    providerId: "deepseek",
+    baseUrl: model.baseUrl,
+    model,
+    context: createContext(),
+    options: {
+      apiKey: "sk-test",
+      deepSeekThinking: "disabled",
+      streamRetry: { disabled: true },
+      async fetch(_url, init) {
+        calls.push(JSON.parse(String(init.body)));
+        return responseFromEvents(
+          completedSearchResponseEvents({ includeFunctionCall: false }).events,
+        );
+      },
+    },
   });
 
-  const high = serializeDeepSeekRequest(createModel(), context, { reasoning: "low" });
-  assert.deepEqual(high.thinking, { type: "enabled" });
-  assert.equal(high.reasoning_effort, "high");
+  await consume(streamSimpleByApi(model, createContext(), options));
 
-  const max = serializeDeepSeekRequest(createModel(), context, { reasoning: "max" });
-  assert.deepEqual(max.thinking, { type: "enabled" });
-  assert.equal(max.reasoning_effort, "max");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].reasoning, { effort: "none" });
 
-  const alwaysOn = serializeDeepSeekRequest(
-    createModel({ id: "deepseek-reasoner", deepSeekThinkingAlwaysOn: true }),
-    context,
-    {},
-  );
-  assert.deepEqual(alwaysOn.thinking, { type: "enabled" });
-  assert.equal(alwaysOn.reasoning_effort, "high");
-
-  const explicitlyDisabled = serializeDeepSeekRequest(
-    createModel({ id: "deepseek-reasoner", deepSeekThinkingAlwaysOn: true }),
-    context,
-    { reasoning: "max", deepSeekThinking: "disabled" },
-  );
-  assert.deepEqual(explicitlyDisabled.thinking, { type: "disabled" });
-  assert.equal(explicitlyDisabled.reasoning_effort, undefined);
-
-  assert.equal(
-    serializeDeepSeekRequest(createModel(), { ...context, tools: [] }, { toolChoice: "any" })
-      .tool_choice,
-    undefined,
-  );
-  assert.equal(
-    serializeDeepSeekRequest(
-      createModel(),
-      {
-        ...context,
-        tools: [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }],
+  // Agent path never sets deepSeekThinking; off is just a missing reasoning
+  // level. Responses still defaults to thinking=high unless effort is none.
+  calls.length = 0;
+  const agentOptions = finalizeProviderStreamOptions({
+    providerId: "deepseek",
+    baseUrl: model.baseUrl,
+    model,
+    context: createContext(),
+    options: {
+      apiKey: "sk-test",
+      streamRetry: { disabled: true },
+      async fetch(_url, init) {
+        calls.push(JSON.parse(String(init.body)));
+        return responseFromEvents(
+          completedSearchResponseEvents({ includeFunctionCall: false }).events,
+        );
       },
-      { toolChoice: "any" },
-    ).tool_choice,
-    "required",
-  );
+    },
+  });
+  await consume(streamSimpleByApi(model, createContext(), agentOptions));
+  assert.deepEqual(calls[0].reasoning, { effort: "none" });
 });
 
-test("DeepSeek serialization rejects images instead of silently dropping them", () => {
-  assert.throws(
-    () =>
-      serializeDeepSeekMessages(
-        createContext({
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "describe" },
-                { type: "image", data: "AAAA", mimeType: "image/png" },
-              ],
-              timestamp: 1,
-            },
-          ],
-        }),
-      ),
-    /does not support image content/,
-  );
+test("DeepSeek search capture falls back to ordered output-item events", async () => {
+  const model = createModel();
+  const context = createContext();
+  const { events, output } = completedSearchResponseEvents({
+    includeFunctionCall: false,
+    terminalOutput: false,
+  });
+  const stream = deepseek.streamDeepSeekResponses(model, context, {
+    apiKey: "sk-test",
+    streamRetry: { disabled: true },
+    fetch: async () => responseFromEvents(events),
+  });
+  const { result } = await consume(stream);
+
+  assert.equal(result.stopReason, "stop");
+  assert.deepEqual(result.deepSeekResponseState, { output });
 });
 
-test("DeepSeek native stream rejects images before fetch", async () => {
+test("DeepSeek payload replays complete search output and remaps orphaned tool results", () => {
+  const firstOutput = [
+    { type: "reasoning", id: "rs_first", content: [] },
+    {
+      type: "web_search_call",
+      id: "ws_first",
+      status: "completed",
+      action: { query: "first query" },
+    },
+    {
+      type: "message",
+      id: "msg_first",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "first answer", annotations: [] }],
+    },
+    {
+      type: "function_call",
+      id: "fc_first",
+      call_id: "call_first",
+      name: "lookup_local",
+      arguments: '{"key":"first"}',
+    },
+  ];
+  const secondOutput = [
+    { type: "reasoning", id: "rs_second", content: [] },
+    {
+      type: "web_search_call",
+      id: "ws_second",
+      status: "completed",
+      action: { query: "second query" },
+    },
+    {
+      type: "message",
+      id: "msg_second",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "second answer", annotations: [] }],
+    },
+  ];
+  const context = createContext({
+    messages: [
+      { role: "user", content: "first", timestamp: 1 },
+      assistant({
+        model: "deepseek-v4-flash",
+        content: [
+          {
+            type: "thinking",
+            thinking: "first reasoning",
+            thinkingSignature: JSON.stringify(firstOutput[0]),
+          },
+          { type: "text", text: "first answer" },
+          {
+            type: "toolCall",
+            id: "call_first|fc_first",
+            name: "lookup_local",
+            arguments: { key: "first" },
+          },
+        ],
+        state: firstOutput,
+      }),
+      { role: "user", content: "second", timestamp: 3 },
+      assistant({
+        model: "deepseek-v4-pro",
+        timestamp: 4,
+        content: [
+          {
+            type: "thinking",
+            thinking: "second reasoning",
+            thinkingSignature: JSON.stringify(secondOutput[0]),
+          },
+          { type: "text", text: "second answer" },
+        ],
+        state: secondOutput,
+      }),
+      { role: "user", content: "continue", timestamp: 5 },
+    ],
+  });
+  const generatedInput = [
+    { role: "developer", content: "You are precise." },
+    { role: "user", content: [{ type: "input_text", text: "first" }] },
+    {
+      type: "message",
+      id: "msg_pi_1",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "first reasoning", annotations: [] }],
+    },
+    {
+      type: "message",
+      id: "msg_pi_1_1",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "first answer", annotations: [] }],
+    },
+    {
+      type: "function_call",
+      call_id: "call_first_fc_first",
+      name: "lookup_local",
+      arguments: '{"key":"first"}',
+    },
+    {
+      type: "function_call_output",
+      call_id: "call_first_fc_first",
+      output: "No result provided",
+    },
+    { role: "user", content: [{ type: "input_text", text: "second" }] },
+    secondOutput[0],
+    {
+      type: "message",
+      id: "msg_pi_3",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "second answer", annotations: [] }],
+    },
+    { role: "user", content: [{ type: "input_text", text: "continue" }] },
+  ];
+
+  const normalized = payloadCompat.normalizeDeepSeekResponsesPayload(
+    {
+      model: "deepseek-v4-pro",
+      input: generatedInput,
+      previous_response_id: "unsupported",
+      conversation: "unsupported",
+      store: false,
+      background: true,
+      metadata: { source: "unsupported" },
+      include: ["reasoning.encrypted_content"],
+      prompt: { id: "unsupported" },
+      truncation: "auto",
+      service_tier: "auto",
+      safety_identifier: "unsupported",
+      prompt_cache_key: "unsupported",
+      prompt_cache_retention: "24h",
+      prompt_cache_options: { mode: "explicit" },
+      context_management: [{ type: "compaction" }],
+      stream_options: { include_usage: true },
+      reasoning: { effort: "high", summary: "auto" },
+    },
+    context,
+    createModel({ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }),
+  );
+
+  assert.deepEqual(normalized.reasoning, { effort: "high" });
+  for (const unsupported of [
+    "previous_response_id",
+    "conversation",
+    "store",
+    "background",
+    "metadata",
+    "include",
+    "prompt",
+    "truncation",
+    "service_tier",
+    "safety_identifier",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "prompt_cache_options",
+    "context_management",
+    "stream_options",
+  ]) {
+    assert.equal(unsupported in normalized, false, unsupported);
+  }
+  assert.deepEqual(normalized.input, [
+    generatedInput[0],
+    generatedInput[1],
+    ...firstOutput,
+    { ...generatedInput[5], call_id: "call_first" },
+    generatedInput[6],
+    ...secondOutput,
+    generatedInput[9],
+  ]);
+});
+
+test("DeepSeek replay state is provider-scoped and requires a web search call", () => {
+  const context = createContext({
+    systemPrompt: undefined,
+    messages: [
+      { role: "user", content: "hello", timestamp: 1 },
+      assistant({
+        provider: "openai",
+        api: "openai-responses",
+        content: [{ type: "text", text: "foreign" }],
+        state: [{ type: "web_search_call", id: "foreign" }],
+      }),
+      assistant({
+        content: [{ type: "text", text: "no search" }],
+        state: [{ type: "message", id: "plain" }],
+      }),
+    ],
+  });
+  const input = [
+    { role: "user", content: [{ type: "input_text", text: "hello" }] },
+    { type: "message", id: "foreign-generated" },
+    { type: "message", id: "plain-generated" },
+  ];
+
+  const normalized = payloadCompat.normalizeDeepSeekResponsesPayload(
+    { input },
+    context,
+    createModel(),
+  );
+  assert.deepEqual(normalized.input, input);
+});
+
+test("DeepSeek rejects image input before sending a request", async () => {
   let fetchCalled = false;
-  const { events, result } = await runStream({
-    context: createContext({
+  const stream = deepseek.streamDeepSeekResponses(
+    createModel(),
+    createContext({
       messages: [
         {
           role: "user",
@@ -332,302 +676,18 @@ test("DeepSeek native stream rejects images before fetch", async () => {
         },
       ],
     }),
-    fetch: async () => {
-      fetchCalled = true;
-      throw new Error("fetch must not run for image content");
+    {
+      apiKey: "sk-test",
+      fetch: async () => {
+        fetchCalled = true;
+        throw new Error("fetch should not run");
+      },
     },
-  });
+  );
+  const { events, result } = await consume(stream);
 
   assert.equal(fetchCalled, false);
   assert.equal(events.at(-1).type, "error");
   assert.equal(result.stopReason, "error");
-  assert.match(result.errorMessage, /does not support image content/);
-});
-
-test("DeepSeek native stream handles split UTF-8 SSE, tools, usage, hooks, and block order", async () => {
-  const body = [
-    sseData({
-      id: "response-1",
-      model: "deepseek-chat-202608",
-      choices: [{ delta: { reasoning_content: "思考" }, finish_reason: null }],
-    }),
-    sseData({ choices: [{ delta: { content: "答案" }, finish_reason: null }] }),
-    sseData({
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: "call-1",
-                function: { name: "lookup", arguments: '{"city":"深' },
-              },
-            ],
-          },
-          finish_reason: null,
-        },
-      ],
-    }),
-    sseData({
-      choices: [
-        {
-          delta: { tool_calls: [{ index: 0, function: { arguments: '圳"}' } }] },
-          finish_reason: "tool_calls",
-        },
-      ],
-      usage: {
-        prompt_tokens: 20,
-        completion_tokens: 9,
-        prompt_cache_hit_tokens: 7,
-        completion_tokens_details: { reasoning_tokens: 4 },
-      },
-    }),
-    sseData("[DONE]"),
-  ].join("");
-  const bytes = new TextEncoder().encode(body);
-  const splitAt = bytes.indexOf(new TextEncoder().encode("圳")[0]) + 1;
-  const calls = [];
-  const responses = [];
-
-  const { events, result } = await runStream({
-    model: createModel({
-      baseUrl: "https://api.deepseek.com/v1/chat/completions",
-      headers: { "X-Model-Header": "model", "X-Remove-Me": "model" },
-    }),
-    context: createContext({
-      tools: [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }],
-    }),
-    reasoning: "high",
-    headers: {
-      "X-Model-Header": "request",
-      "X-Remove-Me": null,
-      "X-Request-Header": "present",
-    },
-    onPayload(payload) {
-      return { ...payload, temperature: 0.1, hook_marker: true };
-    },
-    onResponse(response) {
-      responses.push(response);
-    },
-    fetch: async (url, options) => {
-      calls.push({ url: String(url), options, payload: JSON.parse(options.body) });
-      return responseFromBytes([bytes.slice(0, splitAt), bytes.slice(splitAt)], {
-        headers: { "X-DeepSeek-Request-Id": "request-1" },
-      });
-    },
-  });
-
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "https://api.deepseek.com/v1/chat/completions");
-  assert.equal(calls[0].options.method, "POST");
-  assert.equal(calls[0].options.headers.get("Authorization"), "Bearer sk-test");
-  assert.equal(calls[0].options.headers.get("X-Model-Header"), "request");
-  assert.equal(calls[0].options.headers.get("X-Request-Header"), "present");
-  assert.equal(calls[0].options.headers.has("X-Remove-Me"), false);
-  assert.equal(calls[0].payload.temperature, 0.1);
-  assert.equal(calls[0].payload.hook_marker, true);
-  assert.deepEqual(responses, [
-    {
-      status: 200,
-      headers: {
-        "content-type": "text/event-stream",
-        "x-deepseek-request-id": "request-1",
-      },
-    },
-  ]);
-
-  assert.deepEqual(
-    events.map((event) => event.type),
-    [
-      "start",
-      "thinking_start",
-      "thinking_delta",
-      "text_start",
-      "text_delta",
-      "toolcall_start",
-      "toolcall_delta",
-      "toolcall_delta",
-      "thinking_end",
-      "text_end",
-      "toolcall_end",
-      "done",
-    ],
-  );
-  assert.deepEqual(result.content, [
-    { type: "thinking", thinking: "思考" },
-    { type: "text", text: "答案" },
-    { type: "toolCall", id: "call-1", name: "lookup", arguments: { city: "深圳" } },
-  ]);
-  assert.equal(result.responseId, "response-1");
-  assert.equal(result.responseModel, "deepseek-chat-202608");
-  assert.equal(result.stopReason, "toolUse");
-  assert.equal(result.rawStopReason, "tool_calls");
-  assert.deepEqual(result.usage, {
-    input: 13,
-    output: 9,
-    cacheRead: 7,
-    cacheWrite: 0,
-    reasoning: 4,
-    totalTokens: 29,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  });
-});
-
-test("DeepSeek native stream maps length completion and cached-token detail usage", async () => {
-  const response = responseFromSse([
-    sseData({ choices: [{ delta: { content: "partial" }, finish_reason: "length" }] }),
-    sseData({
-      choices: [],
-      usage: {
-        prompt_tokens: 10,
-        completion_tokens: 3,
-        prompt_tokens_details: { cached_tokens: 4 },
-      },
-    }),
-    sseData("[DONE]"),
-  ]);
-
-  const { result } = await runStream({ fetch: async () => response });
-
-  assert.equal(result.stopReason, "length");
-  assert.deepEqual(result.usage, {
-    input: 6,
-    output: 3,
-    cacheRead: 4,
-    cacheWrite: 0,
-    reasoning: undefined,
-    totalTokens: 13,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  });
-});
-
-test("DeepSeek native stream reports JSON and plain-text HTTP error details", async () => {
-  for (const [response, expected] of [
-    [
-      new Response(JSON.stringify({ error: { message: "invalid key" } }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      }),
-      /HTTP 401.*invalid key/,
-    ],
-    [new Response("upstream unavailable", { status: 502 }), /HTTP 502.*upstream unavailable/],
-  ]) {
-    const { events, result } = await runStream({ fetch: async () => response });
-    assert.equal(events.at(-1).type, "error");
-    assert.equal(result.stopReason, "error");
-    assert.match(result.errorMessage, expected);
-  }
-});
-
-test("DeepSeek native stream rejects malformed, truncated, empty, and unknown-finish responses", async () => {
-  const cases = [
-    {
-      name: "malformed",
-      response: () => responseFromSse([sseData("{not-json"), sseData("[DONE]")]),
-      expected: /Malformed DeepSeek SSE payload/,
-    },
-    {
-      name: "truncated",
-      response: () =>
-        responseFromSse([
-          sseData({ choices: [{ delta: { content: "partial" }, finish_reason: null }] }),
-        ]),
-      expected: /ended without \[DONE\]/,
-    },
-    {
-      name: "empty",
-      response: () =>
-        responseFromSse([
-          sseData({ choices: [{ delta: {}, finish_reason: "stop" }] }),
-          sseData("[DONE]"),
-        ]),
-      expected: /completed response with no content/,
-    },
-    {
-      name: "unknown finish",
-      response: () =>
-        responseFromSse([
-          sseData({ choices: [{ delta: { content: "blocked" }, finish_reason: "content_filter" }] }),
-          sseData("[DONE]"),
-        ]),
-      expected: /unsupported finish reason: content_filter/,
-    },
-    {
-      name: "missing body",
-      response: () => new Response(null, { status: 200 }),
-      expected: /no response body/,
-    },
-  ];
-
-  for (const current of cases) {
-    const { events, result } = await runStream({ fetch: async () => current.response() });
-    assert.equal(events.at(-1).type, "error", current.name);
-    assert.equal(result.stopReason, "error", current.name);
-    assert.match(result.errorMessage, current.expected, current.name);
-  }
-});
-
-test("DeepSeek base URL normalization appends /v1 only when no version or endpoint path exists", () => {
-  // one-api/new-api 系中转只在 /v1 下服务 API，裸域名路径被前置 SPA 兜底。
-  assert.equal(normalizeDeepSeekBaseUrl("https://relay.example.test"), "https://relay.example.test/v1");
-  assert.equal(normalizeDeepSeekBaseUrl("https://relay.example.test/"), "https://relay.example.test/v1");
-  assert.equal(normalizeDeepSeekBaseUrl("https://api.deepseek.com"), "https://api.deepseek.com/v1");
-  assert.equal(
-    normalizeDeepSeekBaseUrl("https://relay.example.test/deepseek"),
-    "https://relay.example.test/deepseek/v1",
-  );
-  // 已带版本段或完整端点路径的配置原样保留。
-  assert.equal(normalizeDeepSeekBaseUrl("https://relay.example.test/v1"), "https://relay.example.test/v1");
-  assert.equal(normalizeDeepSeekBaseUrl("https://relay.example.test/v1beta"), "https://relay.example.test/v1beta");
-  assert.equal(
-    normalizeDeepSeekBaseUrl("https://relay.example.test/v1/chat/completions/"),
-    "https://relay.example.test/v1/chat/completions",
-  );
-  assert.equal(
-    normalizeDeepSeekBaseUrl("https://relay.example.test/api/chat/completions"),
-    "https://relay.example.test/api/chat/completions",
-  );
-
-  const bareDomainModel = createModelFromConfig("deepseek", "deepseek-chat", "https://relay.example.test");
-  assert.equal(bareDomainModel.baseUrl, "https://relay.example.test/v1");
-});
-
-test("DeepSeek native stream fails fast on non-SSE 200 responses instead of reporting truncation", async () => {
-  // one-api 系中转的前置 SPA 会把未命中路径以 200 + HTML 兜底。
-  const { events, result } = await runStream({
-    fetch: async () =>
-      new Response("<!doctype html>\n<html lang=\"zh\"><head></head></html>", {
-        status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      }),
-  });
-
-  assert.equal(events.at(-1).type, "error");
-  assert.equal(result.stopReason, "error");
-  assert.match(result.errorMessage, /returned "text\/html" instead of an SSE stream/);
-  assert.match(result.errorMessage, /check that the Base URL/);
-  assert.equal(result.errorMessage.includes("ended without"), false);
-});
-
-test("DeepSeek native stream maps caller cancellation without AbortSignal.any", async () => {
-  const controller = new AbortController();
-  controller.abort(new Error("cancelled by user"));
-  const originalAny = AbortSignal.any;
-
-  try {
-    AbortSignal.any = undefined;
-    const { events, result } = await runStream({
-      signal: controller.signal,
-      fetch: async (_url, options) => {
-        options.signal.throwIfAborted();
-        throw new Error("fetch should not continue");
-      },
-    });
-
-    assert.equal(events.at(-1).type, "error");
-    assert.equal(result.stopReason, "aborted");
-    assert.match(result.errorMessage, /cancelled by user/);
-  } finally {
-    AbortSignal.any = originalAny;
-  }
+  assert.match(result.errorMessage, /does not support image input/);
 });

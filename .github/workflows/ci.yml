@@ -148,7 +148,9 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter liveagent...
+        # GUI frontend tests load shared Gateway WebUI modules (including STT adapters).
+        # Install that workspace and its transitive dependencies in this isolated job.
+        run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
 
       - name: Typecheck and build GUI frontend
         working-directory: crates/agent-gui
@@ -169,7 +171,7 @@ jobs:
   tauri-rust:
     name: Tauri Rust Check
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 

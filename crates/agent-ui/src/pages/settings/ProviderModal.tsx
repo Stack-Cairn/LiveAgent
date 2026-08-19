@@ -695,7 +695,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           ? "long"
           : undefined,
       nativeWebSearchEnabled:
-        providerType === "deepseek" ? false : (initialData?.nativeWebSearchEnabled ?? true),
+        initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });

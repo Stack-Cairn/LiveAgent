@@ -26,6 +26,7 @@ const SSH_KNOWN_HOSTS_TABLE: &str = "ssh_known_hosts";
 const REMOTE_SETTINGS_TABLE: &str = "remote_settings";
 const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
 const MODEL_FAILOVER_SETTINGS_TABLE: &str = "model_failover_settings";
+const STT_SETTINGS_TABLE: &str = "stt_settings";
 // WebDAV 同步配置。刻意独立成表而不寄居 system_settings —— 后者的 save_system
 // 会 DELETE 整表再按固定白名单重建，任何不在白名单的 key 都会被静默抹掉。
 // 独立表还顺带保证它不被 load_system 采进配置快照，避免 A 机器的凭据同步覆盖 B 机器。
@@ -52,6 +53,9 @@ pub(crate) const PROVIDER_USAGE_QUERY_SECRET_UPDATES_FIELD: &str =
 pub(crate) const SYSTEM_PROXY_PASSWORD_UPDATE_FIELD: &str = "systemProxyPasswordUpdate";
 pub(crate) const SSH_SECRET_UPDATES_FIELD: &str = "sshSecretUpdates";
 pub(crate) const SSH_PATCH_FIELD: &str = "sshPatch";
+/// 仅用于已认证桌面 Agent → Gateway 的后端同步；Gateway 必须在任何 Web 广播前移除。
+pub(crate) const STT_SECRET_SYNC_FIELD: &str = "sttSecretSync";
+pub(crate) const STT_SECRET_UPDATE_FIELD: &str = "sttSecretUpdate";
 
 const PROVIDER_SETTINGS_SELECT_SQL: &str = "
     SELECT provider_id, payload_json
@@ -167,6 +171,7 @@ include!("system.rs");
 include!("mcp.rs");
 include!("memory_settings.rs");
 include!("model_failover.rs");
+include!("stt.rs");
 include!("gateway_sync.rs");
 include!("backup_snapshot.rs");
 include!("backup_io.rs");

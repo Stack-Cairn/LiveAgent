@@ -128,10 +128,8 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "grok-build-0.1", contextWindow: 256000, maxOutputToken: 32000, thinking: { levels: [], off: false } },
   ],
   deepseek: [
-    { id: "deepseek-chat", contextWindow: 1000000, maxOutputToken: 384000 },
-    { id: "deepseek-reasoner", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: [], off: false } },
     { id: "deepseek-v4-flash", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["low", "high", "max"], off: true } },
-    { id: "deepseek-v4-pro", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["high", "max"], off: true } },
+    { id: "deepseek-v4-pro", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["low", "high", "max"], off: true } },
   ],
   zhipuai: [
     { id: "glm-4.5", contextWindow: 131072, maxOutputToken: 98304, thinking: { levels: ["high"], off: true } },
