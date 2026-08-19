@@ -328,28 +328,34 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   );
 
   const importReadableFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], target?: ConversationUploadTarget) => {
       if (files.length === 0) return;
-      await runUploadTask({
-        emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
-        errorFallback: "导入剪贴板文件失败",
-        importer: async ({ targetWorkdir, remainingFileSlots }) => {
-          const importBatch = files.slice(0, remainingFileSlots);
-          const ignoredForLimit = files.length - importBatch.length;
-          if (ignoredForLimit > 0) {
-            addNotify(
-              "warning",
-              `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
+      await runUploadTask(
+        {
+          emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
+          errorFallback: "导入剪贴板文件失败",
+          importer: async ({ targetWorkdir, remainingFileSlots }) => {
+            const importBatch = files.slice(0, remainingFileSlots);
+            const ignoredForLimit = files.length - importBatch.length;
+            if (ignoredForLimit > 0) {
+              addNotify(
+                "warning",
+                `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
+              );
+            }
+            const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
+            return invoke<SystemPickReadableFilesResponse>(
+              "system_import_uploaded_readable_files",
+              {
+                workdir: targetWorkdir,
+                files: uploadFiles,
+                maxFiles: remainingFileSlots,
+              },
             );
-          }
-          const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
-          return invoke<SystemPickReadableFilesResponse>("system_import_uploaded_readable_files", {
-            workdir: targetWorkdir,
-            files: uploadFiles,
-            maxFiles: remainingFileSlots,
-          });
+          },
         },
-      });
+        target,
+      );
     },
     [addNotify, runUploadTask],
   );

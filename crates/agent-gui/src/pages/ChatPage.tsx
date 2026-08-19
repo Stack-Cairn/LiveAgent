@@ -2689,9 +2689,9 @@ export function ChatPage(props: ChatPageProps) {
   );
 
   // Read-and-interact binding for panes not hosting the current conversation.
-  // Interactions that must route through page-level current-conversation
-  // machinery focus the pane first (pointer-down focus already switched the
-  // conversation by the time most of them fire).
+  // Attach/send/stop/chip-remove route by this pane's conversationId. Other
+  // interactions that still go through page-level current-conversation
+  // machinery focus the pane first.
   const buildBackgroundPaneBinding = (
     surface: ConversationWorkbenchSurface,
   ): ConversationPaneBinding => {
@@ -2863,7 +2863,15 @@ export function ChatPage(props: ChatPageProps) {
         onOpenSettings,
         onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
         onPickReadableFiles: focusGuard(pickReadableFiles),
-        onPasteFiles: importReadableFiles,
+        // Paste must not wait for pane focus: Cmd+Alt+Arrow / Tab can leave
+        // the caret in this composer while currentConversationIdRef is still
+        // the focused pane. Same explicit target as native drop.
+        onPasteFiles: (files) => {
+          void importReadableFiles(files, {
+            conversationId,
+            workdir: workspaceRoot ?? "",
+          });
+        },
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),

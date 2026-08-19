@@ -228,6 +228,40 @@ test("removing a chip targets the owning conversation, not the focused pane", as
   assert.deepEqual(uploadStore.getSnapshot("conv-a"), []);
 });
 
+test("an explicit paste target routes clipboard files to that conversation and workdir", async () => {
+  const { hook, uploadStore, invokeCalls } = mountPendingUploads({
+    invokeImpl: () => ({ files: [uploadedFile("clip.png")], skipped: [] }),
+  });
+
+  await hook.importReadableFiles([new File(["png"], "clip.png", { type: "image/png" })], {
+    conversationId: "conv-b",
+    workdir: "/ws/b",
+  });
+
+  assert.equal(invokeCalls.length, 1);
+  assert.equal(invokeCalls[0].command, "system_import_uploaded_readable_files");
+  assert.equal(invokeCalls[0].args.workdir, "/ws/b");
+  assert.deepEqual(
+    uploadStore.getSnapshot("conv-b").map((file) => file.relativePath),
+    ["clip.png"],
+  );
+  assert.deepEqual(uploadStore.getSnapshot("conv-a"), []);
+});
+
+test("without an explicit paste target clipboard files still land in the focused conversation", async () => {
+  const { hook, uploadStore, invokeCalls } = mountPendingUploads({
+    invokeImpl: () => ({ files: [uploadedFile("plain.png")], skipped: [] }),
+  });
+
+  await hook.importReadableFiles([new File(["png"], "plain.png", { type: "image/png" })]);
+
+  assert.equal(invokeCalls[0].args.workdir, "/ws/a");
+  assert.deepEqual(
+    uploadStore.getSnapshot("conv-a").map((file) => file.relativePath),
+    ["plain.png"],
+  );
+});
+
 test("the per-conversation upload cap is measured on the drop target, not the focused pane", async () => {
   const { hook, uploadStore, notifications, invokeCalls } = mountPendingUploads({
     invokeImpl: () => ({ files: [], skipped: [] }),

@@ -201,4 +201,8 @@ test("background pane bindings route Send by conversationId, not through focusGu
   assert.match(paneHost, /hasPendingUploads:\s*\(\)\s*=>\s*controller\.getSnapshot\(\)\.uploads\.length\s*>\s*0/);
   // Chip removal must name this pane's conversation, not the focused one.
   assert.match(builder, /removePendingUpload\(relativePath,\s*conversationId\)/);
+  // Paste must pass an explicit conversation + workdir, not the focused ref.
+  assert.doesNotMatch(builder, /onPasteFiles:\s*importReadableFiles\s*,/);
+  assert.match(builder, /importReadableFiles\(files,\s*\{/);
+  assert.match(builder, /workdir:\s*workspaceRoot/);
 });
