@@ -92,14 +92,19 @@ pnpm check:strict
 
 | 级别 | 检查范围 |
 |---|---|
-| `fast` | diff、UI 边界、GUI/WebUI build+lint、Rust check、golangci-lint、Go tests。 |
-| `all` | `fast` + GUI/WebUI/release 测试、Rust library tests、Proto lint/breaking。 |
-| `strict` | `all` + Shared UI lint、rustfmt、Clippy，并将 Biome/Rust warning 视为错误。 |
+| `fast` | diff、脚本测试、Shared UI 边界/typecheck、GUI/WebUI build、三端完整 lint 诊断、Rust check、golangci-lint、Go tests。 |
+| `all` | `fast` + 自动发现的 GUI/WebUI/release 测试、Rust all-target/doc tests、Proto lint/breaking。 |
+| `strict` | `all` + rustfmt、Clippy，并将全部 Shared UI/GUI/WebUI Biome warning 视为错误。 |
 
-完整日志写入操作系统临时目录下的
-`liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log`。需要失败后继续执行其他检查时设置
-`LIVEAGENT_CHECK_KEEP_GOING=1`。当前已在 macOS ARM64 实跑验证；Windows/Linux 仍应在对应机器
-或 CI 上完成平台验证。
+所有级别都会执行检查脚本单测、Shared UI 边界和独立 TypeScript typecheck；Biome 使用
+`--max-diagnostics=none`，不会隐藏超出默认上限的诊断。GUI 与 WebUI 测试文件由
+`scripts/run-node-tests.mjs` 递归发现，避免手写目录列表或依赖 shell glob。
+
+完整文本日志和结构化 JSON 报告默认写入操作系统临时目录下的
+`liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log` 与 `report.json`。JSON 包含运行元数据、
+汇总计数及每一步的命令、工作目录、状态、退出码和耗时。需要失败后继续执行其他检查时设置
+`LIVEAGENT_CHECK_KEEP_GOING=1`；需要固定报告位置时设置 `LIVEAGENT_CHECK_REPORT_PATH`。当前已在
+macOS ARM64 实跑验证；Windows/Linux 仍应在对应机器或 CI 上完成平台验证。
 
 ## 运行时路径
 
