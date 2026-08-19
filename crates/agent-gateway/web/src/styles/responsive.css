@@ -558,7 +558,9 @@
     display: inline;
   }
 
-  html[data-liveagent-webui="gateway"] .settings-provider-action-group > .settings-provider-action-slot,
+  html[data-liveagent-webui="gateway"]
+    .settings-provider-action-group
+    > .settings-provider-action-slot,
   html[data-liveagent-webui="gateway"] .settings-provider-action-group > .settings-provider-action {
     flex: 1 1 0;
   }

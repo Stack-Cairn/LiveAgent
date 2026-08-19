@@ -747,7 +747,6 @@ export function ProvidersSection(
   },
 ) {
   const { settings, setSettings, initialProviderId, onInitialProviderHandled } = props;
-  const { t } = useLocale();
 
   const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
   const [modalOpen, setModalOpen] = useState(false);
