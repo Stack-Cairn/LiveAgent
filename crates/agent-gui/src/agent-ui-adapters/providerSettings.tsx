@@ -34,7 +34,6 @@ import {
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../src-tauri/icons/custom/cherrystudio.png";
 import type { ProviderModelConfig } from "../lib/settings";
@@ -636,42 +635,33 @@ export function ProviderSettingsExtension(props: {
           </DropdownMenuContent>
         </DropdownMenu>
       </span>
-      {ccsModalOpen || (cherryModalOpen && cherryResponse)
-        ? createPortal(
-            <>
-              {ccsModalOpen ? (
-                <CcsImportModal
-                  activeTab={activeTab}
-                  items={ccsResponse?.providers ?? []}
-                  existingProviders={settings.customProviders}
-                  importing={importing}
-                  result={message}
-                  onImport={importCcs}
-                  onClose={() => setCcsModalOpen(false)}
-                />
-              ) : null}
-              {cherryModalOpen && cherryResponse ? (
-                <CherryStudioImportModal
-                  initialType={activeTab}
-                  response={cherryResponse}
-                  importing={importing}
-                  scanning={scanning}
-                  dataPath={cherryDataPath}
-                  isExisting={(item) =>
-                    settings.customProviders.some(
-                      (provider) => provider.id === cherryProviderId(item),
-                    )
-                  }
-                  onChooseDataDirectory={() => void chooseCherryDataDirectory()}
-                  onResetDataDirectory={resetCherryDataDirectory}
-                  onConfirm={(items) => void importCherry(items)}
-                  onClose={() => setCherryModalOpen(false)}
-                />
-              ) : null}
-            </>,
-            document.body,
-          )
-        : null}
+      {ccsModalOpen ? (
+        <CcsImportModal
+          activeTab={activeTab}
+          items={ccsResponse?.providers ?? []}
+          existingProviders={settings.customProviders}
+          importing={importing}
+          result={message}
+          onImport={importCcs}
+          onClose={() => setCcsModalOpen(false)}
+        />
+      ) : null}
+      {cherryModalOpen && cherryResponse ? (
+        <CherryStudioImportModal
+          initialType={activeTab}
+          response={cherryResponse}
+          importing={importing}
+          scanning={scanning}
+          dataPath={cherryDataPath}
+          isExisting={(item) =>
+            settings.customProviders.some((provider) => provider.id === cherryProviderId(item))
+          }
+          onChooseDataDirectory={() => void chooseCherryDataDirectory()}
+          onResetDataDirectory={resetCherryDataDirectory}
+          onConfirm={(items) => void importCherry(items)}
+          onClose={() => setCherryModalOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

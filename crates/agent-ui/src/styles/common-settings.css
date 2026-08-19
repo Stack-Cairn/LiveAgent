@@ -321,6 +321,10 @@
   align-self: stretch;
 }
 
+.settings-provider-action-group > :not(.settings-provider-action):not(.settings-provider-action-slot) {
+  display: contents;
+}
+
 .settings-provider-action-group .settings-provider-action {
   display: inline-flex;
   height: 100%;
