@@ -175,7 +175,9 @@ fn remote_chat_started_records_use_running_lease() {
         GatewayController::remote_chat_record_lease_ms(&running),
         GATEWAY_CHAT_RUNNING_LEASE_MS
     );
-    assert!(GATEWAY_CHAT_RUNNING_LEASE_MS > GATEWAY_CHAT_LEASE_MS);
+    const {
+        assert!(GATEWAY_CHAT_RUNNING_LEASE_MS > GATEWAY_CHAT_LEASE_MS);
+    }
 }
 
 #[test]

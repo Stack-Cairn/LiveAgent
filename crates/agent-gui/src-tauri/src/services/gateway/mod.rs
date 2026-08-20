@@ -34,7 +34,7 @@ use crate::services::workspace_watch::WorkspaceWatchService;
 /// 网关 v2 protobuf 生成模块。业务消息与帧壳属于同一包。
 /// 仅生成消息，不生成客户端或服务端。
 pub mod gateway_proto {
-    #[allow(dead_code)]
+    #[allow(clippy::large_enum_variant, dead_code)]
     pub mod v2 {
         include!(concat!(env!("OUT_DIR"), "/liveagent.gateway.v2.rs"));
     }

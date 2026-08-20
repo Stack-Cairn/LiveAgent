@@ -303,7 +303,7 @@ fn finish_scan(
     // 同名条目（多作用域声明同一 server）保留先出现的：用户级先扫，优先级更直观。
     let mut seen = std::collections::HashSet::new();
     servers.retain(|server| seen.insert(server.id.to_lowercase()));
-    servers.sort_by(|a, b| a.id.to_lowercase().cmp(&b.id.to_lowercase()));
+    servers.sort_by_key(|a| a.id.to_lowercase());
     SystemExternalMcpToolScan {
         tool: tool.to_string(),
         config_path: if scanned_paths.is_empty() {

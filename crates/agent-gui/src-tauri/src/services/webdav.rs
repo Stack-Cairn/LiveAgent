@@ -358,14 +358,20 @@ mod tests {
             join_url("https://example.com/dav", &["//liveagent//", "/v1/"]),
             "https://example.com/dav/liveagent/v1"
         );
-        assert_eq!(join_url("https://example.com/dav/", &[]), "https://example.com/dav");
+        assert_eq!(
+            join_url("https://example.com/dav/", &[]),
+            "https://example.com/dav"
+        );
     }
 
     #[test]
     fn dir_ladder_flattens_multi_level_segments() {
         // remote_dir 写成 `a/b` 时必须逐级建，否则中间的 `a/` 从来没被 MKCOL 过，
         // 服务器对 `a/b` 只会回 409。
-        assert_eq!(dir_ladder(&["a/b", "v1", "default"]), ["a", "b", "v1", "default"]);
+        assert_eq!(
+            dir_ladder(&["a/b", "v1", "default"]),
+            ["a", "b", "v1", "default"]
+        );
         // 摊平口径与 join_url 一致：空段一律丢弃。
         assert_eq!(dir_ladder(&["//a//", "/b/"]), ["a", "b"]);
     }
@@ -398,7 +404,10 @@ mod tests {
             dir_url("https://example.com/dav/", &["v1"]),
             "https://example.com/dav/v1/"
         );
-        assert_eq!(dir_url("https://example.com/dav/", &[]), "https://example.com/dav/");
+        assert_eq!(
+            dir_url("https://example.com/dav/", &[]),
+            "https://example.com/dav/"
+        );
     }
 
     #[test]
@@ -424,7 +433,9 @@ mod tests {
         assert!(is_jianguoyun("https://dav.jianguoyun.com/dav/"));
         assert!(is_jianguoyun("https://DAV.JianGuoYun.com/dav/"));
         // 国际版走 nutstore 域名，错误语义与国内版一致。
-        assert!(is_jianguoyun("https://dav.jianguoyun.com.nutstore.net/dav/"));
+        assert!(is_jianguoyun(
+            "https://dav.jianguoyun.com.nutstore.net/dav/"
+        ));
         assert!(is_jianguoyun("https://app.nutstore.net/dav/"));
         assert!(!is_jianguoyun("https://example.com/dav/"));
         // 后缀相似但不同域的主机不应误判。
@@ -512,7 +523,9 @@ mod tests {
         };
 
         // ① 测试连接成功（AC6 正向）
-        test_connection(&creds).await.expect("test_connection 应成功");
+        test_connection(&creds)
+            .await
+            .expect("test_connection 应成功");
         eprintln!("① test_connection: ok");
 
         // ② 错误密码走到坚果云特判文案（AC6 反向 + 错误映射）
@@ -520,9 +533,7 @@ mod tests {
             password: "definitely-not-the-password".to_string(),
             ..creds.clone()
         };
-        let err = test_connection(&bad)
-            .await
-            .expect_err("错误密码应认证失败");
+        let err = test_connection(&bad).await.expect_err("错误密码应认证失败");
         assert!(err.contains("认证失败"), "{err}");
         assert!(
             !err.contains("definitely-not-the-password"),
@@ -543,9 +554,14 @@ mod tests {
 
         // 载荷刻意含中文：验证 UTF-8 字节在 PUT/GET 往返中不被服务器改写。
         let body = r#"{"hello":"webdav","zh":"中文"}"#.as_bytes().to_vec();
-        put_bytes(&creds, &[&dir, "probe.json"], body.clone(), "application/json")
-            .await
-            .expect("put_bytes 应成功");
+        put_bytes(
+            &creds,
+            &[&dir, "probe.json"],
+            body.clone(),
+            "application/json",
+        )
+        .await
+        .expect("put_bytes 应成功");
         let fetched = get_bytes(&creds, &[&dir, "probe.json"], 1024 * 1024, "探针")
             .await
             .expect("get_bytes 应成功")

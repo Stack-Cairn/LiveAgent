@@ -13,7 +13,7 @@
     "check:fast": "node scripts/check.mjs fast",
     "check:all": "node scripts/check.mjs all",
     "check:strict": "node scripts/check.mjs strict",
-    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs",
+    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs",
     "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
     "typecheck:ui": "pnpm --filter @liveagent/ui typecheck",
     "lint:ui": "pnpm --filter @liveagent/ui lint",

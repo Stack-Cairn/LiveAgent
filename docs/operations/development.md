@@ -94,10 +94,12 @@ pnpm check:strict
 |---|---|
 | `fast` | diff、脚本测试、Shared UI 边界/typecheck、GUI/WebUI build、三端完整 lint 诊断、Rust check、golangci-lint、Go tests。 |
 | `all` | `fast` + 自动发现的 GUI/WebUI/release 测试、Rust all-target/doc tests、Proto lint/breaking。 |
-| `strict` | `all` + rustfmt、Clippy，并将全部 Shared UI/GUI/WebUI Biome warning 视为错误。 |
+| `strict` | `all` + rustfmt、Clippy、三端完整 Biome 诊断，并将相对基线变更文件中的 Biome warning 视为错误。 |
 
 所有级别都会执行检查脚本单测、Shared UI 边界和独立 TypeScript typecheck；Biome 使用
-`--max-diagnostics=none`，不会隐藏超出默认上限的诊断。GUI 与 WebUI 测试文件由
+`--max-diagnostics=none`，不会隐藏超出默认上限的诊断。`strict` 仍输出三端全量诊断，但只把
+相对 `LIVEAGENT_CHECK_BASE_REF`（默认依次选择 `origin/main`、`main`）新增或修改源码中的 warning
+升级为失败，避免通过关闭规则掩盖历史诊断。GUI 与 WebUI 测试文件由
 `scripts/run-node-tests.mjs` 递归发现，避免手写目录列表或依赖 shell glob。
 
 完整文本日志和结构化 JSON 报告默认写入操作系统临时目录下的

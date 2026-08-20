@@ -499,12 +499,7 @@ where
         });
         prepare_github_source(source, &method, git_ref, tmp.path(), should_cancel)?
     } else if is_http_source(source) {
-        prepare_http_source_with_progress(
-            source,
-            tmp.path(),
-            |update| on_progress(update),
-            should_cancel,
-        )?
+        prepare_http_source_with_progress(source, tmp.path(), &mut on_progress, should_cancel)?
     } else {
         on_progress(SkillInstallProgressUpdate {
             phase: "validating",

@@ -239,7 +239,7 @@ pub(crate) fn ensure_builtin_agent_skills_in_root(
             } else {
                 write_action = "replaced_invalid";
             }
-            backup = Some(backup_existing_path(&root, &target, &name)?);
+            backup = Some(backup_existing_path(root, &target, &name)?);
         }
 
         fs::create_dir_all(&target)

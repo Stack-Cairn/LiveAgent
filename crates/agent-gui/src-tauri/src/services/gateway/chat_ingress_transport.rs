@@ -372,7 +372,7 @@ fn chat_ingress_fragment_chunk_bytes(
     let mut lower = 0_usize;
     let mut upper = CHAT_INGRESS_FRAGMENT_BYTES;
     while lower < upper {
-        let candidate = lower + (upper - lower + 1) / 2;
+        let candidate = lower + (upper - lower).div_ceil(2);
         let envelope = chat_ingress_fragment_envelope(
             stored,
             u32::MAX,
@@ -576,6 +576,8 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|chunk| chunk.len() <= CHAT_INGRESS_FRAGMENT_BYTES));
-        assert!(CHAT_INGRESS_FRAGMENT_BYTES <= CHAT_INGRESS_HARD_FRAME_BYTES);
+        const {
+            assert!(CHAT_INGRESS_FRAGMENT_BYTES <= CHAT_INGRESS_HARD_FRAME_BYTES);
+        }
     }
 }

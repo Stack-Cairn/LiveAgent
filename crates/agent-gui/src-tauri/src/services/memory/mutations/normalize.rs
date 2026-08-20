@@ -124,7 +124,7 @@ fn normalize_description(input: &str) -> Result<String, String> {
 }
 
 fn validate_body_limit(body: &str, max: usize, slug: &str) -> Result<(), String> {
-    if body.as_bytes().len() <= max {
+    if body.len() <= max {
         return Ok(());
     }
     Err(error_json(

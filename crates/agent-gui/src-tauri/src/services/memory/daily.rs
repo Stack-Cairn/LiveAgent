@@ -84,7 +84,7 @@ impl MemoryStore {
         } else {
             format!("{previous_body}\n\n{normalized_bullet}")
         };
-        if body.as_bytes().len() > MAX_DAILY_BODY_BYTES {
+        if body.len() > MAX_DAILY_BODY_BYTES {
             return Err(error_json(
                 "body_too_large",
                 "daily memory body exceeds 32 KB",
@@ -97,7 +97,7 @@ impl MemoryStore {
                 None,
             ));
         }
-        let warning = if body.as_bytes().len() >= DAILY_NEAR_LIMIT_BYTES {
+        let warning = if body.len() >= DAILY_NEAR_LIMIT_BYTES {
             Some(format!(
                 "{slug} is near the 32 KB daily limit; consolidate soon"
             ))

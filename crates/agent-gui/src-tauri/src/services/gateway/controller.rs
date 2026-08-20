@@ -314,9 +314,7 @@ impl GatewayController {
             status.configured = is_remote_configured(&normalized);
             status.gateway_url = normalized.gateway_url.clone();
             status.agent_id = normalized.agent_id.clone();
-            if !normalized.enabled {
-                set_disconnected_status(status, &normalized, None);
-            } else if config_changed {
+            if !normalized.enabled || config_changed {
                 set_disconnected_status(status, &normalized, None);
             }
         });

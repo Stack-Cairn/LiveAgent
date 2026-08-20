@@ -615,7 +615,7 @@ fn writable_temp_dirs() -> Vec<PathBuf> {
         if !temp_write_root_is_safe(&canonical) {
             return;
         }
-        if !out.iter().any(|existing| *existing == canonical) {
+        if !out.contains(&canonical) {
             out.push(canonical);
         }
     };

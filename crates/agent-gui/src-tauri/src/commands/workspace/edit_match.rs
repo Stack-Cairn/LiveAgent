@@ -442,10 +442,9 @@ fn detect_uniform_shift(
         let pattern_indent = leading_whitespace(pattern_line);
         let line_shift = if let Some(prefix) = file_indent.strip_suffix(pattern_indent) {
             IndentShift::Add(prefix.to_string())
-        } else if let Some(prefix) = pattern_indent.strip_suffix(file_indent) {
-            IndentShift::Remove(prefix.to_string())
         } else {
-            return None;
+            let prefix = pattern_indent.strip_suffix(file_indent)?;
+            IndentShift::Remove(prefix.to_string())
         };
         // The prefix must be identical on every non-blank line. A line whose
         // indentation already matches yields an empty `Add` prefix, which is

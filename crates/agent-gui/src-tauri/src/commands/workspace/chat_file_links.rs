@@ -295,11 +295,13 @@ fn has_executable_permission(_path: &Path, _metadata: &fs::Metadata) -> bool {
     false
 }
 
+type NormalizedLocation = (Option<u32>, Option<u32>, Option<u32>);
+
 fn normalized_location(
     line: Option<u32>,
     end_line: Option<u32>,
     column: Option<u32>,
-) -> Result<(Option<u32>, Option<u32>, Option<u32>), ChatFileLinkError> {
+) -> Result<NormalizedLocation, ChatFileLinkError> {
     if line == Some(0)
         || end_line == Some(0)
         || column == Some(0)

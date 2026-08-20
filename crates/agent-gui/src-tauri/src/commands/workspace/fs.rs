@@ -3132,7 +3132,7 @@ fn fs_write_text_impl(
         path: logical_path,
         mode,
         existed_before,
-        bytes_written: content.as_bytes().len(),
+        bytes_written: content.len(),
         mtime_ms: metadata_mtime_ms(&md),
         content_hash: hash_bytes(content.as_bytes()),
         total_lines: count_text_lines(&content),
@@ -4622,9 +4622,7 @@ fn mention_sort_key(path: &str, kind: &str, query: &str) -> (usize, usize, usize
         .rsplit('/')
         .next()
         .unwrap_or(&normalized_path);
-    let match_rank = if query.is_empty() {
-        0
-    } else if normalized_name.starts_with(query) {
+    let match_rank = if query.is_empty() || normalized_name.starts_with(query) {
         0
     } else if normalized_path.starts_with(query) {
         1

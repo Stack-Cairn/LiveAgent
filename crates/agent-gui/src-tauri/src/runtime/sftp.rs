@@ -857,7 +857,7 @@ impl SftpSessionRegistry {
         session_id: &str,
         remote_path: String,
     ) -> Result<SftpListResponse, String> {
-        let connection = self.connection_for_session(&session_id).await?;
+        let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
         let list_path = guard
             .session
@@ -917,7 +917,7 @@ impl SftpSessionRegistry {
         session_id: &str,
         remote_path: String,
     ) -> Result<SftpStatResponse, String> {
-        let connection = self.connection_for_session(&session_id).await?;
+        let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
         match remote_entry_from_metadata(&guard.session, &remote_path).await {
             Ok(entry) => Ok(SftpStatResponse {
@@ -1048,7 +1048,7 @@ impl SftpSessionRegistry {
         overwrite: bool,
         task: &SftpTransferTask,
     ) -> Result<SftpTransferState, String> {
-        let source = resolve_existing_local_entry(&workdir, source_path)?;
+        let source = resolve_existing_local_entry(workdir, source_path)?;
         let source_md =
             fs::symlink_metadata(&source).map_err(|error| format!("local stat failed: {error}"))?;
         if source_md.file_type().is_symlink() {
@@ -1063,11 +1063,11 @@ impl SftpSessionRegistry {
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "upload".to_string());
         let dirs = if source_md.is_dir() {
-            collect_local_dirs(&workdir, &source)?
+            collect_local_dirs(workdir, &source)?
         } else {
             Vec::new()
         };
-        let files = collect_local_files(&workdir, &source)?;
+        let files = collect_local_files(workdir, &source)?;
         let bytes_total = files.iter().map(|file| file.size).sum::<u64>();
         let files_total = files.len().min(u32::MAX as usize) as u32;
         let remote_base = join_remote_path(&normalize_remote_path(target_path), &root_name);
@@ -1149,7 +1149,7 @@ impl SftpSessionRegistry {
         overwrite: bool,
         task: &SftpTransferTask,
     ) -> Result<SftpTransferState, String> {
-        let local_target = resolve_local_target(&workdir, target_path)?;
+        let local_target = resolve_local_target(workdir, target_path)?;
         let remote_source = normalize_remote_path(source_path);
         let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
@@ -1171,15 +1171,15 @@ impl SftpSessionRegistry {
         let files_total = files.len().min(u32::MAX as usize) as u32;
         let source_name = remote_basename(&remote_source).unwrap_or_else(|| "download".to_string());
         let target_base = local_target.join(source_name);
-        ensure_path_inside(&workdir, &target_base)?;
+        ensure_path_inside(workdir, &target_base)?;
         if source_meta.is_dir() {
             fs::create_dir_all(&target_base)
                 .map_err(|error| format!("failed to create local folder: {error}"))?;
-            ensure_path_inside(&workdir, &target_base)?;
+            ensure_path_inside(workdir, &target_base)?;
             for dir in &dirs {
                 check_cancelled(task)?;
                 let local_dir_path = target_base.join(Path::new(&dir.rel));
-                ensure_path_inside(&workdir, &local_dir_path)?;
+                ensure_path_inside(workdir, &local_dir_path)?;
                 fs::create_dir_all(&local_dir_path)
                     .map_err(|error| format!("failed to create local folder: {error}"))?;
             }
@@ -1191,7 +1191,7 @@ impl SftpSessionRegistry {
             direction: "download".to_string(),
             status: "running".to_string(),
             source_path: remote_source.clone(),
-            target_path: rel_to_workdir_str(&workdir, &target_base),
+            target_path: rel_to_workdir_str(workdir, &target_base),
             current_path: String::new(),
             bytes_done: 0,
             bytes_total,
@@ -1208,8 +1208,8 @@ impl SftpSessionRegistry {
             } else {
                 target_base.clone()
             };
-            ensure_path_inside(&workdir, &local_file_path)?;
-            state.current_path = rel_to_workdir_str(&workdir, &local_file_path);
+            ensure_path_inside(workdir, &local_file_path)?;
+            state.current_path = rel_to_workdir_str(workdir, &local_file_path);
             if fs::symlink_metadata(&local_file_path)
                 .map(|metadata| metadata.file_type().is_symlink())
                 .unwrap_or(false)
@@ -1222,7 +1222,7 @@ impl SftpSessionRegistry {
             if let Some(parent) = local_file_path.parent() {
                 fs::create_dir_all(parent)
                     .map_err(|error| format!("failed to create local folder: {error}"))?;
-                ensure_path_inside(&workdir, parent)?;
+                ensure_path_inside(workdir, parent)?;
             }
             download_file(
                 &guard.session,

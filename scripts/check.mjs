@@ -35,7 +35,8 @@ Profiles:
 Environment variables:
   LIVEAGENT_CHECK_KEEP_GOING=1  Continue after failures and report every failed step.
   LIVEAGENT_CHECK_LOG_DIR=PATH  Parent directory for the run log.
-  LIVEAGENT_CHECK_REPORT_PATH=PATH  JSON report path (default: beside check.log).`);
+  LIVEAGENT_CHECK_REPORT_PATH=PATH  JSON report path (default: beside check.log).
+  LIVEAGENT_CHECK_BASE_REF=REF  Base ref for strict changed-file Biome gates.`);
 }
 
 function commandStep(name, command, args, cwd = repoRoot) {
@@ -52,12 +53,16 @@ function biomeStep(name, workspace, strict = false) {
     workspace,
     "exec",
     "biome",
-    "check",
+    "lint",
     "src/",
     "--max-diagnostics=none",
   ];
   if (strict) args.push("--error-on-warnings");
   return miseStep(name, "pnpm", args);
+}
+
+function changedBiomeStep(name, workspace) {
+  return miseStep(name, "node", ["scripts/check-biome-changed.mjs", workspace]);
 }
 
 function buildSteps() {
@@ -74,9 +79,12 @@ function buildSteps() {
 
   if (strict) {
     steps.push(
-      biomeStep("Shared UI lint (warnings are errors)", "@liveagent/ui", true),
-      biomeStep("GUI lint (warnings are errors)", "liveagent", true),
-      biomeStep("WebUI lint (warnings are errors)", "@liveagent/gateway-webui", true),
+      biomeStep("Shared UI lint (complete diagnostics)", "@liveagent/ui"),
+      biomeStep("GUI lint (complete diagnostics)", "liveagent"),
+      biomeStep("WebUI lint (complete diagnostics)", "@liveagent/gateway-webui"),
+      changedBiomeStep("Shared UI changed-file lint (warnings are errors)", "ui"),
+      changedBiomeStep("GUI changed-file lint (warnings are errors)", "gui"),
+      changedBiomeStep("WebUI changed-file lint (warnings are errors)", "webui"),
     );
   } else {
     steps.push(

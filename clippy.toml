@@ -1,0 +1,5 @@
+# Tauri IPC command handlers mirror stable frontend payloads and can legitimately
+# carry up to ten fields. Large gateway envelopes are also returned as typed
+# protocol errors, so keep Clippy enabled with project-appropriate thresholds.
+too-many-arguments-threshold = 10
+large-error-threshold = 2048

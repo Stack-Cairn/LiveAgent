@@ -344,7 +344,7 @@ fn load_backup_sync_config_from_db() -> Result<BackupSyncConfig, String> {
 
 /// 记录一次同步成功：写入时间戳并清掉遗留的自动同步错误横幅。
 fn touch_backup_last_sync_at() -> Result<i64, String> {
-    let timestamp = now_ms() as i64;
+    let timestamp = now_ms();
     let conn = open_db()?;
     let mut config = load_backup_sync_config(&conn)?;
     config.last_sync_at = Some(timestamp);

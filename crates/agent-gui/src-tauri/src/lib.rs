@@ -778,9 +778,7 @@ pub fn run() {
                 return;
             }
             let app = webview.app_handle();
-            if let Some(ready_state) =
-                app.try_state::<Arc<commands::app::FrontendReadyState>>()
-            {
+            if let Some(ready_state) = app.try_state::<Arc<commands::app::FrontendReadyState>>() {
                 ready_state.0.store(false, Ordering::SeqCst);
             }
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {

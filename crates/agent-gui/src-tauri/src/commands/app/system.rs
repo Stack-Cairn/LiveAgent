@@ -609,10 +609,7 @@ fn unique_path_for_copy(mut target: PathBuf) -> PathBuf {
         .extension()
         .and_then(|value| value.to_str())
         .map(|value| value.to_string());
-    let parent = target
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(PathBuf::new);
+    let parent = target.parent().map(Path::to_path_buf).unwrap_or_default();
 
     for idx in 2..=10_000usize {
         let file_name = match ext.as_deref() {

@@ -284,18 +284,16 @@ impl GatewayController {
                     .lease_expires_at
                     .map(|expires_at| now >= expires_at)
                     .unwrap_or(true);
-                if state == "queued"
+                if (state == "queued"
                     || ((state == "claimed" || state == "starting")
                         && lease_expired
-                        && !record.started)
-                {
-                    if selected_created_at
+                        && !record.started))
+                    && selected_created_at
                         .map(|created_at| record.created_at < created_at)
                         .unwrap_or(true)
-                    {
-                        selected_request_id = Some(request_id.clone());
-                        selected_created_at = Some(record.created_at);
-                    }
+                {
+                    selected_request_id = Some(request_id.clone());
+                    selected_created_at = Some(record.created_at);
                 }
             }
             selected_request_id.and_then(|request_id| {

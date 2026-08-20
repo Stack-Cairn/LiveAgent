@@ -346,7 +346,7 @@ fn cherry_decode_chromium_string(bytes: &[u8]) -> Result<String, String> {
     match bytes.first().copied() {
         Some(0) => {
             let payload = &bytes[1..];
-            if payload.len() % 2 != 0 {
+            if !payload.len().is_multiple_of(2) {
                 return Err("Cherry Studio Local Storage UTF-16 数据长度无效".to_string());
             }
             let utf16 = payload

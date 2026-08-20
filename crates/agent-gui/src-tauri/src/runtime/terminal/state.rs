@@ -152,7 +152,7 @@ pub(crate) enum PendingSshPrompt {
     },
     KeyboardInteractive {
         request: PendingSshConnectRequest,
-        host_config: RuntimeSshHostConfig,
+        host_config: Box<RuntimeSshHostConfig>,
         title: String,
         size: TerminalSize,
         handle: client::Handle<LiveAgentSshClient>,

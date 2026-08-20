@@ -228,8 +228,167 @@ pub async fn run<R: Runtime>(
                 }
                 SttCommand::Cancel => { close_provider_socket(&mut write).await; return Ok(()); }
             },
-            Some(message) = read.next() => { let message = message.map_err(|e| stage_failure("VolcengineSeedV3", "receive", e.to_string()))?; let body = match message { Message::Binary(body) => body, Message::Close(frame) if finishing && finish_sent && frame.as_ref().is_none_or(|frame| frame.code == CloseCode::Normal) => { if !last_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: last_text.clone() }); } return Ok(()); }, Message::Close(_) => return Err(stage_failure("VolcengineSeedV3", "close", "连接异常关闭")), _ => continue }; let value = decode_seed_v3_frame(&body).map_err(|e| stage_failure("VolcengineSeedV3", "parse", e))?; if let Some(error) = value.get("error").and_then(Value::as_str) { return Err(stage_failure("VolcengineSeedV3", "provider_response", provider_failure("火山 Seed v3", &value.get("code").and_then(Value::as_i64).unwrap_or_default().to_string(), error))); } let code = value.get("code").and_then(Value::as_i64).unwrap_or_default(); if code != 0 && code != 1000 { return Err(stage_failure("VolcengineSeedV3", "provider_response", provider_failure("火山 Seed v3", &code.to_string(), value.get("message").and_then(Value::as_str).unwrap_or_default()))); } if !ready { ready = true; emit(&app, SttEvent::Ready { session_id: session.clone() }); for (sequence, pcm) in pending.drain(..) { if let Some((_previous_sequence, previous_pcm)) = held_audio.replace((sequence, pcm)) { let compressed = seed_v3_audio(&previous_pcm).map_err(|e| stage_failure("VolcengineSeedV3", "send_audio", e))?; let frame = seed_v3_audio_frame(false, &compressed); send_provider_message(&mut write, Message::Binary(frame.into()), "VolcengineSeedV3", "send_audio").await?; } } if finishing && !finish_sent { let (_sequence, pcm) = held_audio.take().unwrap_or_default(); let compressed = seed_v3_audio(&pcm).map_err(|e| stage_failure("VolcengineSeedV3", "finish", e))?; let frame = seed_v3_audio_frame(true, &compressed); send_provider_message(&mut write, Message::Binary(frame.into()), "VolcengineSeedV3", "finish").await?; finish_sent = true; } } if let Some(result_text) = value.pointer("/result/text").and_then(Value::as_str) { last_text = result_text.to_string(); emit(&app, SttEvent::Partial { session_id: session.clone(), text: last_text.clone() }); } let completed = value.get("is_last_package").and_then(Value::as_bool).unwrap_or(false) || value.get("_last").and_then(Value::as_bool).unwrap_or(false); if finishing && completed { if !last_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: last_text.clone() }); } close_provider_socket(&mut write).await; return Ok(()); } },
-            else => return if finishing && finish_sent { if !last_text.is_empty() { emit(&app, SttEvent::Final { session_id: session.clone(), text: last_text.clone() }); } Ok(()) } else { Err(stage_failure("VolcengineSeedV3", "close", "连接意外关闭")) },
+            Some(message) = read.next() => {
+                let message = message
+                    .map_err(|error| stage_failure("VolcengineSeedV3", "receive", error.to_string()))?;
+                let body = match message {
+                    Message::Binary(body) => body,
+                    Message::Close(frame)
+                        if finishing
+                            && finish_sent
+                            && frame
+                                .as_ref()
+                                .is_none_or(|frame| frame.code == CloseCode::Normal) =>
+                    {
+                        if !last_text.is_empty() {
+                            emit(
+                                &app,
+                                SttEvent::Final {
+                                    session_id: session.clone(),
+                                    text: last_text.clone(),
+                                },
+                            );
+                        }
+                        return Ok(());
+                    }
+                    Message::Close(_) => {
+                        return Err(stage_failure(
+                            "VolcengineSeedV3",
+                            "close",
+                            "连接异常关闭",
+                        ));
+                    }
+                    _ => continue,
+                };
+                let value = decode_seed_v3_frame(&body)
+                    .map_err(|error| stage_failure("VolcengineSeedV3", "parse", error))?;
+                if let Some(error) = value.get("error").and_then(Value::as_str) {
+                    return Err(stage_failure(
+                        "VolcengineSeedV3",
+                        "provider_response",
+                        provider_failure(
+                            "火山 Seed v3",
+                            &value
+                                .get("code")
+                                .and_then(Value::as_i64)
+                                .unwrap_or_default()
+                                .to_string(),
+                            error,
+                        ),
+                    ));
+                }
+                let code = value
+                    .get("code")
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default();
+                if code != 0 && code != 1000 {
+                    return Err(stage_failure(
+                        "VolcengineSeedV3",
+                        "provider_response",
+                        provider_failure(
+                            "火山 Seed v3",
+                            &code.to_string(),
+                            value
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default(),
+                        ),
+                    ));
+                }
+
+                if !ready {
+                    ready = true;
+                    emit(
+                        &app,
+                        SttEvent::Ready {
+                            session_id: session.clone(),
+                        },
+                    );
+                    for (sequence, pcm) in pending.drain(..) {
+                        if let Some((_previous_sequence, previous_pcm)) =
+                            held_audio.replace((sequence, pcm))
+                        {
+                            let compressed = seed_v3_audio(&previous_pcm).map_err(|error| {
+                                stage_failure("VolcengineSeedV3", "send_audio", error)
+                            })?;
+                            let frame = seed_v3_audio_frame(false, &compressed);
+                            send_provider_message(
+                                &mut write,
+                                Message::Binary(frame.into()),
+                                "VolcengineSeedV3",
+                                "send_audio",
+                            )
+                            .await?;
+                        }
+                    }
+                    if finishing && !finish_sent {
+                        let (_sequence, pcm) = held_audio.take().unwrap_or_default();
+                        let compressed = seed_v3_audio(&pcm)
+                            .map_err(|error| stage_failure("VolcengineSeedV3", "finish", error))?;
+                        let frame = seed_v3_audio_frame(true, &compressed);
+                        send_provider_message(
+                            &mut write,
+                            Message::Binary(frame.into()),
+                            "VolcengineSeedV3",
+                            "finish",
+                        )
+                        .await?;
+                        finish_sent = true;
+                    }
+                }
+
+                if let Some(result_text) = value.pointer("/result/text").and_then(Value::as_str) {
+                    last_text = result_text.to_string();
+                    emit(
+                        &app,
+                        SttEvent::Partial {
+                            session_id: session.clone(),
+                            text: last_text.clone(),
+                        },
+                    );
+                }
+                let completed = value
+                    .get("is_last_package")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                    || value
+                        .get("_last")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                if finishing && completed {
+                    if !last_text.is_empty() {
+                        emit(
+                            &app,
+                            SttEvent::Final {
+                                session_id: session.clone(),
+                                text: last_text.clone(),
+                            },
+                        );
+                    }
+                    close_provider_socket(&mut write).await;
+                    return Ok(());
+                }
+            },
+            else => {
+                return if finishing && finish_sent {
+                    if !last_text.is_empty() {
+                        emit(
+                            &app,
+                            SttEvent::Final {
+                                session_id: session.clone(),
+                                text: last_text.clone(),
+                            },
+                        );
+                    }
+                    Ok(())
+                } else {
+                    Err(stage_failure(
+                        "VolcengineSeedV3",
+                        "close",
+                        "连接意外关闭",
+                    ))
+                };
+            },
         }
     }
 }

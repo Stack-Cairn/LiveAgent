@@ -1243,7 +1243,10 @@ fn mark_finished_broadcasts_exit_only_for_the_first_finisher() {
             exit_events += 1;
         }
     }
-    assert_eq!(exit_events, 1, "duplicate mark_finished must not re-broadcast exit");
+    assert_eq!(
+        exit_events, 1,
+        "duplicate mark_finished must not re-broadcast exit"
+    );
 }
 
 #[test]

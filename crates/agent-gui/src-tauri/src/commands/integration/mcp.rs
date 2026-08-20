@@ -915,7 +915,7 @@ impl SseTransport {
 
         // Wait for endpoint event a little while (if the stream is slow to emit).
         let wait_ms = timeout.as_millis() as u64;
-        let wait_ms = wait_ms.min(LEGACY_SSE_ENDPOINT_WAIT_MS).max(1);
+        let wait_ms = wait_ms.clamp(1, LEGACY_SSE_ENDPOINT_WAIT_MS);
         let deadline = Instant::now()
             .checked_add(Duration::from_millis(wait_ms))
             .unwrap_or_else(Instant::now);

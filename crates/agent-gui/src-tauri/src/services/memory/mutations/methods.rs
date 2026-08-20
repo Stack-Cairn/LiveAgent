@@ -86,7 +86,7 @@ impl MemoryStore {
         if let Some(evidence) = args
             .evidence
             .take()
-            .filter(|evidence| evidence_args_present(evidence))
+            .filter(evidence_args_present)
         {
             let raw_body = args.body.clone().unwrap_or_default();
             let (body, confidence, downgraded) = apply_evidence_to_body(&raw_body, &evidence);
