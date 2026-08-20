@@ -671,7 +671,7 @@ export function ToolResultDisplay({
           <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
             {images.map((image, index) => (
               <ToolResultImagePreview
-                key={`${details.path}-${index}`}
+                key={`${image.mimeType}:${image.data.length}:${image.data.slice(0, 64)}:${image.data.slice(-64)}`}
                 id={`${details.path}-${index}`}
                 image={image}
                 alt={details.path}
@@ -916,9 +916,9 @@ export function ToolResultDisplay({
           </ToolSurface>
         ) : (
           <ToolSurface className="max-h-64 overflow-auto space-y-2">
-            {details.matches.map((match, index) => (
+            {details.matches.map((match) => (
               <div
-                key={`${match.path}:${match.line}:${index}`}
+                key={getStableValueSignature(match)}
                 className="rounded-md border border-black/[0.05] bg-white/[0.55] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
               >
                 <div className="flex items-start gap-2">
@@ -1139,7 +1139,7 @@ export function ToolResultDisplay({
         <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
           {images.map((image, index) => (
             <ToolResultImagePreview
-              key={`${item.toolCall.id}-${index}`}
+              key={`${image.mimeType}:${image.data.length}:${image.data.slice(0, 64)}:${image.data.slice(-64)}`}
               id={`${item.toolCall.id}-${index}`}
               image={image}
               alt={item.toolCall.name}

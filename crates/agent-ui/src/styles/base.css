@@ -185,7 +185,9 @@
   [data-streamdown="mermaid"] [role="application"]:active,
   [data-streamdown="mermaid"] [style*="cursor: grabbing"] [role="application"],
   [data-streamdown="mermaid"] [style*="cursor:grabbing"] [role="application"] {
+    /* biome-ignore lint/complexity/noImportantStyles: Streamdown writes drag transitions inline; reduced-motion must override them. */
     transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Streamdown writes drag transitions inline; reduced-motion must override them. */
     transition-property: none !important;
   }
 }
@@ -614,6 +616,7 @@
   .project-terminal-viewport .xterm-viewport,
   .project-terminal-viewport .xterm-screen,
   .project-terminal-viewport .xterm-scrollable-element {
+    /* biome-ignore lint/complexity/noImportantStyles: xterm applies its terminal background inline; the forced-colors palette must override it. */
     background: var(--project-terminal-background) !important;
   }
 

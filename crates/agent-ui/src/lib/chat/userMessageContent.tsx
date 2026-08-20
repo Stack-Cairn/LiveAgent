@@ -521,7 +521,10 @@ function formatCommitTooltipDate(value: string | undefined, locale: string) {
     { unit: "minute", seconds: 60 },
     { unit: "second", seconds: 1 },
   ];
-  const selected = units.find(({ seconds }) => Math.abs(deltaSeconds) >= seconds) ?? units.at(-1)!;
+  const selected = units.find(({ seconds }) => Math.abs(deltaSeconds) >= seconds) ?? {
+    unit: "second",
+    seconds: 1,
+  };
   const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
     Math.round(deltaSeconds / selected.seconds),
     selected.unit,
@@ -616,6 +619,7 @@ function CommitReferenceTooltip({
     formatPastedTextCount(deletions),
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: commit content changes invalidate tooltip width measurement
   useLayoutEffect(() => {
     const node = tooltipRef.current;
     if (!node) return;
@@ -624,6 +628,7 @@ function CommitReferenceTooltip({
   }, [commit, maxWidth, minWidth]);
 
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: Hover handlers keep this descriptive tooltip open; it has no activation behavior.
     <div
       ref={tooltipRef}
       className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
@@ -681,7 +686,7 @@ function CommitReferenceTooltip({
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-primary hover:bg-primary/10"
-            onClick={() => void openUrl(commit.githubUrl!)}
+            onClick={() => commit.githubUrl && void openUrl(commit.githubUrl)}
           >
             <GitHubMarkIcon className="h-3 w-3" />
             {t("chat.composer.commitTooltipOpenGithub")}
@@ -777,6 +782,7 @@ function GitFileMentionChip({ file }: { file: GitFileDisplayReference }) {
   }, [normalized.githubUrl]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: The chip conditionally exposes complete button semantics and keyboard activation only when a URL is available.
     <span
       title={title}
       role={normalized.githubUrl ? "button" : undefined}
@@ -820,6 +826,7 @@ function CommitMentionChip({
   const closeTimerRef = useRef<number | null>(null);
   const label = resolvedCommit.shortSha || resolvedCommit.sha.slice(0, 7);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable commit identity fields reset asynchronously resolved details
   useEffect(() => {
     setResolvedCommit(normalizeCommitDisplayReference(commit));
     setDetailsState("idle");
@@ -890,6 +897,7 @@ function CommitMentionChip({
 
   return (
     <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: The chip conditionally exposes complete button semantics and keyboard activation only when a URL is available. */}
       <span
         role={resolvedCommit.githubUrl ? "button" : undefined}
         tabIndex={resolvedCommit.githubUrl ? 0 : undefined}

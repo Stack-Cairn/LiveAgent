@@ -1,4 +1,4 @@
-import type { Context, Model } from "@earendil-works/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { PromptCacheHintMode, ProviderId } from "../../settings";
 import {
@@ -27,7 +27,7 @@ export type FinalizeProviderStreamOptionsParams = {
   baseUrl: string;
   options: StreamOptionsEx;
   context?: Context;
-  model?: Model<any>;
+  model?: Model<Api>;
   workdir?: string;
   nativeWebSearch?: boolean;
   promptCacheHintMode?: PromptCacheHintMode;

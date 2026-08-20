@@ -179,7 +179,6 @@ function commitRefChipClass(kind: CommitRefKind, selected: boolean) {
         baseClass,
         "border-sky-300/60 bg-sky-50 text-sky-700 ring-sky-200/70 dark:border-sky-300/35 dark:bg-sky-950/45 dark:text-sky-200 dark:ring-sky-300/15",
       );
-    case "ref":
     default:
       return cn(baseClass, "border-border/70 bg-muted/50 text-muted-foreground ring-border/60");
   }
@@ -196,7 +195,6 @@ function CommitRefTagIcon({ kind, variant }: { kind: CommitRefKind; variant: "li
       return <Cloud className={className} aria-hidden="true" />;
     case "tag":
       return <Tag className={className} aria-hidden="true" />;
-    case "ref":
     default:
       return <GitCommitHorizontal className={className} aria-hidden="true" />;
   }
@@ -234,7 +232,6 @@ function CommitRefTags({
         <span
           key={`${ref.kind}:${ref.label}`}
           title={ref.title}
-          aria-label={ref.title}
           className={cn(
             commitRefChipClass(ref.kind, selected),
             variant === "detail" ? "max-w-[12rem] shrink-0" : "max-w-[8.5rem] shrink",
@@ -380,7 +377,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             if (index !== row.commitCol) {
               return (
                 <path
-                  key={`join-${index}-${lane.id}`}
+                  key={`join-${lane.id}-${lane.color}`}
                   d={graphCommitJoinPath(index, row.commitCol)}
                   fill="none"
                   stroke={graphColor(lane.color)}
@@ -400,7 +397,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
               outputIndex++;
               return (
                 <path
-                  key={`lane-${index}-${lane.id}`}
+                  key={`lane-${lane.id}-${lane.color}`}
                   d={graphVerticalPath(index)}
                   fill="none"
                   stroke={graphColor(lane.color)}
@@ -428,7 +425,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             outputIndex++;
             return (
               <path
-                key={`lane-${index}-${lane.id}`}
+                key={`lane-${lane.id}-${lane.color}`}
                 d={d.join(" ")}
                 fill="none"
                 stroke={graphColor(lane.color)}
@@ -442,7 +439,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
           return null;
         })}
 
-        {row.parents.slice(1).map((parentId, index) => {
+        {row.parents.slice(1).map((parentId) => {
           const parentIndex = findLastGraphLaneIndex(row.outputLanes, parentId);
           if (parentIndex === -1 || parentIndex === row.commitCol) {
             return null;
@@ -450,7 +447,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
 
           return (
             <path
-              key={`parent-${index}-${parentId}`}
+              key={`parent-${parentId}`}
               d={graphParentBranchPath(row.commitCol, parentIndex)}
               fill="none"
               stroke={graphColor(row.outputLanes[parentIndex].color)}
@@ -513,7 +510,7 @@ function GitGraphContinuationCell({ row }: { row: GraphRow }) {
       >
         {row.outputLanes.map((lane, index) => (
           <path
-            key={`c${index}:${lane.id}:${lane.color}`}
+            key={`${lane.id}:${lane.color}`}
             d={graphVerticalPath(index)}
             fill="none"
             stroke={graphColor(lane.color)}
@@ -733,6 +730,7 @@ export function GitReviewHistoryView(props: {
     });
   }, [currentHistoryItemIndex, historyVirtualizer, onStackedPaneChange, useSplitReviewLayout]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row-count growth intentionally rechecks the load-more threshold
   useEffect(() => {
     maybeLoadMoreHistory(historyListRef.current, listPaneVisible);
   }, [historyRows.length, listPaneVisible, maybeLoadMoreHistory]);
@@ -872,7 +870,7 @@ export function GitReviewHistoryView(props: {
 
   const confirmCreateBranchFromCommit = useCallback(async () => {
     const target = branchFromCommit;
-    if (!target) return;
+    if (!target || !gitClient) return;
     const branchName = branchFromCommitName.trim();
     if (!branchName) {
       setBranchFromCommitError(t("projectTools.gitReview.branchNameRequired"));
@@ -881,7 +879,7 @@ export function GitReviewHistoryView(props: {
     setBranchFromCommitError("");
     const ok = await runOperation(
       "create_branch",
-      () => gitClient!.createBranch(cwd, branchName, target.commitSha),
+      () => gitClient.createBranch(cwd, branchName, target.commitSha),
       "create_branch",
     );
     if (ok) {
@@ -1060,7 +1058,6 @@ export function GitReviewHistoryView(props: {
                         <div
                           className="git-review-history-row flex h-[22px] w-full min-w-0 select-none items-center gap-1 px-1.5 text-left text-xs text-muted-foreground transition-colors"
                           title={title}
-                          aria-label={title}
                         >
                           <GitGraphSvgCell row={graphRow} />
                           <span className="min-w-0 flex-1 truncate text-[calc(12px*var(--zone-font-scale,1))] font-medium">
@@ -1257,7 +1254,7 @@ export function GitReviewHistoryView(props: {
           role="menu"
           className={cn("layer-popover absolute min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -1269,7 +1266,11 @@ export function GitReviewHistoryView(props: {
                 type="button"
                 role="menuitem"
                 className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
-                onClick={() => openHistoryCommitDiff(historyContextCommit, historyContextFile!)}
+                onClick={() => {
+                  if (historyContextFile) {
+                    openHistoryCommitDiff(historyContextCommit, historyContextFile);
+                  }
+                }}
               >
                 <Eye className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.openChange")}</span>
@@ -1279,7 +1280,11 @@ export function GitReviewHistoryView(props: {
                 role="menuitem"
                 className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
                 disabled={!onInsertGitFileMention}
-                onClick={() => addHistoryFileToContext(historyContextCommit, historyContextFile!)}
+                onClick={() => {
+                  if (historyContextFile) {
+                    addHistoryFileToContext(historyContextCommit, historyContextFile);
+                  }
+                }}
               >
                 <MessageSquareText className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.addToContext")}</span>

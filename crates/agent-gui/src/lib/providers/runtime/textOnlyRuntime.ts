@@ -1,4 +1,4 @@
-import type { AssistantMessage, CacheRetention, Context, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, CacheRetention, Context, Model } from "@earendil-works/pi-ai";
 import {
   appendHostedSearchBlocksToAssistant,
   type HostedSearchBlock,
@@ -65,7 +65,7 @@ function buildTextOnlyCallContext(
 function buildTextOnlyStreamOptions(params: {
   providerId: ProviderId;
   runtime: ProviderRuntimeConfig;
-  model: Model<any>;
+  model: Model<Api>;
   context?: Context;
   workdir?: string;
   headers: Record<string, string>;

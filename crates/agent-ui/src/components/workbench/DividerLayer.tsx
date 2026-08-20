@@ -95,6 +95,7 @@ export function DividerLayer(props: DividerLayerProps) {
       {dividers.map((divider) => {
         const ratioNow = clampFor(divider, currentRatio(divider, dividerSize));
         return (
+          // biome-ignore lint/a11y/useSemanticElements: This is an interactive, draggable separator with value semantics; hr cannot implement pointer capture or keyboard resizing.
           <div
             key={divider.splitId}
             data-workbench-divider={divider.splitId}

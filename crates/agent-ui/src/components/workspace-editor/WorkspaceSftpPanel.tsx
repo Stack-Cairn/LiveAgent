@@ -238,7 +238,7 @@ function PathCrumbRow(props: {
       {crumbs.map((crumb, index) => {
         const isLast = index === crumbs.length - 1;
         return (
-          <Fragment key={`${crumb.path}-${index}`}>
+          <Fragment key={crumb.path}>
             {index > 0 ? (
               <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
             ) : null}
@@ -436,10 +436,9 @@ function PathNavigator(props: {
   };
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label={t("workspaceSftp.pathSuggestions")}
-      className="relative z-30 flex h-10 shrink-0 items-center border-b border-border/60 bg-muted/15 px-2"
+      className="relative z-30 flex h-10 min-w-0 shrink-0 items-center border-x-0 border-b border-t-0 border-border/60 bg-muted/15 px-2"
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
         if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
@@ -585,7 +584,7 @@ function PathNavigator(props: {
           </div>
         </div>
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -768,6 +767,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
     [client, onError, projectPathKey, session.id, workdir],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activation/session identity owns the initial two-pane load
   useEffect(() => {
     if (!isActive) return;
     void loadPane("local", localPane.path || INITIAL_LOCAL_PATH);
@@ -839,7 +839,10 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
     });
   }, []);
 
-  const paneForSide = (side: SftpSide) => (side === "local" ? localPane : remotePane);
+  const paneForSide = useCallback(
+    (side: SftpSide) => (side === "local" ? localPane : remotePane),
+    [localPane, remotePane],
+  );
   const selectedItemsForSide = useCallback(
     (side: SftpSide) => {
       const pane = side === "local" ? localPane : remotePane;
@@ -861,7 +864,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
     [selectedItemsForSide],
   );
 
-  const selectEntry = (side: SftpSide, path: string, additive: boolean) => {
+  const selectEntry = useCallback((side: SftpSide, path: string, additive: boolean) => {
     const setPane = side === "local" ? setLocalPane : setRemotePane;
     setPane((current) => {
       if (!additive) {
@@ -875,7 +878,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
       }
       return { ...current, selectedPaths: [...selected] };
     });
-  };
+  }, []);
 
   const clearSelection = useCallback((side: SftpSide) => {
     const setPane = side === "local" ? setLocalPane : setRemotePane;
@@ -950,8 +953,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
     session.id,
     t,
     workdir,
-    localPane,
-    remotePane,
+    paneForSide,
   ]);
 
   const openRenameEntryDialog = useCallback((side: SftpSide, path: string) => {
@@ -1007,8 +1009,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
     session.id,
     t,
     workdir,
-    localPane,
-    remotePane,
+    paneForSide,
   ]);
 
   const deleteEntries = useCallback(
@@ -1059,8 +1060,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
       session.id,
       t,
       workdir,
-      localPane,
-      remotePane,
+      paneForSide,
     ],
   );
 
@@ -1362,7 +1362,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
         items,
       });
     },
-    [getActionItems, selectedItemsForSide],
+    [getActionItems, selectEntry, selectedItemsForSide],
   );
 
   const panes = useMemo(
@@ -1435,6 +1435,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
               const PaneFolderIcon = getFileTypeIcon(root || pane.path, "dir", { expanded: true });
 
               return (
+                // biome-ignore lint/a11y/noStaticElementInteractions: This pane is a native drag/drop and context-menu target; file rows provide the keyboard-accessible actions.
                 <div
                   key={side}
                   data-sftp-drop-side={side}
@@ -1511,7 +1512,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
                   <div
                     className="relative min-h-0 flex-1 overscroll-contain overflow-auto p-2"
-                    onClick={(event) => {
+                    onPointerDown={(event) => {
                       const target = event.target;
                       if (target instanceof HTMLElement && target.closest("[data-sftp-entry]"))
                         return;
@@ -1603,7 +1604,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                               data-sftp-drop-path={
                                 entry.kind === "directory" ? entry.path : undefined
                               }
-                              aria-selected={isSelected}
+                              aria-pressed={isSelected}
                               className={cn(
                                 "grid w-full cursor-default grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
                                 !isMobileLayout && "touch-none",

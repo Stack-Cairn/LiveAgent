@@ -274,11 +274,14 @@
     .mention-popup-enter,
     .mention-popup-item,
     .sidebar-context-menu,
+    /* biome-ignore lint/style/noDescendingSpecificity: This reduced-motion override intentionally follows the more specific open-state animation selectors. */
     .sidebar-context-menu [role="menuitem"] {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides menu state animations. */
       animation: none !important;
     }
 
     .sidebar-context-menu {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides menu state transitions. */
       transition: none !important;
     }
   }

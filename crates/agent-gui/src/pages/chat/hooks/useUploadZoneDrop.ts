@@ -111,6 +111,7 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
       }
     },
     [
+      addNotify,
       canDropUpload,
       fileDropTitle,
       importReadableFilePaths,

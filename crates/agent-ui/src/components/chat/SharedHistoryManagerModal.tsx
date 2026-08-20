@@ -100,18 +100,16 @@ function RedactionPicker(props: {
   const { value, disabled, onChange } = props;
   const { t } = useLocale();
   return (
-    <div
-      role="radiogroup"
+    <fieldset
       aria-label={t("sharedHistory.redactionTitle")}
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
+        "inline-flex min-w-0 shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
       )}
     >
       <button
         type="button"
-        role="radio"
-        aria-checked={value}
+        aria-pressed={value}
         disabled={disabled}
         onClick={() => onChange(true)}
         className={cn(
@@ -125,8 +123,7 @@ function RedactionPicker(props: {
       </button>
       <button
         type="button"
-        role="radio"
-        aria-checked={!value}
+        aria-pressed={!value}
         disabled={disabled}
         onClick={() => onChange(false)}
         className={cn(
@@ -138,7 +135,7 @@ function RedactionPicker(props: {
       >
         {t("settings.disable")}
       </button>
-    </div>
+    </fieldset>
   );
 }
 

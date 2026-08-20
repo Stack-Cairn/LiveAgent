@@ -852,7 +852,7 @@ export async function runAssistantWithTools(params: {
     // override 清空——不带的只有压缩/重冻结分支，此时快照已重算进 systemPrompt，
     // 旧尾部内容已被快照覆盖，继续挂只会重复投递。
     let accumulatedWireTailBlocks: PinnedTailBlock[] = [];
-    let agentTools: AgentTool<any>[] = [];
+    let agentTools: AgentTool[] = [];
     const pendingRecoveredSeedTurnRef: {
       current: {
         round: number;
@@ -1079,7 +1079,7 @@ export async function runAssistantWithTools(params: {
       };
     }
 
-    const visibleAgentTools: AgentTool<any>[] = llmTools.map((tool) => ({
+    const visibleAgentTools: AgentTool[] = llmTools.map((tool) => ({
       ...tool,
       label: tool.name,
       async execute(toolCallId, toolArgs, signal) {
@@ -1109,7 +1109,7 @@ export async function runAssistantWithTools(params: {
         return executeSingleToolCall(toolCall, signal);
       },
     }));
-    const hiddenProviderNativeWebSearchAgentTools: AgentTool<any>[] = [
+    const hiddenProviderNativeWebSearchAgentTools: AgentTool[] = [
       ...hiddenProviderNativeWebSearchToolNames,
     ].map((name) => ({
       name,
@@ -1137,7 +1137,7 @@ export async function runAssistantWithTools(params: {
     // Registered so pi-agent-core resolves leaked provider-native web_fetch
     // calls instead of erroring with "Tool web_fetch not found"; execution
     // routes into the silent bridge above.
-    const hiddenProviderNativeWebFetchAgentTools: AgentTool<any>[] = [
+    const hiddenProviderNativeWebFetchAgentTools: AgentTool[] = [
       ...hiddenProviderNativeWebFetchToolNames,
     ].map((name) => ({
       name,
@@ -1167,7 +1167,11 @@ export async function runAssistantWithTools(params: {
     ];
 
     let streamRound = 0;
-    const streamFn = (streamModel: typeof model, streamContext: Context, options?: any) => {
+    const streamFn = (
+      streamModel: typeof model,
+      streamContext: Context,
+      options?: StreamOptionsEx,
+    ) => {
       const round = ++streamRound;
       const retryAttemptsForRound: RetryAttemptRecord[] = [];
       params.onRetryAttempts?.(round, retryAttemptsForRound);

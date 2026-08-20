@@ -99,6 +99,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
     setDraftAttachments(attachments);
   }, [attachments]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: draft text intentionally invalidates the DOM measurement
   useLayoutEffect(() => {
     if (textareaSizing === "content") {
       resizeEditableTextarea(textareaRef.current);

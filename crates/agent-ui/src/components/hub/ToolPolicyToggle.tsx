@@ -28,10 +28,9 @@ export function ToolPolicyToggle(props: {
   const { t } = useLocale();
   const buttonPad = size === "sm" ? "px-2 py-0.5" : "px-2.5 py-1";
   return (
-    <div
-      role="radiogroup"
+    <fieldset
       aria-label={ariaLabel}
-      className="inline-flex shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+      className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
     >
       {POLICY_ORDER.map((option) => {
         const active = value === option;
@@ -39,8 +38,7 @@ export function ToolPolicyToggle(props: {
           <button
             key={option}
             type="button"
-            role="radio"
-            aria-checked={active}
+            aria-pressed={active}
             onClick={() => onChange(option)}
             className={cn(
               "rounded-md text-[11px] font-medium leading-none transition-colors",
@@ -52,6 +50,6 @@ export function ToolPolicyToggle(props: {
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

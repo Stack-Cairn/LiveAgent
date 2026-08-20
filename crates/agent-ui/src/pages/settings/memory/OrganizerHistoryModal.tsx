@@ -590,9 +590,9 @@ export function OrganizerHistoryModal(props: {
                       {t("settings.memoryOrganizerReviewNotes")}
                     </div>
                     <ul className="space-y-2 text-xs text-muted-foreground">
-                      {reviewItems.map((item, index) => (
+                      {reviewItems.map((item) => (
                         <li
-                          key={`${index}:${item.phase}:${item.slug || ""}:${item.message}`}
+                          key={`${item.phase}:${item.code || ""}:${item.slug || ""}:${item.message}`}
                           className="rounded-md border border-border/50 bg-background/70 px-3 py-2"
                         >
                           <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -628,9 +628,9 @@ export function OrganizerHistoryModal(props: {
                       {t("settings.memoryOrganizerClusterSummaries")}
                     </div>
                     <div className="space-y-2">
-                      {clusterSummaries.map((summary, index) => (
+                      {clusterSummaries.map((summary) => (
                         <div
-                          key={`${index}:${summary}`}
+                          key={summary}
                           className="rounded bg-muted/30 px-3 py-2 text-xs"
                         >
                           {summary}

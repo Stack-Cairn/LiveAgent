@@ -12,11 +12,13 @@ export type GatewayRuntimeStatus = {
   lastError?: string | null;
 };
 
-export function isRemoteSettingsConfigured(remote: AppSettings["remote"]) {
+type GatewayFallbackSettings = Pick<AppSettings["remote"], "enabled" | "gatewayUrl" | "token">;
+
+export function isRemoteSettingsConfigured(remote: GatewayFallbackSettings) {
   return remote.gatewayUrl.trim() !== "" && remote.token.trim() !== "";
 }
 
-export function buildFallbackGatewayStatus(remote: AppSettings["remote"]): GatewayRuntimeStatus {
+export function buildFallbackGatewayStatus(remote: GatewayFallbackSettings): GatewayRuntimeStatus {
   return {
     online: false,
     enabled: remote.enabled,

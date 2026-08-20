@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ProviderId } from "../../settings";
 import {
   ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
@@ -96,7 +96,7 @@ function appendOpenAIChatCompletionsNativeWebSearch(
   payload: Record<string, unknown>,
   params: {
     baseUrl?: string;
-    model: Model<any>;
+    model: Model<Api>;
   },
 ) {
   if (
@@ -120,7 +120,7 @@ function isOpenAIWebSearchMinimalReasoningUnsupportedModel(modelId: string) {
   return normalized === "gpt-5" || normalized.startsWith("gpt-5-");
 }
 
-function normalizeOpenAIWebSearchReasoning(payload: Record<string, unknown>, model: Model<any>) {
+function normalizeOpenAIWebSearchReasoning(payload: Record<string, unknown>, model: Model<Api>) {
   if (!isOpenAIWebSearchMinimalReasoningUnsupportedModel(model.id)) return payload;
   if (!isRecord(payload.reasoning) || payload.reasoning.effort !== "minimal") return payload;
   return {

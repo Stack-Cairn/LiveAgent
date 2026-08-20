@@ -1355,7 +1355,8 @@ export function createFileMentionChip(path: string, kind: FileMentionKind) {
 export function insertMentionChipElement(ctx: MentionContext, chip: HTMLElement) {
   const { textNode, triggerOffset, query } = ctx;
   const text = textNode.textContent || "";
-  const parent = textNode.parentNode!;
+  const parent = textNode.parentNode;
+  if (!parent) return;
 
   const beforeText = text.slice(0, triggerOffset);
   const afterRaw = text.slice(triggerOffset + 1 + query.length);

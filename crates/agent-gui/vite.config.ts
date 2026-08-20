@@ -22,10 +22,32 @@ export default defineConfig(async () => ({
       "@liveagent/app": path.resolve(__dirname, "./src"),
       "@liveagent/adapters": path.resolve(__dirname, "./src/agent-ui-adapters"),
       "@liveagent/ui": path.resolve(__dirname, "../agent-ui/src"),
+      "node:fs": path.resolve(__dirname, "../agent-ui/src/shims/nodeFs.ts"),
     },
   },
   define: {
     __LIVEAGENT_APP_VERSION__: JSON.stringify(appVersion),
+  },
+  build: {
+    // Monaco language workers are emitted as indivisible lazy assets (largest
+    // is the TypeScript worker at ~6.6 MB). Application modules are still held
+    // to the 450 KB code-splitting group below.
+    chunkSizeWarningLimit: 7_000,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          minSize: 20_000,
+          maxSize: 450_000,
+          groups: [
+            {
+              name: "liveagent-app",
+              test: /\/crates\/(?:agent-gui|agent-ui)\/src\//,
+              entriesAware: true,
+            },
+          ],
+        },
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

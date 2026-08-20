@@ -268,7 +268,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       request_id: gatewayRequest.requestId,
       conversation_id: item.conversationId,
       worker_id: gatewayRequest.workerId ?? "gui-queue",
-    } as any).catch((error) => {
+    }).catch((error) => {
       console.warn("gateway_chat_cancel_request failed", error);
     });
   }
@@ -293,7 +293,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
             snapshotJson: JSON.stringify(snapshot),
             revision: snapshot.revision,
           },
-        } as any),
+        }),
       )
       .then(() => undefined)
       .catch((error) => {
@@ -316,6 +316,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     }
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Queue publication and the active conversation are read through stable stores/refs; queueStore is the callback ownership boundary.
   const setQueuedChatTurnsState = useCallback(
     (updater: (current: QueuedChatTurn[]) => QueuedChatTurn[]) => {
       const previous = queuedChatTurnsRef.current;
@@ -591,7 +592,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
                   request_id: gatewayRequest.requestId,
                   conversation_id: targetConversationId,
                   worker_id: gatewayWorkerId,
-                } as any);
+                });
               }
             : undefined;
         const accepted = await sendActionRef.current({
@@ -625,7 +626,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
               request_id: gatewayRequest.requestId,
               conversation_id: targetConversationId,
               worker_id: gatewayWorkerId,
-            } as any).catch((error) => {
+            }).catch((error) => {
               console.warn("gateway_chat_complete failed", error);
             });
           }
@@ -674,6 +675,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       });
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Running-set transitions are the only trigger; the queue is sampled from its ref and helpers are evaluated from this render.
   useEffect(() => {
     const previousRunningConversationIds = previousRunningConversationIdsRef.current;
     previousRunningConversationIdsRef.current = runningConversationIds;
@@ -850,6 +852,24 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     return true;
   }
 
+  const gatewayChatQueueActionsRef = useRef({
+    buildChatQueueItemDetail,
+    buildChatQueueSnapshot,
+    isConversationRunning,
+    removeQueuedTurn,
+    runQueuedTurnNow,
+    setQueuedChatTurnsState,
+  });
+  gatewayChatQueueActionsRef.current = {
+    buildChatQueueItemDetail,
+    buildChatQueueSnapshot,
+    isConversationRunning,
+    removeQueuedTurn,
+    runQueuedTurnNow,
+    setQueuedChatTurnsState,
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: This native listener is registered once and dispatches through latest-action and mutable state refs to avoid stale closures without re-subscribing.
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -877,16 +897,23 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           errorCode: typeof response.errorCode === "string" ? response.errorCode : "",
           revision: chatQueueRevisionRef.current,
         },
-      } as any).catch((error) => {
+      }).catch((error) => {
         console.warn("gateway_chat_queue_respond failed", error);
       });
     };
 
-    const snapshotJson = (conversationId: string) =>
-      JSON.stringify(buildChatQueueSnapshot(conversationId));
-
     void listen<GatewayChatQueueRequestEvent>("gateway:chat-queue-request", (event) => {
       if (disposed) return;
+      const {
+        buildChatQueueItemDetail,
+        buildChatQueueSnapshot,
+        isConversationRunning,
+        removeQueuedTurn,
+        runQueuedTurnNow,
+        setQueuedChatTurnsState,
+      } = gatewayChatQueueActionsRef.current;
+      const snapshotJson = (targetConversationId: string) =>
+        JSON.stringify(buildChatQueueSnapshot(targetConversationId));
       const request = event.payload;
       const requestId = request.requestId?.trim() ?? "";
       const action = request.action?.trim() ?? "";

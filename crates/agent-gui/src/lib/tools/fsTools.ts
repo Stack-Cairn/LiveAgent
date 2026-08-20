@@ -7,7 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import { invoke } from "@tauri-apps/api/core";
-import { Type } from "typebox";
+import { Type, type TProperties } from "typebox";
 import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import {
   type BuiltinToolBundle,
@@ -46,9 +46,11 @@ type ToolOk<TDetails extends BuiltinToolResultDetails = BuiltinToolResultDetails
 const MAX_DISPLAY_IMAGE_PATHS = 12;
 const AUTO_FULL_READ_MAX_LINES = 5_000;
 
-function strictToolParameters(properties: Record<string, unknown>) {
-  return Type.Object(properties as any, { additionalProperties: false });
+function strictToolParameters<T extends TProperties>(properties: T) {
+  return Type.Object(properties, { additionalProperties: false });
 }
+
+type ToolArguments = Record<string, unknown>;
 
 function assertKnownArguments(toolName: string, args: unknown, allowed: readonly string[]) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return;
@@ -736,7 +738,7 @@ export function createFsTools(params: {
     ],
   };
 
-  async function execRead(args: any, signal?: AbortSignal): Promise<ToolOk> {
+  async function execRead(args: ToolArguments, signal?: AbortSignal): Promise<ToolOk> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const resolved = await pathResolver.resolvePath(args?.path, {
@@ -1105,7 +1107,7 @@ export function createFsTools(params: {
     return value;
   }
 
-  function getOptionalMimeType(args: any) {
+  function getOptionalMimeType(args: ToolArguments) {
     const value =
       typeof args?.mimeType === "string"
         ? args.mimeType
@@ -1205,7 +1207,9 @@ export function createFsTools(params: {
     }
   }
 
-  async function normalizeDisplayImageSources(args: any): Promise<DisplayImageSourceInput[]> {
+  async function normalizeDisplayImageSources(
+    args: ToolArguments,
+  ): Promise<DisplayImageSourceInput[]> {
     const sources: DisplayImageSourceInput[] = [];
     const mimeType = getOptionalMimeType(args);
 
@@ -1285,7 +1289,7 @@ export function createFsTools(params: {
         source: input.source,
         source_type: input.sourceType,
         mime_type: input.mimeType,
-      } as any);
+      });
     } catch (error) {
       if (isFsBackendError(error) && input.resolvedPath) {
         throw new Error(buildFsErrorText("Image", input.resolvedPath, error));
@@ -1339,7 +1343,7 @@ export function createFsTools(params: {
   }
 
   async function execImage(
-    args: any,
+    args: ToolArguments,
     signal?: AbortSignal,
   ): Promise<ToolOk<DisplayImageResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
@@ -1410,7 +1414,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execWrite(args: any, signal?: AbortSignal): Promise<ToolOk<WriteResultDetails>> {
+  async function execWrite(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<WriteResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const writeArgs = normalizeWriteArgs(args);
@@ -1486,7 +1493,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execEdit(args: any, signal?: AbortSignal): Promise<ToolOk<EditResultDetails>> {
+  async function execEdit(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<EditResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const resolved = await pathResolver.resolvePath(args?.path, {
@@ -1578,7 +1588,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execDelete(args: any, signal?: AbortSignal): Promise<ToolOk<DeleteResultDetails>> {
+  async function execDelete(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<DeleteResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const resolved = await pathResolver.resolvePath(args?.path, {
@@ -1615,7 +1628,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execList(args: any, signal?: AbortSignal): Promise<ToolOk<ListResultDetails>> {
+  async function execList(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<ListResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const resolved = await pathResolver.resolvePath(args?.path, {
@@ -1677,7 +1693,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execGlob(args: any, signal?: AbortSignal): Promise<ToolOk<GlobResultDetails>> {
+  async function execGlob(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<GlobResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const pattern = typeof args?.pattern === "string" ? args.pattern.trim() : "";
@@ -1742,7 +1761,10 @@ export function createFsTools(params: {
     };
   }
 
-  async function execGrep(args: any, signal?: AbortSignal): Promise<ToolOk<GrepResultDetails>> {
+  async function execGrep(
+    args: ToolArguments,
+    signal?: AbortSignal,
+  ): Promise<ToolOk<GrepResultDetails>> {
     if (signal?.aborted) throw new Error("Cancelled");
 
     const pattern = typeof args?.pattern === "string" ? args.pattern : "";

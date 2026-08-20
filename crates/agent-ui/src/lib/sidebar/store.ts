@@ -885,7 +885,10 @@ export function createSidebarStore(
         const conversationId = item.conversationId.trim();
         if (!conversationId) continue;
         const hasUpdatedAt = typeof item.updatedAt === "number" && Number.isFinite(item.updatedAt);
-        const updatedAt = hasUpdatedAt ? item.updatedAt! : now();
+        const updatedAt =
+          typeof item.updatedAt === "number" && Number.isFinite(item.updatedAt)
+            ? item.updatedAt
+            : now();
         const statusUpdatedAt = runningStatusUpdatedAt.get(conversationId);
         const current = running.get(conversationId);
         const staleAgainstKnownStatus =

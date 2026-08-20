@@ -474,9 +474,8 @@ function ProviderActionGroup(props: {
     props;
 
   return (
-    <div
-      className="settings-provider-action-group"
-      role="group"
+    <fieldset
+      className="settings-provider-action-group min-w-0 border-0 p-0"
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
@@ -514,7 +513,7 @@ function ProviderActionGroup(props: {
           {t("settings.providerActionSettings")}
         </span>
       </Button>
-    </div>
+    </fieldset>
   );
 }
 

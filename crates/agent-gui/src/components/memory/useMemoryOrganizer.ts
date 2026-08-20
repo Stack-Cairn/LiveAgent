@@ -43,6 +43,7 @@ export function useMemoryOrganizer(settings: AppSettings, setSettings: SetSettin
   const scheduleKey = `${organizerEnabled}:${organizerSchedule.frequency}:${organizerNextRunAt ?? 0}:${
     organizerModel ? `${organizerModel.customProviderId}/${organizerModel.model}` : ""
   }`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The composite key intentionally re-arms configure while the service reads the latest settings through settingsRef.
   useEffect(() => {
     serviceRef.current?.configure();
   }, [scheduleKey]);

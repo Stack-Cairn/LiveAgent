@@ -602,7 +602,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           request_id: gatewayBridgeRequestId,
           conversation_id: conversationId,
           worker_id: gatewayBridgeWorkerId ?? "gui-live",
-        } as any).catch((error) => {
+        }).catch((error) => {
           console.warn("gateway_chat_cancel_request failed", error);
         });
       }
@@ -871,7 +871,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             request_id: gatewayBridgeRequestId,
             conversation_id: conversationId,
           };
-      void invoke(command, payload as any).catch((error) => {
+      void invoke(command, payload).catch((error) => {
         console.warn(`${command} failed`, error);
       });
     }
@@ -973,7 +973,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       await invoke("gateway_chat_mark_local_started", {
         request_id: gatewayBridgeRequestId,
         conversation_id: conversationId,
-      } as any);
+      });
       localGatewayRunStarted = true;
     }
 

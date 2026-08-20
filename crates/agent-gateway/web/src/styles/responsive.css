@@ -38,7 +38,7 @@
  */
 @media (max-width: 820px), (pointer: coarse) {
   .transcript-width-controls {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -121,7 +121,7 @@
     z-index: var(--layer-panel);
     height: 100svh;
     height: 100dvh;
-    width: min(86vw, 272px) !important;
+    width: min(86vw, 272px);
     max-width: min(86vw, 272px);
     box-shadow: 18px 0 48px hsl(220 22% 10% / 0.16);
     /* The drawer is ~86vw wide — almost the full screen on mobile. Fading the
@@ -134,7 +134,7 @@
     transform: translate3d(-100%, 0, 0);
     transition:
       transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      visibility 0s linear 180ms !important;
+      visibility 0s linear 180ms;
     will-change: transform;
     /* As a fixed, layer-promoted drawer, `contain: paint` (inherited from the
        base rule) makes the compositor intermittently re-raster the covered
@@ -151,7 +151,7 @@
     transform: translate3d(0, 0, 0);
     transition:
       transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      visibility 0s linear 0s !important;
+      visibility 0s linear 0s;
   }
 
   .gateway-editor-host > .chat-history-sidebar[data-state="closed"] {
@@ -189,25 +189,25 @@
        keep the mobile transition to the same simple fade used by settings. */
     background: hsl(var(--background));
     box-shadow: none;
-    opacity: 0 !important;
+    opacity: 0;
     visibility: hidden;
     transition:
       opacity 220ms ease,
-      visibility 0s linear 220ms !important;
+      visibility 0s linear 220ms;
     will-change: opacity;
     contain: layout style;
-    translate: 0 0 !important;
-    transform: none !important;
+    translate: 0 0;
+    transform: none;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
 
   html[data-liveagent-webui="gateway"] .project-tools-panel[data-state="open"] {
-    opacity: 1 !important;
+    opacity: 1;
     visibility: visible;
     transition:
       opacity 220ms ease,
-      visibility 0s linear 0s !important;
+      visibility 0s linear 0s;
   }
 
   html[data-liveagent-webui="gateway"] .workspace-code-editor-overlay,
@@ -234,10 +234,10 @@
 
   html[data-liveagent-webui="gateway"] .project-tools-panel-inner {
     min-width: 0;
-    opacity: 1 !important;
-    translate: 0 0 !important;
-    transform: translate3d(0, 0, 0) !important;
-    transition: none !important;
+    opacity: 1;
+    translate: 0 0;
+    transform: translate3d(0, 0, 0);
+    transition: none;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
@@ -292,7 +292,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-sidebar {
-    width: 100% !important;
+    width: 100%;
     flex: 0 0 auto;
     border-right: 0;
     border-bottom: 1px solid hsl(var(--border));
@@ -320,12 +320,12 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-nav > * + * {
-    margin-top: 0 !important;
+    margin-top: 0;
   }
 
   html[data-liveagent-webui="gateway"] .settings-nav-group {
     display: contents;
-    margin-top: 0 !important;
+    margin-top: 0;
   }
 
   html[data-liveagent-webui="gateway"] .settings-nav-group-label {
@@ -337,7 +337,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-nav-group > div:last-child > * + * {
-    margin-top: 0 !important;
+    margin-top: 0;
   }
 
   html[data-liveagent-webui="gateway"] .settings-nav-item {
@@ -403,7 +403,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-content-hooks {
-    overflow-y: auto !important;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
   }
@@ -415,7 +415,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-content-memory {
-    overflow-y: auto !important;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
   }
@@ -495,11 +495,11 @@
 
   html[data-liveagent-webui="gateway"] .settings-card-actions,
   html[data-liveagent-webui="gateway"] .settings-hover-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 
   html[data-liveagent-webui="gateway"] .settings-hover-action {
-    display: flex !important;
+    display: flex;
   }
 
   html[data-liveagent-webui="gateway"] .settings-content-providers,
@@ -612,11 +612,11 @@
   html[data-liveagent-webui="gateway"] .settings-form-grid,
   html[data-liveagent-webui="gateway"] .settings-cron-type-grid,
   html[data-liveagent-webui="gateway"] .settings-choice-grid {
-    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   html[data-liveagent-webui="gateway"] .settings-language-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   html[data-liveagent-webui="gateway"] .settings-field-row {
@@ -736,7 +736,7 @@
     flex: 0 0 auto;
     flex-direction: column;
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     overflow: visible;
   }
@@ -890,7 +890,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row > span {
-    width: auto !important;
+    width: auto;
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row > span:first-of-type {
@@ -898,7 +898,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row > span:nth-of-type(3) {
-    margin-left: 0 !important;
+    margin-left: 0;
   }
 
   .login-shell {
@@ -942,6 +942,7 @@
     border-radius: 8px;
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: This narrower breakpoint intentionally refines the same login feature text selector. */
   .login-feat-text span {
     font-size: 11px;
   }
@@ -988,7 +989,7 @@
 @media (hover: none), (pointer: coarse) {
   html[data-liveagent-webui="gateway"] .settings-card-actions,
   html[data-liveagent-webui="gateway"] .settings-hover-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 }
 
@@ -1022,6 +1023,7 @@
     gap: 8px;
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: This narrower breakpoint intentionally hides text that the wider mobile breakpoint sizes. */
   .login-feat-text span {
     display: none;
   }
@@ -1104,7 +1106,7 @@
 
   .chat-user-bubble-wrap,
   .chat-user-bubble-editor {
-    max-width: min(92%, calc(100vw - 56px)) !important;
+    max-width: min(92%, calc(100vw - 56px));
   }
 
   .chat-user-bubble {
@@ -1115,7 +1117,7 @@
 
   .chat-user-bubble-actions,
   .chat-assistant-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 
   .chat-user-bubble-action,
@@ -1128,6 +1130,7 @@
     justify-content: center;
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: The mobile breakpoint intentionally follows broader settings button sizing declared earlier. */
   .checkpoint-card button {
     padding: 10px 12px;
   }
@@ -1180,9 +1183,9 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-tool-detail-overlay .settings-tool-detail-panel {
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: min(86dvh, 640px) !important;
+    width: 100%;
+    max-width: 100%;
+    max-height: min(86dvh, 640px);
     border-bottom: 0;
     border-radius: 20px 20px 0 0;
     padding-bottom: env(safe-area-inset-bottom);
@@ -1274,7 +1277,7 @@
 
 @media (max-width: 520px) {
   html[data-liveagent-webui="gateway"] .settings-language-grid {
-    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   html[data-liveagent-webui="gateway"] .settings-section-actions > button:not([role="switch"]),
@@ -1296,7 +1299,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row > span {
-    width: auto !important;
+    width: auto;
     min-width: 0;
   }
 
@@ -1308,7 +1311,7 @@
   }
 
   html[data-liveagent-webui="gateway"] .settings-log-row > span:nth-of-type(3) {
-    margin-left: 0 !important;
+    margin-left: 0;
   }
 
   html[data-liveagent-webui="gateway"] .settings-provider-card-row {
@@ -1438,6 +1441,7 @@
     border-radius: 9px;
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: This compact-height media query intentionally refines the wider login logo rule. */
   .login-logo-mark svg {
     width: 14px;
     height: 14px;

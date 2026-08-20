@@ -1,4 +1,4 @@
-import type { Context, Model } from "@earendil-works/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import type { ProviderId } from "../../settings";
 import { DEEPSEEK_RESPONSES_API, type DeepSeekAssistantMessage } from "../deepSeekNative";
 import { isRecord } from "./common";
@@ -34,7 +34,7 @@ function responseOutput(message: DeepSeekAssistantMessage) {
   return output.some((item) => item.type === "web_search_call") ? output : undefined;
 }
 
-function transformedAssistantItemCount(message: DeepSeekAssistantMessage, model: Model<any>) {
+function transformedAssistantItemCount(message: DeepSeekAssistantMessage, model: Model<Api>) {
   const isSameModel =
     message.provider === model.provider && message.api === model.api && message.model === model.id;
   let count = 0;
@@ -74,7 +74,7 @@ function collectFunctionCallIdMappings(
 function replayDeepSeekResponseOutput(
   payload: Record<string, unknown>,
   context: Context | undefined,
-  model: Model<any> | undefined,
+  model: Model<Api> | undefined,
 ) {
   if (!Array.isArray(payload.input) || !context || !model) return payload;
 
@@ -136,7 +136,7 @@ function replayDeepSeekResponseOutput(
 export function normalizeDeepSeekResponsesPayload(
   payload: unknown,
   context?: Context,
-  model?: Model<any>,
+  model?: Model<Api>,
 ): unknown {
   if (!isRecord(payload)) return payload;
   const next: Record<string, unknown> = { ...payload };
@@ -157,7 +157,7 @@ export function attachDeepSeekResponsesPayloadCompat(
   options: StreamOptionsEx,
   params: {
     providerId: ProviderId;
-    model?: Model<any>;
+    model?: Model<Api>;
     context?: Context;
   },
 ): StreamOptionsEx {

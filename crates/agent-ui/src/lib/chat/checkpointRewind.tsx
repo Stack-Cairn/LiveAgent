@@ -204,6 +204,7 @@ export function CheckpointRewindProvider(props: {
 
   // 切会话立刻清空旧列表:分支复制会保留消息 ID,旧会话的轮残留可能错配到
   // 新会话的同 ID 气泡上。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity intentionally clears stale rewind state
   useEffect(() => {
     loadEpochRef.current += 1;
     setTurns([]);

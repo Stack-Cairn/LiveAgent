@@ -1,4 +1,4 @@
-import type { Context, Model } from "@earendil-works/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import { stream as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
 import {
   type GoogleOptions,
@@ -47,7 +47,7 @@ function mapToolChoiceToGoogle(
   return "auto";
 }
 
-function buildOpenAIBaseOptions(model: Model<any>, options: StreamOptionsEx) {
+function buildOpenAIBaseOptions(model: Model<Api>, options: StreamOptionsEx) {
   return {
     temperature: options.temperature,
     maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
@@ -62,14 +62,14 @@ function buildOpenAIBaseOptions(model: Model<any>, options: StreamOptionsEx) {
   };
 }
 
-export function streamSimpleByApi(model: Model<any>, context: Context, options: StreamOptionsEx) {
+export function streamSimpleByApi(model: Model<Api>, context: Context, options: StreamOptionsEx) {
   switch (model.api) {
     case "anthropic-messages": {
       // Anthropic：需要我们自己调用 streamAnthropic()，以便显式传 toolChoice（以及启用/禁用 thinking）。
       const anthropicThinking = resolveAnthropicThinkingRuntime(model, options);
       return withStreamRetry(
         () => {
-          return streamAnthropic(model as any, context, {
+          return streamAnthropic(model as Model<"anthropic-messages">, context, {
             temperature: options.temperature,
             maxTokens: anthropicThinking.maxTokens,
             signal: options.signal,
@@ -104,7 +104,7 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
       return withStreamRetry(
         () => {
           return rejectEmptyOpenAICompletionsResponse(
-            streamOpenAICompletions(model as any, context, openAIOptions),
+            streamOpenAICompletions(model as Model<"openai-completions">, context, openAIOptions),
           );
         },
         { signal: options.signal, ...options.streamRetry },
@@ -120,10 +120,14 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
         ...buildOpenAIBaseOptions(model, options),
         reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
       };
-      return withStreamRetry(() => streamOpenAIResponses(model as any, context, openAIOptions), {
+      return withStreamRetry(
+        () =>
+          streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions),
+        {
         signal: options.signal,
         ...options.streamRetry,
-      });
+        },
+      );
     }
     case "google-generative-ai": {
       const googleOptions: GoogleOptions = {
@@ -138,10 +142,13 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
         thinking: resolveGeminiThinkingRuntime(model, options.reasoning),
         toolChoice: mapToolChoiceToGoogle(options.toolChoice) ?? "none",
       };
-      return withStreamRetry(() => streamGoogle(model as any, context, googleOptions), {
+      return withStreamRetry(
+        () => streamGoogle(model as Model<"google-generative-ai">, context, googleOptions),
+        {
         signal: options.signal,
         ...options.streamRetry,
-      });
+        },
+      );
     }
     default:
       throw new Error(`Unsupported model API: ${model.api}`);
