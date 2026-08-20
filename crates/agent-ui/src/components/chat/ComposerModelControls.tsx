@@ -28,13 +28,6 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@liveagent/ui/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   COMPOSER_CONTROL_CHEVRON_CLASS,
@@ -51,7 +44,7 @@ import {
 } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { memo, useEffect, useId, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   off: "settings.reasoning.off",
@@ -63,9 +56,15 @@ const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   max: "settings.reasoning.max",
 };
 
-function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return typeof value === "string" && Object.hasOwn(REASONING_I18N_KEYS, value);
-}
+const REASONING_COMPACT_I18N_KEYS: Record<ReasoningLevel, string> = {
+  off: "chat.runtime.reasoningCompact.off",
+  minimal: "chat.runtime.reasoningCompact.minimal",
+  low: "chat.runtime.reasoningCompact.low",
+  medium: "chat.runtime.reasoningCompact.medium",
+  high: "chat.runtime.reasoningCompact.high",
+  xhigh: "chat.runtime.reasoningCompact.xhigh",
+  max: "chat.runtime.reasoningCompact.max",
+};
 
 function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: string }) {
   const cls = cn("h-4 w-4 shrink-0", className);
@@ -74,6 +73,141 @@ function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: 
   if (type === "xai") return <GrokIcon className={cls} />;
   if (type === "deepseek") return <DeepseekIcon className={cls} />;
   return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
+}
+
+function RuntimeToggleChip(props: {
+  pressed: boolean;
+  disabled?: boolean;
+  label: string;
+  ariaLabel: string;
+  pressedClassName: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
+  const { pressed, disabled = false, label, ariaLabel, pressedClassName, icon, onClick } = props;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-[11px] font-medium outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
+        pressed
+          ? pressedClassName
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+      )}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+// The visible thumb of the native range input is 12px wide, so its center
+// travels across [6px, width - 6px]. The visual layer (track, step dots,
+// fill, thumb marker) is drawn inside a band inset by 6px on each side and
+// positions everything with plain percentages of that band. This keeps every
+// element pixel-aligned regardless of how a browser renders native thumbs.
+const EFFORT_THUMB_INSET_CLASS = "right-[6px] left-[6px]";
+
+function ReasoningEffortSlider(props: {
+  choices: ReasoningLevel[];
+  value: ReasoningLevel;
+  disabled?: boolean;
+  label: string;
+  formatLevel: (level: ReasoningLevel) => string;
+  formatLevelCompact: (level: ReasoningLevel) => string;
+  onSelect: (level: ReasoningLevel) => void;
+}) {
+  const {
+    choices,
+    value,
+    disabled = false,
+    label,
+    formatLevel,
+    formatLevelCompact,
+    onSelect,
+  } = props;
+  const max = Math.max(1, choices.length - 1);
+  const index = Math.max(0, choices.indexOf(value));
+  const percent = (index / max) * 100;
+  const isOff = value === "off";
+  return (
+    <div
+      title={`${label}: ${formatLevel(value)}`}
+      className={cn("flex min-w-0 flex-1 items-center gap-2", disabled && "opacity-50")}
+    >
+      <Sparkle
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 transition-colors",
+          isOff ? "text-muted-foreground/60" : "text-violet-500 dark:text-violet-400",
+        )}
+      />
+      <div className="group relative flex h-8 min-w-0 flex-1 items-center">
+        <div
+          className={cn(
+            "pointer-events-none absolute top-1/2 -translate-y-1/2",
+            EFFORT_THUMB_INSET_CLASS,
+          )}
+        >
+          <div className="absolute top-1/2 left-0 h-[3px] w-full -translate-y-1/2 rounded-full bg-muted-foreground/20" />
+          <div
+            className={cn(
+              "absolute top-1/2 left-0 h-[3px] -translate-y-1/2 rounded-full transition-[width,background-color] duration-150 ease-out",
+              isOff ? "bg-muted-foreground/30" : "bg-violet-500",
+            )}
+            style={{ width: `${percent}%` }}
+          />
+          {choices.map((level, stopIndex) => (
+            <span
+              key={level}
+              className={cn(
+                "absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors",
+                stopIndex <= index && !isOff ? "bg-violet-500" : "bg-muted-foreground/30",
+              )}
+              style={{ left: `${(stopIndex / max) * 100}%` }}
+            />
+          ))}
+          <span
+            className={cn(
+              "absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-background transition-[left,background-color] duration-150 ease-out group-hover:scale-110",
+              isOff ? "bg-muted-foreground" : "bg-violet-500",
+            )}
+            style={{ left: `${percent}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={max}
+          step={1}
+          value={index}
+          disabled={disabled}
+          aria-label={label}
+          aria-valuetext={formatLevel(value)}
+          className="model-runtime-effort relative z-10 h-8 w-full min-w-0 cursor-pointer appearance-none rounded-full bg-transparent outline-hidden disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary/35 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-[3px] [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-8 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:opacity-0"
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const next = choices[Number(event.target.value)];
+            if (next) onSelect(next);
+          }}
+        />
+      </div>
+      <span
+        className={cn(
+          "w-10 shrink-0 rounded-md py-1 text-center text-[11px] font-medium leading-none transition-colors",
+          isOff
+            ? "bg-muted text-muted-foreground"
+            : "bg-violet-500/10 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
+        )}
+      >
+        {formatLevelCompact(value)}
+      </span>
+    </div>
+  );
 }
 
 export type ComposerModelControlsProps = {
@@ -118,6 +252,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     readStoredProviderSortMode(),
   );
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const popoverContentRef = useRef<HTMLDivElement>(null);
   const executionModeRadioName = useId();
 
   useEffect(() => {
@@ -161,6 +296,14 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     : reasoningOptions.includes(DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning)
       ? DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning
       : (reasoningOptions[reasoningOptions.length - 1] ?? DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning);
+  const thinkingOn = thinkingSupported && (thinkingAlwaysOn || chatRuntimeControls.thinkingEnabled);
+  const showEffortBar = thinkingSupported && reasoningOptions.length > 1;
+  const effortChoices: ReasoningLevel[] = showEffortBar
+    ? thinkingAlwaysOn
+      ? reasoningOptions.filter((level) => level !== "off")
+      : ["off", ...reasoningOptions.filter((level) => level !== "off")]
+    : [];
+  const selectedEffort: ReasoningLevel = thinkingOn ? selectedReasoning : "off";
   const sortToggleTitle =
     nextProviderSortMode === "alpha"
       ? t("chat.sortProvidersByName")
@@ -180,6 +323,19 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       const activeGroupId = previous === undefined ? selectedGroupId : previous;
       return activeGroupId === id ? null : id;
     });
+  const resolveModelPickerInitialFocus = (openType: string) => {
+    // Touch / coarse-pointer must not land on the search field: that opens the IME.
+    // Focus the popup itself, matching Base UI's default touch behavior.
+    const openedByTouch = openType === "touch";
+    const coarsePointer =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    if (openedByTouch || coarsePointer) {
+      return popoverContentRef.current ?? false;
+    }
+    return searchInputRef.current;
+  };
 
   return (
     <Popover open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
@@ -206,11 +362,12 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       </PopoverTrigger>
 
       <PopoverContent
+        ref={popoverContentRef}
         side="top"
         align="start"
         sideOffset={8}
         collisionPadding={8}
-        initialFocus={searchInputRef}
+        initialFocus={resolveModelPickerInitialFocus}
         aria-label={t("chat.selectModel")}
         className="model-selector-dropdown flex max-h-[min(30rem,var(--available-height,30rem))] w-[min(19rem,calc(100vw-1rem))] flex-col overflow-hidden p-0 text-xs"
       >
@@ -409,105 +566,77 @@ export const ComposerModelControls = memo(function ComposerModelControls(
 
         <fieldset
           aria-label={t("chat.runtime.controls")}
-          className={cn(
-            "grid shrink-0 items-center gap-1 border-t border-border/50 bg-muted/20 p-2",
-            reasoningOptions.length > 0 ? "grid-cols-3" : "grid-cols-2",
-          )}
+          className="model-runtime-controls flex shrink-0 items-center gap-1.5 border-t border-border/50 bg-muted/20 px-2 py-1.5"
         >
-          <button
-            type="button"
+          <RuntimeToggleChip
+            pressed={chatRuntimeControls.nativeWebSearchEnabled}
             disabled={disabled}
-            aria-pressed={chatRuntimeControls.nativeWebSearchEnabled}
-            aria-label={
+            label={t("chat.runtime.webSearch")}
+            ariaLabel={
               chatRuntimeControls.nativeWebSearchEnabled
                 ? t("chat.runtime.webSearchOn")
                 : t("chat.runtime.webSearchOff")
+            }
+            pressedClassName="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
+            icon={
+              chatRuntimeControls.nativeWebSearchEnabled ? (
+                <Globe className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <GlobeOff className="h-3.5 w-3.5 shrink-0" />
+              )
             }
             onClick={() =>
               onChatRuntimeControlsChange({
                 nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
               })
             }
-            className={cn(
-              "inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-[11px] font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
-              chatRuntimeControls.nativeWebSearchEnabled
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "text-muted-foreground",
-            )}
-          >
-            {chatRuntimeControls.nativeWebSearchEnabled ? (
-              <Globe className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <GlobeOff className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span className="truncate">{t("chat.runtime.webSearch")}</span>
-          </button>
+          />
 
-          <button
-            type="button"
-            disabled={disabled || !thinkingSupported || thinkingAlwaysOn}
-            aria-pressed={chatRuntimeControls.thinkingEnabled && thinkingSupported}
-            aria-label={
-              !thinkingSupported
-                ? t("chat.runtime.thinkingUnavailable")
-                : chatRuntimeControls.thinkingEnabled
-                  ? t("chat.runtime.thinkingOn")
-                  : t("chat.runtime.thinkingOff")
-            }
-            onClick={() =>
-              onChatRuntimeControlsChange({
-                thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
-              })
-            }
-            className={cn(
-              "inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-[11px] font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
-              chatRuntimeControls.thinkingEnabled && thinkingSupported
-                ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                : "text-muted-foreground",
-            )}
-          >
-            {chatRuntimeControls.thinkingEnabled && thinkingSupported ? (
-              <Lightbulb className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <LightbulbOff className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span className="truncate">{t("chat.runtime.thinking")}</span>
-          </button>
+          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border/70" />
 
-          {reasoningOptions.length > 0 ? (
-            <Select
-              value={selectedReasoning}
-              onValueChange={(value) =>
-                onChatRuntimeControlsChange({ reasoning: value as ReasoningLevel })
+          {showEffortBar ? (
+            <ReasoningEffortSlider
+              choices={effortChoices}
+              value={selectedEffort}
+              disabled={disabled}
+              label={t("chat.runtime.reasoning")}
+              formatLevel={(level) => t(REASONING_I18N_KEYS[level])}
+              formatLevelCompact={(level) => t(REASONING_COMPACT_I18N_KEYS[level])}
+              onSelect={(level) => {
+                if (level === "off") {
+                  onChatRuntimeControlsChange({ thinkingEnabled: false });
+                  return;
+                }
+                onChatRuntimeControlsChange({ thinkingEnabled: true, reasoning: level });
+              }}
+            />
+          ) : (
+            <RuntimeToggleChip
+              pressed={thinkingOn}
+              disabled={disabled || !thinkingSupported || thinkingAlwaysOn}
+              label={t("chat.runtime.thinking")}
+              ariaLabel={
+                !thinkingSupported
+                  ? t("chat.runtime.thinkingUnavailable")
+                  : thinkingOn
+                    ? t("chat.runtime.thinkingOn")
+                    : t("chat.runtime.thinkingOff")
               }
-              disabled={
-                disabled || !chatRuntimeControls.thinkingEnabled || reasoningOptions.length === 1
+              pressedClassName="border-amber-500/20 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300"
+              icon={
+                thinkingOn ? (
+                  <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <LightbulbOff className="h-3.5 w-3.5 shrink-0" />
+                )
               }
-            >
-              <SelectTrigger
-                className="h-8 w-full min-w-0 gap-0.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.07] pl-2 pr-1.5 text-[11px] font-medium text-foreground shadow-none outline-hidden disabled:opacity-45 [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50"
-                aria-label={t("chat.runtime.reasoning")}
-              >
-                <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500 dark:text-violet-400" />
-                <SelectValue>
-                  {(value) =>
-                    t(REASONING_I18N_KEYS[isReasoningLevel(value) ? value : selectedReasoning])
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="sidebar-context-menu min-w-36 rounded-xl border-0">
-                {reasoningOptions.map((value) => (
-                  <SelectItem
-                    key={value}
-                    value={value}
-                    className="mb-0.5 h-[30px] rounded-md py-0 text-sm font-normal leading-5 transition-none last:mb-0 focus:bg-foreground/[0.05] focus:text-foreground"
-                  >
-                    {t(REASONING_I18N_KEYS[value])}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
+              onClick={() =>
+                onChatRuntimeControlsChange({
+                  thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
+                })
+              }
+            />
+          )}
         </fieldset>
       </PopoverContent>
     </Popover>

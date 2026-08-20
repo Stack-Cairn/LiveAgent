@@ -1054,6 +1054,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 </RuntimeControlTooltip>
               ) : null}
 
+              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
+                <CommandSafetyModeSelector
+                  value={commandSafetyMode}
+                  disabled={controlsDisabled}
+                  onChange={onCommandSafetyModeChange}
+                />
+              ) : null}
+
               <ComposerModelControls
                 executionMode={executionMode}
                 hasModels={hasModels}
@@ -1069,14 +1077,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 onOpenSettings={onOpenSettings}
                 onChatRuntimeControlsChange={onChatRuntimeControlsChange}
               />
-
-              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
-                <CommandSafetyModeSelector
-                  value={commandSafetyMode}
-                  disabled={controlsDisabled}
-                  onChange={onCommandSafetyModeChange}
-                />
-              ) : null}
 
               <GitBranchSelector
                 workdir={workdir}

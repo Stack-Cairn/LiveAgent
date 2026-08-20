@@ -1,13 +1,6 @@
 import { useSandboxCapability } from "@liveagent/adapters/sandboxCapability";
 import type { CommandSafetyMode } from "@liveagent/app/lib/settings";
-import {
-  Check,
-  ChevronDown,
-  Hand,
-  Shield,
-  ShieldOff,
-  Zap,
-} from "@liveagent/ui/components/IconSet";
+import { Check, Hand, Shield, ShieldOff, Zap } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -16,11 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import {
-  COMPOSER_CONTROL_CHEVRON_CLASS,
-  COMPOSER_CONTROL_LABEL_CLASS,
-  COMPOSER_CONTROL_TRIGGER_CLASS,
-} from "@liveagent/ui/lib/chat/composerControlStyles";
+import { COMPOSER_CONTROL_TRIGGER_CLASS } from "@liveagent/ui/lib/chat/composerControlStyles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 
@@ -112,15 +101,16 @@ export function CommandSafetyModeSelector(props: {
           <Button
             variant="ghost"
             disabled={disabled}
-            className={cn(COMPOSER_CONTROL_TRIGGER_CLASS, "data-[popup-open]:bg-muted/60")}
+            className={cn(
+              COMPOSER_CONTROL_TRIGGER_CLASS,
+              "composer-safety-trigger w-8 justify-center gap-0 px-0 data-[popup-open]:bg-muted/60",
+            )}
           />
         }
         title={selectedLabel}
         aria-label={`${t("chat.safety.label")}: ${selectedLabel}`}
       >
         {modeIcon(selected, triggerIconClass(selected))}
-        <span className={COMPOSER_CONTROL_LABEL_CLASS}>{selectedLabel}</span>
-        <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         className="composer-safety-dropdown flex w-72 flex-col overflow-hidden p-1"
