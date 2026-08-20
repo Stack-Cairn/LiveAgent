@@ -668,14 +668,21 @@ pub async fn open_chat_file_link(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static NEXT_TEMP_WORKSPACE_ID: AtomicU64 = AtomicU64::new(0);
 
     fn temp_workspace() -> PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("liveagent-chat-file-links-{suffix}"));
+        let unique_id = NEXT_TEMP_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "liveagent-chat-file-links-{}-{suffix}-{unique_id}",
+            std::process::id()
+        ));
         fs::create_dir_all(root.join("src")).expect("create temp workspace");
         root
     }
