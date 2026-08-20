@@ -104,6 +104,24 @@ function terminalContainerHasSize(container: HTMLElement) {
   return rect.width > 0 && rect.height > 0;
 }
 
+function writeTextToClipboard(text: string) {
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text).catch(() => {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    });
+  }
+}
+
 export function XTermViewport({
   client,
   session,
@@ -185,6 +203,34 @@ export function XTermViewport({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    // 终端复制/粘贴快捷键：xterm.js 默认把所有按键透传给 PTY，连 Ctrl+Shift+C
+    // 都会变成 Ctrl+C 信号，所以 selection 选中后无法直接复制。挂自定义键盘
+    // 处理：Ctrl+Shift+C/V（Linux/Windows）和 Cmd+C/V（macOS）走剪贴板，
+    // 其余按键全部放行由 xterm 自行处理。
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown") return true;
+      const key = event.key.toLowerCase();
+      const isMod =
+        (event.ctrlKey && event.shiftKey) || (event.metaKey && !event.ctrlKey && !event.altKey);
+      if (isMod && key === "c") {
+        const selection = term.getSelection();
+        if (selection) {
+          writeTextToClipboard(selection);
+          term.focus();
+        }
+        return false;
+      }
+      if (isMod && key === "v") {
+        const clipboard = navigator.clipboard;
+        if (clipboard?.readText) {
+          void clipboard.readText().then((text) => {
+            if (text) term.paste(text);
+          });
+        }
+        return false;
+      }
+      return true;
+    });
     // WebGL 渲染器：多 Pane 同时渲染时 DOM 渲染器主线程压力线性叠加，WebGL
     // 走 GPU。上下文创建失败（WebGL2 不可用）或运行中丢失时回退默认渲染器。
     let webglAddon: WebglAddon | null = null;
