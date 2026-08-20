@@ -545,10 +545,11 @@ function alignEnrich(params: {
   // Full window: everything older than the paired turns renders from
   // history. Parse ids are deterministic, so an id-level comparison detects
   // every structural change; identical content reparses to identical ids.
-  const pairStart =
-    storeWithUser.length === 0
-      ? historyTurns.length
-      : historyTurns.indexOf(historyWithUser[historyWithUser.length - storeWithUser.length]!);
+  const firstPairedHistoryTurn =
+    storeWithUser.length === 0 ? undefined : historyWithUser.at(-storeWithUser.length);
+  const pairStart = firstPairedHistoryTurn
+    ? historyTurns.indexOf(firstPairedHistoryTurn)
+    : historyTurns.length;
   const nextHistoryEntries = flattenHistoryTurns(historyTurns.slice(0, pairStart));
 
   const historyChanged =

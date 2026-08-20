@@ -315,6 +315,7 @@ export async function executeSubagentRun(
 
   const settleWorktree = async (terminal: "completed" | "failed" | "cancelled") => {
     if (!worktree) return;
+    const worktreeRoot = worktree.worktreeRoot;
     env.onStatus?.(`Inspecting worktree changes for ${identity.name}…`);
     await fetchWorktreeStatus();
 
@@ -333,7 +334,7 @@ export async function executeSubagentRun(
           const applyResult = await env.enqueueWorktreeApply(() =>
             env.worktree.apply({
               parentWorkdir: env.workdir,
-              worktreeRoot: worktree!.worktreeRoot,
+              worktreeRoot,
               ...(env.checkpoint ? { checkpoint: env.checkpoint } : {}),
             }),
           );

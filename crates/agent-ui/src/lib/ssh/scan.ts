@@ -171,6 +171,8 @@ function isPrivateKeyContent(content: string) {
   return /^-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/m.test(content.trim());
 }
 
+const BRACED_HOME = "$" + "{HOME}";
+
 export function expandIdentityPath(homePath: string, path: string) {
   const profile = pathProfileFromHome(homePath);
   const trimmed = stripWrappingQuotes(path);
@@ -183,8 +185,8 @@ export function expandIdentityPath(homePath: string, path: string) {
     if (trimmed.startsWith("$HOME/") || trimmed.startsWith("$HOME\\")) {
       return joinIdentityPath(homePath, trimmed.slice(6), profile);
     }
-    if (trimmed.startsWith("${HOME}/") || trimmed.startsWith("${HOME}\\")) {
-      return joinIdentityPath(homePath, trimmed.slice(8), profile);
+    if (trimmed.startsWith(`${BRACED_HOME}/`) || trimmed.startsWith(`${BRACED_HOME}\\`)) {
+      return joinIdentityPath(homePath, trimmed.slice(BRACED_HOME.length + 1), profile);
     }
     if (/^%USERPROFILE%[\\/]/i.test(trimmed)) {
       return joinIdentityPath(homePath, trimmed.slice("%USERPROFILE%".length), profile);
@@ -197,7 +199,9 @@ export function expandIdentityPath(homePath: string, path: string) {
   }
   if (trimmed.startsWith("~/")) return joinIdentityPath(homePath, trimmed.slice(2), profile);
   if (trimmed.startsWith("$HOME/")) return joinIdentityPath(homePath, trimmed.slice(6), profile);
-  if (trimmed.startsWith("${HOME}/")) return joinIdentityPath(homePath, trimmed.slice(8), profile);
+  if (trimmed.startsWith(`${BRACED_HOME}/`)) {
+    return joinIdentityPath(homePath, trimmed.slice(BRACED_HOME.length + 1), profile);
+  }
   if (trimmed.startsWith("/")) return trimmed.replace(/\/+$/, "");
   return joinIdentityPath(homePath, trimmed, profile);
 }

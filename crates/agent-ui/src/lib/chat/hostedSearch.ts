@@ -205,7 +205,6 @@ function statusRank(status: HostedSearchStatus) {
       return 3;
     case "completed":
       return 2;
-    case "searching":
     default:
       return 1;
   }
