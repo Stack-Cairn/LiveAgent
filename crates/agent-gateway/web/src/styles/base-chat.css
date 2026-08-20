@@ -61,6 +61,16 @@ html[data-liveagent-webui="gateway"] .model-selector-group-label {
   html[data-liveagent-webui="gateway"] .composer-model-trigger > svg:last-child {
     display: block;
   }
+
+  /* Icon-only sandbox must not share the leftover width with model/branch labels. */
+  html[data-liveagent-webui="gateway"] .composer-safety-trigger {
+    flex: 0 0 auto;
+    width: 2rem;
+    min-width: 2rem;
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+  }
 }
 
 html[data-liveagent-webui="gateway"] .chat-history-sidebar {
