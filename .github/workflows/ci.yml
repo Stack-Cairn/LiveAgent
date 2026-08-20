@@ -232,6 +232,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter @liveagent/ui...
 
+      - name: Run check script tests
+        run: pnpm check:script-tests
+
       - name: Check shared UI dependency boundaries
         run: pnpm check:ui-boundaries
 
