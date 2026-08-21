@@ -1500,9 +1500,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     </div>
                   ) : null}
 
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: Deselect-on-blank-click is a pointer-only convenience; entry rows expose the keyboard-accessible selection. */}
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: Same as above — no keyboard equivalent is expected for clearing via blank space. */}
                   <div
                     className="relative min-h-0 flex-1 overscroll-contain overflow-auto p-2"
-                    onPointerDown={(event) => {
+                    // click（而非 pointerdown）：右键/长按呼出菜单前不能预先清空
+                    // 多选，否则目录菜单会基于已清空的选择执行批量操作。
+                    onClick={(event) => {
                       const target = event.target;
                       if (target instanceof HTMLElement && target.closest("[data-sftp-entry]"))
                         return;

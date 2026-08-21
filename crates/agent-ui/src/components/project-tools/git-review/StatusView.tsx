@@ -673,11 +673,12 @@ export function GitReviewStatusView(props: {
           className="layer-popover absolute min-w-56"
           style={{ right: changesMenu.right, top: changesMenu.y }}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。 */}
           <div
             role="menu"
             className={cn("w-full", CONTEXT_MENU_CONTAINER_CLASS)}
             style={{ transformOrigin: "top right" }}
-            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -733,12 +734,13 @@ export function GitReviewStatusView(props: {
         </div>
       ) : null}
       {changeContextMenu && contextEntry ? (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
           ref={changeContextMenuRef}
           role="menu"
           className={cn("layer-popover absolute min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: changeContextMenu.x, top: changeContextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();

@@ -1249,12 +1249,13 @@ export function GitReviewHistoryView(props: {
       {historyContextMenu &&
       historyContextCommit &&
       (historyContextMenu.kind === "commit" || historyContextFile) ? (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
           ref={contextMenuRef}
           role="menu"
           className={cn("layer-popover absolute min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
