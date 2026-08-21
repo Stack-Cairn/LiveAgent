@@ -203,8 +203,9 @@ function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
 
 export function createExitPlanModeTools(params: {
   conversationId: string;
-  /** 计划获批时同步触发:宿主据此关闭 plan 开关并入队"开始执行"续轮。 */
-  onPlanApproved?: (input: { plan: string }) => void;
+  /** 计划获批时同步触发:宿主据此关闭 plan 开关并入队"开始执行"续轮。
+   *  savePath 为用户在批准卡上选填的计划存盘路径(相对工作区),由续轮落盘。 */
+  onPlanApproved?: (input: { plan: string; savePath?: string }) => void;
   /** 应答窗口毫秒数;仅测试注入,生产始终用默认值。 */
   timeoutMs?: number;
 }): BuiltinToolBundle {
@@ -314,7 +315,7 @@ export function createExitPlanModeTools(params: {
       // 同步触发回调:宿主关闭 plan 开关并入队续轮。回调异常绝不能污染工具
       // 结果——计划批准的事实已经落定,续轮入队失败由宿主自行提示。
       try {
-        params.onPlanApproved?.({ plan });
+        params.onPlanApproved?.({ plan, ...(answer.savePath ? { savePath: answer.savePath } : {}) });
       } catch (error) {
         console.warn("onPlanApproved callback failed", error);
       }

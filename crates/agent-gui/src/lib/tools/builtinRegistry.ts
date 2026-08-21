@@ -302,7 +302,7 @@ export async function buildBuiltinToolRegistry(
     /** Plan mode:非只读工具不进注册表,注入 ExitPlanMode,子代理强制 readonly。 */
     planMode?: {
       conversationId: string;
-      onPlanApproved?: (input: { plan: string }) => void;
+      onPlanApproved?: (input: { plan: string; savePath?: string }) => void;
     };
     /** MCP 懒加载:schema 总量超阈值时注入 ToolSearch,MCP 工具延迟到激活后
      * 才进模型请求(执行层始终全量注册)。仅 chat 场景;plan mode 下无意义

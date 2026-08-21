@@ -23,7 +23,6 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
-import { createTextComposerDraft } from "@liveagent/ui/lib/chat/composerDraft";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -905,8 +904,13 @@ export function ChatPage(props: ChatPageProps) {
   //    不依赖 setSettings 后的闭包新鲜度);本轮仍在运行,排空由 drain effect
   //    在 run 结束后自动触发。计划正文已在 ExitPlanMode 工具结果里,续轮提示
   //    只需引用它,不重复注入。
+  // 批准后待发的执行续轮(conversationId → 提示词)。不进队列:批准即终止使
+  // run 立刻结束,下面的 effect 在 run 消失后直接 send——用户看不到队列行,
+  // 也没有队列轮询参与;计划执行完对话自然结束。
+  const pendingPlanContinuationsRef = useRef(new Map<string, string>());
+  const [planContinuationVersion, setPlanContinuationVersion] = useState(0);
   const handlePlanApprovedForConversation = useCallback(
-    (input: { conversationId: string; plan: string }) => {
+    (input: { conversationId: string; plan: string; savePath?: string }) => {
       setSettings((prev) =>
         prev.chatRuntimeControls.planModeEnabled
           ? {
@@ -915,18 +919,34 @@ export function ChatPage(props: ChatPageProps) {
             }
           : prev,
       );
-      enqueueComposerTurnForConversation({
-        conversationId: input.conversationId,
-        draft: createTextComposerDraft(t("chat.planMode.executePrompt")),
-        uploadedFiles: [],
-        runtimeControls: {
+      // 用户在批准卡上选了存盘:续轮第一步先把计划原文写到该路径(执行轮有
+      // 全工具 + checkpoint 可回滚;规划轮自身无写能力,存盘只能发生在这里)。
+      const executePrompt = input.savePath
+        ? `${t("chat.planMode.savePlanPrompt").replace("{path}", input.savePath)}\n${t("chat.planMode.executePrompt")}`
+        : t("chat.planMode.executePrompt");
+      pendingPlanContinuationsRef.current.set(input.conversationId, executePrompt);
+      setPlanContinuationVersion((version) => version + 1);
+    },
+    [setSettings, t],
+  );
+  // 规划 run 结束(批准即终止) + plan 开关已关(settings 已 flush,避免续轮又
+  // 被"只能收紧"合并锁回只读)后,直接发送执行续轮。
+  useEffect(() => {
+    if (settings.chatRuntimeControls.planModeEnabled) return;
+    for (const [conversationId, prompt] of pendingPlanContinuationsRef.current) {
+      if (runningConversationIds.has(conversationId)) continue;
+      pendingPlanContinuationsRef.current.delete(conversationId);
+      void sendActionRef.current({
+        conversationIdOverride: conversationId,
+        textOverride: prompt,
+        preserveComposerOnStart: true,
+        runtimeControlsOverride: {
           ...settings.chatRuntimeControls,
           planModeEnabled: false,
         },
       });
-    },
-    [enqueueComposerTurnForConversation, setSettings, settings.chatRuntimeControls, t],
-  );
+    }
+  }, [planContinuationVersion, runningConversationIds, settings.chatRuntimeControls]);
 
   // Queue snapshots publish on queue mutation only; after a gateway
   // reconnect (new session) the gateway's in-memory queue view is empty, so

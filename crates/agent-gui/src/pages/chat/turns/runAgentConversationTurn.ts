@@ -300,7 +300,7 @@ export type RunAgentConversationTurnParams = {
   /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 审批闸门。 */
   planModeEnabled?: boolean;
   /** 计划获批时触发:宿主据此关闭 plan 开关并入队"开始执行"续轮。 */
-  onPlanApproved?: (input: { plan: string }) => void;
+  onPlanApproved?: (input: { plan: string; savePath?: string }) => void;
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;

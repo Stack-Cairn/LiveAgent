@@ -9,6 +9,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useState } from "react";
 import {
   EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH,
+  EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH,
   EXIT_PLAN_MODE_TIMEOUT_MS,
   type PlanDecision,
   type PlanDecisionAnswer,
@@ -84,6 +85,10 @@ export function PlanModeCard({
   const { t } = useLocale();
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  // 批准时可选存盘:勾选后显示路径输入(相对工作区,预填 plan.md),
+  // 落盘由执行续轮完成(规划轮无写能力)。
+  const [saveEnabled, setSaveEnabled] = useState(false);
+  const [savePathDraft, setSavePathDraft] = useState("plan.md");
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
 
@@ -172,6 +177,28 @@ export function PlanModeCard({
       {/* 交互区：批准 / 要求修改；展开反馈输入后回车或按钮提交。 */}
       {countdownActive ? (
         <div className="flex flex-col gap-2 border-t border-border/35 px-3 py-2 dark:border-white/[0.05]">
+          <label className="flex cursor-pointer items-center gap-2 text-[calc(11.5px*var(--zone-font-scale,1))] text-foreground/80">
+            <input
+              type="checkbox"
+              checked={saveEnabled}
+              disabled={!canInteract}
+              onChange={(event) => setSaveEnabled(event.target.checked)}
+              className="h-3.5 w-3.5 shrink-0 accent-[hsl(var(--primary))]"
+            />
+            {t("chat.planMode.saveToggle")}
+            {saveEnabled ? (
+              <input
+                type="text"
+                value={savePathDraft}
+                disabled={!canInteract}
+                onChange={(event) => setSavePathDraft(event.target.value)}
+                maxLength={EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH}
+                placeholder="plan.md"
+                aria-label={t("chat.planMode.savePathLabel")}
+                className="min-w-0 flex-1 rounded-md border border-border/50 bg-background/80 px-2 py-1 font-mono text-[calc(11px*var(--zone-font-scale,1))] outline-hidden focus-visible:ring-2 focus-visible:ring-primary/35 dark:border-white/[0.08]"
+              />
+            ) : null}
+          </label>
           {showFeedbackInput ? (
             <textarea
               value={feedbackDraft}
@@ -187,7 +214,12 @@ export function PlanModeCard({
             <button
               type="button"
               disabled={!canInteract}
-              onClick={() => void submit({ decision: "approve" })}
+              onClick={() => {
+                const savePath = saveEnabled
+                  ? savePathDraft.trim().slice(0, EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH)
+                  : "";
+                void submit({ decision: "approve", ...(savePath ? { savePath } : {}) });
+              }}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[calc(12px*var(--zone-font-scale,1))] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" />

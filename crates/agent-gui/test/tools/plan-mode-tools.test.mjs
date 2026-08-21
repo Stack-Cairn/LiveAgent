@@ -54,6 +54,21 @@ test("shared helpers sanitize plans and resolve decisions", () => {
     shared.EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH,
   );
 
+  // savePath:仅批准时保留;拒绝时忽略;超长截断。
+  assert.deepEqual(
+    shared.resolvePlanDecisionAnswer({ decision: "approve", savePath: " docs/plan.md " }),
+    { decision: "approve", savePath: "docs/plan.md" },
+  );
+  assert.deepEqual(
+    shared.resolvePlanDecisionAnswer({ decision: "reject", savePath: "plan.md" }),
+    { decision: "reject" },
+  );
+  const longPath = "p".repeat(shared.EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH + 9);
+  assert.equal(
+    shared.resolvePlanDecisionAnswer({ decision: "approve", savePath: longPath }).savePath.length,
+    shared.EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH,
+  );
+
   // details 解析：kind/plan 缺失即 null；可选字段按需保留。
   assert.equal(shared.parseExitPlanModeResultDetails({ kind: "other", plan: "p" }), null);
   assert.deepEqual(
@@ -81,7 +96,7 @@ test("approve settles the pending plan and fires onPlanApproved", async () => {
   const approvals = [];
   const bundle = tools.createExitPlanModeTools({
     conversationId: "conv-1",
-    onPlanApproved: (input) => approvals.push(input.plan),
+    onPlanApproved: (input) => approvals.push(input),
   });
   const resultPromise = bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-approve"));
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -102,7 +117,7 @@ test("approve settles the pending plan and fires onPlanApproved", async () => {
 
   const accepted = tools.answerPlanDecision(
     "call-plan-approve",
-    { decision: "approve" },
+    { decision: "approve", savePath: "docs/plan.md" },
     { conversationId: "conv-1" },
   );
   assert.equal(accepted.ok, true);
@@ -111,7 +126,7 @@ test("approve settles the pending plan and fires onPlanApproved", async () => {
   assert.match(result.content[0].text, /APPROVED/);
   assert.equal(result.details.kind, "exit_plan_mode");
   assert.equal(result.details.decision, "approve");
-  assert.deepEqual(approvals, [PLAN.trim()]);
+  assert.deepEqual(approvals, [{ plan: PLAN.trim(), savePath: "docs/plan.md" }]);
   // 获批调用进入终止标记集(runner 据此结束本轮);拒绝/超时路径不标记。
   assert.equal(tools.isPlanApprovalToolCall("call-plan-approve"), true);
   // 已落定后再次应答被拒。

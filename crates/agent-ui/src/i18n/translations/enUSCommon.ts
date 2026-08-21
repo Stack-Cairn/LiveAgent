@@ -584,6 +584,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.planMode.cancelled": "Turn stopped; the plan was not approved",
   "chat.planMode.timedOut": "Approval window elapsed; the plan counts as not approved",
   "chat.planMode.submitFailed": "Failed to submit, please retry",
+  "chat.planMode.saveToggle": "Also save the plan to a file",
+  "chat.planMode.savePathLabel": "Save path (relative to the workspace)",
+  "chat.planMode.savePlanPrompt": "First save the approved plan verbatim (from the plan card above) to {path}.",
   "chat.planMode.executePrompt":
     "Start executing the approved plan: create a task list with TaskCreate first, then implement and verify step by step.",
   "chat.toolApproval.title": "Approval required",

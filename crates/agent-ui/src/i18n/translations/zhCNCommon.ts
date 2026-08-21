@@ -544,6 +544,9 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.planMode.cancelled": "本轮已停止，计划未获批准",
   "chat.planMode.timedOut": "应答超时，计划按未批准处理",
   "chat.planMode.submitFailed": "提交失败，请重试",
+  "chat.planMode.saveToggle": "同时保存计划到文件",
+  "chat.planMode.savePathLabel": "保存路径（相对工作区）",
+  "chat.planMode.savePlanPrompt": "先把批准的计划原文（见上一轮计划卡）保存到 {path}。",
   "chat.planMode.executePrompt":
     "开始执行已批准的计划：先用 TaskCreate 建任务清单，然后逐项实施并验证。",
   "chat.toolApproval.title": "需要你的批准",

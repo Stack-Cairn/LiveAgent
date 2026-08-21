@@ -24,10 +24,16 @@ export const EXIT_PLAN_MODE_DEADLINE_ARG = "__exitPlanModeDeadlineAt";
 /** approve：批准计划并退出 plan mode；reject：留在 plan mode 继续完善计划。 */
 export type PlanDecision = "approve" | "reject";
 
+/** 批准时可选的计划存盘路径长度上限；超出截断。 */
+export const EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH = 512;
+
 export type PlanDecisionAnswer = {
   decision: PlanDecision;
   /** 拒绝时的修改意见；原文回传给模型作为继续规划的输入。 */
   feedback?: string;
+  /** 批准时可选：把计划原文保存到该路径（相对工作区）。写入发生在执行续轮
+   *  （全工具 + checkpoint 可回滚），规划轮自身无写能力。 */
+  savePath?: string;
 };
 
 export type ExitPlanModeResultDetails = {
@@ -66,9 +72,16 @@ export function resolvePlanDecisionAnswer(raw: unknown): PlanDecisionAnswer | nu
     feedbackRaw.length > EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH
       ? feedbackRaw.slice(0, EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH)
       : feedbackRaw;
+  const savePathRaw =
+    obj.decision === "approve" && typeof obj.savePath === "string" ? obj.savePath.trim() : "";
+  const savePath =
+    savePathRaw.length > EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH
+      ? savePathRaw.slice(0, EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH)
+      : savePathRaw;
   return {
     decision: obj.decision,
     ...(feedback ? { feedback } : {}),
+    ...(savePath ? { savePath } : {}),
   };
 }
 
