@@ -3,7 +3,11 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import ts from "typescript-transpile";
+import {
+  parseTypeScriptSource,
+  staticStringValue,
+  walkSyntaxTree,
+} from "../../../../scripts/typescript-source-tools.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -44,19 +48,19 @@ function sourceFilesUnder(directory) {
   return files;
 }
 
-function sourceReference(sourceFile, node) {
-  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-  return `${path.relative(repositoryRoot, sourceFile.fileName)}:${position.line + 1}`;
+function sourceReference(file, node) {
+  return `${path.relative(repositoryRoot, file)}:${node.loc?.start.line ?? 1}`;
 }
 
 function collectLiteralTranslationArguments(node, literals = []) {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    literals.push(node);
-  } else if (ts.isParenthesizedExpression(node)) {
+  const value = staticStringValue(node);
+  if (value !== undefined) {
+    literals.push({ node, value });
+  } else if (node?.type === "ParenthesizedExpression") {
     collectLiteralTranslationArguments(node.expression, literals);
-  } else if (ts.isConditionalExpression(node)) {
-    collectLiteralTranslationArguments(node.whenTrue, literals);
-    collectLiteralTranslationArguments(node.whenFalse, literals);
+  } else if (node?.type === "ConditionalExpression") {
+    collectLiteralTranslationArguments(node.consequent, literals);
+    collectLiteralTranslationArguments(node.alternate, literals);
   }
   return literals;
 }
@@ -79,17 +83,12 @@ function collectTranslationKeys(sourceRoot, collectTranslationLikeLiterals = fal
   );
 
   for (const file of sourceFilesUnder(sourceRoot)) {
-    const sourceFile = ts.createSourceFile(
-      file,
-      readFileSync(file, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-      file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    );
+    const syntaxTree = parseTypeScriptSource(readFileSync(file, "utf8"), file);
 
-    function visit(node) {
-      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-        const key = node.text;
+    walkSyntaxTree(syntaxTree, (node) => {
+      const literalValue = staticStringValue(node);
+      if (literalValue !== undefined) {
+        const key = literalValue;
         const root = key.split(".")[0];
         if (
           collectTranslationLikeLiterals &&
@@ -97,25 +96,21 @@ function collectTranslationKeys(sourceRoot, collectTranslationLikeLiterals = fal
           knownRoots.has(root) &&
           !nonTranslationLiterals.has(key)
         ) {
-          addReference(translationLikeLiterals, key, sourceReference(sourceFile, node));
+          addReference(translationLikeLiterals, key, sourceReference(file, node));
         }
       }
 
       if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        (node.expression.text === "t" || node.expression.text === "translate") &&
+        node.type === "CallExpression" &&
+        node.callee.type === "Identifier" &&
+        (node.callee.name === "t" || node.callee.name === "translate") &&
         node.arguments.length > 0
       ) {
         for (const literal of collectLiteralTranslationArguments(node.arguments[0])) {
-          addReference(directKeys, literal.text, sourceReference(sourceFile, literal));
+          addReference(directKeys, literal.value, sourceReference(file, literal.node));
         }
       }
-
-      ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
+    });
   }
 
   return { directKeys, translationLikeLiterals };

@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { transpileTypeScriptModule } from "../../../../scripts/typescript-source-tools.mjs";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".css"];
 
@@ -134,7 +135,6 @@ export function createWebModuleLoader(options = {}) {
   const hostSourceDir = path.join(rootDir, "src");
   const sharedSourceDir = fileURLToPath(new URL("../../../agent-ui/src", import.meta.url));
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
-  const ts = requireFromRoot("typescript");
   const cache = new Map();
   const mocks = new Map([
     ...Object.entries(createDefaultMocks()),
@@ -221,31 +221,7 @@ export function createWebModuleLoader(options = {}) {
     }
 
     const source = fs.readFileSync(filePath, "utf8");
-    const transpiled = ts.transpileModule(source, {
-      fileName: filePath,
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-        jsx: ts.JsxEmit.ReactJSX,
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        moduleResolution: ts.ModuleResolutionKind.Node10 ?? ts.ModuleResolutionKind.NodeJs,
-        resolveJsonModule: true,
-        ignoreDeprecations: "6.0",
-      },
-      reportDiagnostics: true,
-    });
-
-    const diagnostics = transpiled.diagnostics ?? [];
-    const fatalDiagnostics = diagnostics.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-    if (fatalDiagnostics.length > 0) {
-      const message = ts.formatDiagnosticsWithColorAndContext(fatalDiagnostics, {
-        getCanonicalFileName: (name) => name,
-        getCurrentDirectory: () => rootDir,
-        getNewLine: () => "\n",
-      });
-      throw new Error(message);
-    }
+    const outputText = transpileTypeScriptModule(source, filePath);
 
     const module = { exports: {} };
     cache.set(filePath, module);
@@ -262,10 +238,6 @@ export function createWebModuleLoader(options = {}) {
         ? resolveLocal(nextSpecifier, dirname)
         : requireFromRoot.resolve(nextSpecifier);
 
-    const outputText = transpiled.outputText.replaceAll(
-      "import.meta.url",
-      JSON.stringify(pathToFileURL(filePath).href),
-    );
     const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${outputText}\n})`;
     const script = new vm.Script(wrapped, { filename: filePath });
     const compiled = script.runInThisContext();

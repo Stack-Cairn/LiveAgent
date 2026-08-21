@@ -5,8 +5,6 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "paths": {
       "@liveagent/app/*": ["../agent-gui/src/*"],
       "@liveagent/adapters/*": ["../agent-gui/src/agent-ui-adapters/*"],

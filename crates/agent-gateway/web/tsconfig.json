@@ -7,12 +7,10 @@
     "allowJs": false,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "ignoreDeprecations": "6.0",
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@liveagent/app/*": ["./src/*"],

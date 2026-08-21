@@ -44,5 +44,9 @@
       "unplugin-icons": "23.0.1",
       "vite": "8.0.5"
     }
+  },
+  "devDependencies": {
+    "@babel/parser": "7.29.8",
+    "esbuild": "0.28.2"
   }
 }

@@ -3,10 +3,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-// typescript 7 (native tsc) no longer ships the JS compiler API the loader
-// needs (transpileModule/ModuleKind), so the transpile step stays on the
-// aliased typescript 6 package.
-import ts from "typescript-transpile";
+import { transpileTypeScriptModule } from "../../../../scripts/typescript-source-tools.mjs";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"];
 
@@ -307,31 +304,7 @@ export function createTsModuleLoader(options = {}) {
     }
 
     const source = fs.readFileSync(filePath, "utf8");
-    const transpiled = ts.transpileModule(source, {
-      fileName: filePath,
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-        jsx: ts.JsxEmit.ReactJSX,
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        moduleResolution: ts.ModuleResolutionKind.Node10 ?? ts.ModuleResolutionKind.NodeJs,
-        resolveJsonModule: true,
-        ignoreDeprecations: "6.0",
-      },
-      reportDiagnostics: true,
-    });
-
-    const diagnostics = transpiled.diagnostics ?? [];
-    const fatalDiagnostics = diagnostics.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-    if (fatalDiagnostics.length > 0) {
-      const message = ts.formatDiagnosticsWithColorAndContext(fatalDiagnostics, {
-        getCanonicalFileName: (name) => name,
-        getCurrentDirectory: () => rootDir,
-        getNewLine: () => "\n",
-      });
-      throw new Error(message);
-    }
+    const outputText = transpileTypeScriptModule(source, filePath);
 
     const module = { exports: {} };
     cache.set(filePath, module);
@@ -347,7 +320,7 @@ export function createTsModuleLoader(options = {}) {
         ? resolveLocal(nextSpecifier, dirname)
         : requireFromRoot.resolve(nextSpecifier);
 
-    const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${transpiled.outputText}\n})`;
+    const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${outputText}\n})`;
     const script = new vm.Script(wrapped, { filename: filePath });
     const previousWindow = globalThis.window;
     if (typeof globalThis.window === "undefined") {

@@ -63,7 +63,6 @@
     "postcss": "^8.5.8",
     "tailwindcss": "4.2.2",
     "typescript": "~7.0.2",
-    "typescript-transpile": "npm:typescript@~6.0.3",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.0.5"
   }
