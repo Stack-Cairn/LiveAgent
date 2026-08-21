@@ -67,6 +67,16 @@ export function streamSimpleByApi(model: Model<Api>, context: Context, options: 
     case "anthropic-messages": {
       // Anthropic：需要我们自己调用 streamAnthropic()，以便显式传 toolChoice（以及启用/禁用 thinking）。
       const anthropicThinking = resolveAnthropicThinkingRuntime(model, options);
+      // Anthropic 拒绝 extended thinking 与强制工具（"any"/{type:"tool"}）同请求
+      // （400）。降级为 auto：有界强制的调用方（plan mode 补提交轮）同时注入了
+      // 消息级提醒，语义仍然成立；直接 400 反而会进重试/failover 循环。
+      const requestedToolChoice = options.toolChoice ?? "none";
+      const anthropicToolChoice =
+        anthropicThinking.thinkingEnabled &&
+        requestedToolChoice !== "none" &&
+        requestedToolChoice !== "auto"
+          ? "auto"
+          : requestedToolChoice;
       return withStreamRetry(
         () => {
           return streamAnthropic(model as Model<"anthropic-messages">, context, {
@@ -85,7 +95,7 @@ export function streamSimpleByApi(model: Model<Api>, context: Context, options: 
             ...(anthropicThinking.thinkingBudgetTokens !== undefined
               ? { thinkingBudgetTokens: anthropicThinking.thinkingBudgetTokens }
               : {}),
-            toolChoice: options.toolChoice ?? "none",
+            toolChoice: anthropicToolChoice,
           });
         },
         { signal: options.signal, ...options.streamRetry },

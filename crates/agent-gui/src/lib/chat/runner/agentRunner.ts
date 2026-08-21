@@ -35,6 +35,7 @@ import {
   resolveProviderCacheRetention,
   type StreamOptionsEx,
   streamSimpleByApi,
+  type ToolChoice,
   toSimpleStreamReasoning,
 } from "../../providers/llm";
 import {
@@ -488,6 +489,17 @@ export async function runAssistantWithTools(params: {
    * 提交用它跳过无意义的"收尾话"轮——批准事实由卡片展示,执行由续轮承接。
    */
   resolveToolTermination?: (toolCall: ToolCall) => boolean;
+  /**
+   * 每轮出站请求的 tool_choice 裁决钩子(编排层策略,runner 不感知具体模式)。
+   * 返回 undefined 走缺省(有工具则 "auto")。定向强制({type:"tool"})只应
+   * 由调用方在有界场景使用——无界强制会剥夺模型的文本收尾能力,导致失控循环。
+   */
+  resolveToolChoice?: (round: number) => ToolChoice | undefined;
+  /**
+   * 模型轮数上限(含):达到后当前工具批执行完即优雅终止本轮 run(不抛错,
+   * 结果保留在历史),由编排层决定后续(如 plan mode 的补提交/兜底)。缺省无上限。
+   */
+  maxRounds?: number;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -1305,7 +1317,10 @@ export async function runAssistantWithTools(params: {
               target.runtime.promptCacheRetention,
             ),
           metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
-          toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
+          toolChoice:
+            params.resolveToolChoice?.(round) ??
+            options?.toolChoice ??
+            (effectiveContext.tools?.length ? "auto" : undefined),
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
           workdir: params.workdir,
           streamRetry: {
@@ -1503,7 +1518,10 @@ export async function runAssistantWithTools(params: {
         // still executes and keeps its result in history, then the run ends —
         // otherwise one Read next to ExitPlanMode would silently void the
         // "submitting ends this turn" guarantee and run a wrap-up round.
+        // maxRounds is the run-level circuit breaker: once the cap is reached
+        // the current batch finishes normally, then the run ends gracefully.
         terminate:
+          (params.maxRounds !== undefined && currentRound >= params.maxRounds) ||
           (params.resolveToolTermination
             ? getAssistantToolCalls(assistantMessage).some((call) =>
                 params.resolveToolTermination?.(call),

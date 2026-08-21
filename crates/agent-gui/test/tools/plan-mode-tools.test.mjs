@@ -238,3 +238,153 @@ test("isPlanModeAllowedTool admits read-only, plan, and collaboration tools only
   assert.equal(tools.isPlanModeAllowedTool("Write", { isReadOnly: false }), false);
   assert.equal(tools.isPlanModeAllowedTool("mcp_srv_tool", undefined), false);
 });
+
+test("plan-mode prompt routes every complete answer through ExitPlanMode without unbounded pressure", () => {
+  const { tools } = loadModules();
+  const section = tools.buildPlanModeSystemPromptSection();
+  // 覆盖面:所有完整答案(不只实现计划)都经 ExitPlanMode 提交。
+  assert.match(section, /Submit every complete answer through ExitPlanMode/);
+  assert.match(section, /architecture summaries, research findings, Q&A/);
+  assert.match(section, /instead of plain assistant text/);
+  // 反空转:引导"够用即停",并点明重复读取只会得到 unchanged 桩。
+  assert.match(section, /Stop researching once you can produce the deliverable/);
+  assert.match(section, /unchanged stub/);
+  // 高压措辞已移除:它抬高提交门槛,诱导无限调研。
+  assert.doesNotMatch(section, /You MUST call/);
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-prompt" });
+  const tool = bundle.tools.find((candidate) => candidate.name === "ExitPlanMode");
+  assert.match(tool.description, /every finished answer, not only implementation plans/);
+  assert.match(tool.description, /Submitting ends this turn immediately/);
+});
+
+// ---------------------------------------------------------------------------
+// 运行策略:有界升级状态机
+// ---------------------------------------------------------------------------
+
+function textAssistantMessage(text) {
+  return { role: "assistant", content: [{ type: "text", text }], timestamp: 1 };
+}
+
+function planToolResultMessage(toolCallId, isError = false) {
+  return {
+    role: "toolResult",
+    toolCallId,
+    toolName: "ExitPlanMode",
+    content: [{ type: "text", text: "ok" }],
+    isError,
+    timestamp: 1,
+  };
+}
+
+test("run policy: auto during research, one forced nudge, then text fallback registers the plan", () => {
+  const { tools } = loadModules();
+  const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy" });
+
+  // 研究阶段:不强制 tool_choice,熔断线为研究上限。
+  assert.equal(policy.resolveToolChoice(), undefined);
+  assert.equal(policy.maxRounds(), tools.PLAN_MODE_MAX_RESEARCH_ROUNDS);
+  assert.equal(
+    policy.resolveToolTermination({ type: "toolCall", id: "c1", name: "ExitPlanMode" }),
+    true,
+  );
+  assert.equal(policy.resolveToolTermination({ type: "toolCall", id: "c2", name: "Read" }), false);
+
+  // 第一次 run 以文本收尾且未提交 → 补提交一轮(定向强制 + 提醒文案)。
+  const first = policy.decideAfterRun({ emittedMessages: [textAssistantMessage("plan text")] });
+  assert.equal(first.kind, "nudge");
+  assert.equal(first.reminderText, tools.PLAN_MODE_NUDGE_REMINDER);
+  assert.deepEqual(policy.resolveToolChoice(), { type: "tool", name: "ExitPlanMode" });
+  assert.equal(policy.maxRounds(), tools.PLAN_MODE_MAX_NUDGE_ROUNDS);
+
+  // 补提交仍未产出 → 文本兜底。
+  const second = policy.decideAfterRun({ emittedMessages: [textAssistantMessage("plan text")] });
+  assert.equal(second.kind, "fallback");
+
+  const fallback = policy.registerFallbackPlan({ planText: "## 兜底计划\n\n1. A\n" });
+  assert.ok(fallback);
+  assert.equal(fallback.toolCall.name, "ExitPlanMode");
+  assert.equal(fallback.toolResult.toolCallId, fallback.toolCall.id);
+  assert.equal(fallback.toolResult.isError, false);
+  assert.deepEqual(fallback.toolResult.details, {
+    kind: "exit_plan_mode",
+    plan: "## 兜底计划\n\n1. A",
+  });
+  // 与真实提交同构:登记待决计划,审批入口零改动复用。
+  assert.deepEqual(tools.getPendingPlanForConversation("conv-policy"), {
+    toolCallId: fallback.toolCall.id,
+    plan: "## 兜底计划\n\n1. A",
+  });
+  assert.equal(tools.isPlanDecisionPending(fallback.toolCall.id), true);
+  tools.cancelPendingPlanDecisionsForConversation("conv-policy");
+});
+
+test("run policy: a successful ExitPlanMode submission settles the run immediately", () => {
+  const { tools } = loadModules();
+  const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy-ok" });
+  const decision = policy.decideAfterRun({
+    emittedMessages: [planToolResultMessage("call-ok-1")],
+  });
+  assert.equal(decision.kind, "submitted");
+  // 提交成功后不进入补提交态。
+  assert.equal(policy.resolveToolChoice(), undefined);
+});
+
+test("run policy: an errored ExitPlanMode result does not count as submission", () => {
+  const { tools } = loadModules();
+  const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy-err" });
+  const decision = policy.decideAfterRun({
+    emittedMessages: [planToolResultMessage("call-err-1", true)],
+  });
+  assert.equal(decision.kind, "nudge");
+});
+
+test("run policy: fallback with empty text registers nothing and the turn just ends", () => {
+  const { tools } = loadModules();
+  const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy-empty" });
+  policy.decideAfterRun({ emittedMessages: [] });
+  policy.decideAfterRun({ emittedMessages: [] });
+  assert.equal(policy.registerFallbackPlan({ planText: "   " }), null);
+  assert.equal(tools.getPendingPlanForConversation("conv-policy-empty"), null);
+});
+
+test("run policy: repeated identical research calls are blocked past the limit", () => {
+  const { tools } = loadModules();
+  const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy-repeat" });
+  const read = (id) => ({
+    type: "toolCall",
+    id,
+    name: "Read",
+    // 键序不同也算同一调用(稳定序列化)。
+    arguments: id === "r2" ? { limit: 5, path: "a.ts" } : { path: "a.ts", limit: 5 },
+  });
+
+  assert.equal(policy.guardRepeatedToolCall(read("r1")).allow, true);
+  assert.equal(policy.guardRepeatedToolCall(read("r2")).allow, true);
+  const blocked = policy.guardRepeatedToolCall(read("r3"));
+  assert.equal(blocked.allow, false);
+  assert.match(blocked.reason, /already made this exact Read call/);
+  assert.match(blocked.reason, /ExitPlanMode/);
+
+  // 参数不同的调用不受影响。
+  assert.equal(
+    policy.guardRepeatedToolCall({
+      type: "toolCall",
+      id: "r4",
+      name: "Read",
+      arguments: { path: "b.ts" },
+    }).allow,
+    true,
+  );
+  // ExitPlanMode 永不被重复守卫拦截(修订后的重提不能被卡死)。
+  for (const id of ["p1", "p2", "p3", "p4"]) {
+    assert.equal(
+      policy.guardRepeatedToolCall({
+        type: "toolCall",
+        id,
+        name: "ExitPlanMode",
+        arguments: { plan: "same" },
+      }).allow,
+      true,
+    );
+  }
+});

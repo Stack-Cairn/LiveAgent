@@ -7,7 +7,6 @@ import type {
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
-import { EXIT_PLAN_MODE_TOOL_NAME } from "@liveagent/ui/lib/chat/planMode";
 import {
   composeTrajectorySystemPrompt,
   serializeToolCatalog,
@@ -85,6 +84,7 @@ import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinType
 import { createFileToolState } from "../../../lib/tools/fileToolState";
 import {
   buildPlanModeSystemPromptSection,
+  createPlanModeRunPolicy,
   isPlanModeAllowedTool,
 } from "../../../lib/tools/planModeTools";
 import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
@@ -103,7 +103,11 @@ import {
   NOOP_TRAJECTORY_RECORDER,
   type TrajectoryRecorder,
 } from "../../../lib/trajectory/recorder";
-import { appendSystemPrompt, buildPartialAssistantMessage } from "../runtime/chatPageRuntime";
+import {
+  appendSystemPrompt,
+  buildPartialAssistantMessage,
+  createEmptyAssistantUsage,
+} from "../runtime/chatPageRuntime";
 import {
   buildGatewayToolCallPreviewArguments,
   summarizeToolCallForApproval,
@@ -569,6 +573,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // Plan mode 段:turn 级快照、run 内恒定文本,与 frozenTaskListContext 同列
   // 冻结注入——system 段任何变动都会作废整条前缀缓存,绝不能随状态中途改写。
   const planModeSection = planModeEnabled ? buildPlanModeSystemPromptSection() : "";
+  // Plan mode 运行策略(turn 级实例):有界升级状态机——终止谓词、轮数熔断、
+  // 重复调用守卫、run 后的补提交/兜底裁决全部收敛于此,runner 保持模式无关。
+  const planRunPolicy = planModeEnabled ? createPlanModeRunPolicy({ conversationId }) : null;
   const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
     if (planModeSection) {
@@ -733,6 +740,15 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         allow: false,
         reason: `Plan mode is active: ${toolCall.name} is unavailable during planning. Research with read-only tools and submit the plan via ExitPlanMode.`,
       };
+    }
+    // 防空转守卫:plan mode 下同参重复的研究调用超过放行次数即拦截,拦截理由
+    // 作为 toolResult 引导模型停止刷读、提交计划(Read 的 unchanged 桩只省
+    // token,不打断循环;这里才是打断点)。
+    if (planRunPolicy) {
+      const repeatGate = planRunPolicy.guardRepeatedToolCall(toolCall);
+      if (!repeatGate.allow) {
+        return repeatGate;
+      }
     }
     const policy = resolveToolPolicy(toolCall.name, metadata, getToolPolicies?.());
     if (policy === "deny") {
@@ -973,6 +989,19 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     }
   }
 
+  // Plan mode 文本兜底产出的合成消息对(assistant toolCall + toolResult),
+  // 随最终状态一次性落盘;卡片在 turn 落定后由持久化消息渲染。
+  let planFallbackMessages: Message[] = [];
+  const lastVisibleAssistantText = (messages: readonly Message[]): string => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role !== "assistant") continue;
+      const text = assistantMessageToText(message).trim();
+      if (text) return text;
+    }
+    return "";
+  };
+
   let midStreamProtectionDisabled = false;
   while (!result) {
     let streamedAgentText = "";
@@ -1011,10 +1040,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         resolveToolGate,
         requestToolFilter,
         // 计划提交即终止本轮(对话式范式,对齐 Codex):计划由卡片展示,用户以
-        // 消息或按钮回应;不存在挂起等待,也没有收尾模型轮。
-        resolveToolTermination: planModeEnabled
-          ? (toolCall) => toolCall.name === EXIT_PLAN_MODE_TOOL_NAME
-          : undefined,
+        // 消息或按钮回应;不存在挂起等待,也没有收尾模型轮。tool_choice 常态
+        // auto(策略只在补提交轮定向强制一次),maxRounds 为失控循环的熔断线。
+        resolveToolTermination: planRunPolicy?.resolveToolTermination,
+        resolveToolChoice: planRunPolicy ? () => planRunPolicy.resolveToolChoice() : undefined,
+        maxRounds: planRunPolicy?.maxRounds(),
         onRequestStart: ({ round, context, toolsSuffix }) => {
           const activeSources = new Set(
             currentTrajectoryRuntimeContext.entries.map((entry) => entry.source),
@@ -1355,6 +1385,66 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           messageCount: result.messages.length,
         },
       );
+
+      // Plan mode 有界升级:run 正常结束但未经 ExitPlanMode 提交时,先补提交一
+      // 轮(nudge),仍未提交则把最后的助手文本兜底注册为待决计划。两步各至多
+      // 一次,turn 必然有限步收敛。
+      if (planRunPolicy) {
+        const decision = planRunPolicy.decideAfterRun({
+          emittedMessages: result.emittedMessages,
+        });
+        if (decision.kind === "nudge") {
+          // 对齐 mid-stream 压缩的循环重入范式:先把本 run 的消息提交进会话
+          // 状态并重置 live 轮(避免重入后 round key 冲突、消息双渲染),再带
+          // 一条 wire-only 提醒续跑。提醒只进出站请求——不追加进会话状态,
+          // 不持久化、不进 UI 与记忆抽取。
+          const interimState = appendMessagesToConversation(
+            getNextConversationState(),
+            result.emittedMessages,
+          );
+          latestAgentEmittedMessages = [];
+          applyConversationState(interimState);
+          clearPersistableAgentProgress();
+          resetLiveTranscript(transcriptStore);
+          const preparedContext = buildPreparedContext(interimState, combinedTools, {
+            includeUploadedFilesMetadata: true,
+          });
+          pendingAgentContext = {
+            ...preparedContext,
+            messages: [
+              ...preparedContext.messages,
+              {
+                role: "user",
+                content: [{ type: "text", text: decision.reminderText }],
+                timestamp: Date.now(),
+              },
+            ],
+          };
+          result = null;
+        } else if (decision.kind === "fallback") {
+          const fallback = planRunPolicy.registerFallbackPlan({
+            planText: lastVisibleAssistantText(result.messages),
+          });
+          if (fallback) {
+            // 合成 ExitPlanMode 调用对追加进最终历史:协议一致(assistant
+            // toolCall + toolResult),计划卡与审批链路零改动复用;usage 置零,
+            // 不污染用量统计。
+            planFallbackMessages = [
+              {
+                role: "assistant",
+                content: [fallback.toolCall],
+                api: runtimeModel.api,
+                provider: runtimeModel.provider,
+                model: runtimeModel.id,
+                usage: createEmptyAssistantUsage(),
+                stopReason: "toolUse",
+                timestamp: fallback.toolResult.timestamp,
+              } satisfies AssistantMessage,
+              fallback.toolResult,
+            ];
+          }
+        }
+      }
     } catch (error) {
       if (!midStreamCompactionRequested) {
         throw error;
@@ -1421,10 +1511,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     throw new Error("Cancelled");
   }
 
-  const finalState = appendMessagesToConversation(
-    getNextConversationState(),
-    result.emittedMessages,
-  );
+  const finalState = appendMessagesToConversation(getNextConversationState(), [
+    ...result.emittedMessages,
+    ...planFallbackMessages,
+  ]);
   let completedState = finalState;
   const gatewayAssistantText = assistantMessageToText(result.assistant);
   if (!gatewayBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {

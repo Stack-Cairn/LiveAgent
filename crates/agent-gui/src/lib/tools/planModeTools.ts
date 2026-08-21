@@ -11,7 +11,7 @@
 // 远端(WebUI)按钮经 gateway chat_queue.plan_decision 转发到桌面后走同一入口
 // answerPlanDecision(approve → 宿主批准 handler;reject → 反馈作为消息发送)。
 
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message, Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import {
   EXIT_PLAN_MODE_TOOL_NAME,
   type ExitPlanModeResultDetails,
@@ -19,6 +19,7 @@ import {
   sanitizePlanMarkdown,
 } from "@liveagent/ui/lib/chat/planMode";
 import { Type } from "typebox";
+import type { ToolChoice } from "../providers/runtime/types";
 import { AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME } from "../subagents/types";
 import {
   type BuiltinToolBundle,
@@ -252,34 +253,39 @@ export function isPlanModeAllowedTool(
   );
 }
 
-/** Plan mode 的 system prompt 段;run 内恒定文本,冻结注入以保护前缀缓存。 */
+/** Plan mode 的 system prompt 段;run 内恒定文本,冻结注入以保护前缀缓存。
+ *  plan mode 规则的唯一权威表述——toolsSuffix 与工具 description 只作指引,
+ *  不再复述,避免三处漂移与 token 浪费。措辞刻意不用"MUST before this turn
+ *  ends"式高压:那会抬高提交门槛、诱导模型为求"完整"而无限调研。 */
 export function buildPlanModeSystemPromptSection(): string {
   return [
     "<plan-mode>",
     "Plan mode is ACTIVE. This is a read-only planning phase:",
-    "- Research the task with the available read-only tools (and readonly subagents), then design an implementation plan.",
+    "- Research with the available read-only tools (and readonly subagents). Stop researching once you can produce the deliverable — do not re-read files you have already read; a re-read returns an unchanged stub, never new information.",
     "- Mutation is impossible this turn: write-capable tools are not in your tool list. Do not promise edits you cannot make here.",
-    `- When the plan is ready, call ${EXIT_PLAN_MODE_TOOL_NAME} with the complete plan (markdown). Submitting ends this turn immediately — the user replies with approval or feedback as a normal message.`,
-    "- If the user replies with feedback instead of approval, revise the plan accordingly and submit again.",
-    "- If the user asks to save the plan to a file, make writing that file the first step of the plan itself — the execution turn (full tools) will do it.",
-    "- On approval, execution starts automatically in the next turn with full tools — begin that turn by turning the plan into a task list (TaskCreate), then implement.",
-    "- Keep the plan concrete: files to touch, ordered steps, risks, and how to verify.",
+    `- Submit every complete answer through ${EXIT_PLAN_MODE_TOOL_NAME} — implementation plans, architecture summaries, research findings, Q&A, and recommendations alike — instead of plain assistant text. If no code changes are needed, the plan states that and carries the findings.`,
+    "- Submitting ends this turn immediately; the user replies with approval or feedback as a normal message. On feedback, revise the plan and submit again.",
+    "- If the user asks to save the plan to a file, make that write the first step of the plan itself — the execution turn (full tools) will do it.",
+    "- On approval, execution starts automatically in the next turn with full tools — begin that turn by turning the plan into a task list (TaskCreate), then implement. If the plan needs no file changes, confirm that briefly and stop.",
+    "- Keep implementation plans concrete: files to touch, ordered steps, risks, and how to verify.",
     "</plan-mode>",
   ].join("\n");
 }
 
-const EXIT_PLAN_MODE_TOOL_DESCRIPTION = `Present your implementation plan to the user. Only available in plan mode; call it once your research is complete and the plan is ready for review.
+// 只述工具自身的调用契约;plan mode 的行为规则统一由 <plan-mode> system 段承载。
+const EXIT_PLAN_MODE_TOOL_DESCRIPTION = `Present the complete user-facing deliverable for this turn (every finished answer, not only implementation plans). Only available in plan mode; call it once your research is complete.
 
-Submitting the plan ends this turn immediately. The user then replies as a normal message: approval starts execution automatically in the next turn (full tools); anything else is feedback — revise the plan and submit again.
+Submitting ends this turn immediately. The user replies as a normal message: approval starts execution automatically in the next turn (full tools); anything else is feedback — revise the plan and submit again.
 
 Rules:
-- \`plan\` must be the complete, self-contained plan in markdown — goals, files to change, ordered steps, risks, and verification. Do not reference earlier messages ("as discussed above").
+- \`plan\` must be the complete, self-contained markdown deliverable. Do not reference earlier messages ("as discussed above").
+- Implementation work: goals, files to change, ordered steps, risks, verification. Analysis/Q&A: the full findings, plus whether any follow-up code changes are needed.
 - If the user asked to save the plan to a file, include that write as the first step of the plan.`;
 
 const exitPlanModeParameters = Type.Object({
   plan: Type.String({
     description:
-      "The complete implementation plan in markdown: goals, files to change, ordered steps, risks, verification.",
+      "The complete user-facing deliverable in markdown. Implementation work: goals, files to change, ordered steps, risks, verification. Analysis/Q&A: the full findings, plus whether any follow-up code changes are needed.",
   }),
 });
 
@@ -310,7 +316,7 @@ export function createExitPlanModeTools(params: { conversationId: string }): Bui
     if (!plan) {
       return buildErrorResult(
         toolCall,
-        "plan is required: pass the complete implementation plan in markdown.",
+        "plan is required: pass the complete markdown deliverable.",
       );
     }
 
@@ -359,5 +365,162 @@ export function createExitPlanModeTools(params: { conversationId: string }): Bui
         },
       ],
     ]),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Plan mode 运行策略:有界升级状态机。
+//
+// 原则:绝不无界强制。常态 toolChoice=auto,模型可自由文本收尾;终止性由四道
+// **有界**防线保证:
+//   1. 终止谓词 —— ExitPlanMode 提交即结束本轮 run(runner resolveToolTermination);
+//   2. 轮数上限 —— 研究阶段 maxRounds 熔断,防失控循环(runner maxRounds);
+//   3. 补提交轮 —— run 以文本收尾且未提交时,追加一次 wire-only 提醒消息并定向
+//      强制 ExitPlanMode,只重试一次(nudging 态);
+//   4. 文本兜底 —— 补提交仍未产出时,把最后的助手文本注册为待决计划(合成
+//      ExitPlanMode 调用对),计划卡/审批/持久化零改动复用。
+// 任何模型行为都在有限步内收敛到计划卡。
+// ---------------------------------------------------------------------------
+
+/** 研究阶段的模型轮数熔断值(含);达到后当前批执行完即优雅终止,进入补提交。 */
+export const PLAN_MODE_MAX_RESEARCH_ROUNDS = 32;
+/** 补提交轮的轮数上限:定向强制下 1 轮即提交,留余量兜供应商降级为 auto 的情况。 */
+export const PLAN_MODE_MAX_NUDGE_ROUNDS = 4;
+/** 同一 (工具名, 参数) 的重复调用放行次数;超过即拦截,引导提交计划。 */
+export const PLAN_MODE_REPEAT_CALL_LIMIT = 2;
+
+/** 补提交轮注入的 wire-only 提醒(只进出站请求,不持久化、不进 UI)。 */
+export const PLAN_MODE_NUDGE_REMINDER = [
+  "[plan-mode reminder] Your previous turn ended without submitting the deliverable.",
+  `Call ${EXIT_PLAN_MODE_TOOL_NAME} now with the complete user-facing deliverable in markdown,`,
+  "based on the research you already completed. Do not run more research tools first.",
+].join(" ");
+
+export type PlanModeRunDecision =
+  | { kind: "submitted" }
+  | { kind: "nudge"; reminderText: string }
+  | { kind: "fallback" };
+
+export type PlanModeFallbackPlan = {
+  toolCall: ToolCall;
+  toolResult: ToolResultMessage;
+};
+
+export type PlanModeRunPolicy = {
+  /** ExitPlanMode 提交即终止本轮 run(交给 runner resolveToolTermination)。 */
+  resolveToolTermination: (toolCall: ToolCall) => boolean;
+  /** 当前 run 的 tool_choice:常态 undefined(缺省 auto);补提交轮定向强制。 */
+  resolveToolChoice: () => ToolChoice | undefined;
+  /** 当前 run 的轮数熔断值(交给 runner maxRounds)。 */
+  maxRounds: () => number;
+  /** 防空转守卫:同参重复的研究调用超过放行次数即拦截(接入 resolveToolGate)。 */
+  guardRepeatedToolCall: (toolCall: ToolCall) => { allow: true } | { allow: false; reason: string };
+  /** run 结束后的升级裁决:已提交 → done;首次未提交 → nudge;再次 → fallback。 */
+  decideAfterRun: (input: { emittedMessages: readonly Message[] }) => PlanModeRunDecision;
+  /** 文本兜底:把助手文本注册为待决计划并返回合成的 ExitPlanMode 调用对;
+   *  文本经 sanitize 后为空时返回 null(此时本轮无计划,turn 正常结束)。 */
+  registerFallbackPlan: (input: { planText: string }) => PlanModeFallbackPlan | null;
+};
+
+/** 递归键排序的稳定序列化:重复调用判定不受对象键序影响。模型参数来自 JSON,无环。 */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function hasSuccessfulPlanSubmission(messages: readonly Message[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === "toolResult" &&
+      message.toolName === EXIT_PLAN_MODE_TOOL_NAME &&
+      !message.isError,
+  );
+}
+
+export function createPlanModeRunPolicy(params: { conversationId: string }): PlanModeRunPolicy {
+  let phase: "researching" | "nudging" = "researching";
+  const repeatCounts = new Map<string, number>();
+
+  return {
+    resolveToolTermination: (toolCall) => toolCall.name === EXIT_PLAN_MODE_TOOL_NAME,
+
+    resolveToolChoice: () =>
+      // 定向强制只出现在有界的补提交轮;供应商不支持时(如 Anthropic thinking、
+      // Google)由 provider 层降级为 auto,提醒消息仍然生效。
+      phase === "nudging" ? { type: "tool" as const, name: EXIT_PLAN_MODE_TOOL_NAME } : undefined,
+
+    maxRounds: () =>
+      phase === "nudging" ? PLAN_MODE_MAX_NUDGE_ROUNDS : PLAN_MODE_MAX_RESEARCH_ROUNDS,
+
+    guardRepeatedToolCall: (toolCall) => {
+      if (toolCall.name === EXIT_PLAN_MODE_TOOL_NAME) return { allow: true };
+      const key = `${toolCall.name}\u0000${stableStringify(toolCall.arguments ?? {})}`;
+      const count = (repeatCounts.get(key) ?? 0) + 1;
+      repeatCounts.set(key, count);
+      if (count <= PLAN_MODE_REPEAT_CALL_LIMIT) return { allow: true };
+      return {
+        allow: false,
+        reason:
+          `You already made this exact ${toolCall.name} call in this planning turn and its result has not changed. ` +
+          `Use the content you already gathered, or submit the deliverable via ${EXIT_PLAN_MODE_TOOL_NAME}.`,
+      };
+    },
+
+    decideAfterRun: ({ emittedMessages }) => {
+      if (hasSuccessfulPlanSubmission(emittedMessages)) {
+        return { kind: "submitted" };
+      }
+      if (phase === "researching") {
+        phase = "nudging";
+        return { kind: "nudge", reminderText: PLAN_MODE_NUDGE_REMINDER };
+      }
+      return { kind: "fallback" };
+    },
+
+    registerFallbackPlan: ({ planText }) => {
+      const plan = sanitizePlanMarkdown(planText);
+      if (!plan) return null;
+      const toolCallId = `call_plan_fallback_${crypto.randomUUID().replaceAll("-", "")}`;
+      const toolCall: ToolCall = {
+        type: "toolCall",
+        id: toolCallId,
+        name: EXIT_PLAN_MODE_TOOL_NAME,
+        arguments: { plan },
+      };
+      // 与真实 ExitPlanMode 执行完全同构:登记待决计划(覆盖旧登记)并通知订阅方,
+      // 计划卡按钮态、WebUI 预览、审批入口全部零改动复用。
+      pendingPlanByConversation.set(params.conversationId, {
+        conversationId: params.conversationId,
+        toolCallId,
+        plan,
+      });
+      emitChange();
+      const details: ExitPlanModeResultDetails = { kind: "exit_plan_mode", plan };
+      return {
+        toolCall,
+        toolResult: {
+          role: "toolResult",
+          toolCallId,
+          toolName: EXIT_PLAN_MODE_TOOL_NAME,
+          content: [
+            {
+              type: "text",
+              text: "Plan captured from the assistant's final text; the user will reply with approval or feedback.",
+            },
+          ],
+          details,
+          isError: false,
+          timestamp: Date.now(),
+        },
+      };
+    },
   };
 }

@@ -12,6 +12,7 @@ const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity
 const streamQueue = [];
 const streamSideEffects = [];
 const observedStreamContexts = [];
+const observedStreamOptions = [];
 const HOSTED_SEARCH_PROBE_HEADER = "x-liveagent-hosted-search-probe";
 
 function createUsage() {
@@ -355,6 +356,7 @@ const llmMock = {
   },
   streamSimpleByApi(_model, context, options) {
     observedStreamContexts.push(context);
+    observedStreamOptions.push(options);
     const queued = streamQueue.shift();
     if (!queued) {
       throw new Error("No fake stream response queued");
@@ -398,6 +400,7 @@ function resetFakeStreams(...assistants) {
   streamQueue.push(...assistants);
   streamSideEffects.length = 0;
   observedStreamContexts.length = 0;
+  observedStreamOptions.length = 0;
 }
 
 function queueStreamSideEffect(sideEffect) {
@@ -2679,4 +2682,96 @@ test("resolveToolTermination spreads across a mixed parallel batch (still ends t
   assert.equal(observedStreamContexts.length, 1);
   assert.equal(textDeltas.join(""), "");
   assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("ExitPlanMode in the tool list keeps toolChoice auto — plan rules live in the prompt, never in unbounded forcing", async () => {
+  resetFakeStreams(createTextAssistant("done"));
+  const tools = [
+    {
+      name: "Read",
+      description: "Read a file",
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "ExitPlanMode",
+      description: "Submit a plan",
+      parameters: { type: "object", properties: { plan: { type: "string" } } },
+    },
+  ];
+  const { params } = createBaseParams({
+    tools,
+    context: {
+      systemPrompt: "Base system prompt",
+      messages: [{ role: "user", content: "Start", timestamp: 1 }],
+      tools,
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(observedStreamOptions.length, 1);
+  assert.equal(observedStreamOptions[0].toolChoice, "auto");
+  assert.match(observedStreamContexts[0].systemPrompt, /Plan mode is ACTIVE/);
+  assert.doesNotMatch(
+    observedStreamContexts[0].systemPrompt,
+    /answer directly without invoking tools/,
+  );
+});
+
+test("resolveToolChoice drives per-round tool_choice on the outbound request", async () => {
+  const readCall = createToolCall("call-choice-1", "Read");
+  resetFakeStreams(createToolUseAssistant(readCall), createTextAssistant("done"));
+  const observedRounds = [];
+  const { params } = createBaseParams({
+    resolveToolChoice: (round) => {
+      observedRounds.push(round);
+      return round === 1 ? undefined : { type: "tool", name: "Read" };
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.deepEqual(observedRounds, [1, 2]);
+  // undefined falls through to the default (auto with tools present).
+  assert.equal(observedStreamOptions[0].toolChoice, "auto");
+  assert.deepEqual(observedStreamOptions[1].toolChoice, { type: "tool", name: "Read" });
+});
+
+test("without resolveToolChoice the runner keeps toolChoice auto", async () => {
+  resetFakeStreams(createTextAssistant("done"));
+  const { params } = createBaseParams();
+
+  await runAssistantWithTools(params);
+
+  assert.equal(observedStreamOptions.length, 1);
+  assert.equal(observedStreamOptions[0].toolChoice, "auto");
+  assert.match(
+    observedStreamContexts[0].systemPrompt,
+    /answer directly without invoking tools/,
+  );
+});
+
+test("maxRounds ends the run gracefully after the capped round's tool batch", async () => {
+  const call1 = createToolCall("call-cap-1", "Read", { path: "a" });
+  const call2 = createToolCall("call-cap-2", "Read", { path: "b" });
+  const call3 = createToolCall("call-cap-3", "Read", { path: "c" });
+  resetFakeStreams(
+    createToolUseAssistant(call1),
+    createToolUseAssistant(call2),
+    createToolUseAssistant(call3),
+    createTextAssistant("never reached"),
+  );
+  const { params, executedToolCalls } = createBaseParams({ maxRounds: 2 });
+
+  const result = await runAssistantWithTools(params);
+
+  // Round 2 hits the cap: its tool batch still executes and lands in history,
+  // then the run ends without a further model round and without throwing.
+  assert.equal(observedStreamContexts.length, 2);
+  assert.deepEqual(
+    executedToolCalls.map((call) => call.id),
+    ["call-cap-1", "call-cap-2"],
+  );
+  assert.equal(result.assistant.stopReason, "toolUse");
+  assert.equal(result.messages.filter((message) => message.role === "toolResult").length, 2);
 });

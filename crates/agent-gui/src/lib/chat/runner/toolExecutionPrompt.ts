@@ -1,3 +1,4 @@
+import { EXIT_PLAN_MODE_TOOL_NAME } from "@liveagent/ui/lib/chat/planMode";
 import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
 import {
   inferRuntimePlatform,
@@ -21,6 +22,11 @@ export function buildToolsSuffix(
   const hasAny = (...names: string[]) => names.some(has);
   const hasDynamicMcp =
     allowAll || (availableToolNames ?? []).some((name) => name.startsWith("mcp_"));
+  // ExitPlanMode is injected only in plan mode. `allowAll` (tests / full dump)
+  // must not flip those rules on — that path describes every tool, not a live
+  // plan-mode registry.
+  const planModeActive = !allowAll && has(EXIT_PLAN_MODE_TOOL_NAME);
+  const present = (...names: string[]) => names.filter(has);
 
   const fileTools = ["Read", "Image", "Write", "Edit", "Delete", "List", "Grep", "Glob"].filter(
     has,
@@ -28,8 +34,13 @@ export function buildToolsSuffix(
   const hasFileTool = fileTools.length > 0;
   const hasReadFamily = hasAny("Read", "List", "Grep", "Glob");
   const canWrite = hasAny("Write", "Edit", "Delete");
+  const processWaitTools = present("ProcessWait", "ProcessStop");
+  const taskTools = present("TaskCreate", "TaskUpdate", "TaskList");
 
   const toolGroups: string[] = [];
+  if (planModeActive) {
+    toolGroups.push(`plan submission (${EXIT_PLAN_MODE_TOOL_NAME})`);
+  }
   if (fileTools.length > 0) toolGroups.push(`file tools (${fileTools.join(" / ")})`);
   if (has("SkillsManager")) toolGroups.push("skill tools (SkillsManager)");
   if (has("MemoryManager")) toolGroups.push("persistent memory (MemoryManager)");
@@ -37,26 +48,41 @@ export function buildToolsSuffix(
   if (has("CronTaskManager")) toolGroups.push("scheduled task management (CronTaskManager)");
   if (has("Agent")) toolGroups.push("subagent delegation (Agent)");
   if (has("SendMessage")) toolGroups.push("subagent message bus (SendMessage)");
+  if (has("AskUserQuestion")) toolGroups.push("user questions (AskUserQuestion)");
   if (has("Bash")) toolGroups.push("the command tool (Bash)");
-  if (has("ProcessWait")) {
-    toolGroups.push("resumable command waiting (ProcessWait / ProcessStop)");
+  if (processWaitTools.length > 0) {
+    toolGroups.push(`resumable command waiting (${processWaitTools.join(" / ")})`);
   }
   if (has("ManagedProcess")) toolGroups.push("managed local processes (ManagedProcess)");
-  if (hasAny("TaskCreate", "TaskUpdate", "TaskList")) {
-    toolGroups.push("durable task planning (TaskCreate / TaskUpdate / TaskList)");
+  if (taskTools.length > 0) {
+    toolGroups.push(`durable task planning (${taskTools.join(" / ")})`);
   }
   if (hasDynamicMcp) toolGroups.push("MCP business tools whose names are prefixed with mcp_");
 
   const sections: string[] = [];
 
+  // Plan mode 的行为规则由 system prompt 的 <plan-mode> 段唯一承载;这里只声明
+  // 工具面差异并指回该段,避免规则复述漂移。
+  sections.push(
+    planModeActive
+      ? [
+          "# Tool-Execution Mode",
+          "",
+          `Plan mode is ACTIVE. You have the read-only tools listed under **Available Tools**, plus ${EXIT_PLAN_MODE_TOOL_NAME}. Follow the <plan-mode> rules above: research, then submit the complete deliverable via ${EXIT_PLAN_MODE_TOOL_NAME} instead of plain assistant text.`,
+        ].join("\n")
+      : [
+          "# Tool-Execution Mode",
+          "",
+          "In this mode you have access to the tools listed under **Available Tools** at the end of this section. Invoke them when the task requires reading, searching, modifying, or coordinating state (files, commands, agents, MCP services). For pure Q&A, explanation, or analysis that does not depend on current state, answer directly without invoking tools.",
+        ].join("\n"),
+  );
+
   sections.push(
     [
-      "# Tool-Execution Mode",
-      "",
-      "In this mode you have access to the tools listed under **Available Tools** at the end of this section. Invoke them when the task requires reading, searching, modifying, or coordinating state (files, commands, agents, MCP services). For pure Q&A, explanation, or analysis that does not depend on current state, answer directly without invoking tools.",
-      "",
       "## Final Reply",
-      "- Your reply to the user is plain text plus Markdown.",
+      planModeActive
+        ? `- Do not put the complete deliverable in this reply. Call ${EXIT_PLAN_MODE_TOOL_NAME} instead; the plan card is what the user reviews.`
+        : "- Your reply to the user is plain text plus Markdown.",
       "- Never include raw tool-call JSON or raw tool arguments in your reply — describe what you did in plain words instead.",
     ].join("\n"),
   );
@@ -81,7 +107,9 @@ export function buildToolsSuffix(
         ...additionalRootLines,
         "- Files inside an enabled Skill: use `skill://<skill>/...` exactly as returned by SkillsManager or file tools.",
         "- Absolute paths, `~/...`, and `file://` URLs are also accepted and auto-normalized; never construct one when a returned path is available.",
-        "- Write, Edit, and Delete operate only inside the workspace, writable configured root:// project roots, or enabled writable Skills. Bash `cwd` may point outside the workspace under its existing policy, but additional project roots do not expand that policy.",
+        canWrite
+          ? "- Write, Edit, and Delete operate only inside the workspace, writable configured root:// project roots, or enabled writable Skills. Bash `cwd` may point outside the workspace under its existing policy, but additional project roots do not expand that policy."
+          : "- Structured file tools operate only inside the workspace, configured root:// project roots, or enabled Skills.",
         "- Use `/` as the separator everywhere, including Glob and Grep patterns; Windows `\\` is auto-normalized.",
         '- On a path error, follow its guidance: reuse a "Did you mean" candidate verbatim, or locate the file with Glob/Grep first, then retry with the returned path.',
       ].join("\n"),
@@ -214,7 +242,11 @@ export function buildToolsSuffix(
               "- ProcessWait defaults to 30000ms. For a quiet command that is expected to take several minutes, set ProcessWait.yield_time_ms up to 300000 instead of issuing repeated short waits.",
               "- Session responses use completed, failed, cancelled, or timed_out as terminal statuses. The reported session_duration_ms is cumulative from the original Bash start; never add values from multiple responses.",
               "- Omit Bash.timeout_ms when the command should run until completion. Set it only when a real hard runtime limit is desired; ProcessWait does not restart or extend that limit.",
-              "- Use ProcessStop with session_id to terminate the complete process tree when the command is no longer needed.",
+              ...(has("ProcessStop")
+                ? [
+                    "- Use ProcessStop with session_id to terminate the complete process tree when the command is no longer needed.",
+                  ]
+                : []),
               "- ProcessWait session_id values come from Bash/ProcessWait, not from ManagedProcess.process_id.",
             ]
           : []),
@@ -232,7 +264,9 @@ export function buildToolsSuffix(
         "## Agent Delegation",
         "- Use Agent for bounded, independent jobs that benefit from a fresh context: implementation, research, review, discussion, or verification. Do not delegate trivial work you can finish yourself.",
         "- To run multiple independent jobs in parallel, issue ONE Agent call whose `agents` array lists every job. Use sequential Agent calls only when a later job needs an earlier job's output.",
-        "- Default to mode=readonly for research, review, and discussion agents. Use mode=worktree (with apply_policy) only when the subagent is expected to produce file changes or the user explicitly asked for file output.",
+        planModeActive
+          ? "- PLAN MODE: every subagent is readonly this turn — mode=worktree is rejected. Delegate research/review only; file changes happen after the plan is approved."
+          : "- Default to mode=readonly for research, review, and discussion agents. Use mode=worktree (with apply_policy) only when the subagent is expected to produce file changes or the user explicitly asked for file output.",
         "- To continue with an existing delegated agent or a previously formed team, call Agent again with the same stable id(s) and only the new prompt — do not impersonate those agents from this transcript and do not restate their identity fields.",
         "- If an Agent call is rejected, no subagents were started; fix every listed issue and retry with one corrected call.",
       ].join("\n"),
@@ -265,16 +299,28 @@ export function buildToolsSuffix(
     );
   }
 
-  if (hasAny("TaskCreate", "TaskUpdate", "TaskList")) {
-    sections.push(
-      [
-        "## Task Planning",
+  if (taskTools.length > 0) {
+    const taskLines = ["## Task Planning"];
+    if (has("TaskCreate")) {
+      taskLines.push(
         "- Proactively use TaskCreate for multi-step work (3+ distinct steps) or multiple user requests; skip it for one trivial action.",
+      );
+    }
+    if (has("TaskUpdate")) {
+      taskLines.push(
         "- Task IDs are stable and executor-assigned. Use TaskUpdate with taskId; never replace or recreate the list after context compaction.",
         "- Exactly one task may be in_progress. Mark it in_progress before work and completed immediately after it is fully done.",
-        "- Use TaskList whenever the authoritative task state is unclear.",
-      ].join("\n"),
-    );
+      );
+    }
+    if (has("TaskList")) {
+      taskLines.push("- Use TaskList whenever the authoritative task state is unclear.");
+    }
+    if (planModeActive) {
+      taskLines.push(
+        `- Plan mode: do not start execution-side task work this turn. Submit the plan via ${EXIT_PLAN_MODE_TOOL_NAME}; TaskCreate happens after approval.`,
+      );
+    }
+    sections.push(taskLines.join("\n"));
   }
 
   if (has("MemoryManager")) {

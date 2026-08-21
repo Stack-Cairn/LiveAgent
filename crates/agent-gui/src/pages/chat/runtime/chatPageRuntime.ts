@@ -105,7 +105,7 @@ export function createConversationRuntimeEntry(params: {
   };
 }
 
-function createEmptyAssistantUsage(): AssistantMessage["usage"] {
+export function createEmptyAssistantUsage(): AssistantMessage["usage"] {
   return {
     input: 0,
     output: 0,
