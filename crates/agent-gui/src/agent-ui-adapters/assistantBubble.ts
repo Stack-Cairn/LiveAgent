@@ -5,7 +5,13 @@ import {
   answerAskUserQuestion,
   getAskUserQuestionDeadlineAt,
 } from "../lib/tools/askUserQuestionTools";
-import { answerPlanDecision, getExitPlanModeDeadlineAt } from "../lib/tools/planModeTools";
+import {
+  answerPlanDecision,
+  getPlanDecisionVersion,
+  isPlanApprovalToolCall,
+  isPlanDecisionPending,
+  subscribePlanDecisions,
+} from "../lib/tools/planModeTools";
 import {
   getPendingToolApproval,
   getToolApprovalVersion,
@@ -34,11 +40,12 @@ export function submitAskUserQuestionAnswers(toolCallId: string, answers: AskUse
   return Promise.resolve(answerAskUserQuestion(toolCallId, answers));
 }
 
-export function readPlanDecisionDeadline(
-  toolCallId: string,
-  _toolArguments: Record<string, unknown>,
-) {
-  return getExitPlanModeDeadlineAt(toolCallId) ?? undefined;
+export function usePlanDecisionState(toolCallId: string, _toolArguments: Record<string, unknown>) {
+  useSyncExternalStore(subscribePlanDecisions, getPlanDecisionVersion, getPlanDecisionVersion);
+  return {
+    pending: isPlanDecisionPending(toolCallId),
+    approved: isPlanApprovalToolCall(toolCallId),
+  };
 }
 
 export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswer) {

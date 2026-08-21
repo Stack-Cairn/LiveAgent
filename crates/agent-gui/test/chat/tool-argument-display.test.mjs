@@ -150,8 +150,8 @@ function createToolCallItemRenderer() {
         readAskUserQuestionDeadline() {
           return undefined;
         },
-        readPlanDecisionDeadline() {
-          return undefined;
+        usePlanDecisionState() {
+          return { pending: false, approved: false };
         },
         retainRunningToolContent: false,
         submitAskUserQuestionAnswers() {},

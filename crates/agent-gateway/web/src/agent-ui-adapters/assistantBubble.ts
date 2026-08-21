@@ -1,7 +1,10 @@
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
 import { readAskUserQuestionDeadlineAt } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
-import { readPlanDecisionDeadlineAt } from "@liveagent/ui/lib/chat/planMode";
+import {
+  readPlanApprovedMarker,
+  readPlanPendingMarker,
+} from "@liveagent/ui/lib/chat/planMode";
 import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { submitAskUserQuestionAnswer } from "../lib/chat/askUserQuestionBridge";
 import { submitPlanDecision as submitPlanDecisionViaGateway } from "../lib/chat/planModeBridge";
@@ -27,11 +30,14 @@ export function submitAskUserQuestionAnswers(toolCallId: string, answers: AskUse
   return submitAskUserQuestionAnswer(toolCallId, answers);
 }
 
-export function readPlanDecisionDeadline(
+export function usePlanDecisionState(
   _toolCallId: string,
   toolArguments: Record<string, unknown>,
 ) {
-  return readPlanDecisionDeadlineAt(toolArguments) ?? undefined;
+  return {
+    pending: readPlanPendingMarker(toolArguments),
+    approved: readPlanApprovedMarker(toolArguments),
+  };
 }
 
 export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswer) {

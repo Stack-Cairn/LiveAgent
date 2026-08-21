@@ -130,7 +130,9 @@ import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUs
 import {
   answerPlanDecision,
   cancelPendingPlanDecisionsForConversation,
-  getPendingPlanDecisionToolCallId,
+  getPendingPlanForConversation,
+  isPlanApprovalMessage,
+  registerPlanDecisionHandlers,
 } from "../lib/tools/planModeTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
 import { clearMcpToolActivation } from "../lib/tools/toolSearchTools";
@@ -898,38 +900,37 @@ export function ChatPage(props: ChatPageProps) {
   });
   stopConversationActionRef.current = stopConversation;
 
-  // 计划获批(ExitPlanMode approve):
-  // 1. 关闭 plan 开关——续轮与后续轮都在完整工具下执行;
-  // 2. 入队"开始执行"续轮(带 planModeEnabled:false 的 runtimeControls 快照,
-  //    不依赖 setSettings 后的闭包新鲜度);本轮仍在运行,排空由 drain effect
-  //    在 run 结束后自动触发。计划正文已在 ExitPlanMode 工具结果里,续轮提示
-  //    只需引用它,不重复注入。
-  // 批准后待发的执行续轮(conversationId → 提示词)。不进队列:批准即终止使
-  // run 立刻结束,下面的 effect 在 run 消失后直接 send——用户看不到队列行,
-  // 也没有队列轮询参与;计划执行完对话自然结束。
+  // 对话式计划审批(对齐 Codex):计划提交即终止规划 run,用户以消息或按钮
+  // 回应。批准 = 关 plan 开关 + 暂存执行续轮(run 消失后直发,不进队列);
+  // 退回 = 反馈作为普通用户消息发送(模型在 plan mode 修订后重新提交)。
+  // 卡片按钮、输入框批准短语、WebUI plan_decision 三个入口共用这两条路径。
   const pendingPlanContinuationsRef = useRef(new Map<string, string>());
   const [planContinuationVersion, setPlanContinuationVersion] = useState(0);
-  const handlePlanApprovedForConversation = useCallback(
-    (input: { conversationId: string; plan: string; savePath?: string }) => {
-      setSettings((prev) =>
-        prev.chatRuntimeControls.planModeEnabled
-          ? {
-              ...prev,
-              chatRuntimeControls: { ...prev.chatRuntimeControls, planModeEnabled: false },
-            }
-          : prev,
-      );
-      // 用户在批准卡上选了存盘:续轮第一步先把计划原文写到该路径(执行轮有
-      // 全工具 + checkpoint 可回滚;规划轮自身无写能力,存盘只能发生在这里)。
-      const executePrompt = input.savePath
-        ? `${t("chat.planMode.savePlanPrompt").replace("{path}", input.savePath)}\n${t("chat.planMode.executePrompt")}`
-        : t("chat.planMode.executePrompt");
-      pendingPlanContinuationsRef.current.set(input.conversationId, executePrompt);
-      setPlanContinuationVersion((version) => version + 1);
-    },
-    [setSettings, t],
-  );
-  // 规划 run 结束(批准即终止) + plan 开关已关(settings 已 flush,避免续轮又
+  useEffect(() => {
+    registerPlanDecisionHandlers({
+      onApprove: ({ conversationId }) => {
+        setSettings((prev) =>
+          prev.chatRuntimeControls.planModeEnabled
+            ? {
+                ...prev,
+                chatRuntimeControls: { ...prev.chatRuntimeControls, planModeEnabled: false },
+              }
+            : prev,
+        );
+        pendingPlanContinuationsRef.current.set(conversationId, t("chat.planMode.executePrompt"));
+        setPlanContinuationVersion((version) => version + 1);
+      },
+      onReject: ({ conversationId, feedback }) => {
+        void sendActionRef.current({
+          conversationIdOverride: conversationId,
+          textOverride: feedback,
+          preserveComposerOnStart: true,
+        });
+      },
+    });
+    return () => registerPlanDecisionHandlers(null);
+  }, [setSettings, t]);
+  // 规划 run 结束(提交即终止) + plan 开关已关(settings 已 flush,避免续轮又
   // 被"只能收紧"合并锁回只读)后,直接发送执行续轮。
   useEffect(() => {
     if (settings.chatRuntimeControls.planModeEnabled) return;
@@ -1362,7 +1363,6 @@ export function ChatPage(props: ChatPageProps) {
     setSettings,
     getMcpSettings,
     getToolPolicies,
-    onPlanApprovedForConversation: handlePlanApprovedForConversation,
     t,
     setErrorMessage,
     sidebarStore,
@@ -1840,16 +1840,17 @@ export function ChatPage(props: ChatPageProps) {
       }
       return;
     }
-    // 计划卡挂起时输入的消息 = 对计划的修改意见:直接作为"退回并附反馈"落到
-    // 挂起的 ExitPlanMode(模型立即收到反馈继续完善),而不是排进队列干等审批。
+    // 对话式计划审批:会话有待决计划时,纯批准短语("同意/开始/ok"等)即批准
+    // (等同点卡片按钮);其他输入就是普通消息(修改意见),照常发送——规划 run
+    // 已结束,消息直接开启新一轮 plan mode 修订,不经队列。
     if (conversationId) {
-      const pendingPlanToolCallId = getPendingPlanDecisionToolCallId(conversationId);
-      if (pendingPlanToolCallId) {
-        const feedback = composerRef.current?.getText().trim() ?? "";
-        if (feedback) {
+      const pendingPlan = getPendingPlanForConversation(conversationId);
+      if (pendingPlan) {
+        const text = composerRef.current?.getText().trim() ?? "";
+        if (text && isPlanApprovalMessage(text)) {
           const outcome = answerPlanDecision(
-            pendingPlanToolCallId,
-            { decision: "reject", feedback },
+            pendingPlan.toolCallId,
+            { decision: "approve" },
             { conversationId },
           );
           if (outcome.ok) {

@@ -1,10 +1,10 @@
 import {
   readAskUserQuestionDeadline,
-  readPlanDecisionDeadline,
   retainRunningToolContent,
   submitAskUserQuestionAnswers,
   submitPlanDecision,
   usePendingToolApproval,
+  usePlanDecisionState,
 } from "@liveagent/adapters/assistantBubble";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
@@ -108,17 +108,15 @@ function ToolCallItem({
     [item.toolCall.id],
   );
   // ExitPlanMode 计划卡：分派方式同 AskUserQuestion(按工具名),details 优先、
-  // 流式参数兜底;执行中(无 result)即渲染,批准/拒绝动作由宿主适配器提供。
+  // 流式参数兜底。对话式范式:提交即结束本轮,待决/已批准状态由宿主适配器
+  // 响应式提供(GUI 订阅登记表,WebUI 由参数标记),批准动作亦经适配器。
   const isPlanCard = !isRedactedToolContent && item.toolCall.name === EXIT_PLAN_MODE_TOOL_NAME;
   const planDetails = isPlanCard ? parseExitPlanModeResultDetails(result?.details) : null;
   const planMarkdown = isPlanCard
     ? (planDetails?.plan ?? sanitizePlanMarkdown(item.toolCall.arguments?.plan))
     : "";
   const planSettled = isPlanCard && (Boolean(isRunning) || Boolean(result));
-  const planDeadlineAt =
-    isPlanCard && isRunning && !result
-      ? readPlanDecisionDeadline(item.toolCall.id, item.toolCall.arguments)
-      : undefined;
+  const planState = usePlanDecisionState(item.toolCall.id, item.toolCall.arguments);
   const submitPlanAnswer = useCallback(
     (answer: PlanDecisionAnswer) => submitPlanDecision(item.toolCall.id, answer),
     [item.toolCall.id],
@@ -185,9 +183,7 @@ function ToolCallItem({
           ? t("chat.askUser.waiting")
           : t("chat.askUser.preparing")
         : isPlanCard
-          ? planMarkdown
-            ? t("chat.planMode.waiting")
-            : t("chat.planMode.preparing")
+          ? t("chat.planMode.submitted")
           : t("chat.tool.running")
       : shellSessionStatus === "running"
         ? t("chat.tool.running")
@@ -392,12 +388,8 @@ function ToolCallItem({
         <div className="py-1.5">
           <PlanModeCard
             plan={planMarkdown}
-            decision={planDetails?.decision}
-            feedback={planDetails?.feedback}
-            cancelled={planDetails?.cancelled === true}
-            timedOut={planDetails?.timedOut === true}
-            interactive={Boolean(isRunning) && !result && !readOnly}
-            deadlineAt={planDeadlineAt}
+            approved={planState.approved || planDetails?.decision === "approve"}
+            pending={planState.pending}
             readOnly={readOnly}
             onSubmit={submitPlanAnswer}
           />

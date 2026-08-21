@@ -153,12 +153,6 @@ type UseSendChatTurnParams = {
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   getMcpSettings: () => AppSettings["mcp"];
   getToolPolicies: () => AppSettings["system"]["toolPolicies"];
-  /** 计划获批(ExitPlanMode approve):宿主关闭 plan 开关并入队"开始执行"续轮。 */
-  onPlanApprovedForConversation?: (input: {
-    conversationId: string;
-    plan: string;
-    savePath?: string;
-  }) => void;
   t: (key: string) => string;
   sidebarStore: SidebarStore;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
@@ -1702,14 +1696,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             getToolPolicies,
             commandSafetyMode: effectiveCommandSafetyMode,
             planModeEnabled: effectivePlanModeEnabled,
-            onPlanApproved: effectivePlanModeEnabled
-              ? (input: { plan: string; savePath?: string }) =>
-                  params.onPlanApprovedForConversation?.({
-                    conversationId,
-                    plan: input.plan,
-                    ...(input.savePath ? { savePath: input.savePath } : {}),
-                  })
-              : undefined,
             applyMcpOps: (ops) => {
               const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
               setSettings((prev) =>

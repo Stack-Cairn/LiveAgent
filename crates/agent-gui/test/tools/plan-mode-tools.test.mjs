@@ -47,195 +47,159 @@ test("shared helpers sanitize plans and resolve decisions", () => {
     decision: "reject",
     feedback: "改一下",
   });
-  const longFeedback = "b".repeat(shared.EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH + 5);
-  assert.equal(
-    shared.resolvePlanDecisionAnswer({ decision: "reject", feedback: longFeedback }).feedback
-      .length,
-    shared.EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH,
-  );
 
-  // savePath:仅批准时保留;拒绝时忽略;超长截断。
-  assert.deepEqual(
-    shared.resolvePlanDecisionAnswer({ decision: "approve", savePath: " docs/plan.md " }),
-    { decision: "approve", savePath: "docs/plan.md" },
-  );
-  assert.deepEqual(
-    shared.resolvePlanDecisionAnswer({ decision: "reject", savePath: "plan.md" }),
-    { decision: "reject" },
-  );
-  const longPath = "p".repeat(shared.EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH + 9);
-  assert.equal(
-    shared.resolvePlanDecisionAnswer({ decision: "approve", savePath: longPath }).savePath.length,
-    shared.EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH,
-  );
+  // 待决/已批准的合成标记读取(WebUI 参数盖章)。
+  assert.equal(shared.readPlanPendingMarker({ __exitPlanModePending: true }), true);
+  assert.equal(shared.readPlanPendingMarker({}), false);
+  assert.equal(shared.readPlanApprovedMarker({ __exitPlanModeApproved: true }), true);
 
-  // details 解析：kind/plan 缺失即 null；可选字段按需保留。
+  // details 解析：kind/plan 缺失即 null。
   assert.equal(shared.parseExitPlanModeResultDetails({ kind: "other", plan: "p" }), null);
-  assert.deepEqual(
-    shared.parseExitPlanModeResultDetails({
-      kind: "exit_plan_mode",
-      plan: "p",
-      decision: "reject",
-      feedback: "f",
-    }),
-    { kind: "exit_plan_mode", plan: "p", decision: "reject", feedback: "f" },
-  );
+  assert.deepEqual(shared.parseExitPlanModeResultDetails({ kind: "exit_plan_mode", plan: "p" }), {
+    kind: "exit_plan_mode",
+    plan: "p",
+  });
 });
 
-test("execute rejects an empty plan without suspending", async () => {
+test("isPlanApprovalMessage accepts pure approval phrases only", () => {
+  const { tools } = loadModules();
+  for (const yes of ["同意", "  开始吧。", "OK", "ok!", "Go ahead", "lgtm", "开干"]) {
+    assert.equal(tools.isPlanApprovalMessage(yes), true, yes);
+  }
+  for (const no of ["同意,但第二步改一下", "先等等", "保存到 plan.md 再执行", "", "  "]) {
+    assert.equal(tools.isPlanApprovalMessage(no), false, no);
+  }
+});
+
+test("execute rejects an empty plan without registering", async () => {
   const { tools } = loadModules();
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-1" });
   const result = await bundle.executeToolCall(createToolCall({ plan: "   " }, "call-plan-empty"));
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /plan is required/);
-  assert.equal(tools.hasPendingPlanDecision("call-plan-empty"), false);
+  assert.equal(tools.getPendingPlanForConversation("conv-1"), null);
 });
 
-test("approve settles the pending plan and fires onPlanApproved", async () => {
+test("submission returns immediately and registers the pending plan", async () => {
   const { tools } = loadModules();
-  const approvals = [];
-  const bundle = tools.createExitPlanModeTools({
-    conversationId: "conv-1",
-    onPlanApproved: (input) => approvals.push(input),
-  });
-  const resultPromise = bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-approve"));
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(tools.hasPendingPlanDecision("call-plan-approve"), true);
-
-  // 非法决定被拒，不消解挂起。
-  const invalid = tools.answerPlanDecision("call-plan-approve", { decision: "maybe" });
-  assert.equal(invalid.ok, false);
-  assert.equal(tools.hasPendingPlanDecision("call-plan-approve"), true);
-
-  // 串会话应答被拒。
-  const wrongConversation = tools.answerPlanDecision(
-    "call-plan-approve",
-    { decision: "approve" },
-    { conversationId: "conv-other" },
-  );
-  assert.equal(wrongConversation.ok, false);
-
-  const accepted = tools.answerPlanDecision(
-    "call-plan-approve",
-    { decision: "approve", savePath: "docs/plan.md" },
-    { conversationId: "conv-1" },
-  );
-  assert.equal(accepted.ok, true);
-  const result = await resultPromise;
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-submit" });
+  // 对话式范式:execute 不挂起——立即 resolve,不需要任何应答。
+  const result = await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-submit-1"));
   assert.equal(result.isError, false);
-  assert.match(result.content[0].text, /APPROVED/);
-  assert.equal(result.details.kind, "exit_plan_mode");
-  assert.equal(result.details.decision, "approve");
-  assert.deepEqual(approvals, [{ plan: PLAN.trim(), savePath: "docs/plan.md" }]);
-  // 获批调用进入终止标记集(runner 据此结束本轮);拒绝/超时路径不标记。
-  assert.equal(tools.isPlanApprovalToolCall("call-plan-approve"), true);
-  // 已落定后再次应答被拒。
-  assert.equal(tools.answerPlanDecision("call-plan-approve", { decision: "approve" }).ok, false);
+  assert.match(result.content[0].text, /this turn ends here/);
+  assert.deepEqual(result.details, { kind: "exit_plan_mode", plan: PLAN.trim() });
+  assert.deepEqual(tools.getPendingPlanForConversation("conv-submit"), {
+    toolCallId: "call-submit-1",
+    plan: PLAN.trim(),
+  });
+  assert.equal(tools.isPlanDecisionPending("call-submit-1"), true);
+
+  // 新提交覆盖旧登记:旧调用不再待决。
+  await bundle.executeToolCall(createToolCall({ plan: "# v2" }, "call-submit-2"));
+  assert.equal(tools.isPlanDecisionPending("call-submit-1"), false);
+  assert.equal(tools.getPendingPlanForConversation("conv-submit").toolCallId, "call-submit-2");
+  tools.cancelPendingPlanDecisionsForConversation("conv-submit");
 });
 
-test("reject keeps plan mode and returns the feedback", async () => {
+test("approve routes to the host handler and settles the pending plan", async () => {
   const { tools } = loadModules();
   const approvals = [];
-  const bundle = tools.createExitPlanModeTools({
-    conversationId: "conv-1",
-    onPlanApproved: (input) => approvals.push(input.plan),
+  const rejections = [];
+  tools.registerPlanDecisionHandlers({
+    onApprove: (input) => approvals.push(input),
+    onReject: (input) => rejections.push(input),
   });
-  const resultPromise = bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-reject"));
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  const accepted = tools.answerPlanDecision("call-plan-reject", {
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-approve" });
+  await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-approve-1"));
+
+  // 非法决定被拒。
+  assert.equal(tools.answerPlanDecision("call-approve-1", { decision: "maybe" }).ok, false);
+  // 串会话应答被拒。
+  assert.equal(
+    tools.answerPlanDecision(
+      "call-approve-1",
+      { decision: "approve" },
+      { conversationId: "conv-other" },
+    ).ok,
+    false,
+  );
+
+  const outcome = tools.answerPlanDecision(
+    "call-approve-1",
+    { decision: "approve" },
+    { conversationId: "conv-approve" },
+  );
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(approvals, [{ conversationId: "conv-approve", plan: PLAN.trim() }]);
+  assert.deepEqual(rejections, []);
+  assert.equal(tools.isPlanApprovalToolCall("call-approve-1"), true);
+  assert.equal(tools.getPendingPlanForConversation("conv-approve"), null);
+  // 已落定后再次应答被拒。
+  assert.equal(tools.answerPlanDecision("call-approve-1", { decision: "approve" }).ok, false);
+  tools.registerPlanDecisionHandlers(null);
+  tools.cancelPendingPlanDecisionsForConversation("conv-approve");
+});
+
+test("reject requires feedback and routes it to the host as a message", async () => {
+  const { tools } = loadModules();
+  const approvals = [];
+  const rejections = [];
+  tools.registerPlanDecisionHandlers({
+    onApprove: (input) => approvals.push(input),
+    onReject: (input) => rejections.push(input),
+  });
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-reject" });
+  await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-reject-1"));
+
+  // 缺反馈的 reject 被拒(引导直接打字)。
+  assert.equal(tools.answerPlanDecision("call-reject-1", { decision: "reject" }).ok, false);
+  assert.equal(tools.isPlanDecisionPending("call-reject-1"), true);
+
+  const outcome = tools.answerPlanDecision("call-reject-1", {
     decision: "reject",
     feedback: "拆成两步",
   });
-  assert.equal(accepted.ok, true);
-  const result = await resultPromise;
-  assert.equal(result.isError, false);
-  assert.match(result.content[0].text, /REJECTED/);
-  assert.match(result.content[0].text, /拆成两步/);
-  assert.equal(result.details.decision, "reject");
-  assert.equal(result.details.feedback, "拆成两步");
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(rejections, [{ conversationId: "conv-reject", feedback: "拆成两步" }]);
   assert.deepEqual(approvals, []);
-  assert.equal(tools.isPlanApprovalToolCall("call-plan-reject"), false);
+  // 反馈发出后旧计划失效(模型将修订重提)。
+  assert.equal(tools.isPlanDecisionPending("call-reject-1"), false);
+  assert.equal(tools.isPlanApprovalToolCall("call-reject-1"), false);
+  tools.registerPlanDecisionHandlers(null);
 });
 
-test("timeout settles as not-approved (no callback)", async () => {
+test("cancel clears the conversation's pending plan and approval mark", async () => {
   const { tools } = loadModules();
-  const approvals = [];
-  const bundle = tools.createExitPlanModeTools({
-    conversationId: "conv-1",
-    onPlanApproved: (input) => approvals.push(input.plan),
-    timeoutMs: 20,
-  });
-  const result = await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-timeout"));
-  assert.equal(result.isError, false);
-  assert.equal(result.details.timedOut, true);
-  assert.equal(result.details.decision, undefined);
-  assert.match(result.content[0].text, /NOT approved/);
-  assert.deepEqual(approvals, []);
-});
-
-test("abort settles a pending plan as cancelled", async () => {
-  const { tools } = loadModules();
-  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-1" });
-  const controller = new AbortController();
-  const resultPromise = bundle.executeToolCall(
-    createToolCall({ plan: PLAN }, "call-plan-abort"),
-    controller.signal,
-  );
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  controller.abort();
-  const result = await resultPromise;
-  assert.equal(result.isError, true);
-  assert.equal(result.details.cancelled, true);
-  assert.match(result.content[0].text, /Do not assume approval/);
-});
-
-test("cancelPendingPlanDecisionsForConversation settles only that conversation", async () => {
-  const { tools } = loadModules();
+  tools.registerPlanDecisionHandlers({ onApprove: () => {}, onReject: () => {} });
   const bundleA = tools.createExitPlanModeTools({ conversationId: "conv-a" });
   const bundleB = tools.createExitPlanModeTools({ conversationId: "conv-b" });
-  const promiseA = bundleA.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-a"));
-  const promiseB = bundleB.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-b"));
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await bundleA.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-a"));
+  await bundleB.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-b"));
 
   tools.cancelPendingPlanDecisionsForConversation("conv-a");
-  const resultA = await promiseA;
-  assert.equal(resultA.details.cancelled, true);
-  assert.equal(tools.hasPendingPlanDecision("call-plan-b"), true);
-
-  tools.answerPlanDecision("call-plan-b", { decision: "approve" });
-  const resultB = await promiseB;
-  assert.equal(resultB.details.decision, "approve");
+  assert.equal(tools.getPendingPlanForConversation("conv-a"), null);
+  // 其他会话不受影响。
+  assert.equal(tools.isPlanDecisionPending("call-plan-b"), true);
+  tools.cancelPendingPlanDecisionsForConversation("conv-b");
+  tools.registerPlanDecisionHandlers(null);
 });
 
-test("getPendingPlanDecisionToolCallId resolves the conversation's pending plan", async () => {
+test("subscription notifies on register/approve/supersede", async () => {
   const { tools } = loadModules();
-  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-pending" });
-  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), null);
-  const resultPromise = bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-pending"));
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), "call-plan-pending");
-  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-other"), null);
-  // 挂起时输入消息即"退回并附反馈"的落点:reject 后挂起消解。
-  tools.answerPlanDecision("call-plan-pending", { decision: "reject", feedback: "改" });
-  await resultPromise;
-  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), null);
-});
-
-test("gateway deadline preset is reused by execute", async () => {
-  const { tools, shared } = loadModules();
-  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-1" });
-  const preset = tools.ensureExitPlanModeDeadlineAt("call-plan-deadline");
-  assert.ok(preset > Date.now());
-  assert.ok(preset <= Date.now() + shared.EXIT_PLAN_MODE_TIMEOUT_MS);
-
-  const resultPromise = bundle.executeToolCall(
-    createToolCall({ plan: PLAN }, "call-plan-deadline"),
-  );
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  // 挂起后读取到的权威截止时间与预置一致。
-  assert.equal(tools.getExitPlanModeDeadlineAt("call-plan-deadline"), preset);
-  tools.answerPlanDecision("call-plan-deadline", { decision: "approve" });
-  await resultPromise;
+  tools.registerPlanDecisionHandlers({ onApprove: () => {}, onReject: () => {} });
+  let notifications = 0;
+  const unsubscribe = tools.subscribePlanDecisions(() => {
+    notifications += 1;
+  });
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-sub" });
+  await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-sub-1"));
+  const afterRegister = notifications;
+  assert.ok(afterRegister >= 1);
+  tools.answerPlanDecision("call-sub-1", { decision: "approve" });
+  assert.ok(notifications > afterRegister);
+  unsubscribe();
+  tools.registerPlanDecisionHandlers(null);
+  tools.cancelPendingPlanDecisionsForConversation("conv-sub");
 });
 
 test("isPlanModeAllowedTool admits read-only, plan, and collaboration tools only", () => {

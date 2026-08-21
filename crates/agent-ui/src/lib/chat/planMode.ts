@@ -3,12 +3,6 @@
 
 export const EXIT_PLAN_MODE_TOOL_NAME = "ExitPlanMode";
 
-/**
- * 计划审批的应答窗口。比 AskUserQuestion(3min) 更长：用户需要通读完整计划。
- * 超时不批准——计划批准是执行闸门，绝不能默认放行（与工具审批同取向）。
- */
-export const EXIT_PLAN_MODE_TIMEOUT_MS = 10 * 60 * 1000;
-
 /** 计划 markdown 的长度上限；超出部分截断（防御模型异常输出撑爆持久化）。 */
 export const EXIT_PLAN_MODE_PLAN_MAX_LENGTH = 64_000;
 
@@ -16,24 +10,29 @@ export const EXIT_PLAN_MODE_PLAN_MAX_LENGTH = 64_000;
 export const EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH = 4_000;
 
 /**
- * 桌面端在网关上报的工具参数上附带的权威应答截止时间戳（毫秒）。
- * WebUI 卡片倒计时以它对齐桌面计时；模型参数里不存在该键（`__` 前缀防冲突）。
+ * 桌面端在网关上报的工具参数上附带的待决/已批准标记（`__` 前缀合成参数，
+ * 不入展示、不影响执行）；WebUI 卡片据此渲染批准按钮/落定态。
  */
-export const EXIT_PLAN_MODE_DEADLINE_ARG = "__exitPlanModeDeadlineAt";
+export const EXIT_PLAN_MODE_PENDING_ARG = "__exitPlanModePending";
+export const EXIT_PLAN_MODE_APPROVED_ARG = "__exitPlanModeApproved";
 
-/** approve：批准计划并退出 plan mode；reject：留在 plan mode 继续完善计划。 */
+export function readPlanPendingMarker(args: unknown): boolean {
+  if (!args || typeof args !== "object") return false;
+  return (args as Record<string, unknown>)[EXIT_PLAN_MODE_PENDING_ARG] === true;
+}
+
+export function readPlanApprovedMarker(args: unknown): boolean {
+  if (!args || typeof args !== "object") return false;
+  return (args as Record<string, unknown>)[EXIT_PLAN_MODE_APPROVED_ARG] === true;
+}
+
+/** approve：批准计划并开始执行；reject：反馈作为普通消息发回，模型修订后重提。 */
 export type PlanDecision = "approve" | "reject";
-
-/** 批准时可选的计划存盘路径长度上限；超出截断。 */
-export const EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH = 512;
 
 export type PlanDecisionAnswer = {
   decision: PlanDecision;
-  /** 拒绝时的修改意见；原文回传给模型作为继续规划的输入。 */
+  /** 拒绝时的修改意见；作为普通用户消息发送给模型。 */
   feedback?: string;
-  /** 批准时可选：把计划原文保存到该路径（相对工作区）。写入发生在执行续轮
-   *  （全工具 + checkpoint 可回滚），规划轮自身无写能力。 */
-  savePath?: string;
 };
 
 export type ExitPlanModeResultDetails = {
@@ -45,13 +44,6 @@ export type ExitPlanModeResultDetails = {
   /** 应答窗口超时、按“不批准”落定时为 true。 */
   timedOut?: boolean;
 };
-
-/** 读取工具参数上附带的应答截止时间戳（毫秒）；缺失或非法返回 null。 */
-export function readPlanDecisionDeadlineAt(args: unknown): number | null {
-  if (!args || typeof args !== "object") return null;
-  const value = (args as Record<string, unknown>)[EXIT_PLAN_MODE_DEADLINE_ARG];
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-}
 
 /** 提取并截断计划 markdown；非字符串/空白返回空串（调用方按参数错误处理）。 */
 export function sanitizePlanMarkdown(value: unknown): string {
@@ -72,16 +64,9 @@ export function resolvePlanDecisionAnswer(raw: unknown): PlanDecisionAnswer | nu
     feedbackRaw.length > EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH
       ? feedbackRaw.slice(0, EXIT_PLAN_MODE_FEEDBACK_MAX_LENGTH)
       : feedbackRaw;
-  const savePathRaw =
-    obj.decision === "approve" && typeof obj.savePath === "string" ? obj.savePath.trim() : "";
-  const savePath =
-    savePathRaw.length > EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH
-      ? savePathRaw.slice(0, EXIT_PLAN_MODE_SAVE_PATH_MAX_LENGTH)
-      : savePathRaw;
   return {
     decision: obj.decision,
     ...(feedback ? { feedback } : {}),
-    ...(savePath ? { savePath } : {}),
   };
 }
 

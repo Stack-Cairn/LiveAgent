@@ -5,7 +5,8 @@ import {
   ASK_USER_QUESTION_TOOL_NAME,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
-  EXIT_PLAN_MODE_DEADLINE_ARG,
+  EXIT_PLAN_MODE_APPROVED_ARG,
+  EXIT_PLAN_MODE_PENDING_ARG,
   EXIT_PLAN_MODE_TOOL_NAME,
 } from "@liveagent/ui/lib/chat/planMode";
 import {
@@ -22,7 +23,7 @@ import {
 } from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
-import { ensureExitPlanModeDeadlineAt } from "../../../lib/tools/planModeTools";
+import { isPlanApprovalToolCall, isPlanDecisionPending } from "../../../lib/tools/planModeTools";
 import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
@@ -118,12 +119,13 @@ export function buildGatewayToolCallPreviewArguments(
       [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
     };
   }
-  // ExitPlanMode：同 AskUserQuestion 的 deadline 盖章机制（planModeTools 预置/复用）。
-  // 计划卡片即审批门,工具只读、不进审批,无需 approvalOverlay。
+  // ExitPlanMode：附带待决/已批准标记(桌面登记表权威),WebUI 卡片据此渲染
+  // 批准按钮与落定态;快照/事件每次经此重建,状态翻转随补发事件同步。
   if (toolCall.name === EXIT_PLAN_MODE_TOOL_NAME) {
     return {
       ...sourceArgs,
-      [EXIT_PLAN_MODE_DEADLINE_ARG]: ensureExitPlanModeDeadlineAt(toolCall.id),
+      [EXIT_PLAN_MODE_PENDING_ARG]: isPlanDecisionPending(toolCall.id),
+      [EXIT_PLAN_MODE_APPROVED_ARG]: isPlanApprovalToolCall(toolCall.id),
     };
   }
   const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];

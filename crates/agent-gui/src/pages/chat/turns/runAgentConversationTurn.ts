@@ -85,7 +85,6 @@ import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinType
 import { createFileToolState } from "../../../lib/tools/fileToolState";
 import {
   buildPlanModeSystemPromptSection,
-  isPlanApprovalToolCall,
   isPlanModeAllowedTool,
 } from "../../../lib/tools/planModeTools";
 import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
@@ -297,10 +296,8 @@ export type RunAgentConversationTurnParams = {
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
   /** 命令执行方式(turn 级快照):ask 全量审批 / auto 按策略 / sandbox(±断网)。 */
   commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];
-  /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 审批闸门。 */
+  /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 提交闸门。 */
   planModeEnabled?: boolean;
-  /** 计划获批时触发:宿主据此关闭 plan 开关并入队"开始执行"续轮。 */
-  onPlanApproved?: (input: { plan: string; savePath?: string }) => void;
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
@@ -390,7 +387,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     getToolPolicies,
     commandSafetyMode,
     planModeEnabled,
-    onPlanApproved,
     applyMcpOps,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
@@ -616,7 +612,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sandbox: resolveShellSandboxSettings(safetyMode),
     taskStateStore,
     askUserQuestionConversationId: conversationId,
-    planMode: planModeEnabled ? { conversationId, onPlanApproved } : undefined,
+    planMode: planModeEnabled ? { conversationId } : undefined,
     toolSearch: { conversationId },
     checkpoint: {
       conversationId,
@@ -1011,11 +1007,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         executeToolCall: combinedExecutor,
         resolveToolGate,
         requestToolFilter,
-        // 计划获批即终止本轮:批准事实由卡片展示,执行由续轮承接,收尾模型轮
-        // 纯属浪费且拖慢队列放行。
+        // 计划提交即终止本轮(对话式范式,对齐 Codex):计划由卡片展示,用户以
+        // 消息或按钮回应;不存在挂起等待,也没有收尾模型轮。
         resolveToolTermination: planModeEnabled
-          ? (toolCall) =>
-              toolCall.name === EXIT_PLAN_MODE_TOOL_NAME && isPlanApprovalToolCall(toolCall.id)
+          ? (toolCall) => toolCall.name === EXIT_PLAN_MODE_TOOL_NAME
           : undefined,
         onRequestStart: ({ round, context, toolsSuffix }) => {
           const activeSources = new Set(
