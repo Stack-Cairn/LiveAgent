@@ -377,7 +377,8 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             if (index !== row.commitCol) {
               return (
                 <path
-                  key={`join-${lane.id}-${lane.color}`}
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 同一行可有多条 lane 汇聚到同一提交且调色板循环导致 id+color 撞 key；lane 数组按行整体重建，索引 key 稳定唯一。
+                  key={`join-${index}-${lane.id}`}
                   d={graphCommitJoinPath(index, row.commitCol)}
                   fill="none"
                   stroke={graphColor(lane.color)}
@@ -397,7 +398,8 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
               outputIndex++;
               return (
                 <path
-                  key={`lane-${lane.id}-${lane.color}`}
+                  // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+                  key={`lane-${index}-${lane.id}`}
                   d={graphVerticalPath(index)}
                   fill="none"
                   stroke={graphColor(lane.color)}
@@ -425,7 +427,8 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             outputIndex++;
             return (
               <path
-                key={`lane-${lane.id}-${lane.color}`}
+                // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+                key={`lane-${index}-${lane.id}`}
                 d={d.join(" ")}
                 fill="none"
                 stroke={graphColor(lane.color)}
@@ -510,7 +513,8 @@ function GitGraphContinuationCell({ row }: { row: GraphRow }) {
       >
         {row.outputLanes.map((lane, index) => (
           <path
-            key={`${lane.id}:${lane.color}`}
+            // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+            key={`c${index}:${lane.id}`}
             d={graphVerticalPath(index)}
             fill="none"
             stroke={graphColor(lane.color)}

@@ -671,7 +671,8 @@ export function ToolResultDisplay({
           <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
             {images.map((image, index) => (
               <ToolResultImagePreview
-                key={`${image.mimeType}:${image.data.length}:${image.data.slice(0, 64)}:${image.data.slice(-64)}`}
+                // biome-ignore lint/suspicious/noArrayIndexKey: 同一结果可含重复图片（内容签名会撞 key）；列表随结果整体重建，索引 key 稳定唯一。
+                key={`${details.path}-${index}`}
                 id={`${details.path}-${index}`}
                 image={image}
                 alt={details.path}
@@ -916,9 +917,10 @@ export function ToolResultDisplay({
           </ToolSurface>
         ) : (
           <ToolSurface className="max-h-64 overflow-auto space-y-2">
-            {details.matches.map((match) => (
+            {details.matches.map((match, index) => (
               <div
-                key={getStableValueSignature(match)}
+                // biome-ignore lint/suspicious/noArrayIndexKey: multiline grep 同一行可命中多次产生字段全同的 match；列表随结果整体重建，索引 key 稳定唯一。
+                key={`${match.path}:${match.line}:${index}`}
                 className="rounded-md border border-black/[0.05] bg-white/[0.55] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
               >
                 <div className="flex items-start gap-2">
@@ -1139,7 +1141,8 @@ export function ToolResultDisplay({
         <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
           {images.map((image, index) => (
             <ToolResultImagePreview
-              key={`${image.mimeType}:${image.data.length}:${image.data.slice(0, 64)}:${image.data.slice(-64)}`}
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同一结果可含重复图片（内容签名会撞 key）；列表随结果整体重建，索引 key 稳定唯一。
+              key={`${item.toolCall.id}-${index}`}
               id={`${item.toolCall.id}-${index}`}
               image={image}
               alt={item.toolCall.name}

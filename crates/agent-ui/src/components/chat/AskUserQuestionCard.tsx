@@ -258,6 +258,8 @@ export function AskUserQuestionCard({
           </div>
 
           <fieldset
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；子项 role="radio" 需要 radiogroup 上下文。
+            role="radiogroup"
             className="flex min-w-0 flex-col gap-1.5 border-0 p-0"
             aria-label={activeQuestion.prompt}
           >
