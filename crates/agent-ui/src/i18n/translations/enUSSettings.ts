@@ -555,6 +555,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerUsageStaleTitle": "Refresh failed; showing the last successful result",
   "settings.providerUsageRefresh": "Refresh usage",
   "settings.providerUsageInvalid": "Plan expired",
+  "settings.providerUsageNoData": "No usage data",
   "settings.providerUsageUpdated.justNow": "just now",
   "settings.providerUsageUpdated.minutesAgo": "{count} min ago",
   "settings.providerUsageUpdated.hoursAgo": "{count} h ago",

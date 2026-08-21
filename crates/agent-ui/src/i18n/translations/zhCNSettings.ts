@@ -534,6 +534,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerUsageStaleTitle": "刷新失败，展示上次成功结果",
   "settings.providerUsageRefresh": "刷新用量",
   "settings.providerUsageInvalid": "套餐已失效",
+  "settings.providerUsageNoData": "暂无用量数据",
   "settings.providerUsageUpdated.justNow": "刚刚",
   "settings.providerUsageUpdated.minutesAgo": "{count} 分钟前",
   "settings.providerUsageUpdated.hoursAgo": "{count} 小时前",
