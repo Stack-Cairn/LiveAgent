@@ -42,7 +42,6 @@ import {
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { NumberInput } from "../../components/ui/number-input";
-import { Switch } from "../../components/ui/switch";
 import { Textarea } from "../../components/ui/textarea";
 import { createUuid } from "../../lib/shared/id";
 import {
@@ -222,6 +221,9 @@ function SshHostModal(props: {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [proxyUseSystem, setProxyUseSystem] = useState(initialData?.proxy.useSystemProxy === true);
   const [proxyType, setProxyType] = useState<SshProxyType>(initialData?.proxy.type ?? "socks5");
+  // The proxy type selector offers "app proxy" alongside the manual protocol
+  // choices; the manual type is kept so switching back restores it.
+  const proxySelection: "system" | SshProxyType = proxyUseSystem ? "system" : proxyType;
   const [proxyUrl, setProxyUrl] = useState(initialData?.proxy.url ?? "");
   const [proxyPort, setProxyPort] = useState(
     initialData?.proxy.port ? String(initialData.proxy.port) : "",
@@ -593,55 +595,45 @@ function SshHostModal(props: {
                 inert={!advancedOpen}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5 sm:col-span-2">
-                    <div className="min-w-0 space-y-0.5">
-                      <Label
-                        htmlFor="ssh-proxy-use-system"
-                        className="text-xs font-medium text-foreground"
-                      >
-                        {t("settings.sshProxyUseSystem")}
-                      </Label>
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        {t("settings.sshProxyUseSystemHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      id="ssh-proxy-use-system"
-                      tone="success"
-                      checked={proxyUseSystem}
-                      aria-label={t("settings.sshProxyUseSystem")}
-                      onCheckedChange={(checked) => setProxyUseSystem(checked === true)}
-                    />
-                  </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium text-muted-foreground">
                       {t("settings.sshProxyType")}
                     </Label>
-                    <div
-                      className={cn(
-                        "grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-background p-1",
-                        proxyUseSystem ? "opacity-50" : "",
-                      )}
-                    >
-                      {(["socks5", "http"] as SshProxyType[]).map((type) => (
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/60 bg-background p-1">
+                      {(
+                        [
+                          { value: "system", label: t("settings.sshProxyUseSystemTag") },
+                          { value: "socks5", label: t("settings.sshProxyTypeSocks5") },
+                          { value: "http", label: t("settings.sshProxyTypeHttp") },
+                        ] as const
+                      ).map((option) => (
                         <button
-                          key={type}
+                          key={option.value}
                           type="button"
-                          disabled={proxyUseSystem}
                           className={cn(
-                            "rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed",
-                            proxyType === type
+                            "rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+                            proxySelection === option.value
                               ? "bg-muted text-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                           )}
-                          onClick={() => setProxyType(type)}
+                          onClick={() => {
+                            if (option.value === "system") {
+                              setProxyUseSystem(true);
+                              return;
+                            }
+                            setProxyUseSystem(false);
+                            setProxyType(option.value);
+                          }}
                         >
-                          {type === "socks5"
-                            ? t("settings.sshProxyTypeSocks5")
-                            : t("settings.sshProxyTypeHttp")}
+                          {option.label}
                         </button>
                       ))}
                     </div>
+                    {proxyUseSystem ? (
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {t("settings.sshProxyUseSystemHint")}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-1.5">
                     <Label

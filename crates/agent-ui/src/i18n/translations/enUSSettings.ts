@@ -749,7 +749,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Deleting will disconnect {count} active SSH connection(s) to this host. This cannot be undone.",
   "settings.sshAdvancedSettings": "Advanced settings",
   "settings.sshAdvancedProxy": "Proxy",
-  "settings.sshProxyUseSystem": "Use app proxy",
   "settings.sshProxyUseSystemHint":
     "Reuse the app proxy configured in System settings instead of the manual fields below; connects directly while the app proxy is disabled.",
   "settings.sshProxyUseSystemTag": "App proxy",
