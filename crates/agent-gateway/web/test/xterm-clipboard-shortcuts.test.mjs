@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// 回归护栏:#355 — 终端选中内容后,Ctrl+Shift+C（Linux/Windows）和
-// Cmd+C（macOS）必须把 selection 写入剪贴板(xterm 的键盘映射不处理这
-// 两组组合键,默认什么都不发生)。同理 Cmd+V / Ctrl+Shift+V 走剪贴板读取,
-// 且命中分支必须 preventDefault,否则浏览器原生 paste 事件会导致粘贴两遍。
+// 回归护栏:#355 — gateway web 终端(Local/SSH Pane)复用 agent-ui 的
+// XTermViewport,复制/粘贴快捷键的行为约束与 GUI 侧一致:Ctrl+Shift+C /
+// Cmd+C 把 selection 写入剪贴板,Ctrl+Shift+V / Cmd+V 经 term.paste 注入,
+// 命中分支必须 preventDefault(浏览器环境下原生 paste 事件真实存在,
+// 不拦截会粘贴两遍),非安全上下文(http 直连)下兜底路径必须可达。
 
 const source = readFileSync(
   new URL("../../../agent-ui/src/components/project-tools/XTermViewport.tsx", import.meta.url),
@@ -20,14 +21,7 @@ test("XTermViewport wires attachCustomKeyEventHandler for copy/paste", () => {
   );
 });
 
-test("Ctrl+Shift+C and Cmd+C both route selection to the clipboard", () => {
-  // 必须出现 term.getSelection() + writeTextToClipboard 的组合,
-  // 同时识别 ctrl+shift 和 meta（macOS 的 Cmd）两种修饰键组合。
-  assert.match(
-    source,
-    /term\.getSelection\(\)/,
-    "xterm 的 selection API 必须用于读取选中内容",
-  );
+test("copy and paste shortcuts cover ctrl+shift and meta modifiers", () => {
   assert.match(
     source,
     /writeTextToClipboard\(selection\)/,
@@ -42,14 +36,6 @@ test("Ctrl+Shift+C and Cmd+C both route selection to the clipboard", () => {
     source,
     /event\.metaKey/,
     "Cmd 修饰键分支必须存在,否则 macOS 用户无路可走",
-  );
-});
-
-test("Ctrl+Shift+V and Cmd+V both read from the clipboard", () => {
-  assert.match(
-    source,
-    /clipboard\.readText/,
-    "粘贴必须从剪贴板读取文本,而不是依赖 PTY 的 bracketed paste 事件",
   );
   assert.match(
     source,

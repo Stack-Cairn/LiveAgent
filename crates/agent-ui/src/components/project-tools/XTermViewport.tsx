@@ -104,22 +104,33 @@ function terminalContainerHasSize(container: HTMLElement) {
   return rect.width > 0 && rect.height > 0;
 }
 
+// execCommand("copy") 兜底：textarea.select() 会抢走焦点，复制完把焦点还给
+// 原元素（终端），避免用户复制一次后键盘输入丢失。
+function fallbackCopyTextToClipboard(text: string) {
+  const active = document.activeElement;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (active instanceof HTMLElement) active.focus();
+}
+
+// 非安全上下文（http 直连 gateway web）里 navigator.clipboard 整个不存在，
+// 所以「API 缺失」和「writeText 被拒绝」都必须落到 execCommand 兜底——
+// 只把兜底挂在 catch 上会让最需要它的环境静默失败。
 function writeTextToClipboard(text: string) {
   if (!text) return;
   if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.setAttribute("readonly", "");
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      textarea.style.top = "0";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    });
+    void navigator.clipboard.writeText(text).catch(() => fallbackCopyTextToClipboard(text));
+    return;
   }
+  fallbackCopyTextToClipboard(text);
 }
 
 export function XTermViewport({
@@ -203,10 +214,14 @@ export function XTermViewport({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
-    // 终端复制/粘贴快捷键：xterm.js 默认把所有按键透传给 PTY，连 Ctrl+Shift+C
-    // 都会变成 Ctrl+C 信号，所以 selection 选中后无法直接复制。挂自定义键盘
-    // 处理：Ctrl+Shift+C/V（Linux/Windows）和 Cmd+C/V（macOS）走剪贴板，
-    // 其余按键全部放行由 xterm 自行处理。
+    // 终端复制/粘贴快捷键：xterm 的键盘映射不处理 Ctrl+Shift+字母（^C 控制
+    // 字符分支要求无 shift）和 Cmd 组合，所以选中后按 Ctrl+Shift+C/Cmd+C
+    // 什么都不发生（#355）。挂自定义键盘处理：Ctrl+Shift+C/V（Linux/Windows）
+    // 和 Cmd+C/V（macOS）走剪贴板，其余按键全部放行由 xterm 自行处理。
+    // 命中分支必须 event.preventDefault()：返回 false 只跳过 xterm 自身处理，
+    // 浏览器默认行为仍会执行——Chromium 的 Ctrl+Shift+V 和 macOS 的 Cmd+V
+    // 会另行派发原生 paste 事件（xterm 在 textarea 上有原生 paste 监听），
+    // 不拦截同一次按键会粘贴两遍。
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
       const key = event.key.toLowerCase();
@@ -214,19 +229,21 @@ export function XTermViewport({
         (event.ctrlKey && event.shiftKey) || (event.metaKey && !event.ctrlKey && !event.altKey);
       if (isMod && key === "c") {
         const selection = term.getSelection();
-        if (selection) {
-          writeTextToClipboard(selection);
-          term.focus();
-        }
+        if (!selection) return true;
+        event.preventDefault();
+        writeTextToClipboard(selection);
+        term.focus();
         return false;
       }
       if (isMod && key === "v") {
         const clipboard = navigator.clipboard;
-        if (clipboard?.readText) {
-          void clipboard.readText().then((text) => {
-            if (text) term.paste(text);
-          });
-        }
+        // 非安全上下文里 readText 不存在，此时放行让原生 paste 事件路径
+        // （macOS Cmd+V / Chromium Ctrl+Shift+V）作为仅剩的粘贴通道。
+        if (!clipboard?.readText) return true;
+        event.preventDefault();
+        void clipboard.readText().then((text) => {
+          if (text) term.paste(text);
+        });
         return false;
       }
       return true;
