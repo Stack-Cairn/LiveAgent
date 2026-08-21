@@ -62,6 +62,19 @@ test("explicit turn workdir overrides persisted cwd and text mode has no workdir
   );
 });
 
+test("empty text-mode workdir override preserves the conversation cwd for prompts", () => {
+  const input = {
+    isAgentMode: false,
+    workdirOverride: "",
+    persistedWorkdir: "C:/workspace-b",
+    runtimeWorkdir: "C:/workspace-a",
+    globalWorkdir: "C:/global",
+  };
+
+  assert.equal(resolveEffectiveConversationWorkdir(input), "");
+  assert.equal(resolveConversationPromptWorkdir(input), "C:/workspace-b");
+});
+
 test("successful move updates an existing idle GUI runtime entry", () => {
   const runtimeCache = new Map([
     ["current", { isSending: false, workdir: "C:/workspace-a" }],

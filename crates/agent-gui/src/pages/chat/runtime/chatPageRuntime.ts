@@ -29,10 +29,8 @@ export function resolveConversationPromptWorkdir(params: {
   runtimeWorkdir?: string;
   globalWorkdir: string;
 }) {
-  const explicitWorkdir = params.workdirOverride ?? params.gatewayWorkdirOverride;
-  if (explicitWorkdir !== undefined) {
-    return explicitWorkdir.trim();
-  }
+  const explicitWorkdir = params.workdirOverride?.trim() || params.gatewayWorkdirOverride?.trim();
+  if (explicitWorkdir) return explicitWorkdir;
   return (
     params.persistedWorkdir?.trim() ||
     params.runtimeWorkdir?.trim() ||
