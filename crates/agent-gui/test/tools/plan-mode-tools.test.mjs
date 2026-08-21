@@ -249,6 +249,11 @@ test("plan-mode prompt routes every complete answer through ExitPlanMode without
   // 反空转:引导"够用即停",并点明重复读取只会得到 unchanged 桩。
   assert.match(section, /Stop researching once you can produce the deliverable/);
   assert.match(section, /unchanged stub/);
+  // 细节决策积极提问:属于用户的决定用 AskUserQuestion 问清,而非猜测或把
+  // 开放问题遗留在计划里;作答后本轮继续。
+  assert.match(section, /proactively ask with AskUserQuestion during research/);
+  assert.match(section, /instead of guessing or leaving open questions in the plan/);
+  assert.match(section, /Execution pauses for the answers and continues this turn/);
   // 高压措辞已移除:它抬高提交门槛,诱导无限调研。
   assert.doesNotMatch(section, /You MUST call/);
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-prompt" });

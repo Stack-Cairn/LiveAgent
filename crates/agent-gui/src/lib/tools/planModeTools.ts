@@ -12,6 +12,7 @@
 // answerPlanDecision(approve → 宿主批准 handler;reject → 反馈作为消息发送)。
 
 import type { Message, Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   EXIT_PLAN_MODE_TOOL_NAME,
   type ExitPlanModeResultDetails,
@@ -262,6 +263,9 @@ export function buildPlanModeSystemPromptSection(): string {
     "<plan-mode>",
     "Plan mode is ACTIVE. This is a read-only planning phase:",
     "- Research with the available read-only tools (and readonly subagents). Stop researching once you can produce the deliverable — do not re-read files you have already read; a re-read returns an unchanged stub, never new information.",
+    // AskUserQuestion 在 plan mode 恒可用(isReadOnly 白名单),且是 run 内挂起
+    // 语义——作答后本轮继续,不影响提交终止与有界升级。
+    `- When a planning detail is genuinely the user's call — scope boundaries, mutually exclusive approaches, trade-offs, target behavior — proactively ask with ${ASK_USER_QUESTION_TOOL_NAME} during research instead of guessing or leaving open questions in the plan. Execution pauses for the answers and continues this turn. Resolve what the code itself can answer; batch the remaining decisions into one focused call.`,
     "- Mutation is impossible this turn: write-capable tools are not in your tool list. Do not promise edits you cannot make here.",
     `- Submit every complete answer through ${EXIT_PLAN_MODE_TOOL_NAME} — implementation plans, architecture summaries, research findings, Q&A, and recommendations alike — instead of plain assistant text. If no code changes are needed, the plan states that and carries the findings.`,
     "- Submitting ends this turn immediately; the user replies with approval or feedback as a normal message. On feedback, revise the plan and submit again.",

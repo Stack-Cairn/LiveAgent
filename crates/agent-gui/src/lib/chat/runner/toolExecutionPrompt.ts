@@ -69,6 +69,11 @@ export function buildToolsSuffix(
           "# Tool-Execution Mode",
           "",
           `Plan mode is ACTIVE. You have the read-only tools listed under **Available Tools**, plus ${EXIT_PLAN_MODE_TOOL_NAME}. Follow the <plan-mode> rules above: research, then submit the complete deliverable via ${EXIT_PLAN_MODE_TOOL_NAME} instead of plain assistant text.`,
+          ...(has("AskUserQuestion")
+            ? [
+                "Detail decisions that belong to the user (scope, approach trade-offs, target behavior) go through AskUserQuestion during research — ask proactively instead of guessing.",
+              ]
+            : []),
         ].join("\n")
       : [
           "# Tool-Execution Mode",

@@ -606,6 +606,8 @@ test("plan-mode tool rules require ExitPlanMode and do not allow a direct final 
   // 规则唯一权威在 <plan-mode> system 段;toolsSuffix 只声明工具面差异并指回。
   assert.match(suffix, /Follow the <plan-mode> rules above/);
   assert.match(suffix, /submit the complete deliverable via ExitPlanMode instead of plain assistant text/);
+  // 细节决策指引:AskUserQuestion 可用时提示积极提问。
+  assert.match(suffix, /go through AskUserQuestion during research — ask proactively instead of guessing/);
   assert.match(suffix, /Call ExitPlanMode instead; the plan card is what the user reviews/);
   assert.match(suffix, /plan submission \(ExitPlanMode\)/);
   assert.doesNotMatch(suffix, /answer directly without invoking tools/);
@@ -616,6 +618,14 @@ test("plan-mode tool rules require ExitPlanMode and do not allow a direct final 
   assert.match(suffix, /durable task planning \(TaskList\)/);
   assert.match(suffix, /resumable command waiting \(ProcessWait\)/);
   assert.match(suffix, /Submit the plan via ExitPlanMode; TaskCreate happens after approval/);
+
+  // AskUserQuestion 不在工具表时,plan 段不产生提问指引。
+  const suffixWithoutAsk = agentRunnerModule.buildToolsSuffix("/workspace", [
+    "Read",
+    "ExitPlanMode",
+  ]);
+  assert.match(suffixWithoutAsk, /Plan mode is ACTIVE/);
+  assert.doesNotMatch(suffixWithoutAsk, /AskUserQuestion/);
 });
 
 test("non-plan tool rules still allow answering analysis without tools", () => {
