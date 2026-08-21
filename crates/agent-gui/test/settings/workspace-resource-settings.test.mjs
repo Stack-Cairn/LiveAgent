@@ -48,6 +48,10 @@ const sharedProjectPromptEditor = readFileSync(
   ),
   "utf8",
 );
+const sharedAgentsSection = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/AgentsSection.tsx", import.meta.url),
+  "utf8",
+);
 const sendRuntime = readFileSync(
   new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
   "utf8",
@@ -199,6 +203,22 @@ test("prompt templates expose global and project scopes with append or replace e
   assert.match(sendRuntime, /resolveConversationPromptWorkdir\(workdirResolution\)/);
   assert.match(sendRuntime, /resolveEffectivePromptSettings\(settings, promptWorkdir\)/);
   assert.match(sendRuntime, /historyCwd/);
+});
+
+test("global and project prompt cards share row and action layout", () => {
+  const projectCards = sharedAgentsSection.slice(sharedAgentsSection.indexOf("{projects.map"));
+
+  assert.match(projectCards, /settings-card-row flex items-center gap-3 px-4 py-3/);
+  assert.match(projectCards, /settings-card-actions flex items-center gap-1\.5/);
+  assert.match(projectCards, /settings-hover-actions ml-1 flex items-center gap-0\.5/);
+  assert.match(
+    projectCards,
+    /size="icon"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
+  );
+  assert.doesNotMatch(
+    projectCards,
+    /size="sm"[\s\S]*\{t\("settings\.agentsProjectEdit"\)\}/,
+  );
 });
 
 test("chat runtime resolves and snapshots workspace resources from the effective workdir", () => {

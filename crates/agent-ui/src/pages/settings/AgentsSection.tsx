@@ -285,11 +285,13 @@ export function AgentsSection(props: SettingsSectionProps) {
           </div>
 
           {projects.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center">
-              <FolderTree className="h-7 w-7 text-muted-foreground" />
-              <div>
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-14 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10">
+                <FolderTree className="h-6 w-6 text-violet-400" />
+              </div>
+              <div className="space-y-1.5">
                 <p className="text-sm font-medium">{t("settings.agentsNoProjects")}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mx-auto max-w-xs text-xs leading-relaxed text-muted-foreground">
                   {t("settings.agentsNoProjectsHint")}
                 </p>
               </div>
@@ -304,34 +306,51 @@ export function AgentsSection(props: SettingsSectionProps) {
                   <div
                     key={project.id}
                     className={cn(
-                      "group flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
+                      "group rounded-xl border transition-all",
                       configured
-                        ? "border-violet-500/25 bg-violet-500/[0.035]"
+                        ? "border-violet-500/30 bg-violet-500/[0.03] shadow-sm shadow-violet-500/5"
                         : "border-border/60 bg-card hover:border-border",
                     )}
                   >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300">
-                      <FolderTree className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-medium">{project.name}</span>
-                        <span
-                          className={cn(
-                            "rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
-                            configured
-                              ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {t(
-                            configured
-                              ? "settings.agentsProjectConfigured"
-                              : "settings.agentsProjectUnconfigured",
-                          )}
-                        </span>
+                    <div className="settings-card-row flex items-center gap-3 px-4 py-3">
+                      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300">
+                        <FolderTree className="h-4 w-4" />
                         {configured ? (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+                          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-violet-500" />
+                        ) : null}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-foreground">
+                            {project.name}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
+                              configured
+                                ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
+                                : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {t(
+                              configured
+                                ? "settings.agentsProjectConfigured"
+                                : "settings.agentsProjectUnconfigured",
+                            )}
+                          </span>
+                        </div>
+                        <p
+                          className="mt-1 truncate text-xs leading-relaxed text-muted-foreground"
+                          title={project.path}
+                        >
+                          {project.path}
+                        </p>
+                      </div>
+
+                      <div className="settings-card-actions flex items-center gap-1.5">
+                        {configured ? (
+                          <span className="shrink-0 rounded-full border border-border/60 bg-muted/40 px-2 py-1 text-[10px] font-medium text-muted-foreground">
                             {t(
                               entry?.projectPromptStrategy === "replace"
                                 ? "settings.agentsProjectReplace"
@@ -339,23 +358,20 @@ export function AgentsSection(props: SettingsSectionProps) {
                             )}
                           </span>
                         ) : null}
+                        <div className="settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            onClick={() => setEditingProject(project)}
+                            title={t("settings.agentsProjectEdit")}
+                            aria-label={t("settings.agentsProjectEdit")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                      <p
-                        className="mt-1 truncate text-xs text-muted-foreground"
-                        title={project.path}
-                      >
-                        {project.path}
-                      </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => setEditingProject(project)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      {t("settings.agentsProjectEdit")}
-                    </Button>
                   </div>
                 );
               })}
