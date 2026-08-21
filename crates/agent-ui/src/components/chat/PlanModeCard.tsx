@@ -60,6 +60,8 @@ export function PlanModeCard({
   interactive,
   deadlineAt,
   readOnly = false,
+  /** 宿主的摘要行已展示标题时隐藏卡片自带头部(倒计时移入底部操作行)。 */
+  showHeader = true,
   onSubmit,
 }: {
   /** 模型提交的完整计划（markdown）。 */
@@ -76,6 +78,7 @@ export function PlanModeCard({
   /** 权威应答截止时间戳（毫秒）；缺省以挂载时刻近似。 */
   deadlineAt?: number;
   readOnly?: boolean;
+  showHeader?: boolean;
   onSubmit?: (answer: PlanDecisionAnswer) => Promise<PlanDecisionSubmitOutcome>;
 }) {
   const { t } = useLocale();
@@ -112,19 +115,21 @@ export function PlanModeCard({
 
   return (
     <div className="tool-expand overflow-hidden rounded-xl border border-border/45 bg-background/70 dark:border-white/[0.08] dark:bg-white/[0.03]">
-      <div className="flex items-center gap-2 border-b border-border/35 px-3 py-2 dark:border-white/[0.05]">
-        <ListChecks className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-        <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium text-foreground/90">
-          {t("chat.planMode.cardTitle")}
-        </span>
-        {countdownActive && remainingMs > 0 ? (
-          <span className="ml-auto shrink-0 text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground">
-            {formatCountdown(remainingMs)}
+      {showHeader ? (
+        <div className="flex items-center gap-2 border-b border-border/35 px-3 py-2 dark:border-white/[0.05]">
+          <ListChecks className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium text-foreground/90">
+            {t("chat.planMode.cardTitle")}
           </span>
-        ) : null}
-      </div>
+          {countdownActive && remainingMs > 0 ? (
+            <span className="ml-auto shrink-0 text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground">
+              {formatCountdown(remainingMs)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className="max-h-[26rem] overflow-y-auto px-3 py-2.5">
+      <div className="px-3.5 py-3">
         <Markdown content={plan} className="font-chat text-sm" readOnly={readOnly} />
       </div>
 
@@ -210,6 +215,11 @@ export function PlanModeCard({
             {submitting ? (
               <span className="text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                 {t("chat.planMode.submitting")}
+              </span>
+            ) : null}
+            {!showHeader && remainingMs > 0 ? (
+              <span className="ml-auto shrink-0 text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground">
+                {formatCountdown(remainingMs)}
               </span>
             ) : null}
           </div>

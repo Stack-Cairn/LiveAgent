@@ -2,7 +2,7 @@ use rusqlite::{Connection, OptionalExtension};
 use std::{collections::HashSet, fs, path::PathBuf, sync::Mutex, time::Duration};
 
 const DB_FILENAME: &str = "chat-history.sqlite3";
-const HISTORY_DB_SCHEMA_VERSION: i64 = 3;
+const HISTORY_DB_SCHEMA_VERSION: i64 = 4;
 
 static HISTORY_DB_MIGRATION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -93,6 +93,11 @@ fn migrate_history_db_inner(conn: &Connection) -> Result<(), String> {
         set_user_version(conn, 3)?;
     }
 
+    if current_version < 4 {
+        migrate_to_v4(conn)?;
+        set_user_version(conn, 4)?;
+    }
+
     // The subagent schema is versioned independently via subagentMeta and is
     // safe to (re)ensure on every startup.
     ensure_subagent_schema(conn)?;
@@ -116,6 +121,20 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), String> {
 // per-segment event columns and the content-addressed prompt section table.
 fn migrate_to_v3(conn: &Connection) -> Result<(), String> {
     ensure_chat_history_schema(conn)?;
+    Ok(())
+}
+
+// v4: 清除 1.x 遗留的 chatHistory.context_json(NOT NULL 且无默认值)。该列在
+// 分段持久化上线后已无任何读写方,但 CREATE TABLE IF NOT EXISTS 不改建既有表、
+// 列 ensure 只加不删——携带该列的老库每次 INSERT 都被 NOT NULL 约束拒绝,
+// 聊天历史/任务清单持久化全部失败,轨迹分段随之因外键(主表行缺失)刷屏报错。
+fn migrate_to_v4(conn: &Connection) -> Result<(), String> {
+    ensure_chat_history_schema(conn)?;
+    let columns = read_table_columns(conn, "chatHistory", "chatHistory")?;
+    if columns.contains("context_json") {
+        conn.execute_batch("ALTER TABLE chatHistory DROP COLUMN context_json;")
+            .map_err(|e| format!("移除遗留 chatHistory.context_json 列失败：{e}"))?;
+    }
     Ok(())
 }
 
@@ -881,6 +900,56 @@ mod tests {
             )
             .expect("query trajectory section table");
         assert_eq!(section_table_exists, 1);
+    }
+
+    #[test]
+    fn migrate_v3_database_drops_legacy_context_json() {
+        let conn = Connection::open_in_memory().expect("open v3 in-memory history db");
+        // 1.x 一路升到 v3 的真实老库形态:chatHistory 仍携带 NOT NULL 的
+        // context_json 列(建表早于分段持久化,列 ensure 只加不删)。
+        conn.execute_batch(
+            "
+            CREATE TABLE chatHistory (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                provider_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                context_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                is_pinned INTEGER NOT NULL DEFAULT 0,
+                pinned_at INTEGER,
+                session_id TEXT,
+                cwd TEXT,
+                context_meta_json TEXT NOT NULL DEFAULT '{}',
+                active_segment_index INTEGER NOT NULL DEFAULT 0,
+                total_segment_count INTEGER NOT NULL DEFAULT 1,
+                total_message_count INTEGER NOT NULL DEFAULT 0,
+                selected_model_json TEXT
+            );
+            PRAGMA user_version = 3;
+            ",
+        )
+        .expect("create legacy-with-context_json schema");
+
+        initialize_connection(&conn).expect("migrate v3 -> v4");
+
+        assert_eq!(
+            read_user_version(&conn).expect("read migrated version"),
+            HISTORY_DB_SCHEMA_VERSION
+        );
+        let columns = read_table_columns(&conn, "chatHistory", "chatHistory")
+            .expect("read migrated chatHistory columns");
+        assert!(
+            !columns.contains("context_json"),
+            "legacy context_json must be dropped"
+        );
+        // 迁移后 INSERT 不再被遗留 NOT NULL 约束拒绝。
+        conn.execute(
+            "INSERT INTO chatHistory (id, title, provider_id, model, context_meta_json, active_segment_index, total_segment_count, total_message_count, created_at, updated_at) VALUES ('c1', 't', 'claude_code', 'm', '{}', 0, 1, 0, 1, 1)",
+            [],
+        )
+        .expect("insert into migrated chatHistory");
     }
 
     #[test]

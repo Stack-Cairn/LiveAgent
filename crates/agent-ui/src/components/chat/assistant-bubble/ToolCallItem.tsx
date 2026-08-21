@@ -115,7 +115,6 @@ function ToolCallItem({
     ? (planDetails?.plan ?? sanitizePlanMarkdown(item.toolCall.arguments?.plan))
     : "";
   const planSettled = isPlanCard && (Boolean(isRunning) || Boolean(result));
-  const shouldKeepPlanOpen = !readOnly && isPlanCard && (Boolean(isRunning) || !result);
   const planDeadlineAt =
     isPlanCard && isRunning && !result
       ? readPlanDecisionDeadline(item.toolCall.id, item.toolCall.arguments)
@@ -129,10 +128,7 @@ function ToolCallItem({
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
   const shouldAutoOpen =
     !isRedactedToolContent &&
-    (item.toolCall.name === "Image" ||
-      builtinResultKind === "display_image" ||
-      shouldKeepAskOpen ||
-      shouldKeepPlanOpen);
+    (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
   const [open, setOpen] = useState(readOnly || isRedactedToolContent ? false : shouldAutoOpen);
   const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
@@ -214,28 +210,19 @@ function ToolCallItem({
 
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
-    if (shouldKeepAskOpen || shouldKeepPlanOpen) {
+    if (shouldKeepAskOpen) {
       setOpen(true);
     } else if (shouldCloseAnsweredAsk) {
       setOpen(false);
     } else if (shouldAutoOpen) {
       setOpen(true);
     }
-  }, [
-    isRedactedToolContent,
-    readOnly,
-    shouldAutoOpen,
-    shouldCloseAnsweredAsk,
-    shouldKeepAskOpen,
-    shouldKeepPlanOpen,
-  ]);
+  }, [isRedactedToolContent, readOnly, shouldAutoOpen, shouldCloseAnsweredAsk, shouldKeepAskOpen]);
 
   const canExpand =
     !isRedactedToolContent &&
-    (shouldShowArgs ||
-      Boolean(result) ||
-      (isAskUser && askQuestions.length > 0) ||
-      (isPlanCard && Boolean(planMarkdown)));
+    !isPlanCard &&
+    (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
   const effectiveOpen = canExpand && open;
   const summaryClassName = cn(
     "flex w-full select-none items-center gap-2 text-left",
@@ -331,20 +318,6 @@ function ToolCallItem({
             />
           ) : null}
 
-          {isPlanCard && planSettled && planMarkdown ? (
-            <PlanModeCard
-              plan={planMarkdown}
-              decision={planDetails?.decision}
-              feedback={planDetails?.feedback}
-              cancelled={planDetails?.cancelled === true}
-              timedOut={planDetails?.timedOut === true}
-              interactive={Boolean(isRunning) && !result && !readOnly}
-              deadlineAt={planDeadlineAt}
-              readOnly={readOnly}
-              onSubmit={submitPlanAnswer}
-            />
-          ) : null}
-
           {/* 提问卡/计划卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
           {result && (!isAskUser || !askDetails) && (!isPlanCard || !planDetails) ? (
             <ToolSection
@@ -410,6 +383,28 @@ function ToolCallItem({
     </LazyCollapse>
   );
   const containerClassName = "group/tool min-w-0 max-w-full";
+
+  // 计划卡直出(任务卡风格):不进折叠壳、无摘要行,整卡直接展示——
+  // 卡片自带「实施计划」头部与状态,正文不限高(与消息正文同滚动上下文)。
+  if (isPlanCard && planSettled && planMarkdown) {
+    return (
+      <div className={containerClassName}>
+        <div className="py-1.5">
+          <PlanModeCard
+            plan={planMarkdown}
+            decision={planDetails?.decision}
+            feedback={planDetails?.feedback}
+            cancelled={planDetails?.cancelled === true}
+            timedOut={planDetails?.timedOut === true}
+            interactive={Boolean(isRunning) && !result && !readOnly}
+            deadlineAt={planDeadlineAt}
+            readOnly={readOnly}
+            onSubmit={submitPlanAnswer}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!canExpand) {
     return (

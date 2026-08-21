@@ -113,10 +113,12 @@ test("provider groups reveal the edit affordance before the count on hover", () 
 
 test("upload stays leftmost before model controls in the composer toolbar", () => {
   assert.match(composerSource, /<ComposerModelControls/);
-  assert.match(composerSource, /<RuntimeControlTooltip label=\{uploadTooltip\}>/);
+  // 上传入口是 Codex 风格的 + 菜单(aria-label 用 uploadTooltip),不再是裸回形针按钮。
+  assert.match(composerSource, /aria-label=\{uploadTooltip\}/);
+  assert.match(composerSource, /chat\.upload\.filesAndFolders/);
   assert.match(composerSource, /<CommandSafetyModeSelector/);
   assert.ok(
-    composerSource.indexOf("<RuntimeControlTooltip label={uploadTooltip}>") <
+    composerSource.indexOf("aria-label={uploadTooltip}") <
       composerSource.indexOf("<CommandSafetyModeSelector"),
   );
   assert.ok(
