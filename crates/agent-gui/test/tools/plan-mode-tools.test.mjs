@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { validateToolArguments } from "@earendil-works/pi-ai";
 import * as typebox from "typebox";
@@ -205,6 +206,26 @@ test("subscription notifies on register/approve/supersede", async () => {
   unsubscribe();
   tools.registerPlanDecisionHandlers(null);
   tools.cancelPendingPlanDecisionsForConversation("conv-sub");
+});
+
+test("phrase approval in ChatPage is gated on the live plan switch", () => {
+  // 待决计划跨 run 存活(设计如此),但短语批准必须要求 plan 开关仍开着:
+  // 用户关掉 pill 弃置计划后,之后随口一句"好的/ok"不得把陈旧计划复活成
+  // 执行续轮。显式批准仍走卡片按钮,不受开关限制。
+  const chatPageSource = readFileSync(
+    new URL("../../src/pages/ChatPage.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    chatPageSource,
+    /planModeEnabledRef\.current =\s*settings\.chatRuntimeControls\.planModeEnabled === true/,
+  );
+  assert.match(chatPageSource, /if \(conversationId && planModeEnabledRef\.current\) \{/);
+  // 短语批准分支整体处于开关前置之内(前置判断先于 pending 查询出现)。
+  assert.ok(
+    chatPageSource.indexOf("conversationId && planModeEnabledRef.current") <
+      chatPageSource.indexOf("getPendingPlanForConversation(conversationId)"),
+  );
 });
 
 test("isPlanModeAllowedTool admits read-only, plan, and collaboration tools only", () => {

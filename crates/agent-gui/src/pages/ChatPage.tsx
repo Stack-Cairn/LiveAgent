@@ -913,6 +913,10 @@ export function ChatPage(props: ChatPageProps) {
   const pendingPlanFeedbackRef = useRef(new Map<string, string>());
   const planDecisionSendsInFlightRef = useRef(new Set<string>());
   const planDecisionRetryCountsRef = useRef(new Map<string, number>());
+  // handleSend 点击时采样(该回调刻意不依赖 settings):短语批准只在 plan 开关
+  // 仍开着时生效,防止被弃置的陈旧待决计划之后被一句"好的/ok"意外复活。
+  const planModeEnabledRef = useRef(false);
+  planModeEnabledRef.current = settings.chatRuntimeControls.planModeEnabled === true;
   const [planContinuationVersion, setPlanContinuationVersion] = useState(0);
   useEffect(() => {
     registerPlanDecisionHandlers({
@@ -1922,7 +1926,10 @@ export function ChatPage(props: ChatPageProps) {
     // 对话式计划审批:会话有待决计划时,纯批准短语("同意/开始/ok"等)即批准
     // (等同点卡片按钮);其他输入就是普通消息(修改意见),照常发送——规划 run
     // 已结束,消息直接开启新一轮 plan mode 修订,不经队列。
-    if (conversationId) {
+    // 短语批准要求 plan 开关仍开着:正常流程中提交后开关保持开启(批准才关);
+    // 用户手动关掉 pill 即视为弃置当前计划,之后的"好的/ok"是普通消息,不得
+    // 把陈旧计划复活成执行续轮。显式批准仍可走卡片按钮(不受开关限制)。
+    if (conversationId && planModeEnabledRef.current) {
       const pendingPlan = getPendingPlanForConversation(conversationId);
       if (pendingPlan) {
         const text = composerRef.current?.getText().trim() ?? "";
