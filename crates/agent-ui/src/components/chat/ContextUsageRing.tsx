@@ -1,6 +1,6 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useMemo, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   canManualCompact,
   contextUsageLevel,
@@ -28,6 +28,27 @@ function getTokenFormatter(locale: string): Intl.NumberFormat {
   return formatter;
 }
 
+const COARSE_POINTER_QUERY = "(hover: none), (pointer: coarse)";
+
+// 触屏形态可热切换（iPad 插拔键鼠、可翻转本翻转），订阅 matchMedia change
+// 而非挂载时一次性求值，交互模式（两段点按 vs 悬停）随设备形态实时切换。
+function subscribeCoarsePointer(onChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+  const query = window.matchMedia(COARSE_POINTER_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function isCoarsePointerNow(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(COARSE_POINTER_QUERY).matches
+  );
+}
+
 /**
  * 上下文用量环：composer 内展示当前会话上下文占用百分比，占用 ≥ 50%（黄档）
  * 起可点击弹出确认后触发手动压缩。阈值与 WebUI 补算口径见 lib/chat/contextUsage.ts。
@@ -46,20 +67,27 @@ export function ContextUsageRing(props: {
 }) {
   const { totalTokens, contextWindow, disabled, onConfirm, className } = props;
   const { t, locale } = useLocale();
-  const isCoarsePointer = useMemo(
-    () =>
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(hover: none), (pointer: coarse)").matches,
-    [],
+  const isCoarsePointer = useSyncExternalStore(
+    subscribeCoarsePointer,
+    isCoarsePointerNow,
+    () => false,
   );
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const ratio = contextUsageRatio(totalTokens, contextWindow);
+  const compactAvailable = canManualCompact(ratio) && !disabled && Boolean(onConfirm);
+  // 确认弹层只在可压缩分支渲染，而可压缩状态可能在弹层打开期间翻回 false
+  //（他端开始压缩/发消息使 disabled 置位、他端压缩完成后占用掉回阈值下）。
+  // 此时弹层随分支切换直接卸载，confirmOpen 若残留 true：恢复可压缩后弹层
+  // 会无操作自动弹开，残留期间还会经 tooltip 互斥守卫一直吞掉 tooltip 的
+  // 打开请求。渲染期归位（adjust-state-during-render）在绘制前完成，不闪现。
+  if (!compactAvailable && confirmOpen) {
+    setConfirmOpen(false);
+  }
   if (typeof contextWindow !== "number" || !Number.isFinite(contextWindow) || contextWindow <= 0) {
     return null;
   }
 
-  const ratio = contextUsageRatio(totalTokens, contextWindow);
   // 只保留两个口径：展示值（取整、封顶 999）与画环/量度值（0-100 钳制，
   // 二者共用避免 a11y 量度与弧线漂移）。contextUsageRatio 不会返回负数。
   const displayedPercentage = Math.min(999, Math.round(ratio * 100));
@@ -78,7 +106,6 @@ export function ContextUsageRing(props: {
       <span className="text-muted-foreground">{windowLine}</span>
     </span>
   );
-  const compactAvailable = canManualCompact(ratio) && !disabled && Boolean(onConfirm);
 
   const handleTooltipOpenChange = (nextOpen: boolean) => {
     // 确认弹层展示期间抑制 tooltip 的打开请求（悬停/点按），保证不重叠。

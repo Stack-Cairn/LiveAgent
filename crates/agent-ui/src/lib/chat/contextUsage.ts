@@ -80,9 +80,11 @@ export function estimateTextTokens(text: string): number {
 
 // 两端 transcript 项的最小结构投影：GUI RenderTimelineItem（检查点 kind:"summary"）
 // 与 WebUI TranscriptRow（检查点 kind:"checkpoint"）经结构化类型直接传入。
+// attachments 两端同为 PendingUploadedFile 投影（GUI 时间线项 / WebUI user 行）。
 export type ContextUsageScanItem = {
   kind: string;
   text?: string;
+  attachments?: readonly unknown[];
   rounds?: readonly {
     meta?: {
       usageTotalTokens?: number;
@@ -204,8 +206,9 @@ export function positiveTokenCount(value: unknown): number | undefined {
 /**
  * 倒扫 transcript 求当前上下文占用：最近一个 assistant 轮次的真实 API usage
  * 是锚点（usage.totalTokens 已含该 assistant 输出及其之前的 system/tools/历史），
- * 再累加锚点之后的用户消息、后续 assistant 内容与工具结果。压缩检查点优先使用
- * 桌面端同步的权威 contextUsageTokens；旧历史没有该字段时才退回摘要正文估算。
+ * 再累加锚点之后的用户消息（正文 + 附件元数据）、后续 assistant 内容与工具
+ * 结果。压缩检查点优先使用桌面端同步的权威 contextUsageTokens；旧历史没有
+ * 该字段时才退回摘要正文估算。
  */
 export function deriveContextUsageTokens(
   items: readonly ContextUsageScanItem[],
@@ -220,8 +223,15 @@ export function deriveContextUsageTokens(
       return checkpointTokens === undefined ? undefined : checkpointTokens + trailingTokens;
     }
     if (item.kind === "user") {
-      if (typeof item.text === "string" && item.text.trim()) {
-        trailingTokens += estimateTextTokens(item.text) + MESSAGE_ENVELOPE_TOKENS;
+      let units = typeof item.text === "string" ? estimateTextTokenUnits(item.text.trim()) : 0;
+      // 附件按元数据序列化估算（路径/文件名/规模等即运行时注入的指令行量级；
+      // 原生 base64 附件路径下这是下界）。不计会让"检查点后发大批附件"的
+      // 空闲读数两端一致偏低，且纯附件消息此前完全计零。
+      for (const attachment of item.attachments ?? []) {
+        units += stringifiedTokenUnits(attachment);
+      }
+      if (units > 0) {
+        trailingTokens += messageTokensFromUnits(units);
       }
       continue;
     }

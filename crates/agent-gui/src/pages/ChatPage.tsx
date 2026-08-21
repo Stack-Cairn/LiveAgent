@@ -510,9 +510,11 @@ export function ChatPage(props: ChatPageProps) {
     finishGatewayRunMirror,
   } = useGatewayRunMirrorCoordinator();
 
-  // 用量环读数：与 WebUI 同一把共享扫描器（deriveContextUsageTokens），
-  // 历史项 + 流式实时轮次（live store 每帧批量提交）联合倒扫。经订阅源
-  // 直达环组件，流式读数逐帧更新而不回流 ChatPage。
+  // 用量环读数：运行中直读 TokenLedger（消息落定即更新，不逐帧估算流式
+  // 文本，优先级与理由见 useContextUsageTokensSource 内注释）；账本无读数
+  // 或空闲时用与 WebUI 同源的 deriveContextUsageTokens 倒扫历史项（运行中
+  // 补上 live 尾部）。经订阅源直达环组件，读数变化只重渲染环本身而不回流
+  // ChatPage。
   const contextUsageRingRunning = isSending || compactionStatus.phase === "running";
   const contextUsageTokensSource = useContextUsageTokensSource({
     isRunning: contextUsageRingRunning,
