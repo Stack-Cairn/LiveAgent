@@ -63,17 +63,20 @@ const ChangedFileRow = memo(function ChangedFileRow({ file }: { file: ChangedFil
 
   const pathLabel = (
     <span title={file.path} className="flex min-w-0 flex-1 items-center overflow-hidden font-mono">
+      {dir ? (
+        <span
+          className={cn(
+            "min-w-0 truncate text-[calc(10.5px*var(--zone-font-scale,1))] leading-tight text-muted-foreground/65",
+            file.deleted && "line-through",
+          )}
+        >
+          {dir}
+        </span>
+      ) : null}
+      {/* shrink-0 keeps the file name intact while the directory truncates first. */}
       <span
         className={cn(
-          "min-w-0 truncate text-[calc(10.5px*var(--zone-font-scale,1))] leading-tight text-muted-foreground/65",
-          file.deleted && "line-through",
-        )}
-      >
-        {dir}
-      </span>
-      <span
-        className={cn(
-          "min-w-0 max-w-full truncate text-[calc(11.5px*var(--zone-font-scale,1))] font-medium leading-tight text-foreground/85",
+          "max-w-full shrink-0 truncate text-[calc(11.5px*var(--zone-font-scale,1))] font-medium leading-tight text-foreground/85",
           file.deleted && "text-muted-foreground line-through",
         )}
       >
@@ -203,28 +206,28 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
         {visibleFiles.map((file) => (
           <ChangedFileRow key={file.lastToolCallId || file.path} file={file} />
         ))}
+        {hasCollapsedFiles ? (
+          <button
+            type="button"
+            onClick={() => setFilesExpanded((expanded) => !expanded)}
+            aria-expanded={filesExpanded}
+            className="flex min-h-8 w-full items-center gap-1 rounded-lg px-2.5 py-0.5 text-left text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-foreground/80 transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            <span className="truncate">
+              {filesExpanded
+                ? t("chat.changedFiles.collapse")
+                : t("chat.changedFiles.expand").replace("{count}", String(hiddenFileCount))}
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 transition-transform",
+                filesExpanded && "rotate-180",
+              )}
+            />
+          </button>
+        ) : null}
       </div>
-      {hasCollapsedFiles ? (
-        <button
-          type="button"
-          onClick={() => setFilesExpanded((expanded) => !expanded)}
-          aria-expanded={filesExpanded}
-          className="flex w-full items-center gap-1 border-t border-border/20 py-2 pl-[calc(0.5rem+0.625rem)] pr-2.5 text-left text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-foreground/80 transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:border-white/[0.05]"
-        >
-          <span className="truncate">
-            {filesExpanded
-              ? t("chat.changedFiles.collapse")
-              : t("chat.changedFiles.expand").replace("{count}", String(hiddenFileCount))}
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 transition-transform",
-              filesExpanded && "rotate-180",
-            )}
-          />
-        </button>
-      ) : null}
     </div>
   );
 });
