@@ -4,6 +4,7 @@ import { normalizeStringArray } from "./normalizers";
 import {
   DEFAULT_WORKSPACE_PROJECT_ID,
   DEFAULT_WORKSPACE_PROJECT_NAME,
+  type ProjectPromptStrategy,
   type SystemSettings,
   type WorkspaceProject,
   type WorkspaceProjectKind,
@@ -65,6 +66,10 @@ function normalizeWorkspaceResourceSettingsMode(input: unknown): WorkspaceResour
   return input === "custom" || input === "off" ? input : "inherit";
 }
 
+function normalizeProjectPromptStrategy(input: unknown): ProjectPromptStrategy {
+  return input === "replace" ? "replace" : "append";
+}
+
 export function normalizeWorkspaceResourceSettingsEntry(input: unknown): WorkspaceResourceSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const mode = normalizeWorkspaceResourceSettingsMode(obj.mode);
@@ -74,6 +79,8 @@ export function normalizeWorkspaceResourceSettingsEntry(input: unknown): Workspa
     mode,
     skillNames: mode === "custom" ? normalizeStringArray(obj.skillNames) : [],
     mcpServerIds: mode === "custom" ? normalizeStringArray(obj.mcpServerIds) : [],
+    projectPrompt: typeof obj.projectPrompt === "string" ? obj.projectPrompt.trim() : "",
+    projectPromptStrategy: normalizeProjectPromptStrategy(obj.projectPromptStrategy),
     stateVersion: Number.isSafeInteger(stateVersion) && stateVersion > 0 ? stateVersion : 1,
     writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 64) : "",
     updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0,
@@ -106,6 +113,7 @@ export function normalizeWorkspaceResourceSettings(
   for (const [pathKey, entry] of Object.entries(entries)) {
     if (
       entry.mode === "inherit" &&
+      !entry.projectPrompt &&
       entry.updatedAt > 0 &&
       now - entry.updatedAt > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
     ) {
@@ -117,7 +125,9 @@ export function normalizeWorkspaceResourceSettings(
     pathKeys.sort((a, b) => {
       const aEntry = entries[a];
       const bEntry = entries[b];
-      const byActiveMode = Number(bEntry.mode !== "inherit") - Number(aEntry.mode !== "inherit");
+      const byActiveMode =
+        Number(bEntry.mode !== "inherit" || Boolean(bEntry.projectPrompt)) -
+        Number(aEntry.mode !== "inherit" || Boolean(aEntry.projectPrompt));
       if (byActiveMode !== 0) return byActiveMode;
       const byUpdatedAt = bEntry.updatedAt - aEntry.updatedAt;
       if (byUpdatedAt !== 0) return byUpdatedAt;

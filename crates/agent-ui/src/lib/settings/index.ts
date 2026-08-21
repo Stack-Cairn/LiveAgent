@@ -69,6 +69,7 @@ import type {
   CommandSafetyMode,
   CustomProvider,
   CustomSettings,
+  EffectivePromptSettings,
   EffectiveWorkspaceResources,
   ExecutionMode,
   McpServerConfig,
@@ -76,6 +77,7 @@ import type {
   McpTransport,
   MemorySettings,
   ModelLimitsSource,
+  ProjectPromptStrategy,
   PromptCacheHintMode,
   ProviderFailoverSettings,
   ProviderId,
@@ -1787,6 +1789,33 @@ export function resolveWorkspaceResources(
   };
 }
 
+export function resolveEffectivePromptSettings(
+  settings: AppSettings,
+  workdir: string,
+): EffectivePromptSettings {
+  const globalTemplate = settings.agents.find(
+    (template) => template.enabled && template.prompt.trim(),
+  );
+  const globalTemplates = globalTemplate ? [globalTemplate] : [];
+  const globalPrompt = globalTemplate?.prompt.trim() ?? "";
+  const pathKey = workspaceProjectPathKey(workdir);
+  const entry = pathKey ? settings.system.workspaceResourceSettings[pathKey] : undefined;
+  const projectPrompt = entry?.projectPrompt.trim() ?? "";
+  const projectPromptStrategy = entry?.projectPromptStrategy ?? "append";
+  const prompt = projectPrompt
+    ? projectPromptStrategy === "replace" || !globalPrompt
+      ? projectPrompt
+      : `${globalPrompt}\n\n${projectPrompt}`
+    : globalPrompt;
+  return {
+    globalTemplates,
+    globalPrompt,
+    projectPrompt,
+    projectPromptStrategy,
+    prompt,
+  };
+}
+
 export function filterMcpSettingsForWorkspace(
   mcp: McpSettings,
   resources: Pick<EffectiveWorkspaceResources, "mode" | "mcpServerIds">,
@@ -1800,13 +1829,40 @@ export function filterMcpSettingsForWorkspace(
 export function updateWorkspaceResourceSettings(
   prev: AppSettings,
   workdir: string,
-  patch: Pick<WorkspaceResourceSettings, "mode" | "skillNames" | "mcpServerIds">,
+  patch: Pick<WorkspaceResourceSettings, "mode" | "skillNames" | "mcpServerIds"> &
+    Partial<Pick<WorkspaceResourceSettings, "projectPrompt" | "projectPromptStrategy">>,
 ): AppSettings {
   const pathKey = workspaceProjectPathKey(workdir);
   if (!pathKey) return prev;
   const entries = { ...prev.system.workspaceResourceSettings };
   const current = entries[pathKey];
   entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+    ...current,
+    ...patch,
+    stateVersion: (current?.stateVersion ?? 0) + 1,
+    writerId: getRightDockWriterId(),
+    updatedAt: Date.now(),
+  });
+  return normalizeSettings({
+    ...prev,
+    system: { ...prev.system, workspaceResourceSettings: entries },
+  });
+}
+
+export function updateWorkspacePromptSettings(
+  prev: AppSettings,
+  workdir: string,
+  patch: { projectPrompt: string; projectPromptStrategy: ProjectPromptStrategy },
+): AppSettings {
+  const pathKey = workspaceProjectPathKey(workdir);
+  if (!pathKey) return prev;
+  const entries = { ...prev.system.workspaceResourceSettings };
+  const current = entries[pathKey];
+  entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+    ...current,
+    mode: current?.mode ?? "inherit",
+    skillNames: current?.skillNames ?? [],
+    mcpServerIds: current?.mcpServerIds ?? [],
     ...patch,
     stateVersion: (current?.stateVersion ?? 0) + 1,
     writerId: getRightDockWriterId(),
@@ -1823,6 +1879,8 @@ export function resetWorkspaceResourceSettings(prev: AppSettings, workdir: strin
     mode: "inherit",
     skillNames: [],
     mcpServerIds: [],
+    projectPrompt: "",
+    projectPromptStrategy: "append",
   });
 }
 

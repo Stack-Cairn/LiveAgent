@@ -2377,6 +2377,75 @@ test("only one agent prompt template remains enabled after normalization", () =>
   );
 });
 
+test("effective prompts append or replace project prompts after the active global template", () => {
+  const appSettings = settings.normalizeSettings({
+    agents: [
+      { id: "a", name: "A", prompt: "Global A", enabled: true },
+      { id: "b", name: "B", prompt: "Global B", enabled: true },
+      { id: "c", name: "C", prompt: "Disabled", enabled: false },
+    ],
+    system: {
+      workspaceResourceSettings: {
+        "/repo/append": {
+          projectPrompt: "Project append",
+          projectPromptStrategy: "append",
+          stateVersion: 1,
+          writerId: "test",
+          updatedAt: 1,
+        },
+        "/repo/replace": {
+          projectPrompt: "Project replace",
+          projectPromptStrategy: "replace",
+          stateVersion: 1,
+          writerId: "test",
+          updatedAt: 1,
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    settings.resolveEffectivePromptSettings(appSettings, "/repo/append").prompt,
+    "Global A\n\nProject append",
+  );
+  assert.equal(
+    settings.resolveEffectivePromptSettings(appSettings, "/repo/replace").prompt,
+    "Project replace",
+  );
+  assert.equal(
+    settings.resolveEffectivePromptSettings(appSettings, "/repo/unconfigured").prompt,
+    "Global A",
+  );
+});
+
+test("project prompt updates preserve workspace Skill and MCP configuration", () => {
+  const initial = settings.normalizeSettings({
+    system: {
+      workspaceResourceSettings: {
+        "/repo": {
+          mode: "custom",
+          skillNames: ["skill-a"],
+          mcpServerIds: ["mcp-a"],
+          stateVersion: 2,
+          writerId: "test",
+          updatedAt: 1,
+        },
+      },
+    },
+  });
+  const updated = settings.updateWorkspacePromptSettings(initial, "/repo", {
+    projectPrompt: "Project",
+    projectPromptStrategy: "replace",
+  });
+  const entry = updated.system.workspaceResourceSettings["/repo"];
+
+  assert.equal(entry.mode, "custom");
+  assert.deepEqual(entry.skillNames, ["skill-a"]);
+  assert.deepEqual(entry.mcpServerIds, ["mcp-a"]);
+  assert.equal(entry.projectPrompt, "Project");
+  assert.equal(entry.projectPromptStrategy, "replace");
+});
+
 test("mcp and remote settings normalize transport, selection, ports, and tokens", () => {
   const mcp = settings.normalizeMcpSettings({
     servers: [
@@ -3167,6 +3236,8 @@ test("resetting a removed workspace leaves an inherit tombstone for the same pat
           mode: "custom",
           skillNames: ["workspace-skill"],
           mcpServerIds: ["workspace-mcp"],
+          projectPrompt: "Removed project prompt",
+          projectPromptStrategy: "replace",
           stateVersion: 4,
           writerId: "old-writer",
           updatedAt: 10,
@@ -3181,6 +3252,8 @@ test("resetting a removed workspace leaves an inherit tombstone for the same pat
   assert.equal(tombstone.stateVersion, 5);
   assert.deepEqual(tombstone.skillNames, []);
   assert.deepEqual(tombstone.mcpServerIds, []);
+  assert.equal(tombstone.projectPrompt, "");
+  assert.equal(tombstone.projectPromptStrategy, "append");
   const readded = settings.resolveWorkspaceResources(reset, "/repo/removed");
   assert.ok(readded.skillNames.includes("global-skill"));
   assert.deepEqual(readded.mcpServers.map((server) => server.id), ["global-mcp"]);
@@ -3271,11 +3344,20 @@ test("workspace resource normalization expires only old inherit tombstones", () 
       writerId: "test",
       updatedAt: now,
     },
+    "/repo/project-prompt": {
+      mode: "inherit",
+      projectPrompt: "Keep project context",
+      projectPromptStrategy: "append",
+      stateVersion: 2,
+      writerId: "test",
+      updatedAt: old,
+    },
   });
   assert.equal(normalized["/repo/old-tombstone"], undefined);
   assert.equal(normalized["/repo/custom"].mode, "custom");
   assert.equal(normalized["/repo/off"].mode, "off");
   assert.equal(normalized["/repo/recent-tombstone"].mode, "inherit");
+  assert.equal(normalized["/repo/project-prompt"].projectPrompt, "Keep project context");
 });
 
 test("workspace resource overflow prefers active entries and newest tombstones deterministically", () => {

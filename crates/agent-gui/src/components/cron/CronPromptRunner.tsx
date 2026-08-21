@@ -20,6 +20,7 @@ import {
   isAgentDevMode,
   isAgentExecutionMode,
   type ReasoningLevel,
+  resolveEffectivePromptSettings,
   resolveWorkspaceResources,
 } from "../../lib/settings";
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
@@ -53,13 +54,6 @@ function buildCronSystemPrompt(taskName: string) {
     "Do not include raw JSON, tool calls, hidden reasoning, or intermediate execution logs.",
   );
   return lines.join("\n");
-}
-
-function getActiveAgentPrompt(settings: AppSettings) {
-  return (
-    settings.agents.find((template) => template.enabled && template.prompt.trim())?.prompt.trim() ??
-    ""
-  );
 }
 
 async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
@@ -165,7 +159,7 @@ async function executeCronPromptRun(
 
   const workspaceResources = resolveWorkspaceResources(settings, workdir);
   const skillsContext = await buildCronSkillsContext(settings, workdir);
-  const activeAgentPrompt = getActiveAgentPrompt(settings);
+  const activeAgentPrompt = resolveEffectivePromptSettings(settings, workdir).prompt;
   const runtimePlatform = await resolveRuntimePlatform();
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir,

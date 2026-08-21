@@ -41,6 +41,13 @@ const sharedSidebar = readFileSync(
   new URL("../../../agent-ui/src/components/chat/ChatHistorySidebarRows.tsx", import.meta.url),
   "utf8",
 );
+const sharedProjectPromptEditor = readFileSync(
+  new URL(
+    "../../../agent-ui/src/components/chat/ProjectPromptEditorModal.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const sendRuntime = readFileSync(
   new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
   "utf8",
@@ -101,10 +108,14 @@ const sharedMcpServerCard = readFileSync(
 test("workspace configuration uses one entry and one shared two-column modal", () => {
   assert.match(sharedSidebar, /chat\.workspaceConfigure/);
   assert.match(sharedSidebar, /onConfigureProject\(project\)/);
+  assert.doesNotMatch(sharedSidebar, /chat\.workspaceEditPrompt/);
+  assert.doesNotMatch(sharedSidebar, /onEditProjectPrompt\(project\)/);
   assert.match(sharedSidebar, /onDoubleClick=\{\(event\)[\s\S]*onConfigureProject\(project\)/);
   assert.doesNotMatch(sharedSidebar, /chat\.workspaceRename/);
   assert.match(sharedDrawer, /WorkspaceProjectSettingsModal as WorkspaceResourceSettingsDrawer/);
-  assert.match(sharedProjectSettings, /"general" \| "directories" \| "resources"/);
+  assert.match(sharedProjectSettings, /"general" \| "directories" \| "resources" \| "prompt"/);
+  assert.match(sharedProjectSettings, /id: "prompt"/);
+  assert.match(sharedProjectSettings, /<ProjectPromptSettingsPanel/);
   assert.match(sharedResourcePanel, /\["inherit", "custom", "off"\]/);
   assert.match(sharedResourcePanel, /value: "skills"/);
   assert.match(sharedResourcePanel, /value: "mcp"/);
@@ -175,6 +186,19 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedDirectoryPanel, /<SelectItem value="write"/);
   assert.doesNotMatch(sharedDirectoryPanel, /<(?:input|select|option)\b/);
   assert.doesNotMatch(sharedResourcePanel, /McpImportView|McpRegistryBrowser|SkillsStoreView/);
+});
+
+test("prompt templates expose global and project scopes with append or replace editing", () => {
+  assert.match(sharedProjectPromptEditor, /\["append", "replace"\]/);
+  assert.match(sharedProjectPromptEditor, /resolveEffectivePromptSettings\(settings, ""\)/);
+  assert.match(sharedProjectPromptEditor, /chat\.projectPromptEffectivePreview/);
+  assert.match(guiChatPage, /onConfigureProject=\{setProjectSettingsProject\}/);
+  assert.match(webGatewayAppView, /onConfigureProject=\{setProjectSettingsProject\}/);
+  assert.doesNotMatch(guiChatPage, /onEditProjectPrompt/);
+  assert.doesNotMatch(webGatewayAppView, /onEditProjectPrompt/);
+  assert.match(sendRuntime, /resolveConversationPromptWorkdir\(workdirResolution\)/);
+  assert.match(sendRuntime, /resolveEffectivePromptSettings\(settings, promptWorkdir\)/);
+  assert.match(sendRuntime, /historyCwd/);
 });
 
 test("chat runtime resolves and snapshots workspace resources from the effective workdir", () => {

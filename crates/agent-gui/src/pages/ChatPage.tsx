@@ -113,6 +113,7 @@ import {
   isAgentExecutionMode,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
+  resolveEffectivePromptSettings,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
@@ -271,11 +272,8 @@ export function ChatPage(props: ChatPageProps) {
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
   const workdir = settings.system.workdir.trim();
   const activeAgentPrompt = useMemo(() => {
-    const activeTemplate = settings.agents.find(
-      (template) => template.enabled && template.prompt.trim(),
-    );
-    return activeTemplate?.prompt.trim() ?? "";
-  }, [settings.agents]);
+    return resolveEffectivePromptSettings(settings, "").globalPrompt;
+  }, [settings]);
   // The sidebar store owns all sidebar domain state (conversation list,
   // workdirs, running set); ChatPage only issues imperative calls and keeps a
   // few narrow selector subscriptions.
@@ -1360,7 +1358,6 @@ export function ChatPage(props: ChatPageProps) {
     availableSkills,
     skillsRootDir,
     refreshSkills,
-    activeAgentPrompt,
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     persistConversation,
@@ -1379,9 +1376,10 @@ export function ChatPage(props: ChatPageProps) {
   const resolveManualCompactionPromptInputs = useCallback(
     async (input: { isCurrentConversation: boolean; workdir?: string }) => {
       if (!input.isCurrentConversation) {
-        return { skillsPrompt: "", memoryPrompt: "" };
+        return { activeAgentPrompt, skillsPrompt: "", memoryPrompt: "" };
       }
       const promptWorkdir = input.workdir?.trim() ?? "";
+      const effectivePrompt = resolveEffectivePromptSettings(settings, promptWorkdir).prompt;
       const resources = resolveWorkspaceResources(settings, promptWorkdir);
       let skillsPrompt = "";
       if (resources.skillsEnabled && isAgentMode && resources.skillNames.length > 0) {
@@ -1405,9 +1403,9 @@ export function ChatPage(props: ChatPageProps) {
           memoryPrompt = "";
         }
       }
-      return { skillsPrompt, memoryPrompt };
+      return { activeAgentPrompt: effectivePrompt, skillsPrompt, memoryPrompt };
     },
-    [availableSkills, isAgentMode, settings, skillsRootDir],
+    [activeAgentPrompt, availableSkills, isAgentMode, settings, skillsRootDir],
   );
 
   const handleManualCompact = useManualCompaction({
@@ -1434,7 +1432,6 @@ export function ChatPage(props: ChatPageProps) {
     finishGatewayRunMirror,
     persistConversation,
     setErrorMessage,
-    activeAgentPrompt,
     resolveManualCompactionPromptInputs,
   });
   manualCompactActionRef.current = handleManualCompact;

@@ -129,13 +129,12 @@ export function useManualCompaction(params: {
   finishGatewayRunMirror: (input: FinishGatewayRunMirrorInput) => Promise<void>;
   persistConversation: PersistConversationAction;
   setErrorMessage: (message: string | null) => void;
-  activeAgentPrompt: string;
   // 与发送链路同源的提示词构建：当前会话据当前工作区解析 skills/memory 提示词；
   // 后台会话（跨会话中继）拿不到这些上下文，返回空串（见调用点注释）。
   resolveManualCompactionPromptInputs: (input: {
     isCurrentConversation: boolean;
     workdir?: string;
-  }) => Promise<{ skillsPrompt: string; memoryPrompt: string }>;
+  }) => Promise<{ activeAgentPrompt: string; skillsPrompt: string; memoryPrompt: string }>;
 }) {
   const {
     settings,
@@ -161,7 +160,6 @@ export function useManualCompaction(params: {
     finishGatewayRunMirror,
     persistConversation,
     setErrorMessage,
-    activeAgentPrompt,
     resolveManualCompactionPromptInputs,
   } = params;
 
@@ -304,11 +302,14 @@ export function useManualCompaction(params: {
         // 与发送链路同源的检查点上下文：注入 agent/skills/memory 提示词与 tools，
         // 使 checkpoint contextTokensAfter（两端环的权威锚点）计入系统提示词与
         // 工具重量，否则少算导致压缩后两端环读数偏低。
-        const { skillsPrompt, memoryPrompt: freshMemoryPrompt } =
-          await resolveManualCompactionPromptInputs({
-            isCurrentConversation: isCurrentConversation(),
-            workdir: runtimeEntry.workdir,
-          });
+        const {
+          activeAgentPrompt: resolvedAgentPrompt,
+          skillsPrompt,
+          memoryPrompt: freshMemoryPrompt,
+        } = await resolveManualCompactionPromptInputs({
+          isCurrentConversation: isCurrentConversation(),
+          workdir: runtimeEntry.workdir,
+        });
         // memory 段已在首轮冻结进 system prompt，这里必须沿用同一份快照与同一批
         // 增量块：否则压缩轮用新读的快照、下一轮发送又翻回冻结的那份，system 段
         // 白翻两次，保留下来的 user 消息字节也对不上。还没有基线时（例如后台会话）
@@ -402,7 +403,7 @@ export function useManualCompaction(params: {
               buildPreparedConversationContext({
                 state,
                 tools,
-                activeAgentPrompt,
+                activeAgentPrompt: resolvedAgentPrompt,
                 skillsPrompt,
                 memoryPrompt,
                 memoryTurnUpdates,
@@ -415,7 +416,7 @@ export function useManualCompaction(params: {
                 state,
                 resumeMessage,
                 tools,
-                activeAgentPrompt,
+                activeAgentPrompt: resolvedAgentPrompt,
                 skillsPrompt,
                 memoryPrompt,
                 memoryTurnUpdates,
@@ -536,7 +537,6 @@ export function useManualCompaction(params: {
       }
     },
     [
-      activeAgentPrompt,
       buildRuntimeEntryFromVisibleState,
       clearConversationStopHandler,
       consumeConversationStop,

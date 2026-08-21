@@ -96,6 +96,7 @@ export type RunTextConversationTurnParams = {
   sessionId: string;
   conversationId: string;
   conversationCwd?: string;
+  historyCwd?: string;
   fallbackTitle: string;
   createdAt: number;
   titlePromise: Promise<string | null> | null;
@@ -156,6 +157,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     sessionId,
     conversationId,
     conversationCwd,
+    historyCwd = conversationCwd,
     fallbackTitle,
     createdAt,
     titlePromise,
@@ -555,7 +557,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     sessionId,
     providerId,
     model,
-    cwd: conversationCwd,
+    cwd: historyCwd,
     state: finalState,
     fallbackTitle,
     createdAt,

@@ -2,6 +2,7 @@ import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import {
   type AppSettings,
   DEFAULT_WORKSPACE_PROJECT_ID,
+  type ProjectPromptStrategy,
   type WorkspaceProject,
   type WorkspaceResourceSettingsMode,
   workspaceProjectPathKey,
@@ -16,7 +17,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useEffect, useMemo, useState } from "react";
 import type { StoreCategoryValue } from "../../pages/skills-hub/SkillCategoryControls";
-import { Blend, FolderTree, Loader2, Settings } from "../IconSet";
+import { Blend, BookOpen, FolderTree, Loader2, Settings } from "../IconSet";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { ProjectPromptSettingsPanel } from "./ProjectPromptEditorModal";
 import { WorkspaceDirectorySettingsPanel } from "./workspace-project-settings/WorkspaceDirectorySettingsPanel";
 import { WorkspaceGeneralSettingsPanel } from "./workspace-project-settings/WorkspaceGeneralSettingsPanel";
 import {
@@ -39,7 +41,7 @@ import {
   rootAliasFromPath,
 } from "./workspace-project-settings/workspaceProjectSettingsUtils";
 
-type ProjectSettingsPanel = "general" | "directories" | "resources";
+type ProjectSettingsPanel = "general" | "directories" | "resources" | "prompt";
 
 export type {
   WorkspaceProjectRootAccess,
@@ -53,6 +55,8 @@ type ResourceSettingsDraft = {
   mode: WorkspaceResourceSettingsMode;
   skillNames: string[];
   mcpServerIds: string[];
+  projectPrompt: string;
+  projectPromptStrategy: ProjectPromptStrategy;
 };
 
 export function WorkspaceProjectSettingsModal(props: {
@@ -98,6 +102,10 @@ export function WorkspaceProjectSettingsModal(props: {
   );
   const [mcpServerIds, setMcpServerIds] = useState<Set<string>>(
     () => new Set(saved?.mode === "custom" ? saved.mcpServerIds : globalMcpIds),
+  );
+  const [projectPrompt, setProjectPrompt] = useState(saved?.projectPrompt ?? "");
+  const [projectPromptStrategy, setProjectPromptStrategy] = useState<ProjectPromptStrategy>(
+    saved?.projectPromptStrategy ?? "append",
   );
   const [tab, setTab] = useState<WorkspaceResourceTab>("skills");
   const [query, setQuery] = useState("");
@@ -253,6 +261,8 @@ export function WorkspaceProjectSettingsModal(props: {
         mode,
         skillNames: [...skillNames],
         mcpServerIds: [...mcpServerIds],
+        projectPrompt: projectPrompt.trim(),
+        projectPromptStrategy,
       });
       requestClose();
     } catch (error) {
@@ -294,6 +304,11 @@ export function WorkspaceProjectSettingsModal(props: {
       id: "resources" as const,
       icon: Blend,
       label: t("chat.workspaceSettingsResources"),
+    },
+    {
+      id: "prompt" as const,
+      icon: BookOpen,
+      label: t("chat.projectPromptTitle"),
     },
   ];
 
@@ -436,6 +451,18 @@ export function WorkspaceProjectSettingsModal(props: {
                 onSkillNamesChange={setSkillNames}
                 onMcpServerIdsChange={setMcpServerIds}
               />
+            ) : null}
+
+            {activePanel === "prompt" ? (
+              <div className="space-y-5 p-6">
+                <ProjectPromptSettingsPanel
+                  settings={settings}
+                  projectPrompt={projectPrompt}
+                  strategy={projectPromptStrategy}
+                  onProjectPromptChange={setProjectPrompt}
+                  onStrategyChange={setProjectPromptStrategy}
+                />
+              </div>
             ) : null}
           </main>
         </DialogBody>

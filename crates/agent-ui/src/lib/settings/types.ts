@@ -273,10 +273,14 @@ export type SystemSettings = {
 
 export type WorkspaceResourceSettingsMode = "inherit" | "custom" | "off";
 
+export type ProjectPromptStrategy = "append" | "replace";
+
 export type WorkspaceResourceSettings = {
   mode: WorkspaceResourceSettingsMode;
   skillNames: string[];
   mcpServerIds: string[];
+  projectPrompt: string;
+  projectPromptStrategy: ProjectPromptStrategy;
   stateVersion: number;
   writerId: string;
   updatedAt: number;
@@ -288,6 +292,14 @@ export type EffectiveWorkspaceResources = {
   skillNames: string[];
   mcpServerIds: string[];
   mcpServers: McpServerConfig[];
+};
+
+export type EffectivePromptSettings = {
+  globalTemplates: AgentPromptTemplate[];
+  globalPrompt: string;
+  projectPrompt: string;
+  projectPromptStrategy: ProjectPromptStrategy;
+  prompt: string;
 };
 
 export type WorkspaceProjectKind = "managed" | "folder" | "history";

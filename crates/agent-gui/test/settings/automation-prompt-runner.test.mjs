@@ -70,6 +70,10 @@ test.beforeEach(() => {
   invokeCalls.length = 0;
 });
 
+test("Auto Prompt resolves global and project prompts from the task workdir", () => {
+  assert.match(runnerSource, /resolveEffectivePromptSettings\(settings, workdir\)\.prompt/);
+});
+
 test("Auto Prompt completion uses the Rust camelCase wire contract", async () => {
   const input = createCompletePromptRunInput("execution-1", true, 1200, "conclusion");
 
