@@ -38,6 +38,7 @@ export function AgentsSection(props: SettingsSectionProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<AgentPromptTemplate | null>(null);
   const [viewingTemplate, setViewingTemplate] = useState<AgentPromptTemplate | null>(null);
+  const [viewingProject, setViewingProject] = useState<WorkspaceProject | null>(null);
   const [editingProject, setEditingProject] = useState<WorkspaceProject | null>(null);
 
   function openAdd() {
@@ -105,6 +106,9 @@ export function AgentsSection(props: SettingsSectionProps) {
     const entry = settings.system.workspaceResourceSettings[workspaceProjectPathKey(project.path)];
     return Boolean(entry?.projectPrompt.trim());
   }).length;
+  const viewingProjectEntry = viewingProject
+    ? settings.system.workspaceResourceSettings[workspaceProjectPathKey(viewingProject.path)]
+    : undefined;
 
   return (
     <>
@@ -363,6 +367,17 @@ export function AgentsSection(props: SettingsSectionProps) {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            disabled={!configured}
+                            onClick={() => setViewingProject(project)}
+                            title={t("settings.agentsShowPrompt")}
+                            aria-label={t("settings.agentsShowPrompt")}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
                             onClick={() => setEditingProject(project)}
                             title={t("settings.agentsProjectEdit")}
                             aria-label={t("settings.agentsProjectEdit")}
@@ -392,6 +407,28 @@ export function AgentsSection(props: SettingsSectionProps) {
         <AgentPromptViewModal template={viewingTemplate} onClose={() => setViewingTemplate(null)} />
       ) : null}
 
+      {viewingProject && viewingProjectEntry?.projectPrompt.trim() ? (
+        <AgentPromptViewModal
+          template={{
+            id: viewingProject.id,
+            name: viewingProject.name,
+            description: viewingProject.path,
+            prompt: viewingProjectEntry.projectPrompt,
+            enabled: true,
+          }}
+          subtitle={t("chat.projectPromptTitle")}
+          detailsTitle={t("settings.agentsProjectsTab")}
+          statusTitle={t("chat.projectPromptStrategy")}
+          statusLabel={t(
+            viewingProjectEntry.projectPromptStrategy === "replace"
+              ? "settings.agentsProjectReplace"
+              : "settings.agentsProjectAppend",
+          )}
+          statusTone="violet"
+          onClose={() => setViewingProject(null)}
+        />
+      ) : null}
+
       {editingProject ? (
         <ProjectPromptEditorModal
           project={editingProject}
@@ -408,11 +445,46 @@ export function AgentsSection(props: SettingsSectionProps) {
 
 type AgentPromptViewModalProps = {
   template: AgentPromptTemplate;
+  subtitle?: string;
+  detailsTitle?: string;
+  statusTitle?: string;
+  statusLabel?: string;
+  statusTone?: "emerald" | "muted" | "violet";
   onClose: () => void;
 };
 
-function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) {
+function AgentPromptViewModal({
+  template,
+  subtitle,
+  detailsTitle,
+  statusTitle,
+  statusLabel,
+  statusTone,
+  onClose,
+}: AgentPromptViewModalProps) {
   const { t } = useLocale();
+  const tone = statusTone ?? (template.enabled ? "emerald" : "muted");
+  const resolvedStatusLabel =
+    statusLabel ??
+    (template.enabled ? t("settings.agentsActiveLabel") : t("settings.agentsInactiveLabel"));
+  const statusBadgeClass =
+    tone === "emerald"
+      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      : tone === "violet"
+        ? "border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300"
+        : "border-border/60 bg-muted/40 text-muted-foreground";
+  const statusTextClass =
+    tone === "emerald"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "violet"
+        ? "text-violet-600 dark:text-violet-300"
+        : "text-muted-foreground";
+  const statusDotClass =
+    tone === "emerald"
+      ? "bg-emerald-500"
+      : tone === "violet"
+        ? "bg-violet-500"
+        : "bg-muted-foreground/50";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -428,24 +500,17 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate">{template.name}</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              {t("settings.agentsShowPrompt")}
+              {subtitle ?? t("settings.agentsShowPrompt")}
             </DialogDescription>
           </div>
           <span
             className={cn(
               "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:inline-flex",
-              template.enabled
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "border-border/60 bg-muted/40 text-muted-foreground",
+              statusBadgeClass,
             )}
           >
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
-              )}
-            />
-            {template.enabled ? t("settings.agentsActiveLabel") : t("settings.agentsInactiveLabel")}
+            <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
+            {resolvedStatusLabel}
           </span>
         </DialogHeader>
 
@@ -456,7 +521,9 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
                   <BookOpen className="h-4 w-4" />
                 </div>
-                <h3 className="text-sm font-semibold">{t("settings.agentsTemplateDetails")}</h3>
+                <h3 className="text-sm font-semibold">
+                  {detailsTitle ?? t("settings.agentsTemplateDetails")}
+                </h3>
               </div>
 
               <p className="mt-4 text-xs leading-5 text-muted-foreground">
@@ -465,24 +532,14 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
 
               <div className="mt-6 space-y-3 border-t border-border/60 pt-4 text-xs">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{t("settings.agentsStatus")}</span>
+                  <span className="text-muted-foreground">
+                    {statusTitle ?? t("settings.agentsStatus")}
+                  </span>
                   <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 font-medium",
-                      template.enabled
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground",
-                    )}
+                    className={cn("inline-flex items-center gap-1.5 font-medium", statusTextClass)}
                   >
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        template.enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
-                      )}
-                    />
-                    {template.enabled
-                      ? t("settings.agentsActiveLabel")
-                      : t("settings.agentsInactiveLabel")}
+                    <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
+                    {resolvedStatusLabel}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
