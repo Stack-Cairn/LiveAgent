@@ -32,6 +32,7 @@ pub struct GatewayChatRuntimeControlsEvent {
     pub thinking_enabled: bool,
     pub native_web_search_enabled: bool,
     pub reasoning: String,
+    pub plan_mode_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

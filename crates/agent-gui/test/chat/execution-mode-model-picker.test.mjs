@@ -113,12 +113,16 @@ test("provider groups reveal the edit affordance before the count on hover", () 
 
 test("upload stays leftmost before model controls in the composer toolbar", () => {
   assert.match(composerSource, /<ComposerModelControls/);
-  // 上传入口是 Codex 风格的 + 菜单(aria-label 用 uploadTooltip),不再是裸回形针按钮。
-  assert.match(composerSource, /aria-label=\{uploadTooltip\}/);
+  // 上传入口是 Codex 风格的 + 菜单。触发键按菜单可用性禁用(aria-label 用
+  // addMenuTooltip),上传专属限制(需要 workdir 等)下沉到上传菜单项自身——
+  // plan 开关不依赖上传前置条件,不得被 uploadDisabled 连坐锁死。
+  assert.match(composerSource, /aria-label=\{addMenuTooltip\}/);
+  assert.match(composerSource, /disabled=\{composerAddMenuDisabled\}/);
+  assert.match(composerSource, /onSelect=\{onPickReadableFiles\}\s+disabled=\{uploadDisabled\}/);
   assert.match(composerSource, /chat\.upload\.filesAndFolders/);
   assert.match(composerSource, /<CommandSafetyModeSelector/);
   assert.ok(
-    composerSource.indexOf("aria-label={uploadTooltip}") <
+    composerSource.indexOf("aria-label={addMenuTooltip}") <
       composerSource.indexOf("<CommandSafetyModeSelector"),
   );
   assert.ok(

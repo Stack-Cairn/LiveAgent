@@ -34,8 +34,10 @@ type PendingPlan = {
 
 // 每会话至多一个待决计划(新提交覆盖旧的——旧计划随之失效)。
 const pendingPlanByConversation = new Map<string, PendingPlan>();
-// 已获批准的 ExitPlanMode 调用(卡片落定态展示用;随会话销毁清理)。
+// 已获批准的 ExitPlanMode 调用(卡片落定态展示用;随会话销毁清理)。批准会先清
+// pending 登记,故清理不能经由 pending 反查——按会话另记一份,销毁时整组删除。
 const approvedToolCallIds = new Set<string>();
+const approvedToolCallIdsByConversation = new Map<string, Set<string>>();
 
 // useSyncExternalStore 订阅:登记/批准/覆盖时通知,驱动计划卡按钮态刷新。
 const listeners = new Set<() => void>();
@@ -133,7 +135,13 @@ export function registerPlanDecisionHandlers(next: PlanDecisionHandlers | null) 
   decisionHandlers = next;
 }
 
-export type AnswerPlanDecisionOutcome = { ok: boolean; message?: string };
+export type AnswerPlanDecisionOutcome = {
+  ok: boolean;
+  message?: string;
+  /** 失败分类:not_pending(已决定/被新提交覆盖——卡片应落定而非报错)/
+   * invalid(参数或会话不符)/unavailable(宿主 handler 未就绪)。 */
+  code?: "not_pending" | "invalid" | "unavailable";
+};
 
 /**
  * 应答某调用的待决计划(卡片按钮/批准短语/WebUI plan_decision 共用入口)。
@@ -154,22 +162,32 @@ export function answerPlanDecision(
     }
   }
   if (!pending) {
-    return { ok: false, message: "Plan is not pending (already decided or superseded)." };
+    return {
+      ok: false,
+      code: "not_pending",
+      message: "Plan is not pending (already decided or superseded).",
+    };
   }
   const expectedConversationId = options?.conversationId?.trim();
   if (expectedConversationId && expectedConversationId !== pending.conversationId) {
-    return { ok: false, message: "Plan belongs to a different conversation." };
+    return { ok: false, code: "invalid", message: "Plan belongs to a different conversation." };
   }
   const answer = resolvePlanDecisionAnswer(rawAnswer);
   if (!answer) {
-    return { ok: false, message: 'Decision must be "approve" or "reject".' };
+    return { ok: false, code: "invalid", message: 'Decision must be "approve" or "reject".' };
   }
   if (!decisionHandlers) {
-    return { ok: false, message: "Plan decision handlers are not ready." };
+    return { ok: false, code: "unavailable", message: "Plan decision handlers are not ready." };
   }
   if (answer.decision === "approve") {
     pendingPlanByConversation.delete(pending.conversationId);
     approvedToolCallIds.add(pending.toolCallId);
+    let conversationApproved = approvedToolCallIdsByConversation.get(pending.conversationId);
+    if (!conversationApproved) {
+      conversationApproved = new Set();
+      approvedToolCallIdsByConversation.set(pending.conversationId, conversationApproved);
+    }
+    conversationApproved.add(pending.toolCallId);
     emitChange();
     try {
       decisionHandlers.onApprove({ conversationId: pending.conversationId, plan: pending.plan });
@@ -196,15 +214,24 @@ export function answerPlanDecision(
   return { ok: true };
 }
 
-/** 会话销毁/放弃计划模式的兜底清理。 */
+/** 会话销毁/放弃计划模式的兜底清理。批准态也一并清:批准发生时 pending 已删,
+ *  只按 pending 反查会让 approvedToolCallIds 随进程无限增长。 */
 export function cancelPendingPlanDecisionsForConversation(conversationId: string) {
   const target = conversationId.trim();
   const pending = pendingPlanByConversation.get(target);
+  const approved = approvedToolCallIdsByConversation.get(target);
+  if (!pending && !approved) return;
   if (pending) {
     pendingPlanByConversation.delete(target);
     approvedToolCallIds.delete(pending.toolCallId);
-    emitChange();
   }
+  if (approved) {
+    approvedToolCallIdsByConversation.delete(target);
+    for (const toolCallId of approved) {
+      approvedToolCallIds.delete(toolCallId);
+    }
+  }
+  emitChange();
 }
 
 /**

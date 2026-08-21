@@ -1019,7 +1019,16 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         }
         const outcome = answerPlanDecision(itemId, rawAnswer, { conversationId });
         if (!outcome.ok) {
-          fail(outcome.message || "plan not pending", "not_found");
+          // 结构化 code 直通:not_pending 让远端卡片落定为"已决定/已被覆盖"
+          // 而非裸报错;invalid/unavailable 维持错误展示。
+          fail(
+            outcome.message || "plan not pending",
+            outcome.code === "invalid"
+              ? "invalid_request"
+              : outcome.code === "unavailable"
+                ? "unavailable"
+                : "not_found",
+          );
           return;
         }
         respond(requestId, { accepted: true });

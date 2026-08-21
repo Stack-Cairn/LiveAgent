@@ -220,6 +220,9 @@ export function createSubagentTools(params: {
   const readonlyTools = selectReadOnlyTools({
     tools: params.baseTools,
     metadataByName: params.metadataByName,
+    // Plan mode 承诺"本轮不可能发生变更";只读子代理据此也不得继承
+    // isReadOnly:false 的 MCP 业务工具(平时放行是为了调研便利)。
+    strictReadOnly: params.forceReadonly,
   });
   const enqueueWorktreeApply = createSequentialQueue();
   const agentRunQueues = new Map<string, ReturnType<typeof createSequentialQueue>>();

@@ -16,7 +16,7 @@
 3. 模型完成调研后调用 `ExitPlanMode(plan)` 提交完整计划（markdown），渲染为交互卡片挂起等待；
 4. 用户「批准并开始执行」→ 关闭 plan 开关 + 自动入队"开始执行"续轮（带 `planModeEnabled:false` 快照）；本轮剩余部分仍处于 plan mode，模型收到指令简短收尾；
 5. 用户「要求修改」（可附反馈）→ 反馈作为工具结果回传，模型留在 plan mode 继续完善；
-6. 10 分钟未决定按**未批准**处理（计划批准是执行闸门，绝不默认放行，与工具审批同取向）；停止本轮按"未决定"落定。
+6. 计划**无应答超时**：待决计划跨 run 存活，直到用户批准、退回或提交被新计划覆盖（对话式范式下"不批准"就是继续对话，无需超时裁决）；停止/删除会话则随会话清理。
 
 ## 2. 核心设计决策
 
@@ -37,7 +37,7 @@
 ## 3. 组件与文件
 
 **共享契约层（agent-ui，端无关）**
-- `lib/chat/planMode.ts` — 工具名、超时/长度常量、`PlanDecision`/`ExitPlanModeResultDetails` 类型、deadline 读取、容错解析（对标 `askUserQuestion.ts`）
+- `lib/chat/planMode.ts` — 工具名、长度常量、`PlanDecision`/`ExitPlanModeResultDetails` 类型、待决/已批准参数标记、容错解析（对标 `askUserQuestion.ts`）
 - `components/chat/PlanModeCard.tsx` — 计划卡片：markdown 渲染（内滚动）、倒计时（时钟可比性校验同 AskUserQuestionCard）、批准/要求修改（附反馈）、落定态展示
 - `components/chat/assistant-bubble/ToolCallItem.tsx` — 按工具名分派（同 AskUserQuestion），details 优先、流式参数兜底
 - `lib/tools/builtinToolCatalog.ts` — `exit_plan_mode` 目录条目（conditional，CHAT_ONLY）
@@ -45,11 +45,11 @@
 - `components/chat/ComposerModelControls.tsx` — 「计划」RuntimeToggleChip（sky 色系，仅 agent 模式渲染）
 
 **桌面端（agent-gui）**
-- `lib/tools/planModeTools.ts` — `ExitPlanMode` 工具 + 挂起表 + `answerPlanDecision`（本地/远端同一入口）+ `isPlanModeAllowedTool` + plan mode system prompt 段 + 网关 deadline 预置（同 askUserQuestionTools 机制）
+- `lib/tools/planModeTools.ts` — `ExitPlanMode` 工具 + 待决计划登记表 + `answerPlanDecision`（本地/远端同一入口）+ `isPlanModeAllowedTool` + plan mode system prompt 段
 - `lib/tools/builtinRegistry.ts` — `planMode` 参数：注入 ExitPlanMode bundle + `filterForPlanMode` 过滤两条 return 路径 + 子代理 `forceReadonly` 透传
 - `lib/subagents/validate.ts` / `agentTool.ts` — `forceReadonly` 选项与工具描述提示
 - `pages/chat/turns/runAgentConversationTurn.ts` — `planModeEnabled`/`onPlanApproved` 参数、prompt 段冻结注入 + 轨迹同口径、`resolveToolGate` 后备拦截
-- `pages/chat/turns/gatewayToolPreview.ts` — ExitPlanMode deadline 盖章
+- `pages/chat/turns/gatewayToolPreview.ts` — ExitPlanMode 待决/已批准标记盖章
 - `pages/chat/runtime/useSendChatTurn.ts` — `effectivePlanModeEnabled` 三源"只能收紧"合并、回调透传
 - `pages/chat/queue/useChatTurnQueue.ts` — `plan_decision` action 分支、`enqueueComposerTurnForConversation` 支持 `runtimeControls` 覆盖
 - `pages/ChatPage.tsx` — `handlePlanApprovedForConversation`（关开关 + 入队执行续轮）、会话销毁 cancel 兜底
@@ -60,7 +60,7 @@
 - `lib/chat/planModeBridge.ts` — 模块级单例桥（对标 toolApprovalBridge）
 - `app/GatewayApp.tsx` — handler 注册 → `chatQueuePlanDecision`
 - `lib/gatewaySocketRpc.ts` — `chat_queue.plan_decision` RPC
-- `agent-ui-adapters/assistantBubble.ts` — deadline 从参数盖章读取、提交走桥
+- `agent-ui-adapters/assistantBubble.ts` — 待决/已批准状态读取（GUI 订阅登记表,WebUI 参数标记 + 本地落定 overlay）、提交走桥
 
 ## 4. 已知边界（首版）
 
@@ -71,7 +71,7 @@
 
 ## 5. 测试
 
-- `test/tools/plan-mode-tools.test.mjs` — 10 用例：schema、sanitize/resolve/parse、空计划拒绝、批准（含非法/串会话应答拒绝、回调触发、重复应答拒绝）、拒绝（反馈回传）、超时（不批准、无回调）、中止、按会话 cancel 隔离、网关 deadline 预置复用、`isPlanModeAllowedTool` 白名单
+- `test/tools/plan-mode-tools.test.mjs` — schema、sanitize/resolve/parse、空计划拒绝、批准（含非法/串会话应答拒绝、回调触发、重复应答拒绝）、拒绝（反馈回传）、新提交覆盖旧登记、按会话 cancel 隔离（含批准落定态清理）、`isPlanModeAllowedTool` 白名单
 - `test/subagents/validate.test.mjs` — forceReadonly：显式 worktree 报错、缺省/复用身份收敛 readonly、显式 readonly 通过
 - `test/tools/builtin-registry-subagent-mcp.test.mjs` — plan mode 注册表过滤：只读+计划+协作工具在表、一切写能力（内置+MCP）不在表、Agent 描述带 PLAN MODE 提示
 - 存量适配：`tool-argument-display.test.mjs`（新模块 mock）、`settings/normalization.test.mjs`（期望对象补 `planModeEnabled: false`）

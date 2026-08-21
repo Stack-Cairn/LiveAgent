@@ -236,18 +236,25 @@ export function decideWorktreeCleanup(params: {
   return { shouldCleanup: false, reason: "unapplied_changes" };
 }
 
-/** Readonly children: read-only builtin tools + MCP business tools. */
+/** Readonly children: read-only builtin tools + MCP business tools.
+ *
+ * MCP business tools are admitted even when their metadata says
+ * `isReadOnly: false` — research agents routinely need e.g. issue lookups.
+ * `strictReadOnly` (plan mode) revokes that allowance: the parent turn
+ * promises "mutation is impossible", so a readonly child must not carry
+ * write-capable MCP tools either. */
 export function selectReadOnlyTools(params: {
   tools: Tool[];
   metadataByName: Map<string, ToolMetadataLike>;
+  strictReadOnly?: boolean;
 }) {
   return params.tools.filter((tool) => {
     if (tool.name === AGENT_TOOL_NAME) return false;
     if (tool.name === SEND_MESSAGE_TOOL_NAME) return true;
     const metadata = params.metadataByName.get(tool.name);
-    return (
-      metadata?.isReadOnly === true || (metadata?.groupId === "mcp" && metadata.kind === "mcp")
-    );
+    if (metadata?.isReadOnly === true) return true;
+    if (params.strictReadOnly) return false;
+    return metadata?.groupId === "mcp" && metadata.kind === "mcp";
   });
 }
 

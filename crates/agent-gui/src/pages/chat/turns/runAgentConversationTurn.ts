@@ -704,11 +704,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     signal?: AbortSignal,
     context?: BuiltinToolExecutionContext,
   ) => Promise<Message> = (tc, signal, context) => {
-    // 直呼未激活 MCP 工具(模型凭历史记忆/精确猜名)也放行并顺带激活——
+    // 直呼未激活 MCP 业务工具(模型凭历史记忆/精确猜名)也放行并顺带激活——
     // 执行层本就找得到;激活保证后续轮次请求里能看到 schema,避免模型困惑。
+    // 判定同 requestToolFilter:kind === "mcp" 才是延迟对象(McpManager 不是)。
+    const tcMetadata = builtinRegistry.metadataByName.get(tc.name);
     if (
       builtinRegistry.mcpToolDeferralActive &&
-      builtinRegistry.metadataByName.get(tc.name)?.groupId === "mcp"
+      tcMetadata?.groupId === "mcp" &&
+      tcMetadata.kind === "mcp"
     ) {
       getMcpToolActivation(conversationId).add(tc.name);
     }

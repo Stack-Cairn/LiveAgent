@@ -408,6 +408,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const uploadDisabled =
     isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled || stt.active;
+  // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
+  // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
+  const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
@@ -423,6 +426,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       : !workdir
         ? t("chat.upload.requireWorkdir")
         : t("chat.upload.button");
+  // 菜单触发键的提示:菜单可用而上传不可用时用泛化"添加"文案,上传专属限制
+  // (需要工作目录等)只出现在上传菜单项自身的禁用态上。
+  const addMenuTooltip =
+    !composerAddMenuDisabled && uploadDisabled ? t("chat.upload.addSection") : uploadTooltip;
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
@@ -1001,9 +1008,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   render={
                     <button
                       type="button"
-                      disabled={uploadDisabled}
-                      aria-label={uploadTooltip}
-                      title={uploadTooltip}
+                      disabled={composerAddMenuDisabled}
+                      aria-label={addMenuTooltip}
+                      title={addMenuTooltip}
                       className={cn(
                         "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
                         "disabled:pointer-events-none disabled:opacity-40",
@@ -1038,6 +1045,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   </DropdownMenuLabel>
                   <DropdownMenuItem
                     onSelect={onPickReadableFiles}
+                    disabled={uploadDisabled}
                     className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
                   >
                     <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

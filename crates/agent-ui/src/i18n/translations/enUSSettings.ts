@@ -362,7 +362,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.exit_plan_mode.desc":
     "Present the implementation plan and wait for your approval",
   "settings.builtinTool.exit_plan_mode.detail":
-    "In plan mode, the model submits its complete implementation plan as a card once research is done. Approval starts execution automatically (full tools return next turn); requesting changes sends your feedback back for another revision. Without a decision within 10 minutes the plan counts as not approved. Registered only in plan-mode chat sessions.",
+    "In plan mode, the model submits its complete implementation plan as a card once research is done. Submitting ends that turn immediately; the plan stays pending until you respond. Approval starts execution automatically (full tools return next turn); replying with anything else sends your feedback back for another revision. Registered only in plan-mode chat sessions.",
   "settings.builtinTool.ask_user_question.name": "Ask User",
   "settings.builtinTool.ask_user_question.desc":
     "Ask you multiple-choice questions in a card and wait for your selections",

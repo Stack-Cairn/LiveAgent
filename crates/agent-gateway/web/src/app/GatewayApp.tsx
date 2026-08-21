@@ -635,7 +635,11 @@ function useGatewayAppController() {
           toolCallId,
           JSON.stringify(answer),
         );
-        return { ok: response.accepted, message: response.message || undefined };
+        return {
+          ok: response.accepted,
+          message: response.message || undefined,
+          errorCode: response.errorCode || undefined,
+        };
       } catch (error) {
         return { ok: false, message: asErrorMessage(error, "Failed to submit the decision.") };
       }

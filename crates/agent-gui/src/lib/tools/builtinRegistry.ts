@@ -199,7 +199,18 @@ type BuildBuiltinBaseToolRegistryParams = {
 
 const resolveHomeDir = () => homeDir();
 
-async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryParams) {
+type McpBusinessToolBundle = Awaited<ReturnType<typeof createMcpTools>>;
+
+type BaseBuiltinToolBundles = {
+  bundles: BuiltinToolBundle[];
+  /** MCP 业务工具 bundle(懒加载判定与 ToolSearch 目录的输入)。McpManager 与它
+   * 同为 groupId "mcp",绝不能按 groupId 搜索定位——必须持有这份直接引用。 */
+  mcpBusinessBundle: McpBusinessToolBundle | undefined;
+};
+
+async function buildBaseBuiltinToolBundles(
+  params: BuildBuiltinBaseToolRegistryParams,
+): Promise<BaseBuiltinToolBundles> {
   const baseBundles: BuiltinToolBundle[] = [
     createFsTools({
       workdir: params.workdir,
@@ -280,17 +291,17 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
   ];
 
   const enabledServers = selectEnabledMcpServers(params.getMcpSettings());
+  let mcpBusinessBundle: McpBusinessToolBundle | undefined;
   if (enabledServers.length > 0) {
-    baseBundles.push(
-      await createMcpTools({
-        servers: enabledServers,
-        onLoadError: params.onMcpLoadError,
-        loadFailureMode: params.mcpLoadFailureMode,
-      }),
-    );
+    mcpBusinessBundle = await createMcpTools({
+      servers: enabledServers,
+      onLoadError: params.onMcpLoadError,
+      loadFailureMode: params.mcpLoadFailureMode,
+    });
+    baseBundles.push(mcpBusinessBundle);
   }
 
-  return baseBundles;
+  return { bundles: baseBundles, mcpBusinessBundle };
 }
 
 export async function buildBuiltinToolRegistry(
@@ -312,29 +323,26 @@ export async function buildBuiltinToolRegistry(
   },
 ) {
   const planModeActive = Boolean(params.planMode);
-  const baseBundles = await buildBaseBuiltinToolBundles(params);
+  const { bundles: baseBundles, mcpBusinessBundle } = await buildBaseBuiltinToolBundles(params);
   // MCP 懒加载判定:对"会进请求的 schema JSON"估算 token(与 tokenLedger 同
   // 口径),超阈值才启用——多一次检索回合的代价只在真省下可观 context 时才值。
-  const mcpBundle = baseBundles.find((bundle) => bundle.groupId === "mcp") as
-    | (BuiltinToolBundle & {
-        toolNameMap?: Map<string, { serverId: string; toolName: string; serverLabel: string }>;
-      })
-    | undefined;
+  // 判定与目录的输入必须是 MCP 业务工具 bundle 的直接引用:McpManager 也注册在
+  // groupId "mcp" 下且先入列,按 groupId find 会命中它,让延迟判定永远失效。
   const mcpToolDeferralActive = Boolean(
     params.toolSearch &&
       params.runtimeScope === "chat" &&
       !planModeActive &&
-      mcpBundle &&
-      shouldDeferMcpTools(mcpBundle.tools),
+      mcpBusinessBundle &&
+      shouldDeferMcpTools(mcpBusinessBundle.tools),
   );
   const toolSearchBundles =
-    mcpToolDeferralActive && params.toolSearch && mcpBundle
+    mcpToolDeferralActive && params.toolSearch && mcpBusinessBundle
       ? [
           createToolSearchTools({
             conversationId: params.toolSearch.conversationId,
-            entries: mcpBundle.tools.map((tool) => ({
+            entries: mcpBusinessBundle.tools.map((tool) => ({
               tool,
-              serverLabel: mcpBundle.toolNameMap?.get(tool.name)?.serverLabel ?? "",
+              serverLabel: mcpBusinessBundle.toolNameMap.get(tool.name)?.serverLabel ?? "",
             })),
           }),
         ]
@@ -433,21 +441,23 @@ export async function buildBuiltinToolRegistry(
         checkpoint: params.checkpoint,
         createSubagentToolRegistry: async (workdir) =>
           createBuiltinToolRegistry(
-            await buildBaseBuiltinToolBundles({
-              ...params,
-              workdir,
-              additionalRoots: subagentAdditionalRoots,
-              fileState: createFileToolState(),
-              skillsEnabled: false,
-              applyMcpOps: undefined,
-              mcpLoadFailureMode: "continue",
-              memoryToolMode: "ro",
-              // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
-              // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
-              // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
-              // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
-              checkpoint: undefined,
-            }),
+            (
+              await buildBaseBuiltinToolBundles({
+                ...params,
+                workdir,
+                additionalRoots: subagentAdditionalRoots,
+                fileState: createFileToolState(),
+                skillsEnabled: false,
+                applyMcpOps: undefined,
+                mcpLoadFailureMode: "continue",
+                memoryToolMode: "ro",
+                // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
+                // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
+                // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
+                // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
+                checkpoint: undefined,
+              })
+            ).bundles,
           ),
       }),
     ]),

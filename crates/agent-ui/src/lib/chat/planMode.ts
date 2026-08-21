@@ -40,9 +40,6 @@ export type ExitPlanModeResultDetails = {
   plan: string;
   decision?: PlanDecision;
   feedback?: string;
-  cancelled?: boolean;
-  /** 应答窗口超时、按“不批准”落定时为 true。 */
-  timedOut?: boolean;
 };
 
 /** 提取并截断计划 markdown；非字符串/空白返回空串（调用方按参数错误处理）。 */
@@ -80,7 +77,5 @@ export function parseExitPlanModeResultDetails(value: unknown): ExitPlanModeResu
     plan: obj.plan,
     ...(obj.decision === "approve" || obj.decision === "reject" ? { decision: obj.decision } : {}),
     ...(typeof obj.feedback === "string" && obj.feedback ? { feedback: obj.feedback } : {}),
-    ...(obj.cancelled === true ? { cancelled: true } : {}),
-    ...(obj.timedOut === true ? { timedOut: true } : {}),
   };
 }

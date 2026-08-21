@@ -105,17 +105,21 @@ test("activation is per-conversation and clearable", async () => {
   assert.ok(!tools.getMcpToolActivation("conv-a").has("mcp_docs_search"));
 });
 
-test("buildMcpRequestToolFilter hides only deactivated MCP tools", () => {
+test("buildMcpRequestToolFilter hides only deactivated MCP business tools", () => {
   const { tools } = loadModules();
   const conversationId = "conv-filter";
   const metadataByName = new Map([
     ["Read", { groupId: "fs", isReadOnly: true }],
-    ["mcp_docs_search", { groupId: "mcp", isReadOnly: false }],
-    ["mcp_db_query", { groupId: "mcp", isReadOnly: false }],
+    ["mcp_docs_search", { groupId: "mcp", kind: "mcp", isReadOnly: false }],
+    ["mcp_db_query", { groupId: "mcp", kind: "mcp", isReadOnly: false }],
+    // McpManager 与业务工具同在 groupId "mcp",但不是延迟对象——它不在
+    // ToolSearch 目录里,被隐藏就永远无法激活,必须恒可见。
+    ["McpManager", { groupId: "mcp", kind: "manage_mcp", isReadOnly: false }],
   ]);
   const filter = tools.buildMcpRequestToolFilter({ conversationId, metadataByName });
   assert.equal(filter("Read"), true);
   assert.equal(filter("ToolSearch"), true);
+  assert.equal(filter("McpManager"), true);
   assert.equal(filter("mcp_docs_search"), false);
 
   // 激活集是活引用:激活后同一谓词立即放行(runner 每轮重估)。

@@ -905,10 +905,14 @@ export function ChatPage(props: ChatPageProps) {
   stopConversationActionRef.current = stopConversation;
 
   // 对话式计划审批(对齐 Codex):计划提交即终止规划 run,用户以消息或按钮
-  // 回应。批准 = 关 plan 开关 + 暂存执行续轮(run 消失后直发,不进队列);
-  // 退回 = 反馈作为普通用户消息发送(模型在 plan mode 修订后重新提交)。
+  // 回应。批准 = 关 plan 开关 + 暂存执行续轮;退回 = 反馈暂存为普通用户消息。
+  // 两者都走"暂存 → run 消失后冲刷"路径:send 在会话恰在发送/加载时会拒绝
+  // (返回 false),直发会静默丢消息——冲刷按结果重新暂存,直到真正发出。
   // 卡片按钮、输入框批准短语、WebUI plan_decision 三个入口共用这两条路径。
   const pendingPlanContinuationsRef = useRef(new Map<string, string>());
+  const pendingPlanFeedbackRef = useRef(new Map<string, string>());
+  const planDecisionSendsInFlightRef = useRef(new Set<string>());
+  const planDecisionRetryCountsRef = useRef(new Map<string, number>());
   const [planContinuationVersion, setPlanContinuationVersion] = useState(0);
   useEffect(() => {
     registerPlanDecisionHandlers({
@@ -922,36 +926,82 @@ export function ChatPage(props: ChatPageProps) {
             : prev,
         );
         pendingPlanContinuationsRef.current.set(conversationId, t("chat.planMode.executePrompt"));
+        planDecisionRetryCountsRef.current.delete(conversationId);
         setPlanContinuationVersion((version) => version + 1);
       },
       onReject: ({ conversationId, feedback }) => {
-        void sendActionRef.current({
-          conversationIdOverride: conversationId,
-          textOverride: feedback,
-          preserveComposerOnStart: true,
-        });
+        pendingPlanFeedbackRef.current.set(conversationId, feedback);
+        planDecisionRetryCountsRef.current.delete(conversationId);
+        setPlanContinuationVersion((version) => version + 1);
       },
     });
     return () => registerPlanDecisionHandlers(null);
   }, [setSettings, t]);
-  // 规划 run 结束(提交即终止) + plan 开关已关(settings 已 flush,避免续轮又
-  // 被"只能收紧"合并锁回只读)后,直接发送执行续轮。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: planContinuationVersion 是刻意的重跑触发器(批准写入 ref 后 bump)
+  // 冲刷暂存的计划应答消息(规划 run 已"提交即终止",但打断/排队等场景下会话
+  // 可能仍在发送):
+  // - 退回反馈:会话空闲即发(模型留在 plan mode 修订);
+  // - 执行续轮:还需 plan 开关已关(settings 已 flush,避免续轮又被"只能收紧"
+  //   合并锁回只读)。
+  // send 返回 false / 抛错时重新暂存;运行集变化(run 结束)是主要重试信号,
+  // 另排一次短延迟兜底 bump(覆盖 hydrating 等与运行集无关的拒绝)。兜底限次:
+  // 永久性失败(会话加载失败等)不得退化成秒级重试死循环——超限后消息仍留在
+  // 暂存 map,由下一次运行集变化或新应答触发再试。in-flight 集防并发重复发送。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: planContinuationVersion 是刻意的重跑触发器(应答写入 ref 后 bump)
   useEffect(() => {
+    const scheduleFlushRetry = (conversationId: string) => {
+      const attempts = planDecisionRetryCountsRef.current.get(conversationId) ?? 0;
+      if (attempts >= 5) return;
+      planDecisionRetryCountsRef.current.set(conversationId, attempts + 1);
+      window.setTimeout(() => setPlanContinuationVersion((version) => version + 1), 1_000);
+    };
+    const flushPlanSends = (
+      store: Map<string, string>,
+      buildOverrides: (conversationId: string, text: string) => Parameters<SendChatAction>[0],
+    ) => {
+      for (const [conversationId, text] of store) {
+        if (runningConversationIds.has(conversationId)) continue;
+        if (planDecisionSendsInFlightRef.current.has(conversationId)) continue;
+        planDecisionSendsInFlightRef.current.add(conversationId);
+        store.delete(conversationId);
+        void sendActionRef
+          .current(buildOverrides(conversationId, text))
+          .then((accepted) => {
+            // 竞态失败(会话恰在发送/加载)时重新暂存并排一次兜底重试;期间若
+            // 有更新的同会话应答入了 map,保留新值。
+            if (accepted) {
+              planDecisionRetryCountsRef.current.delete(conversationId);
+            } else if (!store.has(conversationId)) {
+              store.set(conversationId, text);
+              scheduleFlushRetry(conversationId);
+            }
+          })
+          .catch((error) => {
+            console.warn("plan decision message send failed", error);
+            if (!store.has(conversationId)) {
+              store.set(conversationId, text);
+              scheduleFlushRetry(conversationId);
+            }
+          })
+          .finally(() => {
+            planDecisionSendsInFlightRef.current.delete(conversationId);
+          });
+      }
+    };
+    flushPlanSends(pendingPlanFeedbackRef.current, (conversationId, feedback) => ({
+      conversationIdOverride: conversationId,
+      textOverride: feedback,
+      preserveComposerOnStart: true,
+    }));
     if (settings.chatRuntimeControls.planModeEnabled) return;
-    for (const [conversationId, prompt] of pendingPlanContinuationsRef.current) {
-      if (runningConversationIds.has(conversationId)) continue;
-      pendingPlanContinuationsRef.current.delete(conversationId);
-      void sendActionRef.current({
-        conversationIdOverride: conversationId,
-        textOverride: prompt,
-        preserveComposerOnStart: true,
-        runtimeControlsOverride: {
-          ...settings.chatRuntimeControls,
-          planModeEnabled: false,
-        },
-      });
-    }
+    flushPlanSends(pendingPlanContinuationsRef.current, (conversationId, prompt) => ({
+      conversationIdOverride: conversationId,
+      textOverride: prompt,
+      preserveComposerOnStart: true,
+      runtimeControlsOverride: {
+        ...settings.chatRuntimeControls,
+        planModeEnabled: false,
+      },
+    }));
   }, [planContinuationVersion, runningConversationIds, settings.chatRuntimeControls]);
 
   // Queue snapshots publish on queue mutation only; after a gateway
@@ -991,6 +1041,17 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
+  // 会话瞬态交互的统一 prune 清理:本页与 useConversationHistoryActions 两条
+  // prune 路径共用,保证生命周期裁决一致。计划审批刻意不在此列——待决计划的
+  // 设计就是跨 run 存活(规划 run 提交即终止),空闲运行时缓存被逐出不等于会话
+  // 销毁,回到会话后卡片必须仍可批准;真正删除会话时才连批准态一起清(见
+  // handleConversationDeleted)。MCP 激活集清了只损失一次重新检索,可清。
+  const cancelConversationTransientInteractions = useCallback((conversationId: string) => {
+    cancelPendingAskUserQuestionsForConversation(conversationId);
+    cancelPendingToolApprovalsForConversation(conversationId);
+    clearMcpToolActivation(conversationId);
+  }, []);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: Queue and runtime maps are mutable registries intentionally sampled at prune time through refs.
   const pruneIdleConversationCaches = useCallback(
     (extraKeepIds: Iterable<string> = []) => {
@@ -1007,10 +1068,7 @@ export function ChatPage(props: ChatPageProps) {
         onPruneConversation: (conversationId) => {
           deleteConversationLocalCaches(conversationId);
           subagentStoresRef.current.dispose(conversationId);
-          cancelPendingAskUserQuestionsForConversation(conversationId);
-          cancelPendingToolApprovalsForConversation(conversationId);
-          cancelPendingPlanDecisionsForConversation(conversationId);
-          clearMcpToolActivation(conversationId);
+          cancelConversationTransientInteractions(conversationId);
         },
       });
     },
@@ -1020,6 +1078,7 @@ export function ChatPage(props: ChatPageProps) {
       deleteConversationLocalCaches,
       isConversationRunning,
       conversationPersistenceCursorRef,
+      cancelConversationTransientInteractions,
     ],
   );
 
@@ -1080,6 +1139,13 @@ export function ChatPage(props: ChatPageProps) {
     deleteConversationArtifacts: deleteConversationLocalCaches,
     disposeSubagentsForConversation: (conversationId) => {
       subagentStoresRef.current.dispose(conversationId);
+    },
+    cancelConversationTransientInteractions,
+    cancelPlanDecisionsForConversation: (conversationId) => {
+      pendingPlanContinuationsRef.current.delete(conversationId);
+      pendingPlanFeedbackRef.current.delete(conversationId);
+      planDecisionRetryCountsRef.current.delete(conversationId);
+      cancelPendingPlanDecisionsForConversation(conversationId);
     },
     getDefaultNewConversationWorkdir: () =>
       isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,

@@ -134,10 +134,15 @@ test("approve routes to the host handler and settles the pending plan", async ()
   assert.deepEqual(rejections, []);
   assert.equal(tools.isPlanApprovalToolCall("call-approve-1"), true);
   assert.equal(tools.getPendingPlanForConversation("conv-approve"), null);
-  // 已落定后再次应答被拒。
-  assert.equal(tools.answerPlanDecision("call-approve-1", { decision: "approve" }).ok, false);
+  // 已落定后再次应答被拒(结构化 code 供远端卡片落定而非报错)。
+  const settled = tools.answerPlanDecision("call-approve-1", { decision: "approve" });
+  assert.equal(settled.ok, false);
+  assert.equal(settled.code, "not_pending");
   tools.registerPlanDecisionHandlers(null);
+  // 批准态也随会话清理:批准时 pending 已删,清理不得依赖 pending 反查——
+  // 否则 approvedToolCallIds 随进程无限增长。
   tools.cancelPendingPlanDecisionsForConversation("conv-approve");
+  assert.equal(tools.isPlanApprovalToolCall("call-approve-1"), false);
 });
 
 test("reject requires feedback and routes it to the host as a message", async () => {

@@ -240,8 +240,10 @@ export function createToolSearchTools(params: {
 }
 
 /**
- * 请求层可见性谓词:非 MCP 工具恒可见;MCP 工具需已激活。ToolSearch 自身
- * 恒可见。runner 每轮请求都会重新评估,ToolSearch 激活后下一轮立即生效。
+ * 请求层可见性谓词:非 MCP 业务工具恒可见;MCP 业务工具需已激活。判定必须用
+ * kind === "mcp"(业务工具专属),不能用裸 groupId——McpManager 也在 groupId
+ * "mcp" 下,但它不进延迟目录,按 groupId 隐藏会让它从模型请求中永久消失。
+ * ToolSearch 自身恒可见。runner 每轮请求都会重新评估,激活后下一轮立即生效。
  */
 export function buildMcpRequestToolFilter(params: {
   conversationId: string;
@@ -249,7 +251,8 @@ export function buildMcpRequestToolFilter(params: {
 }): (toolName: string) => boolean {
   const activation = getMcpToolActivation(params.conversationId);
   return (toolName: string) => {
-    if (params.metadataByName.get(toolName)?.groupId !== "mcp") return true;
+    const metadata = params.metadataByName.get(toolName);
+    if (metadata?.groupId !== "mcp" || metadata.kind !== "mcp") return true;
     return activation.has(toolName);
   };
 }

@@ -2640,3 +2640,43 @@ test("resolveToolTermination ends the run after the flagged tool call (no wrap-u
   assert.equal(textDeltas.join(""), "");
   assert.equal(result.assistant.stopReason, "toolUse");
 });
+
+test("resolveToolTermination spreads across a mixed parallel batch (still ends the run)", async () => {
+  // pi-agent-core 的批终止是 all-or-nothing:批内每个调用都标记 terminate 才
+  // 生效。ExitPlanMode 与普通并行调用(Read 等)同批时,谓词必须铺展到整批——
+  // 否则一个 Read 就静默作废"提交即结束本轮"的保证,run 继续跑收尾轮,
+  // 待决计划与仍在运行的轮次互相竞态。
+  const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
+  const readCall = createToolCall("call-read", "Read", { file_path: "/tmp/a" });
+  resetFakeStreams(
+    createAssistant([planCall, readCall], "toolUse"),
+    createTextAssistant("SHOULD_NEVER_STREAM"),
+  );
+  const { params, executedToolCalls, textDeltas } = createBaseParams({
+    tools: [
+      {
+        name: "ExitPlanMode",
+        description: "Present the plan",
+        parameters: { type: "object", properties: { plan: { type: "string" } } },
+      },
+      {
+        name: "Read",
+        description: "Read a file",
+        parameters: { type: "object", properties: { file_path: { type: "string" } } },
+      },
+    ],
+    resolveToolTermination: (toolCall) => toolCall.name === "ExitPlanMode",
+  });
+  params.context = { ...params.context, tools: params.tools };
+
+  const result = await runAssistantWithTools(params);
+
+  // 同批的并行调用照常执行(结果保留在历史),随后 run 就地终止。
+  assert.deepEqual(
+    executedToolCalls.map((call) => call.name).sort(),
+    ["ExitPlanMode", "Read"],
+  );
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(textDeltas.join(""), "");
+  assert.equal(result.assistant.stopReason, "toolUse");
+});

@@ -482,9 +482,10 @@ export async function runAssistantWithTools(params: {
    */
   requestToolFilter?: (toolName: string) => boolean;
   /**
-   * 工具级终止谓词:某次调用执行完后返回 true 则本轮 run 就此结束,不再跑
-   * 后续模型轮(pi-agent-core afterToolCall terminate)。计划批准用它跳过
-   * 无意义的"收尾话"轮——批准事实由卡片展示,执行由续轮承接。
+   * 工具级终止谓词:某批调用里任一调用命中即在该批执行完后结束本轮 run,不再
+   * 跑后续模型轮(pi-agent-core afterToolCall terminate,批内全部标记 terminate
+   * 才生效,故谓词按批铺展——同批的并行调用照常执行,结果保留在历史)。计划
+   * 提交用它跳过无意义的"收尾话"轮——批准事实由卡片展示,执行由续轮承接。
    */
   resolveToolTermination?: (toolCall: ToolCall) => boolean;
 }) {
@@ -1496,10 +1497,18 @@ export async function runAssistantWithTools(params: {
       toolExecution: "sequential",
       afterToolCall: async ({ assistantMessage, toolCall }) => ({
         isError: toolResultErrorFlags.get(toolCall.id) ?? false,
-        // The batch only terminates when *every* call terminates, so a real
-        // local tool call mixed into the same message keeps the loop running.
+        // The batch only terminates when *every* call terminates. A terminating
+        // call (ExitPlanMode) can arrive batched with ordinary parallel calls,
+        // so the predicate must spread across the whole batch: every sibling
+        // still executes and keeps its result in history, then the run ends —
+        // otherwise one Read next to ExitPlanMode would silently void the
+        // "submitting ends this turn" guarantee and run a wrap-up round.
         terminate:
-          (params.resolveToolTermination?.(toolCall) ?? false) ||
+          (params.resolveToolTermination
+            ? getAssistantToolCalls(assistantMessage).some((call) =>
+                params.resolveToolTermination?.(call),
+              )
+            : false) ||
           (await shouldTerminateBridgedProviderNativeToolCall(assistantMessage, toolCall)),
       }),
       beforeToolCall: async ({ assistantMessage, toolCall }) => {
