@@ -194,8 +194,7 @@ test("workspace configuration uses one entry and one shared two-column modal", (
 
 test("prompt templates expose global and project scopes with append or replace editing", () => {
   assert.match(sharedProjectPromptEditor, /\["append", "replace"\]/);
-  assert.match(sharedProjectPromptEditor, /resolveEffectivePromptSettings\(settings, ""\)/);
-  assert.match(sharedProjectPromptEditor, /chat\.projectPromptEffectivePreview/);
+  assert.doesNotMatch(sharedProjectPromptEditor, /projectPromptEffectivePreview/);
   assert.match(guiChatPage, /onConfigureProject=\{setProjectSettingsProject\}/);
   assert.match(webGatewayAppView, /onConfigureProject=\{setProjectSettingsProject\}/);
   assert.doesNotMatch(guiChatPage, /onEditProjectPrompt/);
@@ -233,7 +232,7 @@ test("project prompt preview renders the effective prompt without overflowing it
   assert.match(sharedAgentsSection, /hidePromptHeader/);
   assert.match(sharedAgentsSection, /label: t\("chat\.globalPromptTitle"\)/);
   assert.match(sharedAgentsSection, /<PromptScopeLabel label=\{segment\.label\}/);
-  assert.match(sharedAgentsSection, /h-px min-w-4 flex-1 bg-border\/70/);
+  assert.match(sharedAgentsSection, /my-5 h-px w-full bg-border\/70/);
   assert.match(sharedAgentsSection, /md:grid-cols-\[minmax\(0,16rem\)_minmax\(0,1fr\)\]/);
   assert.match(sharedAgentsSection, /\[overflow-wrap:anywhere\]/);
   assert.match(

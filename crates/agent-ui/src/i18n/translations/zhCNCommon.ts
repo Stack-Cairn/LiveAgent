@@ -184,8 +184,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.projectPromptContent": "提示词内容",
   "chat.projectPromptContentHint": "留空表示该项目仅使用全局提示词。",
   "chat.projectPromptPlaceholder": "输入这个项目专属的背景、约束和工作方式...",
-  "chat.projectPromptEffectivePreview": "查看最终生效提示词",
-  "chat.projectPromptEffectiveEmpty": "当前不会注入提示词。",
   "chat.workspaceSettingsTitle": "项目配置",
   "chat.workspaceSettingsNavigation": "项目配置导航",
   "chat.workspaceSettingsGeneral": "通用配置",

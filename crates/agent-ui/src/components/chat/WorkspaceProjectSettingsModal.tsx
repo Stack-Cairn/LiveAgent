@@ -456,7 +456,6 @@ export function WorkspaceProjectSettingsModal(props: {
             {activePanel === "prompt" ? (
               <div className="space-y-5 p-6">
                 <ProjectPromptSettingsPanel
-                  settings={settings}
                   projectPrompt={projectPrompt}
                   strategy={projectPromptStrategy}
                   onProjectPromptChange={setProjectPrompt}

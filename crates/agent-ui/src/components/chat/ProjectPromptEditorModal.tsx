@@ -1,7 +1,6 @@
 import {
   type AppSettings,
   type ProjectPromptStrategy,
-  resolveEffectivePromptSettings,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
@@ -19,7 +18,7 @@ import {
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 export type ProjectPromptDraft = {
   projectPrompt: string;
@@ -27,21 +26,13 @@ export type ProjectPromptDraft = {
 };
 
 export function ProjectPromptSettingsPanel(props: {
-  settings: AppSettings;
   projectPrompt: string;
   strategy: ProjectPromptStrategy;
   onProjectPromptChange: (value: string) => void;
   onStrategyChange: (value: ProjectPromptStrategy) => void;
 }) {
-  const { settings, projectPrompt, strategy, onProjectPromptChange, onStrategyChange } = props;
+  const { projectPrompt, strategy, onProjectPromptChange, onStrategyChange } = props;
   const { t } = useLocale();
-  const globalSettings = resolveEffectivePromptSettings(settings, "");
-  const effectivePrompt = useMemo(() => {
-    const local = projectPrompt.trim();
-    if (!local) return globalSettings.globalPrompt;
-    if (strategy === "replace" || !globalSettings.globalPrompt) return local;
-    return `${globalSettings.globalPrompt}\n\n${local}`;
-  }, [globalSettings.globalPrompt, projectPrompt, strategy]);
 
   return (
     <>
@@ -120,20 +111,6 @@ export function ProjectPromptSettingsPanel(props: {
           onChange={(event) => onProjectPromptChange(event.currentTarget.value)}
         />
       </section>
-
-      <details className="group rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
-        <summary className="cursor-pointer list-none text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="flex items-center justify-between gap-3">
-            <span>{t("chat.projectPromptEffectivePreview")}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {effectivePrompt.length.toLocaleString()} {t("settings.agentsCharacters")}
-            </span>
-          </span>
-        </summary>
-        <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap border-t border-border/60 pt-3 font-mono text-xs leading-5 text-muted-foreground">
-          {effectivePrompt || t("chat.projectPromptEffectiveEmpty")}
-        </pre>
-      </details>
     </>
   );
 }
@@ -194,7 +171,6 @@ export function ProjectPromptEditorModal(props: {
 
         <DialogBody className="space-y-5 overflow-y-auto px-6 py-5">
           <ProjectPromptSettingsPanel
-            settings={settings}
             projectPrompt={projectPrompt}
             strategy={strategy}
             onProjectPromptChange={setProjectPrompt}

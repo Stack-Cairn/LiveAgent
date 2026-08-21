@@ -604,21 +604,9 @@ function AgentPromptViewModal({
                 {promptSegments ? (
                   promptSegments.map((segment, index) => (
                     <div key={segment.tone}>
-                      {index === 0 ? (
-                        <PromptScopeLabel label={segment.label} tone={segment.tone} />
-                      ) : (
-                        <div className="flex items-center gap-3 py-5">
-                          <span className="h-px min-w-4 flex-1 bg-border/70" />
-                          <PromptScopeLabel label={segment.label} tone={segment.tone} />
-                          <span className="h-px min-w-4 flex-1 bg-border/70" />
-                        </div>
-                      )}
-                      <pre
-                        className={cn(
-                          "whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground/90",
-                          index === 0 && "mt-4",
-                        )}
-                      >
+                      {index > 0 ? <div className="my-5 h-px w-full bg-border/70" /> : null}
+                      <PromptScopeLabel label={segment.label} tone={segment.tone} />
+                      <pre className="mt-4 whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground/90">
                         {segment.prompt}
                       </pre>
                     </div>

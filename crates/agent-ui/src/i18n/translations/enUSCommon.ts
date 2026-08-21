@@ -202,8 +202,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.projectPromptContentHint": "Leave empty to use global prompts only for this project.",
   "chat.projectPromptPlaceholder":
     "Describe the context, constraints, and working style specific to this project...",
-  "chat.projectPromptEffectivePreview": "Preview effective prompt",
-  "chat.projectPromptEffectiveEmpty": "No prompt will be injected.",
   "chat.workspaceSettingsTitle": "Project settings",
   "chat.workspaceSettingsNavigation": "Project settings navigation",
   "chat.workspaceSettingsGeneral": "General",
