@@ -1,6 +1,8 @@
 import type { Context, Message, Usage } from "@earendil-works/pi-ai";
 
 import {
+  estimateContentBlockTokenUnits,
+  estimateContentTokenUnits,
   estimateTextTokens,
   estimateTextTokenUnits,
   MESSAGE_ENVELOPE_TOKENS,
@@ -24,53 +26,28 @@ export { estimateTextTokens, estimateTextTokenUnits };
 const messageTokenCache = new WeakMap<object, number>();
 const toolsTokenCache = new WeakMap<object, number>();
 
+// 统一走共享层的内容块口径（文本 CJK 感知、二进制块按计价常量、小结构兜底
+// 序列化）。toolResult 的 details 是 UI/记账负载，provider 转换只发送 content，
+// 一律不计——shell 全量输出、文件读取元数据都挂在 details 上，计入即双算。
 function estimateMessageTokenUnits(message: Message): number {
-  let units = 0;
   if (message.role === "assistant") {
+    let units = 0;
     for (const block of message.content) {
       if (!block || typeof block !== "object") continue;
-      if (block.type === "text" || block.type === "thinking") {
-        const text =
-          (block as { text?: string; thinking?: string }).text ??
-          (block as { thinking?: string }).thinking;
-        if (typeof text === "string") units += estimateTextTokenUnits(text);
-        continue;
-      }
       if (block.type === "toolCall") {
         units += estimateTextTokenUnits(block.name) + stringifiedTokenUnits(block.arguments);
         continue;
       }
-      units += stringifiedTokenUnits(block);
+      units += estimateContentBlockTokenUnits(block);
     }
     return units;
   }
 
   if (message.role === "toolResult") {
-    for (const block of message.content) {
-      if (block && typeof block === "object" && block.type === "text") {
-        units += typeof block.text === "string" ? estimateTextTokenUnits(block.text) : 0;
-      } else {
-        units += stringifiedTokenUnits(block);
-      }
-    }
-    if (message.details != null) units += stringifiedTokenUnits(message.details);
-    return units;
+    return estimateContentTokenUnits(message.content);
   }
 
-  const content = (message as { content?: unknown }).content;
-  if (typeof content === "string") return estimateTextTokenUnits(content);
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (block && typeof block === "object" && (block as { type?: string }).type === "text") {
-        const text = (block as { text?: string }).text;
-        units += typeof text === "string" ? estimateTextTokenUnits(text) : 0;
-      } else {
-        units += stringifiedTokenUnits(block);
-      }
-    }
-    return units;
-  }
-  return stringifiedTokenUnits(content);
+  return estimateContentTokenUnits((message as { content?: unknown }).content);
 }
 
 export function estimateMessageTokens(message: Message): number {
@@ -222,9 +199,9 @@ export class TokenLedger {
   }
 
   total(): number {
-    // 有 usage 锚点时恒信 observed + trailing：估算（尤其 base64 图片按序列化
-    // 字符数、CJK 按 0.7 tok/char）有意高估，与真实读数取 max 会让环读数与
-    // 自动压缩被估算劫持。估算只在完全没有 usage 锚点时兜底。
+    // 有 usage 锚点时恒信 observed + trailing：估算口径偏保守（CJK 0.7 tok/char、
+    // 二进制块按计价量级常量），与真实读数取 max 会让环读数与自动压缩被估算
+    // 劫持。估算只在完全没有 usage 锚点时兜底。
     if (!this.hasObservedUsage) return this.estimatedTotalTokens;
     return this.observedTokens + this.trailingTokens;
   }

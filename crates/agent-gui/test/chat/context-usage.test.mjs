@@ -195,9 +195,37 @@ test("deriveContextUsageTokens adds messages and tool results after the newest u
     },
     { kind: "user", text: trailingUser },
   ];
-  const toolResultTokens =
-    Math.ceil(contextUsage.estimateTextTokenUnits(JSON.stringify(toolResultContent))) + 8;
+  // 工具结果只计模型可见文本（不再整块 JSON 序列化后按字符估）。
+  const toolResultTokens = Math.ceil(contextUsage.estimateTextTokenUnits("y".repeat(4_000))) + 8;
   assert.equal(deriveContextUsageTokens(items), 120_008 + toolResultTokens);
+});
+
+test("deriveContextUsageTokens prices binary tool payloads flat and ignores details", () => {
+  const items = [
+    {
+      kind: "assistant",
+      rounds: [
+        {
+          meta: { usageTotalTokens: 10_000 },
+          blocks: [
+            {
+              kind: "tool",
+              item: {
+                toolCall: { name: "Read", arguments: { path: "shot.png" } },
+                toolResult: {
+                  content: [{ type: "image", data: "A".repeat(1_000_000), mimeType: "image/png" }],
+                  details: { stdout: "C".repeat(400_000) },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  // 锚点轮次自身的工具结果补计：图按计价常量而非 base64/4（后者虚报 25 万
+  // token 令环跳变），details 不发给模型、不计。
+  assert.equal(deriveContextUsageTokens(items), 10_000 + contextUsage.BINARY_BLOCK_TOKENS + 8);
 });
 
 test("deriveContextUsageTokens falls back to checkpoint estimate after compaction", () => {

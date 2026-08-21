@@ -130,8 +130,9 @@ export function buildContextUsageScanItems(
 // 开销。两端（GUI TokenLedger 与 WebUI 倒扫）共用此口径，调参只改这里。
 export const MESSAGE_ENVELOPE_TOKENS = 8;
 
-// 非文本值的估算口径（字符串直估，其余 JSON 序列化后估）。GUI TokenLedger
-// 与 WebUI 倒扫共用，保证两端对同一负载的估算一致。
+// 结构化小负载的估算口径（字符串直估，其余 JSON 序列化后估）。只作为
+// estimateContentBlockTokenUnits 的兜底叶子使用；带 base64 的二进制块绝不能
+// 走到这里（见 BINARY_BLOCK_TOKENS）。
 export function stringifiedTokenUnits(value: unknown): number {
   if (typeof value === "string") return estimateTextTokenUnits(value);
   if (value == null) return 0;
@@ -143,20 +144,52 @@ export function stringifiedTokenUnits(value: unknown): number {
   }
 }
 
+// 模型对图片等二进制附件按图幅/文件计价（Anthropic ≈ 宽×高/750、OpenAI 按
+// tile），单块通常数百到 ~2k token，与 base64 长度无关。估算侧拿不到解码
+// 尺寸，取计价量级上限的常量。按序列化字符数估会差两个数量级——一张 400KB
+// 图的 base64 虚报 ~13 万 token，用量环随锚点在估算/真实 usage 间切换而剧烈
+// 跳变，自动压缩也会被幻影读数提前触发。
+export const BINARY_BLOCK_TOKENS = 1_600;
+
+// 内容块的统一估算：文本/思维链按 CJK 感知直估，携带 base64 负载的二进制块
+//（pi-ai ImageContent 等 {type, data, mimeType} 形态）按常量，其余小型结构
+// 块按序列化。GUI TokenLedger 与 WebUI 倒扫共用，两端口径一致。
+export function estimateContentBlockTokenUnits(block: unknown): number {
+  if (typeof block === "string") return estimateTextTokenUnits(block);
+  if (!block || typeof block !== "object") return 0;
+  const record = block as { text?: unknown; thinking?: unknown; data?: unknown };
+  if (typeof record.text === "string") return estimateTextTokenUnits(record.text);
+  if (typeof record.thinking === "string") return estimateTextTokenUnits(record.thinking);
+  if (typeof record.data === "string") return BINARY_BLOCK_TOKENS;
+  return stringifiedTokenUnits(block);
+}
+
+// 消息 content 的统一估算（string | 块数组 | 其他结构）。
+export function estimateContentTokenUnits(content: unknown): number {
+  if (typeof content === "string") return estimateTextTokenUnits(content);
+  if (Array.isArray(content)) {
+    let units = 0;
+    for (const block of content) units += estimateContentBlockTokenUnits(block);
+    return units;
+  }
+  return content == null ? 0 : stringifiedTokenUnits(content);
+}
+
 function messageTokensFromUnits(units: number): number {
   return Math.ceil(Math.max(0, units)) + MESSAGE_ENVELOPE_TOKENS;
 }
 
 // 两端 store 都按不可变更新替换工具结果对象，估算结果可按对象身份缓存；
-// 流式期间倒扫逐帧执行，没有这层缓存会对大工具结果每帧重复 JSON.stringify。
+// 流式期间倒扫逐帧执行，没有这层缓存会对大工具结果每帧重复估算。
 const toolResultTokenCache = new WeakMap<object, number>();
 
-function estimateToolResultTokens(result: { content?: unknown; details?: unknown }): number {
+function estimateToolResultTokens(result: { content?: unknown }): number {
   const cached = toolResultTokenCache.get(result);
   if (cached !== undefined) return cached;
-  const tokens = messageTokensFromUnits(
-    stringifiedTokenUnits(result.content) + stringifiedTokenUnits(result.details),
-  );
+  // 只计模型可见的 content：details 是 UI/记账负载，provider 转换从不发送
+  //（shell 的全量 stdout/stderr、文件读取元数据都挂在上面），计入会把 shell
+  // 输出双算、把纯元数据当上下文，读数系统性虚高。
+  const tokens = messageTokensFromUnits(estimateContentTokenUnits(result.content));
   toolResultTokenCache.set(result, tokens);
   return tokens;
 }
@@ -173,7 +206,7 @@ function estimateRoundTokens(
         block.item && typeof block.item === "object"
           ? (block.item as {
               toolCall?: { name?: string; arguments?: unknown };
-              toolResult?: { content?: unknown; details?: unknown };
+              toolResult?: { content?: unknown };
             })
           : undefined;
       const toolCall = item?.toolCall;
@@ -186,10 +219,7 @@ function estimateRoundTokens(
       continue;
     }
     if (!onlyToolResults) {
-      assistantUnits +=
-        typeof block.text === "string"
-          ? estimateTextTokenUnits(block.text)
-          : stringifiedTokenUnits(block);
+      assistantUnits += estimateContentBlockTokenUnits(block);
     }
   }
   if (onlyToolResults) return toolResultTokens;
