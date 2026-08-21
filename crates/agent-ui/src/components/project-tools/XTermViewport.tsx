@@ -177,6 +177,7 @@ export function XTermViewport({
     }, 0);
   }, [isActive]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: project identity intentionally recreates the terminal session viewport
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;

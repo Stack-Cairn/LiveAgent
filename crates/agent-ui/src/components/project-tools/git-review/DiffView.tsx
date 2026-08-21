@@ -539,6 +539,7 @@ export function DiffContent(props: {
     [updateDiffHorizontalScrollbar],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: diff render state invalidates the measured scroll targets
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -747,6 +748,7 @@ export function DiffContent(props: {
 
   useEffect(() => stopSelectionAutoscroll, [stopSelectionAutoscroll]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: any diff state transition must close the stale selection menu
   useEffect(() => {
     closeSelectionContextMenu();
   }, [closeSelectionContextMenu, diff?.patch, error, loading]);

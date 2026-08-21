@@ -1,4 +1,4 @@
-import type { Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type { Api, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { AnthropicEffort } from "@earendil-works/pi-ai/api/anthropic-messages";
 import type { GoogleOptions } from "@earendil-works/pi-ai/api/google-generative-ai";
@@ -22,13 +22,13 @@ export type AnthropicThinkingRuntime = {
   display?: "summarized";
 };
 
-function anthropicCompat(model: Model<any>) {
+function anthropicCompat(model: Model<Api>) {
   return (model as Model<"anthropic-messages">).compat;
 }
 
 // 与 pi-ai streamAnthropic 内部判定同源：目录 compat.forceAdaptiveThinking 决定
 // adaptive 还是 budget 档；自定义模型没有 compat，一律按 budget 处理。
-export function supportsAdaptiveAnthropicThinking(model: Model<any>): boolean {
+export function supportsAdaptiveAnthropicThinking(model: Model<Api>): boolean {
   return anthropicCompat(model)?.forceAdaptiveThinking ?? false;
 }
 
@@ -43,7 +43,7 @@ const ANTHROPIC_THINKING_BUDGETS: Record<NonNullable<ReasoningInput>, number> = 
 
 export function mapReasoningToAnthropicEffort(
   reasoning: ReasoningInput,
-  model: Model<any>,
+  model: Model<Api>,
 ): AnthropicEffort {
   // 目录 thinkingLevelMap 显式声明的档位优先（如 opus-4-6 的 xhigh→max），
   // 与 pi-ai mapThinkingLevelToEffort 同语义；未声明则按标准档位直通。
@@ -66,7 +66,7 @@ export function mapReasoningToAnthropicEffort(
 }
 
 export function resolveAnthropicThinkingRuntime(
-  model: Model<any>,
+  model: Model<Api>,
   options: StreamOptionsEx,
 ): AnthropicThinkingRuntime {
   const maxTokens = resolveMaxTokens(options.maxTokens, model.maxTokens);
@@ -106,7 +106,7 @@ export function resolveAnthropicThinkingRuntime(
 // 档位；未声明覆盖时，pi-ai 底层 stream() 会把裁剪后的档位字符串原样透传给
 // reasoning_effort，此处无需再做一次模型族 id 判定。
 export function clampOpenAIReasoningEffort(
-  model: Model<any>,
+  model: Model<Api>,
   reasoning: ReasoningInput,
 ): ReasoningInput {
   if (!reasoning) return undefined;
@@ -182,7 +182,7 @@ function mapGeminiThinkingBudget(modelId: string, effort: GeminiEffort) {
 }
 
 export function resolveGeminiThinkingRuntime(
-  model: Model<any>,
+  model: Model<Api>,
   reasoning: ReasoningInput,
 ): GoogleOptions["thinking"] {
   if (!reasoning) return { enabled: false };

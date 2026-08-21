@@ -298,6 +298,16 @@ pub fn blocking_client_builder() -> Result<reqwest::blocking::ClientBuilder, Str
     blocking_client_builder_for_mode(&current_snapshot().mode)
 }
 
+/// 供自建 TCP 隧道（如 SSH 传输）复用应用代理：`Ok(None)` 表示未启用（直连），
+/// `Err` 表示已启用但配置无效（调用方 fail fast），`Ok(Some)` 返回配置副本。
+pub fn current_config() -> Result<Option<SystemProxyConfig>, String> {
+    match current_snapshot().mode {
+        ProxyMode::Disabled => Ok(None),
+        ProxyMode::Invalid(error) => Err(error),
+        ProxyMode::Enabled(config) => Ok(Some(config)),
+    }
+}
+
 /// 异步版 `blocking_client_builder()`：显式 no_proxy 语义,供需要自定义
 /// 超时/重定向等选项、无法直接复用 `cached_client()` 的出网点使用。
 pub fn async_client_builder() -> Result<reqwest::ClientBuilder, String> {

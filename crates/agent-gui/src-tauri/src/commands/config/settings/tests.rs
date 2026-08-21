@@ -457,7 +457,8 @@ mod tests {
                             "url": "http://127.0.0.1",
                             "port": "1080",
                             "username": "proxy-user",
-                            "password": "proxy-password"
+                            "password": "proxy-password",
+                            "useSystemProxy": true
                         }
                     },
                     {
@@ -525,7 +526,8 @@ mod tests {
                 "port": 1080,
                 "username": "proxy-user",
                 "password": "proxy-password",
-                "passwordConfigured": true
+                "passwordConfigured": true,
+                "useSystemProxy": true
             })
         );
         assert_eq!(
@@ -553,7 +555,8 @@ mod tests {
                             "port": 1080,
                             "username": "proxy-user",
                             "password": "proxy-password",
-                            "passwordConfigured": true
+                            "passwordConfigured": true,
+                            "useSystemProxy": true
                         }
                     },
                     {
@@ -577,7 +580,8 @@ mod tests {
                             "port": 0,
                             "username": "",
                             "password": "",
-                            "passwordConfigured": false
+                            "passwordConfigured": false,
+                            "useSystemProxy": false
                         }
                     }
                 ],

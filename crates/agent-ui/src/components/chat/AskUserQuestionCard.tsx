@@ -257,15 +257,17 @@ export function AskUserQuestionCard({
             {activeQuestion.prompt}
           </div>
 
-          <div
-            className="flex flex-col gap-1.5"
+          <fieldset
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；子项 role="radio" 需要 radiogroup 上下文。
             role="radiogroup"
+            className="flex min-w-0 flex-col gap-1.5 border-0 p-0"
             aria-label={activeQuestion.prompt}
           >
             {activeQuestion.options.map((option) => {
               const isSelected =
                 !activeCustomSelected && selections[activeQuestion.id] === option.label;
               return (
+                // biome-ignore lint/a11y/useSemanticElements: Card options use the ARIA radio pattern so their rich description/recommended content remains one focusable choice.
                 <button
                   key={option.label}
                   type="button"
@@ -319,6 +321,7 @@ export function AskUserQuestionCard({
             {/* UI 合成的“其他（自行输入）”行：固定在选项最底部，不属于模型给出的
                 options；选中后展开单行输入框，键入文本即该题应答。选项行是
                 button 而 input 不能嵌套其中，故此行用 div role="radio"。 */}
+            {/* biome-ignore lint/a11y/useSemanticElements: This composite radio contains the custom text input, so a native radio/input or button would create invalid nested label/interactive markup. */}
             <div
               role="radio"
               aria-checked={activeCustomSelected}
@@ -393,7 +396,7 @@ export function AskUserQuestionCard({
                 ) : null}
               </span>
             </div>
-          </div>
+          </fieldset>
         </div>
 
         {cancelled ? (

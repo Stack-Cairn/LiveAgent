@@ -941,9 +941,8 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         {tabs.map((tab) => {
           const dirty = tab.content !== tab.savedContent;
           return (
-            <button
+            <div
               key={tab.key}
-              type="button"
               className={cn(
                 "group flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs transition-colors",
                 tab.key === activeKey
@@ -951,36 +950,34 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
                   : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
               title={tab.remote ? `${t("workspaceEditor.remoteTabBadge")} · ${tab.path}` : tab.path}
-              onClick={() => setActiveKey(tab.key)}
             >
-              {tab.status === "conflict" ? (
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-              ) : tab.remote ? (
-                <Cloud className="h-3.5 w-3.5 shrink-0 text-sky-500" />
-              ) : (
-                <FilePenLine className="h-3.5 w-3.5 shrink-0" />
-              )}
-              <span className="min-w-0 truncate">{basename(tab.path)}</span>
-              {dirty ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
-              <span
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-1.5"
+                onClick={() => setActiveKey(tab.key)}
+              >
+                {tab.status === "conflict" ? (
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                ) : tab.remote ? (
+                  <Cloud className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+                ) : (
+                  <FilePenLine className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="min-w-0 truncate">{basename(tab.path)}</span>
+                {dirty ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
+              </button>
+              <button
+                type="button"
                 className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/75 hover:bg-background hover:text-foreground"
                 title={t("workspaceEditor.closeTab")}
                 onClick={(event) => {
                   event.stopPropagation();
                   requestCloseTab(tab.key);
                 }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  requestCloseTab(tab.key);
-                }}
               >
                 <X className="h-3 w-3" />
-              </span>
-            </button>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -1001,6 +998,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         </div>
       ) : null}
 
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: The editor surface exposes a pointer context menu; Monaco owns its keyboard interaction model. */}
       <div className="relative min-h-0 flex-1 bg-background" onContextMenu={openEditorContextMenu}>
         <div ref={containerRef} className={cn("absolute inset-0", !activeTab && "hidden")} />
         {!activeTab ? (
@@ -1021,6 +1019,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       </div>
 
       {contextMenu ? (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
           className="editor-context-menu absolute z-50 w-[220px] overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -1177,7 +1176,7 @@ function ContextMenuItem(props: {
 }
 
 function ContextMenuSeparator() {
-  return <div className="mx-1 my-1 h-px bg-border/60" role="separator" />;
+  return <hr className="mx-1 my-1 h-px border-0 bg-border/60" />;
 }
 
 function IconButton(props: {

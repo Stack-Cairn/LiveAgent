@@ -4,6 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const ledgerModule = loader.loadModule("src/lib/chat/compaction/tokenLedger.ts");
+const { BINARY_BLOCK_TOKENS } = loader.loadModule("@liveagent/ui/lib/chat/contextUsage.ts");
 
 const {
   TokenLedger,
@@ -84,7 +85,7 @@ test("estimateTextTokenUnits is additive across arbitrary splits", () => {
   assert.ok(Math.abs(whole - split) < 1e-9, `whole=${whole} split=${split}`);
 });
 
-test("estimateMessageTokens covers text, tool calls, tool results and details", () => {
+test("estimateMessageTokens covers text, tool calls and model-visible tool result content", () => {
   assert.equal(estimateMessageTokens(user("a".repeat(400))), 100 + 8);
 
   const withToolCall = {
@@ -102,9 +103,40 @@ test("estimateMessageTokens covers text, tool calls, tool results and details", 
     Math.ceil((40 + "Read".length + argsChars) / 4) + 8,
   );
 
+  // details 是 UI/记账负载（shell 全量输出、文件元数据都挂在上面），provider
+  // 转换只发送 content——计入即双算，账本读数系统性虚高。
   const resultWithDetails = { ...toolResult("c".repeat(80)), details: { lines: 12 } };
-  const detailsChars = JSON.stringify({ lines: 12 }).length;
-  assert.equal(estimateMessageTokens(resultWithDetails), Math.ceil((80 + detailsChars) / 4) + 8);
+  assert.equal(estimateMessageTokens(resultWithDetails), Math.ceil(80 / 4) + 8);
+});
+
+test("estimateMessageTokens prices binary blocks at provider scale, not base64 length", () => {
+  // 400KB 图的 base64 按字符数会虚报 ~13 万 token，环随锚点在估算/真实 usage
+  // 间切换而剧烈跳变；按计价量级常量后读数与真实成本同量级。
+  const imageResult = {
+    role: "toolResult",
+    toolCallId: "tc-img",
+    toolName: "Read",
+    content: [
+      { type: "text", text: "a".repeat(40) },
+      { type: "image", data: "A".repeat(1_000_000), mimeType: "image/png" },
+    ],
+    isError: false,
+    timestamp: 3,
+  };
+  assert.equal(estimateMessageTokens(imageResult), Math.ceil(40 / 4) + BINARY_BLOCK_TOKENS + 8);
+
+  const imageUser = {
+    role: "user",
+    content: [
+      { type: "text", text: "看这张图" },
+      { type: "image", data: "B".repeat(500_000), mimeType: "image/jpeg" },
+    ],
+    timestamp: 1,
+  };
+  assert.equal(
+    estimateMessageTokens(imageUser),
+    Math.ceil(estimateTextTokenUnits("看这张图") + BINARY_BLOCK_TOKENS) + 8,
+  );
 });
 
 test("estimateMessageTokens memoizes by object identity", () => {

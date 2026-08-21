@@ -55,7 +55,7 @@ export type ChatCommandUpdateListener = (update: ChatCommandUpdate) => void;
 export type WorkspaceActivityListener = (event: WorkspaceActivityEventPayload) => void;
 
 export type PendingRequest = {
-  resolve: (value: any) => void;
+  resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
   timeoutId: number;
 };

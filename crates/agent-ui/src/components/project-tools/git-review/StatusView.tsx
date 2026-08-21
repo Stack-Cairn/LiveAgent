@@ -182,6 +182,7 @@ export function GitReviewStatusView(props: {
   const [visibleWorkingEntryCount, setVisibleWorkingEntryCount] = useState(
     INITIAL_CHANGE_ENTRY_RENDER_COUNT,
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repository and entry-count changes reset incremental rendering
   useEffect(() => {
     setVisibleStagedEntryCount(INITIAL_CHANGE_ENTRY_RENDER_COUNT);
     setVisibleWorkingEntryCount(INITIAL_CHANGE_ENTRY_RENDER_COUNT);
@@ -320,7 +321,8 @@ export function GitReviewStatusView(props: {
   const stageEntry = useCallback(
     (entry: GitStatusEntry) => {
       setChangeContextMenu(null);
-      void runOperation("stage", () => gitClient!.stage(cwd, entry.path));
+      if (!gitClient) return;
+      void runOperation("stage", () => gitClient.stage(cwd, entry.path));
     },
     [cwd, gitClient, runOperation],
   );
@@ -328,7 +330,8 @@ export function GitReviewStatusView(props: {
   const unstageEntry = useCallback(
     (entry: GitStatusEntry) => {
       setChangeContextMenu(null);
-      void runOperation("unstage", () => gitClient!.unstage(cwd, entry.path));
+      if (!gitClient) return;
+      void runOperation("unstage", () => gitClient.unstage(cwd, entry.path));
     },
     [cwd, gitClient, runOperation],
   );
@@ -345,19 +348,22 @@ export function GitReviewStatusView(props: {
   const addEntryToGitignore = useCallback(
     (entry: GitStatusEntry) => {
       setChangeContextMenu(null);
-      void runOperation("add_to_gitignore", () => gitClient!.addToGitignore(cwd, entry.path));
+      if (!gitClient) return;
+      void runOperation("add_to_gitignore", () => gitClient.addToGitignore(cwd, entry.path));
     },
     [cwd, gitClient, runOperation],
   );
 
   const stageAllChanges = useCallback(() => {
     setChangesMenu(null);
-    void runOperation("stage_all", () => gitClient!.stageAll(cwd));
+    if (!gitClient) return;
+    void runOperation("stage_all", () => gitClient.stageAll(cwd));
   }, [cwd, gitClient, runOperation]);
 
   const unstageAllChanges = useCallback(() => {
     setChangesMenu(null);
-    void runOperation("unstage_all", () => gitClient!.unstageAll(cwd));
+    if (!gitClient) return;
+    void runOperation("unstage_all", () => gitClient.unstageAll(cwd));
   }, [cwd, gitClient, runOperation]);
 
   const discardAllChanges = useCallback(() => {
@@ -371,14 +377,14 @@ export function GitReviewStatusView(props: {
   }, [busy]);
 
   const confirmDiscardChanges = useCallback(async () => {
-    if (!discardConfirm) return;
+    if (!discardConfirm || !gitClient) return;
     if (discardConfirm.kind === "all") {
-      await runOperation("discard_all", () => gitClient!.discardAll(cwd), "discard_all");
+      await runOperation("discard_all", () => gitClient.discardAll(cwd), "discard_all");
     } else {
       const target = discardConfirm;
       await runOperation(
         "discard",
-        () => gitClient!.discard(cwd, target.path, target.oldPath ?? undefined),
+        () => gitClient.discard(cwd, target.path, target.oldPath ?? undefined),
         "discard",
       );
     }
@@ -416,6 +422,7 @@ export function GitReviewStatusView(props: {
     const filePath = parentPath(entry.path);
     const deleted = isDeletedStatusEntry(entry);
     return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: Context-menu targeting is a pointer-specific enhancement; the nested button remains the keyboard activation target.
       <div
         key={`${section}:${entry.kind}:${entry.oldPath ?? ""}:${entry.path}`}
         className={cn(
@@ -666,6 +673,7 @@ export function GitReviewStatusView(props: {
           className="layer-popover absolute min-w-56"
           style={{ right: changesMenu.right, top: changesMenu.y }}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。 */}
           <div
             role="menu"
             className={cn("w-full", CONTEXT_MENU_CONTAINER_CLASS)}
@@ -726,6 +734,7 @@ export function GitReviewStatusView(props: {
         </div>
       ) : null}
       {changeContextMenu && contextEntry ? (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
           ref={changeContextMenuRef}
           role="menu"

@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { isRecord } from "./common";
 import type { StreamOptionsEx } from "./types";
 
@@ -233,7 +233,7 @@ export function attachGeminiThoughtSignatureGuard(
   const previousOnPayload = options.onPayload;
   return {
     ...options,
-    onPayload: async (payload, model: Model<any>) => {
+    onPayload: async (payload, model: Model<Api>) => {
       let nextPayload = payload;
       if (previousOnPayload) {
         const overridden = await previousOnPayload(nextPayload, model);

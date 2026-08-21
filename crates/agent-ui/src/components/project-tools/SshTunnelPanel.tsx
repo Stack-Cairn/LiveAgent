@@ -513,6 +513,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     });
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: membership key intentionally triggers an immediate latency refresh
   useEffect(() => {
     // Latency probes only run while the tab is visible. The interval callback
     // reads the latest session list from a ref so reconcile-produced array
@@ -1221,10 +1222,9 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
             ) : null}
           </div>
 
-          <div
-            role="group"
+          <fieldset
             aria-label={t("projectTools.sshTunnelScopeGroup")}
-            className="relative mt-3 grid grid-cols-2 gap-0.5 rounded-lg bg-muted/70 p-0.5"
+            className="relative mt-3 grid min-w-0 grid-cols-2 gap-0.5 rounded-lg border-0 bg-muted/70 p-0.5"
           >
             <div
               aria-hidden="true"
@@ -1258,7 +1258,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                 </button>
               );
             })}
-          </div>
+          </fieldset>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">

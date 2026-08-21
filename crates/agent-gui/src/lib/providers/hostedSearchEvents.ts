@@ -1,3 +1,4 @@
+import type { ProviderHeaders } from "@earendil-works/pi-ai";
 import {
   type HostedSearchBlock,
   type HostedSearchSource,
@@ -48,9 +49,9 @@ export function createHostedSearchProbeId(providerId: ProviderId) {
 }
 
 export function withHostedSearchProbeHeader(
-  headers: Record<string, string> | undefined,
+  headers: ProviderHeaders | undefined,
   requestId: string | undefined,
-): Record<string, string> | undefined {
+): ProviderHeaders | undefined {
   if (!requestId) return headers;
   return {
     ...(headers ?? {}),

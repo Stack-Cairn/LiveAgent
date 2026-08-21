@@ -40,7 +40,7 @@ export function requestRuntimeCancel(runId: string) {
       try {
         const response = await invoke<{ cancelled: boolean }>("runtime_cancel", {
           run_id: normalizedRunId,
-        } as any);
+        });
         if (response.cancelled) return;
       } catch {
         // Transient IPC failure — keep retrying; the loop is bounded.
@@ -90,7 +90,7 @@ export function invokeWithAbort<T>(
   options: InvokeWithAbortOptions<T> = {},
 ): Promise<T> {
   throwIfToolInvocationAborted(signal);
-  const invocation = invoke<T>(command, args as any);
+  const invocation = invoke<T>(command, args);
   if (!signal) return invocation;
 
   return new Promise<T>((resolve, reject) => {

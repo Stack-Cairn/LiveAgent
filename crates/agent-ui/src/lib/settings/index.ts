@@ -1152,6 +1152,7 @@ export function normalizeSshProxyConfig(input: unknown): SshProxyConfig {
     username: typeof obj.username === "string" ? obj.username.trim() : "",
     password,
     passwordConfigured: password.length > 0 || obj.passwordConfigured === true,
+    useSystemProxy: obj.useSystemProxy === true,
   };
 }
 
@@ -1413,7 +1414,7 @@ export function normalizeAgentPromptTemplates(input: unknown): AgentPromptTempla
 export function normalizeSkillsSettings(input: unknown): SkillsSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
-    enabled: obj.enabled === false ? false : true,
+    enabled: obj.enabled !== false,
     selected: mergeAlwaysEnabledSkillNames(normalizeStringArray(obj.selected)),
   };
 }

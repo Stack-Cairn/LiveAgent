@@ -181,6 +181,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setWorkspaceProjectDirectoryMissing],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Action refs deliberately provide the latest conversation-transition handlers without changing this callback identity.
   const activateWorkspaceProject = useCallback(
     (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
       const pathKey = project.path.trim();
@@ -292,7 +293,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       setActiveView("chat");
       activateWorkspaceProject(project, { startConversation: true });
     },
-    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory, setActiveView],
   );
 
   const handleBrowseWorkspaceProjectInFileTree = useCallback(
@@ -310,7 +311,13 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       activateWorkspaceProject(project);
       setSettings((prev) => openRightDockSingletonTab(prev, pathKey, "fileTree"));
     },
-    [activateWorkspaceProject, checkWorkspaceProjectDirectory, setSettings],
+    [
+      activateWorkspaceProject,
+      checkWorkspaceProjectDirectory,
+      setActiveView,
+      setRightDockOpen,
+      setSettings,
+    ],
   );
 
   const ensureTunnelToolTab = useCallback(

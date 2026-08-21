@@ -155,6 +155,7 @@ export function HistoryShareModal({
   const isBusy = isLoading || isUpdating;
   const canCopy = Boolean(shareUrl);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation ids reset local state when the share target changes
   useEffect(() => {
     setRedactToolContent(share?.redactToolContent === true || share?.redact_tool_content === true);
   }, [

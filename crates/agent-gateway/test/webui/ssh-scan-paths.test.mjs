@@ -9,6 +9,10 @@ test("expandIdentityPath supports Windows SSH identity paths", () => {
   const home = "C:\\Users\\Alice";
 
   assert.equal(scan.expandIdentityPath(home, "~\\keys\\id_ed25519"), "C:\\Users\\Alice\\keys\\id_ed25519");
+  assert.equal(
+    scan.expandIdentityPath(home, "${HOME}\\.ssh\\id_ed25519"),
+    "C:\\Users\\Alice\\.ssh\\id_ed25519",
+  );
   assert.equal(scan.expandIdentityPath(home, "%USERPROFILE%\\.ssh\\id_rsa"), "C:\\Users\\Alice\\.ssh\\id_rsa");
   assert.equal(scan.expandIdentityPath(home, "%HOMEDRIVE%%HOMEPATH%\\.ssh\\id_rsa"), "C:\\Users\\Alice\\.ssh\\id_rsa");
   assert.equal(scan.expandIdentityPath(home, "C:\\Keys\\prod key"), "C:\\Keys\\prod key");

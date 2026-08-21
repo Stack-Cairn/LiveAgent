@@ -68,6 +68,7 @@ export function useBranchConversation(params: UseBranchConversationParams) {
       isConversationHydrating,
       isConversationHydrationFailed,
       isSending,
+      setErrorMessage,
       sidebarStore,
       t,
     ],

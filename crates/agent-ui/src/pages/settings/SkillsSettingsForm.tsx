@@ -61,6 +61,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
     }
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chat-mode locking intentionally retriggers skill discovery
   useEffect(() => {
     void refresh();
   }, [skillsLockedByChatMode]);

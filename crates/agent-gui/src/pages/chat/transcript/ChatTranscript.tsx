@@ -190,10 +190,12 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   }, [followRef, scrollFollowHandle]);
 
   // Conversation switches always land pinned to the latest message.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId is an intentional reset signal even though the scroll handle performs the action.
   useLayoutEffect(() => {
     scrollFollowHandle.stickToBottom();
   }, [conversationId, scrollFollowHandle]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId intentionally closes any menu left open by the previous transcript.
   useEffect(() => {
     closeTranscriptContextMenu();
   }, [closeTranscriptContextMenu, conversationId]);
@@ -278,6 +280,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度";
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: The transcript surface exposes a pointer context menu; transcript content and menu items retain their own keyboard semantics.
     <div
       ref={transcriptRootRef}
       // `@container`: transcript overlays (FloorNavRail 等) size against the

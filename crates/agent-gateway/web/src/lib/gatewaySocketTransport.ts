@@ -898,7 +898,7 @@ export class GatewayWebSocketTransport {
       }, options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
 
       this.pending.set(requestId, {
-        resolve,
+        resolve: (value) => resolve(value as T),
         reject,
         timeoutId,
       });

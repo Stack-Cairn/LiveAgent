@@ -727,10 +727,6 @@
   }
 }
 
-html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay .project-terminal-viewport {
-  --project-terminal-padding-x: 1rem;
-}
-
 html[data-liveagent-webui="gateway"] .project-terminal-viewport,
 html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm,
 html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-screen,
@@ -741,4 +737,8 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollabl
 
 html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollable-element {
   -webkit-overflow-scrolling: touch;
+}
+
+html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay .project-terminal-viewport {
+  --project-terminal-padding-x: 1rem;
 }

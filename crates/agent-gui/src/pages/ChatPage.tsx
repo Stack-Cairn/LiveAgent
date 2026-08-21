@@ -518,9 +518,11 @@ export function ChatPage(props: ChatPageProps) {
     finishGatewayRunMirror,
   } = useGatewayRunMirrorCoordinator();
 
-  // 用量环读数：与 WebUI 同一把共享扫描器（deriveContextUsageTokens），
-  // 历史项 + 流式实时轮次（live store 每帧批量提交）联合倒扫。经订阅源
-  // 直达环组件，流式读数逐帧更新而不回流 ChatPage。
+  // 用量环读数：运行中直读 TokenLedger（消息落定即更新，不逐帧估算流式
+  // 文本，优先级与理由见 useContextUsageTokensSource 内注释）；账本无读数
+  // 或空闲时用与 WebUI 同源的 deriveContextUsageTokens 倒扫历史项（运行中
+  // 补上 live 尾部）。经订阅源直达环组件，读数变化只重渲染环本身而不回流
+  // ChatPage。
   const contextUsageRingRunning = isSending || compactionStatus.phase === "running";
   const contextUsageTokensSource = useContextUsageTokensSource({
     isRunning: contextUsageRingRunning,
@@ -828,6 +830,7 @@ export function ChatPage(props: ChatPageProps) {
   }
 
   const composerDraftCacheRef = useRef(conversationRuntimeRegistry.drafts);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The optional conversation defaults to the latest id stored in the stable ref.
   const cacheActiveComposerDraft = useCallback(
     (conversationId = currentConversationIdRef.current) => {
       const key = conversationId.trim();
@@ -843,6 +846,7 @@ export function ChatPage(props: ChatPageProps) {
   const prepareComposerForConversationChange = useCallback(() => {
     cacheActiveComposerDraft();
   }, [cacheActiveComposerDraft]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The optional conversation defaults to the latest id stored in the stable ref.
   const clearCachedComposerDraft = useCallback(
     (conversationId = currentConversationIdRef.current) => {
       conversationRuntimeRegistry.drafts.delete(conversationId);
@@ -932,6 +936,7 @@ export function ChatPage(props: ChatPageProps) {
   }, [setSettings, t]);
   // 规划 run 结束(提交即终止) + plan 开关已关(settings 已 flush,避免续轮又
   // 被"只能收紧"合并锁回只读)后,直接发送执行续轮。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: planContinuationVersion 是刻意的重跑触发器(批准写入 ref 后 bump)
   useEffect(() => {
     if (settings.chatRuntimeControls.planModeEnabled) return;
     for (const [conversationId, prompt] of pendingPlanContinuationsRef.current) {
@@ -986,6 +991,7 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Queue and runtime maps are mutable registries intentionally sampled at prune time through refs.
   const pruneIdleConversationCaches = useCallback(
     (extraKeepIds: Iterable<string> = []) => {
       const queuedConversationIds = getQueuedConversationIds(queuedChatTurnsRef.current);
@@ -1114,6 +1120,7 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef,
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Runtime and persistence registries are intentionally sampled through refs when the visible workspace inputs change.
   useEffect(() => {
     const nextWorkdir = activeWorkspaceProjectPath.trim();
     if (!isAgentMode || !nextWorkdir) {
@@ -1213,8 +1220,9 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationIdRef.current = currentConversationId;
     // Per-conversation pending uploads are restored inside usePendingUploads
     // when its conversationId param changes.
-  }, [currentConversationId]);
+  }, [currentConversationId, currentConversationIdRef]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The runtime cache is a mutable registry sampled when the visible conversation summary inputs change.
   useEffect(() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
     if (currentItem) {
@@ -1264,6 +1272,7 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationId,
     currentConversationSessionId,
     historyItems,
+    isConversationRunning,
     isSending,
     activeSelectedModel,
     displayedConversationWorkdir,
@@ -1301,6 +1310,7 @@ export function ChatPage(props: ChatPageProps) {
     previousHistoryIdsRef.current = nextIds;
   }, [currentConversationId, historyItems, historyScopeKey, isSending]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Composer content is sampled through its ref; the effect is driven by persisted snapshot changes and run state.
   useEffect(() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
     if (!currentItem || currentItem.isPending) {
@@ -1333,6 +1343,7 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationId,
     currentConversationHydrationPhase,
     historyItems,
+    isConversationRunning,
     isSending,
     openController,
     pendingUploadedFiles,
@@ -1496,6 +1507,7 @@ export function ChatPage(props: ChatPageProps) {
   );
   // Shared by the current-conversation controller and every background pane
   // controller: all actions route by explicit conversationId through refs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Controller methods deliberately route through latest-action refs; the runtime registry itself is stable for the page lifetime.
   const conversationControllerActions = useMemo<ConversationControllerActions>(
     () => ({
       async hydrate({ conversationId }) {
@@ -1779,7 +1791,7 @@ export function ChatPage(props: ChatPageProps) {
         unlistenFeedback();
       }
     };
-  }, []);
+  }, [composerRef, setActiveView]);
 
   // 托盘菜单同步：任一输入变化即重建模型推送（syncTrayMenu 内部按 JSON 签名
   // 去抖），300ms 尾随防抖吸收流式期间侧栏 upsert 引起的高频变化。
@@ -1831,6 +1843,7 @@ export function ChatPage(props: ChatPageProps) {
     [removeSharedHistoryItems],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Runtime/edit state is intentionally sampled through refs at click time.
   const handleSend = useCallback(() => {
     const conversationId = currentConversationIdRef.current.trim();
     const runtimeEntry = conversationRuntimeCacheRef.current.get(conversationId);
@@ -1865,7 +1878,12 @@ export function ChatPage(props: ChatPageProps) {
       return;
     }
     void sendActionRef.current();
-  }, [composerRef, enqueueCurrentComposerTurn, isConversationRunning]);
+  }, [
+    composerRef,
+    enqueueCurrentComposerTurn,
+    isConversationRunning,
+    requestQueuedChatTurnProcessing,
+  ]);
 
   const handleComposerBusyChange = useCallback((isBusy: boolean) => {
     composerBusyRef.current = isBusy;
@@ -3306,14 +3324,12 @@ export function ChatPage(props: ChatPageProps) {
             ) : null
           }
           trailingActions={
-            <>
-              <ProjectToolsPanelToggle
-                isOpen={rightDockOpen}
-                sessionCount={projectTerminalSessions.length}
-                disabledMessage={terminalDisabledMessage}
-                onToggle={() => setRightDockOpen((open) => !open)}
-              />
-            </>
+            <ProjectToolsPanelToggle
+              isOpen={rightDockOpen}
+              sessionCount={projectTerminalSessions.length}
+              disabledMessage={terminalDisabledMessage}
+              onToggle={() => setRightDockOpen((open) => !open)}
+            />
           }
           overlay={<NotifyToast items={notifyItems} onDismiss={dismissNotify} />}
         />

@@ -70,7 +70,9 @@ export function ToolApprovalBar({
 
   if (pending.length === 0) return null;
 
-  const runGuarded = async (task: () => Promise<ToolApprovalSubmitOutcome | void>) => {
+  const runGuarded = async (
+    task: (() => Promise<ToolApprovalSubmitOutcome>) | (() => Promise<void>),
+  ) => {
     if (submitting) return;
     setSubmitting(true);
     setErrorText("");

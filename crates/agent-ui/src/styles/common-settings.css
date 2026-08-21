@@ -274,11 +274,14 @@
     .mention-popup-enter,
     .mention-popup-item,
     .sidebar-context-menu,
-    .sidebar-context-menu [role="menuitem"] {
+    /* biome-ignore lint/style/noDescendingSpecificity: This reduced-motion override intentionally follows the more specific open-state animation selectors. */
+      .sidebar-context-menu [role="menuitem"] {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides menu state animations. */
       animation: none !important;
     }
 
     .sidebar-context-menu {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides menu state transitions. */
       transition: none !important;
     }
   }
@@ -321,7 +324,8 @@
   align-self: stretch;
 }
 
-.settings-provider-action-group > :not(.settings-provider-action):not(.settings-provider-action-slot) {
+.settings-provider-action-group
+  > :not(.settings-provider-action):not(.settings-provider-action-slot) {
   display: contents;
 }
 
@@ -423,5 +427,26 @@
 @media (prefers-reduced-motion: reduce) {
   .settings-provider-action-group .settings-provider-action {
     transition: none;
+  }
+}
+
+/* 供应商卡片用量区:结果替换等高骨架占位时柔和浮现,只动透明度不动高度。 */
+.settings-usage-reveal {
+  animation: settings-usage-reveal 240ms ease-out;
+}
+
+@keyframes settings-usage-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-usage-reveal {
+    animation: none;
   }
 }

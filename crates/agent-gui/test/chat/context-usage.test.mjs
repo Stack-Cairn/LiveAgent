@@ -21,6 +21,10 @@ const gatewayAppSource = readFileSync(
   ),
   "utf8",
 );
+const contextUsageRingSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/ContextUsageRing.tsx", import.meta.url),
+  "utf8",
+);
 
 const {
   CONTEXT_USAGE_WARN_RATIO,
@@ -87,6 +91,26 @@ test("composer editor row reserves the right control rail so the scrollbar clear
   assert.match(chatComposerBarSource, /"relative flex flex-1 pl-4 pr-12"/);
   assert.doesNotMatch(chatComposerBarSource, /"relative flex flex-1 px-4"/);
   assert.doesNotMatch(chatComposerBarSource, /"px-0 py-0 pr-8"/);
+});
+
+test("context usage ring resets a stale confirm popover when compaction flips unavailable", () => {
+  // 可压缩分支翻回纯展示时（他端压缩/发消息置 disabled、压缩后占用掉回阈值
+  // 下），confirmOpen 必须渲染期归位：否则恢复可压缩后确认弹层会无操作自动
+  // 弹开，残留期间互斥守卫还会一直吞掉 tooltip 的打开请求。
+  assert.match(
+    contextUsageRingSource,
+    /if \(!compactAvailable && confirmOpen\) \{\s*setConfirmOpen\(false\);/,
+  );
+});
+
+test("context usage ring tracks pointer form-factor changes via matchMedia subscription", () => {
+  // iPad 插拔键鼠、可翻转本翻转等触屏形态热切换必须实时生效，
+  // 不能挂载时一次性求值定死交互模式。
+  assert.match(
+    contextUsageRingSource,
+    /useSyncExternalStore\(\s*subscribeCoarsePointer,\s*isCoarsePointerNow/,
+  );
+  assert.match(contextUsageRingSource, /addEventListener\("change", onChange\)/);
 });
 
 test("contextUsageRatio guards degenerate inputs", () => {
@@ -171,9 +195,37 @@ test("deriveContextUsageTokens adds messages and tool results after the newest u
     },
     { kind: "user", text: trailingUser },
   ];
-  const toolResultTokens =
-    Math.ceil(contextUsage.estimateTextTokenUnits(JSON.stringify(toolResultContent))) + 8;
+  // 工具结果只计模型可见文本（不再整块 JSON 序列化后按字符估）。
+  const toolResultTokens = Math.ceil(contextUsage.estimateTextTokenUnits("y".repeat(4_000))) + 8;
   assert.equal(deriveContextUsageTokens(items), 120_008 + toolResultTokens);
+});
+
+test("deriveContextUsageTokens prices binary tool payloads flat and ignores details", () => {
+  const items = [
+    {
+      kind: "assistant",
+      rounds: [
+        {
+          meta: { usageTotalTokens: 10_000 },
+          blocks: [
+            {
+              kind: "tool",
+              item: {
+                toolCall: { name: "Read", arguments: { path: "shot.png" } },
+                toolResult: {
+                  content: [{ type: "image", data: "A".repeat(1_000_000), mimeType: "image/png" }],
+                  details: { stdout: "C".repeat(400_000) },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  // 锚点轮次自身的工具结果补计：图按计价常量而非 base64/4（后者虚报 25 万
+  // token 令环跳变），details 不发给模型、不计。
+  assert.equal(deriveContextUsageTokens(items), 10_000 + contextUsage.BINARY_BLOCK_TOKENS + 8);
 });
 
 test("deriveContextUsageTokens falls back to checkpoint estimate after compaction", () => {
@@ -197,6 +249,49 @@ test("deriveContextUsageTokens prefers checkpoint fixed overhead and adds its tr
     { kind: "user", text: "x".repeat(4_000) },
   ];
   assert.equal(deriveContextUsageTokens(items), 41_008);
+});
+
+test("deriveContextUsageTokens counts user attachment metadata after the anchor", () => {
+  const attachment = {
+    relativePath: "uploads/diagram.png",
+    fileName: "diagram.png",
+    kind: "image",
+    sizeBytes: 123_456,
+  };
+  const anchor = { kind: "assistant", rounds: [{ meta: { usageTotalTokens: 50_000 } }] };
+  const text = "看看这张图";
+  const textOnly = deriveContextUsageTokens([anchor, { kind: "user", text }]);
+  const withAttachment = deriveContextUsageTokens([
+    anchor,
+    { kind: "user", text, attachments: [attachment] },
+  ]);
+  assert.ok(withAttachment > textOnly, "附件元数据必须计入尾部估算");
+  assert.equal(
+    withAttachment,
+    50_000 +
+      Math.ceil(
+        contextUsage.estimateTextTokenUnits(text) +
+          contextUsage.stringifiedTokenUnits(attachment),
+      ) +
+      8,
+  );
+});
+
+test("deriveContextUsageTokens counts attachment-only user messages", () => {
+  // 纯附件消息（正文为空）此前完全计零。
+  const attachment = {
+    relativePath: "uploads/error.log",
+    fileName: "error.log",
+    kind: "text",
+    sizeBytes: 2_048,
+  };
+  assert.equal(
+    deriveContextUsageTokens([
+      { kind: "checkpoint", content: "short summary", contextUsageTokens: 40_000 },
+      { kind: "user", text: "", attachments: [attachment] },
+    ]),
+    40_000 + Math.ceil(contextUsage.stringifiedTokenUnits(attachment)) + 8,
+  );
 });
 
 test("deriveContextUsageTokens returns undefined without any usage", () => {

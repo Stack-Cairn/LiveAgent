@@ -14,7 +14,7 @@ export function resolveMemorySummaryModelSelection(
   const provider = settings.customProviders.find(
     (item) => item.id === summaryModel.customProviderId,
   );
-  if (!provider || !provider.activeModels.includes(summaryModel.model)) {
+  if (!provider?.activeModels.includes(summaryModel.model)) {
     return null;
   }
 
@@ -36,7 +36,7 @@ export function resolveConversationTitleModelSelection(
   }
 
   const provider = settings.customProviders.find((item) => item.id === titleModel.customProviderId);
-  if (!provider || !provider.activeModels.includes(titleModel.model)) {
+  if (!provider?.activeModels.includes(titleModel.model)) {
     return fallback;
   }
 
@@ -62,7 +62,7 @@ export function resolveCommitMessageModelSelection(
   const provider = settings.customProviders.find(
     (item) => item.id === commitModel.customProviderId,
   );
-  if (!provider || !provider.activeModels.includes(commitModel.model)) {
+  if (!provider?.activeModels.includes(commitModel.model)) {
     return null;
   }
 
@@ -135,7 +135,7 @@ export function buildModelFailoverPlan(
     const provider = settings.customProviders.find((item) => item.id === providerId);
     // The fallback must host the conversation's model: failover keeps the
     // model id and only changes which provider serves it.
-    if (!provider || !provider.activeModels.includes(primary.model)) continue;
+    if (!provider?.activeModels.includes(primary.model)) continue;
     // Same-vendor guard: normalization already filters cross-vendor queue
     // entries, but re-check here so a stale persisted queue can never route
     // a Claude request to a Codex provider (or vice versa).

@@ -40,8 +40,8 @@ import {
 } from "@/lib/gatewaySocket";
 import type {
   AgentStatus,
-  ChatEvent,
   ConversationSummary,
+  GatewayHistoryEvent,
   GatewayProviderSummary,
   HistoryList,
   HistoryWorkdirSummary,
@@ -110,7 +110,6 @@ type LoadSegment = {
 const HISTORY_PAGE_SIZE = 80;
 const SNAPSHOT_REFRESH_MS = 10_000;
 const LIVE_FLUSH_MS = 500;
-const TOKEN_EVENT_MIN_INTERVAL_MS = 1_200;
 const MAX_RECENT_EVENTS = 12;
 
 const initialCounters = (): LiveCounters => ({
@@ -201,20 +200,6 @@ function formatClock(ms: number) {
   }).format(new Date(ms));
 }
 
-function formatDateTime(ms: number) {
-  if (!ms) {
-    return "未知";
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(ms));
-}
-
 function compactNumber(value: number) {
   return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(
     Math.max(0, value),
@@ -286,7 +271,10 @@ function buildRunningConversations(history: HistoryList | null) {
   });
 }
 
-function updateHistoryListWithEvent(history: HistoryList | null, event: any): HistoryList | null {
+function updateHistoryListWithEvent(
+  history: HistoryList | null,
+  event: GatewayHistoryEvent,
+): HistoryList | null {
   if (!history) {
     return history;
   }
@@ -321,123 +309,6 @@ function updateHistoryListWithEvent(history: HistoryList | null, event: any): Hi
     total_count: Math.max(history.total_count, conversations.length),
     conversations,
   };
-}
-
-function classifyChatEvent(event: ChatEvent) {
-  const type = String(event.type);
-  switch (type) {
-    case "token":
-      return { tone: "cyan" as const, title: "Token 流" };
-    case "thinking":
-      return { tone: "violet" as const, title: "推理脉冲" };
-    case "tool_call":
-      return { tone: "amber" as const, title: "工具调用" };
-    case "tool_call_delta":
-      return { tone: "amber" as const, title: "工具参数" };
-    case "tool_result": {
-      const isError = "isError" in event && event.isError === true;
-      return { tone: isError ? ("rose" as const) : ("emerald" as const), title: "工具回传" };
-    }
-    case "hosted_search":
-      return { tone: "cyan" as const, title: "联网检索" };
-    case "tool_status":
-      return { tone: "slate" as const, title: "工具状态" };
-    case "done":
-    case "completed":
-      return { tone: "emerald" as const, title: "会话完成" };
-    case "error":
-    case "failed":
-      return { tone: "rose" as const, title: "异常事件" };
-    case "accepted":
-    case "delivered":
-    case "claimed":
-    case "starting":
-    case "started":
-    case "progress":
-      return { tone: "violet" as const, title: "调度推进" };
-    case "cancelled":
-      return { tone: "amber" as const, title: "任务取消" };
-    default:
-      return { tone: "slate" as const, title: "实时事件" };
-  }
-}
-
-function getToolName(event: ChatEvent) {
-  if ("name" in event && typeof event.name === "string" && event.name.trim()) {
-    return event.name.trim();
-  }
-  if ("id" in event && typeof event.id === "string" && event.id.trim()) {
-    return event.id.trim();
-  }
-  return "system tool";
-}
-
-function summarizeChatEvent(event: ChatEvent): DashboardEvent | null {
-  const type = String(event.type);
-  const classified = classifyChatEvent(event);
-  let detail = "";
-
-  if (type === "token") {
-    detail = "模型正在输出 token chunk。";
-  } else if (type === "thinking") {
-    const text = "text" in event && typeof event.text === "string" ? event.text.trim() : "";
-    detail = text ? truncateMiddle(text.replace(/\s+/g, " "), 80) : "模型正在整理推理上下文。";
-  } else if (type === "tool_call") {
-    detail = `${getToolName(event)} 已发起调用。`;
-  } else if (type === "tool_call_delta") {
-    detail = `${getToolName(event)} 参数流式更新。`;
-  } else if (type === "tool_result") {
-    const isError = "isError" in event && event.isError === true;
-    detail = `${getToolName(event)} ${isError ? "返回异常" : "返回结果"}。`;
-  } else if (type === "hosted_search") {
-    const queries = "queries" in event && Array.isArray(event.queries) ? event.queries : [];
-    detail = queries.length ? truncateMiddle(queries.join(" / "), 80) : "联网检索通道产生事件。";
-  } else if (type === "tool_status") {
-    const statusText =
-      "status" in event && typeof event.status === "string" ? event.status.trim() : "";
-    detail = statusText || "工具链状态更新。";
-  } else if (type === "error" || type === "failed") {
-    detail =
-      "message" in event && typeof event.message === "string" ? event.message : "执行出现异常。";
-  } else if (type === "done" || type === "completed") {
-    detail = "一段会话工作流完成。";
-  } else if ("message" in event && typeof event.message === "string" && event.message.trim()) {
-    detail = event.message.trim();
-  } else {
-    detail = `事件类型：${type}`;
-  }
-
-  return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    at: Date.now(),
-    title: classified.title,
-    detail: truncateMiddle(detail, 112),
-    tone: classified.tone,
-    conversationId: event.conversation_id,
-    workdir: event.workdir,
-  };
-}
-
-function addPendingCounters(target: PendingCounters, event: ChatEvent) {
-  const type = String(event.type);
-  target.events += 1;
-  if (type === "token") {
-    target.tokenChunks += 1;
-    const text = "text" in event && typeof event.text === "string" ? event.text : "";
-    target.tokenChars += text.length;
-  } else if (type === "thinking") {
-    target.thinking += 1;
-  } else if (type === "tool_call") {
-    target.toolCalls += 1;
-  } else if (type === "tool_result") {
-    target.toolResults += 1;
-  } else if (type === "hosted_search") {
-    target.searches += 1;
-  } else if (type === "done" || type === "completed") {
-    target.completions += 1;
-  } else if (type === "error" || type === "failed") {
-    target.errors += 1;
-  }
 }
 
 function useNow(tickMs = 1000) {
@@ -606,8 +477,6 @@ export function StatusDashboardPage() {
   const api = useMemo(() => (token ? getGatewayWebSocketClient(token) : null), [token]);
   const pendingEventsRef = useRef<DashboardEvent[]>([]);
   const pendingCountersRef = useRef<PendingCounters>(initialPendingCounters());
-  const lastTokenEventAtRef = useRef(0);
-
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryList | null>(null);
@@ -692,6 +561,9 @@ export function StatusDashboardPage() {
     };
   }, [api]);
 
+  // refreshVersion is an explicit manual-refresh signal, so it intentionally
+  // retriggers this effect without being read inside the callback.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keep the manual refresh trigger
   useEffect(() => {
     if (!api) {
       return;
@@ -1268,7 +1140,11 @@ export function StatusDashboardPage() {
               </section>
 
               <div className="status-board-radar-deck">
-                <div className="status-board-radar-screen" aria-label="live signal radar">
+                <div
+                  className="status-board-radar-screen"
+                  role="img"
+                  aria-label="live signal radar"
+                >
                   <div className="status-board-radar-grid" />
                   <div className="status-board-radar-sweep" />
                   <div className="status-board-radar-core">

@@ -1,7 +1,7 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
-import { Type } from "typebox";
+import { type TProperties, Type } from "typebox";
 import {
   inferRuntimePlatform,
   normalizeRuntimePlatform,
@@ -131,8 +131,8 @@ function createShellSessionId() {
   return `bash-${createUuid()}`;
 }
 
-function strictToolParameters(properties: Record<string, unknown>) {
-  return Type.Object(properties as any, { additionalProperties: false });
+function strictToolParameters<T extends TProperties>(properties: T) {
+  return Type.Object(properties, { additionalProperties: false });
 }
 
 function assertKnownArguments(toolName: string, args: unknown, allowed: readonly string[]) {
@@ -1146,7 +1146,7 @@ export function createShellTools(params: {
           signal,
           {
             onLateResult: (lateResponse) =>
-              invoke("managed_process_stop", { process_id: lateResponse.process.id } as any).then(
+              invoke("managed_process_stop", { process_id: lateResponse.process.id }).then(
                 () => undefined,
               ),
           },
@@ -1540,7 +1540,7 @@ export function createShellTools(params: {
         run_id,
         sandbox: sandboxEnabled,
         sandbox_allow_network: sandboxAllowNetwork,
-      } as any);
+      });
 
       const header = [
         `# Shell`,

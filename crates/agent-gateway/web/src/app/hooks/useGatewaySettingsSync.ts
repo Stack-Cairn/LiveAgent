@@ -70,6 +70,7 @@ export function useGatewaySettingsSync(params: {
     });
   }, [settings.theme]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: system theme notifications intentionally invalidate the computed theme
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", resolveEffectiveTheme(settings.theme) === "dark");
@@ -206,6 +207,7 @@ export function useGatewaySettingsSync(params: {
     [queueSettingsSave],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: switching the active agent intentionally starts a fresh settings synchronization
   useEffect(() => {
     if (!api) {
       setSettingsSyncReady(token.trim() === "");

@@ -96,6 +96,7 @@ function AppChrome(props: { children: ReactNode }) {
   // suppressed native menu (surfaces with their own menus opt out upstream).
   const { onRootContextMenu, onRootMouseDownCapture, menu } = useNativeInputContextMenu();
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: Root-level pointer handlers only route native input menus and dismissals; child controls own activation semantics.
     <div
       className="relative flex h-full w-full flex-col overflow-hidden bg-background"
       onContextMenu={onRootContextMenu}
@@ -247,6 +248,7 @@ export default function App() {
     setSttProviderOverride(null);
   }, [settings.stt.provider]);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The version is an explicit invalidation signal for the system media query, which resolveEffectiveTheme reads outside React.
   const effectiveTheme = useMemo(
     () => resolveEffectiveTheme(settings.theme),
     [settings.theme, systemThemeVersion],

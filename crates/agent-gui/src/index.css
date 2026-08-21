@@ -218,6 +218,7 @@
     .composer-reasoning-trigger svg:last-child,
     .composer-branch-dropdown,
     .composer-safety-dropdown {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion must override component open/close transition states. */
       transition: none !important;
     }
   }
@@ -231,7 +232,7 @@
  */
 @media (max-width: 820px), (pointer: coarse) {
   .transcript-width-controls {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -258,7 +259,7 @@
   }
 
   .settings-hover-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 
   .settings-card-row {
@@ -272,7 +273,7 @@
  * exists. Hover-revealed action clusters must stay visible there. */
 @media (hover: none) {
   .settings-hover-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 }
 

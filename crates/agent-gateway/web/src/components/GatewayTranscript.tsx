@@ -547,6 +547,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   const historyIdentityKey = `${conversationId ?? ""}\n${rows[0]?.key ?? ""}`;
   const loadCommitDetails = useCommitDetailsLoader(workspaceRoot, gitClient, historyIdentityKey);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transcript identity changes intentionally cancel the current edit
   useEffect(() => {
     setEditingMessageId(null);
   }, [historyIdentityKey]);

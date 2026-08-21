@@ -20,6 +20,10 @@ html[data-liveagent-webui="gateway"] .chat-history-new-conversation-label {
   font-weight: inherit;
 }
 
+button {
+  font: inherit;
+}
+
 html[data-liveagent-webui="gateway"] button {
   font-size: 13px;
   line-height: 1.2;
@@ -445,15 +449,6 @@ html[data-liveagent-webui="gateway"] .composer-dropdown-description {
   white-space: nowrap;
 }
 
-/*
- * Do NOT add input/textarea/select here: Tailwind preflight already applies
- * font: inherit in @layer base, and an unlayered copy would override every
- * text-* utility on form fields (unlayered CSS beats @layer utilities).
- */
-button {
-  font: inherit;
-}
-
 html[data-liveagent-webui="gateway"]
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
 html[data-liveagent-webui="gateway"] textarea:focus,
@@ -725,6 +720,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   line-height: 1rem;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: This transcript-scoped anchor override intentionally follows the global viewport scrollbar rule. */
 .gateway-transcript-scroll [data-scroll-viewport],
 .gateway-transcript-scroll [data-scroll-viewport] > div {
   overflow-anchor: none;
@@ -768,8 +764,11 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 }
 
 .gateway-transcript-scroll [data-scroll-viewport] > div {
+  /* biome-ignore lint/complexity/noImportantStyles: The shared virtual viewport writes layout styles inline; WebUI needs a block flow wrapper. */
   display: block !important;
+  /* biome-ignore lint/complexity/noImportantStyles: The shared virtual viewport writes layout styles inline; WebUI owns the outer width. */
   width: 100% !important;
+  /* biome-ignore lint/complexity/noImportantStyles: The shared virtual viewport writes layout styles inline; WebUI must allow shrinkage. */
   min-width: 0 !important;
 }
 
@@ -857,7 +856,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 /* Keep the hover-revealed action row visible while its inline confirm
    popover is open (the pointer may sit outside the assistant row). */
 .chat-assistant-actions:has(.settings-confirm-popover) {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 /* Confirm-action popover enter/exit: grow out of the anchor toward the
@@ -925,7 +924,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   }
   .chat-user-bubble-actions,
   .chat-assistant-actions {
-    opacity: 1 !important;
+    opacity: 1;
   }
 
   .chat-user-bubble-action,
@@ -946,6 +945,13 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   background: hsl(var(--card) / 0.78);
   box-shadow: 0 10px 38px hsl(220 15% 12% / 0.04);
   backdrop-filter: blur(18px);
+}
+
+.gateway-bubble-content {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.72;
+  color: hsl(var(--foreground));
 }
 
 .gateway-bubble-user {
@@ -994,13 +1000,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: hsl(var(--muted-foreground));
-}
-
-.gateway-bubble-content {
-  margin-top: 10px;
-  font-size: 14px;
-  line-height: 1.72;
-  color: hsl(var(--foreground));
 }
 
 .gateway-transcript-meta {

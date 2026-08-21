@@ -293,8 +293,8 @@ export function createSubagentConversationStore(params: {
         }
         if (!segments) return null;
         cacheHydrated(agentId, runSummary.id, segments);
-      } else {
-        cached!.updatedAt = Date.now();
+      } else if (cached) {
+        cached.updatedAt = Date.now();
       }
       return normalizeConversationState({
         meta: { systemPrompt, tools },

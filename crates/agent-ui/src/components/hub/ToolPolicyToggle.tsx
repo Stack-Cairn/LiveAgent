@@ -28,14 +28,16 @@ export function ToolPolicyToggle(props: {
   const { t } = useLocale();
   const buttonPad = size === "sm" ? "px-2 py-0.5" : "px-2.5 py-1";
   return (
-    <div
+    <fieldset
+      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；互斥单选语义需要向读屏表达。
       role="radiogroup"
       aria-label={ariaLabel}
-      className="inline-flex shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+      className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
     >
       {POLICY_ORDER.map((option) => {
         const active = value === option;
         return (
+          // biome-ignore lint/a11y/useSemanticElements: 分段控件保留 button 样式；互斥语义用 radio 表达，改原生 radio input 需要视觉重构。
           <button
             key={option}
             type="button"
@@ -52,6 +54,6 @@ export function ToolPolicyToggle(props: {
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

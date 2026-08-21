@@ -291,7 +291,9 @@
   @media (prefers-reduced-motion: reduce) {
     .confirm-action-popover-popup,
     .label-tooltip-popup {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides open/close state animations. */
       animation: none !important;
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides open/close state transitions. */
       transition: none !important;
     }
   }

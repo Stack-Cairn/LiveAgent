@@ -87,7 +87,10 @@ function sanitizeDebugValue(value: unknown, seen = new WeakSet<object>()): unkno
   if (valueType === "number" || valueType === "boolean") return value;
   if (valueType === "bigint") return value.toString();
   if (valueType === "undefined") return "[undefined]";
-  if (valueType === "function") return `[Function ${(value as Function).name || "anonymous"}]`;
+  if (valueType === "function") {
+    const functionName = (value as { name?: string }).name;
+    return `[Function ${functionName || "anonymous"}]`;
+  }
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Error) {
     return {

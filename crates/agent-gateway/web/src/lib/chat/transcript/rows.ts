@@ -282,10 +282,12 @@ export function buildRowsFromEntries(
             .map((item) => item.toolCall.id)
             .filter((id): id is string => Boolean(id)),
         );
-        const runningToolCallIds = runningCandidateIds.reduce(
-          (ids, id) => (visibleToolCallIds.has(id) && !ids.includes(id) ? [...ids, id] : ids),
-          withToolCall.runningToolCallIds,
-        );
+        const runningToolCallIds = [...withToolCall.runningToolCallIds];
+        for (const id of runningCandidateIds) {
+          if (visibleToolCallIds.has(id) && !runningToolCallIds.includes(id)) {
+            runningToolCallIds.push(id);
+          }
+        }
         return { ...withToolCall, runningToolCallIds };
       });
       continue;

@@ -822,7 +822,9 @@ export function GitReviewToolbar(props: {
           title={t("projectTools.gitReview.fetch")}
           aria-label={t("projectTools.gitReview.fetch")}
           className="h-7 w-7 px-0"
-          onClick={() => void runOperation("fetch", () => gitClient!.fetch(cwd), "fetch")}
+          onClick={() => {
+            if (gitClient) void runOperation("fetch", () => gitClient.fetch(cwd), "fetch");
+          }}
         >
           {busy === "fetch" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -837,7 +839,9 @@ export function GitReviewToolbar(props: {
           title={t("projectTools.gitReview.pull")}
           aria-label={t("projectTools.gitReview.pull")}
           className="h-7 w-7 px-0"
-          onClick={() => void runOperation("pull", () => gitClient!.pull(cwd), "pull")}
+          onClick={() => {
+            if (gitClient) void runOperation("pull", () => gitClient.pull(cwd), "pull");
+          }}
         >
           {busy === "pull" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -852,7 +856,9 @@ export function GitReviewToolbar(props: {
           title={t("projectTools.gitReview.push")}
           aria-label={t("projectTools.gitReview.push")}
           className="h-7 w-7 px-0"
-          onClick={() => void runOperation("push", () => gitClient!.push(cwd), "push")}
+          onClick={() => {
+            if (gitClient) void runOperation("push", () => gitClient.push(cwd), "push");
+          }}
         >
           {busy === "push" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

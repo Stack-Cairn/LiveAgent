@@ -369,7 +369,7 @@ export async function persistSettings(
 
   if (hasChanged(prev.stt, next.stt)) {
     tasks.push(
-      invoke<unknown>("settings_save_stt", { payload: next.stt } as any).then((response) => {
+      invoke<unknown>("settings_save_stt", { payload: next.stt }).then((response) => {
         if (response) {
           result.stt = normalizeSettings({ stt: response as AppSettings["stt"] }).stt;
         }

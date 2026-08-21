@@ -103,11 +103,13 @@
   @media (prefers-reduced-motion: reduce) {
     .composer-branch-dropdown,
     .composer-safety-dropdown {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides dropdown open/close animations. */
       animation: none !important;
     }
 
     .composer-reasoning-trigger,
     .composer-reasoning-trigger > svg:last-child {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides trigger and chevron transitions. */
       transition: none !important;
     }
   }

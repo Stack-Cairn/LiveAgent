@@ -26,6 +26,7 @@ export default defineConfig(() => ({
       "@tauri-apps/api/core": path.resolve(__dirname, "./src/shims/tauriCore.ts"),
       "@tauri-apps/api/event": path.resolve(__dirname, "./src/shims/tauriEvent.ts"),
       "@tauri-apps/plugin-opener": path.resolve(__dirname, "./src/shims/tauriOpener.ts"),
+      "node:fs": path.resolve(__dirname, "../../agent-ui/src/shims/nodeFs.ts"),
       react: path.resolve(__dirname, "./node_modules/react"),
       "react/jsx-runtime": path.resolve(__dirname, "./node_modules/react/jsx-runtime.js"),
       "react/jsx-dev-runtime": path.resolve(__dirname, "./node_modules/react/jsx-dev-runtime.js"),
@@ -35,6 +36,25 @@ export default defineConfig(() => ({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // Monaco language workers are emitted as indivisible lazy assets (largest
+    // is the TypeScript worker at ~6.6 MB). Application modules are still held
+    // to the 450 KB code-splitting group below.
+    chunkSizeWarningLimit: 7_000,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          minSize: 20_000,
+          maxSize: 450_000,
+          groups: [
+            {
+              name: "liveagent-webui",
+              test: /\/crates\/(?:agent-ui|agent-gateway\/web)\/src\//,
+              entriesAware: true,
+            },
+          ],
+        },
+      },
+    },
   },
   server: {
     proxy: {

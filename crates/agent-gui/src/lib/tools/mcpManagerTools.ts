@@ -141,7 +141,7 @@ const MCP_SERVER_PARAMETERS = Type.Object(
     timeoutMs: Type.Optional(Type.Number({ minimum: 1 })),
     messageUrl: Type.Optional(Type.String()),
   },
-  { description: "Full MCP Server config for create/test/validate." } as any,
+  { description: "Full MCP Server config for create/test/validate." },
 );
 
 const MCP_SERVER_PATCH_PARAMETERS = Type.Object(
@@ -170,7 +170,7 @@ const MCP_SERVER_PATCH_PARAMETERS = Type.Object(
     timeoutMs: Type.Optional(Type.Number({ minimum: 1 })),
     messageUrl: Type.Optional(Type.String()),
   },
-  { description: "Partial MCP Server config for update. The id field cannot be changed." } as any,
+  { description: "Partial MCP Server config for update. The id field cannot be changed." },
 );
 
 const MCP_MANAGER_PARAMETERS = Type.Object({
@@ -465,7 +465,7 @@ async function stopRuntime(serverId: string, warnings: string[]) {
   try {
     const stopped = await invoke<McpStopServerResponse>("mcp_stop_server", {
       server_id: serverId,
-    } as any);
+    });
     return stopped.stopped;
   } catch (err) {
     warnings.push(`failed to stop runtime for ${serverId}: ${asErrorMessage(err)}`);
@@ -474,7 +474,7 @@ async function stopRuntime(serverId: string, warnings: string[]) {
 }
 
 async function runtimeStatus(serverId: string) {
-  return invoke<McpRuntimeStatus>("mcp_runtime_status", { server_id: serverId } as any);
+  return invoke<McpRuntimeStatus>("mcp_runtime_status", { server_id: serverId });
 }
 
 async function runtimeTest(
@@ -487,7 +487,7 @@ async function runtimeTest(
     server,
     include_schema: includeSchema,
     persist,
-  } as any);
+  });
 }
 
 function applyRuntimeTestOutputOptions(
@@ -919,7 +919,7 @@ export function createMcpManagerTools(params: {
       const serverId = requireServerId(args.server_id);
       const stopped = await invoke<McpStopServerResponse>("mcp_stop_server", {
         server_id: serverId,
-      } as any);
+      });
       return { action, serverId, stopped: stopped.stopped, changed: false };
     }
 

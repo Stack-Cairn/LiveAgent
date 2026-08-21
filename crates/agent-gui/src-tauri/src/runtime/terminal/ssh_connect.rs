@@ -93,7 +93,8 @@ pub(crate) enum SshPathProfile {
 }
 
 pub(crate) fn ssh_proxy_configured(host: &RuntimeSshHostConfig) -> bool {
-    !host.proxy.url.trim().is_empty()
+    host.proxy.use_system_proxy
+        || !host.proxy.url.trim().is_empty()
         || host.proxy.port > 0
         || !host.proxy.username.trim().is_empty()
         || host.proxy.password_configured
@@ -127,7 +128,7 @@ pub(crate) fn ssh_client_config() -> client::Config {
 pub(crate) async fn open_ssh_transport(
     host_config: &RuntimeSshHostConfig,
 ) -> Result<TcpStream, String> {
-    if !ssh_proxy_configured(host_config) {
+    let Some(proxy) = resolve_effective_ssh_proxy(host_config)? else {
         let stream = TcpStream::connect((host_config.host.as_str(), host_config.port))
             .await
             .map_err(|error| {
@@ -138,9 +139,8 @@ pub(crate) async fn open_ssh_transport(
             })?;
         configure_ssh_transport_stream(&stream);
         return Ok(stream);
-    }
+    };
 
-    let proxy = resolve_ssh_proxy(host_config)?;
     let mut stream = TcpStream::connect((proxy.host.as_str(), proxy.port))
         .await
         .map_err(|error| {
@@ -175,6 +175,43 @@ pub(crate) async fn open_ssh_transport(
 
 pub(crate) fn configure_ssh_transport_stream(stream: &TcpStream) {
     let _ = stream.set_nodelay(true);
+}
+
+/// Resolves the proxy an SSH connection should tunnel through. `Ok(None)`
+/// means a direct connection — either no proxy is configured, or the host
+/// reuses the app proxy which is currently disabled. An enabled-but-invalid
+/// app proxy fails fast instead of silently connecting directly.
+pub(crate) fn resolve_effective_ssh_proxy(
+    host_config: &RuntimeSshHostConfig,
+) -> Result<Option<ResolvedSshProxy>, String> {
+    if host_config.proxy.use_system_proxy {
+        let config = crate::services::system_proxy::current_config()
+            .map_err(|error| format!("SSH cannot reuse the app proxy: {error}"))?;
+        return Ok(config.as_ref().map(system_proxy_to_ssh_proxy));
+    }
+    if !ssh_proxy_configured(host_config) {
+        return Ok(None);
+    }
+    resolve_ssh_proxy(host_config).map(Some)
+}
+
+pub(crate) fn system_proxy_to_ssh_proxy(
+    config: &crate::services::system_proxy::SystemProxyConfig,
+) -> ResolvedSshProxy {
+    let kind = if config.proxy_type == crate::services::system_proxy::SYSTEM_PROXY_TYPE_SOCKS5 {
+        SshProxyKind::Socks5
+    } else {
+        SshProxyKind::Http
+    };
+    ResolvedSshProxy {
+        kind,
+        // The app proxy accepts bracketed IPv6 hosts ("[::1]"); TcpStream
+        // resolution needs the bare address.
+        host: strip_ipv6_brackets(config.host.trim()).to_string(),
+        port: config.port,
+        username: config.username.trim().to_string(),
+        password: config.password.clone(),
+    }
 }
 
 pub(crate) fn resolve_ssh_proxy(

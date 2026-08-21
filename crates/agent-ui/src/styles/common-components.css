@@ -441,6 +441,7 @@
     .ask-custom-input-enter,
     .notify-toast-enter,
     .notify-toast-exit {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides state-specific entrance and exit animations. */
       animation: none !important;
     }
   }
@@ -981,6 +982,7 @@
     .skills-drawer-backdrop-closing,
     .skills-drawer-panel,
     .skills-drawer-panel-closing {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides state-specific drawer animations. */
       animation: none !important;
     }
     .hub-frost-spinner > i {
@@ -1034,6 +1036,7 @@
     .file-drop-overlay,
     .file-drop-overlay-card,
     .file-drop-overlay-zone {
+      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides active drag-overlay animations. */
       animation: none !important;
     }
   }

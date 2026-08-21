@@ -1063,6 +1063,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         return (
                           <div
+                            // biome-ignore lint/suspicious/noArrayIndexKey: Header rows are an ordered, controlled editor whose mutation API is intentionally index-based; content-derived keys would remount inputs on every keystroke.
                             key={index}
                             className={cn(
                               "provider-panel-enter group relative flex items-stretch overflow-hidden rounded-lg border bg-card transition-all focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-muted-foreground/30 max-[720px]:flex-wrap",

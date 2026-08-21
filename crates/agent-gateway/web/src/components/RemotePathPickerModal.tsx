@@ -245,6 +245,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     });
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: root loading is a one-shot modal initialization using stable state helpers
   useEffect(() => {
     let cancelled = false;
 
@@ -295,6 +296,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initial-path expansion is driven only by its path and loaded roots
   useEffect(() => {
     if (loadingRoots || didExpandInitialPathRef.current) return;
 
@@ -453,7 +455,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   async function loadChildren(path: string) {
     if (!path.trim()) return;
     const current = items[path];
-    if (!current || !current.isFolder) return;
+    if (!current?.isFolder) return;
     if (current.data?.loaded) return;
     if (loadingPaths.has(path)) return;
 

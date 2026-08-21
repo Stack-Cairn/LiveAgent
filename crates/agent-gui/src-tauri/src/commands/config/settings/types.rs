@@ -68,6 +68,8 @@ pub(crate) struct RuntimeSshProxyConfig {
     pub username: String,
     pub password: String,
     pub password_configured: bool,
+    /// 直接复用「系统设置 → 应用代理」；开启时忽略上面的手动代理字段。
+    pub use_system_proxy: bool,
 }
 
 #[derive(Debug, Clone)]

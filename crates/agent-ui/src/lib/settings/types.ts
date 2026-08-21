@@ -369,6 +369,8 @@ export type SshProxyConfig = {
   username: string;
   password: string;
   passwordConfigured?: boolean;
+  /** 直接复用「系统设置 → 应用代理」（systemProxy）；开启时忽略手动代理字段。 */
+  useSystemProxy: boolean;
 };
 
 export type SshHostConfig = {

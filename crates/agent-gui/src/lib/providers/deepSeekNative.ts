@@ -1,4 +1,5 @@
 import {
+  type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
   type AssistantMessageEventStream,
@@ -107,7 +108,7 @@ function assertTextOnlyContext(context: Context) {
 }
 
 function createErrorAssistant(
-  model: Model<any>,
+  model: Model<Api>,
   error: unknown,
   aborted: boolean,
 ): AssistantMessage {
@@ -212,7 +213,7 @@ function capturedDeepSeekOutput(capture: DeepSeekResponseCapture) {
 }
 
 function buildResponsesOptions(
-  model: Model<any>,
+  model: Model<Api>,
   options: StreamOptionsEx,
   fetch: typeof globalThis.fetch,
 ): OpenAIResponsesOptions {
@@ -244,7 +245,7 @@ function buildResponsesOptions(
  * server-side web_search_call items for stateless multi-turn replay.
  */
 export function streamDeepSeekResponses(
-  model: Model<any>,
+  model: Model<Api>,
   context: Context,
   options: StreamOptionsEx,
 ): AssistantMessageEventStream {

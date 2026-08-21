@@ -178,6 +178,7 @@ export function WindowsTitleBar() {
         !isFocused && "text-foreground/55",
       )}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: The native titlebar drag/maximize region is intentionally pointer-only; adjacent window buttons provide keyboard controls. */}
       <div
         className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-2.5 pr-3"
         onDoubleClick={handleTitleDoubleClick}

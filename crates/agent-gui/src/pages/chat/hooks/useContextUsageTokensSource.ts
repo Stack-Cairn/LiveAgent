@@ -51,6 +51,13 @@ export function createContextUsageTokensSource(params: ContextUsageTokensSourceP
       ) {
         return cache.value;
       }
+      // 优先级（#426 引入时的原始设计，文件拆分时注释曾丢失）：运行中（发送/
+      // 压缩）转录尾部滞后于账本，账本读数优先；空闲时转录含权威锚点
+      //（edit-resend 截断历史后账本仍冻结在截断前读数），转录扫描才准。
+      // 惰性求值：命中账本优先项即跳过全量转录扫描（流式期每帧对大工具结果
+      // JSON.stringify 后丢弃的开销）。因此 GUI 环在流式期按消息落定跳变而
+      // 非逐帧估算；live 尾部联合倒扫仅在运行中而账本尚无读数时可达
+      //（如中继压缩落在本会话新建的控制器上）。
       let value: number | undefined;
       if (isRunning && runtimeValue !== undefined) {
         value = runtimeValue;

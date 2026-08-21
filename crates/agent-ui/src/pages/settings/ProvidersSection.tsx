@@ -474,9 +474,8 @@ function ProviderActionGroup(props: {
     props;
 
   return (
-    <div
-      className="settings-provider-action-group"
-      role="group"
+    <fieldset
+      className="settings-provider-action-group min-w-0 border-0 p-0"
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
@@ -514,7 +513,7 @@ function ProviderActionGroup(props: {
           {t("settings.providerActionSettings")}
         </span>
       </Button>
-    </div>
+    </fieldset>
   );
 }
 
@@ -615,10 +614,9 @@ function ProviderList(props: {
                   usageNow,
                 );
                 const usageExpanded = expandedUsageProviderIds.has(provider.id);
-                const visibleUsagePlans =
-                  usageDisplay.plans.length > 1 && !usageExpanded
-                    ? usageDisplay.plans.slice(0, 1)
-                    : usageDisplay.plans;
+                // 收起态只展示首个套餐,其余套餐放入可动画折叠容器;配合下方
+                // 等高骨架,卡片在"加载→出数"全程保持两行高度,不产生布局跳动。
+                const [firstUsagePlan, ...extraUsagePlans] = usageDisplay.plans;
                 return (
                   <div
                     key={provider.id}
@@ -649,42 +647,98 @@ function ProviderList(props: {
                         {provider.activeModels.length} {t("settings.activeModels")}
                       </div>
                       {usageDisplay.show ? (
-                        <div className="mt-1 flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
-                          {visibleUsagePlans.map((plan, index) => (
-                            <UsagePlanLine
-                              key={`${plan.title.kind === "text" ? plan.title.text : plan.title.kind}:${
-                                // biome-ignore lint/suspicious/noArrayIndexKey: 套餐无稳定 id,索引即位置语义
-                                index
-                              }`}
-                              plan={plan}
-                            />
-                          ))}
-                          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {usageDisplay.plans.length > 1 ? (
-                              <button
-                                type="button"
-                                className="text-primary hover:underline"
-                                onClick={() => toggleUsageExpanded(provider.id)}
-                              >
-                                {usageExpanded
-                                  ? t("settings.providerUsageCollapse")
-                                  : t("settings.providerUsageMorePlans").replace(
-                                      "{count}",
-                                      String(usageDisplay.plans.length - 1),
-                                    )}
-                              </button>
-                            ) : null}
-                            {usageDisplay.isStale ? (
-                              <span title={t("settings.providerUsageStaleTitle")}>
-                                {t("settings.providerUsageStale")}
+                        <div
+                          className="mt-1 min-w-0 text-xs text-muted-foreground"
+                          aria-busy={usageDisplay.loading}
+                        >
+                          {/* 主行与元信息行都固定 min-h-4(= text-xs 行高):加载时
+                              骨架等高占位,结果到达后原位替换,卡片高度全程稳定。 */}
+                          <div className="flex min-h-4 min-w-0 items-center">
+                            {firstUsagePlan ? (
+                              <span className="settings-usage-reveal flex min-w-0">
+                                <UsagePlanLine plan={firstUsagePlan} />
                               </span>
-                            ) : null}
-                            {usageDisplay.error ? (
-                              <span className="text-destructive">{usageDisplay.error}</span>
-                            ) : null}
-                            {usageDisplay.updatedAt ? (
-                              <time>{usageRelativeTimeText(t, usageDisplay.updatedAt)}</time>
-                            ) : null}
+                            ) : usageDisplay.loading ? (
+                              <span
+                                aria-hidden="true"
+                                className="h-2 w-32 max-w-full animate-pulse rounded-full bg-foreground/[0.08] motion-reduce:animate-none"
+                              />
+                            ) : (
+                              <span
+                                className={cn(
+                                  "settings-usage-reveal truncate",
+                                  usageDisplay.error && "text-destructive",
+                                )}
+                              >
+                                {usageDisplay.error ?? t("settings.providerUsageNoData")}
+                              </span>
+                            )}
+                          </div>
+                          {extraUsagePlans.length > 0 ? (
+                            <div
+                              className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+                              style={{ gridTemplateRows: usageExpanded ? "1fr" : "0fr" }}
+                              aria-hidden={!usageExpanded}
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                {extraUsagePlans.map((plan, index) => (
+                                  <div
+                                    key={`${plan.title.kind === "text" ? plan.title.text : plan.title.kind}:${
+                                      // biome-ignore lint/suspicious/noArrayIndexKey: 套餐无稳定 id,索引即位置语义
+                                      index
+                                    }`}
+                                    className="flex min-h-4 min-w-0 items-center pt-0.5"
+                                  >
+                                    <UsagePlanLine plan={plan} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="mt-0.5 flex min-h-4 min-w-0 items-center">
+                            {usageDisplay.loading ? (
+                              <span
+                                aria-hidden="true"
+                                className="h-2 w-16 animate-pulse rounded-full bg-foreground/[0.06] motion-reduce:animate-none"
+                              />
+                            ) : (
+                              <span className="settings-usage-reveal flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                {extraUsagePlans.length > 0 ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                                    aria-expanded={usageExpanded}
+                                    onClick={() => toggleUsageExpanded(provider.id)}
+                                  >
+                                    {usageExpanded
+                                      ? t("settings.providerUsageCollapse")
+                                      : t("settings.providerUsageMorePlans").replace(
+                                          "{count}",
+                                          String(extraUsagePlans.length),
+                                        )}
+                                    <ChevronDown
+                                      className={cn(
+                                        "h-3 w-3 transition-transform duration-200 motion-reduce:transition-none",
+                                        usageExpanded && "rotate-180",
+                                      )}
+                                    />
+                                  </button>
+                                ) : null}
+                                {usageDisplay.isStale ? (
+                                  <span title={t("settings.providerUsageStaleTitle")}>
+                                    {t("settings.providerUsageStale")}
+                                  </span>
+                                ) : null}
+                                {usageDisplay.error && firstUsagePlan ? (
+                                  <span className="min-w-0 truncate text-destructive">
+                                    {usageDisplay.error}
+                                  </span>
+                                ) : null}
+                                {usageDisplay.updatedAt ? (
+                                  <time>{usageRelativeTimeText(t, usageDisplay.updatedAt)}</time>
+                                ) : null}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ) : null}

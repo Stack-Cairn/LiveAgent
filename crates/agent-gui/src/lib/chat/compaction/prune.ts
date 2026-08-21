@@ -1,14 +1,12 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-
+import { estimateContentTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
 import { sanitizeMessageForModelContext } from "../context/requestContextSanitizer";
 import {
   type ConversationViewState,
   getActiveSegment,
   replaceActiveSegmentMessages,
 } from "../conversation/conversationState";
-import { flattenContentBlocks, toPlainText } from "./payload";
 import type { PruneOptions } from "./policy";
-import { estimateTextTokens } from "./tokenLedger";
 
 const PRUNED_TOOL_OUTPUT_TEXT = "[output pruned to preserve context budget]";
 
@@ -52,9 +50,9 @@ export function pruneConversationState(
     if (userTurnsSeen < protectedRecentUserTurns) continue;
 
     const modelMessage = sanitizeMessageForModelContext(message) as ToolResultMessage;
-    const toolText = flattenContentBlocks(modelMessage.content);
-    const detailsText = modelMessage.details ? toPlainText(modelMessage.details) : "";
-    const estimated = estimateTextTokens(toolText) + estimateTextTokens(detailsText);
+    // 释放量与账本同口径：只按模型可见的 content 计（details 不发给模型）。
+    // 计入 details 会高报释放量而提前停手，实际上下文并未降到位。
+    const estimated = Math.ceil(estimateContentTokenUnits(modelMessage.content));
     if (estimated <= 0) continue;
     traversedToolTokens += estimated;
     if (traversedToolTokens <= protectedToolTokens) continue;
