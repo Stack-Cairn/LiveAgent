@@ -174,6 +174,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceMore": "更多",
   "chat.workspaceConfigure": "配置",
   "chat.projectPromptTitle": "项目提示词",
+  "chat.globalPromptTitle": "全局提示词",
   "chat.projectPromptStrategy": "与全局提示词的关系",
   "chat.projectPromptStrategyHint": "选择项目提示词如何与当前启用的全局模板组合。",
   "chat.projectPromptAppend": "拼接",

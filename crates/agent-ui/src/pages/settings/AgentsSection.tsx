@@ -110,9 +110,9 @@ export function AgentsSection(props: SettingsSectionProps) {
   const viewingProjectEntry = viewingProject
     ? settings.system.workspaceResourceSettings[workspaceProjectPathKey(viewingProject.path)]
     : undefined;
-  const viewingProjectEffectivePrompt = viewingProject
-    ? resolveEffectivePromptSettings(settings, viewingProject.path).prompt
-    : "";
+  const viewingProjectPromptSettings = viewingProject
+    ? resolveEffectivePromptSettings(settings, viewingProject.path)
+    : null;
 
   return (
     <>
@@ -411,17 +411,36 @@ export function AgentsSection(props: SettingsSectionProps) {
         <AgentPromptViewModal template={viewingTemplate} onClose={() => setViewingTemplate(null)} />
       ) : null}
 
-      {viewingProject && viewingProjectEntry?.projectPrompt.trim() ? (
+      {viewingProject &&
+      viewingProjectEntry?.projectPrompt.trim() &&
+      viewingProjectPromptSettings ? (
         <AgentPromptViewModal
           template={{
             id: viewingProject.id,
             name: viewingProject.name,
             description: viewingProject.path,
-            prompt: viewingProjectEffectivePrompt,
+            prompt: viewingProjectPromptSettings.prompt,
             enabled: true,
           }}
           subtitle={t("chat.projectPromptTitle")}
-          promptTitle={t("chat.projectPromptEffectivePreview")}
+          hidePromptHeader
+          promptSegments={[
+            ...(viewingProjectPromptSettings.projectPromptStrategy === "append" &&
+            viewingProjectPromptSettings.globalPrompt
+              ? [
+                  {
+                    label: t("chat.globalPromptTitle"),
+                    prompt: viewingProjectPromptSettings.globalPrompt,
+                    tone: "global" as const,
+                  },
+                ]
+              : []),
+            {
+              label: t("chat.projectPromptTitle"),
+              prompt: viewingProjectPromptSettings.projectPrompt,
+              tone: "project" as const,
+            },
+          ]}
           detailsTitle={t("settings.agentsProjectsTab")}
           statusTitle={t("chat.projectPromptStrategy")}
           statusLabel={t(
@@ -451,7 +470,12 @@ export function AgentsSection(props: SettingsSectionProps) {
 type AgentPromptViewModalProps = {
   template: AgentPromptTemplate;
   subtitle?: string;
-  promptTitle?: string;
+  hidePromptHeader?: boolean;
+  promptSegments?: Array<{
+    label: string;
+    prompt: string;
+    tone: "global" | "project";
+  }>;
   detailsTitle?: string;
   statusTitle?: string;
   statusLabel?: string;
@@ -462,7 +486,8 @@ type AgentPromptViewModalProps = {
 function AgentPromptViewModal({
   template,
   subtitle,
-  promptTitle,
+  hidePromptHeader = false,
+  promptSegments,
   detailsTitle,
   statusTitle,
   statusLabel,
@@ -562,28 +587,74 @@ function AgentPromptViewModal({
             </aside>
 
             <section className="flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-xs md:min-h-[420px]">
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-4 py-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
-                    <FileText className="h-4 w-4" />
+              {!hidePromptHeader ? (
+                <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-semibold">{t("settings.agentsPrompt")}</span>
                   </div>
-                  <span className="text-xs font-semibold">
-                    {promptTitle ?? t("settings.agentsPrompt")}
+                  <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
+                    {template.prompt.length.toLocaleString()} {t("settings.agentsCharacters")}
                   </span>
                 </div>
-                <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
-                  {template.prompt.length.toLocaleString()} {t("settings.agentsCharacters")}
-                </span>
-              </div>
+              ) : null}
               <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-5">
-                <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground/90">
-                  {template.prompt}
-                </pre>
+                {promptSegments ? (
+                  promptSegments.map((segment, index) => (
+                    <div key={segment.tone}>
+                      {index === 0 ? (
+                        <PromptScopeLabel label={segment.label} tone={segment.tone} />
+                      ) : (
+                        <div className="flex items-center gap-3 py-5">
+                          <span className="h-px min-w-4 flex-1 bg-border/70" />
+                          <PromptScopeLabel label={segment.label} tone={segment.tone} />
+                          <span className="h-px min-w-4 flex-1 bg-border/70" />
+                        </div>
+                      )}
+                      <pre
+                        className={cn(
+                          "whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground/90",
+                          index === 0 && "mt-4",
+                        )}
+                      >
+                        {segment.prompt}
+                      </pre>
+                    </div>
+                  ))
+                ) : (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground/90">
+                    {template.prompt}
+                  </pre>
+                )}
               </div>
             </section>
           </div>
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PromptScopeLabel(props: { label: string; tone: "global" | "project" }) {
+  const { label, tone } = props;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+        tone === "global"
+          ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
+          : "border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300",
+      )}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          tone === "global" ? "bg-sky-500" : "bg-violet-500",
+        )}
+      />
+      {label}
+    </span>
   );
 }

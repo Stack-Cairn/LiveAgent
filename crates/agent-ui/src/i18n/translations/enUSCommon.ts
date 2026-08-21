@@ -188,6 +188,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceMore": "More",
   "chat.workspaceConfigure": "Configure",
   "chat.projectPromptTitle": "Project prompt",
+  "chat.globalPromptTitle": "Global prompt",
   "chat.projectPromptStrategy": "Relationship to the global prompt",
   "chat.projectPromptStrategyHint":
     "Choose how this project prompt combines with the active global template.",

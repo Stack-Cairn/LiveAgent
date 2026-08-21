@@ -228,9 +228,12 @@ test("global and project prompt cards share row and action layout", () => {
 test("project prompt preview renders the effective prompt without overflowing its details column", () => {
   assert.match(
     sharedAgentsSection,
-    /resolveEffectivePromptSettings\(settings, viewingProject\.path\)\.prompt/,
+    /resolveEffectivePromptSettings\(settings, viewingProject\.path\)/,
   );
-  assert.match(sharedAgentsSection, /promptTitle=\{t\("chat\.projectPromptEffectivePreview"\)\}/);
+  assert.match(sharedAgentsSection, /hidePromptHeader/);
+  assert.match(sharedAgentsSection, /label: t\("chat\.globalPromptTitle"\)/);
+  assert.match(sharedAgentsSection, /<PromptScopeLabel label=\{segment\.label\}/);
+  assert.match(sharedAgentsSection, /h-px min-w-4 flex-1 bg-border\/70/);
   assert.match(sharedAgentsSection, /md:grid-cols-\[minmax\(0,16rem\)_minmax\(0,1fr\)\]/);
   assert.match(sharedAgentsSection, /\[overflow-wrap:anywhere\]/);
   assert.match(
