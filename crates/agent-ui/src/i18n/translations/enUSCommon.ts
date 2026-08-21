@@ -401,7 +401,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.changedFiles.diff": "View diff",
   "chat.changedFiles.deleted": "Deleted",
   "chat.changedFiles.collapse": "Collapse file list",
-  "chat.changedFiles.expand": "Expand file list",
+  "chat.changedFiles.expand": "Show {count} more files",
   "chat.compactingContext": "Compressing context",
   "chat.compactingContextWait": "Compressing context, please wait...",
   "chat.contextCheckpoint.title": "Context Checkpoint",

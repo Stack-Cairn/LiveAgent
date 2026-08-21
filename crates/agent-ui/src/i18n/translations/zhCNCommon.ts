@@ -367,7 +367,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.changedFiles.diff": "查看 Diff",
   "chat.changedFiles.deleted": "已删除",
   "chat.changedFiles.collapse": "折叠文件列表",
-  "chat.changedFiles.expand": "展开文件列表",
+  "chat.changedFiles.expand": "再显示 {count} 个文件",
   "chat.compactingContext": "正在压缩上下文",
   "chat.compactingContextWait": "正在压缩上下文，请稍候...",
   "chat.contextCheckpoint.title": "上下文检查点",
