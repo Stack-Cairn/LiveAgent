@@ -1,3 +1,4 @@
+import type { ProviderHeaders } from "@earendil-works/pi-ai";
 import {
   type HostedSearchBlock,
   type HostedSearchSource,
@@ -7,7 +8,6 @@ import {
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import { hashText } from "@liveagent/ui/lib/shared/hash";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import type { ProviderHeaders } from "@earendil-works/pi-ai";
 import type { ProviderId } from "../settings";
 
 type HostedSearchUpdate = {

@@ -7,7 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import { invoke } from "@tauri-apps/api/core";
-import { Type, type TProperties } from "typebox";
+import { type TProperties, Type } from "typebox";
 import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import {
   type BuiltinToolBundle,

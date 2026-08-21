@@ -53,7 +53,7 @@ function biomeStep(name, workspace, strict = false) {
     workspace,
     "exec",
     "biome",
-    "lint",
+    "check",
     "src/",
     "--max-diagnostics=none",
   ];

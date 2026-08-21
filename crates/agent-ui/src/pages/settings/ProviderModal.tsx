@@ -694,8 +694,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
           ? "long"
           : undefined,
-      nativeWebSearchEnabled:
-        initialData?.nativeWebSearchEnabled ?? true,
+      nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });

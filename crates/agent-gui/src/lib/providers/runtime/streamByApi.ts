@@ -121,11 +121,10 @@ export function streamSimpleByApi(model: Model<Api>, context: Context, options: 
         reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
       };
       return withStreamRetry(
-        () =>
-          streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions),
+        () => streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions),
         {
-        signal: options.signal,
-        ...options.streamRetry,
+          signal: options.signal,
+          ...options.streamRetry,
         },
       );
     }
@@ -145,8 +144,8 @@ export function streamSimpleByApi(model: Model<Api>, context: Context, options: 
       return withStreamRetry(
         () => streamGoogle(model as Model<"google-generative-ai">, context, googleOptions),
         {
-        signal: options.signal,
-        ...options.streamRetry,
+          signal: options.signal,
+          ...options.streamRetry,
         },
       );
     }

@@ -1,7 +1,7 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
-import { Type, type TProperties } from "typebox";
+import { type TProperties, Type } from "typebox";
 import {
   inferRuntimePlatform,
   normalizeRuntimePlatform,

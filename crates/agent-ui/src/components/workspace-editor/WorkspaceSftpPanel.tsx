@@ -1051,17 +1051,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
         setBusyMessage("");
       }
     },
-    [
-      client,
-      confirm,
-      loadPane,
-      onError,
-      projectPathKey,
-      session.id,
-      t,
-      workdir,
-      paneForSide,
-    ],
+    [client, confirm, loadPane, onError, projectPathKey, session.id, t, workdir, paneForSide],
   );
 
   const showCopyToast = useCallback(() => {

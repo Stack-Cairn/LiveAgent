@@ -110,8 +110,7 @@ export class SttStreamingResampler {
       const left = Math.floor(relativePosition);
       const fraction = relativePosition - left;
       output.push(
-        (this.buffered[left] ?? 0) * (1 - fraction) +
-          (this.buffered[left + 1] ?? 0) * fraction,
+        (this.buffered[left] ?? 0) * (1 - fraction) + (this.buffered[left + 1] ?? 0) * fraction,
       );
       this.outputIndex += 1;
     }
@@ -132,8 +131,7 @@ export class SttStreamingResampler {
       const right = Math.min(left + 1, this.buffered.length - 1);
       const fraction = relativePosition - left;
       output.push(
-        (this.buffered[left] ?? 0) * (1 - fraction) +
-          (this.buffered[right] ?? 0) * fraction,
+        (this.buffered[left] ?? 0) * (1 - fraction) + (this.buffered[right] ?? 0) * fraction,
       );
       this.outputIndex += 1;
     }
@@ -286,9 +284,10 @@ export class SttAudioCapture {
       const baseline = this.baselineSamples.length
         ? this.baselineSamples.reduce((sum, value) => sum + value, 0) / this.baselineSamples.length
         : 0.003;
-      const threshold = this.options.vadThreshold === undefined
-        ? Math.max(0.005, Math.min(0.009, baseline * 1.8))
-        : this.threshold;
+      const threshold =
+        this.options.vadThreshold === undefined
+          ? Math.max(0.005, Math.min(0.009, baseline * 1.8))
+          : this.threshold;
       const hasVoice = rms >= threshold;
       if (hasVoice) this.lastVoiceAt = performance.now();
       this.options.onChunk(

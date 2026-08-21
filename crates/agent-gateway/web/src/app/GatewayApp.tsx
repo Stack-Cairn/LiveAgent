@@ -1109,15 +1109,12 @@ function useGatewayAppController() {
     [activityStore, sidebarStore],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: workbench setter and version ref are stable hook outputs declared later in the composition
-  const pruneWorkspaceProjectTerminalSessions = useCallback(
-    (pathKey: string) => {
-      terminalSessionsVersionRef.current += 1;
-      setTerminalSessions((current) =>
-        current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
-      );
-    },
-    [],
-  );
+  const pruneWorkspaceProjectTerminalSessions = useCallback((pathKey: string) => {
+    terminalSessionsVersionRef.current += 1;
+    setTerminalSessions((current) =>
+      current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
+    );
+  }, []);
   const closeWorkspaceProjectRightDock = useCallback(
     (pathKey: string) => {
       if (workspaceProjectPathKey(activeWorkspaceProjectPath) === pathKey) {
