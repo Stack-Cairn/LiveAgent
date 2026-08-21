@@ -21,6 +21,7 @@ import {
   Layers,
   Lightbulb,
   LightbulbOff,
+  ListChecks,
   OpenaiChatgptIcon,
   Pencil,
   Search,
@@ -591,6 +592,27 @@ export const ComposerModelControls = memo(function ComposerModelControls(
               })
             }
           />
+
+          {/* Plan mode 仅对 agent 执行模式有意义(text 模式无工具表可裁)。 */}
+          {isAgent ? (
+            <RuntimeToggleChip
+              pressed={chatRuntimeControls.planModeEnabled}
+              disabled={disabled}
+              label={t("chat.runtime.planMode")}
+              ariaLabel={
+                chatRuntimeControls.planModeEnabled
+                  ? t("chat.runtime.planModeOn")
+                  : t("chat.runtime.planModeOff")
+              }
+              pressedClassName="border-sky-500/20 bg-sky-500/10 text-sky-700 hover:bg-sky-500/15 dark:text-sky-300"
+              icon={<ListChecks className="h-3.5 w-3.5 shrink-0" />}
+              onClick={() =>
+                onChatRuntimeControlsChange({
+                  planModeEnabled: !chatRuntimeControls.planModeEnabled,
+                })
+              }
+            />
+          ) : null}
 
           <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border/70" />
 

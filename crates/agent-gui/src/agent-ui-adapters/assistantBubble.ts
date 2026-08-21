@@ -1,9 +1,11 @@
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
+import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 import { useSyncExternalStore } from "react";
 import {
   answerAskUserQuestion,
   getAskUserQuestionDeadlineAt,
 } from "../lib/tools/askUserQuestionTools";
+import { answerPlanDecision, getExitPlanModeDeadlineAt } from "../lib/tools/planModeTools";
 import {
   getPendingToolApproval,
   getToolApprovalVersion,
@@ -30,4 +32,15 @@ export function readAskUserQuestionDeadline(
 
 export function submitAskUserQuestionAnswers(toolCallId: string, answers: AskUserQuestionAnswer[]) {
   return Promise.resolve(answerAskUserQuestion(toolCallId, answers));
+}
+
+export function readPlanDecisionDeadline(
+  toolCallId: string,
+  _toolArguments: Record<string, unknown>,
+) {
+  return getExitPlanModeDeadlineAt(toolCallId) ?? undefined;
+}
+
+export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswer) {
+  return Promise.resolve(answerPlanDecision(toolCallId, answer));
 }

@@ -24,6 +24,7 @@ import {
   normalizeChatRuntimeControls,
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
+import { answerPlanDecision } from "../../../lib/tools/planModeTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import { createTextComposerDraft } from "../composer/composerDraftText";
 import {
@@ -478,6 +479,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     conversationId: string;
     draft: MentionComposerDraft | null;
     uploadedFiles: PendingUploadedFile[];
+    /** 覆盖入队 turn 的运行时控制;缺省取当前 settings 快照。计划批准的续轮
+     * 用它显式带 planModeEnabled:false——不能依赖 setSettings 后的闭包新鲜度。 */
+    runtimeControls?: ChatRuntimeControls;
   }) {
     const conversationId = input.conversationId.trim();
     const uploadedFiles = input.uploadedFiles.slice();
@@ -505,7 +509,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       executionMode,
       workdir: workdirForTurn,
       commandSafetyMode: settings.system.commandSafetyMode,
-      runtimeControls: settings.chatRuntimeControls,
+      runtimeControls: input.runtimeControls ?? settings.chatRuntimeControls,
     });
     setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
     setPendingUploadsForConversation(conversationId, []);
@@ -966,6 +970,29 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         const outcome = answerToolApproval(itemId, raw, { conversationId });
         if (!outcome.ok) {
           fail(outcome.message || "approval not pending", "not_found");
+          return;
+        }
+        respond(requestId, { accepted: true });
+        return;
+      }
+
+      // WebUI 对计划卡片的决定:itemId 即 toolCallId,request_json 携带
+      // {"decision":"approve"|"reject","feedback"?},落到桌面计划挂起表。
+      if (action === "plan_decision") {
+        if (!itemId) {
+          fail("plan_decision requires item_id", "invalid_request");
+          return;
+        }
+        let rawAnswer: unknown;
+        try {
+          rawAnswer = JSON.parse(request.requestJson || "{}");
+        } catch {
+          fail("invalid plan decision payload", "invalid_payload");
+          return;
+        }
+        const outcome = answerPlanDecision(itemId, rawAnswer, { conversationId });
+        if (!outcome.ok) {
+          fail(outcome.message || "plan not pending", "not_found");
           return;
         }
         respond(requestId, { accepted: true });

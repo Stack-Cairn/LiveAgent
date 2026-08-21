@@ -84,6 +84,8 @@ export function getToolMeta(name: string): {
       return { Icon: FolderTree, accent: "var(--tool-list-accent)", category: "list" };
     case "AskUserQuestion":
       return { Icon: CircleHelp, accent: "var(--tool-list-accent)", category: "system" };
+    case "ExitPlanMode":
+      return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
     default:
       return { Icon: Wrench, accent: "var(--tool-file-accent)", category: "other" };
   }
@@ -371,6 +373,7 @@ export function isBuiltinShareToolName(name: string) {
     "CronTaskManager",
     "Delete",
     "Edit",
+    "ExitPlanMode",
     "Glob",
     "Grep",
     "Image",

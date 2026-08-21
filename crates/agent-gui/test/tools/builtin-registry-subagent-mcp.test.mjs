@@ -379,3 +379,56 @@ test("read-only children inherit MCP business tools but no write, shell, or mana
   // Parent memory is read-write, so readonly children do not receive it.
   assert.ok(!names.includes("MemoryManager"));
 });
+
+test("plan mode filters the registry to read-only + plan + collaboration tools", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
+  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
+  const store = storeModule.createSubagentConversationStore({
+    conversationId: "conversation-1",
+    ipc: createFakeStoreIpc(),
+  });
+  const approvals = [];
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-plan-mode-registry-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: true,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    taskStateStore: {
+      runId: "run-1",
+      getState: () => undefined,
+      commitState: async () => undefined,
+    },
+    askUserQuestionConversationId: "conversation-1",
+    planMode: {
+      conversationId: "conversation-1",
+      onPlanApproved: (input) => approvals.push(input.plan),
+    },
+    subagentRuntime: {
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: { baseUrl: "https://api.example.test/v1", apiKey: "test-key" },
+      sessionId: "parent-session",
+      templates: [],
+      store,
+      scheduler: schedulerModule.createSubagentScheduler(),
+    },
+  });
+  const names = registry.tools.map((tool) => tool.name);
+  // 只读、计划闸门与子代理协作工具在表内。
+  for (const expected of ["Read", "Glob", "Grep", "TaskList", "AskUserQuestion", "ExitPlanMode", "Agent", "SendMessage"]) {
+    assert.ok(names.includes(expected), `expected ${expected} in plan-mode tools`);
+  }
+  // 一切写能力(内置与 MCP)不进模型工具表。
+  for (const excluded of ["Bash", "Write", "Edit", "Delete", "TaskCreate", "TaskUpdate", "McpManager", "MemoryManager", "CronTaskManager", "mcp_docs_search"]) {
+    assert.ok(!names.includes(excluded), `did not expect ${excluded} in plan-mode tools`);
+  }
+  // Agent 工具描述带 plan mode 提示(validate 层同时强制 readonly)。
+  assert.match(registry.tools.find((tool) => tool.name === "Agent").description, /PLAN MODE/);
+  // executeToolCall 仍能执行被裁掉的工具吗?——不应依赖:执行层由 gate 后备拦截。
+});

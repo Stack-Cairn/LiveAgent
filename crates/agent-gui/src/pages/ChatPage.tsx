@@ -23,6 +23,7 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
+import { createTextComposerDraft } from "@liveagent/ui/lib/chat/composerDraft";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -127,6 +128,7 @@ import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
+import { cancelPendingPlanDecisionsForConversation } from "../lib/tools/planModeTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
@@ -892,6 +894,35 @@ export function ChatPage(props: ChatPageProps) {
   });
   stopConversationActionRef.current = stopConversation;
 
+  // 计划获批(ExitPlanMode approve):
+  // 1. 关闭 plan 开关——续轮与后续轮都在完整工具下执行;
+  // 2. 入队"开始执行"续轮(带 planModeEnabled:false 的 runtimeControls 快照,
+  //    不依赖 setSettings 后的闭包新鲜度);本轮仍在运行,排空由 drain effect
+  //    在 run 结束后自动触发。计划正文已在 ExitPlanMode 工具结果里,续轮提示
+  //    只需引用它,不重复注入。
+  const handlePlanApprovedForConversation = useCallback(
+    (input: { conversationId: string; plan: string }) => {
+      setSettings((prev) =>
+        prev.chatRuntimeControls.planModeEnabled
+          ? {
+              ...prev,
+              chatRuntimeControls: { ...prev.chatRuntimeControls, planModeEnabled: false },
+            }
+          : prev,
+      );
+      enqueueComposerTurnForConversation({
+        conversationId: input.conversationId,
+        draft: createTextComposerDraft(t("chat.planMode.executePrompt")),
+        uploadedFiles: [],
+        runtimeControls: {
+          ...settings.chatRuntimeControls,
+          planModeEnabled: false,
+        },
+      });
+    },
+    [enqueueComposerTurnForConversation, setSettings, settings.chatRuntimeControls, t],
+  );
+
   // Queue snapshots publish on queue mutation only; after a gateway
   // reconnect (new session) the gateway's in-memory queue view is empty, so
   // republish the current queue for every conversation that has one.
@@ -946,6 +977,7 @@ export function ChatPage(props: ChatPageProps) {
           subagentStoresRef.current.dispose(conversationId);
           cancelPendingAskUserQuestionsForConversation(conversationId);
           cancelPendingToolApprovalsForConversation(conversationId);
+          cancelPendingPlanDecisionsForConversation(conversationId);
         },
       });
     },
@@ -1304,6 +1336,7 @@ export function ChatPage(props: ChatPageProps) {
     setSettings,
     getMcpSettings,
     getToolPolicies,
+    onPlanApprovedForConversation: handlePlanApprovedForConversation,
     t,
     setErrorMessage,
     sidebarStore,

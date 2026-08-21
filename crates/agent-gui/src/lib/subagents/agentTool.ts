@@ -210,6 +210,8 @@ export function createSubagentTools(params: {
   /** 父对话检查点上下文;仅用于 worktree apply 合并回父工作区前捕获前像,
    * 不下发给子代理自身的工具注册表(子代理 workdir 是临时目录)。 */
   checkpoint?: { conversationId: string; turnId: string };
+  /** Plan mode:一切子代理强制 readonly,worktree 请求按参数错误拒绝。 */
+  forceReadonly?: boolean;
 }): BuiltinToolBundle {
   const store = params.store;
   const templates = params.templates;
@@ -239,6 +241,11 @@ export function createSubagentTools(params: {
     name: AGENT_TOOL_NAME,
     description: [
       "Delegate one or more independent jobs to persistent, isolated subagents and return their final reports.",
+      ...(params.forceReadonly
+        ? [
+            "PLAN MODE: every subagent is readonly this turn — mode=worktree is rejected. Delegate research/review only; file changes happen after the plan is approved.",
+          ]
+        : []),
       "Pass one entry per job in `agents`; independent entries run in parallel up to `concurrency`. Use sequential Agent calls only when a later job needs an earlier job's output.",
       "Each agent has a stable `id` inside this conversation. Reuse the same id to resume that agent's private context; use a new id only for a genuinely new persona.",
       "Creation fields (name, role, identity, template) apply only when an id is first created; sending different values for an existing id is an error. For an existing id, send only id and the new prompt.",
@@ -291,7 +298,11 @@ export function createSubagentTools(params: {
     const identities = new Map(
       store.listIdentities().map((identity) => [identity.agentId, identity]),
     );
-    const parsed = parseSubagentBatch(toolCall.arguments, { identities, templates });
+    const parsed = parseSubagentBatch(toolCall.arguments, {
+      identities,
+      templates,
+      forceReadonly: params.forceReadonly,
+    });
     if (!parsed.ok) {
       return rejectBatch(parsed.issues);
     }

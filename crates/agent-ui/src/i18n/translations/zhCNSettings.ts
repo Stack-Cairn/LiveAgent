@@ -342,6 +342,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.send_message.desc": "与子代理之间收发消息",
   "settings.builtinTool.send_message.detail":
     "在主对话与子代理之间传递消息，用于协调多代理协作。需要子代理运行时；仅在对话场景注册。",
+  "settings.builtinTool.exit_plan_mode.name": "计划提交",
+  "settings.builtinTool.exit_plan_mode.desc": "提交实施计划并等待你的批准",
+  "settings.builtinTool.exit_plan_mode.detail":
+    "计划模式下，模型完成调研后以卡片提交完整实施计划。批准后自动开始执行（下一轮恢复全部工具），要求修改则附带你的反馈继续完善计划；10 分钟内未决定按未批准处理。仅在计划模式的对话场景注册。",
   "settings.builtinTool.ask_user_question.name": "用户提问",
   "settings.builtinTool.ask_user_question.desc": "以选项卡片向你提问并等待选择",
   "settings.builtinTool.ask_user_question.detail":

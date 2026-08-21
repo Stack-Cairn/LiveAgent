@@ -1398,6 +1398,7 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "CronTaskManager"
             | "Delete"
             | "Edit"
+            | "ExitPlanMode"
             | "Glob"
             | "Grep"
             | "Image"

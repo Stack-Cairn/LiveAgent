@@ -1,13 +1,16 @@
 import {
   readAskUserQuestionDeadline,
+  readPlanDecisionDeadline,
   retainRunningToolContent,
   submitAskUserQuestionAnswers,
+  submitPlanDecision,
   usePendingToolApproval,
 } from "@liveagent/adapters/assistantBubble";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { PlanModeCard } from "@liveagent/ui/components/chat/PlanModeCard";
 import { ToolScrollablePre, ToolSection } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -25,6 +28,12 @@ import {
   type ToolTraceItem,
   toolResultMessageToText,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import {
+  EXIT_PLAN_MODE_TOOL_NAME,
+  type PlanDecisionAnswer,
+  parseExitPlanModeResultDetails,
+  sanitizePlanMarkdown,
+} from "@liveagent/ui/lib/chat/planMode";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -98,12 +107,32 @@ function ToolCallItem({
     (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswers(item.toolCall.id, answers),
     [item.toolCall.id],
   );
+  // ExitPlanMode 计划卡：分派方式同 AskUserQuestion(按工具名),details 优先、
+  // 流式参数兜底;执行中(无 result)即渲染,批准/拒绝动作由宿主适配器提供。
+  const isPlanCard = !isRedactedToolContent && item.toolCall.name === EXIT_PLAN_MODE_TOOL_NAME;
+  const planDetails = isPlanCard ? parseExitPlanModeResultDetails(result?.details) : null;
+  const planMarkdown = isPlanCard
+    ? (planDetails?.plan ?? sanitizePlanMarkdown(item.toolCall.arguments?.plan))
+    : "";
+  const planSettled = isPlanCard && (Boolean(isRunning) || Boolean(result));
+  const shouldKeepPlanOpen = !readOnly && isPlanCard && (Boolean(isRunning) || !result);
+  const planDeadlineAt =
+    isPlanCard && isRunning && !result
+      ? readPlanDecisionDeadline(item.toolCall.id, item.toolCall.arguments)
+      : undefined;
+  const submitPlanAnswer = useCallback(
+    (answer: PlanDecisionAnswer) => submitPlanDecision(item.toolCall.id, answer),
+    [item.toolCall.id],
+  );
   // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
   const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
   const shouldAutoOpen =
     !isRedactedToolContent &&
-    (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
+    (item.toolCall.name === "Image" ||
+      builtinResultKind === "display_image" ||
+      shouldKeepAskOpen ||
+      shouldKeepPlanOpen);
   const [open, setOpen] = useState(readOnly || isRedactedToolContent ? false : shouldAutoOpen);
   const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
@@ -111,6 +140,7 @@ function ToolCallItem({
   const shouldShowArgs =
     !isRedactedToolContent &&
     !isAskUser &&
+    !isPlanCard &&
     (!isSubagentCard || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
   const isManagedProcess = item.toolCall.name === "ManagedProcess";
@@ -127,7 +157,7 @@ function ToolCallItem({
   const firstLinePreview = capInlineCommandPreview(firstLine);
   const inlineCommandTitle = inlineCommand ? capInlineCommandPreview(inlineCommand) : "";
   const toolArgsSummary =
-    isRedactedToolContent || isBash || inlineCommand
+    isRedactedToolContent || isBash || inlineCommand || isPlanCard
       ? ""
       : isAskUser
         ? (askQuestions[0]?.prompt ?? "")
@@ -145,9 +175,11 @@ function ToolCallItem({
   const ToolIcon = meta.Icon;
   const title = isAskUser
     ? { name: t("chat.tool.askUserTitle"), action: "" }
-    : isRedactedToolContent
-      ? { name: getToolDisplayName(item.toolCall.name), action: "" }
-      : getToolDisplayTitle(item.toolCall);
+    : isPlanCard
+      ? { name: t("chat.planMode.cardTitle"), action: "" }
+      : isRedactedToolContent
+        ? { name: getToolDisplayName(item.toolCall.name), action: "" }
+        : getToolDisplayTitle(item.toolCall);
 
   const statusLabel = isApprovalPending
     ? t("chat.toolApproval.waitingStatus")
@@ -156,7 +188,11 @@ function ToolCallItem({
         ? askQuestions.length > 0
           ? t("chat.askUser.waiting")
           : t("chat.askUser.preparing")
-        : t("chat.tool.running")
+        : isPlanCard
+          ? planMarkdown
+            ? t("chat.planMode.waiting")
+            : t("chat.planMode.preparing")
+          : t("chat.tool.running")
       : shellSessionStatus === "running"
         ? t("chat.tool.running")
         : shellSessionStatus === "cancelled"
@@ -178,18 +214,28 @@ function ToolCallItem({
 
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
-    if (shouldKeepAskOpen) {
+    if (shouldKeepAskOpen || shouldKeepPlanOpen) {
       setOpen(true);
     } else if (shouldCloseAnsweredAsk) {
       setOpen(false);
     } else if (shouldAutoOpen) {
       setOpen(true);
     }
-  }, [isRedactedToolContent, readOnly, shouldAutoOpen, shouldCloseAnsweredAsk, shouldKeepAskOpen]);
+  }, [
+    isRedactedToolContent,
+    readOnly,
+    shouldAutoOpen,
+    shouldCloseAnsweredAsk,
+    shouldKeepAskOpen,
+    shouldKeepPlanOpen,
+  ]);
 
   const canExpand =
     !isRedactedToolContent &&
-    (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
+    (shouldShowArgs ||
+      Boolean(result) ||
+      (isAskUser && askQuestions.length > 0) ||
+      (isPlanCard && Boolean(planMarkdown)));
   const effectiveOpen = canExpand && open;
   const summaryClassName = cn(
     "flex w-full select-none items-center gap-2 text-left",
@@ -285,8 +331,22 @@ function ToolCallItem({
             />
           ) : null}
 
-          {/* 提问卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
-          {result && (!isAskUser || !askDetails) ? (
+          {isPlanCard && planSettled && planMarkdown ? (
+            <PlanModeCard
+              plan={planMarkdown}
+              decision={planDetails?.decision}
+              feedback={planDetails?.feedback}
+              cancelled={planDetails?.cancelled === true}
+              timedOut={planDetails?.timedOut === true}
+              interactive={Boolean(isRunning) && !result && !readOnly}
+              deadlineAt={planDeadlineAt}
+              readOnly={readOnly}
+              onSubmit={submitPlanAnswer}
+            />
+          ) : null}
+
+          {/* 提问卡/计划卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
+          {result && (!isAskUser || !askDetails) && (!isPlanCard || !planDetails) ? (
             <ToolSection
               label={t("chat.tool.return")}
               trailing={

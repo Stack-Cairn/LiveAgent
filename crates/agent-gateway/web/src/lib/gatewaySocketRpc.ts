@@ -273,6 +273,21 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
+  /** 提交对桌面端挂起计划的决定：item_id 为 toolCallId，request_json 为 {"decision":...,"feedback"?}。 */
+  async chatQueuePlanDecision(
+    conversationId: string,
+    toolCallId: string,
+    decisionJson: string,
+  ): Promise<ChatQueueResponse> {
+    return normalizeChatQueueResponse(
+      await this.requestWithRecovery<RawChatQueueResponse>("chat_queue.plan_decision", {
+        conversation_id: conversationId,
+        item_id: toolCallId,
+        request_json: decisionJson,
+      }),
+    );
+  }
+
   // Submit a chat command. Streaming does not hang off the command: the
   // conversation subscription (persistent, run-agnostic) carries the reply.
   async chatCommand(input: GatewayChatCommandInput): Promise<ChatCommandAccepted> {

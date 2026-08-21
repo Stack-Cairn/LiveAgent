@@ -82,6 +82,10 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import {
+  buildPlanModeSystemPromptSection,
+  isPlanModeAllowedTool,
+} from "../../../lib/tools/planModeTools";
 import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
@@ -287,6 +291,10 @@ export type RunAgentConversationTurnParams = {
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
   /** 命令执行方式(turn 级快照):ask 全量审批 / auto 按策略 / sandbox(±断网)。 */
   commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];
+  /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 审批闸门。 */
+  planModeEnabled?: boolean;
+  /** 计划获批时触发:宿主据此关闭 plan 开关并入队"开始执行"续轮。 */
+  onPlanApproved?: (input: { plan: string }) => void;
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
@@ -375,6 +383,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     getMcpSettings,
     getToolPolicies,
     commandSafetyMode,
+    planModeEnabled,
+    onPlanApproved,
     applyMcpOps,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
@@ -554,8 +564,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     return frozenTaskListContext;
   };
   refreezeTaskListContext();
+  // Plan mode 段:turn 级快照、run 内恒定文本,与 frozenTaskListContext 同列
+  // 冻结注入——system 段任何变动都会作废整条前缀缓存,绝不能随状态中途改写。
+  const planModeSection = planModeEnabled ? buildPlanModeSystemPromptSection() : "";
   const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
+    if (planModeSection) {
+      systemPrompt = appendSystemPrompt(systemPrompt, planModeSection);
+    }
     if (rosterIdentitySection) {
       systemPrompt = appendSystemPrompt(systemPrompt, rosterIdentitySection);
     }
@@ -568,6 +584,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     // 轨迹 runtime 段与真实注入同口径：只记录此刻真的拼进 systemPrompt 的部分，
     // builder 会跳过空段，与上方 appendSystemPrompt 的条件一一对应。
     currentTrajectoryRuntimeContext = buildTrajectoryRuntimeContext([
+      { source: "plan-mode", text: planModeSection },
       { source: "subagent-roster", text: rosterIdentitySection },
       { source: "parent-message-bus", text: parentMessageBusSnapshot },
       { source: "task-list", text: frozenTaskListContext },
@@ -593,6 +610,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sandbox: resolveShellSandboxSettings(safetyMode),
     taskStateStore,
     askUserQuestionConversationId: conversationId,
+    planMode: planModeEnabled ? { conversationId, onPlanApproved } : undefined,
     checkpoint: {
       conversationId,
       turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
@@ -684,6 +702,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     signal?: AbortSignal,
   ): Promise<{ allow: true } | { allow: false; reason: string }> => {
     const metadata = builtinRegistry.metadataByName.get(toolCall.name);
+    // Plan mode 后备拦截:注册表组装层已裁掉非只读工具(模型看不到),此分支
+    // 只兜 seed 恢复等旁路把写调用送进执行层的极端情况——语义必须与工具表一致。
+    if (planModeEnabled && !isPlanModeAllowedTool(toolCall.name, metadata)) {
+      return {
+        allow: false,
+        reason: `Plan mode is active: ${toolCall.name} is unavailable during planning. Research with read-only tools and submit the plan via ExitPlanMode.`,
+      };
+    }
     const policy = resolveToolPolicy(toolCall.name, metadata, getToolPolicies?.());
     if (policy === "deny") {
       return {

@@ -5,6 +5,10 @@ import {
   ASK_USER_QUESTION_TOOL_NAME,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
+  EXIT_PLAN_MODE_DEADLINE_ARG,
+  EXIT_PLAN_MODE_TOOL_NAME,
+} from "@liveagent/ui/lib/chat/planMode";
+import {
   TOOL_APPROVAL_DEADLINE_ARG,
   TOOL_APPROVAL_PENDING_ARG,
   TOOL_APPROVAL_SUMMARY_ARG,
@@ -18,6 +22,7 @@ import {
 } from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
+import { ensureExitPlanModeDeadlineAt } from "../../../lib/tools/planModeTools";
 import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
@@ -111,6 +116,14 @@ export function buildGatewayToolCallPreviewArguments(
     return {
       ...sourceArgs,
       [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
+    };
+  }
+  // ExitPlanMode：同 AskUserQuestion 的 deadline 盖章机制（planModeTools 预置/复用）。
+  // 计划卡片即审批门,工具只读、不进审批,无需 approvalOverlay。
+  if (toolCall.name === EXIT_PLAN_MODE_TOOL_NAME) {
+    return {
+      ...sourceArgs,
+      [EXIT_PLAN_MODE_DEADLINE_ARG]: ensureExitPlanModeDeadlineAt(toolCall.id),
     };
   }
   const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];

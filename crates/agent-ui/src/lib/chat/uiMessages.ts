@@ -15,6 +15,7 @@ import {
   resolveHostedSearchTextBoundary,
   splitTextAroundHostedSearch,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import { EXIT_PLAN_MODE_DEADLINE_ARG } from "@liveagent/ui/lib/chat/planMode";
 import {
   TOOL_APPROVAL_DEADLINE_ARG,
   TOOL_APPROVAL_PENDING_ARG,
@@ -529,6 +530,7 @@ const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   TOOL_APPROVAL_DEADLINE_ARG,
   TOOL_APPROVAL_SUMMARY_ARG,
   ASK_USER_QUESTION_DEADLINE_ARG,
+  EXIT_PLAN_MODE_DEADLINE_ARG,
 ]);
 
 // 深度截断超大字符串:MCP 参数可能把超长内容嵌在数组/对象里(如批量写文件),

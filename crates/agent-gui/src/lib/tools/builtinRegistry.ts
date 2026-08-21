@@ -28,6 +28,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
+import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
@@ -294,8 +295,14 @@ export async function buildBuiltinToolRegistry(
     taskStateStore?: TaskStateStore;
     /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
+    /** Plan mode:非只读工具不进注册表,注入 ExitPlanMode,子代理强制 readonly。 */
+    planMode?: {
+      conversationId: string;
+      onPlanApproved?: (input: { plan: string }) => void;
+    };
   },
 ) {
+  const planModeActive = Boolean(params.planMode);
   const baseBundles = await buildBaseBuiltinToolBundles(params);
   const taskBundles =
     params.runtimeScope === "chat" && params.taskStateStore
@@ -305,11 +312,33 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...taskBundles, ...askUserQuestionBundles];
+  const planModeBundles =
+    params.runtimeScope === "chat" && params.planMode
+      ? [
+          createExitPlanModeTools({
+            conversationId: params.planMode.conversationId,
+            onPlanApproved: params.planMode.onPlanApproved,
+          }),
+        ]
+      : [];
+  const chatBundles = [...taskBundles, ...askUserQuestionBundles, ...planModeBundles];
+
+  // Plan mode:在注册表组装层裁掉非只读工具(而非 deny 后备拦截)——模型根本
+  // 看不到写工具,不浪费 token 也无泄漏面。子代理协作工具(Agent/SendMessage)
+  // 保留,Agent 由 forceReadonly 在 validate 层强制 readonly。
+  const filterForPlanMode = (registry: ReturnType<typeof createBuiltinToolRegistry>) => {
+    if (!planModeActive) return registry;
+    return {
+      ...registry,
+      tools: registry.tools.filter((tool) =>
+        isPlanModeAllowedTool(tool.name, registry.metadataByName.get(tool.name)),
+      ),
+    };
+  };
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {
-    return createBuiltinToolRegistry([...baseBundles, ...chatBundles]);
+    return filterForPlanMode(createBuiltinToolRegistry([...baseBundles, ...chatBundles]));
   }
   const subagentAdditionalRoots = params.additionalRoots?.map((root) => ({
     ...root,
@@ -335,45 +364,49 @@ export async function buildBuiltinToolRegistry(
       })
     : null;
   const parentBundles = parentMessageBundle ? [...baseBundles, parentMessageBundle] : baseBundles;
-  return createBuiltinToolRegistry([
-    ...parentBundles,
-    ...chatBundles,
-    createSubagentTools({
-      providerId: subagentRuntime.providerId,
-      model: subagentRuntime.model,
-      runtime: subagentRuntime.runtime,
-      runtimePlatform: params.runtimePlatform,
-      workdir: params.workdir,
-      resolveHomeDir,
-      sessionId: subagentRuntime.sessionId,
-      templates: subagentRuntime.templates,
-      store: subagentRuntime.store,
-      scheduler: subagentRuntime.scheduler,
-      baseTools: baseRegistry.tools,
-      executeToolCall: baseRegistry.executeToolCall,
-      metadataByName: baseRegistry.metadataByName,
-      additionalRoots: subagentAdditionalRoots,
-      // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
-      // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
-      checkpoint: params.checkpoint,
-      createSubagentToolRegistry: async (workdir) =>
-        createBuiltinToolRegistry(
-          await buildBaseBuiltinToolBundles({
-            ...params,
-            workdir,
-            additionalRoots: subagentAdditionalRoots,
-            fileState: createFileToolState(),
-            skillsEnabled: false,
-            applyMcpOps: undefined,
-            mcpLoadFailureMode: "continue",
-            memoryToolMode: "ro",
-            // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
-            // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
-            // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
-            // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
-            checkpoint: undefined,
-          }),
-        ),
-    }),
-  ]);
+  return filterForPlanMode(
+    createBuiltinToolRegistry([
+      ...parentBundles,
+      ...chatBundles,
+      createSubagentTools({
+        providerId: subagentRuntime.providerId,
+        model: subagentRuntime.model,
+        runtime: subagentRuntime.runtime,
+        runtimePlatform: params.runtimePlatform,
+        workdir: params.workdir,
+        resolveHomeDir,
+        sessionId: subagentRuntime.sessionId,
+        templates: subagentRuntime.templates,
+        store: subagentRuntime.store,
+        scheduler: subagentRuntime.scheduler,
+        baseTools: baseRegistry.tools,
+        executeToolCall: baseRegistry.executeToolCall,
+        metadataByName: baseRegistry.metadataByName,
+        additionalRoots: subagentAdditionalRoots,
+        // Plan mode:子代理只许 readonly,worktree 请求按参数错误拒绝。
+        forceReadonly: planModeActive,
+        // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
+        // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
+        checkpoint: params.checkpoint,
+        createSubagentToolRegistry: async (workdir) =>
+          createBuiltinToolRegistry(
+            await buildBaseBuiltinToolBundles({
+              ...params,
+              workdir,
+              additionalRoots: subagentAdditionalRoots,
+              fileState: createFileToolState(),
+              skillsEnabled: false,
+              applyMcpOps: undefined,
+              mcpLoadFailureMode: "continue",
+              memoryToolMode: "ro",
+              // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
+              // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
+              // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
+              // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
+              checkpoint: undefined,
+            }),
+          ),
+      }),
+    ]),
+  );
 }

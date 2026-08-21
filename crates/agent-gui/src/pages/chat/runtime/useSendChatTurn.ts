@@ -153,6 +153,8 @@ type UseSendChatTurnParams = {
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   getMcpSettings: () => AppSettings["mcp"];
   getToolPolicies: () => AppSettings["system"]["toolPolicies"];
+  /** 计划获批(ExitPlanMode approve):宿主关闭 plan 开关并入队"开始执行"续轮。 */
+  onPlanApprovedForConversation?: (input: { conversationId: string; plan: string }) => void;
   t: (key: string) => string;
   sidebarStore: SidebarStore;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
@@ -354,6 +356,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       ? strictestCommandSafetyMode(requestedCommandSafetyMode, settings.system.commandSafetyMode)
       : settings.system.commandSafetyMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
+    // Plan mode:限制性开关,合并方向同 commandSafetyMode 的"只能收紧"——任一
+    // 来源(本地 settings / 队列快照 / 网关覆盖)要求 plan mode 即生效,远端
+    // 陈旧快照的 false 不得关闭本地已开启的 plan mode。仅 agent 模式有意义。
+    const effectivePlanModeEnabled =
+      effectiveIsAgentMode &&
+      (settings.chatRuntimeControls.planModeEnabled ||
+        overrides?.runtimeControlsOverride?.planModeEnabled === true ||
+        gatewayBridgeRequest?.runtimeControlsOverride?.planModeEnabled === true);
     const effectiveWorkdir = resolveEffectiveConversationWorkdir({
       isAgentMode: effectiveIsAgentMode,
       workdirOverride: overrides?.workdirOverride,
@@ -1687,6 +1697,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
             commandSafetyMode: effectiveCommandSafetyMode,
+            planModeEnabled: effectivePlanModeEnabled,
+            onPlanApproved: effectivePlanModeEnabled
+              ? (input: { plan: string }) =>
+                  params.onPlanApprovedForConversation?.({
+                    conversationId,
+                    plan: input.plan,
+                  })
+              : undefined,
             applyMcpOps: (ops) => {
               const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
               setSettings((prev) =>
