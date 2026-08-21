@@ -105,6 +105,17 @@ export function hasPendingPlanDecision(toolCallId: string) {
   return pendingByToolCallId.has(toolCallId.trim());
 }
 
+/** 某会话当前挂起的计划审批(至多一个;ExitPlanMode 串行执行)。
+ *  发送入口据此把"计划挂起时输入的消息"直接作为退回意见落到计划卡,
+ *  而不是让它排进队列干等。 */
+export function getPendingPlanDecisionToolCallId(conversationId: string): string | null {
+  const target = conversationId.trim();
+  for (const [toolCallId, pending] of pendingByToolCallId) {
+    if (pending.conversationId === target) return toolCallId;
+  }
+  return null;
+}
+
 // 本会话进程内已获批准的 ExitPlanMode 调用:runner 的工具级终止谓词据此在
 // 批准后直接结束本轮 run(不再跑"收尾话"模型轮——批准事实由卡片展示,执行由
 // 续轮承接)。只存内存,随进程生命周期;会话销毁时随 cancel 清理。
@@ -155,6 +166,7 @@ export function buildPlanModeSystemPromptSection(): string {
     "- If the user rejects the plan, revise it per their feedback and submit again.",
     "- Approval ends this turn immediately; execution starts automatically in the next turn with full tools — begin that turn by turning the plan into a task list (TaskCreate), then implement.",
     "- Keep the plan concrete: files to touch, ordered steps, risks, and how to verify.",
+    `- The plan lives in the ${EXIT_PLAN_MODE_TOOL_NAME} card. Do NOT offer to save it as a file (plan.md etc.) or ask where to store it — writing files is impossible here and unnecessary.`,
     "</plan-mode>",
   ].join("\n");
 }

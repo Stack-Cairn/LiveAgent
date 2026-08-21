@@ -545,7 +545,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.planMode.timedOut": "应答超时，计划按未批准处理",
   "chat.planMode.submitFailed": "提交失败，请重试",
   "chat.planMode.executePrompt":
-    "计划已批准。请把已批准的计划（见上方 ExitPlanMode 结果）转为任务清单（TaskCreate）并开始执行，逐项完成后验证。",
+    "开始执行已批准的计划：先用 TaskCreate 建任务清单，然后逐项实施并验证。",
   "chat.toolApproval.title": "需要你的批准",
   "chat.toolApproval.barTitle": "{count} 个工具待审批",
   "chat.toolApproval.waitingStatus": "等待审批",

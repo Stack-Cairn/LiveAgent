@@ -585,7 +585,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.planMode.timedOut": "Approval window elapsed; the plan counts as not approved",
   "chat.planMode.submitFailed": "Failed to submit, please retry",
   "chat.planMode.executePrompt":
-    "The plan is approved. Turn the approved plan (see the ExitPlanMode result above) into a task list (TaskCreate) and start executing, verifying each step as you complete it.",
+    "Start executing the approved plan: create a task list with TaskCreate first, then implement and verify step by step.",
   "chat.toolApproval.title": "Approval required",
   "chat.toolApproval.barTitle": "{count} tool(s) awaiting approval",
   "chat.toolApproval.waitingStatus": "Awaiting approval",

@@ -192,6 +192,20 @@ test("cancelPendingPlanDecisionsForConversation settles only that conversation",
   assert.equal(resultB.details.decision, "approve");
 });
 
+test("getPendingPlanDecisionToolCallId resolves the conversation's pending plan", async () => {
+  const { tools } = loadModules();
+  const bundle = tools.createExitPlanModeTools({ conversationId: "conv-pending" });
+  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), null);
+  const resultPromise = bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-plan-pending"));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), "call-plan-pending");
+  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-other"), null);
+  // 挂起时输入消息即"退回并附反馈"的落点:reject 后挂起消解。
+  tools.answerPlanDecision("call-plan-pending", { decision: "reject", feedback: "改" });
+  await resultPromise;
+  assert.equal(tools.getPendingPlanDecisionToolCallId("conv-pending"), null);
+});
+
 test("gateway deadline preset is reused by execute", async () => {
   const { tools, shared } = loadModules();
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-1" });

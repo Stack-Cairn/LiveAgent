@@ -128,7 +128,11 @@ import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
-import { cancelPendingPlanDecisionsForConversation } from "../lib/tools/planModeTools";
+import {
+  answerPlanDecision,
+  cancelPendingPlanDecisionsForConversation,
+  getPendingPlanDecisionToolCallId,
+} from "../lib/tools/planModeTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
 import { clearMcpToolActivation } from "../lib/tools/toolSearchTools";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
@@ -1816,12 +1820,31 @@ export function ChatPage(props: ChatPageProps) {
       }
       return;
     }
+    // 计划卡挂起时输入的消息 = 对计划的修改意见:直接作为"退回并附反馈"落到
+    // 挂起的 ExitPlanMode(模型立即收到反馈继续完善),而不是排进队列干等审批。
+    if (conversationId) {
+      const pendingPlanToolCallId = getPendingPlanDecisionToolCallId(conversationId);
+      if (pendingPlanToolCallId) {
+        const feedback = composerRef.current?.getText().trim() ?? "";
+        if (feedback) {
+          const outcome = answerPlanDecision(
+            pendingPlanToolCallId,
+            { decision: "reject", feedback },
+            { conversationId },
+          );
+          if (outcome.ok) {
+            composerRef.current?.clear();
+            return;
+          }
+        }
+      }
+    }
     if (conversationId && (isConversationRunning(conversationId) || runtimeEntry?.isSending)) {
       enqueueCurrentComposerTurn("end");
       return;
     }
     void sendActionRef.current();
-  }, [enqueueCurrentComposerTurn, isConversationRunning]);
+  }, [composerRef, enqueueCurrentComposerTurn, isConversationRunning]);
 
   const handleComposerBusyChange = useCallback((isBusy: boolean) => {
     composerBusyRef.current = isBusy;
