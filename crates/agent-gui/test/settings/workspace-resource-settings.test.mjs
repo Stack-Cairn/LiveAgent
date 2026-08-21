@@ -225,6 +225,20 @@ test("global and project prompt cards share row and action layout", () => {
   );
 });
 
+test("project prompt preview renders the effective prompt without overflowing its details column", () => {
+  assert.match(
+    sharedAgentsSection,
+    /resolveEffectivePromptSettings\(settings, viewingProject\.path\)\.prompt/,
+  );
+  assert.match(sharedAgentsSection, /promptTitle=\{t\("chat\.projectPromptEffectivePreview"\)\}/);
+  assert.match(sharedAgentsSection, /md:grid-cols-\[minmax\(0,16rem\)_minmax\(0,1fr\)\]/);
+  assert.match(sharedAgentsSection, /\[overflow-wrap:anywhere\]/);
+  assert.match(
+    sharedAgentsSection,
+    /grid grid-cols-\[minmax\(0,1fr\)_auto\] items-start gap-3/,
+  );
+});
+
 test("chat runtime resolves and snapshots workspace resources from the effective workdir", () => {
   assert.match(sendRuntime, /resolveWorkspaceResources\(settings, effectiveWorkdir\)/);
   assert.match(sendRuntime, /workspaceResources\.skillNames/);

@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplate,
+  resolveEffectivePromptSettings,
   updateAgents,
   updateWorkspacePromptSettings,
   type WorkspaceProject,
@@ -109,6 +110,9 @@ export function AgentsSection(props: SettingsSectionProps) {
   const viewingProjectEntry = viewingProject
     ? settings.system.workspaceResourceSettings[workspaceProjectPathKey(viewingProject.path)]
     : undefined;
+  const viewingProjectEffectivePrompt = viewingProject
+    ? resolveEffectivePromptSettings(settings, viewingProject.path).prompt
+    : "";
 
   return (
     <>
@@ -413,10 +417,11 @@ export function AgentsSection(props: SettingsSectionProps) {
             id: viewingProject.id,
             name: viewingProject.name,
             description: viewingProject.path,
-            prompt: viewingProjectEntry.projectPrompt,
+            prompt: viewingProjectEffectivePrompt,
             enabled: true,
           }}
           subtitle={t("chat.projectPromptTitle")}
+          promptTitle={t("chat.projectPromptEffectivePreview")}
           detailsTitle={t("settings.agentsProjectsTab")}
           statusTitle={t("chat.projectPromptStrategy")}
           statusLabel={t(
@@ -446,6 +451,7 @@ export function AgentsSection(props: SettingsSectionProps) {
 type AgentPromptViewModalProps = {
   template: AgentPromptTemplate;
   subtitle?: string;
+  promptTitle?: string;
   detailsTitle?: string;
   statusTitle?: string;
   statusLabel?: string;
@@ -456,6 +462,7 @@ type AgentPromptViewModalProps = {
 function AgentPromptViewModal({
   template,
   subtitle,
+  promptTitle,
   detailsTitle,
   statusTitle,
   statusLabel,
@@ -515,8 +522,8 @@ function AgentPromptViewModal({
         </DialogHeader>
 
         <DialogBody className="px-6 py-5">
-          <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
+          <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+            <aside className="min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
                   <BookOpen className="h-4 w-4" />
@@ -526,17 +533,20 @@ function AgentPromptViewModal({
                 </h3>
               </div>
 
-              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              <p className="mt-4 min-w-0 break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                 {template.description || t("settings.agentsNoDescription")}
               </p>
 
               <div className="mt-6 space-y-3 border-t border-border/60 pt-4 text-xs">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <span className="min-w-0 leading-5 text-muted-foreground">
                     {statusTitle ?? t("settings.agentsStatus")}
                   </span>
                   <span
-                    className={cn("inline-flex items-center gap-1.5 font-medium", statusTextClass)}
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap pt-0.5 font-medium",
+                      statusTextClass,
+                    )}
                   >
                     <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
                     {resolvedStatusLabel}
@@ -557,7 +567,9 @@ function AgentPromptViewModal({
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
                     <FileText className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-semibold">{t("settings.agentsPrompt")}</span>
+                  <span className="text-xs font-semibold">
+                    {promptTitle ?? t("settings.agentsPrompt")}
+                  </span>
                 </div>
                 <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
                   {template.prompt.length.toLocaleString()} {t("settings.agentsCharacters")}
