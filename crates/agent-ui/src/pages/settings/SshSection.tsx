@@ -635,78 +635,80 @@ function SshHostModal(props: {
                       </p>
                     ) : null}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="ssh-proxy-url"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {t("settings.sshProxyUrl")}
-                    </Label>
-                    <Input
-                      id="ssh-proxy-url"
-                      value={proxyUrl}
-                      disabled={proxyUseSystem}
-                      placeholder={t(
-                        proxyType === "socks5"
-                          ? "settings.sshProxyUrlSocks5Placeholder"
-                          : "settings.sshProxyUrlHttpPlaceholder",
-                      )}
-                      onChange={(event) => setProxyUrl(event.currentTarget.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="ssh-proxy-port"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {t("settings.sshProxyPort")}
-                    </Label>
-                    <NumberInput
-                      id="ssh-proxy-port"
-                      min={1}
-                      max={65535}
-                      step={1}
-                      snapOnStep
-                      disabled={proxyUseSystem}
-                      value={proxyPort.trim() ? Number(proxyPort) : null}
-                      incrementLabel={`${t("settings.sshProxyPort")} +`}
-                      decrementLabel={`${t("settings.sshProxyPort")} -`}
-                      onValueChange={(value) => setProxyPort(value === null ? "" : String(value))}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="ssh-proxy-username"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {t("settings.sshProxyUsername")}
-                    </Label>
-                    <Input
-                      id="ssh-proxy-username"
-                      value={proxyUsername}
-                      disabled={proxyUseSystem}
-                      onChange={(event) => setProxyUsername(event.currentTarget.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="ssh-proxy-password"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {t("settings.sshProxyPassword")}
-                    </Label>
-                    <SshPasswordInput
-                      id="ssh-proxy-password"
-                      value={proxyPassword}
-                      disabled={proxyUseSystem}
-                      onChange={setProxyPassword}
-                    />
-                    {initialData?.proxy.passwordConfigured && !proxyPassword.trim() ? (
-                      <div className="text-[11px] text-muted-foreground">
-                        {t("settings.sshProxyPasswordConfigured")}
+                  {proxyUseSystem ? null : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="ssh-proxy-url"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          {t("settings.sshProxyUrl")}
+                        </Label>
+                        <Input
+                          id="ssh-proxy-url"
+                          value={proxyUrl}
+                          placeholder={t(
+                            proxyType === "socks5"
+                              ? "settings.sshProxyUrlSocks5Placeholder"
+                              : "settings.sshProxyUrlHttpPlaceholder",
+                          )}
+                          onChange={(event) => setProxyUrl(event.currentTarget.value)}
+                        />
                       </div>
-                    ) : null}
-                  </div>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="ssh-proxy-port"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          {t("settings.sshProxyPort")}
+                        </Label>
+                        <NumberInput
+                          id="ssh-proxy-port"
+                          min={1}
+                          max={65535}
+                          step={1}
+                          snapOnStep
+                          value={proxyPort.trim() ? Number(proxyPort) : null}
+                          incrementLabel={`${t("settings.sshProxyPort")} +`}
+                          decrementLabel={`${t("settings.sshProxyPort")} -`}
+                          onValueChange={(value) =>
+                            setProxyPort(value === null ? "" : String(value))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="ssh-proxy-username"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          {t("settings.sshProxyUsername")}
+                        </Label>
+                        <Input
+                          id="ssh-proxy-username"
+                          value={proxyUsername}
+                          onChange={(event) => setProxyUsername(event.currentTarget.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="ssh-proxy-password"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          {t("settings.sshProxyPassword")}
+                        </Label>
+                        <SshPasswordInput
+                          id="ssh-proxy-password"
+                          value={proxyPassword}
+                          onChange={setProxyPassword}
+                        />
+                        {initialData?.proxy.passwordConfigured && !proxyPassword.trim() ? (
+                          <div className="text-[11px] text-muted-foreground">
+                            {t("settings.sshProxyPasswordConfigured")}
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
