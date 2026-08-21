@@ -42,6 +42,10 @@ func (v AgentView) WebTunnelsEnabled() bool {
 	return v.m.WebTunnelsEnabled(v.resolvedID())
 }
 
+func (v AgentView) WebAutomationEnabled() bool {
+	return v.m.WebAutomationEnabled(v.resolvedID())
+}
+
 func (v AgentView) TerminalSessionKind(sessionID string) string {
 	return v.m.TerminalSessionKind(v.resolvedID(), sessionID)
 }

@@ -103,6 +103,8 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
       "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可对本机项目执行分支、暂存、提交和同步操作。",
     "settings.remoteWebTunnelsHint":
       "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可为 localhost 或 IP 地址 HTTP 服务创建和关闭临时访问链接。",
+    "settings.remoteWebAutomationHint":
+      "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可管理本机定时任务与自动化 Hook（含立即执行）。",
     "settings.remoteHeartbeatHint":
       "与 Gateway 连接的保活心跳间隔（生效范围 10-60 秒），用于维持连接和检测在线状态",
     "settings.remoteInfoBanner":
@@ -204,6 +206,8 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
       "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can run branch, stage, commit, and sync operations on local projects.",
     "settings.remoteWebTunnelsHint":
       "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can create and close temporary links for localhost or IP-address HTTP services.",
+    "settings.remoteWebAutomationHint":
+      "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can manage cron tasks and automation hooks on this desktop, including running them immediately.",
     "settings.remoteHeartbeatHint":
       "Keepalive heartbeat interval for the Gateway connection (effective range 10-60 seconds), used to maintain the connection and detect online status",
     "settings.remoteInfoBanner":

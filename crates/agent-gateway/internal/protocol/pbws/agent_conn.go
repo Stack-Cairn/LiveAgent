@@ -50,6 +50,9 @@ func (s *Server) AgentHandler() http.Handler {
 		}
 		defer release()
 		conn.SetReadLimit(s.readLimit())
+		// 预认证握手窗口：升级后必须在此窗口内完成 hello（或产生入站活动），
+		// 否则关闭。静默连接不再能永久占用 Agent 连接槽位（无凭据 DoS）。
+		_ = conn.SetReadDeadline(time.Now().Add(s.connIdleTimeout()))
 		s.serveAgent(conn)
 	})
 }
@@ -118,6 +121,10 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 	}); err != nil {
 		return
 	}
+	// 认证完成：清除预认证握手窗口。认证后的存活由心跳会话驱逐
+	// （agentHeartbeatLoop 90s 无心跳清 session）与既有 pong 计入维持，
+	// 空闲但健康的桌面连接不应被读超时误杀。
+	_ = conn.SetReadDeadline(time.Time{})
 
 	observability.Usage.V2AgentConnectsTotal.Add(1)
 	observability.Usage.V2AgentActive.Add(1)

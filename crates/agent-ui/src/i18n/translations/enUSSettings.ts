@@ -914,6 +914,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.remoteWebSshTerminal": "Allow WebUI SSH Terminal",
   "settings.remoteWebGit": "Allow WebUI Git",
   "settings.remoteWebTunnels": "Allow WebUI Tunnels",
+  "settings.remoteWebAutomation": "Allow WebUI Automation",
   "settings.remoteHeartbeat": "Heartbeat Interval",
   "settings.remoteHeartbeatUnit": "seconds",
   "settings.remoteConnectionStatus": "Connection Status",

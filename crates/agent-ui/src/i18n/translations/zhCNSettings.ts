@@ -873,6 +873,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.remoteWebSshTerminal": "允许 WebUI SSH Terminal",
   "settings.remoteWebGit": "允许 WebUI Git",
   "settings.remoteWebTunnels": "允许 WebUI 内网穿透",
+  "settings.remoteWebAutomation": "允许 WebUI 自动化",
   "settings.remoteHeartbeat": "心跳间隔",
   "settings.remoteHeartbeatUnit": "秒",
   "settings.remoteConnectionStatus": "连接状态",

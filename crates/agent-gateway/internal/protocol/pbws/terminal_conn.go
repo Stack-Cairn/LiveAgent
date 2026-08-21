@@ -41,6 +41,9 @@ func (s *Server) TerminalHandler() http.Handler {
 		defer release()
 		// 角色未知前先按浏览器（更严）限额；hello 判定为 Agent 角色后再放宽。
 		conn.SetReadLimit(terminalBrowserReadLimit)
+		// 预认证握手窗口：升级后必须在此窗口内完成 hello（或产生入站活动），
+		// 否则关闭。静默连接不再能永久占用 Terminal 连接槽位（无凭据 DoS）。
+		_ = conn.SetReadDeadline(time.Now().Add(s.connIdleTimeout()))
 		s.serveTerminal(conn)
 	})
 }
@@ -133,6 +136,9 @@ func (s *Server) serveTerminal(conn *websocket.Conn) {
 		roleReadLimit = terminalAgentReadLimit
 	}
 	conn.SetReadLimit(roleReadLimit)
+	// 认证完成：清除预认证握手窗口。terminal 链路无应用层心跳，空闲但
+	// 已认证的连接（桌面端无终端活动时）不应被驱逐；读循环按帧活动顺延。
+	_ = conn.SetReadDeadline(time.Time{})
 	if err := writeDirectMessage(conn, s.writeTimeout(), &gatewayv2.TerminalServerFrame{
 		Payload: &gatewayv2.TerminalServerFrame_Hello{
 			Hello: s.serverHello(true, "", "", roleReadLimit),

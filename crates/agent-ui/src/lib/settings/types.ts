@@ -513,6 +513,7 @@ export type RemoteSettings = {
   enableWebSshTerminal: boolean;
   enableWebGit: boolean;
   enableWebTunnels: boolean;
+  enableWebAutomation: boolean;
 };
 
 export type SttProviderId =

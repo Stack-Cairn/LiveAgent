@@ -248,6 +248,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "开启后，已登录 WebUI 可对本机项目执行分支、暂存、提交和同步操作。",
     "settings.remoteWebTunnelsHint":
       "开启后，已登录 WebUI 可为 localhost 或 IP 地址 HTTP 服务创建和关闭临时访问链接。",
+    "settings.remoteWebAutomationHint":
+      "开启后，已登录 WebUI 可管理本机定时任务与自动化 Hook（含立即执行）。",
     "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
   },
   "en-US": {
@@ -507,6 +509,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "Allow authenticated WebUI clients to run branch, stage, commit, and sync operations on local projects.",
     "settings.remoteWebTunnelsHint":
       "Allow authenticated WebUI clients to create and close temporary links for localhost or IP-address HTTP services.",
+    "settings.remoteWebAutomationHint":
+      "Allow authenticated WebUI clients to manage cron tasks and automation hooks on this desktop, including running them immediately.",
     "settings.remoteHeartbeatHint": "How often the local Agent reports liveness to the Gateway",
   },
 };

@@ -57,7 +57,11 @@ export type GatewaySettingsSyncPayload = {
   ssh: AppSettings["ssh"];
   remote?: Pick<
     AppSettings["remote"],
-    "enableWebTerminal" | "enableWebSshTerminal" | "enableWebGit" | "enableWebTunnels"
+    | "enableWebTerminal"
+    | "enableWebSshTerminal"
+    | "enableWebGit"
+    | "enableWebTunnels"
+    | "enableWebAutomation"
   >;
   /** STT 元数据与 configured 标记；所有云厂商凭据在同步出口均为空串。 */
   stt: AppSettings["stt"];
@@ -864,7 +868,8 @@ function mergeSyncedRemoteSettings(
     !Object.hasOwn(source, "enableWebTerminal") &&
     !Object.hasOwn(source, "enableWebSshTerminal") &&
     !Object.hasOwn(source, "enableWebGit") &&
-    !Object.hasOwn(source, "enableWebTunnels")
+    !Object.hasOwn(source, "enableWebTunnels") &&
+    !Object.hasOwn(source, "enableWebAutomation")
   ) {
     return current;
   }
@@ -882,6 +887,9 @@ function mergeSyncedRemoteSettings(
     enableWebTunnels: Object.hasOwn(source, "enableWebTunnels")
       ? source.enableWebTunnels === true
       : current.enableWebTunnels,
+    enableWebAutomation: Object.hasOwn(source, "enableWebAutomation")
+      ? source.enableWebAutomation === true
+      : current.enableWebAutomation,
   };
 }
 
@@ -1177,6 +1185,7 @@ export function buildGatewaySettingsSyncPayload(
       enableWebSshTerminal: settings.remote.enableWebSshTerminal,
       enableWebGit: settings.remote.enableWebGit,
       enableWebTunnels: settings.remote.enableWebTunnels,
+      enableWebAutomation: settings.remote.enableWebAutomation,
     },
     stt,
     memory: settings.memory,

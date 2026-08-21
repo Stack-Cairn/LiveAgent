@@ -53,7 +53,6 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_FileMentionList,
 		*gatewayv2.GatewayEnvelope_UploadedImagePreview,
 		*gatewayv2.GatewayEnvelope_MemoryManage,
-		*gatewayv2.GatewayEnvelope_CronManage,
 		*gatewayv2.GatewayEnvelope_FsRoots,
 		*gatewayv2.GatewayEnvelope_FsListDirs,
 		*gatewayv2.GatewayEnvelope_FsCreateProjectFolder,
@@ -97,6 +96,14 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 	case *gatewayv2.GatewayEnvelope_TunnelMutation:
 		if !sm.WebTunnelsEnabled() {
 			return errors.New("web tunnels are disabled in desktop Remote settings")
+		}
+		return nil
+	// ---- 带功能门控的直通臂：cron/hooks 管理可写入并立即执行 bash 脚本，
+	// 与 terminal/git/tunnels 同款后端强制开关（enable_web_automation），
+	// 未同步设置时 fail-closed（WebAutomationEnabled 默认 false）。
+	case *gatewayv2.GatewayEnvelope_CronManage:
+		if !sm.WebAutomationEnabled() {
+			return errors.New("web automation is disabled in desktop Remote settings")
 		}
 		return nil
 	case *gatewayv2.GatewayEnvelope_ManagedProcessRequest:

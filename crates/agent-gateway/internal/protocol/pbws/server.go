@@ -127,6 +127,21 @@ func (s *Server) heartbeatPeriod() time.Duration {
 	return 15 * time.Second
 }
 
+// connIdleTimeout 与 wscore.IdleTimeout 同公式（3 个心跳周期 + 宽限，默认 50s）。
+// 用于 agent/terminal 链路的预认证握手窗口：升级完成后必须在此窗口内完成 hello
+// 或持续产生入站活动，否则连接被关闭，杜绝无凭据的静默连接永久占用连接槽位。
+func (s *Server) connIdleTimeout() time.Duration {
+	period := s.heartbeatPeriod()
+	grace := time.Duration(0)
+	if s.cfg != nil && s.cfg.WebSocketHeartbeatGrace > 0 {
+		grace = s.cfg.WebSocketHeartbeatGrace
+	}
+	if grace <= 0 {
+		grace = 5 * time.Second
+	}
+	return period*3 + grace
+}
+
 func (s *Server) writeTimeout() time.Duration {
 	if s.cfg != nil && s.cfg.WebSocketWriteTimeout > 0 {
 		return s.cfg.WebSocketWriteTimeout

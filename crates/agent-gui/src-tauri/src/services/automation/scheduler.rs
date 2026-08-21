@@ -288,6 +288,9 @@ impl AutomationScheduler {
     }
 
     pub fn run_now(self: &Arc<Self>, task_id: &str) -> Result<CronRunNowResponse, String> {
+        // enabled 只控制定时调度;本地手动 Run Now 对禁用/耗尽任务保持可用
+        // (UI 的 Run Now 按钮不因 enabled=false 禁用)。远程边界的限制由
+        // gateway_bridge::handle_cron_manage 的 run_now 分支单独施加。
         let (workdir, task) = self.store.cron_task_for_manual_run(task_id)?;
         let started_at = now_ms();
         if !self.start_fire(task, workdir, RunTrigger::Manual) {
