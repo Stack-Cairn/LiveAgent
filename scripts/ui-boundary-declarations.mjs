@@ -1,9 +1,12 @@
-import { parseTypeScriptSource, walkSyntaxTree } from "./typescript-source-tools.mjs";
+import {
+  parseTypeScriptSource,
+  staticStringValue,
+  walkSyntaxTree,
+} from "./typescript-source-tools.mjs";
 
 function staticPropertyName(name, computed = false) {
   if (!computed && name?.type === "Identifier") return name.name;
-  if (name?.type === "StringLiteral") return name.value;
-  return null;
+  return staticStringValue(name) ?? null;
 }
 
 function assignmentTargetName(node) {

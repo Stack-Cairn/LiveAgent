@@ -3,7 +3,7 @@ import { parse } from "@babel/parser";
 import { transformSync } from "esbuild";
 
 export function parseTypeScriptSource(source, fileName) {
-  const supportsJsx = /\.[cm]?[jt]sx$/i.test(fileName) && fileName.toLowerCase().endsWith("x");
+  const supportsJsx = /\.[cm]?[jt]sx$/i.test(fileName);
   return parse(source, {
     sourceFilename: fileName,
     sourceType: "module",
@@ -11,6 +11,17 @@ export function parseTypeScriptSource(source, fileName) {
     plugins: supportsJsx ? ["typescript", "jsx"] : ["typescript"],
   });
 }
+
+const NON_CHILD_KEYS = new Set([
+  "comments",
+  "errors",
+  "extra",
+  "innerComments",
+  "leadingComments",
+  "loc",
+  "tokens",
+  "trailingComments",
+]);
 
 export function walkSyntaxTree(node, visitor) {
   if (!node || typeof node !== "object") return;
@@ -22,13 +33,15 @@ export function walkSyntaxTree(node, visitor) {
 
   visitor(node);
   for (const [key, child] of Object.entries(node)) {
-    if (["comments", "errors", "extra", "loc", "tokens"].includes(key)) continue;
+    if (NON_CHILD_KEYS.has(key)) continue;
     walkSyntaxTree(child, visitor);
   }
 }
 
 export function staticStringValue(node) {
-  if (node?.type === "StringLiteral") return node.value;
+  // DirectiveLiteral: Babel lifts prologue strings ("use strict"-style
+  // statements) out of ExpressionStatement, unlike the TypeScript AST.
+  if (node?.type === "StringLiteral" || node?.type === "DirectiveLiteral") return node.value;
   if (node?.type !== "TemplateLiteral" || node.expressions.length > 0) return undefined;
   return node.quasis[0]?.value.cooked ?? node.quasis[0]?.value.raw;
 }
