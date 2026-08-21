@@ -1055,7 +1055,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     </span>
                   </DropdownMenuItem>
                   {isAgentMode ? (
+                    // 计划模式开关行:整行即开关,右侧迷你 switch 呈现状态。
+                    // closeOnClick=false 让切换就地生效——开关动画可见,菜单
+                    // 不弹跳;行为说明降为 hover 提示,不再挤占行内小字。
                     <DropdownMenuItem
+                      closeOnClick={false}
+                      role="menuitemcheckbox"
+                      aria-checked={chatRuntimeControls.planModeEnabled}
+                      title={t("chat.runtime.planModeHint")}
                       onSelect={() =>
                         onChatRuntimeControlsChange({
                           planModeEnabled: !chatRuntimeControls.planModeEnabled,
@@ -1063,14 +1070,34 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       }
                       className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
                     >
-                      <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <Lightbulb
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-colors",
+                          chatRuntimeControls.planModeEnabled
+                            ? "text-sky-600 dark:text-sky-300"
+                            : "text-muted-foreground",
+                        )}
+                      />
                       <span className="min-w-0 flex-1 truncate font-medium leading-5">
                         {t("chat.runtime.planModeTitle")}
-                        <span className="ml-2 font-normal text-muted-foreground">
-                          {chatRuntimeControls.planModeEnabled
-                            ? t("chat.runtime.planModeSlashOff")
-                            : t("chat.runtime.planModeSlashOn")}
-                        </span>
+                      </span>
+                      {/* 视觉开关(aria 由行上的 menuitemcheckbox 承担):与计划
+                          pill 同用 sky 色系,状态一眼可辨。 */}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "ml-auto inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors",
+                          chatRuntimeControls.planModeEnabled
+                            ? "bg-sky-500 dark:bg-sky-400"
+                            : "bg-muted-foreground/25",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "block h-3.5 w-3.5 translate-x-[2px] rounded-full bg-white shadow-sm transition-transform dark:bg-slate-100",
+                            chatRuntimeControls.planModeEnabled && "translate-x-4",
+                          )}
+                        />
                       </span>
                     </DropdownMenuItem>
                   ) : null}

@@ -329,7 +329,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.upload.addSection": "添加",
   "chat.upload.filesAndFolders": "文件和文件夹",
   "chat.runtime.planModeTitle": "计划模式",
-  "chat.runtime.planModeSlashOn": "开启计划模式",
+  "chat.runtime.planModeHint": "只读调研并产出计划,批准后自动开始执行",
   "chat.runtime.planModeSlashOff": "关闭计划模式",
   "chat.runtime.webSearch": "联网",
   "chat.runtime.thinking": "思考",

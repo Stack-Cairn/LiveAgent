@@ -360,7 +360,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.upload.addSection": "Add",
   "chat.upload.filesAndFolders": "Files & folders",
   "chat.runtime.planModeTitle": "Plan mode",
-  "chat.runtime.planModeSlashOn":
+  "chat.runtime.planModeHint":
     "Research read-only and present a plan; execution starts after approval",
   "chat.runtime.planModeSlashOff": "Turn off plan mode",
   "chat.runtime.webSearch": "Web",
