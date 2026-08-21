@@ -1,6 +1,7 @@
 import {
   type AppSettings,
   removeWorkspaceResourceReferences,
+  updateSkillEnvVar,
   updateSkills,
 } from "@liveagent/app/lib/settings";
 import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
@@ -44,6 +45,7 @@ import {
 } from "@liveagent/ui/lib/skills/clawHub";
 import type { ClawHubCategorySlug } from "@liveagent/ui/lib/skills/clawHubCategories";
 import {
+  consumeSkillEnvConfigTarget,
   discoverSkills,
   type ExternalSkillEntry,
   type ExternalToolScan,
@@ -58,12 +60,14 @@ import {
   type SkillSummary,
   scanExternalSkills,
   startSkillInstallJob,
+  subscribeSkillEnvConfigRequested,
 } from "@liveagent/ui/lib/skills/index";
 import {
   type InstalledSkillSort,
   isInstalledSkillSort,
   sortInstalledSkillItems,
 } from "@liveagent/ui/lib/skills/installedSort";
+import { isSkillEnvSatisfied, type SkillEnvVarConfig } from "@liveagent/ui/lib/skills/skillEnv";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { reconcileExternalToolScans } from "./externalSkillScanState";
 import { InstalledSkillCard } from "./InstalledSkillCard";
@@ -217,6 +221,22 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const discoverySignatureRef = useRef<string | null>(null);
   const skillsSnapshotRef = useRef<SkillSummary[]>(initialSkills ?? []);
 
+  // 聊天引导卡请求配置某技能：等技能列表就绪后打开其详情抽屉（运行要求区块
+  // 就在描述下方）。挂载前发出的请求通过一次性 pending 目标兜底。
+  const [pendingEnvConfigSkill, setPendingEnvConfigSkill] = useState<string | null>(() =>
+    consumeSkillEnvConfigTarget(),
+  );
+  useEffect(() => subscribeSkillEnvConfigRequested(setPendingEnvConfigSkill), []);
+  useEffect(() => {
+    if (!pendingEnvConfigSkill) return;
+    const skill = skills.find((item) => item.name === pendingEnvConfigSkill);
+    if (skill) {
+      setView("installed");
+      setPreviewInstalledSkill(skill);
+      setPendingEnvConfigSkill(null);
+    }
+  }, [pendingEnvConfigSkill, skills]);
+
   const dismissScanFeedback = useCallback(() => {
     if (scanFeedbackTimerRef.current !== null) {
       window.clearTimeout(scanFeedbackTimerRef.current);
@@ -364,6 +384,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     () => new Set(mergeAlwaysEnabledSkillNames(settings.skills.selected)),
     [settings.skills.selected],
   );
+  // 环境变量门禁：必需项未满足的技能禁止启用。satisfied=false 的技能开关
+  // 被拦截并引导到详情抽屉的「运行要求」区块补齐配置。
+  const skillEnvSatisfied = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const skill of skills) {
+      map.set(skill.name, isSkillEnvSatisfied(skill, settings.skills.env));
+    }
+    return map;
+  }, [skills, settings.skills.env]);
   // React 19 的 initialValue 让 Hub 外壳先独立提交；大量卡片在可中断的后台
   // render 中准备，全部完成后再原子替换加载态，避免页面切换被首屏列表挂载阻塞。
   const deferredSkills = useDeferredValue(skills, EMPTY_SKILLS);
@@ -1000,6 +1029,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   function toggleSkill(name: string, on: boolean) {
     if (isAlwaysEnabledSkillName(name)) return;
+    if (on && skillEnvSatisfied.get(name) === false) {
+      // 缺少必需环境变量时不启用，改为打开详情抽屉引导配置。
+      const skill = skills.find((item) => item.name === name);
+      if (skill) setPreviewInstalledSkill(skill);
+      return;
+    }
     const next = new Set(settings.skills.selected);
     if (on) next.add(name);
     else next.delete(name);
@@ -1101,7 +1136,11 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   // 传给 setSettings 的 updater 必须是纯函数（StrictMode 会双调用）。
   const applyBulkEnableState = useCallback(
     (target: boolean) => {
-      const names = [...bulkSelection].filter((name) => !isAlwaysEnabledSkillName(name));
+      // 批量启用跳过环境变量门禁未满足的技能（按钮计数已同步扣除）。
+      const names = [...bulkSelection].filter(
+        (name) =>
+          !isAlwaysEnabledSkillName(name) && (!target || skillEnvSatisfied.get(name) !== false),
+      );
       if (names.length === 0) return;
 
       const before = settings.skills.selected;
@@ -1139,6 +1178,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       requestInstalledSkillFlip,
       setSettings,
       settings.skills.selected,
+      skillEnvSatisfied,
     ],
   );
 
@@ -1295,10 +1335,11 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     let count = 0;
     for (const name of bulkSelection) {
       if (isAlwaysEnabledSkillName(name)) continue;
+      if (skillEnvSatisfied.get(name) === false) continue;
       if (!selected.has(name)) count += 1;
     }
     return count;
-  }, [bulkSelection, selected]);
+  }, [bulkSelection, selected, skillEnvSatisfied]);
   const bulkDisableChangeCount = useMemo(() => {
     let count = 0;
     for (const name of bulkSelection) {
@@ -1326,6 +1367,13 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   function openInstalledSkillPreview(skill: SkillSummary) {
     setPreviewInstalledSkill(skill);
   }
+
+  const handleEnvVarChange = useCallback(
+    (skillName: string, varName: string, config: SkillEnvVarConfig | null) => {
+      setSettings((prev) => updateSkillEnvVar(prev, skillName, varName, config));
+    },
+    [setSettings],
+  );
 
   // memo 卡片的回调走 latest-ref（先例 file-tree）：引用恒定使 memo 不失效，
   // 实现经 ref 每渲染更新到最新闭包。
@@ -1752,6 +1800,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                                     deleting={deletingSkillName === skill.name}
                                     deleteDisabled={deletingSkillName !== null}
                                     searchQuery={deferredFilter}
+                                    envSatisfied={skillEnvSatisfied.get(skill.name) !== false}
                                     onToggle={handleCardToggle}
                                     onEnterBulkMode={enterBulkMode}
                                     onToggleBulkSelection={toggleBulkSelectionName}
@@ -1840,6 +1889,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
             selected.has(previewInstalledSkill.name))
         }
         skillsEnabled={skillsEnabled}
+        envSettings={settings.skills.env}
+        onEnvVarChange={handleEnvVarChange}
         onClose={() => setPreviewInstalledSkill(null)}
       />
 

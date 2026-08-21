@@ -200,9 +200,17 @@ export type SkillsManagerActionResultDetails = {
   errors?: string[];
 };
 
+/** 技能因缺少必需环境变量被拦截时的结构化结果（聊天侧渲染配置引导卡片）。 */
+export type SkillsManagerEnvMissingDetails = {
+  kind: "skill_env_missing";
+  skillName: string;
+  missing: string[];
+};
+
 export type SkillsManagerResultDetails =
   | SkillsManagerReadResultDetails
-  | SkillsManagerActionResultDetails;
+  | SkillsManagerActionResultDetails
+  | SkillsManagerEnvMissingDetails;
 
 export type McpManagerResultDetails = {
   kind: "manage_mcp";

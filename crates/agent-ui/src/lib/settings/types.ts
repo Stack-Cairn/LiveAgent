@@ -1,5 +1,6 @@
 import type { Locale } from "@liveagent/app/i18n/config";
 import type { ThinkingLevel } from "@liveagent/ui/lib/models/modelThinking";
+import type { SkillEnvSettingsMap } from "@liveagent/ui/lib/skills/skillEnv";
 import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 
 export type ProviderId = "codex" | "claude_code" | "gemini" | "xai" | "deepseek";
@@ -36,6 +37,8 @@ export type McpSettings = {
 export type SkillsSettings = {
   enabled: boolean;
   selected: string[];
+  /** 技能环境变量配置:技能名 -> 变量名 -> { value?, override? }。 */
+  env: SkillEnvSettingsMap;
 };
 
 export type MemoryOrganizerScope = "all" | "global" | "projects" | "current-project";

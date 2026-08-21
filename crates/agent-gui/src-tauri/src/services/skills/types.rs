@@ -53,6 +53,32 @@ pub struct SystemClawHubSkillCard {
     pub download_url: String,
 }
 
+/// 技能脚本依赖的单个环境变量（探测或 `metadata.env` 声明）。
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemSkillEnvRequirement {
+    pub name: String,
+    /// true 时参与「未配置禁止启用」门禁（强信号或声明必填）。
+    pub required: bool,
+    /// "declared" | "strong" | "weak"。
+    pub confidence: String,
+    pub provider: Option<String>,
+    pub description: Option<String>,
+    pub url: Option<String>,
+    /// 证据文件（相对技能目录），最多记录 5 个。
+    pub sources: Vec<String>,
+    /// 列表时对进程环境变量的现场探测结果（有非空值即 true）。
+    pub system_value_present: bool,
+}
+
+/// `env_status` 动作的单条探测结果。
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemSkillEnvProbeResult {
+    pub name: String,
+    pub present: bool,
+}
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemSkillSummary {
@@ -64,6 +90,7 @@ pub struct SystemSkillSummary {
     pub built_in: bool,
     pub installed_at: Option<u64>,
     pub source: Option<SystemSkillSourceMetadata>,
+    pub env_requirements: Vec<SystemSkillEnvRequirement>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -207,6 +234,7 @@ pub struct SystemManageSkillResponse {
     pub clawhub_download_url: Option<String>,
     pub external: Option<Vec<SystemExternalToolScan>>,
     pub external_mcp: Option<Vec<SystemExternalMcpToolScan>>,
+    pub env_probe: Option<Vec<SystemSkillEnvProbeResult>>,
 }
 
 impl SystemManageSkillResponse {

@@ -32,6 +32,12 @@ importers:
       '@babel/parser':
         specifier: 7.29.8
         version: 7.29.8
+      '@svgr/core':
+        specifier: ^8.1.0
+        version: 8.1.0(typescript@7.0.2)
+      '@svgr/plugin-jsx':
+        specifier: ^8.1.0
+        version: 8.1.0(@svgr/core@8.1.0(typescript@7.0.2))
       esbuild:
         specifier: 0.28.2
         version: 0.28.2

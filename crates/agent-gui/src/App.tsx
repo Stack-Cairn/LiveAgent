@@ -127,6 +127,9 @@ function hasSensitiveSettingsUpdates(settings: AppSettings) {
     ) ||
     settings.ssh.hosts.some(
       (host) => host.password.trim().length > 0 || host.privateKey.trim().length > 0,
+    ) ||
+    Object.values(settings.skills.env).some((vars) =>
+      Object.values(vars).some((config) => (config.value?.trim().length ?? 0) > 0),
     )
   );
 }
@@ -139,12 +142,28 @@ function hasSensitiveSettingsUpdatesPayload(payload: unknown) {
           providerUsageQuerySecretUpdates?: unknown;
           sshSecretUpdates?: unknown;
           sttSecretUpdate?: unknown;
+          skillEnvSecretUpdates?: unknown;
         })
       : {};
   if (
     source.sttSecretUpdate &&
     typeof source.sttSecretUpdate === "object" &&
     !Array.isArray(source.sttSecretUpdate)
+  ) {
+    return true;
+  }
+  const skillEnvUpdates = source.skillEnvSecretUpdates;
+  if (
+    skillEnvUpdates &&
+    typeof skillEnvUpdates === "object" &&
+    !Array.isArray(skillEnvUpdates) &&
+    Object.values(skillEnvUpdates).some(
+      (vars) =>
+        vars &&
+        typeof vars === "object" &&
+        !Array.isArray(vars) &&
+        Object.values(vars).some((value) => typeof value === "string" && value.trim().length > 0),
+    )
   ) {
     return true;
   }

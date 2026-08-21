@@ -592,10 +592,24 @@ function buildActionDetails(
   };
 }
 
+function buildSkillEnvMissingText(gate: { skillName: string; missing: string[] }) {
+  return [
+    `Skill "${gate.skillName}" is currently unavailable: missing required environment variable(s): ${gate.missing.join(", ")}.`,
+    "The app is showing the user a setup card for this (fill the values in the Skill detail page, or adopt existing system environment variables).",
+    "Tell the user briefly what is missing, then wait for them to finish configuring before retrying.",
+    "Never ask the user to paste secret values into the chat.",
+  ].join(" ");
+}
+
 export function createSkillTools(
   params: {
     workdir?: string;
     skillAccessPolicy?: SkillAccessPolicy;
+    /**
+     * 环境变量门禁：按 baseDir 返回该技能未满足的必需变量；null 放行。
+     * 命中时 action=read 被拦截，返回 skill_env_missing 结构化结果。
+     */
+    skillEnvGate?: (baseDir: string) => { skillName: string; missing: string[] } | null;
     onManagedSkillsChanged?: (change: {
       action: "install" | "create" | "delete";
       names: string[];
@@ -646,6 +660,26 @@ export function createSkillTools(
         { workdir: params.workdir },
       );
       enforceSkillManagerAccessPolicy(payload, skillAccessPolicy);
+
+      if (payload.action === "read" && params.skillEnvGate) {
+        const gate = params.skillEnvGate(skillBaseDirFromPath(String(payload.path ?? "")));
+        if (gate) {
+          const details: SkillsManagerResultDetails = {
+            kind: "skill_env_missing",
+            skillName: gate.skillName,
+            missing: gate.missing,
+          };
+          return {
+            role: "toolResult",
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            content: [{ type: "text", text: buildSkillEnvMissingText(gate) }],
+            details,
+            isError: true,
+            timestamp: now,
+          };
+        }
+      }
 
       const result = await manageSkill(payload);
       const visibleResult = filterManageSkillResult(result, skillAccessPolicy);

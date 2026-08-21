@@ -161,6 +161,8 @@ type InstalledSkillCardProps = {
   deleting: boolean;
   deleteDisabled: boolean;
   searchQuery: string;
+  /** 必需环境变量是否全部满足；false 时禁止启用并显示「待配置」徽标。 */
+  envSatisfied: boolean;
   onToggle: (name: string, on: boolean) => void;
   onEnterBulkMode: (name: string) => void;
   onToggleBulkSelection: (name: string) => void;
@@ -187,6 +189,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
     deleting,
     deleteDisabled,
     searchQuery,
+    envSatisfied,
     onToggle,
     onEnterBulkMode,
     onToggleBulkSelection,
@@ -197,6 +200,8 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   } = props;
   const { t } = useLocale();
   const effectivelyEnabled = skillsEnabled && checked;
+  // 未启用且必需环境变量未满足：开关置灰，点击改为打开详情抽屉引导配置。
+  const envGated = !alwaysEnabled && !envSatisfied && !checked;
   const cardIdentity = useMemo(
     () => (alwaysEnabled ? null : getInstalledSkillCardIdentity(skill.name, primaryCategory)),
     [alwaysEnabled, primaryCategory, skill.name],
@@ -253,6 +258,20 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                aria-label={`${t("settings.skillsEnvCardConfigure")}: ${skill.name}`}
+                title={t("settings.skillsEnvCardConfigure")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenPreview(skill);
+                }}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <Key className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                 aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
                 title={t("settings.skillsHubBulkSelect")}
                 onClick={(event) => {
@@ -263,14 +282,29 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
               >
                 <ListChecks className="h-3.5 w-3.5" />
               </Button>
-              <ResourceActivationSwitch
-                checked={effectivelyEnabled}
-                disabled={!skillsEnabled}
-                compact
-                stopPropagation
-                label={`${t("skills.select")}: ${skill.name}`}
-                onCheckedChange={(nextChecked) => onToggle(skill.name, nextChecked)}
-              />
+              <span className="relative inline-flex">
+                <ResourceActivationSwitch
+                  checked={effectivelyEnabled}
+                  disabled={!skillsEnabled || envGated}
+                  compact
+                  stopPropagation
+                  label={`${t("skills.select")}: ${skill.name}`}
+                  onCheckedChange={(nextChecked) => onToggle(skill.name, nextChecked)}
+                />
+                {envGated && skillsEnabled ? (
+                  <button
+                    type="button"
+                    className="absolute inset-0 cursor-pointer rounded-full"
+                    aria-label={`${t("settings.skillsEnvConfigureToEnable")}: ${skill.name}`}
+                    title={t("settings.skillsEnvConfigureToEnable")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenPreview(skill);
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  />
+                ) : null}
+              </span>
             </>
           )}
         </div>
@@ -291,6 +325,15 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
           ) : effectivelyEnabled ? (
             <Badge variant="success" className="h-5 px-1.5 text-[10px]">
               {t("settings.skillsHubEnabledBadge")}
+            </Badge>
+          ) : null}
+          {!alwaysEnabled && !envSatisfied ? (
+            <Badge
+              variant="outline"
+              className="h-5 gap-1 border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-300"
+            >
+              <Key className="h-2.5 w-2.5" />
+              {t("settings.skillsEnvBadgePending")}
             </Badge>
           ) : null}
         </div>

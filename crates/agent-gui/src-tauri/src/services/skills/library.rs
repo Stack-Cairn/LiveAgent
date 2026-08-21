@@ -298,6 +298,7 @@ pub(crate) fn skill_summary_from_dir(
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .and_then(|duration| u64::try_from(duration.as_millis()).ok()),
         source: read_skill_source_metadata(skill_dir),
+        env_requirements: skill_env_requirements(skill_dir),
     })
 }
 

@@ -523,6 +523,8 @@ export function createShellTools(params: {
   resolveHomeDir?: () => Promise<string>;
   /** OS 级沙箱;undefined 或 enabled=false 时直跑。Windows 联网后端不掩蔽凭据目录。 */
   sandbox?: ShellSandboxSettings;
+  /** 会话级额外环境变量（技能配置注入），每次执行时实时取值。 */
+  resolveExtraEnvs?: () => Record<string, string>;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
   const runtimePlatform =
@@ -1530,6 +1532,7 @@ export function createShellTools(params: {
           abortHandler();
         }
       }
+      const extraEnvs = params.resolveExtraEnvs?.();
       const res = await invoke<ShellRunResponse>("shell_run", {
         workdir,
         command,
@@ -1540,6 +1543,7 @@ export function createShellTools(params: {
         run_id,
         sandbox: sandboxEnabled,
         sandbox_allow_network: sandboxAllowNetwork,
+        extra_envs: extraEnvs && Object.keys(extraEnvs).length > 0 ? extraEnvs : undefined,
       });
 
       const header = [

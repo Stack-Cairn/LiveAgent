@@ -26,11 +26,24 @@ test("installed Skill cards follow the global Skills activation state", () => {
   assert.match(cardSource, /const effectivelyEnabled = skillsEnabled && checked/);
   assert.match(
     cardSource,
-    /<ResourceActivationSwitch[\s\S]*checked=\{effectivelyEnabled\}[\s\S]*disabled=\{!skillsEnabled\}/,
+    /<ResourceActivationSwitch[\s\S]*checked=\{effectivelyEnabled\}[\s\S]*disabled=\{!skillsEnabled \|\| envGated\}/,
   );
   assert.match(cardSource, /effectivelyEnabled \? \([\s\S]*settings\.skillsHubEnabledBadge/);
   assert.match(cardSource, /: effectivelyEnabled\s*\? "border-emerald-600\/25"/);
   assert.match(pageSource, /<InstalledSkillCard[\s\S]*skillsEnabled=\{skillsEnabled\}/);
+});
+
+test("env-gated Skill cards block enabling and reroute the switch to the detail drawer", () => {
+  const cardSource = readUiSource("pages/skills-hub/InstalledSkillCard.tsx");
+  const pageSource = readUiSource("pages/skills-hub/SkillsHubPage.tsx");
+
+  // 未启用且必需环境变量未满足：开关置灰，覆盖层点击改为打开详情抽屉。
+  assert.match(cardSource, /const envGated = !alwaysEnabled && !envSatisfied && !checked/);
+  assert.match(cardSource, /envGated && skillsEnabled \? \([\s\S]*onOpenPreview\(skill\)/);
+  assert.match(cardSource, /settings\.skillsEnvBadgePending/);
+  // 页面侧：toggle 与批量启用都跳过未满足的技能。
+  assert.match(pageSource, /if \(on && skillEnvSatisfied\.get\(name\) === false\)/);
+  assert.match(pageSource, /!target \|\| skillEnvSatisfied\.get\(name\) !== false/);
 });
 
 test("installed Skill switches stay right-aligned while delete appears in the card footer", () => {

@@ -13,6 +13,7 @@ import {
 } from "@liveagent/ui/lib/sidebar/openController";
 import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
+import { subscribeSkillEnvConfigRequested } from "@liveagent/ui/lib/skills/index";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProjectRemoval";
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
@@ -1121,6 +1122,13 @@ function useGatewayAppController() {
     t: translateWorkspaceProject,
     setErrorMessage: setSidebarActionError,
     beforeRemoveWorkspaceProject,
+  });
+
+  // 聊天里的技能环境变量引导卡请求跳转：复用侧栏的 Skills Hub 打开动作。
+  useEffect(() => {
+    return subscribeSkillEnvConfigRequested(() => {
+      handleSidebarOpenSkillsHub();
+    });
   });
 
   const isWorkspaceProjectRunning = useCallback(

@@ -4,6 +4,7 @@
 //! - [`util`]：临时目录、时间戳与 payload 字段工具
 //! - [`paths`]：skills 根目录解析、路径回显与路径 / 名称清洗
 //! - [`metadata`]：frontmatter / skill.json 元数据解析与元数据文件定位
+//! - [`env_requirements`]：技能脚本环境变量依赖探测与系统环境探测
 //! - [`library`]：已安装 Skill 库（发现 / 列表 / 读取 / 删除 / 打包 / `_meta.json`）
 //! - [`sources`]：安装源准备（GitHub / HTTP / 本地 / 压缩包）、下载与安全解压
 //! - [`install`]：备份、带冲突策略的复制与 install payload 编排
@@ -17,6 +18,7 @@
 mod builtin;
 mod clawhub;
 mod create;
+mod env_requirements;
 mod external;
 mod external_mcp;
 mod install;
@@ -36,6 +38,7 @@ pub use builtin::ensure_builtin_agent_skills_sync;
 pub(crate) use builtin::*;
 pub(crate) use clawhub::*;
 pub(crate) use create::*;
+pub(crate) use env_requirements::*;
 pub(crate) use external::*;
 pub(crate) use external_mcp::*;
 pub(crate) use install::*;

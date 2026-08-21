@@ -5,9 +5,11 @@ import {
   normalizeChatRuntimeControls,
   normalizeRightDockSettings,
   normalizeSettings,
+  normalizeSkillsSettings,
   normalizeWorkspaceResourceSettings,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings/index";
+import type { SkillEnvSettingsMap, SkillEnvVarConfig } from "@liveagent/ui/lib/skills/skillEnv";
 
 export type GatewayProviderApiKeyUpdates = Record<string, string>;
 export type GatewayProviderUsageQuerySecretUpdates = Record<
@@ -48,6 +50,7 @@ export type GatewaySettingsSyncProvider = Omit<AppSettings["customProviders"][nu
 };
 export type GatewaySettingsSyncCustomSettings = Partial<AppSettings["customSettings"]>;
 export type GatewaySttSecretUpdate = AppSettings["stt"];
+export type GatewaySkillEnvSecretUpdates = Record<string, Record<string, string>>;
 
 export type GatewaySettingsSyncPayload = {
   system: AppSettings["system"];
@@ -78,6 +81,8 @@ export type GatewaySettingsSyncPayload = {
   systemProxyPasswordUpdate?: string;
   /** WebUI → 桌面端的一次性 STT 凭据更新；任何公开广播前必须移除。 */
   sttSecretUpdate?: GatewaySttSecretUpdate;
+  /** 技能环境变量明文 sidecar（技能名 → 变量名 → 值）；skills 字段出口必被脱敏。 */
+  skillEnvSecretUpdates?: GatewaySkillEnvSecretUpdates;
 };
 export type GatewaySettingsSyncUpdatePayload = Partial<GatewaySettingsSyncPayload>;
 
@@ -186,7 +191,125 @@ export function redactSettingsForWebStorage(settings: AppSettings): AppSettings 
     customProviders: redactCustomProvidersForWebStorage(settings.customProviders),
     ssh: redactSshSettingsForWebStorage(settings.ssh),
     stt: redactSttSettingsForWebStorage(settings.stt),
+    skills: redactSkillsSettingsSecrets(settings.skills),
   });
+}
+
+/** 技能环境变量值出口脱敏：值本体清空，configured 标记保留已配置状态。 */
+export function redactSkillsSettingsSecrets(skills: AppSettings["skills"]): AppSettings["skills"] {
+  const env: SkillEnvSettingsMap = {};
+  for (const [skillName, vars] of Object.entries(skills.env)) {
+    const nextVars: Record<string, SkillEnvVarConfig> = {};
+    for (const [varName, config] of Object.entries(vars)) {
+      const configured = (config.value?.trim().length ?? 0) > 0 || config.configured === true;
+      const next: SkillEnvVarConfig = {};
+      if (configured) next.configured = true;
+      if (config.override) next.override = config.override;
+      if (next.configured !== undefined || next.override !== undefined) {
+        nextVars[varName] = next;
+      }
+    }
+    if (Object.keys(nextVars).length > 0) {
+      env[skillName] = nextVars;
+    }
+  }
+  return { ...skills, env };
+}
+
+/** 收集当前持有的全部技能环境变量明文（对齐 collectProviderApiKeyUpdates 语义）。 */
+export function collectSkillEnvSecretUpdates(
+  skills: AppSettings["skills"],
+): GatewaySkillEnvSecretUpdates | undefined {
+  const updates: GatewaySkillEnvSecretUpdates = {};
+  for (const [skillName, vars] of Object.entries(skills.env)) {
+    for (const [varName, config] of Object.entries(vars)) {
+      if (typeof config.value === "string" && config.value.trim()) {
+        const bucket = updates[skillName] ?? {};
+        bucket[varName] = config.value;
+        updates[skillName] = bucket;
+      }
+    }
+  }
+  return Object.keys(updates).length > 0 ? updates : undefined;
+}
+
+/** 只收集相对 prev 新增/变化的技能环境变量明文（更新载荷用）。 */
+export function collectChangedSkillEnvSecretUpdates(
+  prev: AppSettings["skills"],
+  next: AppSettings["skills"],
+): GatewaySkillEnvSecretUpdates | undefined {
+  const updates: GatewaySkillEnvSecretUpdates = {};
+  for (const [skillName, vars] of Object.entries(next.env)) {
+    for (const [varName, config] of Object.entries(vars)) {
+      const value = typeof config.value === "string" && config.value.trim() ? config.value : "";
+      if (!value) continue;
+      if (prev.env[skillName]?.[varName]?.value === value) continue;
+      const bucket = updates[skillName] ?? {};
+      bucket[varName] = value;
+      updates[skillName] = bucket;
+    }
+  }
+  return Object.keys(updates).length > 0 ? updates : undefined;
+}
+
+function normalizeSkillEnvSecretUpdates(input: unknown): GatewaySkillEnvSecretUpdates {
+  const out: GatewaySkillEnvSecretUpdates = {};
+  for (const [skillName, vars] of Object.entries(asObject(input))) {
+    if (!skillName.trim()) continue;
+    for (const [varName, value] of Object.entries(asObject(vars))) {
+      if (typeof value === "string" && value.trim()) {
+        const bucket = out[skillName] ?? {};
+        bucket[varName] = value;
+        out[skillName] = bucket;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 合并同步来的 skills 域：结构以 incoming 为准；脱敏回声（configured=true 且无值）
+ * 沿用本地已存值；sidecar 明文最后落座。configured 丢失且无 sidecar = 显式清除。
+ */
+function mergeSyncedSkillsSettings(
+  current: AppSettings["skills"],
+  incoming: unknown,
+  secretUpdates: GatewaySkillEnvSecretUpdates,
+): AppSettings["skills"] {
+  const next = normalizeSkillsSettings(incoming ?? current);
+  const env: SkillEnvSettingsMap = {};
+  for (const [skillName, vars] of Object.entries(next.env)) {
+    const nextVars: Record<string, SkillEnvVarConfig> = {};
+    for (const [varName, config] of Object.entries(vars)) {
+      const sidecar = secretUpdates[skillName]?.[varName];
+      const merged: SkillEnvVarConfig = { ...config };
+      if (typeof sidecar === "string" && sidecar.trim()) {
+        merged.value = sidecar;
+        merged.configured = true;
+      } else if (!merged.value?.trim() && merged.configured === true) {
+        const existing = current.env[skillName]?.[varName]?.value;
+        if (existing?.trim()) {
+          merged.value = existing;
+        }
+      }
+      nextVars[varName] = merged;
+    }
+    env[skillName] = nextVars;
+  }
+  // sidecar 中出现但 incoming 结构里没有的条目（极端时序），直接落座。
+  for (const [skillName, vars] of Object.entries(secretUpdates)) {
+    for (const [varName, value] of Object.entries(vars)) {
+      if (env[skillName]?.[varName]) continue;
+      const bucket = env[skillName] ?? {};
+      bucket[varName] = {
+        ...(current.env[skillName]?.[varName] ?? {}),
+        value,
+        configured: true,
+      };
+      env[skillName] = bucket;
+    }
+  }
+  return normalizeSkillsSettings({ ...next, env });
 }
 
 export function redactSttSettingsForWebStorage(stt: AppSettings["stt"]): AppSettings["stt"] {
@@ -1182,7 +1305,7 @@ export function buildGatewaySettingsSyncPayload(
     memory: settings.memory,
     modelFailover: settings.modelFailover,
     customSettings: syncableCustomSettings(settings.customSettings),
-    skills: settings.skills,
+    skills: redactSkillsSettingsSecrets(settings.skills),
     chatRuntimeControls: settings.chatRuntimeControls,
     selectedModel: settings.selectedModel ?? null,
     theme: settings.theme,
@@ -1211,6 +1334,12 @@ export function buildGatewaySettingsSyncPayload(
     : undefined;
   if (systemProxyPasswordUpdate !== undefined) {
     payload.systemProxyPasswordUpdate = systemProxyPasswordUpdate;
+  }
+  const skillEnvSecretUpdates = options.includeProviderApiKeyUpdates
+    ? collectSkillEnvSecretUpdates(settings.skills)
+    : undefined;
+  if (skillEnvSecretUpdates) {
+    payload.skillEnvSecretUpdates = skillEnvSecretUpdates;
   }
   return payload;
 }
@@ -1265,6 +1394,13 @@ export function buildGatewaySettingsSyncUpdatePayload(
     // sidecar 必须与（脱敏后的）system 字段成对出现，接收端才能定位回填目标。
     update.system ??= nextPayload.system;
     update.systemProxyPasswordUpdate = systemProxyPasswordUpdate;
+  }
+  const skillEnvSecretUpdates = options.includeProviderApiKeyUpdates
+    ? collectChangedSkillEnvSecretUpdates(prev.skills, next.skills)
+    : undefined;
+  if (skillEnvSecretUpdates) {
+    update.skills ??= nextPayload.skills;
+    update.skillEnvSecretUpdates = skillEnvSecretUpdates;
   }
 
   return update;
@@ -1335,7 +1471,19 @@ export function applyGatewaySettingsSyncPayload(
       chatTranscript: current.customSettings.chatTranscript,
       fontScale: current.customSettings.fontScale,
     },
-    skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
+    skills: Object.hasOwn(source, "skills")
+      ? mergeSyncedSkillsSettings(
+          current.skills,
+          source.skills,
+          normalizeSkillEnvSecretUpdates(source.skillEnvSecretUpdates),
+        )
+      : Object.hasOwn(source, "skillEnvSecretUpdates")
+        ? mergeSyncedSkillsSettings(
+            current.skills,
+            current.skills,
+            normalizeSkillEnvSecretUpdates(source.skillEnvSecretUpdates),
+          )
+        : current.skills,
     chatRuntimeControls: Object.hasOwn(source, "chatRuntimeControls")
       ? normalizeChatRuntimeControls(source.chatRuntimeControls)
       : current.chatRuntimeControls,

@@ -30,6 +30,11 @@ import { normalizeFontFamily } from "@liveagent/ui/lib/shared/fontFamily";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/builtin";
 import {
+  isValidSkillEnvVarName,
+  normalizeSkillEnvSettings,
+  type SkillEnvVarConfig,
+} from "@liveagent/ui/lib/skills/skillEnv";
+import {
   DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
@@ -1416,6 +1421,7 @@ export function normalizeSkillsSettings(input: unknown): SkillsSettings {
   return {
     enabled: obj.enabled !== false,
     selected: mergeAlwaysEnabledSkillNames(normalizeStringArray(obj.selected)),
+    env: normalizeSkillEnvSettings(obj.env),
   };
 }
 
@@ -1585,6 +1591,7 @@ export function getDefaultSettings(): AppSettings {
     skills: {
       enabled: true,
       selected: mergeAlwaysEnabledSkillNames([]),
+      env: {},
     },
     chatRuntimeControls: DEFAULT_CHAT_RUNTIME_CONTROLS,
     selectedModel: undefined,
@@ -1753,6 +1760,36 @@ export function updateSkills(prev: AppSettings, patch: Partial<SkillsSettings>):
     skills: {
       ...prev.skills,
       ...patch,
+    },
+  });
+}
+
+/**
+ * 写入/清除单个技能环境变量配置。`config` 传 null 删除该变量条目;
+ * 值与覆盖标记都为空的条目会被 normalize 清理,技能条目空了同样移除。
+ */
+export function updateSkillEnvVar(
+  prev: AppSettings,
+  skillName: string,
+  varName: string,
+  config: SkillEnvVarConfig | null,
+): AppSettings {
+  const normalizedSkillName = skillName.trim();
+  const normalizedVarName = varName.trim();
+  if (!normalizedSkillName || !isValidSkillEnvVarName(normalizedVarName)) return prev;
+
+  const skillVars = { ...(prev.skills.env[normalizedSkillName] ?? {}) };
+  if (config === null) {
+    if (!(normalizedVarName in skillVars)) return prev;
+    delete skillVars[normalizedVarName];
+  } else {
+    skillVars[normalizedVarName] = config;
+  }
+
+  return updateSkills(prev, {
+    env: {
+      ...prev.skills.env,
+      [normalizedSkillName]: skillVars,
     },
   });
 }

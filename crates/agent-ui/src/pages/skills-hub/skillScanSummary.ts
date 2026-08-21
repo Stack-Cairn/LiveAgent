@@ -1,4 +1,5 @@
 import type { SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { skillEnvRequirementsSignature } from "@liveagent/ui/lib/skills/skillEnv";
 
 export type SkillScanSummary = {
   total: number;
@@ -19,6 +20,7 @@ export function buildSkillEntrySignature(skill: SkillSummary) {
     skill.source?.slug ?? "",
     skill.installedAt ?? "",
     skill.source?.version ?? "",
+    skillEnvRequirementsSignature(skill.envRequirements),
   ].join("\0");
 }
 

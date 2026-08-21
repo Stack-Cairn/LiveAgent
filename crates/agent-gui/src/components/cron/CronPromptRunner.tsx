@@ -6,6 +6,7 @@ import {
   isAlwaysEnabledSkillName,
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
+import { collectSkillEnvInjection, resolveSkillEnvStatus } from "@liveagent/ui/lib/skills/skillEnv";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { backend } from "../../lib/automation/backend";
@@ -62,6 +63,8 @@ function getActiveAgentPrompt(settings: AppSettings) {
   );
 }
 
+type CronSkillEnvGate = (baseDir: string) => { skillName: string; missing: string[] } | null;
+
 async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
   const resources = resolveWorkspaceResources(settings, workdir);
   const selectedSkillNames = resources.skillNames.filter((name) => !isAlwaysEnabledSkillName(name));
@@ -71,6 +74,8 @@ async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
       prompt: "",
       rootDir: "",
       accessPolicy: undefined as SkillAccessPolicy | undefined,
+      envGate: undefined as CronSkillEnvGate | undefined,
+      envInjection: undefined as (() => Record<string, string>) | undefined,
     };
   }
 
@@ -90,14 +95,25 @@ async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
       prompt: "",
       rootDir: "",
       accessPolicy: undefined as SkillAccessPolicy | undefined,
+      envGate: undefined as CronSkillEnvGate | undefined,
+      envInjection: undefined as (() => Record<string, string>) | undefined,
     };
   }
+
+  const envSettings = settings.skills.env;
+  const envGate: CronSkillEnvGate = (baseDir) => {
+    const skill = selectedSkills.find((item) => item.baseDir === baseDir);
+    if (!skill) return null;
+    const status = resolveSkillEnvStatus(skill, envSettings);
+    return status.satisfied ? null : { skillName: skill.name, missing: status.missingRequired };
+  };
 
   return {
     enabled: true,
     prompt: buildSkillsSystemPrompt({
       rootDir: discovery.rootDir,
       selected: selectedSkills,
+      envSettings,
     }),
     rootDir: discovery.rootDir,
     accessPolicy: {
@@ -107,6 +123,12 @@ async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
       allowSkillManagement: false,
       allowSkillMutation: true,
     },
+    envGate: envGate as CronSkillEnvGate | undefined,
+    envInjection: (() =>
+      collectSkillEnvInjection(
+        selectedSkills.filter((skill) => resolveSkillEnvStatus(skill, envSettings).satisfied),
+        envSettings,
+      )) as (() => Record<string, string>) | undefined,
   };
 }
 
@@ -175,6 +197,8 @@ async function executeCronPromptRun(
     skillsEnabled: skillsContext.enabled,
     skillsRootDir: skillsContext.rootDir,
     skillAccessPolicy: skillsContext.accessPolicy,
+    skillEnvGate: skillsContext.envGate,
+    resolveSkillEnvInjection: skillsContext.envInjection,
     sandbox: resolveShellSandboxSettings(settings.system.commandSafetyMode),
     runtimeScope: "cron_auto_prompt",
     currentChatModel: {

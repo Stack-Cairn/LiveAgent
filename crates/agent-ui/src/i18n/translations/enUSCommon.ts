@@ -117,6 +117,14 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "tooltip.closeSidebar": "Close Sidebar",
   "tooltip.openSidebar": "Open Sidebar",
   "chat.newConversation": "New Conversation",
+  "chat.skillEnvMissingTitle":
+    "Skill {skill} is unavailable: missing required environment variables",
+  "chat.skillEnvOpenConfig": "Configure in Skill details",
+  "chat.skillEnvUseSystem": "Use system environment",
+  "chat.skillEnvProbeResolved":
+    "System environment satisfies the requirements — reply “continue” to let the model retry.",
+  "chat.skillEnvProbeAbsent":
+    "Not found in system environment either: {names}. Fill them in Skill details.",
   "chat.pendingTitle": "New Chat",
   "chat.recentConversation": "Conversations",
   "chat.workspaceSection": "Workspaces",

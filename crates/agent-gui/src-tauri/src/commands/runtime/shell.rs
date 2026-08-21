@@ -38,8 +38,16 @@ pub async fn shell_run(
     run_id: Option<String>,
     sandbox: bool,
     sandbox_allow_network: bool,
+    extra_envs: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ShellRunResponse, String> {
     let sandbox_options = effective_sandbox_options(sandbox, sandbox_allow_network)?;
+    // 技能环境变量注入：只接受合法变量名（前端已过滤，这里兜底），注入值
+    // 优先于继承的进程环境（Command::env 语义），即用户填写的值覆盖系统值。
+    let injected_envs: Vec<(String, String)> = extra_envs
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(name, _)| crate::services::skills::is_valid_env_var_name(name))
+        .collect();
     let normalized_run_id = run_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -55,7 +63,7 @@ pub async fn shell_run(
             max_timeout_ms,
             provider_id,
             cancel_token,
-            &[],
+            &injected_envs,
             sandbox_options,
         )
     })

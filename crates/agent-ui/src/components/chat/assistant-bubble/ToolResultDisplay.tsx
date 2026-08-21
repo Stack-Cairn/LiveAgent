@@ -10,6 +10,8 @@ import {
   ToolSurfaceLabel,
 } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type DeleteResultDetails,
   deriveFileToolPreview,
@@ -33,12 +35,18 @@ import {
   toolResultMessageToText,
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import {
+  notifySkillsDiscoveryUpdated,
+  probeSkillEnvNames,
+  requestSkillEnvConfigNavigation,
+} from "@liveagent/ui/lib/skills/index";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
-import { Search } from "../../IconSet";
+import { useState } from "react";
+import { Key, Loader2, Search } from "../../IconSet";
 import {
   displayString,
   getBuiltinResultKind,
@@ -445,6 +453,92 @@ function fileScopeTags(details: unknown): MetaTag[] {
   return scope ? [{ label: "scope", value: scope }] : [];
 }
 
+// 技能缺少必需环境变量时的引导卡：跳转详情页填写，或现场探测系统环境变量。
+// 探测结果只存在组件内，不回写消息——重开会话时按钮仍可重试。
+function SkillEnvMissingCard(props: { skillName: string; missing: string[]; readOnly: boolean }) {
+  const { skillName, missing, readOnly } = props;
+  const { t } = useLocale();
+  const [probing, setProbing] = useState(false);
+  const [probeOutcome, setProbeOutcome] = useState<{ absent: string[] } | null>(null);
+  const resolved = probeOutcome !== null && probeOutcome.absent.length === 0;
+
+  const adoptSystemEnv = async () => {
+    if (probing) return;
+    setProbing(true);
+    try {
+      const results = await probeSkillEnvNames(missing);
+      const absent = missing.filter((name) => !results[name]);
+      setProbeOutcome({ absent });
+      if (absent.length === 0) {
+        // 系统已满足：触发发现刷新，让 Hub 徽标与启用门禁同步解除。
+        notifySkillsDiscoveryUpdated();
+      }
+    } catch {
+      // 探测失败保持原状，允许重试。
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  return (
+    <ToolSurface>
+      <div className="flex items-start gap-2.5">
+        <Key className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="text-xs font-medium text-foreground">
+            {t("chat.skillEnvMissingTitle").replace("{skill}", skillName)}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {missing.map((name) => (
+              <code
+                key={name}
+                className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+              >
+                {name}
+              </code>
+            ))}
+          </div>
+          {resolved ? (
+            <div className="text-[11px] leading-4 text-emerald-700 dark:text-emerald-300">
+              {t("chat.skillEnvProbeResolved")}
+            </div>
+          ) : (
+            <>
+              {probeOutcome ? (
+                <div className="text-[11px] leading-4 text-muted-foreground">
+                  {t("chat.skillEnvProbeAbsent").replace("{names}", probeOutcome.absent.join(", "))}
+                </div>
+              ) : null}
+              {!readOnly ? (
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => requestSkillEnvConfigNavigation(skillName)}
+                  >
+                    {t("chat.skillEnvOpenConfig")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 px-2.5 text-xs"
+                    disabled={probing}
+                    onClick={() => void adoptSystemEnv()}
+                  >
+                    {probing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    {t("chat.skillEnvUseSystem")}
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </ToolSurface>
+  );
+}
+
 export function ToolResultDisplay({
   item,
   result,
@@ -613,6 +707,20 @@ export function ToolResultDisplay({
         </ToolSurface>
         <CodePreview text={text} maxChars={8000} />
       </div>
+    );
+  }
+
+  if (kind === "skill_env_missing") {
+    const details = result.details as Extract<
+      SkillsManagerResultDetails,
+      { kind: "skill_env_missing" }
+    >;
+    return (
+      <SkillEnvMissingCard
+        skillName={details.skillName}
+        missing={details.missing}
+        readOnly={readOnly}
+      />
     );
   }
 

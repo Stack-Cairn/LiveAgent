@@ -44,7 +44,11 @@ import {
 import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
-import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import {
+  buildSkillsSystemPrompt,
+  type SkillSummary,
+  subscribeSkillEnvConfigRequested,
+} from "@liveagent/ui/lib/skills/index";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
@@ -1523,6 +1527,7 @@ export function ChatPage(props: ChatPageProps) {
           skillsPrompt = buildSkillsSystemPrompt({
             rootDir: skillsRootDir,
             selected: selectedSkills,
+            envSettings: settings.skills.env,
           });
         }
       }
@@ -1862,6 +1867,16 @@ export function ChatPage(props: ChatPageProps) {
       }
     };
   }, [composerRef, setActiveView]);
+
+  // 聊天里的技能环境变量引导卡请求跳转：切到 Skills Hub，抽屉由 Hub 页
+  // 消费 pending 目标自行打开。
+  useEffect(() => {
+    return subscribeSkillEnvConfigRequested(() => {
+      cacheActiveComposerDraft();
+      setRightDockOpen(false);
+      setActiveView("skills-hub");
+    });
+  });
 
   // 托盘菜单同步：任一输入变化即重建模型推送（syncTrayMenu 内部按 JSON 签名
   // 去抖），300ms 尾随防抖吸收流式期间侧栏 upsert 引起的高频变化。

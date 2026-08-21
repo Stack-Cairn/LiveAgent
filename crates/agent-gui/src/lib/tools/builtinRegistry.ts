@@ -167,6 +167,10 @@ type BuildBuiltinBaseToolRegistryParams = {
   skillsEnabled: boolean;
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
+  /** 技能环境变量门禁：按 baseDir 返回未满足的必需变量；null 放行。 */
+  skillEnvGate?: (baseDir: string) => { skillName: string; missing: string[] } | null;
+  /** 会话级技能环境变量注入（Bash 子进程），只含用户填写的值。 */
+  resolveSkillEnvInjection?: () => Record<string, string>;
   onManagedSkillsChanged?: (change: {
     action: "install" | "create" | "delete";
     names: string[];
@@ -233,12 +237,14 @@ async function buildBaseBuiltinToolBundles(
       resumableShellEnabled: params.runtimeScope === "chat",
       resolveHomeDir,
       sandbox: params.sandbox,
+      resolveExtraEnvs: params.resolveSkillEnvInjection,
     }),
     ...(params.skillsEnabled
       ? [
           createSkillTools({
             workdir: params.workdir,
             skillAccessPolicy: params.skillAccessPolicy,
+            skillEnvGate: params.skillEnvGate,
             onManagedSkillsChanged: params.onManagedSkillsChanged,
           }),
         ]

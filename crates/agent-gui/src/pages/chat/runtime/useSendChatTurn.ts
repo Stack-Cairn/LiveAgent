@@ -19,6 +19,7 @@ import {
   resolveExplicitSkillMentions,
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
+import { collectSkillEnvInjection, resolveSkillEnvStatus } from "@liveagent/ui/lib/skills/skillEnv";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useCallback } from "react";
@@ -1238,6 +1239,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     /** 本轮 `/skill-name` 显式提及块;没有提及时恒为空串,不会挂出任何内容。 */
     let explicitSkillMentionBlock = "";
     let skillsRootDirForTools = skillsRootDir;
+    let skillEnvGateForTools:
+      | ((baseDir: string) => { skillName: string; missing: string[] } | null)
+      | undefined;
+    let skillEnvInjectionForTools: (() => Record<string, string>) | undefined;
     let skillAccessPolicyForTools: SkillAccessPolicy | undefined = effectiveSkillsEnabled
       ? {
           allowedSkillNames: [],
@@ -1467,6 +1472,22 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         allowSkillManagement: allowBuiltinSkillManagement,
         allowSkillMutation: true,
       };
+      // 环境变量门禁与注入都按当轮启用技能 + 发送时的配置快照构造；
+      // 用户在卡片引导下补配置后，下一轮自然拿到新状态。
+      const skillEnvSettings = settings.skills.env;
+      skillEnvGateForTools = (baseDir: string) => {
+        const skill = selectedSkills.find((item) => item.baseDir === baseDir);
+        if (!skill) return null;
+        const status = resolveSkillEnvStatus(skill, skillEnvSettings);
+        return status.satisfied ? null : { skillName: skill.name, missing: status.missingRequired };
+      };
+      skillEnvInjectionForTools = () =>
+        collectSkillEnvInjection(
+          selectedSkills.filter(
+            (skill) => resolveSkillEnvStatus(skill, skillEnvSettings).satisfied,
+          ),
+          skillEnvSettings,
+        );
       const explicitSkills = resolveExplicitSkillMentions({
         text,
         structured: composerDraft?.skillMentions ?? [],
@@ -1478,6 +1499,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       skillsPrompt = buildSkillsSystemPrompt({
         rootDir,
         selected: selectedSkills,
+        envSettings: skillEnvSettings,
       });
     }
 
@@ -1677,6 +1699,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
             skillsRootDir: skillsRootDirForTools,
             skillAccessPolicy: skillAccessPolicyForTools,
+            skillEnvGate: skillEnvGateForTools,
+            resolveSkillEnvInjection: skillEnvInjectionForTools,
             onManagedSkillsChanged: (change) => {
               if (change.action !== "delete") {
                 enableManagedSkills(change.names);

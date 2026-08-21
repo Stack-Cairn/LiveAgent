@@ -2,6 +2,7 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 
 import { sortSkillsForDisplay } from "./builtin";
 import type { ClawHubSkillCard } from "./clawHub";
+import { resolveSkillEnvStatus, type SkillEnvSettingsMap } from "./skillEnv";
 
 const SKILLS_DISCOVERY_UPDATED_EVENT = "liveagent:skills-discovery-updated";
 
@@ -30,6 +31,25 @@ export type SkillSummary = {
   inlineContent?: string;
   inlineContentTruncated?: boolean;
   source?: SkillSourceMetadata | null;
+  /** 后端探测/声明得到的脚本环境变量依赖(缺失表示旧缓存或无依赖)。 */
+  envRequirements?: SkillEnvRequirement[];
+};
+
+export type SkillEnvRequirementConfidence = "declared" | "strong" | "weak";
+
+/** 技能脚本依赖的单个环境变量(后端探测或 metadata.env 声明)。 */
+export type SkillEnvRequirement = {
+  name: string;
+  /** true 时参与「未配置禁止启用」门禁;用户覆盖后以 resolveSkillEnvStatus 结果为准。 */
+  required: boolean;
+  confidence: SkillEnvRequirementConfidence;
+  provider?: string | null;
+  description?: string | null;
+  url?: string | null;
+  /** 证据文件(相对技能目录),最多 5 个。 */
+  sources: string[];
+  /** 后端列表时对进程环境变量的现场探测结果。 */
+  systemValuePresent: boolean;
 };
 
 export type SkillSourceMetadata = {
@@ -127,6 +147,7 @@ type SystemManageSkillResponse = {
     builtIn?: boolean;
     installedAt?: number | null;
     source?: SkillSourceMetadata | null;
+    envRequirements?: unknown;
   }> | null;
   invalid?: Array<{ path: string; error: string }> | null;
   installed?: SkillInstallResult[] | null;
@@ -153,6 +174,7 @@ type SystemManageSkillResponse = {
   clawhubDownloadUrl?: string | null;
   external?: ExternalToolScan[] | null;
   externalMcp?: ExternalMcpToolScan[] | null;
+  envProbe?: Array<{ name?: string | null; present?: boolean | null }> | null;
 };
 
 export type ExternalSkillEntry = {
@@ -354,6 +376,52 @@ function isSkillReadmePath(path: string) {
   return /(?:^|\/)readme\.md$/i.test(path);
 }
 
+function normalizeSkillEnvRequirements(input: unknown): SkillEnvRequirement[] {
+  if (!Array.isArray(input)) return [];
+  const out: SkillEnvRequirement[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const confidence =
+      item.confidence === "declared" || item.confidence === "strong" || item.confidence === "weak"
+        ? item.confidence
+        : "weak";
+    const optionalString = (value: unknown) =>
+      typeof value === "string" && value.trim() ? value : null;
+    out.push({
+      name,
+      required: item.required === true,
+      confidence,
+      provider: optionalString(item.provider),
+      description: optionalString(item.description),
+      url: optionalString(item.url),
+      sources: Array.isArray(item.sources)
+        ? item.sources.filter((source): source is string => typeof source === "string")
+        : [],
+      systemValuePresent: item.systemValuePresent === true,
+    });
+  }
+  return out;
+}
+
+/** 按名现场探测进程环境变量(走 SkillsManager env_status 动作,双端可用)。 */
+export async function probeSkillEnvNames(names: string[]): Promise<Record<string, boolean>> {
+  const filtered = names.map((name) => name.trim()).filter(Boolean);
+  if (filtered.length === 0) return {};
+  const response = await manageSkill({ action: "env_status", names: filtered });
+  const out: Record<string, boolean> = {};
+  for (const item of response.envProbe ?? []) {
+    if (typeof item?.name === "string" && item.name) {
+      out[item.name] = item.present === true;
+    }
+  }
+  return out;
+}
+
 export async function ensureBuiltinSkills() {
   try {
     return await invoke<SystemBuiltinSkillSeedResponse[]>("system_ensure_builtin_skills");
@@ -377,6 +445,38 @@ export function subscribeSkillsDiscoveryUpdated(listener: () => void) {
   }
   window.addEventListener(SKILLS_DISCOVERY_UPDATED_EVENT, listener);
   return () => window.removeEventListener(SKILLS_DISCOVERY_UPDATED_EVENT, listener);
+}
+
+const SKILL_ENV_CONFIG_REQUEST_EVENT = "liveagent:skill-env-config-request";
+
+let pendingSkillEnvConfigTarget: string | null = null;
+
+/** 聊天引导卡请求打开某技能的环境变量配置。App 壳负责切到 Skills Hub，Hub 页负责打开抽屉。 */
+export function requestSkillEnvConfigNavigation(skillName: string) {
+  if (typeof window === "undefined") return;
+  pendingSkillEnvConfigTarget = skillName;
+  window.dispatchEvent(new CustomEvent(SKILL_ENV_CONFIG_REQUEST_EVENT, { detail: { skillName } }));
+}
+
+/** Skills Hub 页取走待打开的技能名（一次性；覆盖事件发出时页面尚未挂载的冷启动路径）。 */
+export function consumeSkillEnvConfigTarget(): string | null {
+  const target = pendingSkillEnvConfigTarget;
+  pendingSkillEnvConfigTarget = null;
+  return target;
+}
+
+export function subscribeSkillEnvConfigRequested(listener: (skillName: string) => void) {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<{ skillName?: unknown }>).detail;
+    if (typeof detail?.skillName === "string" && detail.skillName) {
+      listener(detail.skillName);
+    }
+  };
+  window.addEventListener(SKILL_ENV_CONFIG_REQUEST_EVENT, handler);
+  return () => window.removeEventListener(SKILL_ENV_CONFIG_REQUEST_EVENT, handler);
 }
 
 export function invalidateSkillsDiscoveryCache() {
@@ -472,6 +572,7 @@ async function managedSkillListToDiscovery(
           ? raw.installedAt
           : null,
       source: normalizeSkillSourceMetadata(raw.source),
+      envRequirements: normalizeSkillEnvRequirements(raw.envRequirements),
     });
   }
   // README 回退型 skill 的富化各需两次串行往返；数量多时串行等待主导加载耗时，
@@ -611,9 +712,22 @@ export async function cancelSkillInstallJob(jobId: string): Promise<SkillInstall
 export function buildSkillsSystemPrompt(params: {
   rootDir: string;
   selected: SkillSummary[];
+  /** 传入后对必需环境变量未满足的技能加 unavailable 标注（含缺失变量名）。 */
+  envSettings?: SkillEnvSettingsMap;
 }): string {
   const { selected } = params;
   if (selected.length === 0) return "";
+
+  // 满足门禁的技能保持与无门禁时完全相同的输出，避免无谓的缓存前缀失效。
+  const missingBySkill = new Map<string, string[]>();
+  if (params.envSettings) {
+    for (const skill of selected) {
+      const status = resolveSkillEnvStatus(skill, params.envSettings);
+      if (!status.satisfied) {
+        missingBySkill.set(skill.name, status.missingRequired);
+      }
+    }
+  }
 
   return [
     "The following Skills are enabled by the user. Skill files are exposed to file tools through skill://<baseDir>/... paths.",
@@ -631,15 +745,22 @@ export function buildSkillsSystemPrompt(params: {
     "- Do not guess a Skill's exact instructions or script paths before reading the Skill file.",
     "- Relative paths inside a Skill (scripts/, references/, assets/, and so on) are resolved relative to baseDir.",
     "- If a Skill contains the {baseDir} placeholder, interpret it as the baseDir value in the metadata below (relative to the Skills root directory).",
+    ...(missingBySkill.size > 0
+      ? [
+          '- Skills marked "status: unavailable" are missing required environment variables. Do not read them with SkillsManager and do not follow their workflows yet. Tell the user which variables are missing and wait for the user to configure them in the Skill detail page. Never ask the user to paste secret values into the chat.',
+        ]
+      : []),
     "",
     "Skills:",
-    ...selected.map((s) =>
-      [
+    ...selected.map((s) => {
+      const missing = missingBySkill.get(s.name);
+      return [
         `- name: ${s.name}`,
         `  description: ${s.description}`,
         `  skillFile: ${s.skillFile}`,
         `  baseDir: ${s.baseDir}`,
-        s.inlineContent !== undefined
+        missing ? `  status: unavailable (missing env: ${missing.join(", ")})` : "",
+        s.inlineContent !== undefined && !missing
           ? [
               `  loadedFrom: README.md without metadata`,
               `  truncated: ${s.inlineContentTruncated ? "true" : "false"}`,
@@ -649,8 +770,8 @@ export function buildSkillsSystemPrompt(params: {
               "</README.md>",
             ].join("\n")
           : "",
-      ].join("\n"),
-    ),
+      ].join("\n");
+    }),
   ].join("\n");
 }
 
