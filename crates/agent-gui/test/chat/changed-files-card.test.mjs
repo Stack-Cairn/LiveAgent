@@ -29,6 +29,7 @@ function createCardModule(rootDir) {
         },
       },
       "@liveagent/ui/components/IconSet": {
+        ChevronDown: NullIcon,
         FilePenLine: NullIcon,
         FolderTree: NullIcon,
         GitCommitHorizontal: NullIcon,
@@ -91,25 +92,25 @@ function renderCard(
   );
 }
 
-function assertVerticalPath(html, fileName, directory, fromIndex = 0) {
+function assertInlinePath(html, fileName, directory, fromIndex = 0) {
   const fileNameIndex = html.indexOf(`>${fileName}</span>`, fromIndex);
-  const directoryIndex = html.indexOf(`>${directory}</span>`, fileNameIndex);
   assert.notEqual(fileNameIndex, -1, `missing file name ${fileName}`);
+  if (!directory) return fileNameIndex;
+  const directoryIndex = html.indexOf(`>${directory}</span>`, fromIndex);
   assert.notEqual(directoryIndex, -1, `missing directory ${directory}`);
-  assert.ok(fileNameIndex < directoryIndex, `${fileName} must render above its directory`);
-  return directoryIndex;
+  return Math.max(fileNameIndex, directoryIndex);
 }
 
-test("GUI changed-files rows render file names above directory paths", () => {
+test("GUI changed-files rows render file names and directory paths inline", () => {
   const html = renderCard(createCardModule(rootDir));
 
-  let position = assertVerticalPath(html, "ChangedFilesCard.tsx", "src/components/");
-  position = assertVerticalPath(html, "README.md", ".", position);
-  assertVerticalPath(html, "Settings.tsx", "src/pages/", position);
+  let position = assertInlinePath(html, "ChangedFilesCard.tsx", "src/components/");
+  position = assertInlinePath(html, "README.md", null, position);
+  assertInlinePath(html, "Settings.tsx", "src/pages/", position);
 
   assert.match(
     html,
-    /class="[^"]*line-through[^"]*"[^>]*>removed\.ts<\/span><span[^>]*>tmp\/<\/span>/,
+    /<span[^>]*>tmp\/<\/span><span[^>]*line-through[^>]*>removed\.ts<\/span>/,
   );
   for (const filePath of [
     "src/components/ChangedFilesCard.tsx",
@@ -122,15 +123,16 @@ test("GUI changed-files rows render file names above directory paths", () => {
   assert.doesNotMatch(html, /aria-label="chat\.changedFiles\.(?:open|reveal|diff):/);
 });
 
-test("GUI changed-files scrolling starts with the sixth row", () => {
+test("GUI changed-files rows collapse after the fifth file", () => {
   const modules = createCardModule(rootDir);
   const fiveFiles = renderCard(modules, { fileCount: 5 });
   const sixFiles = renderCard(modules, { fileCount: 6 });
 
-  assert.ok(!fiveFiles.includes("max-h-[calc(210px*var(--zone-font-scale,1))]"));
-  assert.ok(!fiveFiles.includes("overscroll-contain"));
-  assert.ok(sixFiles.includes("max-h-[calc(210px*var(--zone-font-scale,1))]"));
-  assert.ok(sixFiles.includes("overflow-y-auto overscroll-contain"));
+  assert.ok(!fiveFiles.includes('aria-expanded="false"'));
+  assert.ok(!fiveFiles.includes("chat.changedFiles.expand"));
+  assert.ok(sixFiles.includes('aria-expanded="false"'));
+  assert.ok(sixFiles.includes("chat.changedFiles.expand"));
+  assert.ok(!sixFiles.includes("overflow-y-auto"));
 });
 
 test("GUI changed-files actions include the localized action and canonical path", () => {
