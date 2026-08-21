@@ -1,7 +1,7 @@
 import type { Range } from "@tanstack/react-virtual";
 
-export const TRANSCRIPT_OVERSCAN_COST_BUDGET = 8;
-export const TRANSCRIPT_OVERSCAN_MAX_UNITS = 5;
+export const TRANSCRIPT_OVERSCAN_COST_BUDGET = 6;
+export const TRANSCRIPT_OVERSCAN_MAX_UNITS = 3;
 
 function normalizedCost(cost: number | undefined) {
   return Number.isFinite(cost) && (cost ?? 0) > 0 ? Math.ceil(cost ?? 1) : 1;

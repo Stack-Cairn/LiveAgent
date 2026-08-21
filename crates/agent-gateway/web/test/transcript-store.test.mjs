@@ -2234,6 +2234,59 @@ test("a matching run_finished settles the run without firing onDivergence", () =
   assert.equal(divergences, 0);
 });
 
+test("visible tab: a large live reply batches content deltas before the next frame", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-budget", 1));
+  store.applyEvent(token("run-budget", 2, "x".repeat(60_000)));
+  store.flush();
+
+  const originalDocument = globalThis.document;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+  const frames = [];
+  let emits = 0;
+  store.subscribe(() => {
+    emits += 1;
+  });
+
+  try {
+    globalThis.document = { visibilityState: "visible" };
+    globalThis.requestAnimationFrame = (callback) => {
+      frames.push(callback);
+      return 31;
+    };
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.setTimeout = (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    };
+    globalThis.clearTimeout = () => {};
+
+    store.applyEvent(token("run-budget", 3, "tail"));
+    assert.deepEqual(timers.map((timer) => timer.delay), [64]);
+    assert.equal(frames.length, 0);
+    assert.equal(emits, 0);
+
+    timers[0].callback();
+    assert.equal(frames.length, 1);
+    frames[0]();
+    assert.equal(emits, 1);
+    assert.ok(rowText(allRows(store.getSnapshot()).at(-1)).endsWith("tail"));
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    if (originalCancelAnimationFrame === undefined) delete globalThis.cancelAnimationFrame;
+    else globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
 function installHiddenTab() {
   const rafCalls = { count: 0 };
   globalThis.document = { visibilityState: "hidden" };

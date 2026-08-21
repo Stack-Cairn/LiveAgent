@@ -1,3 +1,4 @@
+import { resolveStreamingRenderDelay } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
   ConversationStreamEvent,
@@ -139,6 +140,21 @@ function isDocumentHidden() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
 
+function countLiveSnapshotCharacters(snapshot: TranscriptSnapshot) {
+  if (snapshot.liveStartIndex < 0) return 0;
+  let count = 0;
+  for (let index = snapshot.liveStartIndex; index < snapshot.rows.length; index += 1) {
+    const row = snapshot.rows[index];
+    if (row?.kind !== "assistant") continue;
+    for (const round of row.rounds) {
+      for (const block of round.blocks) {
+        if (block.kind === "text" || block.kind === "thinking") count += block.text.length;
+      }
+    }
+  }
+  return count;
+}
+
 function readEventClientRequestId(event: ConversationStreamEvent): string {
   const value = (event as { client_request_id?: unknown }).client_request_id;
   return typeof value === "string" ? value.trim() : "";
@@ -222,6 +238,8 @@ export function createTranscriptStore(options?: {
   let dirty = false;
   let rafId: number | null = null;
   let hiddenCommitTimer: ReturnType<typeof setTimeout> | null = null;
+  let visibleCommitTimer: ReturnType<typeof setTimeout> | null = null;
+  let renderedCharacterCount = 0;
   const listeners = new Set<() => void>();
 
   // Row caches: history rows rebuild only when the history region changes;
@@ -236,6 +254,7 @@ export function createTranscriptStore(options?: {
     historyEntries: ChatEntry[];
     foldedTurns: Turn[];
     rows: TranscriptRow[];
+    keys: ReadonlySet<string>;
   } | null = null;
 
   const historyRows = (): TranscriptRow[] => {
@@ -344,10 +363,20 @@ export function createTranscriptStore(options?: {
         ...historyRows(),
         ...foldedTurns.flatMap((turn) => rowsForTurn(turn)),
       ]);
-      foldedRowsCache = { historyEntries, foldedTurns, rows: foldedRows };
+      foldedRowsCache = {
+        historyEntries,
+        foldedTurns,
+        rows: foldedRows,
+        keys: new Set(foldedRows.map((row) => row.key)),
+      };
     }
 
-    const seenKeys = new Set(foldedRows.map((row) => row.key));
+    const foldedKeys = foldedRowsCache?.keys ?? new Set<string>();
+    const liveKeys = new Set<string>();
+    const seenKeys = {
+      has: (key: string) => foldedKeys.has(key) || liveKeys.has(key),
+      add: (key: string) => liveKeys.add(key),
+    };
     const liveRows = dedupeRowKeys(
       unfoldedTurns.flatMap((turn) => rowsForTurn(turn)),
       seenKeys,
@@ -382,18 +411,23 @@ export function createTranscriptStore(options?: {
       clearTimeout(hiddenCommitTimer);
       hiddenCommitTimer = null;
     }
+    if (visibleCommitTimer !== null) {
+      clearTimeout(visibleCommitTimer);
+      visibleCommitTimer = null;
+    }
     if (!dirty) {
       return;
     }
     dirty = false;
     snapshot = buildSnapshot();
+    renderedCharacterCount = countLiveSnapshotCharacters(snapshot);
     emit();
   };
   // While a batch is open (applySync), schedule() only marks dirty: the
   // snapshot rebuild and the event replay must land as ONE commit, never an
   // intermediate frame at the (older) snapshot state.
   let batchDepth = 0;
-  const schedule = (flush?: boolean) => {
+  const schedule = (flush?: boolean, adaptive = false) => {
     dirty = true;
     if (batchDepth > 0) {
       return;
@@ -416,8 +450,31 @@ export function createTranscriptStore(options?: {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
+      if (visibleCommitTimer !== null) {
+        clearTimeout(visibleCommitTimer);
+        visibleCommitTimer = null;
+      }
       if (hiddenCommitTimer === null) {
         hiddenCommitTimer = setTimeout(commit, HIDDEN_COMMIT_DELAY_MS);
+      }
+      return;
+    }
+    if (hiddenCommitTimer !== null) {
+      clearTimeout(hiddenCommitTimer);
+      hiddenCommitTimer = null;
+    }
+    const renderDelay = adaptive ? resolveStreamingRenderDelay(renderedCharacterCount) : 0;
+    if (renderDelay > 0 && typeof setTimeout === "function") {
+      if (visibleCommitTimer === null && rafId === null) {
+        visibleCommitTimer = setTimeout(() => {
+          visibleCommitTimer = null;
+          if (!dirty) return;
+          if (typeof requestAnimationFrame === "function") {
+            rafId = requestAnimationFrame(commit);
+          } else {
+            commit();
+          }
+        }, renderDelay);
       }
       return;
     }
@@ -626,7 +683,7 @@ export function createTranscriptStore(options?: {
     const next = applyEventToTurn(turn, event as ChatEvent);
     if (next !== turn) {
       replaceTurn(turn, next);
-      schedule(false);
+      schedule(false, true);
     }
   };
 

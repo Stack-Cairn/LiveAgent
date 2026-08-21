@@ -566,8 +566,8 @@ test("cost-aware overscan spends one giant unit instead of five fixed rows", () 
     readIndexes.push(index);
     return costs[index];
   };
-  assert.deepEqual(extractRenderUnitRange(range, getCost, -1), [2, 3, 4, 5, 6, 7, 8, 9]);
-  assert.deepEqual(readIndexes, [2, 5, 6, 7, 8, 9]);
+  assert.deepEqual(extractRenderUnitRange(range, getCost, -1), [2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(readIndexes, [2, 5, 6, 7]);
 
   const tailPinned = extractRenderUnitRange(
     { startIndex: 0, endIndex: 0, overscan: 0, count: 6 },

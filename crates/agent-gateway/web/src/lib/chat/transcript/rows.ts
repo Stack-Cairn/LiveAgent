@@ -402,7 +402,15 @@ export function buildTurnRows(turn: Turn): TranscriptRow[] {
 // the card twice; the later copy is dropped instead (region order puts the
 // history copy first, and the shared key keeps React/measurement identity
 // stable when the rendering source flips).
-export function dedupeRowKeys(rows: TranscriptRow[], seen = new Set<string>()): TranscriptRow[] {
+type RowKeyRegistry = {
+  has(key: string): boolean;
+  add(key: string): unknown;
+};
+
+export function dedupeRowKeys(
+  rows: TranscriptRow[],
+  seen: RowKeyRegistry = new Set<string>(),
+): TranscriptRow[] {
   let next: TranscriptRow[] | null = null;
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];

@@ -1,3 +1,4 @@
+import { resolveStreamingRenderDelay } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createCompactionControllerRegistry } from "../../../lib/chat/compaction/controller";
 import {
@@ -23,9 +24,10 @@ function shouldUseLiveTranscriptAnimationFrame() {
   );
 }
 
-export function scheduleLiveTranscriptFlush(callback: () => void) {
+export function scheduleLiveTranscriptFlush(callback: () => void, minimumDelayMs = 0) {
   let frameId: number | null = null;
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let fallbackId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let finished = false;
 
   const run = () => {
@@ -39,18 +41,30 @@ export function scheduleLiveTranscriptFlush(callback: () => void) {
       globalThis.clearTimeout(timeoutId);
       timeoutId = null;
     }
+    if (fallbackId !== null && typeof globalThis.clearTimeout === "function") {
+      globalThis.clearTimeout(fallbackId);
+      fallbackId = null;
+    }
     callback();
   };
 
   const useFrame = shouldUseLiveTranscriptAnimationFrame();
-  if (useFrame) {
+  const scheduleFrame = () => {
+    timeoutId = null;
     frameId = globalThis.requestAnimationFrame(run);
-  }
+    if (typeof globalThis.setTimeout === "function") {
+      fallbackId = globalThis.setTimeout(run, LIVE_TRANSCRIPT_RAF_FALLBACK_MS);
+    }
+  };
 
-  if (typeof globalThis.setTimeout === "function") {
+  if (useFrame && minimumDelayMs > 0 && typeof globalThis.setTimeout === "function") {
+    timeoutId = globalThis.setTimeout(scheduleFrame, minimumDelayMs);
+  } else if (useFrame) {
+    scheduleFrame();
+  } else if (typeof globalThis.setTimeout === "function") {
     timeoutId = globalThis.setTimeout(
       run,
-      useFrame ? LIVE_TRANSCRIPT_RAF_FALLBACK_MS : LIVE_TRANSCRIPT_BACKGROUND_BATCH_MS,
+      Math.max(LIVE_TRANSCRIPT_BACKGROUND_BATCH_MS, minimumDelayMs),
     );
   } else if (!useFrame && typeof queueMicrotask === "function") {
     queueMicrotask(run);
@@ -66,6 +80,10 @@ export function scheduleLiveTranscriptFlush(callback: () => void) {
     if (timeoutId !== null && typeof globalThis.clearTimeout === "function") {
       globalThis.clearTimeout(timeoutId);
       timeoutId = null;
+    }
+    if (fallbackId !== null && typeof globalThis.clearTimeout === "function") {
+      globalThis.clearTimeout(fallbackId);
+      fallbackId = null;
     }
   };
 }
@@ -91,8 +109,20 @@ type LiveTranscriptArtifacts = {
   toolStatusFlushCancel: (() => void) | null;
   pendingRetryAttempts: { value: RetryAttemptRecord[] } | null;
   retryAttemptsFlushCancel: (() => void) | null;
+  renderedCharacterCount: number;
   abortSnapshot: AbortSnapshot | null;
 };
+
+function countLiveTranscriptCharacters(store: LiveTranscriptStore) {
+  const snapshot = store.getSnapshot();
+  let count = snapshot.draftAssistantText.length;
+  for (const round of snapshot.liveRounds) {
+    for (const block of round.blocks) {
+      if (block.kind === "text" || block.kind === "thinking") count += block.text.length;
+    }
+  }
+  return count;
+}
 
 function createLiveTranscriptArtifacts(): LiveTranscriptArtifacts {
   return {
@@ -105,12 +135,13 @@ function createLiveTranscriptArtifacts(): LiveTranscriptArtifacts {
     toolStatusFlushCancel: null,
     pendingRetryAttempts: null,
     retryAttemptsFlushCancel: null,
+    renderedCharacterCount: 0,
     abortSnapshot: null,
   };
 }
 
 // Pure live-transcript store management: per-conversation stores plus
-// rAF-coalesced delta flushing. Scroll-follow lives entirely in
+// frame-aligned, cost-aware delta flushing. Scroll-follow lives entirely in
 // useScrollFollow (owned by ChatTranscript); store mutations reach the
 // viewport through React commit → layout → ResizeObserver, so nothing here
 // needs to ask for a scroll.
@@ -214,6 +245,8 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
         artifacts.pendingRetryAttempts = null;
         targetStore.setRetryAttempts(pending.value);
       }
+
+      artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
@@ -273,16 +306,20 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     (targetStore: LiveTranscriptStore = liveTranscriptStore) => {
       flushPendingLiveUpdates(targetStore);
       targetStore.reset();
+      const artifacts = resolveLiveTranscriptArtifacts(targetStore);
+      if (artifacts) artifacts.renderedCharacterCount = 0;
     },
-    [flushPendingLiveUpdates, liveTranscriptStore],
+    [flushPendingLiveUpdates, liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
 
   const settleLiveTranscript = useCallback(
     (targetStore: LiveTranscriptStore = liveTranscriptStore) => {
       flushPendingLiveUpdates(targetStore);
       targetStore.settle();
+      const artifacts = resolveLiveTranscriptArtifacts(targetStore);
+      if (artifacts) artifacts.renderedCharacterCount = 0;
     },
-    [flushPendingLiveUpdates, liveTranscriptStore],
+    [flushPendingLiveUpdates, liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
 
   const appendDraftAssistantText = useCallback(
@@ -299,20 +336,27 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
         targetStore.getSnapshot().draftAssistantText.length === 0;
       if (shouldApplyImmediately) {
         targetStore.appendDraftAssistantText(delta);
+        artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
         return;
       }
 
       artifacts.pendingDraftDelta += delta;
       if (artifacts.draftFlushCancel !== null) return;
 
-      artifacts.draftFlushCancel = scheduleLiveTranscriptFlush(() => {
-        artifacts.draftFlushCancel = null;
+      artifacts.draftFlushCancel = scheduleLiveTranscriptFlush(
+        () => {
+          artifacts.draftFlushCancel = null;
 
-        const acc = artifacts.pendingDraftDelta;
-        artifacts.pendingDraftDelta = "";
-        if (!acc) return;
-        targetStore.appendDraftAssistantText(acc);
-      });
+          const acc = artifacts.pendingDraftDelta;
+          artifacts.pendingDraftDelta = "";
+          if (!acc) return;
+          targetStore.appendDraftAssistantText(acc);
+          artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
+        },
+        resolveStreamingRenderDelay(
+          artifacts.renderedCharacterCount + artifacts.pendingDraftDelta.length,
+        ),
+      );
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
@@ -336,6 +380,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
         (snapshot.liveRounds.length === 0 || (lastRound?.blocks.length ?? 0) === 0);
       if (shouldApplyImmediately) {
         targetStore.updateLiveRounds(updater);
+        artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
         return;
       }
 
@@ -354,7 +399,8 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
           }
           return nextRounds;
         });
-      });
+        artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
+      }, resolveStreamingRenderDelay(artifacts.renderedCharacterCount));
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );

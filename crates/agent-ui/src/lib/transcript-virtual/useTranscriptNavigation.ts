@@ -34,6 +34,15 @@ export function useTranscriptNavigation<TItem>(options: UseTranscriptNavigationO
   const getAnchorKeyRef = useRef(getAnchorKey);
   getAnchorKeyRef.current = getAnchorKey;
   const cancelJumpSettleRef = useRef<() => void>(() => {});
+  // A live row changes object identity on every content commit, but its list
+  // position is structurally unchanged. Boundary keys catch append/prepend,
+  // conversation replacement and live-row mount/unmount in O(1), without a
+  // full key scan on every streamed token.
+  const itemCount = items.length;
+  const firstItemKey = itemCount > 0 ? getItemKey(items[0]) : null;
+  const lastItemKey = itemCount > 0 ? getItemKey(items[itemCount - 1]) : null;
+  const structureToken = JSON.stringify([itemCount, firstItemKey, lastItemKey]);
+  const reportedStructureTokenRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     if (!navRef) return;
@@ -133,7 +142,8 @@ export function useTranscriptNavigation<TItem>(options: UseTranscriptNavigationO
   }, [scrollViewport]);
 
   useEffect(() => {
-    itemsRef.current = items;
+    if (reportedStructureTokenRef.current === structureToken) return;
+    reportedStructureTokenRef.current = structureToken;
     reportAnchorRef.current();
-  }, [items]);
+  }, [structureToken]);
 }

@@ -42,7 +42,7 @@ import {
   type TranscriptNavigationHandle,
   useTranscriptNavigation,
 } from "@liveagent/ui/lib/transcript-virtual/useTranscriptNavigation";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { type Range, useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -129,7 +129,6 @@ export type GatewayTranscriptNavHandle = TranscriptNavigationHandle;
 
 const TRANSCRIPT_ROW_ESTIMATED_HEIGHT = 260;
 const TRANSCRIPT_ROW_GAP = 18;
-const TRANSCRIPT_ROW_OVERSCAN_COUNT = 5;
 
 // Measured row heights survive conversation switches: saved on unmount,
 // restored (width-gated) on the next open so the switch lays out with exact
@@ -329,19 +328,14 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   );
 });
 
-// Maps each assistant row to the nearest preceding user row — the prompt a
-// retry re-sends.
-function buildRetryTargetMap(rows: readonly TranscriptRow[]) {
-  const map = new Map<string, Extract<TranscriptRow, { kind: "user" }>>();
-  let lastUser: Extract<TranscriptRow, { kind: "user" }> | null = null;
-  for (const row of rows) {
-    if (row.kind === "user") {
-      lastUser = row;
-    } else if (row.kind === "assistant" && lastUser) {
-      map.set(row.key, lastUser);
-    }
+// Retry actions render only for mounted assistant rows. Resolve their prompt
+// locally instead of rebuilding an all-history map on every streamed token.
+function findRetryTarget(rows: readonly TranscriptRow[], assistantIndex: number) {
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.kind === "user") return row;
   }
-  return map;
+  return null;
 }
 
 // Shared assistant-row hover actions (copy / retry). Retry re-sends the
@@ -630,8 +624,20 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
         : -1;
   const forceMountStartRef = useRef(forceMountStart);
   forceMountStartRef.current = forceMountStart;
+  const virtualItemsRef = useRef(virtualItems);
+  virtualItemsRef.current = virtualItems;
+  const getVirtualItemRenderCost = useCallback((index: number) => {
+    const item = virtualItemsRef.current[index];
+    if (!item) return 1;
+    // Height is already identity-cached per transcript row. It is a useful
+    // proxy for Markdown/tool mount cost and avoids a second block traversal.
+    return Math.max(1, Math.ceil(estimateVirtualItemHeight(item) / 480));
+  }, []);
+  const extractTranscriptRange = useCallback(
+    (range: Range) => extractLiveRange(range, forceMountStartRef.current, getVirtualItemRenderCost),
+    [getVirtualItemRenderCost],
+  );
 
-  const retryTargetByAssistantKey = useMemo(() => buildRetryTargetMap(rows), [rows]);
   const getTranscriptItemKey = useCallback(
     // The index branch is unreachable (count === virtualItems.length); it
     // only satisfies the type.
@@ -660,7 +666,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     },
     getItemKey: getTranscriptItemKey,
     gap: TRANSCRIPT_ROW_GAP,
-    overscan: TRANSCRIPT_ROW_OVERSCAN_COUNT,
+    overscan: 0,
     enabled: scrollViewport !== null,
     // End anchoring is enabled only for a detached reader so keyed prepends
     // preserve the visible row. While following, start anchoring disables the
@@ -668,7 +674,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     anchorTo: viewportFollowing ? "start" : "end",
     scrollEndThreshold: 8,
     initialMeasurementsCache,
-    rangeExtractor: (range) => extractLiveRange(range, forceMountStartRef.current),
+    rangeExtractor: extractTranscriptRange,
   });
 
   // TanStack exposes the resize-compensation predicate as an instance field,
@@ -916,7 +922,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 {!readOnly && !isLatestLiveStreaming ? (
                   <GatewayAssistantMessageActions
                     row={row}
-                    retryTarget={retryTargetByAssistantKey.get(row.key) ?? null}
+                    retryTarget={findRetryTarget(rows, rowIndex)}
                     isStreaming={isStreaming}
                     isCopied={copiedMessageId === row.key}
                     setCopiedMessageId={setCopiedMessageId}
