@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, TcpListener},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
@@ -13,7 +13,10 @@ use axum::{
     Router,
 };
 use base64::Engine as _;
-use reqwest::Url;
+use reqwest::{
+    dns::{Addrs, Name, Resolve, Resolving},
+    Url,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::net::TcpListener as TokioTcpListener;
@@ -125,21 +128,37 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
 }
 
 async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
+    // 纵深防御:非 WebView 来源的 fetch(恶意网页)直接拒绝。
+    if !image_proxy_origin_allowed(&headers) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "Image proxy origin is not allowed",
+            &headers,
+        );
+    }
     let target_url = match validate_image_proxy_url(&query.url) {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
     };
+    // 连接前解析预检:命中黑名单在出网前快速 400(也是代理模式下的尽力校验——
+    // HTTP 代理由代理端解析目标,客户端无法绑定,见 ImageProxyResolver 注释)。
+    if image_proxy_host_resolves_to_blocked(&target_url).await {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Image URL host resolves to a blocked IP range",
+            &headers,
+        );
+    }
 
-    // 图片外链与商店链路同语义：恒随应用代理出网（未启用=直连，配置异常
-    // 502 fail fast）。<img> 请求无法携带自定义头，因此不走 per-request 开关。
-    let client = match crate::services::system_proxy::cached_client() {
+    // 图片外链与商店链路同语义:恒随应用代理出网(未启用=直连,配置异常
+    // 502 fail fast)。<img> 请求无法携带自定义头,因此不走 per-request 开关。
+    // 终审在 build_image_proxy_client 安装的安全 resolver:拨号所用地址即
+    // 本轮已审核地址,重定向每一跳的新连接自动重审;redirect policy 做每跳
+    // 预检并拦截不经 DNS 的字面 IP 目标。
+    let client = match build_image_proxy_client() {
         Ok(client) => client,
         Err(error) => {
-            return error_response(
-                StatusCode::BAD_GATEWAY,
-                &format!("App proxy unavailable: {error}"),
-                &headers,
-            );
+            return error_response(StatusCode::BAD_GATEWAY, &error, &headers);
         }
     };
     let image_request = client
@@ -240,7 +259,266 @@ fn validate_image_proxy_url(raw: &str) -> Result<Url, String> {
             "Image URL must be a valid absolute URL without embedded credentials".to_string(),
         );
     }
+    // SSRF 防护:拒绝指向本机/内网/云元数据/保留段的字面 IP 目标(与网关 Go 侧
+    // outbound_http.go 的 blocked prefixes 对齐)。本地代理以应用身份出网,
+    // 若放行 127.0.0.1 / 169.254.169.254 等目标,任何本机页面或提示注入的
+    // 模型输出图片 URL 都能用它探测/访问内网服务。注意:图片外链(<img>)请求
+    // 不带 Origin,来源校验挡不住,此处是唯一且必须的主防线。
+    if let Some(host) = url.host_str() {
+        let host = host.trim_start_matches('[').trim_end_matches(']');
+        // 回环主机名(无拨号时 DNS 检查,字面拦截,与 Go 侧 127.0.0.0/8 等价)。
+        let host_lower = host.to_ascii_lowercase();
+        if host_lower == "localhost" || host_lower == "localhost.localdomain" {
+            return Err("Image URL host is in a blocked IP range".to_string());
+        }
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            if is_blocked_image_proxy_ip(ip) {
+                return Err("Image URL host is in a blocked IP range".to_string());
+            }
+        }
+    }
     Ok(url)
+}
+
+/// 判断 IPv4 字面地址是否属于禁止出网访问的段(与 Go 侧 outbound_http.go 对齐,
+/// 出站代理语义:回环/私网/link-local/多播/保留全部拒绝)。
+fn is_blocked_image_proxy_ipv4(ip: std::net::Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    let [a, b, c, _] = octets;
+    // 0.0.0.0/8、10.0.0.0/8、127.0.0.0/8、169.254.0.0/16、172.16.0.0/12、
+    // 192.0.0.0/24、192.0.2.0/24、192.88.99.0/24、192.168.0.0/16、
+    // 198.18.0.0/15、198.51.100.0/24、203.0.113.0/24、224.0.0.0/4、
+    // 240.0.0.0/4(含广播)、100.64.0.0/10
+    (a == 0)
+        || (a == 10)
+        || (a == 100 && (64..=127).contains(&b))
+        || (a == 127)
+        || (a == 169 && b == 254)
+        || (a == 172 && (16..=31).contains(&b))
+        || (a == 192 && b == 0 && c == 0)
+        || (a == 192 && b == 0 && c == 2)
+        || (a == 192 && b == 88 && c == 99)
+        || (a == 192 && b == 168)
+        || (a == 198 && (18..=19).contains(&b))
+        || (a == 198 && b == 51 && c == 100)
+        || (a == 203 && b == 0 && c == 113)
+        || (a >= 224)
+}
+
+/// 统一入口:IPv4-mapped IPv6(::ffff:a.b.c.d)先 unmap 还原为 IPv4 再走
+/// IPv4 黑名单(与网关 Go 侧 outbound_http.go 的 Unmap() 先例一致)。
+fn is_blocked_image_proxy_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_blocked_image_proxy_ipv4(v4),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => is_blocked_image_proxy_ipv4(v4),
+            None => is_blocked_image_proxy_ipv6(v6),
+        },
+    }
+}
+
+fn ipv6_in_range(addr: Ipv6Addr, network: Ipv6Addr, prefix_len: u32) -> bool {
+    if prefix_len == 0 {
+        return true;
+    }
+    let mask = u128::MAX << (128 - prefix_len);
+    (u128::from_be_bytes(addr.octets()) & mask) == (u128::from_be_bytes(network.octets()) & mask)
+}
+
+/// IPv6 禁止段,与 Go 侧 outbound_http.go 的 blocked prefixes 逐项对齐:
+/// 未指定/回环、NAT64、Discard-only、Teredo/文档段、6to4、ULA、link-local、多播。
+fn is_blocked_image_proxy_ipv6(ip: Ipv6Addr) -> bool {
+    const BLOCKED_PREFIXES: &[(&str, u32)] = &[
+        ("::", 128),
+        ("::1", 128),
+        ("64:ff9b::", 96),
+        ("64:ff9b:1::", 48),
+        ("100::", 64),
+        ("2001::", 23),
+        ("2001::", 32),
+        ("2001:2::", 48),
+        ("2001:10::", 28),
+        ("2001:20::", 28),
+        ("2001:db8::", 32),
+        ("2002::", 16),
+        ("3fff::", 20),
+        ("5f00::", 16),
+        ("fc00::", 7),
+        ("fe80::", 10),
+        ("ff00::", 8),
+    ];
+    BLOCKED_PREFIXES.iter().any(|(network, prefix_len)| {
+        // 静态字面量在编译期已由 Go 侧同表验证格式,parse 不会失败。
+        let network = network
+            .parse::<Ipv6Addr>()
+            .expect("static blocked ipv6 prefix must parse");
+        ipv6_in_range(ip, network, *prefix_len)
+    })
+}
+
+/// 生产底层解析：系统 getaddrinfo(tokio 异步封装),与 reqwest 默认 GAI 语义一致。
+/// 端口填 0——hyper 拨号时按 URL 的显式端口或 scheme 默认端口覆盖。
+struct SystemResolver;
+
+impl Resolve for SystemResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let addresses: Vec<SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            Ok(Box::new(addresses.into_iter()) as Addrs)
+        })
+    }
+}
+
+/// image-proxy 专用安全 resolver：把 IP 黑名单放进 reqwest 实际拨号使用的 DNS
+/// 解析路径,堵住预检与连接脱钩的 DNS rebinding 缺口(预检返回公网、连接时
+/// 改答 127.0.0.1/RFC1918/云元数据)。
+///
+/// 绑定原理:hyper 对主机名目标每次新建连接都调用本 resolver,且只拨号本轮
+/// 回填的地址——审核结果与连接目标一一对应,不存在第二次独立解析。重定向
+/// 跨 origin 的每一跳必然新建连接,自动重走本 resolver 再审;同 origin 跳转
+/// 复用的是当初已过审的连接本身,无重新解析窗口。任一地址命中黑名单即整体
+/// fail-closed(不允许 hyper 从混合答案里挑出内网地址),解析失败/空答案同样拒绝。
+///
+/// 边界说明:
+/// - 字面 IP 目标不经 resolver(hyper 短路),由 validate_image_proxy_url 与
+///   重定向策略的字面量检查拦截,两层缺一不可。
+/// - 应用代理启用时,socks5 已由 async_client_builder_local_dns 翻转为本地
+///   解析(经本 resolver 审核后把 IP 交给代理);HTTP 代理(CONNECT/absolute-
+///   URI)协议只携带主机名,目标解析在代理端完成,客户端无法绑定——残余窗口
+///   由前置预检 + 重定向策略尽力收缩,触达面限于代理所在网络位置。
+/// - proxy_host 豁免:已启用代理的主机名来自用户设置(非攻击者输入),其解析
+///   不走黑名单,否则指向回环/内网的代理端点会让图片代理整体不可用。图片
+///   URL 本身指向代理主机时仍被前置预检/重定向策略拦截,豁免不放大攻击面。
+struct ImageProxyResolver {
+    inner: Arc<dyn Resolve>,
+    block: Arc<dyn Fn(IpAddr) -> bool + Send + Sync>,
+    proxy_host: Option<String>,
+}
+
+impl ImageProxyResolver {
+    fn production(proxy_host: Option<String>) -> Self {
+        Self {
+            inner: Arc::new(SystemResolver),
+            block: Arc::new(is_blocked_image_proxy_ip),
+            proxy_host,
+        }
+    }
+}
+
+impl Resolve for ImageProxyResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let inner = Arc::clone(&self.inner);
+        let block = Arc::clone(&self.block);
+        let exempt = self
+            .proxy_host
+            .as_deref()
+            .is_some_and(|proxy| proxy.eq_ignore_ascii_case(name.as_str()));
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            let addresses: Vec<SocketAddr> = inner.resolve(name).await?.collect();
+            // fail-closed:空答案与解析失败同罪,绝不让 connector 拿到未审地址。
+            if addresses.is_empty() {
+                return Err(format!("image proxy resolved no addresses for {host}").into());
+            }
+            if !exempt && addresses.iter().any(|addr| block(addr.ip())) {
+                return Err(
+                    format!("image proxy host {host} resolves to a blocked IP range").into(),
+                );
+            }
+            Ok(Box::new(addresses.into_iter()) as Addrs)
+        })
+    }
+}
+
+/// 构造 image-proxy 专用 client：安全 resolver(拨号前终审)+ 重定向策略(每跳
+/// 预检)。reqwest 0.13 的重定向策略是 client 级配置,client 每次请求新建,
+/// 与修改前语义一致。
+fn build_image_proxy_client() -> Result<reqwest::Client, String> {
+    let (builder, proxy_host) = crate::services::system_proxy::async_client_builder_local_dns()
+        .map_err(|error| format!("App proxy unavailable: {error}"))?;
+    builder
+        .dns_resolver(ImageProxyResolver::production(proxy_host))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if validate_image_proxy_redirect_target(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
+        .build()
+        .map_err(|error| format!("App proxy unavailable: {error}"))
+}
+
+/// 解析目标主机的全部地址,任一命中黑名单即拒绝(fail-closed:解析失败也拒绝)。
+/// 覆盖 DNS rebinding——攻击者域名可解析到回环/内网地址,字面校验挡不住。
+async fn image_proxy_host_resolves_to_blocked(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return true;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    // 字面 IP 已在 validate_image_proxy_url 中校验,这里只处理主机名。
+    if host.parse::<IpAddr>().is_ok() {
+        return false;
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    let addresses = match tokio::net::lookup_host((host, port)).await {
+        Ok(addresses) => addresses,
+        Err(_) => return true,
+    };
+    addresses
+        .into_iter()
+        .any(|address| is_blocked_image_proxy_ip(address.ip()))
+}
+
+/// 重定向目标的校验(每次跳转都重新过一遍):scheme/凭据/字面 IP/主机名解析
+/// 全部地址。主机名解析为同步阻塞调用——重定向跳数极少且受 OS DNS 超时约束,
+/// 在 reqwest 同步 redirect policy 回调内是唯一可行形态;失败一律拒绝(fail-closed)。
+fn validate_image_proxy_redirect_target(url: &Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    let host_lower = host.to_ascii_lowercase();
+    if host_lower == "localhost" || host_lower == "localhost.localdomain" {
+        return false;
+    }
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return !is_blocked_image_proxy_ip(ip);
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    match (host, port).to_socket_addrs() {
+        Ok(addresses) => !addresses
+            .into_iter()
+            .any(|address| is_blocked_image_proxy_ip(address.ip())),
+        Err(_) => false,
+    }
+}
+
+/// 本地来源校验:image-proxy 端点无 token(<img> 无法携带自定义头),以 Origin
+/// 白名单作纵深防御——只允许空 Origin(非浏览器)、Tauri WebView 来源或同源
+/// 请求;恶意网页的 fetch 携带其自身 Origin,会被拒绝。注意浏览器 <img> 请求
+/// 不带 Origin,该检查不拦截 img 路径(由上面的 IP 黑名单兜底)。
+fn image_proxy_origin_allowed(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(ORIGIN).and_then(|value| value.to_str().ok()) else {
+        return true;
+    };
+    let origin = origin.trim();
+    if origin.is_empty() {
+        return true;
+    }
+    match origin.to_ascii_lowercase().as_str() {
+        // Tauri WebView 的来源(Windows/macOS/Linux 桌面)。
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost" => true,
+        _ => false,
+    }
 }
 
 fn image_proxy_referer(target_url: &Url) -> String {
@@ -869,6 +1147,135 @@ mod tests {
     }
 
     #[test]
+    fn rejects_ssrf_targets_in_image_proxy_urls() {
+        // 回环 / 私网 / 云元数据 / link-local / 多播 / 保留 / 广播段全部拒绝。
+        for value in [
+            "http://127.0.0.1:3000/admin",
+            "http://localhost:3000/admin",
+            "http://[::1]:5173",
+            "http://10.0.0.5:80/",
+            "http://172.16.0.1:80/",
+            "http://192.168.1.1:80/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://169.254.170.2/",
+            "http://100.64.0.1:80/",
+            "http://224.0.0.1:80/",
+            "http://255.255.255.255:80/",
+            "http://0.0.0.0:80/",
+            "http://192.0.2.1:80/",
+            "http://198.51.100.1:80/",
+            "http://203.0.113.1:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // 公网字面 IP 与域名不受影响。
+        assert!(validate_image_proxy_url("http://8.8.8.8:8080/photo.png").is_ok());
+        assert!(validate_image_proxy_url("https://example.com/photo.png").is_ok());
+    }
+
+    #[test]
+    fn rejects_ipv6_and_mapped_ssrf_targets_in_image_proxy_urls() {
+        // IPv6 禁止段:ULA / link-local / 多播 / 未指定 / NAT64 / 文档段。
+        for value in [
+            "http://[fc00::1]:80/",
+            "http://[fd00:abcd::1]:80/",
+            "http://[fe80::1]:80/",
+            "http://[ff02::1]:80/",
+            "http://[::]:80/",
+            "http://[64:ff9b::1]:80/",
+            "http://[2001:db8::1]:80/",
+            "http://[2002:7f00:1::1]:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // IPv4-mapped IPv6 先 unmap 再走 IPv4 黑名单:
+        // ::ffff:127.0.0.1 / ::ffff:169.254.169.254 不得绕过。
+        for value in [
+            "http://[::ffff:127.0.0.1]:80/",
+            "http://[::ffff:169.254.169.254]:80/latest/meta-data/",
+            "http://[::ffff:10.0.0.5]:80/",
+            "http://[::ffff:192.168.1.1]:80/",
+        ] {
+            assert!(validate_image_proxy_url(value).is_err(), "{value}");
+        }
+
+        // 公网 IPv6 与 mapped 公网 IPv4 不受影响。
+        assert!(validate_image_proxy_url("http://[2001:4860:4860::8888]:80/").is_ok());
+        assert!(validate_image_proxy_url("http://[2606:4700:4700::1111]:80/").is_ok());
+        assert!(validate_image_proxy_url("http://[::ffff:8.8.8.8]:80/").is_ok());
+    }
+
+    #[test]
+    fn image_proxy_redirect_targets_revalidate_every_hop() {
+        // 字面 IP / 主机名 / mapped / scheme / 凭据的拒绝路径。
+        for value in [
+            "http://127.0.0.1:8080/next",
+            "http://localhost:3000/next",
+            "http://[::1]:5173/next",
+            "http://[::ffff:127.0.0.1]:80/next",
+            "http://[fe80::1]:80/next",
+            "ftp://example.com/file",
+            "https://user:pass@example.com/file",
+        ] {
+            let url = Url::parse(value).expect("redirect target url parses");
+            assert!(!validate_image_proxy_redirect_target(&url), "{value}");
+        }
+
+        // 主机名解析到回环地址同样拒绝(DNS rebinding 的跳转形态)。
+        // "localhost." 带尾点,不命中字面 localhost 拦截,但解析结果命中黑名单。
+        let trailing_dot = Url::parse("http://localhost.:8080/next").expect("trailing-dot parses");
+        assert!(
+            !validate_image_proxy_redirect_target(&trailing_dot),
+            "localhost. resolves to loopback and must be rejected"
+        );
+
+        // 公网字面 IP 放行(不依赖外部 DNS)。
+        let public = Url::parse("http://8.8.8.8:80/photo.png").expect("public ip parses");
+        assert!(validate_image_proxy_redirect_target(&public));
+    }
+
+    #[tokio::test]
+    async fn image_proxy_dns_precheck_rejects_loopback_resolution() {
+        // 主机名解析到回环地址:在出网前拒绝(fail-closed)。
+        let localhost = Url::parse("http://localhost.:8080/photo.png").expect("localhost parses");
+        assert!(image_proxy_host_resolves_to_blocked(&localhost).await);
+
+        // 字面 IP 不做 DNS 解析(已在 validate 层拦截,这里直接放行给上层)。
+        let literal = Url::parse("http://8.8.8.8:80/photo.png").expect("literal parses");
+        assert!(!image_proxy_host_resolves_to_blocked(&literal).await);
+
+        // 无法解析的域名按拒绝处理(fail-closed)。
+        let nonexistent = Url::parse("http://nonexistent.invalid/photo.png").expect("parses");
+        assert!(image_proxy_host_resolves_to_blocked(&nonexistent).await);
+    }
+
+    #[test]
+    fn image_proxy_origin_check_blocks_foreign_web_pages() {
+        use axum::http::HeaderMap;
+
+        let empty = HeaderMap::new();
+        assert!(image_proxy_origin_allowed(&empty), "no Origin allowed");
+
+        for origin in [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", origin.parse().unwrap());
+            assert!(image_proxy_origin_allowed(&headers), "{origin}");
+        }
+
+        for origin in ["https://evil.example", "http://127.0.0.1:3000", "null"] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", origin.parse().unwrap());
+            assert!(!image_proxy_origin_allowed(&headers), "{origin}");
+        }
+    }
+
+    #[test]
     fn builds_origin_referer_for_image_proxy_requests() {
         let url = validate_image_proxy_url("https://example.com:8443/path/photo.png?size=large")
             .expect("image proxy url should be valid");
@@ -1059,6 +1466,225 @@ mod tests {
         // 超限
         let oversized = "A".repeat(UPSTREAM_HEADERS_MAX_BYTES + 4);
         assert!(decode_upstream_header_overrides(&oversized).is_err());
+    }
+
+    // ------------------------------------------------------------------
+    // 安全 resolver(DNS rebinding 绑定)回归测试
+    // ------------------------------------------------------------------
+
+    use std::collections::{HashMap, VecDeque};
+    use std::str::FromStr;
+    use std::sync::Mutex;
+
+    /// 脚本化底层 resolver:按主机名排队应答,记录调用序列——模拟攻击者控制的
+    /// DNS(同一域名前后两次解析返回不同答案),验证审核绑定在拨号路径上。
+    #[derive(Default)]
+    struct ScriptedResolver {
+        answers: Mutex<HashMap<String, VecDeque<Result<Vec<SocketAddr>, String>>>>,
+        calls: Mutex<Vec<String>>,
+    }
+
+    impl ScriptedResolver {
+        fn push(&self, host: &str, answer: Result<Vec<SocketAddr>, &str>) {
+            self.answers
+                .lock()
+                .unwrap()
+                .entry(host.to_string())
+                .or_default()
+                .push_back(answer.map_err(str::to_string));
+        }
+    }
+
+    impl Resolve for ScriptedResolver {
+        fn resolve(&self, name: Name) -> Resolving {
+            let host = name.as_str().to_string();
+            self.calls.lock().unwrap().push(host.clone());
+            let answer = self
+                .answers
+                .lock()
+                .unwrap()
+                .get_mut(&host)
+                .and_then(VecDeque::pop_front);
+            Box::pin(async move {
+                match answer {
+                    Some(Ok(addrs)) => Ok(Box::new(addrs.into_iter()) as Addrs),
+                    Some(Err(message)) => Err(message.into()),
+                    None => Err(format!("no scripted answer for {host}").into()),
+                }
+            })
+        }
+    }
+
+    fn resolver_over(
+        scripted: Arc<ScriptedResolver>,
+        proxy_host: Option<String>,
+    ) -> ImageProxyResolver {
+        ImageProxyResolver {
+            inner: scripted,
+            block: Arc::new(is_blocked_image_proxy_ip),
+            proxy_host,
+        }
+    }
+
+    async fn resolve_once(
+        resolver: &ImageProxyResolver,
+        host: &str,
+    ) -> Result<Vec<SocketAddr>, String> {
+        let name = Name::from_str(host).expect("test host must be a valid name");
+        resolver
+            .resolve(name)
+            .await
+            .map(|addrs| addrs.collect())
+            .map_err(|err| err.to_string())
+    }
+
+    #[tokio::test]
+    async fn image_proxy_resolver_rejects_dns_rebinding_flip() {
+        // 审核要求的核心场景:第一次解析返回公网 IP(通过预检),同一域名第二次
+        // 解析翻转为回环地址。resolver 装在拨号路径上,翻转答案在连接前被拒。
+        let scripted = Arc::new(ScriptedResolver::default());
+        scripted.push("rebind.test", Ok(vec![SocketAddr::from(([8, 8, 8, 8], 0))]));
+        scripted.push(
+            "rebind.test",
+            Ok(vec![SocketAddr::from(([127, 0, 0, 1], 0))]),
+        );
+        let resolver = resolver_over(scripted, None);
+
+        let first = resolve_once(&resolver, "rebind.test")
+            .await
+            .expect("public answer must pass");
+        assert_eq!(first, vec![SocketAddr::from(([8, 8, 8, 8], 0))]);
+
+        let error = resolve_once(&resolver, "rebind.test")
+            .await
+            .expect_err("rebound loopback answer must be rejected at dial time");
+        assert!(error.contains("blocked IP range"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn image_proxy_resolver_fail_closed_on_mixed_empty_and_failed_answers() {
+        let scripted = Arc::new(ScriptedResolver::default());
+        // 混合答案:公网 + 内网并存,任一命中即整体拒绝(防止 happy-eyeballs
+        // 从答案集中挑出内网地址)。
+        scripted.push(
+            "mixed.test",
+            Ok(vec![
+                SocketAddr::from(([8, 8, 8, 8], 0)),
+                SocketAddr::from(([169, 254, 169, 254], 0)),
+            ]),
+        );
+        // 空答案与解析失败同样 fail-closed。
+        scripted.push("empty.test", Ok(Vec::new()));
+        scripted.push("down.test", Err("simulated DNS failure"));
+
+        let resolver = resolver_over(scripted, None);
+        for host in ["mixed.test", "empty.test", "down.test"] {
+            assert!(
+                resolve_once(&resolver, host).await.is_err(),
+                "{host} must be rejected"
+            );
+        }
+        // 未脚本化的域名也不许静默通过。
+        assert!(resolve_once(&resolver, "unscripted.test").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn image_proxy_resolver_exempts_only_the_configured_proxy_host() {
+        let scripted = Arc::new(ScriptedResolver::default());
+        scripted.push("proxy.lan", Ok(vec![SocketAddr::from(([10, 0, 0, 1], 0))]));
+        scripted.push("PROXY.lan", Ok(vec![SocketAddr::from(([10, 0, 0, 1], 0))]));
+        scripted.push("other.lan", Ok(vec![SocketAddr::from(([10, 0, 0, 1], 0))]));
+
+        let resolver = resolver_over(scripted, Some("proxy.lan".to_string()));
+        // 用户配置的代理端点(大小写不敏感)豁免黑名单——否则指向内网的代理
+        // 主机名会让图片代理整体不可用。
+        assert!(resolve_once(&resolver, "proxy.lan").await.is_ok());
+        assert!(resolve_once(&resolver, "PROXY.lan").await.is_ok());
+        // 同一内网地址出现在任何其他主机名上照样拒绝。
+        let error = resolve_once(&resolver, "other.lan")
+            .await
+            .expect_err("non-proxy hosts stay blocked");
+        assert!(error.contains("blocked IP range"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn image_proxy_client_dials_only_resolver_approved_addresses() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // 本地 HTTP 服务器:统计 accept 次数,返回最小合法响应。
+        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind loopback test server");
+        let server_addr = listener.local_addr().expect("server addr");
+        let accepts = Arc::new(AtomicUsize::new(0));
+        tokio::spawn({
+            let accepts = Arc::clone(&accepts);
+            async move {
+                loop {
+                    let Ok((mut socket, _)) = listener.accept().await else {
+                        return;
+                    };
+                    accepts.fetch_add(1, Ordering::SeqCst);
+                    tokio::spawn(async move {
+                        let mut buf = [0u8; 1024];
+                        let _ = socket.read(&mut buf).await;
+                        let _ = socket
+                            .write_all(
+                                b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ncontent-type: image/png\r\nconnection: close\r\n\r\nok",
+                            )
+                            .await;
+                    });
+                }
+            }
+        });
+
+        // 两个 client 共用同一脚本:img.test 恒解析到这个**可达的**回环服务器。
+        let scripted = Arc::new(ScriptedResolver::default());
+        for _ in 0..4 {
+            scripted.push("img.test", Ok(vec![server_addr]));
+        }
+        let url = format!("http://img.test:{}/photo.png", server_addr.port());
+
+        // 对照组(放行谓词):请求成功,证明服务器可达、resolver 接线正确。
+        let allowed_client = reqwest::Client::builder()
+            .no_proxy()
+            .dns_resolver(ImageProxyResolver {
+                inner: Arc::clone(&scripted) as Arc<dyn Resolve>,
+                block: Arc::new(|_| false),
+                proxy_host: None,
+            })
+            .build()
+            .expect("allow-all client builds");
+        allowed_client
+            .get(&url)
+            .send()
+            .await
+            .expect("allow-all resolver must reach the loopback server");
+        assert_eq!(accepts.load(Ordering::SeqCst), 1);
+
+        // 实验组(真实黑名单):同一可达地址在拨号前被否决——服务器不得再收到
+        // 任何连接。这证明 veto 绑定在 connector 实际使用的解析上,而非仅仅是
+        // 一次独立的预检(DNS rebinding 中第二次解析返内网即此形态)。
+        let blocked_client = reqwest::Client::builder()
+            .no_proxy()
+            .dns_resolver(resolver_over(scripted, None))
+            .build()
+            .expect("blocked client builds");
+        let error = blocked_client
+            .get(&url)
+            .send()
+            .await
+            .expect_err("blocked resolver must veto the dial");
+        assert!(
+            format!("{error:?}").contains("blocked IP range"),
+            "{error:?}"
+        );
+        assert_eq!(
+            accepts.load(Ordering::SeqCst),
+            1,
+            "vetoed resolution must not produce any connection"
+        );
     }
 
     fn encoded_overrides(value: serde_json::Value) -> HeaderValue {

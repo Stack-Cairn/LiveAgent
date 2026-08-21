@@ -79,6 +79,13 @@ func imageProxyWithClient(client outboundHTTPClient) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "private, max-age=300")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		if mimeType == "image/svg+xml" {
+			// SVG 可携带脚本；顶层导航到 SVG 会在网关 origin 执行脚本（WebUI
+			// 的管理 token 在 localStorage）。sandbox 禁脚本 + 附件式内联处置
+			// 把该端点降级为纯图片源。
+			w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+			w.Header().Set("Content-Disposition", `inline; filename="image.svg"`)
+		}
 		_, _ = w.Write(body)
 	}
 }

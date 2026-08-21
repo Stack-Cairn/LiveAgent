@@ -34,6 +34,13 @@ func TestNewHTTPServerServesRootWithoutRedirect(t *testing.T) {
 	if cacheControl := rec.Header().Get("Cache-Control"); !strings.Contains(cacheControl, "no-store") {
 		t.Fatalf("Cache-Control = %q, want no-store for index.html", cacheControl)
 	}
+	// 防点击劫持:WebUI token 自动登录,禁 iframe 内嵌。
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("X-Frame-Options = %q, want DENY", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "frame-ancestors 'none'" {
+		t.Fatalf("CSP = %q, want frame-ancestors 'none'", got)
+	}
 }
 
 func TestNewHTTPServerServesSpaFallbackWithoutRedirect(t *testing.T) {

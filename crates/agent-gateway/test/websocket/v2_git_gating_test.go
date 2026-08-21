@@ -77,6 +77,29 @@ func TestV2GitRejectsWriteRequestsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestV2GitRejectsCaseMutatedWriteActionsWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	_, _, conn, cleanup := newV2GitBrowserTest(t, false)
+	defer cleanup()
+
+	// 大小写变体:桌面端对 action 做 to_ascii_lowercase 后执行,网关门控必须
+	// 先归一化,否则 CLONE_START 等变体被当作读操作放行却在桌面端执行写操作。
+	for _, action := range []string{"CLONE_START", "Push", "COMMIT", "Stage", "Clone"} {
+		id := "git-case-" + action
+		sendGitAgentRequest(t, conn, id, action)
+
+		frame := receiveWebFrameWithID(t, conn, id)
+		localError := frame.GetLocalError()
+		if localError == nil {
+			t.Fatalf("git %s reply = %#v, want local_error", action, frame)
+		}
+		if !strings.Contains(localError.GetMessage(), "web git is disabled") {
+			t.Fatalf("git %s error = %q, want web git disabled message", action, localError.GetMessage())
+		}
+	}
+}
+
 func TestV2GitAllowsReadRequestsWhenDisabled(t *testing.T) {
 	t.Parallel()
 

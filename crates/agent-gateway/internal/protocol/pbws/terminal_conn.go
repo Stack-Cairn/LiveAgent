@@ -16,6 +16,7 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
+	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
 // 终端数据面（/ws/v2/terminal）：两端共用一条路径，角色由 hello 区分。浏览器
@@ -23,6 +24,11 @@ import (
 // 入站帧。两端直接传输 proto TerminalStreamFrame。
 
 const terminalWriteQueueSize = 1024
+
+// 握手阶段的绝对时间边界：配合逐帧计数限速（见 readTerminalFrame），空连接、
+// 慢速字节流与文本帧洪泛都不能无限占住 terminal connection slot。
+// var 而非 const：仅用于测试缩短。
+var terminalHandshakeTimeout = 10 * time.Second
 
 // TerminalHandler 返回 /ws/v2/terminal 的 HTTP 处理器。
 func (s *Server) TerminalHandler() http.Handler {
@@ -48,11 +54,29 @@ func (s *Server) TerminalHandler() http.Handler {
 func (s *Server) serveTerminal(conn *websocket.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	frame, ok := readTerminalFrame(conn)
-	if !ok {
-		return
+	// 握手限速器自第一帧起生效（每帧在反序列化前计数，文本帧同罪）；浏览器角色
+	// 握手后沿用同一限速器——攻击者不能借完成握手重置预算。Agent 数据面输出帧
+	// 无丢帧语义，不在此限速（见 readTerminalFrame 的 nil 语义）。
+	limiter := wscore.NewInboundRateLimiter(
+		browserInboundFramesPerSecond, browserInboundBurst, browserRateLimitMaxViolations,
+	)
+	_ = conn.SetReadDeadline(time.Now().Add(terminalHandshakeTimeout))
+	var hello *gatewayv2.ClientHello
+	for {
+		frame, denied, ok := readTerminalFrame(conn, limiter)
+		if !ok {
+			return
+		}
+		if denied {
+			// 握手前被限速的帧静默丢弃（尚无协商好的反馈通道），截止时间与
+			// 违规阈值保证洪泛很快被判死。
+			continue
+		}
+		hello = frame.GetHello()
+		break
 	}
-	hello := frame.GetHello()
+	// 握手完成后恢复数据面既有的长连接语义（无读超时）。
+	_ = conn.SetReadDeadline(time.Time{})
 	// 终端路径两端共用：按 hello 声明的角色校验（未声明按浏览器处理）。
 	wantRole := hello.GetRole()
 	if wantRole == gatewayv2.ClientRole_CLIENT_ROLE_UNSPECIFIED {
@@ -147,23 +171,42 @@ func (s *Server) serveTerminal(conn *websocket.Conn) {
 		return
 	}
 	observability.Usage.V2TerminalConnectsTotal.Add(1)
-	s.serveTerminalBrowser(conn, boundAgentID)
+	s.serveTerminalBrowser(conn, boundAgentID, limiter)
 }
 
-func readTerminalFrame(conn *websocket.Conn) (*gatewayv2.TerminalClientFrame, bool) {
+// readTerminalFrame 读取并解码一帧。限速器（非 nil 时）在每次 ReadMessage 成功
+// 后、proto 反序列化前立即计数：文本帧与大型二进制帧同样消耗令牌——旧实现把
+// Allow 放在反序列化之后且文本帧直接 continue，洪泛文本帧可零成本绕过限速并
+// 占住连接 slot，大帧的解析 CPU 也无法被约束。denied=true 表示该帧在解析前被
+// 限速丢弃、连接仍存活（由调用方决定是否回 "too many requests"）；ok=false
+// 表示连接应关闭（读错误 / 解码失败 / 连续违规超阈值判定失控客户端）。
+//
+// limiter 为 nil 用于 Agent 数据面：输出帧没有可容忍的丢帧语义（静默丢弃会让
+// 终端显示残缺），其入站由 read limit 与会话通道背压兜底，对端是经凭证认证的
+// 桌面端。
+func readTerminalFrame(conn *websocket.Conn, limiter *wscore.InboundRateLimiter) (frame *gatewayv2.TerminalClientFrame, denied bool, ok bool) {
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
-			return nil, false
+			return nil, false, false
+		}
+		if limiter != nil {
+			if allowed, exceeded := limiter.Allow(); !allowed {
+				if exceeded {
+					return nil, false, false
+				}
+				return nil, true, true
+			}
 		}
 		if messageType != websocket.BinaryMessage {
+			// v2 终端链路上文本帧无意义：已在上方计入限速，忽略。
 			continue
 		}
-		var frame gatewayv2.TerminalClientFrame
-		if err := proto.Unmarshal(data, &frame); err != nil {
-			return nil, false
+		var decoded gatewayv2.TerminalClientFrame
+		if err := proto.Unmarshal(data, &decoded); err != nil {
+			return nil, false, false
 		}
-		return &frame, true
+		return &decoded, false, true
 	}
 }
 
@@ -196,7 +239,8 @@ func (s *Server) serveTerminalAgent(
 	}()
 
 	for {
-		frame, ok := readTerminalFrame(conn)
+		// Agent 数据面不限速（nil）：输出帧无丢帧语义，见 readTerminalFrame。
+		frame, _, ok := readTerminalFrame(conn, nil)
 		if !ok {
 			cancel()
 			return
@@ -227,6 +271,17 @@ func (s *Server) writeTerminalFrame(conn *websocket.Conn, frame *gatewayv2.Termi
 // 浏览器角色
 // ---------------------------------------------------------------------------
 
+// terminalBrowserMaxTrackedIDs 限制单连接 attach/detach 跟踪的会话/流 id 数量：
+// 无上限时任意长度、任意数量的 session_id 会把网关内存打爆（单帧可达 1 MiB）。
+const terminalBrowserMaxTrackedIDs = 512
+
+// terminalBrowserMaxRawIDLen 限制 trim 前的原始字段长度：TrimSpace 返回子切片、
+// 底层数组仍持有整帧缓冲区，必须先按原始长度拒绝再规范化。
+const terminalBrowserMaxRawIDLen = 4 * 1024
+
+// terminalBrowserMaxIDLen 限制规范化后单个 session_id / stream_id 的长度上限。
+const terminalBrowserMaxIDLen = 512
+
 type terminalBrowserConn struct {
 	srv  *Server
 	sm   *session.Manager
@@ -239,21 +294,28 @@ type terminalBrowserConn struct {
 	done chan struct{}
 	once sync.Once
 
+	// rateLimiter 与主链路同款入站限速（100 帧/秒、突发 200、3 次违规断连）。
+	// 由 serveTerminal 在握手前创建并传入：限速自第一帧起生效，浏览器角色握手
+	// 后沿用同一预算，攻击者无法借完成握手重置额度。计数点在 ReadMessage 成功
+	// 后、反序列化前（见 readTerminalFrame），文本帧与大帧都计入。
+	rateLimiter *wscore.InboundRateLimiter
+
 	mu       sync.RWMutex
 	attached map[string]struct{}
 	streams  map[string]struct{}
 }
 
-func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
+func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string, limiter *wscore.InboundRateLimiter) {
 	c := &terminalBrowserConn{
-		srv:      s,
-		sm:       s.sm,
-		conn:     conn,
-		agentID:  agentID,
-		out:      make(chan []byte, terminalWriteQueueSize),
-		done:     make(chan struct{}),
-		attached: make(map[string]struct{}),
-		streams:  make(map[string]struct{}),
+		srv:         s,
+		sm:          s.sm,
+		conn:        conn,
+		agentID:     agentID,
+		out:         make(chan []byte, terminalWriteQueueSize),
+		done:        make(chan struct{}),
+		rateLimiter: limiter,
+		attached:    make(map[string]struct{}),
+		streams:     make(map[string]struct{}),
 	}
 	defer c.close()
 
@@ -261,9 +323,17 @@ func (s *Server) serveTerminalBrowser(conn *websocket.Conn, agentID string) {
 	c.startForwarder()
 
 	for {
-		frame, ok := readTerminalFrame(conn)
+		frame, denied, ok := readTerminalFrame(conn, c.rateLimiter)
 		if !ok {
 			return
+		}
+		if denied {
+			// 帧在反序列化前已被丢弃，无 request 上下文可关联，回通用错误帧。
+			c.enqueueFrame(terminalErrorFrame(
+				&gatewayv2.TerminalStreamFrame{Kind: "error"},
+				"too many requests",
+			))
+			continue
 		}
 		streamFrame := frame.GetFrame()
 		if streamFrame == nil {
@@ -282,7 +352,12 @@ func (c *terminalBrowserConn) handleFrame(frame *gatewayv2.TerminalStreamFrame) 
 
 	switch kind {
 	case "attach":
-		c.remember(frame.GetSessionId(), frame.GetStreamId())
+		// 拒绝的 attach 明确回错误帧且不转发给 Agent:超长原始字段、
+		// 规范化后超长或跟踪表已满都不得进入后续链路。
+		if message := c.remember(frame.GetSessionId(), frame.GetStreamId()); message != "" {
+			c.enqueueFrame(terminalErrorFrame(frame, message))
+			return
+		}
 	case "detach":
 		c.forget(frame.GetSessionId(), frame.GetStreamId())
 	case "input", "resize":
@@ -363,20 +438,48 @@ func (c *terminalBrowserConn) shouldForward(frame *gatewayv2.TerminalStreamFrame
 	return c.isAttached(frame.GetSessionId())
 }
 
-func (c *terminalBrowserConn) remember(sessionID string, streamID string) {
+// remember 登记 attach 的 session/stream id。返回错误信息表示该 attach 必须被
+// 拒绝且不得转发给 Agent(超长原始字段 / 规范化后超长 / 跟踪表已满);
+// 返回空串表示登记成功。
+func (c *terminalBrowserConn) remember(sessionID string, streamID string) string {
+	// 先按原始字段长度拒绝:TrimSpace 返回的是原字符串的子切片,底层数组仍
+	// 持有整帧缓冲区(帧上限可达 1 MiB)。若先 trim 再截长度,"接近 1 MiB 的
+	// 空白前缀 + 短且唯一的 ID" 会以合法长度进入 map,却让每个 key 保留
+	// 接近整帧的内存——这正是要在源头上切断的保留路径。
+	if len(sessionID) > terminalBrowserMaxRawIDLen || len(streamID) > terminalBrowserMaxRawIDLen {
+		return "terminal attach id is too long"
+	}
 	sessionID = strings.TrimSpace(sessionID)
 	streamID = strings.TrimSpace(streamID)
 	if sessionID == "" && streamID == "" {
-		return
+		return "terminal attach id is required"
+	}
+	if len(sessionID) > terminalBrowserMaxIDLen || len(streamID) > terminalBrowserMaxIDLen {
+		return "terminal attach id is too long"
+	}
+	// 有界拷贝:切断与整帧缓冲区的引用,map key 的底层内存只保留规范化后的
+	// 字节(≤ terminalBrowserMaxIDLen)。
+	if sessionID != "" {
+		sessionID = string([]byte(sessionID))
+	}
+	if streamID != "" {
+		streamID = string([]byte(streamID))
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if sessionID != "" && len(c.attached) >= terminalBrowserMaxTrackedIDs {
+		return "terminal attach tracking table is full"
+	}
+	if streamID != "" && len(c.streams) >= terminalBrowserMaxTrackedIDs {
+		return "terminal attach tracking table is full"
+	}
 	if sessionID != "" {
 		c.attached[sessionID] = struct{}{}
 	}
 	if streamID != "" {
 		c.streams[streamID] = struct{}{}
 	}
-	c.mu.Unlock()
+	return ""
 }
 
 func (c *terminalBrowserConn) forget(sessionID string, streamID string) {

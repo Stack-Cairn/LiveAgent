@@ -46,6 +46,62 @@ func TestImageProxyServesSupportedImage(t *testing.T) {
 	}
 }
 
+func TestImageProxyServesSVGWithSandboxCSP(t *testing.T) {
+	// 顶层导航到 SVG 会在网关 origin 执行脚本（WebUI 管理 token 在 localStorage）；
+	// SVG 响应必须携带 sandbox CSP 与附件式处置,降级为纯图片源。
+	client := outboundHTTPClientFunc(func(r *http.Request) (*http.Response, error) {
+		body := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Header:        http.Header{"Content-Type": []string{"text/plain"}},
+			Body:          io.NopCloser(strings.NewReader(string(body))),
+			ContentLength: int64(len(body)),
+			Request:       r,
+		}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/image-proxy?url=https://evil.example/x.svg", nil)
+	rec := httptest.NewRecorder()
+	imageProxyWithClient(client)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%q", http.StatusOK, rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Fatalf("content-type = %q, want image/svg+xml", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "sandbox; default-src 'none'" {
+		t.Fatalf("svg CSP = %q, want sandbox CSP", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "inline") {
+		t.Fatalf("svg content-disposition = %q, want inline attachment-style disposition", got)
+	}
+}
+
+func TestImageProxyNonSVGHasNoSandboxCSP(t *testing.T) {
+	client := outboundHTTPClientFunc(func(r *http.Request) (*http.Response, error) {
+		body := []byte("\x89PNG\r\n\x1a\nliveagent-test")
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Header:        http.Header{"Content-Type": []string{"image/png"}},
+			Body:          io.NopCloser(strings.NewReader(string(body))),
+			ContentLength: int64(len(body)),
+			Request:       r,
+		}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/image-proxy?url=https://images.example/photo.png", nil)
+	rec := httptest.NewRecorder()
+	imageProxyWithClient(client)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%q", http.StatusOK, rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "" {
+		t.Fatalf("non-svg CSP = %q, want empty", got)
+	}
+}
+
 func TestImageProxyRefererUsesTargetOrigin(t *testing.T) {
 	targetURL, err := url.Parse("https://example.com:8443/path/photo.png?size=large")
 	if err != nil {
