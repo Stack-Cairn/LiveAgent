@@ -259,4 +259,33 @@ test("provider card display exposes plans stale error and relative time", () => 
   assert.equal(display.plans[1].severity, "low");
   assert.deepEqual(display.updatedAt, { kind: "minutesAgo", value: 5 });
   assert.equal(display.refreshDisabled, true);
+  assert.equal(display.loading, false);
+});
+
+test("provider card display stays in loading until the first result lands", () => {
+  const now = 1_700_000_000_000;
+  const provider = { id: "p", usageQuery: { enabled: true } };
+
+  // 首个结果未回:无论请求是否已在途,都视为加载中(渲染等高骨架占位)。
+  assert.equal(usage.getProviderUsageCardDisplay(provider, undefined, false, now).loading, true);
+  assert.equal(usage.getProviderUsageCardDisplay(provider, undefined, true, now).loading, true);
+
+  // 结果落地(即使数据为空/失败形态)即退出加载态;手动刷新不回到骨架。
+  const empty = usage.getProviderUsageCardDisplay(
+    provider,
+    { data: [], queriedAt: now, error: null, isStale: false },
+    false,
+    now,
+  );
+  assert.equal(empty.loading, false);
+  assert.equal(empty.show, true);
+
+  const refreshing = usage.getProviderUsageCardDisplay(
+    provider,
+    { data: [{ planName: "Balance", remaining: 4.2, unit: "USD" }], queriedAt: now, error: null, isStale: false },
+    true,
+    now,
+  );
+  assert.equal(refreshing.loading, false);
+  assert.equal(refreshing.refreshDisabled, true);
 });

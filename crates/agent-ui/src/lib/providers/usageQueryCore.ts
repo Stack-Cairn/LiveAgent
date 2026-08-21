@@ -191,6 +191,10 @@ export function getProviderUsageCardDisplay(
   const queriedAt = usage?.queriedAt ?? null;
   return {
     show: Boolean(provider.usageQuery?.enabled || usage),
+    // 首个结果落地前视为加载中(桌面端总会应答,成功或错误形态都会写入
+    // usage),卡片据此渲染等高骨架占位;已有结果的手动刷新不回到骨架,
+    // 保持旧值原位更新(stale-while-revalidate),避免高度反复变化。
+    loading: !usage,
     plans: (usage?.data ?? []).map(getUsagePlanDisplay),
     isStale: usage?.isStale === true,
     error: usage?.error ?? null,
