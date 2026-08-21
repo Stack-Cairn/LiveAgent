@@ -734,7 +734,17 @@ pub fn run() {
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
+    // `tauri dev` 会把启动转发给正在运行的正式版然后自我退出。
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        if let Err(error) = show_main_window(app) {
+            eprintln!("failed to focus existing LiveAgent instance: {error}");
+        }
+    }));
+
+    let app = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_mcp_bridge::init())

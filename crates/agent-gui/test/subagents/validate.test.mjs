@@ -411,3 +411,40 @@ test("allowed_output_paths escaping the workspace reject the batch before any ru
   assert.equal(harness.runnerCalls.length, 0);
   assert.equal(harness.worktreeIpc.creates.length, 0);
 });
+
+test("forceReadonly rejects explicit worktree and coerces defaults to readonly", () => {
+  // 显式 worktree 在 plan mode 下是参数错误,不静默降级。
+  const explicit = validate.parseSubagentBatch(
+    { agents: [{ id: "expert-a", prompt: "p", mode: "worktree" }] },
+    { identities: new Map(), templates: TEMPLATES, forceReadonly: true },
+  );
+  assert.equal(explicit.ok, false);
+  assert.ok(explicit.issues.some((item) => /Plan mode/.test(item.message)));
+
+  // 缺省 mode → readonly。
+  const defaulted = validate.parseSubagentBatch(
+    { agents: [{ id: "expert-b", prompt: "p" }] },
+    { identities: new Map(), templates: TEMPLATES, forceReadonly: true },
+  );
+  assert.equal(defaulted.ok, true);
+  assert.equal(defaulted.batch.agents[0].spec.mode, "readonly");
+
+  // 复用的 worktree 身份也被强制回 readonly。
+  const identities = new Map([
+    ["expert-c", identityFor("expert-c", { lastMode: "worktree" })],
+  ]);
+  const resumed = validate.parseSubagentBatch(
+    { agents: [{ id: "expert-c", prompt: "p" }] },
+    { identities, templates: TEMPLATES, forceReadonly: true },
+  );
+  assert.equal(resumed.ok, true);
+  assert.equal(resumed.batch.agents[0].spec.mode, "readonly");
+
+  // 显式 readonly 照常通过。
+  const readonly = validate.parseSubagentBatch(
+    { agents: [{ id: "expert-d", prompt: "p", mode: "readonly" }] },
+    { identities: new Map(), templates: TEMPLATES, forceReadonly: true },
+  );
+  assert.equal(readonly.ok, true);
+  assert.equal(readonly.batch.agents[0].spec.mode, "readonly");
+});

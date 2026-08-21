@@ -372,10 +372,12 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 	if controls := req.GetRuntimeControls(); controls != nil {
 		thinking := controls.GetThinkingEnabled()
 		webSearch := controls.GetNativeWebSearchEnabled()
+		planMode := controls.GetPlanModeEnabled()
 		body.RuntimeControls = &handler.ChatRuntimeControlsBody{
 			ThinkingEnabled:        &thinking,
 			NativeWebSearchEnabled: &webSearch,
 			Reasoning:              controls.GetReasoning(),
+			PlanModeEnabled:        &planMode,
 		}
 	}
 	for _, file := range req.GetUploadedFiles() {

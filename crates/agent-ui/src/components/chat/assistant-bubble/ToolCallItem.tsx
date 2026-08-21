@@ -2,12 +2,15 @@ import {
   readAskUserQuestionDeadline,
   retainRunningToolContent,
   submitAskUserQuestionAnswers,
+  submitPlanDecision,
   usePendingToolApproval,
+  usePlanDecisionState,
 } from "@liveagent/adapters/assistantBubble";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { PlanModeCard } from "@liveagent/ui/components/chat/PlanModeCard";
 import { ToolScrollablePre, ToolSection } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -25,6 +28,12 @@ import {
   type ToolTraceItem,
   toolResultMessageToText,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import {
+  EXIT_PLAN_MODE_TOOL_NAME,
+  type PlanDecisionAnswer,
+  parseExitPlanModeResultDetails,
+  sanitizePlanMarkdown,
+} from "@liveagent/ui/lib/chat/planMode";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -98,6 +107,20 @@ function ToolCallItem({
     (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswers(item.toolCall.id, answers),
     [item.toolCall.id],
   );
+  // ExitPlanMode 计划卡：分派方式同 AskUserQuestion(按工具名),details 优先、
+  // 流式参数兜底。对话式范式:提交即结束本轮,待决/已批准状态由宿主适配器
+  // 响应式提供(GUI 订阅登记表,WebUI 由参数标记),批准动作亦经适配器。
+  const isPlanCard = !isRedactedToolContent && item.toolCall.name === EXIT_PLAN_MODE_TOOL_NAME;
+  const planDetails = isPlanCard ? parseExitPlanModeResultDetails(result?.details) : null;
+  const planMarkdown = isPlanCard
+    ? (planDetails?.plan ?? sanitizePlanMarkdown(item.toolCall.arguments?.plan))
+    : "";
+  const planSettled = isPlanCard && (Boolean(isRunning) || Boolean(result));
+  const planState = usePlanDecisionState(item.toolCall.id, item.toolCall.arguments);
+  const submitPlanAnswer = useCallback(
+    (answer: PlanDecisionAnswer) => submitPlanDecision(item.toolCall.id, answer),
+    [item.toolCall.id],
+  );
   // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
   const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
@@ -111,6 +134,7 @@ function ToolCallItem({
   const shouldShowArgs =
     !isRedactedToolContent &&
     !isAskUser &&
+    !isPlanCard &&
     (!isSubagentCard || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
   const isManagedProcess = item.toolCall.name === "ManagedProcess";
@@ -127,7 +151,7 @@ function ToolCallItem({
   const firstLinePreview = capInlineCommandPreview(firstLine);
   const inlineCommandTitle = inlineCommand ? capInlineCommandPreview(inlineCommand) : "";
   const toolArgsSummary =
-    isRedactedToolContent || isBash || inlineCommand
+    isRedactedToolContent || isBash || inlineCommand || isPlanCard
       ? ""
       : isAskUser
         ? (askQuestions[0]?.prompt ?? "")
@@ -145,9 +169,11 @@ function ToolCallItem({
   const ToolIcon = meta.Icon;
   const title = isAskUser
     ? { name: t("chat.tool.askUserTitle"), action: "" }
-    : isRedactedToolContent
-      ? { name: getToolDisplayName(item.toolCall.name), action: "" }
-      : getToolDisplayTitle(item.toolCall);
+    : isPlanCard
+      ? { name: t("chat.planMode.cardTitle"), action: "" }
+      : isRedactedToolContent
+        ? { name: getToolDisplayName(item.toolCall.name), action: "" }
+        : getToolDisplayTitle(item.toolCall);
 
   const statusLabel = isApprovalPending
     ? t("chat.toolApproval.waitingStatus")
@@ -156,7 +182,9 @@ function ToolCallItem({
         ? askQuestions.length > 0
           ? t("chat.askUser.waiting")
           : t("chat.askUser.preparing")
-        : t("chat.tool.running")
+        : isPlanCard
+          ? t("chat.planMode.submitted")
+          : t("chat.tool.running")
       : shellSessionStatus === "running"
         ? t("chat.tool.running")
         : shellSessionStatus === "cancelled"
@@ -189,6 +217,7 @@ function ToolCallItem({
 
   const canExpand =
     !isRedactedToolContent &&
+    !isPlanCard &&
     (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
   const effectiveOpen = canExpand && open;
   const summaryClassName = cn(
@@ -285,8 +314,8 @@ function ToolCallItem({
             />
           ) : null}
 
-          {/* 提问卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
-          {result && (!isAskUser || !askDetails) ? (
+          {/* 提问卡/计划卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
+          {result && (!isAskUser || !askDetails) && (!isPlanCard || !planDetails) ? (
             <ToolSection
               label={t("chat.tool.return")}
               trailing={
@@ -350,6 +379,24 @@ function ToolCallItem({
     </LazyCollapse>
   );
   const containerClassName = "group/tool min-w-0 max-w-full";
+
+  // 计划卡直出(任务卡风格):不进折叠壳、无摘要行,整卡直接展示——
+  // 卡片自带「实施计划」头部与状态,正文不限高(与消息正文同滚动上下文)。
+  if (isPlanCard && planSettled && planMarkdown) {
+    return (
+      <div className={containerClassName}>
+        <div className="py-1.5">
+          <PlanModeCard
+            plan={planMarkdown}
+            approved={planState.approved || planDetails?.decision === "approve"}
+            pending={planState.pending}
+            readOnly={readOnly}
+            onSubmit={submitPlanAnswer}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!canExpand) {
     return (

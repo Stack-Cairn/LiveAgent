@@ -17,6 +17,9 @@ type ChatRuntimeControlsBody struct {
 	ThinkingEnabled        *bool  `json:"thinking_enabled,omitempty"`
 	NativeWebSearchEnabled *bool  `json:"native_web_search_enabled,omitempty"`
 	Reasoning              string `json:"reasoning"`
+	// Plan mode 是限制性开关:缺省按 false 归一(桌面端"只能收紧"合并,false
+	// 不会关闭本地已开启的 plan mode),与 thinking/webSearch 的缺省 true 相反。
+	PlanModeEnabled *bool `json:"plan_mode_enabled,omitempty"`
 }
 
 type ChatUploadedFileBody struct {
@@ -114,6 +117,7 @@ func NormalizeChatRuntimeControls(input *ChatRuntimeControlsBody) *ChatRuntimeCo
 		ThinkingEnabled:        boolPtr(boolValue(input.ThinkingEnabled, true)),
 		NativeWebSearchEnabled: boolPtr(boolValue(input.NativeWebSearchEnabled, true)),
 		Reasoning:              normalizeChatRuntimeReasoning(input.Reasoning),
+		PlanModeEnabled:        boolPtr(boolValue(input.PlanModeEnabled, false)),
 	}
 }
 
@@ -209,6 +213,7 @@ func ToProtoChatRuntimeControls(input *ChatRuntimeControlsBody) *gatewayv2.ChatR
 		ThinkingEnabled:        boolValue(input.ThinkingEnabled, true),
 		NativeWebSearchEnabled: boolValue(input.NativeWebSearchEnabled, true),
 		Reasoning:              normalizeChatRuntimeReasoning(input.Reasoning),
+		PlanModeEnabled:        boolValue(input.PlanModeEnabled, false),
 	}
 }
 

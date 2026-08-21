@@ -5,6 +5,11 @@ import {
   ASK_USER_QUESTION_TOOL_NAME,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
+  EXIT_PLAN_MODE_APPROVED_ARG,
+  EXIT_PLAN_MODE_PENDING_ARG,
+  EXIT_PLAN_MODE_TOOL_NAME,
+} from "@liveagent/ui/lib/chat/planMode";
+import {
   TOOL_APPROVAL_DEADLINE_ARG,
   TOOL_APPROVAL_PENDING_ARG,
   TOOL_APPROVAL_SUMMARY_ARG,
@@ -18,6 +23,7 @@ import {
 } from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
+import { isPlanApprovalToolCall, isPlanDecisionPending } from "../../../lib/tools/planModeTools";
 import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
@@ -111,6 +117,15 @@ export function buildGatewayToolCallPreviewArguments(
     return {
       ...sourceArgs,
       [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
+    };
+  }
+  // ExitPlanMode：附带待决/已批准标记(桌面登记表权威),WebUI 卡片据此渲染
+  // 批准按钮与落定态;快照/事件每次经此重建,状态翻转随补发事件同步。
+  if (toolCall.name === EXIT_PLAN_MODE_TOOL_NAME) {
+    return {
+      ...sourceArgs,
+      [EXIT_PLAN_MODE_PENDING_ARG]: isPlanDecisionPending(toolCall.id),
+      [EXIT_PLAN_MODE_APPROVED_ARG]: isPlanApprovalToolCall(toolCall.id),
     };
   }
   const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];

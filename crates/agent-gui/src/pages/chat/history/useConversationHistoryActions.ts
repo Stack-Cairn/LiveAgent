@@ -84,6 +84,12 @@ type UseConversationHistoryActionsParams = {
   resetVisibleTransientState: () => void;
   deleteConversationArtifacts: (conversationId: string) => void;
   disposeSubagentsForConversation?: (conversationId: string) => void;
+  /** 空闲运行时缓存被逐出时的瞬态交互清理(挂起提问/工具审批/MCP 激活集)。
+   * 与 ChatPage 自己的 prune 路径共用同一实现,两条路径的生命周期裁决必须一致。
+   * 刻意不含计划审批——待决计划跨 run 存活,仅会话删除时清(见下)。 */
+  cancelConversationTransientInteractions?: (conversationId: string) => void;
+  /** 会话真正删除时的计划审批清理(含批准落定态)。 */
+  cancelPlanDecisionsForConversation?: (conversationId: string) => void;
   getDefaultNewConversationWorkdir?: () => string | undefined;
   resolveConversationSelectedModel: (json: string | null | undefined) => SelectedModel | undefined;
   setCurrentConversationId: Dispatch<SetStateAction<string>>;
@@ -129,6 +135,8 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     resetVisibleTransientState,
     deleteConversationArtifacts,
     disposeSubagentsForConversation,
+    cancelConversationTransientInteractions,
+    cancelPlanDecisionsForConversation,
     getDefaultNewConversationWorkdir,
     resolveConversationSelectedModel,
     setCurrentConversationId,
@@ -148,6 +156,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       onPruneConversation: (conversationId) => {
         deleteConversationArtifacts(conversationId);
         disposeSubagentsForConversation?.(conversationId);
+        cancelConversationTransientInteractions?.(conversationId);
       },
     });
   }
@@ -454,6 +463,9 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     conversationRuntimeCacheRef.current.delete(id);
     deleteConversationArtifacts(id);
     disposeSubagentsForConversation?.(id);
+    cancelConversationTransientInteractions?.(id);
+    // 会话已不存在,计划审批(含批准落定态)才随之销毁——空闲 prune 不走这里。
+    cancelPlanDecisionsForConversation?.(id);
 
     if (currentConversationIdRef.current === id) {
       cancelConversationLoad();

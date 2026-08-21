@@ -18,7 +18,7 @@ export type GatewaySelectedModelEvent = {
 
 export type GatewayChatRuntimeControlsEvent = Pick<
   ChatRuntimeControls,
-  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning"
+  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning" | "planModeEnabled"
 >;
 
 export type GatewayChatRequestEvent = {

@@ -491,6 +491,7 @@ export function buildChatCommandPayload(input: GatewayChatCommandInput) {
             thinking_enabled: input.runtimeControls.thinkingEnabled,
             native_web_search_enabled: input.runtimeControls.nativeWebSearchEnabled,
             reasoning: input.runtimeControls.reasoning,
+            plan_mode_enabled: input.runtimeControls.planModeEnabled === true,
           }
         : undefined,
       queue_policy: input.queuePolicy ?? "auto",

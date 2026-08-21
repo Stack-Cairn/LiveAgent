@@ -23,18 +23,27 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
+  Lightbulb,
   Loader2,
   Maximize2,
   Mic,
   Minimize2,
   Paperclip,
   Play,
+  Plus,
   Send,
   Square,
   SquarePen,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@liveagent/ui/components/ui/dropdown-menu";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
@@ -399,6 +408,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const uploadDisabled =
     isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled || stt.active;
+  // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
+  // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
+  const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
@@ -414,6 +426,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       : !workdir
         ? t("chat.upload.requireWorkdir")
         : t("chat.upload.button");
+  // 菜单触发键的提示:菜单可用而上传不可用时用泛化"添加"文案,上传专属限制
+  // (需要工作目录等)只出现在上传菜单项自身的禁用态上。
+  const addMenuTooltip =
+    !composerAddMenuDisabled && uploadDisabled ? t("chat.upload.addSection") : uploadTooltip;
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
@@ -988,32 +1004,28 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
 
           <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
             <div className="flex min-w-0 flex-1 items-center gap-1">
-              <RuntimeControlTooltip label={uploadTooltip}>
-                <button
-                  type="button"
-                  disabled={uploadDisabled}
-                  onClick={onPickReadableFiles}
-                  aria-label={
-                    isUploadingFiles
-                      ? t("chat.upload.uploading")
-                      : !isAgentMode
-                        ? t("chat.upload.onlyInTools")
-                        : !workdir
-                          ? t("chat.upload.requireWorkdir")
-                          : t("chat.upload.selectFiles")
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={composerAddMenuDisabled}
+                      aria-label={addMenuTooltip}
+                      title={addMenuTooltip}
+                      className={cn(
+                        "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
+                        "disabled:pointer-events-none disabled:opacity-40",
+                        pendingUploadedFiles.length > 0
+                          ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
+                          : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                      )}
+                    />
                   }
-                  className={cn(
-                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
-                    "disabled:pointer-events-none disabled:opacity-40",
-                    pendingUploadedFiles.length > 0
-                      ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
-                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
-                  )}
                 >
                   {isUploadingFiles ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Paperclip className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                   )}
                   {pendingUploadedFiles.length > 0 ? (
                     <span
@@ -1023,8 +1035,62 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       {pendingUploadedFiles.length}
                     </span>
                   ) : null}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="composer-add-dropdown flex w-60 flex-col overflow-hidden p-1"
+                  side="top"
+                  align="start"
+                >
+                  <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                    {t("chat.upload.addSection")}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onSelect={onPickReadableFiles}
+                    disabled={uploadDisabled}
+                    className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="font-medium leading-5">
+                      {t("chat.upload.filesAndFolders")}
+                    </span>
+                  </DropdownMenuItem>
+                  {isAgentMode ? (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        onChatRuntimeControlsChange({
+                          planModeEnabled: !chatRuntimeControls.planModeEnabled,
+                        })
+                      }
+                      className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                    >
+                      <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate font-medium leading-5">
+                        {t("chat.runtime.planModeTitle")}
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          {chatRuntimeControls.planModeEnabled
+                            ? t("chat.runtime.planModeSlashOff")
+                            : t("chat.runtime.planModeSlashOn")}
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* 计划模式开启指示(Codex 风格 pill):一眼可见,点击即关。 */}
+              {isAgentMode && chatRuntimeControls.planModeEnabled ? (
+                <button
+                  type="button"
+                  disabled={controlsDisabled}
+                  onClick={() => onChatRuntimeControlsChange({ planModeEnabled: false })}
+                  title={t("chat.runtime.planModeSlashOff")}
+                  aria-label={t("chat.runtime.planModeSlashOff")}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 text-[11px] font-medium text-sky-700 outline-hidden transition-colors hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300"
+                >
+                  <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t("chat.runtime.planMode")}</span>
                 </button>
-              </RuntimeControlTooltip>
+              ) : null}
 
               {stt.available ? (
                 <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>

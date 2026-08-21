@@ -2473,8 +2473,12 @@ type ChatRuntimeControls struct {
 	ThinkingEnabled        bool                   `protobuf:"varint,1,opt,name=thinking_enabled,json=thinkingEnabled,proto3" json:"thinking_enabled,omitempty"`
 	NativeWebSearchEnabled bool                   `protobuf:"varint,2,opt,name=native_web_search_enabled,json=nativeWebSearchEnabled,proto3" json:"native_web_search_enabled,omitempty"`
 	Reasoning              string                 `protobuf:"bytes,3,opt,name=reasoning,proto3" json:"reasoning,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Plan mode(计划模式):true 表示本轮只注入只读工具 + ExitPlanMode。
+	// 限制性开关,桌面端按"只能收紧"合并(任一来源为 true 即生效);缺省 false
+	// 不得关闭桌面本地已开启的 plan mode。
+	PlanModeEnabled bool `protobuf:"varint,4,opt,name=plan_mode_enabled,json=planModeEnabled,proto3" json:"plan_mode_enabled,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ChatRuntimeControls) Reset() {
@@ -2526,6 +2530,13 @@ func (x *ChatRuntimeControls) GetReasoning() string {
 		return x.Reasoning
 	}
 	return ""
+}
+
+func (x *ChatRuntimeControls) GetPlanModeEnabled() bool {
+	if x != nil {
+		return x.PlanModeEnabled
+	}
+	return false
 }
 
 type ChatUploadedFile struct {
@@ -14147,11 +14158,12 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x11ChatSelectedModel\x12,\n" +
 	"\x12custom_provider_id\x18\x01 \x01(\tR\x10customProviderId\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12#\n" +
-	"\rprovider_type\x18\x03 \x01(\tR\fproviderType\"\x99\x01\n" +
+	"\rprovider_type\x18\x03 \x01(\tR\fproviderType\"\xc5\x01\n" +
 	"\x13ChatRuntimeControls\x12)\n" +
 	"\x10thinking_enabled\x18\x01 \x01(\bR\x0fthinkingEnabled\x129\n" +
 	"\x19native_web_search_enabled\x18\x02 \x01(\bR\x16nativeWebSearchEnabled\x12\x1c\n" +
-	"\treasoning\x18\x03 \x01(\tR\treasoning\"\xac\x01\n" +
+	"\treasoning\x18\x03 \x01(\tR\treasoning\x12*\n" +
+	"\x11plan_mode_enabled\x18\x04 \x01(\bR\x0fplanModeEnabled\"\xac\x01\n" +
 	"\x10ChatUploadedFile\x12#\n" +
 	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12#\n" +
 	"\rabsolute_path\x18\x02 \x01(\tR\fabsolutePath\x12\x1b\n" +

@@ -184,6 +184,7 @@ impl GatewayController {
                 thinking_enabled: runtime_controls.thinking_enabled,
                 native_web_search_enabled: runtime_controls.native_web_search_enabled,
                 reasoning: runtime_controls.reasoning,
+                plan_mode_enabled: runtime_controls.plan_mode_enabled,
             });
         let base_message_ref =
             base_message_ref.map(|base_message_ref| GatewayChatMessageRefEvent {

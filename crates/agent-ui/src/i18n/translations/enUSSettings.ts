@@ -354,6 +354,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.send_message.desc": "Exchange messages with subagents",
   "settings.builtinTool.send_message.detail":
     "Relays messages between the main conversation and subagents to coordinate multi-agent work. Requires the subagent runtime; chat sessions only.",
+  "settings.builtinTool.tool_search.name": "Tool Search",
+  "settings.builtinTool.tool_search.desc": "Search and activate deferred MCP tools on demand",
+  "settings.builtinTool.tool_search.detail":
+    "Enabled automatically when the combined MCP tool schemas exceed a threshold: every tool stays registered for execution, but only tools matched by a search (or called directly) enter the model request, cutting context cost dramatically with many servers. Activation persists for the conversation. Chat sessions only.",
+  "settings.builtinTool.exit_plan_mode.name": "Plan Submission",
+  "settings.builtinTool.exit_plan_mode.desc":
+    "Present the implementation plan and wait for your approval",
+  "settings.builtinTool.exit_plan_mode.detail":
+    "In plan mode, the model submits its complete implementation plan as a card once research is done. Submitting ends that turn immediately; the plan stays pending until you respond. Approval starts execution automatically (full tools return next turn); replying with anything else sends your feedback back for another revision. Registered only in plan-mode chat sessions.",
   "settings.builtinTool.ask_user_question.name": "Ask User",
   "settings.builtinTool.ask_user_question.desc":
     "Ask you multiple-choice questions in a card and wait for your selections",

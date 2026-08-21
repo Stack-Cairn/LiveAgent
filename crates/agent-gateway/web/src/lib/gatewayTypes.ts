@@ -40,7 +40,7 @@ export type GatewaySelectedModel = {
 
 export type GatewayChatRuntimeControls = Pick<
   ChatRuntimeControls,
-  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning"
+  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning" | "planModeEnabled"
 >;
 
 export type GatewayProviderSummary = {

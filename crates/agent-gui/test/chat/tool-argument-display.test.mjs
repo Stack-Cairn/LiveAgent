@@ -150,14 +150,21 @@ function createToolCallItemRenderer() {
         readAskUserQuestionDeadline() {
           return undefined;
         },
+        usePlanDecisionState() {
+          return { pending: false, approved: false };
+        },
         retainRunningToolContent: false,
         submitAskUserQuestionAnswers() {},
+        submitPlanDecision() {},
         usePendingToolApproval() {
           return null;
         },
       },
       "@liveagent/ui/components/chat/AskUserQuestionCard": {
         AskUserQuestionCard: NullComponent,
+      },
+      "@liveagent/ui/components/chat/PlanModeCard": {
+        PlanModeCard: NullComponent,
       },
       "@liveagent/ui/components/chat/AssistantStatus": {
         AssistantStatus({ children }) {
@@ -196,6 +203,15 @@ function createToolCallItemRenderer() {
         },
         sanitizeAskUserQuestionItems() {
           return [];
+        },
+      },
+      "@liveagent/ui/lib/chat/planMode": {
+        EXIT_PLAN_MODE_TOOL_NAME: "ExitPlanMode",
+        parseExitPlanModeResultDetails() {
+          return null;
+        },
+        sanitizePlanMarkdown() {
+          return "";
         },
       },
       "@liveagent/ui/lib/chat/assistantBubbleAdapter": {

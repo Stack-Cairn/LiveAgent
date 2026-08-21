@@ -28,12 +28,14 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
+import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
 import { createTaskTools, type TaskStateStore } from "./taskTools";
 import { createTerminalTools } from "./terminalTools";
+import { createToolSearchTools, shouldDeferMcpTools } from "./toolSearchTools";
 import { createTunnelManagerTools, type TunnelManagerChange } from "./tunnelManagerTools";
 
 export type BuiltinToolRegistry = {
@@ -45,6 +47,9 @@ export type BuiltinToolRegistry = {
   ) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
   hasTool: (toolName: string) => boolean;
+  /** MCP 懒加载已启用:调用方应给 runner 挂 requestToolFilter(未激活的 MCP
+   * 工具不进模型请求)。工具仍全量在 tools 里——执行层必须找得到它们。 */
+  mcpToolDeferralActive?: boolean;
 };
 
 // 第三方来源(MCP server / 插件)的工具名不受我们控制,可能撞车。撞车时不能像
@@ -194,7 +199,18 @@ type BuildBuiltinBaseToolRegistryParams = {
 
 const resolveHomeDir = () => homeDir();
 
-async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryParams) {
+type McpBusinessToolBundle = Awaited<ReturnType<typeof createMcpTools>>;
+
+type BaseBuiltinToolBundles = {
+  bundles: BuiltinToolBundle[];
+  /** MCP 业务工具 bundle(懒加载判定与 ToolSearch 目录的输入)。McpManager 与它
+   * 同为 groupId "mcp",绝不能按 groupId 搜索定位——必须持有这份直接引用。 */
+  mcpBusinessBundle: McpBusinessToolBundle | undefined;
+};
+
+async function buildBaseBuiltinToolBundles(
+  params: BuildBuiltinBaseToolRegistryParams,
+): Promise<BaseBuiltinToolBundles> {
   const baseBundles: BuiltinToolBundle[] = [
     createFsTools({
       workdir: params.workdir,
@@ -275,17 +291,17 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
   ];
 
   const enabledServers = selectEnabledMcpServers(params.getMcpSettings());
+  let mcpBusinessBundle: McpBusinessToolBundle | undefined;
   if (enabledServers.length > 0) {
-    baseBundles.push(
-      await createMcpTools({
-        servers: enabledServers,
-        onLoadError: params.onMcpLoadError,
-        loadFailureMode: params.mcpLoadFailureMode,
-      }),
-    );
+    mcpBusinessBundle = await createMcpTools({
+      servers: enabledServers,
+      onLoadError: params.onMcpLoadError,
+      loadFailureMode: params.mcpLoadFailureMode,
+    });
+    baseBundles.push(mcpBusinessBundle);
   }
 
-  return baseBundles;
+  return { bundles: baseBundles, mcpBusinessBundle };
 }
 
 export async function buildBuiltinToolRegistry(
@@ -294,9 +310,43 @@ export async function buildBuiltinToolRegistry(
     taskStateStore?: TaskStateStore;
     /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
+    /** Plan mode:非只读工具不进注册表,注入 ExitPlanMode,子代理强制 readonly。 */
+    planMode?: {
+      conversationId: string;
+    };
+    /** MCP 懒加载:schema 总量超阈值时注入 ToolSearch,MCP 工具延迟到激活后
+     * 才进模型请求(执行层始终全量注册)。仅 chat 场景;plan mode 下无意义
+     * (MCP 工具非只读,本就不在表内)。 */
+    toolSearch?: {
+      conversationId: string;
+    };
   },
 ) {
-  const baseBundles = await buildBaseBuiltinToolBundles(params);
+  const planModeActive = Boolean(params.planMode);
+  const { bundles: baseBundles, mcpBusinessBundle } = await buildBaseBuiltinToolBundles(params);
+  // MCP 懒加载判定:对"会进请求的 schema JSON"估算 token(与 tokenLedger 同
+  // 口径),超阈值才启用——多一次检索回合的代价只在真省下可观 context 时才值。
+  // 判定与目录的输入必须是 MCP 业务工具 bundle 的直接引用:McpManager 也注册在
+  // groupId "mcp" 下且先入列,按 groupId find 会命中它,让延迟判定永远失效。
+  const mcpToolDeferralActive = Boolean(
+    params.toolSearch &&
+      params.runtimeScope === "chat" &&
+      !planModeActive &&
+      mcpBusinessBundle &&
+      shouldDeferMcpTools(mcpBusinessBundle.tools),
+  );
+  const toolSearchBundles =
+    mcpToolDeferralActive && params.toolSearch && mcpBusinessBundle
+      ? [
+          createToolSearchTools({
+            conversationId: params.toolSearch.conversationId,
+            entries: mcpBusinessBundle.tools.map((tool) => ({
+              tool,
+              serverLabel: mcpBusinessBundle.toolNameMap.get(tool.name)?.serverLabel ?? "",
+            })),
+          }),
+        ]
+      : [];
   const taskBundles =
     params.runtimeScope === "chat" && params.taskStateStore
       ? [createTaskTools(params.taskStateStore)]
@@ -305,11 +355,41 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...taskBundles, ...askUserQuestionBundles];
+  const planModeBundles =
+    params.runtimeScope === "chat" && params.planMode
+      ? [
+          createExitPlanModeTools({
+            conversationId: params.planMode.conversationId,
+          }),
+        ]
+      : [];
+  const chatBundles = [
+    ...taskBundles,
+    ...askUserQuestionBundles,
+    ...planModeBundles,
+    ...toolSearchBundles,
+  ];
+
+  // Plan mode:在注册表组装层裁掉非只读工具(而非 deny 后备拦截)——模型根本
+  // 看不到写工具,不浪费 token 也无泄漏面。子代理协作工具(Agent/SendMessage)
+  // 保留,Agent 由 forceReadonly 在 validate 层强制 readonly。
+  const filterForPlanMode = (registry: ReturnType<typeof createBuiltinToolRegistry>) => {
+    const withDeferralFlag: BuiltinToolRegistry = {
+      ...registry,
+      mcpToolDeferralActive,
+    };
+    if (!planModeActive) return withDeferralFlag;
+    return {
+      ...withDeferralFlag,
+      tools: withDeferralFlag.tools.filter((tool) =>
+        isPlanModeAllowedTool(tool.name, withDeferralFlag.metadataByName.get(tool.name)),
+      ),
+    };
+  };
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {
-    return createBuiltinToolRegistry([...baseBundles, ...chatBundles]);
+    return filterForPlanMode(createBuiltinToolRegistry([...baseBundles, ...chatBundles]));
   }
   const subagentAdditionalRoots = params.additionalRoots?.map((root) => ({
     ...root,
@@ -335,45 +415,51 @@ export async function buildBuiltinToolRegistry(
       })
     : null;
   const parentBundles = parentMessageBundle ? [...baseBundles, parentMessageBundle] : baseBundles;
-  return createBuiltinToolRegistry([
-    ...parentBundles,
-    ...chatBundles,
-    createSubagentTools({
-      providerId: subagentRuntime.providerId,
-      model: subagentRuntime.model,
-      runtime: subagentRuntime.runtime,
-      runtimePlatform: params.runtimePlatform,
-      workdir: params.workdir,
-      resolveHomeDir,
-      sessionId: subagentRuntime.sessionId,
-      templates: subagentRuntime.templates,
-      store: subagentRuntime.store,
-      scheduler: subagentRuntime.scheduler,
-      baseTools: baseRegistry.tools,
-      executeToolCall: baseRegistry.executeToolCall,
-      metadataByName: baseRegistry.metadataByName,
-      additionalRoots: subagentAdditionalRoots,
-      // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
-      // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
-      checkpoint: params.checkpoint,
-      createSubagentToolRegistry: async (workdir) =>
-        createBuiltinToolRegistry(
-          await buildBaseBuiltinToolBundles({
-            ...params,
-            workdir,
-            additionalRoots: subagentAdditionalRoots,
-            fileState: createFileToolState(),
-            skillsEnabled: false,
-            applyMcpOps: undefined,
-            mcpLoadFailureMode: "continue",
-            memoryToolMode: "ro",
-            // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
-            // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
-            // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
-            // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
-            checkpoint: undefined,
-          }),
-        ),
-    }),
-  ]);
+  return filterForPlanMode(
+    createBuiltinToolRegistry([
+      ...parentBundles,
+      ...chatBundles,
+      createSubagentTools({
+        providerId: subagentRuntime.providerId,
+        model: subagentRuntime.model,
+        runtime: subagentRuntime.runtime,
+        runtimePlatform: params.runtimePlatform,
+        workdir: params.workdir,
+        resolveHomeDir,
+        sessionId: subagentRuntime.sessionId,
+        templates: subagentRuntime.templates,
+        store: subagentRuntime.store,
+        scheduler: subagentRuntime.scheduler,
+        baseTools: baseRegistry.tools,
+        executeToolCall: baseRegistry.executeToolCall,
+        metadataByName: baseRegistry.metadataByName,
+        additionalRoots: subagentAdditionalRoots,
+        // Plan mode:子代理只许 readonly,worktree 请求按参数错误拒绝。
+        forceReadonly: planModeActive,
+        // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
+        // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
+        checkpoint: params.checkpoint,
+        createSubagentToolRegistry: async (workdir) =>
+          createBuiltinToolRegistry(
+            (
+              await buildBaseBuiltinToolBundles({
+                ...params,
+                workdir,
+                additionalRoots: subagentAdditionalRoots,
+                fileState: createFileToolState(),
+                skillsEnabled: false,
+                applyMcpOps: undefined,
+                mcpLoadFailureMode: "continue",
+                memoryToolMode: "ro",
+                // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
+                // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
+                // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
+                // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
+                checkpoint: undefined,
+              })
+            ).bundles,
+          ),
+      }),
+    ]),
+  );
 }

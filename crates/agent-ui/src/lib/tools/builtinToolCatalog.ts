@@ -249,6 +249,24 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: true,
     runtimeScopes: CHAT_ONLY,
   },
+  {
+    id: "exit_plan_mode",
+    toolName: "ExitPlanMode",
+    icon: "checklist",
+    categoryId: "intelligence",
+    isReadOnly: true,
+    runtimeScopes: CHAT_ONLY,
+    conditional: true,
+  },
+  {
+    id: "tool_search",
+    toolName: "ToolSearch",
+    icon: "search",
+    categoryId: "connectivity",
+    isReadOnly: true,
+    runtimeScopes: CHAT_ONLY,
+    conditional: true,
+  },
   /* ── Automation ── */
   {
     id: "cron_task_manager",

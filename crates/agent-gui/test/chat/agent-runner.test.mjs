@@ -2552,3 +2552,131 @@ test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错�
   assert.equal(prefixCaptures[2].prefixChanged, false);
   assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });
+
+test("requestToolFilter re-evaluates per round: activation mid-run exposes the tool next round", async () => {
+  // 轮中激活的正式验证(MCP 懒加载 spike):
+  // 第 1 轮请求不含被延迟的 mcp 工具;ToolSearch 风格的激活发生在第 1 轮的
+  // 工具执行里;第 2 轮请求(同一 run 内)必须包含它,且执行层始终找得到。
+  const activation = new Set();
+  const deferredTool = {
+    name: "mcp_docs_search",
+    description: "Search docs",
+    parameters: { type: "object", properties: { q: { type: "string" } } },
+  };
+  const searchCall = createToolCall("call-search", "ToolSearch", { query: "docs" });
+  const mcpCall = createToolCall("call-mcp", "mcp_docs_search", { q: "hello" });
+  resetFakeStreams(
+    createToolUseAssistant(searchCall),
+    createToolUseAssistant(mcpCall),
+    createTextAssistant("done"),
+  );
+  const { params, executedToolCalls } = createBaseParams({
+    tools: [
+      {
+        name: "ToolSearch",
+        description: "Activate deferred tools",
+        parameters: { type: "object", properties: { query: { type: "string" } } },
+      },
+      deferredTool,
+    ],
+    requestToolFilter: (toolName) => toolName !== "mcp_docs_search" || activation.has(toolName),
+    async executeToolCall(toolCall) {
+      executedToolCalls.push(toolCall);
+      if (toolCall.name === "ToolSearch") {
+        activation.add("mcp_docs_search");
+        return createToolResult(toolCall, "Activated mcp_docs_search");
+      }
+      return createToolResult(toolCall, `result:${toolCall.name}`);
+    },
+  });
+  params.context = {
+    ...params.context,
+    tools: params.tools,
+  };
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(result.assistant.stopReason, "stop");
+  // 第 1 轮:延迟工具不在请求里;ToolSearch 在。
+  const round1Names = observedStreamContexts[0].tools.map((tool) => tool.name);
+  assert.ok(round1Names.includes("ToolSearch"));
+  assert.ok(!round1Names.includes("mcp_docs_search"));
+  // 第 2 轮(激活后,同一 run):延迟工具进入请求。
+  const round2Names = observedStreamContexts[1].tools.map((tool) => tool.name);
+  assert.ok(round2Names.includes("mcp_docs_search"));
+  // 执行层全程找得到:两次调用都真实执行。
+  assert.deepEqual(
+    executedToolCalls.map((call) => call.name),
+    ["ToolSearch", "mcp_docs_search"],
+  );
+});
+
+
+test("resolveToolTermination ends the run after the flagged tool call (no wrap-up round)", async () => {
+  // 计划批准语义:ExitPlanMode 获批后本轮就此结束——只消耗 1 个模型轮,
+  // 不再为"收尾话"请求下一轮(队列因此立即放行续轮)。
+  const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
+  resetFakeStreams(
+    createToolUseAssistant(planCall),
+    createTextAssistant("SHOULD_NEVER_STREAM"),
+  );
+  const { params, executedToolCalls, textDeltas } = createBaseParams({
+    tools: [
+      {
+        name: "ExitPlanMode",
+        description: "Present the plan",
+        parameters: { type: "object", properties: { plan: { type: "string" } } },
+      },
+    ],
+    resolveToolTermination: (toolCall) => toolCall.name === "ExitPlanMode",
+  });
+  params.context = { ...params.context, tools: params.tools };
+
+  const result = await runAssistantWithTools(params);
+
+  assert.deepEqual(executedToolCalls.map((call) => call.name), ["ExitPlanMode"]);
+  // 只发出了一次模型请求:terminate 阻止了收尾轮。
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(textDeltas.join(""), "");
+  assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("resolveToolTermination spreads across a mixed parallel batch (still ends the run)", async () => {
+  // pi-agent-core 的批终止是 all-or-nothing:批内每个调用都标记 terminate 才
+  // 生效。ExitPlanMode 与普通并行调用(Read 等)同批时,谓词必须铺展到整批——
+  // 否则一个 Read 就静默作废"提交即结束本轮"的保证,run 继续跑收尾轮,
+  // 待决计划与仍在运行的轮次互相竞态。
+  const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
+  const readCall = createToolCall("call-read", "Read", { file_path: "/tmp/a" });
+  resetFakeStreams(
+    createAssistant([planCall, readCall], "toolUse"),
+    createTextAssistant("SHOULD_NEVER_STREAM"),
+  );
+  const { params, executedToolCalls, textDeltas } = createBaseParams({
+    tools: [
+      {
+        name: "ExitPlanMode",
+        description: "Present the plan",
+        parameters: { type: "object", properties: { plan: { type: "string" } } },
+      },
+      {
+        name: "Read",
+        description: "Read a file",
+        parameters: { type: "object", properties: { file_path: { type: "string" } } },
+      },
+    ],
+    resolveToolTermination: (toolCall) => toolCall.name === "ExitPlanMode",
+  });
+  params.context = { ...params.context, tools: params.tools };
+
+  const result = await runAssistantWithTools(params);
+
+  // 同批的并行调用照常执行(结果保留在历史),随后 run 就地终止。
+  assert.deepEqual(
+    executedToolCalls.map((call) => call.name).sort(),
+    ["ExitPlanMode", "Read"],
+  );
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(textDeltas.join(""), "");
+  assert.equal(result.assistant.stopReason, "toolUse");
+});

@@ -33,7 +33,7 @@ const DOCS_SERVER = {
   env: {},
 };
 
-function createRegistryHarness({ onRun } = {}) {
+function createRegistryHarness({ onRun, mcpToolInfos } = {}) {
   const runnerCalls = [];
   const listedServerIds = [];
   const listedServerCommands = [];
@@ -60,15 +60,17 @@ function createRegistryHarness({ onRun } = {}) {
           if (command === "mcp_list_tools") {
             listedServerIds.push((args.servers ?? []).map((server) => server.id));
             listedServerCommands.push((args.servers ?? []).map((server) => server.command));
-            return [
-              {
-                serverId: "docs",
-                serverLabel: "Docs",
-                name: "search",
-                description: "Search docs",
-                inputSchema: { type: "object" },
-              },
-            ];
+            return (
+              mcpToolInfos ?? [
+                {
+                  serverId: "docs",
+                  serverLabel: "Docs",
+                  name: "search",
+                  description: "Search docs",
+                  inputSchema: { type: "object" },
+                },
+              ]
+            );
           }
           if (command === "subagent_worktree_create") {
             return {
@@ -378,4 +380,195 @@ test("read-only children inherit MCP business tools but no write, shell, or mana
   assert.ok(!names.includes("McpManager"));
   // Parent memory is read-write, so readonly children do not receive it.
   assert.ok(!names.includes("MemoryManager"));
+});
+
+test("plan mode filters the registry to read-only + plan + collaboration tools", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
+  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
+  const store = storeModule.createSubagentConversationStore({
+    conversationId: "conversation-1",
+    ipc: createFakeStoreIpc(),
+  });
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-plan-mode-registry-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: true,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    taskStateStore: {
+      runId: "run-1",
+      getState: () => undefined,
+      commitState: async () => undefined,
+    },
+    askUserQuestionConversationId: "conversation-1",
+    planMode: {
+      conversationId: "conversation-1",
+    },
+    subagentRuntime: {
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: { baseUrl: "https://api.example.test/v1", apiKey: "test-key" },
+      sessionId: "parent-session",
+      templates: [],
+      store,
+      scheduler: schedulerModule.createSubagentScheduler(),
+    },
+  });
+  const names = registry.tools.map((tool) => tool.name);
+  // 只读、计划闸门与子代理协作工具在表内。
+  for (const expected of ["Read", "Glob", "Grep", "TaskList", "AskUserQuestion", "ExitPlanMode", "Agent", "SendMessage"]) {
+    assert.ok(names.includes(expected), `expected ${expected} in plan-mode tools`);
+  }
+  // 一切写能力(内置与 MCP)不进模型工具表。
+  for (const excluded of ["Bash", "Write", "Edit", "Delete", "TaskCreate", "TaskUpdate", "McpManager", "MemoryManager", "CronTaskManager", "mcp_docs_search"]) {
+    assert.ok(!names.includes(excluded), `did not expect ${excluded} in plan-mode tools`);
+  }
+  // Agent 工具描述带 plan mode 提示(validate 层同时强制 readonly)。
+  assert.match(registry.tools.find((tool) => tool.name === "Agent").description, /PLAN MODE/);
+  // executeToolCall 仍能执行被裁掉的工具吗?——不应依赖:执行层由 gate 后备拦截。
+});
+
+test("MCP deferral registers ToolSearch and keeps all tools in the execution registry", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const toolSearchModule = loader.loadModule("src/lib/tools/toolSearchTools.ts");
+
+  const baseParams = {
+    workdir: "/tmp/liveagent-tool-search-registry-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: false,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    toolSearch: { conversationId: "conversation-defer" },
+  };
+
+  // mock 的 docs server 只有一个小工具:低于阈值,不延迟、不注册 ToolSearch。
+  const light = await buildBuiltinToolRegistry(baseParams);
+  assert.equal(light.mcpToolDeferralActive, false);
+  assert.ok(!light.tools.some((tool) => tool.name === "ToolSearch"));
+  assert.ok(light.tools.some((tool) => tool.name === "mcp_docs_search"));
+
+  // 阈值判定是纯函数,超阈值场景由 tool-search-tools 单测覆盖;这里再验证
+  // 判定函数与注册表口径一致(同一批工具、同一估算函数)。
+  const mcpTools = light.tools.filter((tool) => tool.name.startsWith("mcp_"));
+  assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools), false);
+  assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools, 1), true);
+});
+
+// 超阈值的生产形态回归:延迟判定与 ToolSearch 目录必须来自 MCP 业务工具
+// bundle 的直接引用。曾按 groupId "mcp" find 定位 bundle,命中先注册的
+// McpManager(同 groupId),判定永远低于阈值,整个 ToolSearch 特性静默失效。
+test("MCP deferral activates above threshold and the catalog covers business tools", async () => {
+  const bulkDescription = "x".repeat(4_000);
+  const harness = createRegistryHarness({
+    mcpToolInfos: Array.from({ length: 20 }, (_, index) => ({
+      serverId: "docs",
+      serverLabel: "Docs",
+      name: `search_${index}`,
+      description: `Search docs variant ${index}. ${bulkDescription}`,
+      inputSchema: { type: "object", properties: { query: { type: "string" } } },
+    })),
+  });
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const toolSearchModule = loader.loadModule("src/lib/tools/toolSearchTools.ts");
+  const conversationId = "conversation-defer-heavy";
+
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-tool-search-heavy-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: false,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    toolSearch: { conversationId },
+  });
+
+  assert.equal(registry.mcpToolDeferralActive, true);
+  assert.ok(registry.tools.some((tool) => tool.name === "ToolSearch"));
+  // 执行层保持全量注册。
+  assert.ok(registry.tools.some((tool) => tool.name === "mcp_docs_search_0"));
+
+  const filter = toolSearchModule.buildMcpRequestToolFilter({
+    conversationId,
+    metadataByName: registry.metadataByName,
+  });
+  // 未激活的 MCP 业务工具不进请求;McpManager 不是延迟对象,必须恒可见。
+  assert.equal(filter("mcp_docs_search_0"), false);
+  assert.equal(filter("McpManager"), true);
+  assert.equal(filter("ToolSearch"), true);
+  assert.equal(filter("Read"), true);
+
+  // 目录来自业务工具 bundle:检索能命中并激活真实的 mcp_docs_* 工具。
+  const searchResult = await registry.executeToolCall({
+    type: "toolCall",
+    id: "call-tool-search",
+    name: "ToolSearch",
+    arguments: { query: "search docs variant 3" },
+  });
+  assert.equal(searchResult.isError, false);
+  assert.ok(searchResult.details.activated.length > 0);
+  assert.ok(searchResult.details.activated.every((name) => name.startsWith("mcp_docs_search")));
+  for (const name of searchResult.details.activated) {
+    assert.equal(filter(name), true);
+  }
+  toolSearchModule.clearMcpToolActivation(conversationId);
+});
+
+// Plan mode 的只读承诺必须穿透到子代理:平时 readonly 子代理放行 MCP 业务
+// 工具(isReadOnly:false 也放,调研便利),plan mode 下这条通道就是写泄漏面。
+test("plan mode readonly children do not inherit write-capable MCP business tools", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
+  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
+  const store = storeModule.createSubagentConversationStore({
+    conversationId: "conversation-plan-subagent",
+    ipc: createFakeStoreIpc(),
+  });
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-plan-subagent-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: false,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    planMode: { conversationId: "conversation-plan-subagent" },
+    subagentRuntime: {
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: { baseUrl: "https://api.example.test/v1", apiKey: "test-key" },
+      sessionId: "parent-session",
+      templates: [],
+      store,
+      scheduler: schedulerModule.createSubagentScheduler(),
+    },
+  });
+
+  const result = await registry.executeToolCall(
+    createAgentToolCall({
+      agents: [{ id: "agent-plan", prompt: "Research only.", mode: "readonly" }],
+    }),
+  );
+  assert.equal(result.isError, false);
+  assert.equal(harness.runnerCalls.length, 1);
+  const names = harness.runnerCalls[0].tools.map((tool) => tool.name);
+
+  assert.ok(names.includes("Read"));
+  assert.ok(names.includes("SendMessage"));
+  // isReadOnly:false 的 MCP 业务工具在 plan mode 下不得进入子代理工具表。
+  assert.ok(!names.includes("mcp_docs_search"));
+  assert.ok(!names.includes("Write"));
+  assert.ok(!names.includes("Bash"));
 });

@@ -434,6 +434,9 @@ export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControl
   return {
     thinkingEnabled: obj.thinkingEnabled !== false,
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
+    // Plan mode 是限制性开关,归一化取向与联网/思考相反:仅显式 true 生效,
+    // 旧配置/远端缺失字段一律回落 false,绝不把历史会话意外锁进只读。
+    planModeEnabled: obj.planModeEnabled === true,
     reasoning,
     reasoningByProvider: normalizeChatRuntimeReasoningByProvider(
       obj.reasoningByProvider,

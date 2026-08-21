@@ -559,6 +559,7 @@ test("chat runtime controls default and follow provider model reasoning support"
   assert.deepEqual(defaults.chatRuntimeControls, {
     thinkingEnabled: true,
     nativeWebSearchEnabled: true,
+    planModeEnabled: false,
     reasoning: "high",
     reasoningByProvider: {
       claude_code: "high",
@@ -687,6 +688,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     {
       thinkingEnabled: false,
       nativeWebSearchEnabled: false,
+      planModeEnabled: false,
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
@@ -703,6 +705,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       {
         thinkingEnabled: true,
         nativeWebSearchEnabled: true,
+        planModeEnabled: false,
         reasoning: "xhigh",
         reasoningByProvider: {
           codex_openai_completions: "xhigh",
@@ -717,6 +720,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     {
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
+      planModeEnabled: false,
       // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 钳回默认 high。
       reasoning: "high",
       reasoningByProvider: {
@@ -746,6 +750,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     {
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
+      planModeEnabled: false,
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "high",
@@ -804,6 +809,7 @@ test("chat runtime controls default and follow provider model reasoning support"
   assert.deepEqual(normalized.chatRuntimeControls, {
     thinkingEnabled: false,
     nativeWebSearchEnabled: false,
+    planModeEnabled: false,
     reasoning: "high",
     reasoningByProvider: {
       claude_code: "high",

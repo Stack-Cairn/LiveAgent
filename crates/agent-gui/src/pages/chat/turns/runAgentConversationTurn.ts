@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import { EXIT_PLAN_MODE_TOOL_NAME } from "@liveagent/ui/lib/chat/planMode";
 import {
   composeTrajectorySystemPrompt,
   serializeToolCatalog,
@@ -82,12 +83,20 @@ import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProject
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import {
+  buildPlanModeSystemPromptSection,
+  isPlanModeAllowedTool,
+} from "../../../lib/tools/planModeTools";
 import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
 import { isSessionApproved, requestToolApproval } from "../../../lib/tools/toolApproval";
 import { resolveToolPolicy } from "../../../lib/tools/toolPolicy";
+import {
+  buildMcpRequestToolFilter,
+  getMcpToolActivation,
+} from "../../../lib/tools/toolSearchTools";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
 import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
 import {
@@ -287,6 +296,8 @@ export type RunAgentConversationTurnParams = {
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
   /** 命令执行方式(turn 级快照):ask 全量审批 / auto 按策略 / sandbox(±断网)。 */
   commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];
+  /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 提交闸门。 */
+  planModeEnabled?: boolean;
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
@@ -375,6 +386,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     getMcpSettings,
     getToolPolicies,
     commandSafetyMode,
+    planModeEnabled,
     applyMcpOps,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
@@ -554,8 +566,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     return frozenTaskListContext;
   };
   refreezeTaskListContext();
+  // Plan mode 段:turn 级快照、run 内恒定文本,与 frozenTaskListContext 同列
+  // 冻结注入——system 段任何变动都会作废整条前缀缓存,绝不能随状态中途改写。
+  const planModeSection = planModeEnabled ? buildPlanModeSystemPromptSection() : "";
   const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
+    if (planModeSection) {
+      systemPrompt = appendSystemPrompt(systemPrompt, planModeSection);
+    }
     if (rosterIdentitySection) {
       systemPrompt = appendSystemPrompt(systemPrompt, rosterIdentitySection);
     }
@@ -568,6 +586,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     // 轨迹 runtime 段与真实注入同口径：只记录此刻真的拼进 systemPrompt 的部分，
     // builder 会跳过空段，与上方 appendSystemPrompt 的条件一一对应。
     currentTrajectoryRuntimeContext = buildTrajectoryRuntimeContext([
+      { source: "plan-mode", text: planModeSection },
       { source: "subagent-roster", text: rosterIdentitySection },
       { source: "parent-message-bus", text: parentMessageBusSnapshot },
       { source: "task-list", text: frozenTaskListContext },
@@ -593,6 +612,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sandbox: resolveShellSandboxSettings(safetyMode),
     taskStateStore,
     askUserQuestionConversationId: conversationId,
+    planMode: planModeEnabled ? { conversationId } : undefined,
+    toolSearch: { conversationId },
     checkpoint: {
       conversationId,
       turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
@@ -669,12 +690,33 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // systemPrompt，不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
   refreezeTaskListContext();
 
+  // MCP 懒加载:未激活的 MCP 工具不进模型请求(runner 每轮重估此谓词,
+  // ToolSearch 激活后下一轮立即可见);执行层保持全量注册。
+  const requestToolFilter = builtinRegistry.mcpToolDeferralActive
+    ? buildMcpRequestToolFilter({
+        conversationId,
+        metadataByName: builtinRegistry.metadataByName,
+      })
+    : undefined;
+
   const combinedExecutor: (
     toolCall: ToolCall,
     signal?: AbortSignal,
     context?: BuiltinToolExecutionContext,
-  ) => Promise<Message> = (tc, signal, context) =>
-    builtinRegistry.executeToolCall(tc, signal, context);
+  ) => Promise<Message> = (tc, signal, context) => {
+    // 直呼未激活 MCP 业务工具(模型凭历史记忆/精确猜名)也放行并顺带激活——
+    // 执行层本就找得到;激活保证后续轮次请求里能看到 schema,避免模型困惑。
+    // 判定同 requestToolFilter:kind === "mcp" 才是延迟对象(McpManager 不是)。
+    const tcMetadata = builtinRegistry.metadataByName.get(tc.name);
+    if (
+      builtinRegistry.mcpToolDeferralActive &&
+      tcMetadata?.groupId === "mcp" &&
+      tcMetadata.kind === "mcp"
+    ) {
+      getMcpToolActivation(conversationId).add(tc.name);
+    }
+    return builtinRegistry.executeToolCall(tc, signal, context);
+  };
 
   // 工具审批门:按实时策略裁决每次调用。deny → 直接拦;ask → 挂起等用户在
   // 聊天审批卡片作决定(本会话已“记住”的工具免审);allow → 放行。
@@ -684,6 +726,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     signal?: AbortSignal,
   ): Promise<{ allow: true } | { allow: false; reason: string }> => {
     const metadata = builtinRegistry.metadataByName.get(toolCall.name);
+    // Plan mode 后备拦截:注册表组装层已裁掉非只读工具(模型看不到),此分支
+    // 只兜 seed 恢复等旁路把写调用送进执行层的极端情况——语义必须与工具表一致。
+    if (planModeEnabled && !isPlanModeAllowedTool(toolCall.name, metadata)) {
+      return {
+        allow: false,
+        reason: `Plan mode is active: ${toolCall.name} is unavailable during planning. Research with read-only tools and submit the plan via ExitPlanMode.`,
+      };
+    }
     const policy = resolveToolPolicy(toolCall.name, metadata, getToolPolicies?.());
     if (policy === "deny") {
       return {
@@ -959,6 +1009,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         subagentScheduler,
         executeToolCall: combinedExecutor,
         resolveToolGate,
+        requestToolFilter,
+        // 计划提交即终止本轮(对话式范式,对齐 Codex):计划由卡片展示,用户以
+        // 消息或按钮回应;不存在挂起等待,也没有收尾模型轮。
+        resolveToolTermination: planModeEnabled
+          ? (toolCall) => toolCall.name === EXIT_PLAN_MODE_TOOL_NAME
+          : undefined,
         onRequestStart: ({ round, context, toolsSuffix }) => {
           const activeSources = new Set(
             currentTrajectoryRuntimeContext.entries.map((entry) => entry.source),

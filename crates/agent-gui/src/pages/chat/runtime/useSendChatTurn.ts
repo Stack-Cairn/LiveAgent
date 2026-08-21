@@ -354,6 +354,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       ? strictestCommandSafetyMode(requestedCommandSafetyMode, settings.system.commandSafetyMode)
       : settings.system.commandSafetyMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
+    // Plan mode:限制性开关,合并方向同 commandSafetyMode 的"只能收紧"——任一
+    // 来源(本地 settings / 队列快照 / 网关覆盖)要求 plan mode 即生效,远端
+    // 陈旧快照的 false 不得关闭本地已开启的 plan mode。仅 agent 模式有意义。
+    const effectivePlanModeEnabled =
+      effectiveIsAgentMode &&
+      (settings.chatRuntimeControls.planModeEnabled ||
+        overrides?.runtimeControlsOverride?.planModeEnabled === true ||
+        gatewayBridgeRequest?.runtimeControlsOverride?.planModeEnabled === true);
     const workdirResolution = {
       isAgentMode: effectiveIsAgentMode,
       workdirOverride: overrides?.workdirOverride,
@@ -1691,6 +1699,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
             commandSafetyMode: effectiveCommandSafetyMode,
+            planModeEnabled: effectivePlanModeEnabled,
             applyMcpOps: (ops) => {
               const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
               setSettings((prev) =>

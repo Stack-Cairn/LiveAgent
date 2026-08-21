@@ -587,6 +587,11 @@ pub fn app_restart(app: AppHandle) -> Result<(), String> {
     if let Err(error) = app.save_window_state(crate::WINDOW_STATE_FLAGS) {
         eprintln!("failed to save window state before restart: {error}");
     }
+    // restart() spawns the replacement before this process exits; if the new
+    // process reaches single-instance init while we still hold the lock, it
+    // forwards to a dying process and exits, so release the lock first.
+    #[cfg(not(debug_assertions))]
+    tauri_plugin_single_instance::destroy(&app);
     app.restart();
 }
 
