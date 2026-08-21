@@ -35,6 +35,7 @@ import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
 import { createTaskTools, type TaskStateStore } from "./taskTools";
 import { createTerminalTools } from "./terminalTools";
+import { createToolSearchTools, shouldDeferMcpTools } from "./toolSearchTools";
 import { createTunnelManagerTools, type TunnelManagerChange } from "./tunnelManagerTools";
 
 export type BuiltinToolRegistry = {
@@ -46,6 +47,9 @@ export type BuiltinToolRegistry = {
   ) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
   hasTool: (toolName: string) => boolean;
+  /** MCP 懒加载已启用:调用方应给 runner 挂 requestToolFilter(未激活的 MCP
+   * 工具不进模型请求)。工具仍全量在 tools 里——执行层必须找得到它们。 */
+  mcpToolDeferralActive?: boolean;
 };
 
 // 第三方来源(MCP server / 插件)的工具名不受我们控制,可能撞车。撞车时不能像
@@ -300,10 +304,42 @@ export async function buildBuiltinToolRegistry(
       conversationId: string;
       onPlanApproved?: (input: { plan: string }) => void;
     };
+    /** MCP 懒加载:schema 总量超阈值时注入 ToolSearch,MCP 工具延迟到激活后
+     * 才进模型请求(执行层始终全量注册)。仅 chat 场景;plan mode 下无意义
+     * (MCP 工具非只读,本就不在表内)。 */
+    toolSearch?: {
+      conversationId: string;
+    };
   },
 ) {
   const planModeActive = Boolean(params.planMode);
   const baseBundles = await buildBaseBuiltinToolBundles(params);
+  // MCP 懒加载判定:对"会进请求的 schema JSON"估算 token(与 tokenLedger 同
+  // 口径),超阈值才启用——多一次检索回合的代价只在真省下可观 context 时才值。
+  const mcpBundle = baseBundles.find((bundle) => bundle.groupId === "mcp") as
+    | (BuiltinToolBundle & {
+        toolNameMap?: Map<string, { serverId: string; toolName: string; serverLabel: string }>;
+      })
+    | undefined;
+  const mcpToolDeferralActive = Boolean(
+    params.toolSearch &&
+      params.runtimeScope === "chat" &&
+      !planModeActive &&
+      mcpBundle &&
+      shouldDeferMcpTools(mcpBundle.tools),
+  );
+  const toolSearchBundles =
+    mcpToolDeferralActive && params.toolSearch && mcpBundle
+      ? [
+          createToolSearchTools({
+            conversationId: params.toolSearch.conversationId,
+            entries: mcpBundle.tools.map((tool) => ({
+              tool,
+              serverLabel: mcpBundle.toolNameMap?.get(tool.name)?.serverLabel ?? "",
+            })),
+          }),
+        ]
+      : [];
   const taskBundles =
     params.runtimeScope === "chat" && params.taskStateStore
       ? [createTaskTools(params.taskStateStore)]
@@ -321,17 +357,26 @@ export async function buildBuiltinToolRegistry(
           }),
         ]
       : [];
-  const chatBundles = [...taskBundles, ...askUserQuestionBundles, ...planModeBundles];
+  const chatBundles = [
+    ...taskBundles,
+    ...askUserQuestionBundles,
+    ...planModeBundles,
+    ...toolSearchBundles,
+  ];
 
   // Plan mode:在注册表组装层裁掉非只读工具(而非 deny 后备拦截)——模型根本
   // 看不到写工具,不浪费 token 也无泄漏面。子代理协作工具(Agent/SendMessage)
   // 保留,Agent 由 forceReadonly 在 validate 层强制 readonly。
   const filterForPlanMode = (registry: ReturnType<typeof createBuiltinToolRegistry>) => {
-    if (!planModeActive) return registry;
-    return {
+    const withDeferralFlag: BuiltinToolRegistry = {
       ...registry,
-      tools: registry.tools.filter((tool) =>
-        isPlanModeAllowedTool(tool.name, registry.metadataByName.get(tool.name)),
+      mcpToolDeferralActive,
+    };
+    if (!planModeActive) return withDeferralFlag;
+    return {
+      ...withDeferralFlag,
+      tools: withDeferralFlag.tools.filter((tool) =>
+        isPlanModeAllowedTool(tool.name, withDeferralFlag.metadataByName.get(tool.name)),
       ),
     };
   };

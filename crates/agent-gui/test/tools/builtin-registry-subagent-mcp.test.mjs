@@ -432,3 +432,33 @@ test("plan mode filters the registry to read-only + plan + collaboration tools",
   assert.match(registry.tools.find((tool) => tool.name === "Agent").description, /PLAN MODE/);
   // executeToolCall 仍能执行被裁掉的工具吗?——不应依赖:执行层由 gate 后备拦截。
 });
+
+test("MCP deferral registers ToolSearch and keeps all tools in the execution registry", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const toolSearchModule = loader.loadModule("src/lib/tools/toolSearchTools.ts");
+
+  const baseParams = {
+    workdir: "/tmp/liveagent-tool-search-registry-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: false,
+    runtimeScope: "chat",
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+    toolSearch: { conversationId: "conversation-defer" },
+  };
+
+  // mock 的 docs server 只有一个小工具:低于阈值,不延迟、不注册 ToolSearch。
+  const light = await buildBuiltinToolRegistry(baseParams);
+  assert.equal(light.mcpToolDeferralActive, false);
+  assert.ok(!light.tools.some((tool) => tool.name === "ToolSearch"));
+  assert.ok(light.tools.some((tool) => tool.name === "mcp_docs_search"));
+
+  // 阈值判定是纯函数,超阈值场景由 tool-search-tools 单测覆盖;这里再验证
+  // 判定函数与注册表口径一致(同一批工具、同一估算函数)。
+  const mcpTools = light.tools.filter((tool) => tool.name.startsWith("mcp_"));
+  assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools), false);
+  assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools, 1), true);
+});

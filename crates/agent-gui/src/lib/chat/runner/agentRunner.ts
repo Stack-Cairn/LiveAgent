@@ -475,6 +475,12 @@ export async function runAssistantWithTools(params: {
     toolCall: ToolCall,
     signal?: AbortSignal,
   ) => Promise<{ allow: true } | { allow: false; reason: string }>;
+  /**
+   * 请求层工具可见性谓词(MCP 懒加载):返回 false 的工具不进发给模型的请求,
+   * 但保留在执行层(loop 快照)——已发生的调用照常校验与执行。每轮请求前重新
+   * 评估,ToolSearch 激活后下一轮立即可见。与隐藏的 provider 原生搜索桥同机制。
+   */
+  requestToolFilter?: (toolName: string) => boolean;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -795,7 +801,8 @@ export async function runAssistantWithTools(params: {
       tools?.filter(
         (tool) =>
           !hiddenProviderNativeWebSearchToolNames.has(tool.name) &&
-          !hiddenProviderNativeWebFetchToolNames.has(tool.name),
+          !hiddenProviderNativeWebFetchToolNames.has(tool.name) &&
+          (params.requestToolFilter?.(tool.name) ?? true),
       );
 
     const assistantVisibleAnswerText = (assistant: AssistantMessage) =>

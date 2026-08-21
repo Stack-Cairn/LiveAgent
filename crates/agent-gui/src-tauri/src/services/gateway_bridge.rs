@@ -1412,6 +1412,7 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "ReadTerminal"
             | "SendMessage"
             | "SkillsManager"
+            | "ToolSearch"
             | "SSHManager"
             | "SshManager"
             | "TaskCreate"

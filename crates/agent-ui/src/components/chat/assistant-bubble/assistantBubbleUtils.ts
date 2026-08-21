@@ -86,6 +86,8 @@ export function getToolMeta(name: string): {
       return { Icon: CircleHelp, accent: "var(--tool-list-accent)", category: "system" };
     case "ExitPlanMode":
       return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
+    case "ToolSearch":
+      return { Icon: Search, accent: "var(--tool-search-accent)", category: "search" };
     default:
       return { Icon: Wrench, accent: "var(--tool-file-accent)", category: "other" };
   }
@@ -387,6 +389,7 @@ export function isBuiltinShareToolName(name: string) {
     "ReadTerminal",
     "SendMessage",
     "SkillsManager",
+    "ToolSearch",
     "SSHManager",
     "SshManager",
     "TunnelManager",

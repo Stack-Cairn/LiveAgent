@@ -92,6 +92,10 @@ import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
 import { isSessionApproved, requestToolApproval } from "../../../lib/tools/toolApproval";
 import { resolveToolPolicy } from "../../../lib/tools/toolPolicy";
+import {
+  buildMcpRequestToolFilter,
+  getMcpToolActivation,
+} from "../../../lib/tools/toolSearchTools";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
 import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
 import {
@@ -611,6 +615,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     taskStateStore,
     askUserQuestionConversationId: conversationId,
     planMode: planModeEnabled ? { conversationId, onPlanApproved } : undefined,
+    toolSearch: { conversationId },
     checkpoint: {
       conversationId,
       turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
@@ -687,12 +692,30 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // systemPrompt，不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
   refreezeTaskListContext();
 
+  // MCP 懒加载:未激活的 MCP 工具不进模型请求(runner 每轮重估此谓词,
+  // ToolSearch 激活后下一轮立即可见);执行层保持全量注册。
+  const requestToolFilter = builtinRegistry.mcpToolDeferralActive
+    ? buildMcpRequestToolFilter({
+        conversationId,
+        metadataByName: builtinRegistry.metadataByName,
+      })
+    : undefined;
+
   const combinedExecutor: (
     toolCall: ToolCall,
     signal?: AbortSignal,
     context?: BuiltinToolExecutionContext,
-  ) => Promise<Message> = (tc, signal, context) =>
-    builtinRegistry.executeToolCall(tc, signal, context);
+  ) => Promise<Message> = (tc, signal, context) => {
+    // 直呼未激活 MCP 工具(模型凭历史记忆/精确猜名)也放行并顺带激活——
+    // 执行层本就找得到;激活保证后续轮次请求里能看到 schema,避免模型困惑。
+    if (
+      builtinRegistry.mcpToolDeferralActive &&
+      builtinRegistry.metadataByName.get(tc.name)?.groupId === "mcp"
+    ) {
+      getMcpToolActivation(conversationId).add(tc.name);
+    }
+    return builtinRegistry.executeToolCall(tc, signal, context);
+  };
 
   // 工具审批门:按实时策略裁决每次调用。deny → 直接拦;ask → 挂起等用户在
   // 聊天审批卡片作决定(本会话已“记住”的工具免审);allow → 放行。
@@ -985,6 +1008,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         subagentScheduler,
         executeToolCall: combinedExecutor,
         resolveToolGate,
+        requestToolFilter,
         onRequestStart: ({ round, context, toolsSuffix }) => {
           const activeSources = new Set(
             currentTrajectoryRuntimeContext.entries.map((entry) => entry.source),

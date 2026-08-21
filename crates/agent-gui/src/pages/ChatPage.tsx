@@ -130,6 +130,7 @@ import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { cancelPendingPlanDecisionsForConversation } from "../lib/tools/planModeTools";
 import { cancelPendingToolApprovalsForConversation } from "../lib/tools/toolApproval";
+import { clearMcpToolActivation } from "../lib/tools/toolSearchTools";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
@@ -978,6 +979,7 @@ export function ChatPage(props: ChatPageProps) {
           cancelPendingAskUserQuestionsForConversation(conversationId);
           cancelPendingToolApprovalsForConversation(conversationId);
           cancelPendingPlanDecisionsForConversation(conversationId);
+          clearMcpToolActivation(conversationId);
         },
       });
     },

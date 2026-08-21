@@ -2552,3 +2552,61 @@ test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错�
   assert.equal(prefixCaptures[2].prefixChanged, false);
   assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });
+
+test("requestToolFilter re-evaluates per round: activation mid-run exposes the tool next round", async () => {
+  // 轮中激活的正式验证(MCP 懒加载 spike):
+  // 第 1 轮请求不含被延迟的 mcp 工具;ToolSearch 风格的激活发生在第 1 轮的
+  // 工具执行里;第 2 轮请求(同一 run 内)必须包含它,且执行层始终找得到。
+  const activation = new Set();
+  const deferredTool = {
+    name: "mcp_docs_search",
+    description: "Search docs",
+    parameters: { type: "object", properties: { q: { type: "string" } } },
+  };
+  const searchCall = createToolCall("call-search", "ToolSearch", { query: "docs" });
+  const mcpCall = createToolCall("call-mcp", "mcp_docs_search", { q: "hello" });
+  resetFakeStreams(
+    createToolUseAssistant(searchCall),
+    createToolUseAssistant(mcpCall),
+    createTextAssistant("done"),
+  );
+  const { params, executedToolCalls } = createBaseParams({
+    tools: [
+      {
+        name: "ToolSearch",
+        description: "Activate deferred tools",
+        parameters: { type: "object", properties: { query: { type: "string" } } },
+      },
+      deferredTool,
+    ],
+    requestToolFilter: (toolName) => toolName !== "mcp_docs_search" || activation.has(toolName),
+    async executeToolCall(toolCall) {
+      executedToolCalls.push(toolCall);
+      if (toolCall.name === "ToolSearch") {
+        activation.add("mcp_docs_search");
+        return createToolResult(toolCall, "Activated mcp_docs_search");
+      }
+      return createToolResult(toolCall, `result:${toolCall.name}`);
+    },
+  });
+  params.context = {
+    ...params.context,
+    tools: params.tools,
+  };
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(result.assistant.stopReason, "stop");
+  // 第 1 轮:延迟工具不在请求里;ToolSearch 在。
+  const round1Names = observedStreamContexts[0].tools.map((tool) => tool.name);
+  assert.ok(round1Names.includes("ToolSearch"));
+  assert.ok(!round1Names.includes("mcp_docs_search"));
+  // 第 2 轮(激活后,同一 run):延迟工具进入请求。
+  const round2Names = observedStreamContexts[1].tools.map((tool) => tool.name);
+  assert.ok(round2Names.includes("mcp_docs_search"));
+  // 执行层全程找得到:两次调用都真实执行。
+  assert.deepEqual(
+    executedToolCalls.map((call) => call.name),
+    ["ToolSearch", "mcp_docs_search"],
+  );
+});

@@ -342,6 +342,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.send_message.desc": "与子代理之间收发消息",
   "settings.builtinTool.send_message.detail":
     "在主对话与子代理之间传递消息，用于协调多代理协作。需要子代理运行时；仅在对话场景注册。",
+  "settings.builtinTool.tool_search.name": "工具检索",
+  "settings.builtinTool.tool_search.desc": "检索并按需激活被延迟注入的 MCP 工具",
+  "settings.builtinTool.tool_search.detail":
+    "MCP 工具的参数 schema 总量超过阈值时自动启用：工具仍全量注册在执行层，但只有检索命中（或被直接调用）的工具才进入模型请求，大幅降低多服务器场景的上下文占用。激活在会话内持续有效。仅在对话场景注册。",
   "settings.builtinTool.exit_plan_mode.name": "计划提交",
   "settings.builtinTool.exit_plan_mode.desc": "提交实施计划并等待你的批准",
   "settings.builtinTool.exit_plan_mode.detail":
