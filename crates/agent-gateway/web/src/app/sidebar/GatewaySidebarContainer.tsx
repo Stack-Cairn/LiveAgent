@@ -60,6 +60,7 @@ export type GatewaySidebarContainerProps = Omit<
   "onShareConversation"
 > & {
   store: SidebarStore;
+  approvalConversationIds: ReadonlySet<string>;
   // 手动压缩 pending 已按会话 id 键化，多个会话可同时“转圈”（issue #359 缺陷 #3）。
   transientRunningConversations?: readonly TransientSidebarRunningConversation[];
   // GatewayApp-level sidebar errors (project removal flow); store errors are
@@ -84,6 +85,7 @@ export type GatewaySidebarContainerProps = Omit<
 export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
   const {
     store,
+    approvalConversationIds,
     projects,
     externalErrorMessage,
     connectionLost,
@@ -319,6 +321,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
         renamingId,
         renameDraft,
       })}
+      approvalConversationIds={approvalConversationIds}
       {...buildChatHistorySidebarWorkspaceProps(
         props,
         sortedProjects,

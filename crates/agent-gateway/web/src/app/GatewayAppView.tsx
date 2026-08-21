@@ -81,6 +81,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     addNotify,
     api,
     approvalBar,
+    approvalConversationIds,
     archivedWorkspaceProjectPathKeys,
     associatedSshHostIds,
     availableSkills,
@@ -431,6 +432,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           <div className="gateway-editor-host">
             <GatewaySidebarContainer
               store={sidebarStore}
+              approvalConversationIds={approvalConversationIds}
               transientRunningConversations={manualCompactTransientConversations}
               currentConversationId={displayedConversationId}
               isOpen={sidebarOpen}

@@ -231,10 +231,12 @@ export const ConversationPaneHost = forwardRef<
                 />
               }
               approvalBar={
-                <PendingToolApprovalBar
-                  conversationId={snapshot.conversationId}
-                  approvals={snapshot.approvals}
-                />
+                snapshot.approvals.length > 0 ? (
+                  <PendingToolApprovalBar
+                    conversationId={snapshot.conversationId}
+                    approvals={snapshot.approvals}
+                  />
+                ) : null
               }
               fileDropOverlay={
                 fileDrop.active ? (

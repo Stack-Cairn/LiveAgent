@@ -101,6 +101,7 @@ const SIDEBAR_PROJECTS_BODY_DEFAULT_RATIO = 0.5;
 const SIDEBAR_MOBILE_PROJECTS_BODY_DEFAULT_RATIO = 0.4;
 const PROJECT_LIST_COLLAPSED_MAX = 30;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
+const EMPTY_APPROVAL_CONVERSATION_IDS = new Set<string>();
 const HISTORY_LOADING_SKELETON_ROWS = [
   { title: "w-36", meta: "w-20" },
   { title: "w-44", meta: "w-24" },
@@ -167,6 +168,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     currentConversationId,
     busyConversationIds,
     runningConversationIds,
+    approvalConversationIds = EMPTY_APPROVAL_CONVERSATION_IDS,
     listStatus,
     scopeKey = "",
     hasMore,
@@ -280,6 +282,30 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const bulkMoveRunRef = useRef(0);
   const { confirm: requestBulkDeleteConfirm, dialog: bulkDeleteDialog } = useConfirmDialog();
   const orderedConversationIds = useMemo(() => items.map((item) => item.id), [items]);
+  const visibleRunningProjectPathKeys = useMemo(() => {
+    if (approvalConversationIds.size === 0) return runningProjectPathKeys;
+
+    const approvalOnlyCandidates = new Set<string>();
+    const activelyRunningPathKeys = new Set<string>();
+    for (const item of items) {
+      if (!runningConversationIds.has(item.id)) continue;
+      const pathKey = workspaceProjectPathKey(item.cwd ?? "");
+      if (!pathKey) continue;
+      if (approvalConversationIds.has(item.id)) {
+        approvalOnlyCandidates.add(pathKey);
+      } else {
+        activelyRunningPathKeys.add(pathKey);
+      }
+    }
+
+    let next: Set<string> | null = null;
+    for (const pathKey of approvalOnlyCandidates) {
+      if (activelyRunningPathKeys.has(pathKey) || !runningProjectPathKeys.has(pathKey)) continue;
+      next ??= new Set(runningProjectPathKeys);
+      next.delete(pathKey);
+    }
+    return next ?? runningProjectPathKeys;
+  }, [approvalConversationIds, items, runningConversationIds, runningProjectPathKeys]);
   const selectableConversationIds = useMemo(
     () =>
       new Set(
@@ -1100,6 +1126,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         isActive={currentConversationId === item.id}
         isBusy={busyConversationIds.has(item.id)}
         isRunning={runningConversationIds.has(item.id)}
+        needsApproval={approvalConversationIds.has(item.id)}
         isDeleteDisabled={runningConversationIds.has(item.id)}
         canShareConversation={canShareConversations}
         isRenaming={renamingId === item.id}
@@ -1151,6 +1178,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       busyConversationIds,
       canShareConversations,
       activeProjects,
+      approvalConversationIds,
       enterSelectionMode,
       isBulkDeleting,
       isBulkMoving,
@@ -1453,7 +1481,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                   indented
                                   isActive={activeProjectId === project.id}
                                   isMissing={missingProjectPathKeys.has(pathKey)}
-                                  isRunning={runningProjectPathKeys.has(pathKey)}
+                                  isRunning={visibleRunningProjectPathKeys.has(pathKey)}
                                   pendingAction={
                                     pendingProjectAction?.projectId === project.id
                                       ? pendingProjectAction.mode
@@ -1519,7 +1547,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                               project={project}
                               isActive={activeProjectId === project.id}
                               isMissing={missingProjectPathKeys.has(pathKey)}
-                              isRunning={runningProjectPathKeys.has(pathKey)}
+                              isRunning={visibleRunningProjectPathKeys.has(pathKey)}
                               pendingAction={
                                 pendingProjectAction?.projectId === project.id
                                   ? pendingProjectAction.mode
@@ -1599,7 +1627,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                 project={project}
                                 isActive={activeProjectId === project.id}
                                 isMissing={missingProjectPathKeys.has(pathKey)}
-                                isRunning={runningProjectPathKeys.has(pathKey)}
+                                isRunning={visibleRunningProjectPathKeys.has(pathKey)}
                                 pendingAction={
                                   pendingProjectAction?.projectId === project.id
                                     ? pendingProjectAction.mode

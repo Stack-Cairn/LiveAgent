@@ -71,6 +71,7 @@ type HistoryRowProps = {
   isActive: boolean;
   isBusy: boolean;
   isRunning: boolean;
+  needsApproval: boolean;
   isDeleteDisabled: boolean;
   canShareConversation: boolean;
   isRenaming: boolean;
@@ -127,6 +128,7 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.isActive === next.isActive &&
     previous.isBusy === next.isBusy &&
     previous.isRunning === next.isRunning &&
+    previous.needsApproval === next.needsApproval &&
     previous.isDeleteDisabled === next.isDeleteDisabled &&
     previous.canShareConversation === next.canShareConversation &&
     previous.isRenaming === next.isRenaming &&
@@ -164,6 +166,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     isActive,
     isBusy,
     isRunning,
+    needsApproval,
     isDeleteDisabled,
     canShareConversation,
     isRenaming,
@@ -194,6 +197,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     onOpenInWorkbenchSplit,
   } = props;
   const { t } = useLocale();
+  const showRunningIndicator = isRunning && !needsApproval;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Enter/Escape mark the blur as handled so onBlur commits exactly once —
@@ -648,6 +652,11 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">
                   {item.title}
                 </span>
+                {!isSelectionMode && needsApproval ? (
+                  <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300">
+                    {t("chat.toolApproval.sidebarStatus")}
+                  </span>
+                ) : null}
               </button>
             </div>
 
@@ -655,7 +664,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               className={cn(
                 "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
                 isSelectionMode && "hidden",
-                isRunning || item.isPinned
+                showRunningIndicator || item.isPinned
                   ? // Mobile rows render no inline action buttons, so this flex
                     // box has zero content width AND zero height — max-w alone
                     // leaves the absolutely-positioned spinner fully clipped by
@@ -668,7 +677,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 menuOpen && "max-w-16 opacity-100",
               )}
             >
-              {isRunning ? (
+              {showRunningIndicator ? (
                 <span
                   role="img"
                   aria-label={t("chat.statusRunningReply")}
@@ -683,7 +692,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         ],
                   )}
                 >
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
                 </span>
               ) : item.isPinned ? (
                 <span
@@ -704,7 +713,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               <div
                 className={cn(
                   "flex items-center gap-0.5 transition-opacity duration-200",
-                  isRunning || item.isPinned
+                  showRunningIndicator || item.isPinned
                     ? "opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                     : "opacity-100",
                   menuOpen && "opacity-100",
@@ -1324,7 +1333,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               menuOpen && "opacity-0",
             )}
           >
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
           </span>
         ) : !isMissing && !isArchived && isPinned ? (
           <span

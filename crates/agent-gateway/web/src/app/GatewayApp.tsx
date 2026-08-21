@@ -1552,6 +1552,7 @@ function useGatewayAppController() {
 
   const {
     approvalBar,
+    approvalConversationIds,
     canDropUpload,
     chatProtocolIncompatibleMessage,
     composerCompactionBlocked,
@@ -1704,6 +1705,7 @@ function useGatewayAppController() {
     addNotify,
     api,
     approvalBar,
+    approvalConversationIds,
     archivedWorkspaceProjectPathKeys,
     associatedSshHostIds,
     availableSkills,

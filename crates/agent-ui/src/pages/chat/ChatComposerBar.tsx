@@ -292,7 +292,7 @@ export type ChatComposerBarProps = {
   onHeightChange?: (height: number) => void;
   /** 当前会话任务进度（存在时渲染在审批栏和队列面板之上）。 */
   taskProgressBar?: ReactNode;
-  /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
+  /** 待审批时替换输入卡片的集中审批面板。 */
   approvalBar?: ReactNode;
   /** 文件拖入命中输入框时显示的局部反馈层。 */
   fileDropOverlay?: ReactNode;
@@ -722,7 +722,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         )}
       >
         {taskProgressBar}
-        {approvalBar}
         {queuedTurns.length > 0 ? (
           <div
             ref={queuePanelRef}
@@ -863,8 +862,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           </div>
         ) : null}
 
+        {approvalBar}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
+          hidden={approvalBar != null}
           ref={glassCardRef}
           data-file-upload-drop-zone=""
           data-file-upload-conversation-id={conversationId}

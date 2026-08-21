@@ -3146,6 +3146,7 @@ export function ChatPage(props: ChatPageProps) {
       {/* ---- Left column: navigation/sidebar ---- */}
       <ChatSidebarContainer
         store={sidebarStore}
+        approvalStore={conversationRuntimeRegistry.approvals}
         currentConversationId={currentConversationId}
         isOpen={sidebarOpen}
         fontScale={settings.customSettings.fontScale.sidebar}

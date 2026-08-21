@@ -29,6 +29,8 @@ export type ChatHistorySidebarProps = {
   // Per-row in-flight mutations: only that row's menu/inputs disable.
   busyConversationIds: ReadonlyMap<string, ChatHistorySidebarMutationKind>;
   runningConversationIds: ReadonlySet<string>;
+  /** Conversations currently blocked on an explicit tool approval. */
+  approvalConversationIds?: ReadonlySet<string>;
   listStatus: ChatHistorySidebarListStatus;
   // Identity of the current list scope (workspace/text mode). A change
   // remounts the list content with a soft enter transition and resets scroll.

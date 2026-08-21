@@ -202,6 +202,13 @@ export function useGatewayChatPresentation({
     }
     return result;
   }, [transcriptRows]);
+  const approvalConversationIds = useMemo<ReadonlySet<string>>(
+    () =>
+      pendingToolApprovals.length > 0 && displayedConversationId
+        ? new Set([displayedConversationId])
+        : new Set(),
+    [displayedConversationId, pendingToolApprovals.length],
+  );
   const approvalBar =
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
@@ -331,6 +338,7 @@ export function useGatewayChatPresentation({
 
   return {
     approvalBar,
+    approvalConversationIds,
     canDropUpload,
     chatProtocolIncompatibleMessage,
     composerCompactionBlocked,
