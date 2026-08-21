@@ -211,6 +211,10 @@ pub(crate) fn load_runtime_ssh_host(host_id: &str) -> Result<Option<RuntimeSshHo
                         .get("passwordConfigured")
                         .and_then(Value::as_bool)
                         .unwrap_or(false),
+                    use_system_proxy: proxy
+                        .get("useSystemProxy")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
                 },
             })
         },

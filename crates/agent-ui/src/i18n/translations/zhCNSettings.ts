@@ -714,6 +714,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshDeleteActiveWarning": "删除将断开该主机的 {count} 个活跃 SSH 连接，此操作不可撤销。",
   "settings.sshAdvancedSettings": "高级设置",
   "settings.sshAdvancedProxy": "代理",
+  "settings.sshProxyUseSystem": "使用应用代理",
+  "settings.sshProxyUseSystemHint":
+    "直接复用「系统设置 → 应用代理」的配置，无需再单独填写下方代理信息；应用代理关闭时将直连。",
+  "settings.sshProxyUseSystemTag": "应用代理",
   "settings.sshProxyType": "代理类型",
   "settings.sshProxyTypeSocks5": "SOCKS5",
   "settings.sshProxyTypeHttp": "HTTP",

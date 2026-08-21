@@ -1190,6 +1190,41 @@ test("ssh keyboard-interactive hosts normalize without credential secrets or sec
   assert.equal(payload.ssh.hosts[0].proxy.passwordConfigured, true);
 });
 
+test("ssh proxy app-proxy reuse flag normalizes strictly and defaults to false", () => {
+  const appSettings = settings.normalizeSettings({
+    ssh: {
+      hosts: [
+        {
+          id: "reuse",
+          name: "Reuse",
+          host: "reuse.example.com",
+          authType: "password",
+          proxy: { useSystemProxy: true },
+        },
+        {
+          id: "manual",
+          name: "Manual",
+          host: "manual.example.com",
+          authType: "password",
+          proxy: { type: "http", url: "http://127.0.0.1", port: 8080, useSystemProxy: "yes" },
+        },
+        {
+          id: "legacy",
+          name: "Legacy",
+          host: "legacy.example.com",
+          authType: "password",
+        },
+      ],
+    },
+  });
+
+  assert.equal(appSettings.ssh.hosts[0].proxy.useSystemProxy, true);
+  // Non-boolean input must not accidentally opt a host into the app proxy.
+  assert.equal(appSettings.ssh.hosts[1].proxy.useSystemProxy, false);
+  assert.equal(appSettings.ssh.hosts[1].proxy.url, "http://127.0.0.1");
+  assert.equal(appSettings.ssh.hosts[2].proxy.useSystemProxy, false);
+});
+
 test("legacy ssh agent hosts fall back to password auth", () => {
   const appSettings = settings.normalizeSettings({
     ssh: {
@@ -2082,6 +2117,7 @@ test("gateway settings update payload uses sshPatch when hosts are explicitly de
           username: "",
           password: "",
           passwordConfigured: false,
+          useSystemProxy: false,
         },
       },
       after: null,

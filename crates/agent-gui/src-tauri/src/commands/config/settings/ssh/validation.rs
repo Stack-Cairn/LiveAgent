@@ -75,6 +75,7 @@ fn validate_and_normalize_ssh_proxy(
             payload.insert("username".to_string(), Value::String(String::new()));
             payload.insert("password".to_string(), Value::String(String::new()));
             payload.insert("passwordConfigured".to_string(), Value::Bool(false));
+            payload.insert("useSystemProxy".to_string(), Value::Bool(false));
             return Ok(payload);
         }
         Some(_) => return Err(format!("{label}.proxy 必须是对象")),
@@ -88,6 +89,7 @@ fn validate_and_normalize_ssh_proxy(
     let password_configured =
         extract_bool_with_default(proxy, "passwordConfigured", &proxy_label, false)?
             || !password.is_empty();
+    let use_system_proxy = extract_bool_with_default(proxy, "useSystemProxy", &proxy_label, false)?;
 
     let mut payload = Map::new();
     payload.insert("type".to_string(), Value::String(proxy_type));
@@ -99,6 +101,7 @@ fn validate_and_normalize_ssh_proxy(
         "passwordConfigured".to_string(),
         Value::Bool(password_configured),
     );
+    payload.insert("useSystemProxy".to_string(), Value::Bool(use_system_proxy));
     Ok(payload)
 }
 

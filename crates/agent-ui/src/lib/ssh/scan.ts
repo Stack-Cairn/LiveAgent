@@ -310,6 +310,7 @@ export async function scanSshImportCandidates(
         username: "",
         password: "",
         passwordConfigured: false,
+        useSystemProxy: false,
       },
       source: SSH_CONFIG_PATH,
       duplicate: false,

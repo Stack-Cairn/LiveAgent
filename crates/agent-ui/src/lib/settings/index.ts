@@ -1149,6 +1149,7 @@ export function normalizeSshProxyConfig(input: unknown): SshProxyConfig {
     username: typeof obj.username === "string" ? obj.username.trim() : "",
     password,
     passwordConfigured: password.length > 0 || obj.passwordConfigured === true,
+    useSystemProxy: obj.useSystemProxy === true,
   };
 }
 

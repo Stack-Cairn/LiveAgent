@@ -612,6 +612,7 @@ fn ssh_password_fallback_prompt_targets_password_auth() {
             username: String::new(),
             password: String::new(),
             password_configured: false,
+            use_system_proxy: false,
         },
     };
 
@@ -739,6 +740,7 @@ fn ssh_proxy_parser_resolves_http_and_socks5_endpoints() {
             username: "proxy-user".to_string(),
             password: "proxy-pass".to_string(),
             password_configured: true,
+            use_system_proxy: false,
         },
     };
 
@@ -754,6 +756,77 @@ fn ssh_proxy_parser_resolves_http_and_socks5_endpoints() {
     let proxy = resolve_ssh_proxy(&host).expect("resolve http proxy");
     assert_eq!(proxy.kind, SshProxyKind::Http);
     assert_eq!(proxy.host, "proxy.local");
+    assert_eq!(proxy.port, 8080);
+}
+
+#[test]
+fn ssh_effective_proxy_resolves_manual_config_and_direct_connections() {
+    let mut host = RuntimeSshHostConfig {
+        id: "prod".to_string(),
+        name: "Production".to_string(),
+        host: "prod.example.com".to_string(),
+        port: 22,
+        username: "deploy".to_string(),
+        auth_type: "keyboardInteractive".to_string(),
+        password: String::new(),
+        private_key: String::new(),
+        private_key_path: String::new(),
+        private_key_passphrase: String::new(),
+        proxy: crate::commands::settings::RuntimeSshProxyConfig {
+            proxy_type: "socks5".to_string(),
+            url: String::new(),
+            port: 0,
+            username: String::new(),
+            password: String::new(),
+            password_configured: false,
+            use_system_proxy: false,
+        },
+    };
+
+    // No proxy configured at all → direct connection.
+    assert!(resolve_effective_ssh_proxy(&host)
+        .expect("resolve without proxy")
+        .is_none());
+
+    // Manual proxy fields resolve exactly like before.
+    host.proxy.url = "socks5://127.0.0.1:1081".to_string();
+    let proxy = resolve_effective_ssh_proxy(&host)
+        .expect("resolve manual proxy")
+        .expect("manual proxy should be used");
+    assert_eq!(proxy.kind, SshProxyKind::Socks5);
+    assert_eq!(proxy.host, "127.0.0.1");
+    assert_eq!(proxy.port, 1081);
+}
+
+#[test]
+fn ssh_app_proxy_reuse_maps_system_proxy_config() {
+    let socks = crate::services::system_proxy::SystemProxyConfig {
+        enabled: true,
+        proxy_type: "socks5".to_string(),
+        host: "10.0.0.1".to_string(),
+        port: 1080,
+        username: "user".to_string(),
+        password: "pass".to_string(),
+    };
+    let proxy = system_proxy_to_ssh_proxy(&socks);
+    assert_eq!(proxy.kind, SshProxyKind::Socks5);
+    assert_eq!(proxy.host, "10.0.0.1");
+    assert_eq!(proxy.port, 1080);
+    assert_eq!(proxy.username, "user");
+    assert_eq!(proxy.password, "pass");
+
+    let http_ipv6 = crate::services::system_proxy::SystemProxyConfig {
+        enabled: true,
+        proxy_type: "http".to_string(),
+        host: "[::1]".to_string(),
+        port: 8080,
+        username: String::new(),
+        password: String::new(),
+    };
+    let proxy = system_proxy_to_ssh_proxy(&http_ipv6);
+    assert_eq!(proxy.kind, SshProxyKind::Http);
+    // Bracketed IPv6 hosts must be unwrapped for TcpStream resolution.
+    assert_eq!(proxy.host, "::1");
     assert_eq!(proxy.port, 8080);
 }
 
@@ -970,6 +1043,7 @@ fn ssh_private_key_host(private_key: &str, passphrase: &str) -> RuntimeSshHostCo
             username: String::new(),
             password: String::new(),
             password_configured: false,
+            use_system_proxy: false,
         },
     }
 }
