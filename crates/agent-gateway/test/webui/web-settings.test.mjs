@@ -476,6 +476,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
   assert.deepEqual(defaults.chatRuntimeControls, {
     thinkingEnabled: true,
     nativeWebSearchEnabled: true,
+    planModeEnabled: false,
     reasoning: "high",
     reasoningByProvider: {
       claude_code: "high",
@@ -612,6 +613,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     {
       thinkingEnabled: false,
       nativeWebSearchEnabled: false,
+      planModeEnabled: false,
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
@@ -638,6 +640,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     {
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
+      planModeEnabled: false,
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "xhigh",
@@ -661,6 +664,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     {
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
+      planModeEnabled: false,
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "high",
