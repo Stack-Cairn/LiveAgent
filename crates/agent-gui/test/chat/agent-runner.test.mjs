@@ -2610,3 +2610,33 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
     ["ToolSearch", "mcp_docs_search"],
   );
 });
+
+
+test("resolveToolTermination ends the run after the flagged tool call (no wrap-up round)", async () => {
+  // 计划批准语义:ExitPlanMode 获批后本轮就此结束——只消耗 1 个模型轮,
+  // 不再为"收尾话"请求下一轮(队列因此立即放行续轮)。
+  const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
+  resetFakeStreams(
+    createToolUseAssistant(planCall),
+    createTextAssistant("SHOULD_NEVER_STREAM"),
+  );
+  const { params, executedToolCalls, textDeltas } = createBaseParams({
+    tools: [
+      {
+        name: "ExitPlanMode",
+        description: "Present the plan",
+        parameters: { type: "object", properties: { plan: { type: "string" } } },
+      },
+    ],
+    resolveToolTermination: (toolCall) => toolCall.name === "ExitPlanMode",
+  });
+  params.context = { ...params.context, tools: params.tools };
+
+  const result = await runAssistantWithTools(params);
+
+  assert.deepEqual(executedToolCalls.map((call) => call.name), ["ExitPlanMode"]);
+  // 只发出了一次模型请求:terminate 阻止了收尾轮。
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(textDeltas.join(""), "");
+  assert.equal(result.assistant.stopReason, "toolUse");
+});

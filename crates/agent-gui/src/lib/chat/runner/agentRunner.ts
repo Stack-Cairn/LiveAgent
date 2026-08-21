@@ -481,6 +481,12 @@ export async function runAssistantWithTools(params: {
    * 评估,ToolSearch 激活后下一轮立即可见。与隐藏的 provider 原生搜索桥同机制。
    */
   requestToolFilter?: (toolName: string) => boolean;
+  /**
+   * 工具级终止谓词:某次调用执行完后返回 true 则本轮 run 就此结束,不再跑
+   * 后续模型轮(pi-agent-core afterToolCall terminate)。计划批准用它跳过
+   * 无意义的"收尾话"轮——批准事实由卡片展示,执行由续轮承接。
+   */
+  resolveToolTermination?: (toolCall: ToolCall) => boolean;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -1488,7 +1494,9 @@ export async function runAssistantWithTools(params: {
         isError: toolResultErrorFlags.get(toolCall.id) ?? false,
         // The batch only terminates when *every* call terminates, so a real
         // local tool call mixed into the same message keeps the loop running.
-        terminate: await shouldTerminateBridgedProviderNativeToolCall(assistantMessage, toolCall),
+        terminate:
+          (params.resolveToolTermination?.(toolCall) ?? false) ||
+          (await shouldTerminateBridgedProviderNativeToolCall(assistantMessage, toolCall)),
       }),
       beforeToolCall: async ({ assistantMessage, toolCall }) => {
         const effectiveToolCall = normalizeToolCallNameForExecution(toolCall);

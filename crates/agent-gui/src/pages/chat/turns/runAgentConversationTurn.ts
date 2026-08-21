@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import { EXIT_PLAN_MODE_TOOL_NAME } from "@liveagent/ui/lib/chat/planMode";
 import {
   composeTrajectorySystemPrompt,
   serializeToolCatalog,
@@ -84,6 +85,7 @@ import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinType
 import { createFileToolState } from "../../../lib/tools/fileToolState";
 import {
   buildPlanModeSystemPromptSection,
+  isPlanApprovalToolCall,
   isPlanModeAllowedTool,
 } from "../../../lib/tools/planModeTools";
 import { resolveShellSandboxSettings } from "../../../lib/tools/sandboxPolicy";
@@ -1009,6 +1011,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         executeToolCall: combinedExecutor,
         resolveToolGate,
         requestToolFilter,
+        // 计划获批即终止本轮:批准事实由卡片展示,执行由续轮承接,收尾模型轮
+        // 纯属浪费且拖慢队列放行。
+        resolveToolTermination: planModeEnabled
+          ? (toolCall) =>
+              toolCall.name === EXIT_PLAN_MODE_TOOL_NAME && isPlanApprovalToolCall(toolCall.id)
+          : undefined,
         onRequestStart: ({ round, context, toolsSuffix }) => {
           const activeSources = new Set(
             currentTrajectoryRuntimeContext.entries.map((entry) => entry.source),

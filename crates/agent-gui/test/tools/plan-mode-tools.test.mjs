@@ -112,6 +112,8 @@ test("approve settles the pending plan and fires onPlanApproved", async () => {
   assert.equal(result.details.kind, "exit_plan_mode");
   assert.equal(result.details.decision, "approve");
   assert.deepEqual(approvals, [PLAN.trim()]);
+  // 获批调用进入终止标记集(runner 据此结束本轮);拒绝/超时路径不标记。
+  assert.equal(tools.isPlanApprovalToolCall("call-plan-approve"), true);
   // 已落定后再次应答被拒。
   assert.equal(tools.answerPlanDecision("call-plan-approve", { decision: "approve" }).ok, false);
 });
@@ -137,6 +139,7 @@ test("reject keeps plan mode and returns the feedback", async () => {
   assert.equal(result.details.decision, "reject");
   assert.equal(result.details.feedback, "拆成两步");
   assert.deepEqual(approvals, []);
+  assert.equal(tools.isPlanApprovalToolCall("call-plan-reject"), false);
 });
 
 test("timeout settles as not-approved (no callback)", async () => {

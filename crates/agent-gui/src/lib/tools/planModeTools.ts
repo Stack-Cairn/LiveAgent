@@ -2,8 +2,9 @@
 // 与 AskUserQuestion / 工具审批同构的挂起/落定/超时/中止模型
 // (见 askUserQuestionTools.ts / toolApproval.ts),差异有三:
 //   1. 超时缺省为"未批准"(计划批准是执行闸门,绝不能默认放行,与工具审批同取向)。
-//   2. 批准触发 onPlanApproved 回调:宿主据此关闭 plan 开关并入队"开始执行"续轮;
-//      本轮剩余部分仍处于 plan mode(工具表在 turn 起始冻结,不做轮中热切换)。
+//   2. 批准触发 onPlanApproved 回调(宿主关闭 plan 开关并入队"开始执行"续轮),
+//      并标记该调用已获批——runner 的工具级终止谓词据此直接结束本轮 run,
+//      不再跑"收尾话"模型轮;续轮由队列 drain 在 run 结束后自动发送。
 //   3. 拒绝不结束等待链路:模型收到反馈后继续留在 plan mode 完善计划。
 // 远端(WebUI)应答经 gateway chat_queue.plan_decision 转发到桌面后走同一入口
 // answerPlanDecision。
@@ -104,11 +105,22 @@ export function hasPendingPlanDecision(toolCallId: string) {
   return pendingByToolCallId.has(toolCallId.trim());
 }
 
+// 本会话进程内已获批准的 ExitPlanMode 调用:runner 的工具级终止谓词据此在
+// 批准后直接结束本轮 run(不再跑"收尾话"模型轮——批准事实由卡片展示,执行由
+// 续轮承接)。只存内存,随进程生命周期;会话销毁时随 cancel 清理。
+const approvedToolCallIds = new Set<string>();
+
+/** 该 ExitPlanMode 调用是否已获批准(runner 终止谓词用)。 */
+export function isPlanApprovalToolCall(toolCallId: string): boolean {
+  return approvedToolCallIds.has(toolCallId.trim());
+}
+
 /** 会话销毁兜底:挂起中的审批按"取消(未批准)"落定(正常路径由 AbortSignal 取消)。 */
 export function cancelPendingPlanDecisionsForConversation(conversationId: string) {
   for (const [toolCallId, pending] of pendingByToolCallId) {
     if (pending.conversationId === conversationId) {
       pendingByToolCallId.delete(toolCallId);
+      approvedToolCallIds.delete(toolCallId);
       pending.settle({ kind: "cancelled" });
     }
   }
@@ -141,7 +153,7 @@ export function buildPlanModeSystemPromptSection(): string {
     "- Mutation is impossible this turn: write-capable tools are not in your tool list. Do not promise edits you cannot make here.",
     `- When the plan is ready, call ${EXIT_PLAN_MODE_TOOL_NAME} with the complete plan (markdown) and wait for the user's decision.`,
     "- If the user rejects the plan, revise it per their feedback and submit again.",
-    "- After approval, finish this reply with a one-line confirmation. Execution starts automatically in the next turn with full tools; begin that turn by turning the plan into a task list (TaskCreate), then implement.",
+    "- Approval ends this turn immediately; execution starts automatically in the next turn with full tools — begin that turn by turning the plan into a task list (TaskCreate), then implement.",
     "- Keep the plan concrete: files to touch, ordered steps, risks, and how to verify.",
     "</plan-mode>",
   ].join("\n");
@@ -155,7 +167,7 @@ The plan renders as an interactive card; execution pauses until the user approve
 
 Rules:
 - \`plan\` must be the complete, self-contained plan in markdown — goals, files to change, ordered steps, risks, and verification. Do not reference earlier messages ("as discussed above").
-- On approval: wrap up this reply immediately with a short confirmation; execution continues automatically in the next turn with full tools. Do not start implementing in this turn.
+- On approval: this turn ends immediately; execution continues automatically in the next turn with full tools.
 - On rejection: the user's feedback comes back as the tool result. Stay in plan mode, revise, and call ${EXIT_PLAN_MODE_TOOL_NAME} again.`;
 
 const exitPlanModeParameters = Type.Object({
@@ -285,6 +297,8 @@ export function createExitPlanModeTools(params: {
 
     const { answer } = settlement;
     if (answer.decision === "approve") {
+      // 标记获批:runner 的终止谓词读到后直接结束本轮 run,跳过收尾模型轮。
+      approvedToolCallIds.add(toolCall.id);
       // 同步触发回调:宿主关闭 plan 开关并入队续轮。回调异常绝不能污染工具
       // 结果——计划批准的事实已经落定,续轮入队失败由宿主自行提示。
       try {
@@ -306,9 +320,8 @@ export function createExitPlanModeTools(params: {
           {
             type: "text",
             text: [
-              "The user APPROVED the plan.",
+              "The user APPROVED the plan. This turn ends here; execution starts automatically in the next turn with full tools.",
               ...(answer.feedback ? [`User note: ${answer.feedback}`] : []),
-              "Plan mode is still active for the remainder of this turn (read-only tools). Wrap up your reply now with a one-line confirmation — do not start implementing here. Execution starts automatically in the next turn with full tools.",
             ].join("\n"),
           },
         ],
