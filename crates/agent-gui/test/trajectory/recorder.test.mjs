@@ -4,7 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createTrajectoryRecorder, NOOP_TRAJECTORY_RECORDER } = loader.loadModule(
+const { createTrajectoryRecorder, scopeTrajectoryRecorder, NOOP_TRAJECTORY_RECORDER } = loader.loadModule(
   "src/lib/trajectory/recorder.ts",
 );
 
@@ -364,6 +364,27 @@ test("turn end is idempotent across happy-path and finalizer calls", () => {
   recorder.endTurn({ status: "error", error: "late finalizer" });
   assert.equal(published.filter((event) => event.k === "turn_end").length, 1);
   assert.equal(published.find((event) => event.k === "turn_end").st, "complete");
+});
+
+test("interleaved scoped runs close only their own trajectory turn", () => {
+  const { recorder, published } = harness();
+  const first = scopeTrajectoryRecorder(recorder, 1);
+  const second = scopeTrajectoryRecorder(recorder, 2);
+
+  first.beginTurn({ turn: 1 });
+  first.stepStart(1);
+  second.beginTurn({ turn: 2 });
+  second.stepStart(1);
+  first.endTurn({ status: "aborted" });
+  second.endTurn({ status: "complete" });
+
+  assert.deepEqual(
+    published.filter((event) => event.k === "turn_end").map((event) => [event.t, event.st]),
+    [
+      [1, "aborted"],
+      [2, "complete"],
+    ],
+  );
 });
 
 test("new request headers declare the seven-slot runtime layout version", () => {

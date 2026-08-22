@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const chatComposerBarSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -79,6 +85,43 @@ async function flushPromises() {
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("an aborted pre-runtime wait releases without waiting for local work", async () => {
+  const loader = createTsModuleLoader();
+  const { raceWithAbort } = loader.loadModule("src/lib/cancellation/abortRace.ts");
+  const localWork = deferred();
+  const controller = new AbortController();
+  const waiting = raceWithAbort(localWork.promise, controller.signal);
+
+  controller.abort(new Error("cancelled by user"));
+
+  await assert.rejects(waiting, /cancelled by user/);
+  // Finish the underlying local work after cancellation. Its settlement must
+  // remain observed and must not turn into an unhandled rejection.
+  localWork.resolve();
+  await flushPromises();
+});
+
+test("a pre-aborted wait still observes local work that rejects later", async () => {
+  const loader = createTsModuleLoader();
+  const { raceWithAbort } = loader.loadModule("src/lib/cancellation/abortRace.ts");
+  const localWork = deferred();
+  const controller = new AbortController();
+  controller.abort(new Error("already cancelled"));
+
+  await assert.rejects(raceWithAbort(localWork.promise, controller.signal), /already cancelled/);
+  localWork.reject(new Error("late local failure"));
+  await flushPromises();
+});
+
+test("a queued draft keeps a direct Stop control available", () => {
+  assert.match(
+    chatComposerBarSource,
+    /\{canQueueDraftWhileSending \? \(\s*<Button\s+onClick=\{onStop\}/,
+  );
+  assert.match(chatComposerBarSource, /title=\{t\("chat\.stopGeneration"\)\}/);
+  assert.match(chatComposerBarSource, /<Square className="h-3 w-3 fill-current" \/>/);
+});
 
 /**
  * Per-conversation live transcript stores, matching
@@ -693,6 +736,53 @@ test("terminal history persistence marks both false results and thrown errors", 
     /history database unavailable/,
   );
   assert.equal(failures, 2);
+});
+
+test("a stale terminal run cannot enqueue or publish a history snapshot", async () => {
+  const loader = createTsModuleLoader();
+  const { persistOwnedTerminalHistory } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  let ownsRun = false;
+  let persistCalls = 0;
+  let markedFailed = 0;
+
+  const skipped = await persistOwnedTerminalHistory({
+    input: { state: "old terminal snapshot" },
+    ownsRun: () => ownsRun,
+    persist: async () => {
+      persistCalls += 1;
+      return true;
+    },
+    markFailed: () => {
+      markedFailed += 1;
+    },
+  });
+
+  assert.equal(skipped, false);
+  assert.equal(persistCalls, 0);
+  assert.equal(markedFailed, 0);
+
+  ownsRun = true;
+  let persistenceGuard;
+  const persisted = await persistOwnedTerminalHistory({
+    input: { state: "current terminal snapshot" },
+    ownsRun: () => ownsRun,
+    persist: async (input) => {
+      persistCalls += 1;
+      persistenceGuard = input.shouldPersist;
+      return true;
+    },
+    markFailed: () => {
+      markedFailed += 1;
+    },
+  });
+
+  assert.equal(persisted, true);
+  assert.equal(persistCalls, 1);
+  assert.equal(typeof persistenceGuard, "function");
+  assert.equal(persistenceGuard(), true);
+  assert.equal(markedFailed, 0);
 });
 
 test("terminal history persistence retries transient failures before succeeding", async () => {

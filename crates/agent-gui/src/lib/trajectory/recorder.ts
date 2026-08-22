@@ -50,6 +50,8 @@ export type TrajectoryStepEndInfo = {
 };
 
 export type TrajectoryRecorder = {
+  /** Internal hook used by conversation runs that share one recorder. */
+  selectTurn?: (turn: number) => void;
   /**
    * 一轮开始（用户消息落定）。同时把 `turn` 记为当前轮，后续调用不再重复传——
    * 让每个埋点点自己传 turn 号，多一个参数就多一处传错的机会。
@@ -135,6 +137,76 @@ export const NOOP_TRAJECTORY_RECORDER: TrajectoryRecorder = {
 };
 
 /**
+ * Bind a recorder to one conversation turn. A conversation can briefly have
+ * two runs alive while a force-stop finalizer is unwinding; every synchronous
+ * recorder call must select its own turn before emitting an event.
+ */
+export function scopeTrajectoryRecorder(
+  recorder: TrajectoryRecorder,
+  turn: number,
+  onSelect?: () => void,
+): TrajectoryRecorder {
+  const select = () => {
+    onSelect?.();
+    recorder.selectTurn?.(turn);
+  };
+  return {
+    selectTurn: recorder.selectTurn,
+    beginTurn: (info) => {
+      select();
+      recorder.beginTurn({ ...info, turn });
+    },
+    noteContext: (info) => {
+      select();
+      recorder.noteContext(info);
+    },
+    captureHeader: (input) => {
+      select();
+      return recorder.captureHeader(input);
+    },
+    stepStart: (step, headerId) => {
+      select();
+      recorder.stepStart(step, headerId);
+    },
+    firstToken: (step) => {
+      select();
+      recorder.firstToken(step);
+    },
+    stepEnd: (step, info) => {
+      select();
+      recorder.stepEnd(step, info);
+    },
+    noteRetry: (step, info) => {
+      select();
+      recorder.noteRetry(step, info);
+    },
+    toolStart: (step, toolCall) => {
+      select();
+      recorder.toolStart(step, toolCall);
+    },
+    toolEnd: (callId, info) => {
+      select();
+      recorder.toolEnd(callId, info);
+    },
+    compactionStart: (options) => {
+      select();
+      recorder.compactionStart(options);
+    },
+    compactionEnd: (info) => {
+      select();
+      recorder.compactionEnd(info);
+    },
+    endTurn: (info) => {
+      select();
+      recorder.endTurn(info);
+    },
+    flush: () => recorder.flush(),
+    dispose: () => recorder.dispose(),
+    discard: () => recorder.discard(),
+  };
+}
+
+/**
  * 创建会话级 recorder。
  *
  * @param params - 会话标识、当前活动 segment 的读取器与落盘/下发端口。
@@ -152,7 +224,7 @@ export function createTrajectoryRecorder(params: {
   let lastHeader: { headerId: string; refs: TrajectorySectionRefs } | undefined;
   // Events before beginTurn are retained as turn 1 rather than discarded.
   let currentTurn = 1;
-  let turnOpen = false;
+  const openTurns = new Set<number>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
   const firstTokenSeen = new Set<string>();
@@ -225,9 +297,12 @@ export function createTrajectoryRecorder(params: {
   };
 
   return {
+    selectTurn: (turn) => {
+      if (Number.isFinite(turn)) currentTurn = Math.max(1, Math.trunc(turn));
+    },
     beginTurn: ({ turn, messageIndex, messageId, text }) => {
       currentTurn = turn;
-      turnOpen = true;
+      openTurns.add(turn);
       emit({
         k: "user",
         t: turn,
@@ -347,8 +422,8 @@ export function createTrajectoryRecorder(params: {
       });
     },
     endTurn: (info) => {
-      if (!turnOpen) return;
-      turnOpen = false;
+      if (!openTurns.has(currentTurn)) return;
+      openTurns.delete(currentTurn);
       const unfinishedSteps = [...openSteps]
         .map((key) => {
           const [turnText, stepText] = key.split(" ");

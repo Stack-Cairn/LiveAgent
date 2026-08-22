@@ -90,3 +90,38 @@ test("the recorder registry exclusively owns desktop live trajectory writes", ()
     assert.doesNotMatch(source, /appendDesktopLiveTrajectory/);
   }
 });
+
+test("late scoped trajectory events publish through their owning run", () => {
+  const conversationId = "desktop-live-interleaved-runs";
+  const publishedByRun = { old: [], replacement: [] };
+  clearDesktopLiveTrajectory(conversationId);
+
+  const oldRun = acquireTrajectoryRecorder(
+    conversationId,
+    0,
+    (events) => publishedByRun.old.push(...events),
+    7,
+  );
+  const replacementRun = acquireTrajectoryRecorder(
+    conversationId,
+    0,
+    (events) => publishedByRun.replacement.push(...events),
+    8,
+  );
+
+  try {
+    oldRun.recorder.beginTurn({ turn: 7, messageIndex: 0, text: "old" });
+    replacementRun.recorder.beginTurn({ turn: 8, messageIndex: 1, text: "replacement" });
+    oldRun.recorder.stepStart(1);
+    replacementRun.recorder.stepStart(1);
+    oldRun.recorder.endTurn({ status: "aborted" });
+    replacementRun.recorder.endTurn({ status: "complete" });
+
+    assert.equal(publishedByRun.old.every((event) => event.t === 7), true);
+    assert.equal(publishedByRun.replacement.every((event) => event.t === 8), true);
+    assert.equal(publishedByRun.old.some((event) => event.k === "turn_end"), true);
+    assert.equal(publishedByRun.replacement.some((event) => event.k === "turn_end"), true);
+  } finally {
+    discardTrajectoryRecorder(conversationId);
+  }
+});

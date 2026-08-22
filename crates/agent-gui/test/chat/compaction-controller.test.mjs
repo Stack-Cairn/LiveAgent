@@ -140,6 +140,17 @@ function bindController(controller, overrides = {}) {
   return { cancellation, recorder };
 }
 
+test("a stale turn lease cannot unbind a replacement compaction binding", () => {
+  const controller = new CompactionController();
+  const oldLease = controller.bindTurn({ sinks: {} });
+  const replacementLease = controller.bindTurn({ sinks: {} });
+
+  assert.equal(controller.unbindTurn(oldLease), false);
+  assert.equal(controller.isTurnBound(replacementLease), true);
+  assert.equal(controller.unbindTurn(replacementLease), true);
+  assert.equal(controller.isTurnBound(replacementLease), false);
+});
+
 test("pre-send compaction: checkpoint, persist, re-appended user message, paired status", async () => {
   const controller = new CompactionController();
   const baseState = bigState();
@@ -362,6 +373,9 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
   releaseOld();
   await assert.rejects(oldPending, /abort/i);
   assert.equal(oldBinding.recorder.byKind("persist").length, 0);
+  // The old task has now unwound. Its finally block must not clear the
+  // replacement compaction's in-flight guard.
+  assert.equal(controller.shouldProtectMidStream(1_000_000), false);
   assert.equal(observed.at(-1)[0], "start");
 
   releaseNew();
@@ -377,6 +391,68 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
       ["end", "complete"],
     ],
   );
+});
+
+test("a replacement binding keeps a late old terminal on the old observer", async () => {
+  const controller = new CompactionController();
+  const oldObserved = [];
+  const newObserved = [];
+  let releaseOld;
+  const oldGate = new Promise((resolve) => {
+    releaseOld = resolve;
+  });
+
+  const oldBinding = bindController(controller, {
+    observer: {
+      onStart: (info) => oldObserved.push(["start", info]),
+      onEnd: (info) => oldObserved.push(["end", info]),
+    },
+    complete: async () => {
+      await oldGate;
+      return summaryResponse();
+    },
+  });
+  const oldPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  controller.unbindTurn();
+  let releaseNew;
+  const newGate = new Promise((resolve) => {
+    releaseNew = resolve;
+  });
+  const newBinding = bindController(controller, {
+    observer: {
+      onStart: (info) => newObserved.push(["start", info]),
+      onEnd: (info) => newObserved.push(["end", info]),
+    },
+    complete: async () => {
+      await newGate;
+      return summaryResponse();
+    },
+  });
+  const newPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  releaseOld();
+  await assert.rejects(oldPending, /abort/i);
+  assert.deepEqual(
+    oldObserved.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "post-tool"],
+      ["end", "aborted"],
+    ],
+  );
+  assert.deepEqual(
+    newObserved.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [["start", "post-tool"]],
+  );
+
+  releaseNew();
+  const result = await newPending;
+  assert.equal(result.outcome, "compacted");
+  assert.equal(newObserved.at(-1)[1].status, "complete");
+  assert.equal(oldObserved.at(-1)[1].status, "aborted");
+  assert.notEqual(oldBinding.cancellation, newBinding.cancellation);
 });
 
 test("summarizer failure degrades to prune and still returns a usable context", async () => {

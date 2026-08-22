@@ -13,7 +13,11 @@ import {
   type PreparedSystemPromptSlots,
 } from "../../pages/chat/runtime/conversationContextBuilders";
 import { appendDesktopLiveTrajectory, clearDesktopLiveTrajectory } from "./liveTrajectory";
-import { createTrajectoryRecorder, type TrajectoryRecorder } from "./recorder";
+import {
+  createTrajectoryRecorder,
+  scopeTrajectoryRecorder,
+  type TrajectoryRecorder,
+} from "./recorder";
 import {
   createTauriTrajectoryPorts,
   resolvePersistedTrajectoryTurnNumber,
@@ -47,12 +51,23 @@ export function acquireTrajectoryRecorder(
   conversationId: string,
   segmentIndex: number,
   publish?: TrajectoryPublish,
+  turn?: number,
 ): { recorder: TrajectoryRecorder; readSlots: () => PreparedSystemPromptSlots } {
   const existing = entries.get(conversationId);
   if (existing !== undefined) {
     existing.segmentIndex = segmentIndex;
     existing.publish = publish;
-    return { recorder: existing.recorder, readSlots: existing.slots.read };
+    return {
+      recorder:
+        turn === undefined
+          ? existing.recorder
+          : scopeTrajectoryRecorder(existing.recorder, turn, () => {
+              // Recorder calls are synchronous. Select the matching bridge immediately before
+              // each event so an old run cannot publish late events through a replacement run.
+              existing.publish = publish;
+            }),
+      readSlots: existing.slots.read,
+    };
   }
   const slots = createPreparedSystemPromptSlotHolder();
   const entry: Entry = {
@@ -69,7 +84,15 @@ export function acquireTrajectoryRecorder(
     }),
   };
   entries.set(conversationId, entry);
-  return { recorder: entry.recorder, readSlots: slots.read };
+  return {
+    recorder:
+      turn === undefined
+        ? entry.recorder
+        : scopeTrajectoryRecorder(entry.recorder, turn, () => {
+            entry.publish = publish;
+          }),
+    readSlots: slots.read,
+  };
 }
 
 /** 供上下文构建器写入分段原文。 */

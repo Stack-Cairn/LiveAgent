@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { readMessageContextUsage } from "../../../lib/chat/compaction/contextUsageMetadata";
 import type {
   CompactionController,
+  CompactionObserver,
   CompactionSinks,
   ManualCompactionOutcome,
   ManualContextUsageSnapshot,
@@ -97,6 +98,7 @@ export function useManualCompaction(params: {
   t: (key: string) => string;
   currentConversationIdRef: MutableRefObject<string>;
   isConversationRunning: (conversationId: string) => boolean;
+  getConversationAbortController: (conversationId: string) => AbortController | null;
   setConversationRunningState: (conversationId: string, value: boolean) => void;
   setConversationAbortController: (
     conversationId: string,
@@ -141,6 +143,7 @@ export function useManualCompaction(params: {
     t,
     currentConversationIdRef,
     isConversationRunning,
+    getConversationAbortController,
     setConversationRunningState,
     setConversationAbortController,
     setConversationStopHandler,
@@ -198,6 +201,9 @@ export function useManualCompaction(params: {
       let stopHandlerRegistered = false;
       let stopRequestVersion: number | null = null;
       let flushTrajectory: (() => Promise<void>) | null = null;
+      const ownsManualRun = () =>
+        !stopHandlerRegistered ||
+        getConversationAbortController(conversationId) === cancellation.userStop;
       // 停止处理器与发送链路 handleConversationStop 同款：记录版本号供 finally
       // 消费 stop intent；abort 使 compactManually 中止（controller 返回 aborted）。
       const handleStop: ConversationStopHandler = (options) => {
@@ -322,13 +328,17 @@ export function useManualCompaction(params: {
 
         let compactionFailureMessage = "";
         const sinks: CompactionSinks = {
-          applyState: (state) =>
-            updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state })),
+          applyState: (state) => {
+            if (!ownsManualRun()) return;
+            updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state }));
+          },
           applyStateMidRun: (state) => {
+            if (!ownsManualRun()) return;
             updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state }));
             resetLiveTranscript(transcriptStore);
           },
           publishStatus: (status) => {
+            if (!ownsManualRun()) return;
             if (status.phase === "failed") compactionFailureMessage = status.message;
             updateConversationRuntimeEntry(conversationId, (prev) => ({
               ...prev,
@@ -336,13 +346,17 @@ export function useManualCompaction(params: {
             }));
           },
           setBridgeToolStatus: (status, isCompaction = false) => {
+            if (!ownsManualRun()) return;
             gatewayBridgeEvents.queueToolStatus(status, isCompaction);
             updateToolStatus(status, transcriptStore);
           },
-          queueCheckpoint: (state, contextUsageTokens) =>
-            gatewayBridgeEvents.queueCheckpoint(state, contextUsageTokens),
-          persist: (state) =>
-            persistConversation({
+          queueCheckpoint: (state, contextUsageTokens) => {
+            if (!ownsManualRun()) return;
+            gatewayBridgeEvents.queueCheckpoint(state, contextUsageTokens);
+          },
+          persist: (state) => {
+            if (!ownsManualRun()) return Promise.resolve(false);
+            return persistConversation({
               conversationId,
               sessionId: runtimeEntry.sessionId,
               providerId,
@@ -353,10 +367,14 @@ export function useManualCompaction(params: {
               fallbackTitle: t("chat.pendingTitle"),
               createdAt: runtimeEntry.createdAt,
               titlePromise: null,
-            }),
+              shouldPersist: ownsManualRun,
+            });
+          },
           // 压缩把携带 memory 增量块的 user 消息移出 active segment;丢弃注入
           // 状态后,下一轮发送的 getSystemText 回退到现读快照并重新冻结。
-          onCompacted: () => memoryTurnInjection.invalidate(conversationId),
+          onCompacted: () => {
+            if (ownsManualRun()) memoryTurnInjection.invalidate(conversationId);
+          },
         };
 
         const compactionController = getCompactionController(conversationId);
@@ -373,9 +391,10 @@ export function useManualCompaction(params: {
               });
             }
           },
+          1,
         );
         flushTrajectory = trajectoryRecording.recorder.flush;
-        compactionController.setObserver({
+        const compactionObserver: CompactionObserver = {
           onStart: ({ trigger }) => {
             trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
           },
@@ -391,13 +410,14 @@ export function useManualCompaction(params: {
               updateTrajectoryRecorderSegment(conversationId, newSegmentIndex);
             }
           },
-        });
+        };
         const outcome = await compactionController.compactManually(
           {
             providerId,
             model,
             runtime,
             cancellation,
+            observer: compactionObserver,
             sinks,
             buildPreparedContext: (state, tools, options) =>
               buildPreparedConversationContext({
@@ -430,6 +450,7 @@ export function useManualCompaction(params: {
           {
             tools: runtimeEntry.state.meta.tools,
             onProceed: () => {
+              if (!ownsManualRun()) return;
               proceeded = true;
               if (hasRemoteGatewayTarget) {
                 // 与 useSendChatTurn 同款注册镜像：userMessage 取最近一条用户消息
@@ -471,27 +492,36 @@ export function useManualCompaction(params: {
 
       try {
         result = await run();
-        if (result.status === "failed" && result.message && isCurrentConversation()) {
+        if (
+          ownsManualRun() &&
+          result.status === "failed" &&
+          result.message &&
+          isCurrentConversation()
+        ) {
           setErrorMessage(result.message);
         }
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (isCurrentConversation()) {
+        if (ownsManualRun() && isCurrentConversation()) {
           setErrorMessage(message);
         }
         result = { status: "failed", message };
         return result;
       } finally {
+        const ownsRunOnFinalization =
+          stopHandlerRegistered && getConversationAbortController(conversationId) === cancellation.userStop;
         const flushRecordedTrajectory = flushTrajectory as (() => Promise<void>) | null;
         if (flushRecordedTrajectory !== null) {
           await flushRecordedTrajectory();
         }
         if (stopHandlerRegistered) {
           clearConversationStopHandler(conversationId, handleStop);
-          setConversationAbortController(conversationId, null);
+          if (ownsRunOnFinalization) {
+            setConversationAbortController(conversationId, null);
+          }
         }
-        if (runningStateClaimed) {
+        if (runningStateClaimed && ownsRunOnFinalization) {
           setConversationRunningState(conversationId, false);
         }
         // 停止意图必须消费，否则残留会吞掉该会话的下一条消息。版本号不匹配
@@ -546,6 +576,7 @@ export function useManualCompaction(params: {
       finishGatewayRunMirror,
       flushGatewayBridgeEventsForRequest,
       getCompactionController,
+      getConversationAbortController,
       getConversationLiveTranscriptStore,
       isConversationRunning,
       persistConversation,

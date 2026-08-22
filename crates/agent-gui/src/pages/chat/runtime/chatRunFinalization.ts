@@ -125,6 +125,53 @@ export async function trackTerminalHistoryPersist(
 }
 
 /**
+ * Keep a terminal write attached to the run that produced it. A force-stopped
+ * run can finish after its replacement has installed a new controller; it
+ * must not enqueue its old snapshot or mark the replacement as persist-failed.
+ */
+export async function persistOwnedTerminalHistory<T extends object>(params: {
+  input: T;
+  ownsRun: () => boolean;
+  persist: (input: T & { shouldPersist: () => boolean }) => Promise<boolean>;
+  markFailed: () => void;
+  options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: (error: unknown, attempt: number, maxAttempts: number) => void;
+  };
+}): Promise<boolean> {
+  const { input, ownsRun, persist, markFailed, options } = params;
+  if (!ownsRun()) return false;
+
+  let ownershipLost = false;
+  const persistWhileOwned = async () => {
+    if (!ownsRun()) {
+      ownershipLost = true;
+      return true;
+    }
+    const persisted = await persist({ ...input, shouldPersist: ownsRun });
+    if (!ownsRun()) {
+      ownershipLost = true;
+      return true;
+    }
+    return persisted;
+  };
+
+  try {
+    const persisted = await persistTerminalHistoryWithRetry(persistWhileOwned, options);
+    if (!persisted && !ownershipLost) {
+      markFailed();
+    }
+    return ownershipLost ? false : persisted;
+  } catch (error) {
+    if (!ownsRun()) return false;
+    markFailed();
+    throw error;
+  }
+}
+
+/**
  * Ordered chat-run finalization: history persistence must land before the
  * gateway stream close / terminal runtime snapshot become observable remotely
  * (26f2561 — "done" is only sent after persist), otherwise a WebUI client can
