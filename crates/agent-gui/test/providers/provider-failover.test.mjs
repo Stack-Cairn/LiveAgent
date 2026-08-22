@@ -80,6 +80,15 @@ async function collectEvents(stream) {
   return events;
 }
 
+function resolvesWithin(promise, timeoutMs = 200) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
+}
+
 function makeCandidate(key, events, extra = {}) {
   return {
     key,
@@ -244,6 +253,32 @@ test("errors after content committed do not switch providers", async () => {
   const events = await collectEvents(stream);
   assert.equal(events.some((event) => event.type === "text_delta"), true);
   assert.equal(events.at(-1)?.type, "error");
+});
+
+test("abort ends a source that finishes iteration without resolving result", async () => {
+  const controller = new AbortController();
+  const source = piAiEventStream.createAssistantMessageEventStream();
+  source.end();
+  const stream = withProviderFailover(
+    [
+      {
+        key: "primary",
+        label: "primary",
+        model: { api: "anthropic-messages", provider: "anthropic", id: "primary" },
+        start: () => source,
+      },
+    ],
+    { config: BREAKER_CONFIG, signal: controller.signal },
+  );
+
+  controller.abort(new Error("cancelled by user"));
+
+  const result = await resolvesWithin(stream.result());
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(result.errorMessage, "Cancelled");
+  const events = await collectEvents(stream);
+  assert.equal(events.at(-1)?.type, "error");
+  assert.equal(events.at(-1)?.reason, "aborted");
 });
 
 test("maxSwitches caps how many candidates are attempted", async () => {

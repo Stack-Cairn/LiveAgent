@@ -5,6 +5,7 @@ import {
   createAssistantMessageEventStream,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
+import { raceWithAbort } from "../../cancellation/abortRace";
 
 /**
  * Provider auto-failover runtime (cc-switch inspired).
@@ -274,6 +275,25 @@ function buildStartFailureAssistantMessage(
   } as AssistantMessage;
 }
 
+function buildAbortedAssistantMessage(candidate: ProviderFailoverCandidate): AssistantMessage {
+  return {
+    ...buildStartFailureAssistantMessage(candidate, new Error("Cancelled")),
+    stopReason: "aborted",
+  } as AssistantMessage;
+}
+
+function observeSourceResult(source: AssistantMessageEventStream): void {
+  try {
+    // A terminal event is authoritative for the wrapped output. Keep a
+    // non-conforming source result observed without making terminal delivery
+    // depend on it, so a later rejection cannot become unhandled.
+    void Promise.resolve(source.result()).catch(() => undefined);
+  } catch {
+    // Custom stream implementations may throw from result(). Their terminal
+    // event has already determined the wrapped stream's outcome.
+  }
+}
+
 /**
  * Runs candidates in order with buffer-until-commit semantics.
  *
@@ -387,11 +407,12 @@ export function withProviderFailover(
       }
 
       if (terminal?.type === "done") {
+        observeSourceResult(source);
         if (!committed) {
           options.onCommitted?.(index);
           for (const bufferedEvent of buffered) output.push(bufferedEvent);
         }
-        output.end(await source.result());
+        output.end();
         return;
       }
 
@@ -399,6 +420,7 @@ export function withProviderFailover(
 
       if (!committed && terminalEligible && !isLastAttempt && !signal?.aborted) {
         // Discard this attempt's buffered events and try the next candidate.
+        observeSourceResult(source);
         continue;
       }
 
@@ -407,7 +429,25 @@ export function withProviderFailover(
       if (!committed) {
         for (const bufferedEvent of buffered) output.push(bufferedEvent);
       }
-      output.end(await source.result());
+      if (terminal) {
+        observeSourceResult(source);
+        output.end();
+        return;
+      }
+
+      try {
+        output.end(await raceWithAbort(source.result(), signal));
+      } catch (error) {
+        const final = signal?.aborted
+          ? buildAbortedAssistantMessage(candidate)
+          : buildStartFailureAssistantMessage(candidate, error);
+        output.push({
+          type: "error",
+          reason: signal?.aborted ? "aborted" : "error",
+          error: final,
+        });
+        output.end(final);
+      }
       return;
     }
   })();
