@@ -1193,6 +1193,22 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         setPendingUploadsForConversation(conversationId, clearedPendingUploads);
       }
     };
+    async function finalizePreRuntimeFailure(message: string, errorCode: string) {
+      // This is outside the provider runtime's try/finally. Every failure here
+      // must explicitly release the UI and any compaction lease so the next
+      // user message can begin a fresh run.
+      if (!ownsConversationRun()) return;
+      gatewayRuntimeFinalState = "failed";
+      gatewayRuntimeErrorCode = errorCode;
+      gatewayRuntimeErrorMessage = message;
+      setConversationErrorState(message);
+      gatewayBridgeEvents.emitError(message, conversationId);
+      releaseConversationRunUi();
+      releaseCompactionTurn();
+      await finalizeConversationRun("failed");
+      clearConversationStopHandler(conversationId, handleConversationStop);
+      restoreComposerOnStartFailure();
+    }
     if (mirrorsLocalRunToGateway) {
       try {
         const result = await awaitBeforeRuntime(markLocalGatewayRunStarted());
@@ -1222,31 +1238,35 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           return true;
         }
         const message = asErrorMessage(error, "启动远程对话运行失败");
-        setConversationErrorState(message);
-        gatewayBridgeEvents.emitError(message, conversationId);
-        releaseConversationRunUi();
-        await finalizeConversationRun("failed");
-        clearConversationStopHandler(conversationId, handleConversationStop);
-        restoreComposerOnStartFailure();
+        await finalizePreRuntimeFailure(message, "runtime_start_failed");
         return false;
       }
     }
 
     if (!initialUserTurnPersisted) {
-      const result = await awaitBeforeRuntime(
-        resolveTrajectoryTurnNumber({
-          conversationId,
-          currentUserPersisted: false,
-          fallbackTurn: nextConversationState.meta.totalMessageCount,
-        }),
-      );
-      if (result.cancelled) {
-        await finishRequestedStopBeforeRuntime();
-        return true;
-      }
-      trajectoryTurn = result.value;
-      if (await finishRequestedStopBeforeRuntime()) {
-        return true;
+      try {
+        const result = await awaitBeforeRuntime(
+          resolveTrajectoryTurnNumber({
+            conversationId,
+            currentUserPersisted: false,
+            fallbackTurn: nextConversationState.meta.totalMessageCount,
+          }),
+        );
+        if (result.cancelled) {
+          await finishRequestedStopBeforeRuntime();
+          return true;
+        }
+        trajectoryTurn = result.value;
+        if (await finishRequestedStopBeforeRuntime()) {
+          return true;
+        }
+      } catch (error) {
+        if (await finishRequestedStopBeforeRuntime()) {
+          return true;
+        }
+        // Trajectory numbering is diagnostic metadata. Keep the safe local
+        // fallback instead of preventing a conversation from starting.
+        console.warn("Failed to resolve trajectory turn number", error);
       }
     }
 
@@ -1281,14 +1301,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
       if (!persisted) {
         const message = "历史记录保存失败，已取消发送。";
-        setConversationErrorState(message);
-        gatewayRuntimeErrorCode = "history_persist_failed";
-        gatewayRuntimeErrorMessage = message;
-        gatewayBridgeEvents.emitError(message, conversationId);
-        releaseConversationRunUi();
-        await finalizeConversationRun("failed");
-        clearConversationStopHandler(conversationId, handleConversationStop);
-        restoreComposerOnStartFailure();
+        await finalizePreRuntimeFailure(message, "history_persist_failed");
         return true;
       }
       try {
@@ -1305,14 +1318,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           return true;
         }
         const message = asErrorMessage(error, "历史保存后的启动操作失败");
-        setConversationErrorState(message);
-        gatewayRuntimeErrorCode = "post_history_start_failed";
-        gatewayRuntimeErrorMessage = message;
-        gatewayBridgeEvents.emitError(message, conversationId);
-        releaseConversationRunUi();
-        await finalizeConversationRun("failed");
-        clearConversationStopHandler(conversationId, handleConversationStop);
-        restoreComposerOnStartFailure();
+        await finalizePreRuntimeFailure(message, "post_history_start_failed");
         return true;
       }
     } else {
@@ -1354,16 +1360,26 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         return true;
       }
     }
-    const queueUserMessageResult = await awaitBeforeRuntime(
-      gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
-        messageId: pendingUserMessage.id,
-        baseMessageRef: overrides?.editResendBaseMessageRef,
-        // The new message's own stable identity: lets remote transcripts bind
-        // their user bubble's messageRef immediately, so a follow-up edit of
-        // this message can anchor its rebase without a history round-trip.
-        messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
-      }),
-    );
+    let queueUserMessageResult: Awaited<ReturnType<typeof awaitBeforeRuntime>>;
+    try {
+      queueUserMessageResult = await awaitBeforeRuntime(
+        gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
+          messageId: pendingUserMessage.id,
+          baseMessageRef: overrides?.editResendBaseMessageRef,
+          // The new message's own stable identity: lets remote transcripts bind
+          // their user bubble's messageRef immediately, so a follow-up edit of
+          // this message can anchor its rebase without a history round-trip.
+          messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
+        }),
+      );
+    } catch (error) {
+      if (await finishRequestedStopBeforeRuntime()) {
+        return true;
+      }
+      const message = asErrorMessage(error, "无法将消息转发至网关。");
+      await finalizePreRuntimeFailure(message, "gateway_user_message_failed");
+      return false;
+    }
     if (queueUserMessageResult.cancelled) {
       await finishRequestedStopBeforeRuntime();
       return true;
@@ -1388,12 +1404,28 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return true;
     }
     acknowledgeGatewayRunStarted();
-    const promptModulesResult = await awaitBeforeRuntime(
-      Promise.all([
-        import("../../../lib/chat/memory/injectionController"),
-        import("../../../lib/memory/prompts/injection"),
-      ]),
-    );
+    let promptModuleLoadStopped = false;
+    const promptModulesResult = await (async () => {
+      try {
+        return await awaitBeforeRuntime(
+          Promise.all([
+            import("../../../lib/chat/memory/injectionController"),
+            import("../../../lib/memory/prompts/injection"),
+          ]),
+        );
+      } catch (error) {
+        if (await finishRequestedStopBeforeRuntime()) {
+          promptModuleLoadStopped = true;
+          return null;
+        }
+        const message = asErrorMessage(error, "无法加载对话运行模块。");
+        await finalizePreRuntimeFailure(message, "runtime_module_load_failed");
+        return null;
+      }
+    })();
+    if (promptModulesResult === null) {
+      return promptModuleLoadStopped;
+    }
     if (promptModulesResult.cancelled) {
       await finishRequestedStopBeforeRuntime();
       return true;
@@ -1604,33 +1636,35 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       let byName = new Map(skillsList.map((s) => [s.name, s]));
       let missing = selectedSkillNames.filter((n) => !byName.has(n));
       if (missing.length > 0 && workspaceResources.mode !== "custom") {
-        const freshResult = await awaitBeforeRuntime(refreshSkills());
-        if (freshResult.cancelled) {
-          await finishRequestedStopBeforeRuntime();
-          return true;
-        }
-        const fresh = freshResult.value;
-        if (await finishRequestedStopBeforeRuntime()) {
-          return true;
-        }
-        if (fresh) {
-          skillsList = fresh.skills;
-          rootDir = fresh.rootDir;
-          byName = new Map(skillsList.map((s) => [s.name, s]));
-          missing = selectedSkillNames.filter((n) => !byName.has(n));
+        try {
+          const freshResult = await awaitBeforeRuntime(refreshSkills());
+          if (freshResult.cancelled) {
+            await finishRequestedStopBeforeRuntime();
+            return true;
+          }
+          const fresh = freshResult.value;
+          if (await finishRequestedStopBeforeRuntime()) {
+            return true;
+          }
+          if (fresh) {
+            skillsList = fresh.skills;
+            rootDir = fresh.rootDir;
+            byName = new Map(skillsList.map((s) => [s.name, s]));
+            missing = selectedSkillNames.filter((n) => !byName.has(n));
+          }
+        } catch (error) {
+          if (await finishRequestedStopBeforeRuntime()) {
+            return true;
+          }
+          // Refresh is only a best-effort lookup. Continue to the existing
+          // missing-Skill error path so this preflight failure always cleans up.
+          console.warn("Failed to refresh skills before starting chat", error);
         }
       }
 
       if (missing.length > 0) {
         const message = `找不到以下 Skills：${missing.join(", ")}（请先重新扫描固定 Skills 目录）`;
-        setConversationErrorState(message);
-        gatewayRuntimeErrorCode = "skills_missing";
-        gatewayRuntimeErrorMessage = message;
-        gatewayBridgeEvents.emitError(message, conversationId);
-        releaseConversationRunUi();
-        await finalizeConversationRun("failed");
-        clearConversationStopHandler(conversationId, handleConversationStop);
-        restoreComposerOnStartFailure();
+        await finalizePreRuntimeFailure(message, "skills_missing");
         return true;
       }
 

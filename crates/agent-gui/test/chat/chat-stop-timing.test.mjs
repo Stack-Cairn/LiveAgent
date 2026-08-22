@@ -12,6 +12,10 @@ const conversationHistoryActionsSource = readFileSync(
   new URL("../../src/pages/chat/history/useConversationHistoryActions.ts", import.meta.url),
   "utf8",
 );
+const sendChatTurnSource = readFileSync(
+  new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -136,6 +140,19 @@ test("a stale title task cannot publish a failure or clear its replacement", () 
     conversationHistoryActionsSource,
     /titleJobRef\.current\?\.conversationId === conversationId &&\s*titleJobRef\.current\.promise === titlePromise/,
   );
+});
+
+test("a pre-runtime failure releases UI and the compaction turn before it exits", () => {
+  assert.match(
+    sendChatTurnSource,
+    /async function finalizePreRuntimeFailure\(message: string, errorCode: string\)[\s\S]*?releaseConversationRunUi\(\);\s*releaseCompactionTurn\(\);\s*await finalizeConversationRun\("failed"\);/,
+  );
+  const skillsFailureStart = sendChatTurnSource.indexOf('gatewayRuntimeErrorCode = "skills_missing"');
+  assert.equal(skillsFailureStart, -1, "the Skill path delegates cleanup to the shared helper");
+  assert.match(sendChatTurnSource, /gateway_user_message_failed/);
+  assert.match(sendChatTurnSource, /runtime_module_load_failed/);
+  assert.match(sendChatTurnSource, /Failed to resolve trajectory turn number/);
+  assert.match(sendChatTurnSource, /Failed to refresh skills before starting chat/);
 });
 
 /**
