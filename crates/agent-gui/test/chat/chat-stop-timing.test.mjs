@@ -145,7 +145,7 @@ test("a stale title task cannot publish a failure or clear its replacement", () 
 test("a pre-runtime failure releases UI and the compaction turn before it exits", () => {
   assert.match(
     sendChatTurnSource,
-    /async function finalizePreRuntimeFailure\(message: string, errorCode: string\)[\s\S]*?releaseConversationRunUi\(\);\s*releaseCompactionTurn\(\);\s*await finalizeConversationRun\("failed"\);/,
+    /async function finalizePreRuntimeFailure\(message: string, errorCode: string\)[\s\S]*?await finishRequestedStopBeforeRuntime\(\)[\s\S]*?restoreComposerOnStartFailure\(\);\s*releaseConversationRunUi\(\);\s*releaseCompactionTurn\(\);\s*clearConversationStopHandler\(conversationId, handleConversationStop\);\s*await finalizeConversationRun\("failed"\);[\s\S]*?pruneIdleConversationCaches\(\[conversationId\]\);[\s\S]*?requestQueuedChatTurnProcessing\(conversationId\);/,
   );
   const skillsFailureStart = sendChatTurnSource.indexOf('gatewayRuntimeErrorCode = "skills_missing"');
   assert.equal(skillsFailureStart, -1, "the Skill path delegates cleanup to the shared helper");

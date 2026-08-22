@@ -1197,17 +1197,28 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       // This is outside the provider runtime's try/finally. Every failure here
       // must explicitly release the UI and any compaction lease so the next
       // user message can begin a fresh run.
+      if (await finishRequestedStopBeforeRuntime()) return;
       if (!ownsConversationRun()) return;
       gatewayRuntimeFinalState = "failed";
       gatewayRuntimeErrorCode = errorCode;
       gatewayRuntimeErrorMessage = message;
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message, conversationId);
+      // Restore before releasing ownership: finalization may wait long enough
+      // for a replacement run to start and clear its own composer.
+      restoreComposerOnStartFailure();
       releaseConversationRunUi();
       releaseCompactionTurn();
-      await finalizeConversationRun("failed");
       clearConversationStopHandler(conversationId, handleConversationStop);
-      restoreComposerOnStartFailure();
+      await finalizeConversationRun("failed");
+      pruneIdleConversationCaches([conversationId]);
+      if (runStopRequestVersion !== null || cancellation.userStop.signal.aborted) {
+        if (runStopRequestVersion !== null) {
+          consumeConversationStop(conversationId, runStopRequestVersion);
+        }
+      } else {
+        requestQueuedChatTurnProcessing(conversationId);
+      }
     }
     if (mirrorsLocalRunToGateway) {
       try {
