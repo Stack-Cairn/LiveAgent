@@ -478,7 +478,7 @@ export async function streamAssistantMessage(params: {
           }
         }
 
-        let final = await s.result();
+        let final = await raceWithAbort(s.result(), params.signal);
         if (final.stopReason === "error" || final.stopReason === "aborted") {
           throw new Error(
             normalizeErrorMessage(
@@ -589,7 +589,7 @@ export async function completeAssistantMessage(params: {
   return withPowerActivity("assistant-complete", `${params.providerId}:${modelId}`, async () => {
     try {
       const s = streamSimpleByApi(m, callContext, options);
-      const final = await s.result();
+      const final = await raceWithAbort(s.result(), params.signal);
 
       if (final.stopReason === "error" || final.stopReason === "aborted") {
         throw new Error(

@@ -71,7 +71,7 @@ const loader = createTsModuleLoader({
   },
 });
 
-const { streamAssistantMessage } = loader.loadModule(
+const { streamAssistantMessage, completeAssistantMessage } = loader.loadModule(
   "src/lib/providers/runtime/textOnlyRuntime.ts",
 );
 const { resetFailoverBreakers } = loader.loadModule(
@@ -267,6 +267,63 @@ test("text mode cancellation does not wait for a stalled hosted-search probe", a
   assert.equal(finishCalls, 1, "abort cleanup starts the probe finish exactly once");
 
   finishGate.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test("text mode cancellation does not wait for a stalled provider result", async () => {
+  const controller = new AbortController();
+  const resultStarted = deferred();
+  const resultGate = deferred();
+  streamImpl = () => ({
+    async *[Symbol.asyncIterator]() {},
+    result() {
+      resultStarted.resolve();
+      return resultGate.promise;
+    },
+  });
+
+  const outcome = streamAssistantMessage(
+    baseParams({ signal: controller.signal }),
+  ).then(
+    () => "resolved",
+    () => "rejected",
+  );
+
+  await resultStarted.promise;
+  controller.abort();
+
+  assert.equal(await settlesPromptly(outcome), true);
+  assert.equal(await outcome, "rejected");
+
+  resultGate.resolve(makeAssistantMessage());
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test("completion cancellation does not wait for a stalled provider result", async () => {
+  const controller = new AbortController();
+  const resultStarted = deferred();
+  const resultGate = deferred();
+  streamImpl = () => ({
+    result() {
+      resultStarted.resolve();
+      return resultGate.promise;
+    },
+  });
+
+  const outcome = completeAssistantMessage(
+    baseParams({ signal: controller.signal }),
+  ).then(
+    () => "resolved",
+    () => "rejected",
+  );
+
+  await resultStarted.promise;
+  controller.abort();
+
+  assert.equal(await settlesPromptly(outcome), true);
+  assert.equal(await outcome, "rejected");
+
+  resultGate.resolve(makeAssistantMessage());
   await new Promise((resolve) => setImmediate(resolve));
 });
 

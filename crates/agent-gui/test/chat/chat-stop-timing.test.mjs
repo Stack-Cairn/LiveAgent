@@ -757,6 +757,10 @@ test("hosted-search probe cleanup is abortable while normal completion still wai
     textOnlyRuntimeSource,
     /raceWithAbort\(finishHostedSearchProbe\(\), params\.signal\)/,
   );
+  assert.equal(
+    textOnlyRuntimeSource.match(/raceWithAbort\(s\.result\(\), params\.signal\)/g)?.length,
+    2,
+  );
   assert.match(
     agentRunnerSource,
     /await raceWithAbort\(pending, params\.signal\)/,
