@@ -1302,35 +1302,44 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         });
     const initialPersist = initialPersistPromise;
     if (overrides?.afterInitialHistoryPersist && !overrides.beforeRuntimeStart) {
-      const initialPersistResult = await awaitBeforeRuntime(initialPersist);
-      if (initialPersistResult.cancelled) {
-        await finishRequestedStopBeforeRuntime();
-        return true;
-      }
-      const persisted = initialPersistResult.value;
-      if (await finishRequestedStopBeforeRuntime()) {
-        return true;
-      }
-      if (!persisted) {
-        const message = "历史记录保存失败，已取消发送。";
-        await finalizePreRuntimeFailure(message, "history_persist_failed");
-        return true;
-      }
       try {
-        const result = await awaitBeforeRuntime(overrides.afterInitialHistoryPersist());
-        if (result.cancelled) {
+        const initialPersistResult = await awaitBeforeRuntime(initialPersist);
+        if (initialPersistResult.cancelled) {
           await finishRequestedStopBeforeRuntime();
           return true;
         }
+        const persisted = initialPersistResult.value;
         if (await finishRequestedStopBeforeRuntime()) {
+          return true;
+        }
+        if (!persisted) {
+          const message = "历史记录保存失败，已取消发送。";
+          await finalizePreRuntimeFailure(message, "history_persist_failed");
+          return true;
+        }
+        try {
+          const result = await awaitBeforeRuntime(overrides.afterInitialHistoryPersist());
+          if (result.cancelled) {
+            await finishRequestedStopBeforeRuntime();
+            return true;
+          }
+          if (await finishRequestedStopBeforeRuntime()) {
+            return true;
+          }
+        } catch (error) {
+          if (await finishRequestedStopBeforeRuntime()) {
+            return true;
+          }
+          const message = asErrorMessage(error, "历史保存后的启动操作失败");
+          await finalizePreRuntimeFailure(message, "post_history_start_failed");
           return true;
         }
       } catch (error) {
         if (await finishRequestedStopBeforeRuntime()) {
           return true;
         }
-        const message = asErrorMessage(error, "历史保存后的启动操作失败");
-        await finalizePreRuntimeFailure(message, "post_history_start_failed");
+        const message = asErrorMessage(error, "历史记录保存失败，已取消发送。");
+        await finalizePreRuntimeFailure(message, "history_persist_failed");
         return true;
       }
     } else {

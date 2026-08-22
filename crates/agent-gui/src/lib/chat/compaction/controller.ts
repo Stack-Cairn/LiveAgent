@@ -5,6 +5,7 @@ import {
   positiveTokenCount,
 } from "@liveagent/ui/lib/chat/contextUsage";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { raceWithAbort } from "../../cancellation/abortRace";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
 import { type ConversationViewState, getActiveSegment } from "../conversation/conversationState";
@@ -254,7 +255,14 @@ export class CompactionController {
     binding: CompactionTurnBinding,
     state: ConversationViewState,
   ): Promise<ConversationViewState> {
-    const persisted = await binding.sinks.persist?.(state);
+    // Checkpoint durability matters, but an already-started write must not
+    // keep a Stop request from releasing the run. raceWithAbort continues to
+    // observe the underlying write after cancellation, so a late failure is
+    // not left as an unhandled rejection.
+    const persisted = await raceWithAbort(
+      binding.sinks.persist?.(state),
+      binding.cancellation.userStop.signal,
+    );
     if (persisted === false || persisted === null) {
       throw new Error("compaction checkpoint persistence failed");
     }

@@ -157,6 +157,10 @@ test("a pre-runtime failure releases UI and the compaction turn before it exits"
   assert.match(sendChatTurnSource, /runtime_module_load_failed/);
   assert.match(sendChatTurnSource, /Failed to resolve trajectory turn number/);
   assert.match(sendChatTurnSource, /Failed to refresh skills before starting chat/);
+  assert.match(
+    sendChatTurnSource,
+    /if \(overrides\?\.afterInitialHistoryPersist && !overrides\.beforeRuntimeStart\) \{\s*try \{\s*const initialPersistResult = await awaitBeforeRuntime\(initialPersist\);[\s\S]*?const message = asErrorMessage\(error, "历史记录保存失败，已取消发送。"\);\s*await finalizePreRuntimeFailure\(message, "history_persist_failed"\);/,
+  );
 });
 
 /**

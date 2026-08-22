@@ -73,6 +73,16 @@ function summaryResponse() {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 // 3 个用户消息绕开 MIN_COMPACTION_USER_MESSAGES 冷却窗，方便连续压缩场景。
 function bigState(extraMessages = []) {
   return conversationState.createConversationStateFromContext({
@@ -692,6 +702,51 @@ test("a rejected checkpoint persist never switches runtime state to the unpersis
       .byKind("applyStateMidRun")
       .every(([, state]) => state.meta.activeSegmentIndex === 0),
   );
+});
+
+test("a stopped checkpoint write cannot hold compaction open or apply its stale state", async () => {
+  const controller = new CompactionController();
+  const checkpointWrite = deferred();
+  const checkpointWriteStarted = deferred();
+  const baseState = bigState();
+  const pendingUserMessage = user("next question", 9);
+  const { cancellation, recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+    presend: {
+      baseState,
+      pendingUserText: "next question",
+      composerText: "next question",
+      uploadedFiles: [],
+      composeAppliedState: (state) =>
+        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
+    },
+  });
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    checkpointWriteStarted.resolve();
+    return checkpointWrite.promise;
+  };
+
+  const pending = controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(baseState),
+  });
+  await checkpointWriteStarted.promise;
+
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /abort/i);
+
+  assert.equal(recorder.byKind("applyState").length, 0);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+  assert.equal(await controller.handleTurnAbort(), true);
+  assert.equal(recorder.byKind("applyStateMidRun").length, 1);
+  assert.equal(recorder.byKind("applyStateMidRun")[0][1], baseState);
+
+  // The cancelled race keeps the original write observed. A late write failure
+  // must not revive the old checkpoint or surface as an unhandled rejection.
+  checkpointWrite.reject(new Error("late checkpoint persistence failure"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(recorder.byKind("applyState").length, 0);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
 });
 
 test("registry hands out one controller per conversation and disposes cleanly", () => {
