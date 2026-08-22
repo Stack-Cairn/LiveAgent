@@ -8,6 +8,10 @@ const chatComposerBarSource = readFileSync(
   new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
   "utf8",
 );
+const conversationHistoryActionsSource = readFileSync(
+  new URL("../../src/pages/chat/history/useConversationHistoryActions.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -121,6 +125,17 @@ test("a queued draft keeps a direct Stop control available", () => {
   );
   assert.match(chatComposerBarSource, /title=\{t\("chat\.stopGeneration"\)\}/);
   assert.match(chatComposerBarSource, /<Square className="h-3 w-3 fill-current" \/>/);
+});
+
+test("a stale title task cannot publish a failure or clear its replacement", () => {
+  assert.match(
+    conversationHistoryActionsSource,
+    /\.catch\(\(\) => \{\s*if \(shouldPersist && !shouldPersist\(\)\) return;\s*markLocalHistorySnapshotSynced\(conversationId, -1\);/,
+  );
+  assert.match(
+    conversationHistoryActionsSource,
+    /titleJobRef\.current\?\.conversationId === conversationId &&\s*titleJobRef\.current\.promise === titlePromise/,
+  );
 });
 
 /**

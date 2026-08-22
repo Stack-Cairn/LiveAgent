@@ -628,11 +628,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         sidebarStore.upsertLocal({ ...summary, isPending: undefined });
       })
       .catch(() => {
+        if (shouldPersist && !shouldPersist()) return;
         markLocalHistorySnapshotSynced(conversationId, -1);
         // ignore late title failures; fallback title is already stored
       })
       .finally(() => {
-        if (titleJobRef.current?.conversationId === conversationId) {
+        if (
+          titleJobRef.current?.conversationId === conversationId &&
+          titleJobRef.current.promise === titlePromise
+        ) {
           titleJobRef.current = null;
         }
       });
