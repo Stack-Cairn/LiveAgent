@@ -1,0 +1,22 @@
+{
+  "name": "@tanstack/virtual-core",
+  "version": "3.17.4",
+  "private": true,
+  "description": "Vendored LiveAgent fork of @tanstack/virtual-core. Resolved workspace-wide via the pnpm override in the root package.json so both the app code and the registry @tanstack/react-virtual wrapper consume this source.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["src", "types", "LICENSE"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node ../../scripts/run-node-tests.mjs test"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2"
+  }
+}

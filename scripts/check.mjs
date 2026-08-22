@@ -72,6 +72,8 @@ function buildSteps() {
     miseStep("Check script tests", "pnpm", ["check:script-tests"]),
     miseStep("Shared UI boundaries", "pnpm", ["check:ui-boundaries"]),
     miseStep("Shared UI TypeScript check", "pnpm", ["typecheck:ui"]),
+    miseStep("Virtual core TypeScript check", "pnpm", ["typecheck:virtual-core"]),
+    miseStep("Virtual core tests", "pnpm", ["test:virtual-core"]),
     miseStep("GUI TypeScript and Vite build", "pnpm", ["build:gui"]),
     miseStep("WebUI TypeScript and Vite build", "pnpm", ["build:webui"]),
     miseStep("Tauri Rust check", "cargo", ["check", "--workspace", "--tests"]),
