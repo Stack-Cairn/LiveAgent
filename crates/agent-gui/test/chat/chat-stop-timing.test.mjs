@@ -28,6 +28,14 @@ const textConversationTurnSource = readFileSync(
   new URL("../../src/pages/chat/turns/runTextConversationTurn.ts", import.meta.url),
   "utf8",
 );
+const agentRunnerSource = readFileSync(
+  new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
+  "utf8",
+);
+const textOnlyRuntimeSource = readFileSync(
+  new URL("../../src/lib/providers/runtime/textOnlyRuntime.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -726,6 +734,22 @@ test("trajectory persistence is detached from chat and manual-compaction cleanup
 
   gate.resolve();
   await flushPromises();
+});
+
+test("debug persistence is detached from provider completion and cancellation paths", () => {
+  assert.equal(
+    agentRunnerSource.match(
+      /flushDebugLoggerInBackground\(params\.debugLogger, "agent runner"\);/g,
+    )?.length,
+    2,
+  );
+  assert.doesNotMatch(agentRunnerSource, /await params\.debugLogger\?\.flush\(\)/);
+
+  assert.equal(
+    textOnlyRuntimeSource.match(/flushDebugLoggerInBackground\(params\.debugLogger, "text /g)?.length,
+    4,
+  );
+  assert.doesNotMatch(textOnlyRuntimeSource, /await params\.debugLogger\?\.flush\(\)/);
 });
 
 test("a stale cancelled run cannot read a replacement live transcript for its gateway terminal", () => {

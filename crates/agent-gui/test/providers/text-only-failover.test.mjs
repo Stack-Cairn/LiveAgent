@@ -53,9 +53,6 @@ const loader = createTsModuleLoader({
     [abs("src/lib/system/powerActivity.ts")]: {
       withPowerActivity: (_scope, _reason, run) => run(),
     },
-    [abs("src/lib/debug/agentDebug.ts")]: {
-      buildStreamRequestDebugPayload: () => ({}),
-    },
     [abs("src/lib/providers/hostedSearchEvents.ts")]: {
       createHostedSearchProbeId: () => undefined,
       withHostedSearchProbeHeader: (headers) => headers ?? {},
@@ -174,9 +171,64 @@ function baseParams(overrides = {}) {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settlesPromptly(promise) {
+  let timeoutId = null;
+  const timedOut = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 100);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timedOut]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 test.beforeEach(() => {
   resetFailoverBreakers();
   streamCalls.length = 0;
+});
+
+test("text mode returns without waiting for diagnostic debug persistence", async () => {
+  streamImpl = () => successStream("answer");
+  const flushGate = deferred();
+  let flushCalls = 0;
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const run = streamAssistantMessage(
+      baseParams({
+        debugLogger: {
+          enabled: true,
+          logRequest() {},
+          logResponse() {},
+          logResult() {},
+          logError() {},
+          flush() {
+            flushCalls += 1;
+            return flushGate.promise;
+          },
+        },
+      }),
+    );
+
+    assert.equal(await settlesPromptly(run), true);
+    assert.equal(flushCalls, 1);
+
+    flushGate.reject(new Error("late debug persistence failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("text mode fails over to the queued provider before content commits", async () => {

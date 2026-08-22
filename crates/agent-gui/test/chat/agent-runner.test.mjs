@@ -472,6 +472,28 @@ function createBaseParams(overrides = {}) {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settlesPromptly(promise) {
+  let timeoutId = null;
+  const timedOut = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 100);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timedOut]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 test("runAssistantWithTools returns terminal stop messages without scheduling a next-turn override", async () => {
   resetFakeStreams(createTextAssistant("done"));
   let beforeNextTurnCalls = 0;
@@ -491,6 +513,37 @@ test("runAssistantWithTools returns terminal stop messages without scheduling a 
   assert.equal(result.messages.length, 2);
   assert.equal(result.messages[0].role, "user");
   assert.equal(result.messages[1].role, "assistant");
+});
+
+test("runAssistantWithTools returns without waiting for diagnostic debug persistence", async () => {
+  resetFakeStreams(createTextAssistant("done"));
+  const flushGate = deferred();
+  let flushCalls = 0;
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const { params } = createBaseParams({
+      debugLogger: {
+        enabled: true,
+        logRequest() {},
+        logResponse() {},
+        logResult() {},
+        logError() {},
+        flush() {
+          flushCalls += 1;
+          return flushGate.promise;
+        },
+      },
+    });
+
+    assert.equal(await settlesPromptly(runAssistantWithTools(params)), true);
+    assert.equal(flushCalls, 1);
+
+    flushGate.reject(new Error("late debug persistence failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("runAssistantWithTools sends tracked deletion rules with a non-empty base prompt", async () => {
