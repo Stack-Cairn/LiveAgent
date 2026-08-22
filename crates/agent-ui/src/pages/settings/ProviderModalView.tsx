@@ -165,11 +165,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setRequestFormat,
     setShowApiKey,
     setShowUsageVariableApiKey,
+    setStreamRetryCountInput,
+    setStreamRetryMode,
     setUsageQuery,
     setUsageTimeoutInput,
     setUseSystemProxy,
     showApiKey,
     showUsageVariableApiKey,
+    streamRetryCountInput,
+    streamRetryMode,
+    commitStreamRetryCountInput,
     t,
     toggleModel,
     toggleModelBulkMode,
@@ -828,6 +833,78 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     onCheckedChange={setUseSystemProxy}
                     ariaLabel={t("settings.providerUseSystemProxy")}
                   />
+                </div>
+
+                <div
+                  className={cn(
+                    "mt-3 rounded-xl border bg-card px-4 py-3 transition-colors",
+                    streamRetryMode !== "default" && "border-primary/35 bg-primary/[0.04]",
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                        streamRetryMode !== "default" && "bg-primary/15 text-primary",
+                      )}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{t("settings.providerStreamRetry")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("settings.providerStreamRetryDesc")}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      {(
+                        [
+                          ["default", "settings.providerStreamRetryDefault"],
+                          ["off", "settings.providerStreamRetryOff"],
+                          ["custom", "settings.providerStreamRetryCustom"],
+                        ] as const
+                      ).map(([value, labelKey]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                            streamRetryMode === value &&
+                              "border-primary bg-primary/10 text-primary",
+                          )}
+                          aria-pressed={streamRetryMode === value}
+                          onClick={() => setStreamRetryMode(value)}
+                        >
+                          {t(labelKey)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {streamRetryMode === "custom" ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3">
+                      <Label
+                        htmlFor="provider-stream-retry-count"
+                        className="text-xs text-muted-foreground"
+                      >
+                        {t("settings.providerStreamRetryMaxRetries")}
+                      </Label>
+                      <Input
+                        id="provider-stream-retry-count"
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={1}
+                        inputMode="numeric"
+                        className="h-8 w-20 text-sm"
+                        value={streamRetryCountInput}
+                        onChange={(event) => setStreamRetryCountInput(event.currentTarget.value)}
+                        onBlur={commitStreamRetryCountInput}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {t("settings.providerStreamRetryMaxRetriesDesc")}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {providerType !== "gemini" &&

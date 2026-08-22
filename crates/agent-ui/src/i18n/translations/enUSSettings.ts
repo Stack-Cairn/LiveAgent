@@ -240,6 +240,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerUseSystemProxy": "Use app proxy",
   "settings.providerUseSystemProxyDesc":
     "Route this provider's model requests through the app proxy. Falls back to a direct connection while the app proxy is disabled.",
+  "settings.providerStreamRetry": "Stream retry",
+  "settings.providerStreamRetryDesc":
+    "How many times to reconnect automatically when the connection drops before any content arrives.",
+  "settings.providerStreamRetryDefault": "Default",
+  "settings.providerStreamRetryOff": "Off",
+  "settings.providerStreamRetryCustom": "Custom",
+  "settings.providerStreamRetryMaxRetries": "Retry count",
+  "settings.providerStreamRetryMaxRetriesDesc":
+    "Retries after the first request fails; the initial request is not counted.",
   "settings.light": "Light",
   "settings.lightDesc": "Bright and clean light interface",
   "settings.dark": "Dark",

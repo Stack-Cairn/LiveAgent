@@ -29,12 +29,12 @@ import {
   createStreamingTextReconciler,
   describeProviderCacheShape,
   finalizeProviderStreamOptions,
+  llm,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
   prepareProviderRequest,
   resolveProviderCacheRetention,
   type StreamOptionsEx,
-  streamSimpleByApi,
   type ToolChoice,
   toSimpleStreamReasoning,
 } from "../../providers/llm";
@@ -52,6 +52,7 @@ import {
   type ProviderFailoverCandidate,
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
+import { resolveStreamRetryConfig } from "../../providers/runtime/retryPolicy";
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
@@ -1324,6 +1325,7 @@ export async function runAssistantWithTools(params: {
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
           workdir: params.workdir,
           streamRetry: {
+            ...resolveStreamRetryConfig(target.runtime.retryPolicy),
             onRetry: (attempt, maxAttempts, errorMessage) => {
               params.onToolStatus?.(
                 `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
@@ -1405,10 +1407,14 @@ export async function runAssistantWithTools(params: {
           }),
         );
 
-        return streamSimpleByApi(targetModel, effectiveContext, streamOptions);
+        return llm.stream({
+          model: targetModel,
+          context: effectiveContext,
+          options: streamOptions,
+        });
       };
 
-      const wrapWithGuard = (stream: ReturnType<typeof streamSimpleByApi>) =>
+      const wrapWithGuard = (stream: ReturnType<typeof llm.stream>) =>
         wrapStreamWithToolCallArgumentGuard(stream, (toolCall, reason) => {
           incompleteToolCallArguments.set(toolCall.id, reason);
         });

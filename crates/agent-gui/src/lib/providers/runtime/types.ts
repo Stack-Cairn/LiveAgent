@@ -6,6 +6,7 @@ import type {
   PromptCacheHintMode,
   ProviderId,
   ProviderModelConfig,
+  ProviderRetryPolicy,
   ReasoningLevel,
 } from "../../settings";
 import type { StreamRetryConfig } from "./streamRetry";
@@ -36,6 +37,8 @@ export type ProviderRuntimeConfig = {
   promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled?: boolean;
   useSystemProxy?: boolean;
+  /** 供应商级流内重试策略；缺省 = 全局默认。failover 逐候选独立携带。 */
+  retryPolicy?: ProviderRetryPolicy;
   modelConfig?: ProviderModelConfig;
 };
 
