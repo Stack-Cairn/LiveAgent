@@ -29,12 +29,12 @@ import {
   createStreamingTextReconciler,
   describeProviderCacheShape,
   finalizeProviderStreamOptions,
+  llm,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
   prepareProviderRequest,
   resolveProviderCacheRetention,
   type StreamOptionsEx,
-  streamSimpleByApi,
   type ToolChoice,
   toSimpleStreamReasoning,
 } from "../../providers/llm";
@@ -1405,10 +1405,14 @@ export async function runAssistantWithTools(params: {
           }),
         );
 
-        return streamSimpleByApi(targetModel, effectiveContext, streamOptions);
+        return llm.stream({
+          model: targetModel,
+          context: effectiveContext,
+          options: streamOptions,
+        });
       };
 
-      const wrapWithGuard = (stream: ReturnType<typeof streamSimpleByApi>) =>
+      const wrapWithGuard = (stream: ReturnType<typeof llm.stream>) =>
         wrapStreamWithToolCallArgumentGuard(stream, (toolCall, reason) => {
           incompleteToolCallArguments.set(toolCall.id, reason);
         });
