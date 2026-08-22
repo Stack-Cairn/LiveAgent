@@ -3,9 +3,12 @@ import {
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
+  PROVIDER_RETRY_DEFAULT_MAX_RETRIES,
+  PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   type PromptCacheHintMode,
   type ProviderId,
   type ProviderModelConfig,
+  type ProviderRetryPolicy,
 } from "@liveagent/app/lib/settings";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
@@ -154,6 +157,17 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     initialData?.requestFormat ?? "openai-responses",
   );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
+  const [streamRetryMode, setStreamRetryMode] = useState<"default" | "off" | "custom">(
+    initialData?.retryPolicy?.mode ?? "default",
+  );
+  // 数字输入用本地草稿字符串，blur 时 clamp（与 usageTimeoutInput 同范式）。
+  const [streamRetryCountInput, setStreamRetryCountInput] = useState(() =>
+    String(
+      initialData?.retryPolicy?.mode === "custom"
+        ? initialData.retryPolicy.maxRetries
+        : PROVIDER_RETRY_DEFAULT_MAX_RETRIES,
+    ),
+  );
   const [promptCachingEnabled, setPromptCachingEnabled] = useState(
     initialData?.promptCachingEnabled ??
       (providerType !== "gemini" && providerType !== "xai" && providerType !== "deepseek"),
@@ -251,6 +265,30 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     const next = clampUsageQueryTimeoutSecs(raw === "" ? Number.NaN : Number(raw));
     setUsageTimeoutInput(String(next));
     setUsageQuery((previous) => ({ ...previous, timeoutSecs: next }));
+  }
+
+  function clampStreamRetryCount(raw: number): number {
+    if (!Number.isFinite(raw)) return PROVIDER_RETRY_DEFAULT_MAX_RETRIES;
+    return Math.min(
+      PROVIDER_RETRY_MAX_RETRIES_LIMITS.max,
+      Math.max(PROVIDER_RETRY_MAX_RETRIES_LIMITS.min, Math.round(raw)),
+    );
+  }
+
+  function commitStreamRetryCountInput() {
+    setStreamRetryCountInput(String(clampStreamRetryCount(Number(streamRetryCountInput.trim()))));
+  }
+
+  /** default 态不落字段：与 normalizeProviderRetryPolicy 的持久层形态一致。 */
+  function serializeStreamRetryPolicy(): ProviderRetryPolicy | undefined {
+    if (streamRetryMode === "off") return { mode: "off" };
+    if (streamRetryMode === "custom") {
+      return {
+        mode: "custom",
+        maxRetries: clampStreamRetryCount(Number(streamRetryCountInput.trim())),
+      };
+    }
+    return undefined;
   }
 
   const doFetch = useCallback(
@@ -696,6 +734,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           : undefined,
       nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
+      retryPolicy: serializeStreamRetryPolicy(),
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });
     requestClose();
@@ -952,11 +991,16 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setRequestFormat,
     setShowApiKey,
     setShowUsageVariableApiKey,
+    setStreamRetryCountInput,
+    setStreamRetryMode,
     setUsageQuery,
     setUsageTimeoutInput,
     setUseSystemProxy,
     showApiKey,
     showUsageVariableApiKey,
+    streamRetryCountInput,
+    streamRetryMode,
+    commitStreamRetryCountInput,
     t,
     toggleModel,
     toggleModelBulkMode,

@@ -1307,10 +1307,32 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
               attempt: latest.attempt,
               // maxAttempts 含首次尝试，重试上限要减去它。
               maxRetries: Math.max(0, latest.maxAttempts - 1),
+              ...(latest.plannedDelayMs === undefined ? {} : { delayMs: latest.plannedDelayMs }),
               ...(latest.errorMessage === "" ? {} : { error: latest.errorMessage }),
+              ...(latest.providerLabel === undefined ? {} : { provider: latest.providerLabel }),
             });
           }
           updateRetryAttempts(attempts, transcriptStore);
+        },
+        onFailoverAttempt: (_round, event) => {
+          trajectory.noteFailover(activeAgentRound, {
+            attempt: event.attempt,
+            fromLabel: event.fromLabel,
+            toLabel: event.toLabel,
+            targetIndex: event.targetIndex,
+            ...(event.errorMessage === "" ? {} : { error: event.errorMessage }),
+          });
+        },
+        onTransportAttempt: (_round, snapshot) => {
+          trajectory.noteTransport(activeAgentRound, {
+            provider: snapshot.providerLabel,
+            ...(snapshot.upstreamOrigin === undefined
+              ? {}
+              : { upstreamOrigin: snapshot.upstreamOrigin }),
+            useSystemProxy: snapshot.useSystemProxy,
+            fullUrl: snapshot.fullUrl,
+            headerNames: snapshot.headerNames,
+          });
         },
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);

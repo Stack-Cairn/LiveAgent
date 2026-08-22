@@ -140,6 +140,111 @@ test("retries are deduplicated by attempt and sorted", () => {
   );
 });
 
+test("retry provider labels survive into the ledger", () => {
+  const ledger = buildTrajectoryLedger([
+    ...turnEvents(),
+    { k: "retry", t: 1, s: 1, at: BASE + 50, n: 1, max: 3, p: "P1 · claude-x", delay: 200 },
+  ]);
+  const retry = ledger.turns[0].steps[0].retries[0];
+  assert.equal(retry.provider, "P1 · claude-x");
+  assert.equal(retry.delayMs, 200);
+});
+
+test("failover events converge into the owning step sorted by attempt", () => {
+  const ledger = buildTrajectoryLedger([
+    ...turnEvents(),
+    {
+      k: "failover",
+      t: 1,
+      s: 1,
+      at: BASE + 60,
+      n: 2,
+      from: "P2 · claude-x",
+      to: "P3 · gpt-y",
+      ti: 2,
+    },
+    {
+      k: "failover",
+      t: 1,
+      s: 1,
+      at: BASE + 30,
+      n: 1,
+      from: "P1 · claude-x",
+      to: "P2 · claude-x",
+      ti: 1,
+      err: "503 from primary",
+    },
+    // 重复投递(实时+落盘)收敛为一条。
+    {
+      k: "failover",
+      t: 1,
+      s: 1,
+      at: BASE + 30,
+      n: 1,
+      from: "P1 · claude-x",
+      to: "P2 · claude-x",
+      ti: 1,
+      err: "503 from primary",
+    },
+  ]);
+  const failovers = ledger.turns[0].steps[0].failovers;
+  assert.equal(failovers.length, 2);
+  assert.deepEqual(
+    failovers.map((entry) => entry.attempt),
+    [1, 2],
+  );
+  assert.equal(failovers[0].fromLabel, "P1 · claude-x");
+  assert.equal(failovers[0].toLabel, "P2 · claude-x");
+  assert.equal(failovers[0].targetIndex, 1);
+  assert.equal(failovers[0].error, "503 from primary");
+  assert.equal(failovers[1].targetIndex, 2);
+});
+
+test("transport snapshots keep per-candidate independence in the ledger", () => {
+  const ledger = buildTrajectoryLedger([
+    ...turnEvents(),
+    {
+      k: "transport",
+      t: 1,
+      s: 1,
+      at: BASE + 15,
+      p: "P1 · claude-x",
+      o: "https://api.primary.example",
+      sp: true,
+      fu: false,
+      hn: ["x-liveagent-proxy-token", "x-liveagent-upstream-origin", "x-liveagent-use-system-proxy"],
+    },
+    {
+      k: "transport",
+      t: 1,
+      s: 1,
+      at: BASE + 35,
+      p: "P2 · claude-x",
+      o: "https://api.fallback.example",
+      sp: false,
+      fu: false,
+      hn: ["x-liveagent-proxy-token", "x-liveagent-upstream-origin"],
+    },
+  ]);
+  const transports = ledger.turns[0].steps[0].transports;
+  assert.equal(transports.length, 2);
+  assert.equal(transports[0].useSystemProxy, true);
+  assert.equal(transports[1].useSystemProxy, false);
+  assert.ok(transports[0].headerNames.includes("x-liveagent-use-system-proxy"));
+  assert.ok(!transports[1].headerNames.includes("x-liveagent-use-system-proxy"));
+});
+
+test("failover and transport events converge order-independently like all others", () => {
+  const events = [
+    ...turnEvents(),
+    { k: "transport", t: 1, s: 1, at: BASE + 15, p: "P1", sp: true, fu: false, hn: ["a"] },
+    { k: "failover", t: 1, s: 1, at: BASE + 30, n: 1, from: "P1", to: "P2", ti: 1 },
+  ];
+  const ordered = buildTrajectoryLedger(events);
+  const shuffled = buildTrajectoryLedger([...events].reverse());
+  assert.deepEqual(shuffled, ordered);
+});
+
 test("hasTiming stays false when no operation carried a timestamp", () => {
   const ledger = buildTrajectoryLedger([{ k: "user", t: 1, at: Number.NaN }]);
   assert.equal(ledger.hasTiming, false);

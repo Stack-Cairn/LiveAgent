@@ -36,6 +36,9 @@ export function OverviewTab({ record, locale, t }: DetailTabProps) {
       {record.retries !== undefined && record.retries.length > 0 && (
         <Field label={t("trajectory.metric.retries")} value={String(record.retries.length)} />
       )}
+      {record.failovers !== undefined && record.failovers.length > 0 && (
+        <Field label={t("trajectory.metric.failovers")} value={String(record.failovers.length)} />
+      )}
       {record.tokensBefore !== undefined && (
         <Field
           label={t("trajectory.compaction.title")}

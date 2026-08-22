@@ -10,11 +10,13 @@
 
 import type {
   LedgerCompaction,
+  LedgerFailover,
   LedgerHeader,
   LedgerInput,
   LedgerRetry,
   LedgerStep,
   LedgerToolCall,
+  LedgerTransport,
   LedgerTurn,
   TrajectoryEvent,
   TrajectoryLedger,
@@ -160,13 +162,15 @@ const EVENT_ORDER: Record<TrajectoryEvent["k"], number> = {
   header: 2,
   compaction_start: 3,
   step_start: 4,
-  first_token: 5,
-  retry: 6,
-  tool_start: 7,
-  tool_end: 8,
-  step_end: 9,
-  compaction_end: 10,
-  turn_end: 11,
+  transport: 5,
+  first_token: 6,
+  retry: 7,
+  failover: 8,
+  tool_start: 9,
+  tool_end: 10,
+  step_end: 11,
+  compaction_end: 12,
+  turn_end: 13,
 };
 
 /** Normalize once so all later pairing is independent of transport arrival order. */
@@ -229,6 +233,8 @@ type MutableStep = {
   usage?: LedgerStep["usage"];
   headerId?: string;
   retries: LedgerRetry[];
+  failovers: LedgerFailover[];
+  transports: LedgerTransport[];
   tools: MutableTool[];
   /** 当前进程的 live 事件流里出现过该条目的任意事件。 */
   sawLive: boolean;
@@ -289,6 +295,8 @@ function ensureStep(turnEntry: MutableTurn, step: number): MutableStep {
       endedAt: null,
       endStatus: null,
       retries: [],
+      failovers: [],
+      transports: [],
       tools: [],
       sawLive: false,
     };
@@ -465,6 +473,35 @@ export function buildTrajectoryLedger(
           ...(event.max === undefined ? {} : { maxRetries: event.max }),
           ...(event.delay === undefined ? {} : { delayMs: event.delay }),
           ...(event.err === undefined ? {} : { error: event.err }),
+          ...(event.p === undefined ? {} : { provider: event.p }),
+        });
+        break;
+      }
+      case "failover": {
+        const turnEntry = ensureTurn(turns, event.t);
+        const step = ensureStep(turnEntry, event.s);
+        markLive(turnEntry, step);
+        step.failovers.push({
+          attempt: event.n,
+          at: event.at,
+          ...(event.from === undefined ? {} : { fromLabel: event.from }),
+          ...(event.to === undefined ? {} : { toLabel: event.to }),
+          ...(event.ti === undefined ? {} : { targetIndex: event.ti }),
+          ...(event.err === undefined ? {} : { error: event.err }),
+        });
+        break;
+      }
+      case "transport": {
+        const turnEntry = ensureTurn(turns, event.t);
+        const step = ensureStep(turnEntry, event.s);
+        markLive(turnEntry, step);
+        step.transports.push({
+          at: event.at,
+          ...(event.p === undefined ? {} : { provider: event.p }),
+          ...(event.o === undefined ? {} : { upstreamOrigin: event.o }),
+          ...(event.sp === undefined ? {} : { useSystemProxy: event.sp }),
+          ...(event.fu === undefined ? {} : { fullUrl: event.fu }),
+          ...(event.hn === undefined ? {} : { headerNames: [...event.hn] }),
         });
         break;
       }
@@ -644,6 +681,10 @@ export function buildTrajectoryLedger(
         ...(step.usage === undefined ? {} : { usage: step.usage }),
         ...(step.headerId === undefined ? {} : { headerId: step.headerId }),
         retries: [...step.retries].sort((left, right) => left.attempt - right.attempt),
+        failovers: [...step.failovers].sort(
+          (left, right) => left.attempt - right.attempt || left.at - right.at,
+        ),
+        transports: [...step.transports].sort((left, right) => left.at - right.at),
         tools,
       };
     });

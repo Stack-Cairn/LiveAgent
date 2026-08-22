@@ -88,6 +88,8 @@ export function deriveLedgerFromMessages(
           ...(round.meta?.stopReason === undefined ? {} : { stopReason: round.meta.stopReason }),
           ...(usage === undefined ? {} : { usage }),
           retries: [],
+          failovers: [],
+          transports: [],
           tools,
         });
       }

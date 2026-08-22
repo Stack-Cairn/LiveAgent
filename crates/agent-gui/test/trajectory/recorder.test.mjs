@@ -167,6 +167,89 @@ test("first token is recorded once per step", () => {
   assert.equal(published.filter((event) => event.k === "first_token").length, 2);
 });
 
+test("noteRetry carries the provider label and planned delay for the audit trail", () => {
+  const { recorder, published } = harness();
+  recorder.beginTurn({ turn: 2 });
+  recorder.noteRetry(1, {
+    attempt: 1,
+    maxRetries: 5,
+    delayMs: 200,
+    error: "503 service unavailable",
+    provider: "P1 · claude-x",
+  });
+  const retry = published.find((event) => event.k === "retry");
+  assert.equal(retry.t, 2);
+  assert.equal(retry.s, 1);
+  assert.equal(retry.n, 1);
+  assert.equal(retry.max, 5);
+  assert.equal(retry.delay, 200);
+  assert.equal(retry.err, "503 service unavailable");
+  assert.equal(retry.p, "P1 · claude-x");
+});
+
+test("noteFailover emits a failover event with switch identity", () => {
+  const { recorder, published } = harness();
+  recorder.beginTurn({ turn: 3 });
+  recorder.noteFailover(2, {
+    attempt: 1,
+    fromLabel: "P1 · claude-x",
+    toLabel: "P2 · claude-x",
+    targetIndex: 1,
+    error: "503 from primary",
+  });
+  const failover = published.find((event) => event.k === "failover");
+  assert.equal(failover.t, 3);
+  assert.equal(failover.s, 2);
+  assert.equal(failover.n, 1);
+  assert.equal(failover.from, "P1 · claude-x");
+  assert.equal(failover.to, "P2 · claude-x");
+  assert.equal(failover.ti, 1);
+  assert.equal(failover.err, "503 from primary");
+});
+
+test("noteTransport records header names and routing flags without values", () => {
+  const { recorder, published } = harness();
+  recorder.beginTurn({ turn: 1 });
+  recorder.noteTransport(1, {
+    provider: "P1 · claude-x",
+    upstreamOrigin: "https://api.example.com",
+    useSystemProxy: true,
+    fullUrl: false,
+    headerNames: ["x-liveagent-proxy-token", "x-liveagent-upstream-origin"],
+  });
+  const transport = published.find((event) => event.k === "transport");
+  assert.equal(transport.p, "P1 · claude-x");
+  assert.equal(transport.o, "https://api.example.com");
+  assert.equal(transport.sp, true);
+  assert.equal(transport.fu, false);
+  assert.deepEqual(transport.hn, ["x-liveagent-proxy-token", "x-liveagent-upstream-origin"]);
+  const serialized = JSON.stringify(transport);
+  assert.ok(!serialized.includes("Bearer"), "transport events must never carry header values");
+});
+
+test("error text entering the ledger is scrubbed of URL keys and bearer tokens", () => {
+  const { recorder, published } = harness();
+  recorder.beginTurn({ turn: 1 });
+  recorder.noteRetry(1, {
+    attempt: 1,
+    error:
+      "fetch failed: https://api.example.com/v1?key=AIzaSyC-secret-sample-0123456789012 Authorization: Bearer sk-proj-abcdef1234567890abcdef",
+  });
+  recorder.stepEnd(1, { status: "error", error: "401 x-goog-api-key=AIzaSyD_other_key_0123456789" });
+  recorder.endTurn({ status: "error", error: "Bearer sk-ant-api03-verysecretvalue12345" });
+
+  for (const event of published) {
+    const serialized = JSON.stringify(event);
+    assert.ok(!serialized.includes("AIzaSy"), `leaked google key in ${event.k}`);
+    assert.ok(!serialized.includes("sk-proj-"), `leaked openai key in ${event.k}`);
+    assert.ok(!serialized.includes("sk-ant-"), `leaked anthropic key in ${event.k}`);
+  }
+  const retry = published.find((event) => event.k === "retry");
+  assert.ok(retry.err.includes("[redacted]"));
+  assert.ok(retry.err.includes("fetch failed"), "non-secret prose survives scrubbing");
+});
+
+
 test("context previews are bounded while preserving their source", () => {
   const { recorder, published } = harness();
   recorder.noteContext({ source: "parent-message-bus", text: "x".repeat(2_000) });
