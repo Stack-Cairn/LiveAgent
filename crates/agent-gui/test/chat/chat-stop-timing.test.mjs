@@ -20,6 +20,14 @@ const manualCompactionSource = readFileSync(
   new URL("../../src/pages/chat/runtime/useManualCompaction.ts", import.meta.url),
   "utf8",
 );
+const agentConversationTurnSource = readFileSync(
+  new URL("../../src/pages/chat/turns/runAgentConversationTurn.ts", import.meta.url),
+  "utf8",
+);
+const textConversationTurnSource = readFileSync(
+  new URL("../../src/pages/chat/turns/runTextConversationTurn.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -705,6 +713,16 @@ test("trajectory persistence is detached from chat and manual-compaction cleanup
     /flushTrajectoryInBackground\(flushRecordedTrajectory, "manual compaction"\);/,
   );
   assert.doesNotMatch(manualCompactionSource, /await flushRecordedTrajectory\(\)/);
+  assert.match(
+    agentConversationTurnSource,
+    /flushTrajectoryInBackground\(trajectory\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(agentConversationTurnSource, /await trajectory\.flush\(\)/);
+  assert.match(
+    textConversationTurnSource,
+    /flushTrajectoryInBackground\(trajectory\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(textConversationTurnSource, /await trajectory\.flush\(\)/);
 
   gate.resolve();
   await flushPromises();

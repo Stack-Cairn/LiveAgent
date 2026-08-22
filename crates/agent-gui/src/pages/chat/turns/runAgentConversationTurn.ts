@@ -108,6 +108,7 @@ import {
   buildPartialAssistantMessage,
   createEmptyAssistantUsage,
 } from "../runtime/chatPageRuntime";
+import { flushTrajectoryInBackground } from "../runtime/chatRunFinalization";
 import {
   buildGatewayToolCallPreviewArguments,
   summarizeToolCallForApproval,
@@ -1588,7 +1589,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       : trajectoryTerminalInfo(pendingTerminalAssistantMeta.assistant),
   );
   // 落盘与历史写入对齐：turn 边界是账本的一致点，之后的记忆提取不属于本轮轨迹。
-  await trajectory.flush();
+  flushTrajectoryInBackground(trajectory.flush, "chat turn");
 
   // Memory extraction reads the in-memory final state. Only run it after the
   // durable history write succeeds so we never keep "memory has the answer,

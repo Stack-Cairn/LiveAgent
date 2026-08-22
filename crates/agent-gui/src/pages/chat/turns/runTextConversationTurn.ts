@@ -48,6 +48,7 @@ import {
   type TrajectoryRecorder,
 } from "../../../lib/trajectory/recorder";
 import { buildPartialAssistantMessage } from "../runtime/chatPageRuntime";
+import { flushTrajectoryInBackground } from "../runtime/chatRunFinalization";
 
 export type RuntimeModel = {
   api: AssistantMessage["api"];
@@ -564,7 +565,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     titlePromise,
   });
   trajectory.endTurn(trajectoryTerminalInfo(finalAssistant));
-  await trajectory.flush();
+  flushTrajectoryInBackground(trajectory.flush, "chat turn");
   // Only extract memory after durable history lands; otherwise memory can
   // retain the answer while a failed final persist leaves chat history on the
   // user-only snapshot.
