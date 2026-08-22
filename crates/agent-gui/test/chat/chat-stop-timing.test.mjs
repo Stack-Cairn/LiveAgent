@@ -752,6 +752,25 @@ test("debug persistence is detached from provider completion and cancellation pa
   assert.doesNotMatch(textOnlyRuntimeSource, /await params\.debugLogger\?\.flush\(\)/);
 });
 
+test("hosted-search probe cleanup is abortable while normal completion still waits for sources", () => {
+  assert.match(
+    textOnlyRuntimeSource,
+    /raceWithAbort\(finishHostedSearchProbe\(\), params\.signal\)/,
+  );
+  assert.match(
+    agentRunnerSource,
+    /await raceWithAbort\(pending, params\.signal\)/,
+  );
+  assert.match(
+    agentRunnerSource,
+    /await raceWithAbort\(\s*finishHostedSearchRound\(currentRound, "completed"\),\s*params\.signal,\s*\)/,
+  );
+  assert.match(
+    agentRunnerSource,
+    /if \(!assistantRef \|\| params\.signal\?\.aborted\) return;/,
+  );
+});
+
 test("a stale cancelled run cannot read a replacement live transcript for its gateway terminal", () => {
   const loader = createTsModuleLoader();
   const { resolveGatewayTerminalProjectionSource } = loader.loadModule(

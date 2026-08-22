@@ -5,6 +5,7 @@ import {
   type HostedSearchOrderedBlock,
   mergeHostedSearchBlocks,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import { raceWithAbort } from "../../cancellation/abortRace";
 import {
   buildStreamRequestDebugPayload,
   flushDebugLoggerInBackground,
@@ -446,6 +447,11 @@ export async function streamAssistantMessage(params: {
       enabled: shouldProbeHostedSearch,
       onRawEvent: hostedSearchAggregator.accept,
     });
+    let hostedSearchProbeFinalization: Promise<void> | undefined;
+    const finishHostedSearchProbe = () =>
+      (hostedSearchProbeFinalization ??= hostedSearchProbe.finish());
+    const finishHostedSearchProbeWithAbort = () =>
+      raceWithAbort(finishHostedSearchProbe(), params.signal);
     try {
       let activeContext = callContext;
       for (let toolRecoveryTurn = 0; toolRecoveryTurn < 4; toolRecoveryTurn += 1) {
@@ -499,7 +505,7 @@ export async function streamAssistantMessage(params: {
           continue;
         }
 
-        await hostedSearchProbe.finish();
+        await finishHostedSearchProbeWithAbort();
         final = appendHostedSearchBlocksToAssistant(
           final as AssistantMessage & { content: unknown[] },
           hostedSearchAggregator.complete(),
@@ -512,10 +518,13 @@ export async function streamAssistantMessage(params: {
 
       throw new Error("Too many text-mode tool-call recovery attempts");
     } catch (error) {
-      await hostedSearchProbe.finish();
       if (params.signal?.aborted) {
+        // finish() unregisters the probe before it waits for its clone reader.
+        // Do not make cancellation wait for a broken network stream to close.
+        void finishHostedSearchProbe().catch(() => undefined);
         hostedSearchAggregator.dispose();
       } else {
+        await finishHostedSearchProbe();
         hostedSearchAggregator.fail();
       }
       params.debugLogger?.logError(error);

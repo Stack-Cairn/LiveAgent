@@ -14,6 +14,7 @@ import {
   mergeHostedSearchBlocks,
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { PreparedProxyRequest } from "@liveagent/ui/lib/providers/proxy";
+import { raceWithAbort } from "../../cancellation/abortRace";
 import {
   buildStreamRequestDebugPayload,
   flushDebugLoggerInBackground,
@@ -859,7 +860,10 @@ export async function runAssistantWithTools(params: {
         // Await the round's probe finalization (message_end already queued this
         // exact promise) so the coverage decision reads the complete in-band
         // search metadata instead of racing the response-clone parser.
-        const blocks = await finishHostedSearchRound(currentRound, "completed");
+        const blocks = await raceWithAbort(
+          finishHostedSearchRound(currentRound, "completed"),
+          params.signal,
+        );
         return blocks.some((block) => block.status === "completed" && block.sources.length > 0);
       }
       // web_fetch bridges never add new information; once the model has
@@ -1042,7 +1046,7 @@ export async function runAssistantWithTools(params: {
     ) {
       const finalization = finishHostedSearchRound(round, mode)
         .then((hostedSearchBlocks) => {
-          if (!assistantRef) return;
+          if (!assistantRef || params.signal?.aborted) return;
           const nextAssistant = applyHostedSearchBlocksToAssistant(
             assistantRef.current,
             round,
@@ -1068,7 +1072,15 @@ export async function runAssistantWithTools(params: {
 
     async function waitForHostedSearchFinalizations() {
       while (hostedSearchFinalizations.size > 0) {
-        await Promise.allSettled([...hostedSearchFinalizations]);
+        const pending = Promise.allSettled([...hostedSearchFinalizations]);
+        try {
+          await raceWithAbort(pending, params.signal);
+        } catch (error) {
+          // Probe finalization unregisters before it waits for a response
+          // clone. A cancelled turn must not wait for that clone to close.
+          if (params.signal?.aborted) return;
+          throw error;
+        }
       }
     }
 

@@ -20,6 +20,7 @@ const streamCalls = [];
 let streamImpl = () => {
   throw new Error("streamImpl was not configured for this test");
 };
+let hostedSearchProbeFinish = async () => {};
 
 const loader = createTsModuleLoader({
   mocks: {
@@ -41,7 +42,7 @@ const loader = createTsModuleLoader({
     [abs("src/lib/providers/runtime/modelFactory.ts")]: {
       // Deterministic identity carrying baseUrl so tests can tell targets apart.
       createModelFromConfig: (providerId, modelId, baseUrl) => ({
-        api: "anthropic-messages",
+        api: providerId === "codex" ? "openai-responses" : "anthropic-messages",
         provider: providerId,
         id: modelId,
         baseUrl,
@@ -56,7 +57,9 @@ const loader = createTsModuleLoader({
     [abs("src/lib/providers/hostedSearchEvents.ts")]: {
       createHostedSearchProbeId: () => undefined,
       withHostedSearchProbeHeader: (headers) => headers ?? {},
-      startHostedSearchFetchProbe: () => ({ finish: async () => {} }),
+      startHostedSearchFetchProbe: () => ({
+        finish: () => hostedSearchProbeFinish(),
+      }),
       createHostedSearchEventAggregator: () => ({
         accept: () => {},
         complete: () => [],
@@ -196,6 +199,7 @@ async function settlesPromptly(promise) {
 test.beforeEach(() => {
   resetFailoverBreakers();
   streamCalls.length = 0;
+  hostedSearchProbeFinish = async () => {};
 });
 
 test("text mode returns without waiting for diagnostic debug persistence", async () => {
@@ -229,6 +233,41 @@ test("text mode returns without waiting for diagnostic debug persistence", async
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test("text mode cancellation does not wait for a stalled hosted-search probe", async () => {
+  streamImpl = () => successStream("answer");
+  const controller = new AbortController();
+  const finishStarted = deferred();
+  const finishGate = deferred();
+  let finishCalls = 0;
+
+  hostedSearchProbeFinish = () => {
+    finishCalls += 1;
+    finishStarted.resolve();
+    return finishGate.promise;
+  };
+
+  const outcome = streamAssistantMessage(
+    baseParams({
+      providerId: "codex",
+      nativeWebSearch: true,
+      signal: controller.signal,
+    }),
+  ).then(
+    () => "resolved",
+    () => "rejected",
+  );
+
+  await finishStarted.promise;
+  controller.abort();
+
+  assert.equal(await settlesPromptly(outcome), true);
+  assert.equal(await outcome, "rejected");
+  assert.equal(finishCalls, 1, "abort cleanup starts the probe finish exactly once");
+
+  finishGate.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 });
 
 test("text mode fails over to the queued provider before content commits", async () => {

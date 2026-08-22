@@ -631,6 +631,112 @@ test("runAssistantWithTools waits for delayed hosted search probe finalization",
   }
 });
 
+test("runAssistantWithTools cancellation does not wait for a stalled hosted-search probe", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const parserStarted = deferred();
+  let closeResponse;
+
+  globalThis.fetch = async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(streamController) {
+          closeResponse = () => streamController.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+    parserStarted.resolve();
+    return response;
+  };
+
+  try {
+    resetFakeStreams(createTextAssistant("done"));
+    queueStreamSideEffect((options) =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: options.headers,
+        body: JSON.stringify({ prompt_cache_key: "session-1" }),
+      }),
+    );
+    const { params } = createBaseParams({
+      nativeWebSearch: true,
+      signal: controller.signal,
+    });
+    const outcome = runAssistantWithTools(params).then(
+      () => "resolved",
+      () => "rejected",
+    );
+
+    await parserStarted.promise;
+    controller.abort();
+
+    assert.equal(await settlesPromptly(outcome), true);
+    assert.equal(await outcome, "rejected");
+  } finally {
+    closeResponse?.();
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
+test("runAssistantWithTools cancellation interrupts stalled hosted-search bridge finalization", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const parserStarted = deferred();
+  let closeResponse;
+
+  globalThis.fetch = async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(streamController) {
+          closeResponse = () => streamController.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+    parserStarted.resolve();
+    return response;
+  };
+
+  try {
+    const webSearchCall = createToolCall("stalled-bridge-search", "web_search", {
+      query: "stalled hosted search",
+    });
+    resetFakeStreams(
+      createAssistant(
+        [{ type: "text", text: "Searching" }, webSearchCall],
+        "stop",
+      ),
+    );
+    queueStreamSideEffect((options) =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: options.headers,
+        body: JSON.stringify({ prompt_cache_key: "session-1" }),
+      }),
+    );
+    const { params } = createBaseParams({
+      nativeWebSearch: true,
+      signal: controller.signal,
+    });
+    const outcome = runAssistantWithTools(params).then(
+      () => "resolved",
+      () => "rejected",
+    );
+
+    await parserStarted.promise;
+    controller.abort();
+
+    assert.equal(await settlesPromptly(outcome), true);
+    assert.equal(await outcome, "rejected");
+  } finally {
+    closeResponse?.();
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
 test("runAssistantWithTools calls onBeforeNextTurn only for toolUse turns with tool results", async () => {
   const toolCall = {
     type: "toolCall",
