@@ -655,6 +655,46 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   gate.resolve();
 });
 
+test("a stale cancelled run cannot read a replacement live transcript for its gateway terminal", () => {
+  const loader = createTsModuleLoader();
+  const { resolveGatewayTerminalProjectionSource } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: false,
+      ownsRun: true,
+    }),
+    "live",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: false,
+      ownsRun: false,
+    }),
+    "history",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "completed",
+      hasFrozenProjection: false,
+      ownsRun: true,
+    }),
+    "history",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: true,
+      ownsRun: false,
+    }),
+    "frozen",
+  );
+});
+
 test("finalization flushes the gateway stream only after history persists", async () => {
   const loader = createTsModuleLoader();
   const { finalizeChatRunInOrder } = loader.loadModule(

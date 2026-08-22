@@ -172,6 +172,21 @@ export async function persistOwnedTerminalHistory<T extends object>(params: {
 }
 
 /**
+ * A force-stopped run can outlive its UI ownership while the next run begins
+ * on the same conversation. In that state the live transcript store belongs
+ * to the replacement run, so an old terminal mirror must fall back to its
+ * own persisted-state projection instead of reading shared live state.
+ */
+export function resolveGatewayTerminalProjectionSource(params: {
+  state: "running" | "completed" | "failed" | "cancelled";
+  hasFrozenProjection: boolean;
+  ownsRun: boolean;
+}): "frozen" | "live" | "history" {
+  if (params.hasFrozenProjection) return "frozen";
+  return params.state === "cancelled" && params.ownsRun ? "live" : "history";
+}
+
+/**
  * Ordered chat-run finalization: history persistence must land before the
  * gateway stream close / terminal runtime snapshot become observable remotely
  * (26f2561 — "done" is only sent after persist), otherwise a WebUI client can

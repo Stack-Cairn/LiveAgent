@@ -125,6 +125,7 @@ import {
   finalizeChatRunInOrder,
   persistOwnedTerminalHistory,
   releaseChatRunUi,
+  resolveGatewayTerminalProjectionSource,
   settleChatRunFinalization,
 } from "./chatRunFinalization";
 import {
@@ -971,6 +972,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       cancellation.userStop.abort();
       requestRemoteGatewayCancellation();
       if (!options.force) return;
+      // Capture this run's live tail before force-stop releases the shared
+      // transcript store for a replacement run. The terminal mirror below
+      // must never read a new run's live state through this old request id.
+      if (ownsConversationRun() && frozenGatewayFinalProjectionJson === null) {
+        freezeGatewayLiveProjection();
+      }
       releaseConversationRunUi();
       // Force stop is the escape hatch for a stuck run: it intentionally
       // skips the persist barrier (which may itself be hung) so the gateway
@@ -989,9 +996,19 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         ensureGatewayRunForTerminalState(state);
       }
       if (gatewayRunStarted) {
-        if (frozenGatewayFinalProjectionJson === null) {
+        const projectionSource = resolveGatewayTerminalProjectionSource({
+          state,
+          hasFrozenProjection: frozenGatewayFinalProjectionJson !== null,
+          ownsRun: ownsConversationRun(),
+        });
+        if (projectionSource === "live") {
+          freezeGatewayLiveProjection();
+        } else if (projectionSource === "history") {
+          // A stale cancelled run cannot safely read the conversation's live
+          // transcript because a replacement may already be writing there.
+          // Its own state is still safe, but must remain incomplete.
           if (state === "cancelled") {
-            freezeGatewayLiveProjection();
+            freezeGatewayFinalProjection(nextConversationState, false);
           } else {
             freezeGatewayFinalProjection(nextConversationState, true);
           }
@@ -1043,6 +1060,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       requestRemoteGatewayCancellation();
       gatewayBridgeEvents.emitError("Cancelled", conversationId);
       const ownsRunOnStop = ownsConversationRun();
+      if (ownsRunOnStop && frozenGatewayFinalProjectionJson === null) {
+        freezeGatewayLiveProjection();
+      }
       releaseConversationRunUi();
       releaseCompactionTurn();
       if (ownsRunOnStop) {
@@ -2034,6 +2054,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
     } finally {
       const ownsRunOnFinalization = ownsConversationRun();
+      const stopped = runStopRequestVersion !== null || cancellation.userStop.signal.aborted;
+      if (
+        stopped &&
+        ownsRunOnFinalization &&
+        frozenGatewayFinalProjectionJson === null
+      ) {
+        freezeGatewayLiveProjection();
+      }
       releaseConversationRunUi();
       releaseCompactionTurn();
       hookLifecycle.endAgent();
@@ -2041,7 +2069,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       if (ownsRunOnFinalization) {
         clearAbortSnapshot(transcriptStore);
       }
-      const stopped = runStopRequestVersion !== null || cancellation.userStop.signal.aborted;
       if (stopped) {
         gatewayRuntimeFinalState = "cancelled";
         requestRemoteGatewayCancellation();
