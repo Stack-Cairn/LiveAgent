@@ -115,6 +115,43 @@ function createNeverYieldingStream() {
   };
 }
 
+function createNeverResolvingIteratorStream() {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next() {
+          return new Promise(() => {});
+        },
+        async return() {
+          return { done: true };
+        },
+      };
+    },
+    async result() {
+      return await new Promise(() => {});
+    },
+  };
+}
+
+function createCountingAbortSignal() {
+  const listeners = new Set();
+  return {
+    signal: {
+      aborted: false,
+      reason: undefined,
+      addEventListener(type, listener) {
+        if (type === "abort") listeners.add(listener);
+      },
+      removeEventListener(type, listener) {
+        if (type === "abort") listeners.delete(listener);
+      },
+    },
+    get listenerCount() {
+      return listeners.size;
+    },
+  };
+}
+
 function createCommittedIdleStream(text) {
   const assistant = createAssistant(text, "stop");
   return {
@@ -374,6 +411,23 @@ test("withStreamRetry retries an uncommitted idle provider stream", async () => 
   await collectEvents(wrapped);
   assert.equal(calls, 2);
   assert.equal((await wrapped.result()).content[0].text, "recovered");
+});
+
+test("withStreamRetry removes the abort listener after a timed-out read retries", async () => {
+  let calls = 0;
+  const abort = createCountingAbortSignal();
+  const wrapped = withStreamRetry(
+    () => {
+      calls += 1;
+      return calls === 1 ? createNeverResolvingIteratorStream() : createSuccessStream("recovered");
+    },
+    { maxAttempts: 2, idleTimeoutMs: 5, signal: abort.signal },
+  );
+
+  const events = await resolveWithin(collectEvents(wrapped), 1_500);
+  assert.equal(calls, 2);
+  assert.deepEqual(events.map((event) => event.type), ["start", "text_delta", "done"]);
+  assert.equal(abort.listenerCount, 0);
 });
 
 test("withStreamRetry drops buffered ordinary events after an already-aborted stop", async () => {

@@ -16,6 +16,10 @@ const sendChatTurnSource = readFileSync(
   new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
   "utf8",
 );
+const manualCompactionSource = readFileSync(
+  new URL("../../src/pages/chat/runtime/useManualCompaction.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -670,6 +674,36 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   assert.deepEqual(released, ["controller", "sending", "tool"]);
   assert.equal(await settling, "timed_out");
   gate.resolve();
+});
+
+test("trajectory persistence is detached from chat and manual-compaction cleanup", async () => {
+  const loader = createTsModuleLoader();
+  const { flushTrajectoryInBackground } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  const gate = deferred();
+  let flushCalls = 0;
+
+  const result = flushTrajectoryInBackground(() => {
+    flushCalls += 1;
+    return gate.promise;
+  }, "chat turn");
+
+  assert.equal(result, undefined);
+  assert.equal(flushCalls, 1, "the diagnostic flush begins immediately");
+  assert.match(
+    sendChatTurnSource,
+    /flushTrajectoryInBackground\(trajectoryRecording\.recorder\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(sendChatTurnSource, /await trajectoryRecording\.recorder\.flush\(\)/);
+  assert.match(
+    manualCompactionSource,
+    /flushTrajectoryInBackground\(flushRecordedTrajectory, "manual compaction"\);/,
+  );
+  assert.doesNotMatch(manualCompactionSource, /await flushRecordedTrajectory\(\)/);
+
+  gate.resolve();
+  await flushPromises();
 });
 
 test("a stale cancelled run cannot read a replacement live transcript for its gateway terminal", () => {

@@ -5,7 +5,6 @@ import {
   createAssistantMessageEventStream,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
-import { raceWithAbort } from "../../cancellation/abortRace";
 
 export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 
@@ -151,13 +150,42 @@ function raceWithTimeout<T>(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<T> {
-  if (timeoutMs <= 0) return raceWithAbort(operation, signal);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("Provider stream idle timeout")), timeoutMs);
-  });
-  return Promise.race([raceWithAbort(operation, signal), timeout]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
+  const source = Promise.resolve(operation);
+  if (signal?.aborted) {
+    // The provider read may already be in flight. Keep its late rejection
+    // observed even though the caller must return cancellation immediately.
+    void source.catch(() => undefined);
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  if (timeoutMs <= 0 && !signal) return source;
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const succeed = (value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () =>
+      fail(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => fail(new Error("Provider stream idle timeout")), timeoutMs);
+    }
+    source.then(succeed, fail);
   });
 }
 

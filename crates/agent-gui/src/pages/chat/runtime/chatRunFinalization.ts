@@ -14,6 +14,25 @@ export function releaseChatRunUi(params: {
   params.clearToolStatus();
 }
 
+/**
+ * Trajectory persistence is diagnostic. Start its final flush immediately,
+ * but never make chat-run ownership or Stop recovery wait for a slow IPC
+ * write. The recorder keeps its own serial queue, so it can finish safely
+ * after the run's visible state has been released.
+ */
+export function flushTrajectoryInBackground(
+  flush: () => Promise<unknown>,
+  context: "chat turn" | "manual compaction",
+): void {
+  try {
+    void Promise.resolve(flush()).catch((error) => {
+      console.warn(`trajectory ${context} flush failed`, error);
+    });
+  } catch (error) {
+    console.warn(`trajectory ${context} flush failed`, error);
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, Math.max(0, ms));

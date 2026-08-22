@@ -123,6 +123,7 @@ import {
 } from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
+  flushTrajectoryInBackground,
   persistOwnedTerminalHistory,
   releaseChatRunUi,
   resolveGatewayTerminalProjectionSource,
@@ -2128,7 +2129,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         status: trajectoryStatus,
         ...(gatewayRuntimeErrorMessage ? { error: gatewayRuntimeErrorMessage } : {}),
       });
-      await trajectoryRecording.recorder.flush();
+      flushTrajectoryInBackground(trajectoryRecording.recorder.flush, "chat turn");
       await finalizeConversationRun(gatewayRuntimeFinalState);
       clearConversationStopHandler(conversationId, handleConversationStop);
       pruneIdleConversationCaches([conversationId]);
