@@ -1608,147 +1608,144 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // durable history write succeeds so we never keep "memory has the answer,
   // chat history only has the user prompt" after a failed final persist.
   if (historyPersisted && showSilentMemoryExtraction && shouldRunMemoryExtraction) {
-    const extraction = await (async () => {
-      try {
-        return await raceWithAbort(
-          runPostTurnMemoryExtraction({
-            roundOffset: memoryRoundOffset,
-            onTurnStart: (round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              gatewayBridgeEvents.queueToken("", { round, contextRelevant: false });
-              batchLiveRoundsUpdate(
-                (prev) => [
-                  ...prev,
-                  {
-                    key: `r${round}`,
-                    round,
-                    blocks: [],
-                    meta: { contextRelevant: false },
-                    runningToolCallIds: [],
-                    thinkingOpen: false,
-                  },
-                ],
-                transcriptStore,
-              );
+    const extractionPromise = runPostTurnMemoryExtraction({
+      roundOffset: memoryRoundOffset,
+      onTurnStart: (round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        gatewayBridgeEvents.queueToken("", { round, contextRelevant: false });
+        batchLiveRoundsUpdate(
+          (prev) => [
+            ...prev,
+            {
+              key: `r${round}`,
+              round,
+              blocks: [],
+              meta: { contextRelevant: false },
+              runningToolCallIds: [],
+              thinkingOpen: false,
             },
-            onTextDelta: (delta, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              gatewayBridgeEvents.queueToken(delta, { round });
-              batchLiveRoundsUpdate(
-                (prev) =>
-                  updateLiveRound(prev, round, (target) =>
-                    appendTextDeltaToRound(collapseThinking(target), delta),
-                  ),
-                transcriptStore,
-              );
-            },
-            onThinkingDelta: (delta, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              gatewayBridgeEvents.queueEvent({
-                type: "thinking",
-                text: delta,
-                round,
-                conversation_id: conversationId,
-              });
-              batchLiveRoundsUpdate(
-                (prev) =>
-                  updateLiveRound(prev, round, (target) => ({
-                    ...appendThinkingDeltaToRound(target, delta),
-                    thinkingOpen: true,
-                  })),
-                transcriptStore,
-              );
-            },
-            onToolCall: (toolCall, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              if (!shouldShowToolEvent(toolCall)) return;
-              gatewayBridgeEvents.queueEvent({
-                type: "tool_call",
-                id: toolCall.id,
-                name: toolCall.name,
-                arguments: toolCall.arguments,
-                round,
-                conversation_id: conversationId,
-              });
-              batchLiveRoundsUpdate(
-                (prev) =>
-                  updateLiveRound(prev, round, (target) => {
-                    const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
-                    return markToolCallRunningInRound(withToolCall, toolCall);
-                  }),
-                transcriptStore,
-              );
-            },
-            onToolExecutionStart: (toolCall, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              if (!shouldShowToolEvent(toolCall)) return;
-              gatewayBridgeEvents.queueEvent({
-                type: "tool_call",
-                id: toolCall.id,
-                name: toolCall.name,
-                arguments: toolCall.arguments,
-                round,
-                conversation_id: conversationId,
-              });
-              batchLiveRoundsUpdate(
-                (prev) =>
-                  updateLiveRound(prev, round, (target) => {
-                    const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
-                    return markToolCallRunningInRound(withToolCall, toolCall);
-                  }),
-                transcriptStore,
-              );
-            },
-            onToolResult: (toolCall, toolResult, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              if (!shouldShowToolEvent(toolCall)) return;
-              gatewayBridgeEvents.queueEvent({
-                type: "tool_result",
-                id: toolCall.id,
-                name: toolCall.name,
-                arguments: toolCall.arguments,
-                content: toolResult.content,
-                details: toolResult.details,
-                isError: toolResult.isError ?? false,
-                round,
-                conversation_id: conversationId,
-              });
-              batchLiveRoundsUpdate(
-                (prev) =>
-                  updateLiveRound(prev, round, (target) => {
-                    const nextTarget = attachToolResultToRound(
-                      collapseThinking(target),
-                      toolCall,
-                      toolResult,
-                    );
-
-                    return {
-                      ...nextTarget,
-                      runningToolCallIds: (nextTarget.runningToolCallIds || []).filter(
-                        (id) => id !== toolCall.id,
-                      ),
-                    };
-                  }),
-                transcriptStore,
-              );
-            },
-            onAssistantMessage: (assistant, round) => {
-              if (cancellation.userStop.signal.aborted) return;
-              commitAssistantRoundMeta(assistant, round, { contextRelevant: false });
-            },
-            onToolStatus: (s) => {
-              if (cancellation.userStop.signal.aborted) return;
-              gatewayBridgeEvents.queueToolStatus(s, false);
-              updateToolStatus(s, transcriptStore);
-            },
-          }),
-          cancellation.userStop.signal,
+          ],
+          transcriptStore,
         );
-      } catch (error) {
-        if (cancellation.userStop.signal.aborted) return null;
-        throw error;
-      }
-    })();
+      },
+      onTextDelta: (delta, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        gatewayBridgeEvents.queueToken(delta, { round });
+        batchLiveRoundsUpdate(
+          (prev) =>
+            updateLiveRound(prev, round, (target) =>
+              appendTextDeltaToRound(collapseThinking(target), delta),
+            ),
+          transcriptStore,
+        );
+      },
+      onThinkingDelta: (delta, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        gatewayBridgeEvents.queueEvent({
+          type: "thinking",
+          text: delta,
+          round,
+          conversation_id: conversationId,
+        });
+        batchLiveRoundsUpdate(
+          (prev) =>
+            updateLiveRound(prev, round, (target) => ({
+              ...appendThinkingDeltaToRound(target, delta),
+              thinkingOpen: true,
+            })),
+          transcriptStore,
+        );
+      },
+      onToolCall: (toolCall, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        if (!shouldShowToolEvent(toolCall)) return;
+        gatewayBridgeEvents.queueEvent({
+          type: "tool_call",
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          round,
+          conversation_id: conversationId,
+        });
+        batchLiveRoundsUpdate(
+          (prev) =>
+            updateLiveRound(prev, round, (target) => {
+              const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
+              return markToolCallRunningInRound(withToolCall, toolCall);
+            }),
+          transcriptStore,
+        );
+      },
+      onToolExecutionStart: (toolCall, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        if (!shouldShowToolEvent(toolCall)) return;
+        gatewayBridgeEvents.queueEvent({
+          type: "tool_call",
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          round,
+          conversation_id: conversationId,
+        });
+        batchLiveRoundsUpdate(
+          (prev) =>
+            updateLiveRound(prev, round, (target) => {
+              const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
+              return markToolCallRunningInRound(withToolCall, toolCall);
+            }),
+          transcriptStore,
+        );
+      },
+      onToolResult: (toolCall, toolResult, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        if (!shouldShowToolEvent(toolCall)) return;
+        gatewayBridgeEvents.queueEvent({
+          type: "tool_result",
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          content: toolResult.content,
+          details: toolResult.details,
+          isError: toolResult.isError ?? false,
+          round,
+          conversation_id: conversationId,
+        });
+        batchLiveRoundsUpdate(
+          (prev) =>
+            updateLiveRound(prev, round, (target) => {
+              const nextTarget = attachToolResultToRound(
+                collapseThinking(target),
+                toolCall,
+                toolResult,
+              );
+
+              return {
+                ...nextTarget,
+                runningToolCallIds: (nextTarget.runningToolCallIds || []).filter(
+                  (id) => id !== toolCall.id,
+                ),
+              };
+            }),
+          transcriptStore,
+        );
+      },
+      onAssistantMessage: (assistant, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        commitAssistantRoundMeta(assistant, round, { contextRelevant: false });
+      },
+      onToolStatus: (s) => {
+        if (cancellation.userStop.signal.aborted) return;
+        gatewayBridgeEvents.queueToolStatus(s, false);
+        updateToolStatus(s, transcriptStore);
+      },
+    });
+    const extraction = await raceWithAbort(
+      extractionPromise,
+      cancellation.userStop.signal,
+    ).catch((error) => {
+      if (cancellation.userStop.signal.aborted) return null;
+      throw error;
+    });
     if (!extraction || cancellation.userStop.signal.aborted) return;
     if (extraction.emittedMessages.length > 0) {
       completedState = appendRenderOnlyMessagesToConversation(

@@ -412,7 +412,6 @@ test("agent dev skips memory extraction when final history persistence fails", a
         systemPrompt: "",
         messages: [],
       });
-      const userStop = new AbortController();
       const order = [];
       memoryExtractionRequestScenario = async () => {
         order.push("memory-extraction");
@@ -429,19 +428,10 @@ test("agent dev skips memory extraction when final history persistence fails", a
           state,
           async persistConversationWithHistorySync() {
             order.push("history-failed");
-            assert.equal(userStop.signal.aborted, false);
             if (failure === "throw") {
               throw new Error("history unavailable");
             }
             return false;
-          },
-          extra: {
-            cancellation: {
-              userStop,
-              deriveScope() {
-                return { controller: new AbortController(), release: noOp };
-              },
-            },
           },
         }),
       );
