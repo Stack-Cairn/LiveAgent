@@ -219,6 +219,36 @@ test("text mode records the exact request boundary, TTFT, terminal model and tur
   assert.equal(calls.at(-1)[0], "flush");
 });
 
+test("text mode releases a completed response when its terminal history write stalls", async () => {
+  const final = assistant();
+  const { runTextConversationTurn } = loadTurn(async (params) => {
+    params.onRequestStart?.({ context: params.context });
+    return final;
+  });
+  const { recorder } = recorderHarness();
+  const params = baseParams(recorder);
+  const persistStarted = deferred();
+  const persistGate = deferred();
+  let committed = 0;
+  params.onTerminalResponseCommitted = () => {
+    committed += 1;
+  };
+  params.persistConversationWithHistorySync = () => {
+    persistStarted.resolve();
+    return persistGate.promise;
+  };
+
+  const run = runTextConversationTurn(params);
+  await persistStarted.promise;
+  assert.equal(committed, 1);
+
+  params.cancellation.userStop.abort();
+  assert.equal(await settlesPromptly(run), true);
+
+  persistGate.resolve(true);
+  await run;
+});
+
 test("text mode does not wait for diagnostic trajectory persistence", async () => {
   const final = assistant();
   const { runTextConversationTurn } = loadTurn(async (params) => {

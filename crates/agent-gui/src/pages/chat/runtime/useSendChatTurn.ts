@@ -790,6 +790,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let gatewayRuntimeErrorMessage = "";
     let frozenGatewayFinalProjectionJson: string | null = null;
     let frozenGatewayContentComplete = false;
+    let terminalResponseCommitted = false;
     let terminalHistoryPersistFailed = false;
     let initialUserTurnPersisted = false;
     let initialPersistPromise: Promise<boolean> | null = null;
@@ -844,14 +845,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     async function persistTerminalConversation(
       input: Parameters<typeof persistConversationWithHistorySync>[0],
     ) {
-      return persistOwnedTerminalHistory({
+      const persistPromise = persistOwnedTerminalHistory({
         input,
-        ownsRun: ownsConversationRun,
+        ownsRun: ownsTerminalHistoryPersist,
         persist: persistConversationWithHistorySync,
         markFailed: () => {
           terminalHistoryPersistFailed = true;
         },
       });
+      terminalHistoryPersistPromise = persistPromise;
+      return persistPromise;
     }
 
     function acknowledgeGatewayRunStarted() {
@@ -897,6 +900,15 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         conversationRunStarted &&
         getConversationAbortController(conversationId) === cancellation.userStop
       );
+    }
+
+    // A completed reply may still be waiting to enter history when Stop
+    // releases the UI. Keep that terminal write eligible until another run
+    // actually claims this conversation, then reject the old snapshot.
+    function ownsTerminalHistoryPersist() {
+      if (!conversationRunStarted) return false;
+      const activeController = getConversationAbortController(conversationId);
+      return activeController === null || activeController === cancellation.userStop;
     }
 
     // The provider runtime may finish callbacks after Stop has released this run's
@@ -969,9 +981,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     const handleConversationStop = (options: { force: boolean; requestVersion: number }) => {
       runStopRequestVersion = options.requestVersion;
-      gatewayRuntimeFinalState = "cancelled";
+      if (!terminalResponseCommitted) {
+        gatewayRuntimeFinalState = "cancelled";
+      }
       cancellation.userStop.abort();
-      requestRemoteGatewayCancellation();
+      if (!terminalResponseCommitted) {
+        requestRemoteGatewayCancellation();
+      }
       if (!options.force) return;
       // Capture this run's live tail before force-stop releases the shared
       // transcript store for a replacement run. The terminal mirror below
@@ -980,6 +996,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         freezeGatewayLiveProjection();
       }
       releaseConversationRunUi();
+      if (terminalResponseCommitted) return;
       // Force stop is the escape hatch for a stuck run: it intentionally
       // skips the persist barrier (which may itself be hung) so the gateway
       // still learns the run is cancelled. The run's own finally block will
@@ -2017,6 +2034,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             commitVisibleAbortedConversation,
             persistConversationWithHistorySync: persistTerminalConversation,
             freezeGatewayFinalProjection,
+            onTerminalResponseCommitted: () => {
+              terminalResponseCommitted = true;
+            },
             trajectory: trajectoryRecording.recorder,
             trajectoryTurn,
             trajectoryMessageIndex,
@@ -2063,6 +2083,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             commitVisibleAbortedConversation,
             persistConversationWithHistorySync: persistTerminalConversation,
             freezeGatewayFinalProjection,
+            onTerminalResponseCommitted: () => {
+              terminalResponseCommitted = true;
+            },
             trajectory: trajectoryRecording.recorder,
             trajectoryTurn,
             trajectoryMessageIndex,
@@ -2073,13 +2096,23 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
     } catch (err) {
       const aborted = cancellation.userStop.signal.aborted || isAbortLikeError(err);
-      gatewayRuntimeFinalState = aborted ? "cancelled" : "failed";
+      const stoppedAfterTerminalResponse =
+        cancellation.userStop.signal.aborted && terminalResponseCommitted;
+      gatewayRuntimeFinalState = stoppedAfterTerminalResponse
+        ? "completed"
+        : aborted
+          ? "cancelled"
+          : "failed";
       const remoteErrorMessage = aborted
         ? "Cancelled"
         : (err instanceof Error ? err.message : String(err)) || "Request failed";
-      gatewayRuntimeErrorCode = aborted ? "cancelled" : "provider_error";
-      gatewayRuntimeErrorMessage = remoteErrorMessage;
-      if (aborted) {
+      gatewayRuntimeErrorCode = stoppedAfterTerminalResponse
+        ? ""
+        : aborted
+          ? "cancelled"
+          : "provider_error";
+      gatewayRuntimeErrorMessage = stoppedAfterTerminalResponse ? "" : remoteErrorMessage;
+      if (aborted && !stoppedAfterTerminalResponse) {
         hookScope.cancel();
         requestRemoteGatewayCancellation();
         runCleanupPromise = (async () => {
@@ -2099,22 +2132,20 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sidebarStore.removeLocal(conversationId);
           }
         })();
-      } else {
+      } else if (!aborted) {
         const msg = err instanceof Error ? err.message : String(err);
         commitErroredConversation(msg || "Request failed");
       }
-      gatewayBridgeEvents.emitError(remoteErrorMessage, conversationId);
+      if (!stoppedAfterTerminalResponse) {
+        gatewayBridgeEvents.emitError(remoteErrorMessage, conversationId);
+      }
       if (ownsConversationRun() && titleJobRef.current?.conversationId === conversationId) {
         titleJobRef.current = null;
       }
     } finally {
       const ownsRunOnFinalization = ownsConversationRun();
       const stopped = runStopRequestVersion !== null || cancellation.userStop.signal.aborted;
-      if (
-        stopped &&
-        ownsRunOnFinalization &&
-        frozenGatewayFinalProjectionJson === null
-      ) {
+      if (stopped && ownsRunOnFinalization && frozenGatewayFinalProjectionJson === null) {
         freezeGatewayLiveProjection();
       }
       releaseConversationRunUi();
@@ -2124,7 +2155,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       if (ownsRunOnFinalization) {
         clearAbortSnapshot(transcriptStore);
       }
-      if (stopped) {
+      if (stopped && !terminalResponseCommitted) {
         gatewayRuntimeFinalState = "cancelled";
         requestRemoteGatewayCancellation();
       }

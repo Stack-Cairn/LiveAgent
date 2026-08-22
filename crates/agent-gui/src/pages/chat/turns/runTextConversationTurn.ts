@@ -48,7 +48,10 @@ import {
   type TrajectoryRecorder,
 } from "../../../lib/trajectory/recorder";
 import { buildPartialAssistantMessage } from "../runtime/chatPageRuntime";
-import { flushTrajectoryInBackground } from "../runtime/chatRunFinalization";
+import {
+  awaitTerminalHistoryPersistOrStop,
+  flushTrajectoryInBackground,
+} from "../runtime/chatRunFinalization";
 
 export type RuntimeModel = {
   api: AssistantMessage["api"];
@@ -130,6 +133,8 @@ export type RunTextConversationTurnParams = {
   updateRetryAttempts: (attempts: RetryAttemptRecord[], store: LiveTranscriptStore) => void;
   commitVisibleAbortedConversation: () => boolean;
   freezeGatewayFinalProjection: (state: ConversationViewState, contentComplete?: boolean) => void;
+  /** The complete assistant reply is visible even while its history checkpoint is pending. */
+  onTerminalResponseCommitted?: () => void;
   persistConversationWithHistorySync: (params: PersistConversationParams) => Promise<boolean>;
   memoryExtractionModel?: MemoryExtractionModelConfig;
   onMemoryExtractionModelFailure?: (model: MemoryExtractionModelConfig) => void;
@@ -180,6 +185,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     updateRetryAttempts,
     commitVisibleAbortedConversation,
     freezeGatewayFinalProjection,
+    onTerminalResponseCommitted,
     persistConversationWithHistorySync,
     memoryExtractionModel,
     onMemoryExtractionModelFailure,
@@ -551,19 +557,25 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   applyConversationState(finalState);
   freezeGatewayFinalProjection(finalState, true);
   settleLiveTranscript(transcriptStore);
+  onTerminalResponseCommitted?.();
   hookLifecycle.ensureMessageEnded();
   hookLifecycle.endAgent();
-  const historyPersisted = await persistConversationWithHistorySync({
-    conversationId,
-    sessionId,
-    providerId,
-    model,
-    cwd: historyCwd,
-    state: finalState,
-    fallbackTitle,
-    createdAt,
-    titlePromise,
-  });
+  const terminalHistory = await awaitTerminalHistoryPersistOrStop(
+    persistConversationWithHistorySync({
+      conversationId,
+      sessionId,
+      providerId,
+      model,
+      cwd: historyCwd,
+      state: finalState,
+      fallbackTitle,
+      createdAt,
+      titlePromise,
+    }),
+    cancellation.userStop.signal,
+  );
+  if (terminalHistory.stopped) return;
+  const historyPersisted = terminalHistory.persisted;
   trajectory.endTurn(trajectoryTerminalInfo(finalAssistant));
   flushTrajectoryInBackground(trajectory.flush, "chat turn");
   // Only extract memory after durable history lands; otherwise memory can

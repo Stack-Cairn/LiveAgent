@@ -1,3 +1,5 @@
+import { raceWithAbort } from "../../../lib/cancellation/abortRace";
+
 export const CHAT_RUN_FINALIZATION_TIMEOUT_MS = 2_000;
 
 /** Terminal history writes get a few short retries before the run is marked failed. */
@@ -139,6 +141,37 @@ export async function trackTerminalHistoryPersist(
     return persisted;
   } catch (error) {
     markFailed();
+    throw error;
+  }
+}
+
+/**
+ * A completed assistant response is already visible before its terminal
+ * history checkpoint returns. Stop must release that foreground wait, while
+ * still observing the persistence promise so a late failure is not unhandled.
+ */
+export async function awaitTerminalHistoryPersistOrStop(
+  persistPromise: Promise<boolean>,
+  signal: AbortSignal,
+): Promise<{ persisted: boolean; stopped: boolean }> {
+  try {
+    return {
+      persisted: await raceWithAbort(persistPromise, signal),
+      stopped: false,
+    };
+  } catch (error) {
+    // A persistence failure can race with Stop. Only consume the exact abort
+    // reason produced by raceWithAbort; otherwise a real history error would
+    // be incorrectly reported as a successful Stop recovery.
+    if (
+      signal.aborted &&
+      (error === signal.reason ||
+        (signal.reason === undefined &&
+          error instanceof DOMException &&
+          error.name === "AbortError"))
+    ) {
+      return { persisted: false, stopped: true };
+    }
     throw error;
   }
 }

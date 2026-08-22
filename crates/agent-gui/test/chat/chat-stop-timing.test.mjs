@@ -142,6 +142,35 @@ test("a pre-aborted wait still observes local work that rejects later", async ()
   await flushPromises();
 });
 
+test("a completed response Stop releases a stalled history checkpoint", async () => {
+  const loader = createTsModuleLoader();
+  const { awaitTerminalHistoryPersistOrStop } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  const persistGate = deferred();
+  const controller = new AbortController();
+  const waiting = awaitTerminalHistoryPersistOrStop(persistGate.promise, controller.signal);
+
+  controller.abort();
+  assert.deepEqual(await waiting, { persisted: false, stopped: true });
+
+  // The underlying IPC may report an error after the foreground Stop has
+  // already recovered. The helper must keep that rejection observed.
+  persistGate.reject(new Error("late history failure"));
+  await flushPromises();
+});
+
+test("a completed response keeps its history write eligible after UI release", () => {
+  assert.match(
+    sendChatTurnSource,
+    /function ownsTerminalHistoryPersist\(\) \{[\s\S]*?activeController === null \|\| activeController === cancellation\.userStop;/,
+  );
+  assert.match(
+    sendChatTurnSource,
+    /persistOwnedTerminalHistory\(\{\s*input,\s*ownsRun: ownsTerminalHistoryPersist,/,
+  );
+});
+
 test("a queued draft keeps a direct Stop control available", () => {
   assert.match(
     chatComposerBarSource,
