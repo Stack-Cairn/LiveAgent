@@ -138,7 +138,7 @@ test("empty snapshots, blank ids, and blank layout keys are not stored", () => {
 });
 
 test("capacity evicts the least recently used entry", () => {
-  const lru = createTranscriptMeasurementsLru(2);
+  const lru = createTranscriptMeasurementsLru({ capacity: 2 });
   lru.save("conv-1", layoutKey(800, 768), [item("a", 1)]);
   lru.save("conv-2", layoutKey(800, 768), [item("b", 2)]);
   // Touch conv-1 so conv-2 becomes the eviction candidate.

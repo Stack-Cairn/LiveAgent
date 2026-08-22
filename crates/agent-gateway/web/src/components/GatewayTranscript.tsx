@@ -132,8 +132,11 @@ const TRANSCRIPT_ROW_GAP = 18;
 
 // Measured row heights survive conversation switches: saved on unmount,
 // restored (width-gated) on the next open so the switch lays out with exact
-// heights instead of estimates.
-const transcriptMeasurementsLru = createTranscriptMeasurementsLru();
+// heights instead of estimates. Persisted so revisited conversations skip
+// the estimate→measure correction churn across page reloads too.
+const transcriptMeasurementsLru = createTranscriptMeasurementsLru({
+  persistNamespace: "webui-transcript",
+});
 
 type GatewayTranscriptVirtualItem =
   | { key: string; kind: "loadRemoteHistory" }
@@ -673,6 +676,15 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     // virtualizer's bottom correction and leaves live growth to useScrollFollow.
     anchorTo: viewportFollowing ? "start" : "end",
     scrollEndThreshold: 8,
+    // Above-viewport estimate corrections and history-page prepends are
+    // absorbed into the layout origin instead of written to scrollTop, so
+    // no programmatic scroll can race the user's wheel gesture; the debt
+    // settles with one verified write when scrolling is idle.
+    scrollAnchoring: "origin",
+    // Compositors paint scrolls ahead of the main thread; keep roughly half
+    // a viewport of pre-rendered rows toward the scroll direction so fast
+    // wheel ticks reveal content instead of blank space.
+    directionalOverscanPx: 480,
     initialMeasurementsCache,
     rangeExtractor: extractTranscriptRange,
   });

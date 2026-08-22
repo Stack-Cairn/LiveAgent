@@ -136,7 +136,7 @@ test("empty snapshots, blank ids, and blank layout keys are not stored", () => {
 });
 
 test("capacity evicts the least recently used entry", () => {
-  const lru = createTranscriptMeasurementsLru(2);
+  const lru = createTranscriptMeasurementsLru({ capacity: 2 });
   lru.save("conv-1", layoutKey(800, 768), [item("a", 1)]);
   lru.save("conv-2", layoutKey(800, 768), [item("b", 2)]);
   // Touch conv-1 so conv-2 becomes the eviction candidate.
@@ -154,4 +154,69 @@ test("re-saving a conversation replaces its snapshot", () => {
   lru.save("conv-1", layoutKey(820, 960), next);
   assert.equal(lru.restore("conv-1", layoutKey(800, 768)), null);
   assert.equal(lru.restore("conv-1", layoutKey(820, 960)), next);
+});
+
+function withFakeLocalStorage(run) {
+  const store = new Map();
+  const previous = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+  try {
+    run(store);
+  } finally {
+    if (previous === undefined) {
+      delete globalThis.localStorage;
+    } else {
+      globalThis.localStorage = previous;
+    }
+  }
+}
+
+test("persisted snapshots round-trip across LRU instances (app restarts)", () => {
+  withFakeLocalStorage(() => {
+    const first = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    first.save("conv-1", layoutKey(800, 768), [item("a", 120), item("b", 300)]);
+
+    const second = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    const restored = second.restore("conv-1", layoutKey(800, 768));
+    assert.equal(restored.length, 2);
+    assert.equal(restored[0].key, "a");
+    assert.equal(restored[0].size, 120);
+    // Layout gating still applies to persisted entries.
+    assert.equal(second.restore("conv-1", layoutKey(900, 768)), null);
+  });
+});
+
+test("malformed persisted payloads degrade to an empty cache", () => {
+  withFakeLocalStorage((store) => {
+    const probe = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    probe.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
+    const [persistKey] = [...store.keys()];
+    store.set(persistKey, "{not json");
+
+    const lru = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    assert.equal(lru.restore("conv-1", layoutKey(800, 768)), null);
+    // The cache still works (memory-only) after the failed read.
+    lru.save("conv-2", layoutKey(800, 768), [item("b", 60)]);
+    assert.ok(lru.restore("conv-2", layoutKey(800, 768)));
+  });
+});
+
+test("storage write failures degrade to memory-only", () => {
+  withFakeLocalStorage(() => {
+    globalThis.localStorage.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    const lru = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    const measurements = [item("a", 120)];
+    lru.save("conv-1", layoutKey(800, 768), measurements);
+    assert.equal(lru.restore("conv-1", layoutKey(800, 768)), measurements);
+  });
 });
