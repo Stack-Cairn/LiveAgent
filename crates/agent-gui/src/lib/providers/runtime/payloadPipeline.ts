@@ -7,6 +7,11 @@ import {
   attachOpenAICompletionsNativeAttachments,
   attachOpenAIResponsesNativeAttachments,
 } from "../nativeResponsesAttachments";
+import {
+  composePayloadInterceptorChain,
+  installDefaultPayloadInterceptors,
+  type PayloadInterceptor,
+} from "../service/interceptors";
 import { attachAnthropicAutomaticCaching } from "./anthropicCache";
 import { attachAnthropicLongContextBeta } from "./anthropicLongContext";
 import { attachCodexPromptCacheHint } from "./codexPromptCache";
@@ -83,76 +88,117 @@ export function attachPayloadDebugLogging(
   };
 }
 
-const finalizePayloadMiddlewares = composePayloadMiddlewares([
-  (options, params) => attachAnthropicAutomaticCaching(params.providerId, params.baseUrl, options),
-  (options, params) =>
-    attachAnthropicLongContextBeta(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-      model: params.model,
-      context: params.context,
-    }),
-  (options, params) => attachCodexResponsesStorage(params.providerId, options),
-  (options, params) =>
-    attachCodexPromptCacheHint(
-      params.providerId,
-      params.baseUrl,
-      params.promptCacheHintMode,
-      params.model,
-      options,
-    ),
-  (options, params) =>
-    attachProviderNativeWebSearch(params.providerId, options, params.nativeWebSearch, {
-      baseUrl: params.baseUrl,
-    }),
-  (options, params) =>
-    attachXaiResponsesPayloadCompat(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-    }),
-  (options, params) =>
-    attachDeepSeekResponsesPayloadCompat(options, {
-      providerId: params.providerId,
-      model: params.model,
-      context: params.context,
-    }),
-  (options, params) => {
-    if (!params.context || !params.model) return options;
-    let nextOptions = attachOpenAIResponsesNativeAttachments(options, {
-      context: params.context,
-      model: params.model,
-      providerId: params.providerId,
-      workdir: params.workdir,
-    });
-    nextOptions = attachOpenAICompletionsNativeAttachments(nextOptions, {
-      context: params.context,
-      model: params.model,
-      providerId: params.providerId,
-      workdir: params.workdir,
-    });
-    nextOptions = attachAnthropicMessagesNativeAttachments(nextOptions, {
-      context: params.context,
-      model: params.model,
-      providerId: params.providerId,
-      workdir: params.workdir,
-    });
-    return attachGeminiGenerativeAINativeAttachments(nextOptions, {
-      context: params.context,
-      model: params.model,
-      providerId: params.providerId,
-      workdir: params.workdir,
-    });
+/**
+ * 现有 10 个中间件的具名默认拦截器（PR-3 注册化）。顺序与注册化前的
+ * finalizePayloadMiddlewares 数组逐项一致——顺序即协议正确性的一部分
+ * （如 native attachments 必须先于 gemini thought guard），由顺序快照
+ * 测试锁定。payload-debug-logging 是钉住的链尾：自定义拦截器插入在默认
+ * 拦截器之后、它之前，保证自定义改动仍被调试日志观测到。
+ */
+const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
+  {
+    name: "anthropic-automatic-caching",
+    intercept: (options, params) =>
+      attachAnthropicAutomaticCaching(params.providerId, params.baseUrl, options),
   },
-  (options, params) =>
-    attachGeminiThoughtSignatureGuard(options, {
-      providerId: params.providerId,
-      baseUrl: params.baseUrl,
-    }),
-  (options, params) => attachPayloadDebugLogging(options, params.debugLogger, params.extra),
-]);
+  {
+    name: "anthropic-long-context-beta",
+    intercept: (options, params) =>
+      attachAnthropicLongContextBeta(options, {
+        providerId: params.providerId,
+        baseUrl: params.baseUrl,
+        model: params.model,
+        context: params.context,
+      }),
+  },
+  {
+    name: "codex-responses-storage",
+    intercept: (options, params) => attachCodexResponsesStorage(params.providerId, options),
+  },
+  {
+    name: "codex-prompt-cache-hint",
+    intercept: (options, params) =>
+      attachCodexPromptCacheHint(
+        params.providerId,
+        params.baseUrl,
+        params.promptCacheHintMode,
+        params.model,
+        options,
+      ),
+  },
+  {
+    name: "provider-native-web-search",
+    intercept: (options, params) =>
+      attachProviderNativeWebSearch(params.providerId, options, params.nativeWebSearch, {
+        baseUrl: params.baseUrl,
+      }),
+  },
+  {
+    name: "xai-responses-payload-compat",
+    intercept: (options, params) =>
+      attachXaiResponsesPayloadCompat(options, {
+        providerId: params.providerId,
+        baseUrl: params.baseUrl,
+      }),
+  },
+  {
+    name: "deepseek-responses-payload-compat",
+    intercept: (options, params) =>
+      attachDeepSeekResponsesPayloadCompat(options, {
+        providerId: params.providerId,
+        model: params.model,
+        context: params.context,
+      }),
+  },
+  {
+    name: "native-attachments",
+    intercept: (options, params) => {
+      if (!params.context || !params.model) return options;
+      let nextOptions = attachOpenAIResponsesNativeAttachments(options, {
+        context: params.context,
+        model: params.model,
+        providerId: params.providerId,
+        workdir: params.workdir,
+      });
+      nextOptions = attachOpenAICompletionsNativeAttachments(nextOptions, {
+        context: params.context,
+        model: params.model,
+        providerId: params.providerId,
+        workdir: params.workdir,
+      });
+      nextOptions = attachAnthropicMessagesNativeAttachments(nextOptions, {
+        context: params.context,
+        model: params.model,
+        providerId: params.providerId,
+        workdir: params.workdir,
+      });
+      return attachGeminiGenerativeAINativeAttachments(nextOptions, {
+        context: params.context,
+        model: params.model,
+        providerId: params.providerId,
+        workdir: params.workdir,
+      });
+    },
+  },
+  {
+    name: "gemini-thought-signature-guard",
+    intercept: (options, params) =>
+      attachGeminiThoughtSignatureGuard(options, {
+        providerId: params.providerId,
+        baseUrl: params.baseUrl,
+      }),
+  },
+  {
+    name: "payload-debug-logging",
+    intercept: (options, params) =>
+      attachPayloadDebugLogging(options, params.debugLogger, params.extra),
+  },
+];
+
+installDefaultPayloadInterceptors(DEFAULT_PAYLOAD_INTERCEPTORS);
 
 export function finalizeProviderStreamOptions(
   params: FinalizeProviderStreamOptionsParams,
 ): StreamOptionsEx {
-  return finalizePayloadMiddlewares(params.options, params);
+  return composePayloadInterceptorChain()(params.options, params);
 }

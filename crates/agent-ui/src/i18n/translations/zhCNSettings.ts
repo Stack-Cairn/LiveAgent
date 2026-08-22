@@ -229,6 +229,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerUseSystemProxy": "使用应用代理",
   "settings.providerUseSystemProxyDesc":
     "该供应商的模型请求经应用代理出网；应用代理未启用时保持直连。",
+  "settings.providerStreamRetry": "流式重试",
+  "settings.providerStreamRetryDesc": "连接中断且尚未输出内容时自动重连的次数。",
+  "settings.providerStreamRetryDefault": "默认",
+  "settings.providerStreamRetryOff": "关闭",
+  "settings.providerStreamRetryCustom": "自定义",
+  "settings.providerStreamRetryMaxRetries": "重试次数",
+  "settings.providerStreamRetryMaxRetriesDesc": "首次请求失败后的重试次数，不含首次请求。",
   "settings.light": "浅色",
   "settings.lightDesc": "明亮清爽的浅色界面",
   "settings.dark": "深色",

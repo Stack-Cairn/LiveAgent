@@ -15,6 +15,7 @@ import {
   withHostedSearchProbeHeader,
 } from "../hostedSearchEvents";
 import { providerSupportsNativeWebSearch } from "../nativeWebSearch";
+import { llm } from "../service/llmService";
 import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
 import { createStreamingTextReconciler } from "./messageUtils";
@@ -32,7 +33,7 @@ import {
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
 } from "./requestOptions";
-import { streamSimpleByApi } from "./streamByApi";
+import { resolveStreamRetryConfig } from "./retryPolicy";
 import { buildTextModeToolResultsForAssistant } from "./textModeToolRecovery";
 import type { ProviderRuntimeConfig, StreamOptionsEx } from "./types";
 
@@ -115,6 +116,7 @@ function buildTextOnlyStreamOptions(params: {
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
     streamRetry: {
+      ...resolveStreamRetryConfig(params.runtime.retryPolicy),
       onRetry: params.onRetryStatus,
       onRetryRecovered: params.onRetryRecovered,
     },
@@ -331,7 +333,7 @@ export async function streamAssistantMessage(params: {
 
   const startAttemptStream = (activeContext: Context) => {
     if (!failover || failover.fallbacks.length === 0) {
-      return streamSimpleByApi(m, activeContext, options);
+      return llm.stream({ model: m, context: activeContext, options });
     }
     // Candidate order: sticky active target first, then the rest in
     // primary→queue order. Breaker-open targets are skipped inside
@@ -360,7 +362,7 @@ export async function streamAssistantMessage(params: {
             : fallbackTargetIdentity(targetIndex),
         start: async () => {
           if (targetIndex === 0 || !fallback) {
-            return streamSimpleByApi(m, activeContext, options);
+            return llm.stream({ model: m, context: activeContext, options });
           }
           const prepared = await prepareFallbackTarget(targetIndex);
           params.debugLogger?.logRequest(
@@ -370,7 +372,11 @@ export async function streamAssistantMessage(params: {
               options: prepared.options,
             }),
           );
-          return streamSimpleByApi(prepared.model, activeContext, prepared.options);
+          return llm.stream({
+            model: prepared.model,
+            context: activeContext,
+            options: prepared.options,
+          });
         },
       } satisfies ProviderFailoverCandidate;
     });
@@ -575,7 +581,7 @@ export async function completeAssistantMessage(params: {
 
   return withPowerActivity("assistant-complete", `${params.providerId}:${modelId}`, async () => {
     try {
-      const s = streamSimpleByApi(m, callContext, options);
+      const s = llm.stream({ model: m, context: callContext, options });
       const final = await s.result();
 
       if (final.stopReason === "error" || final.stopReason === "aborted") {

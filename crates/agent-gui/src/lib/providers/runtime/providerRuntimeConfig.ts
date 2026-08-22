@@ -39,6 +39,7 @@ export function createProviderRuntimeConfig(
     promptCacheRetention: provider.promptCacheRetention,
     nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     useSystemProxy: provider.useSystemProxy,
+    ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),
     modelConfig: findProviderModelConfig(provider, model),
   } as ProviderRuntimeConfig;
 }
