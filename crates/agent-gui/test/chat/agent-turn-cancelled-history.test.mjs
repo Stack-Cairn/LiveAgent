@@ -171,6 +171,28 @@ const { composeTrajectorySystemPrompt } = loader.loadModule(
 
 function noOp() {}
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settlesPromptly(promise) {
+  let timeoutId = null;
+  const timedOut = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 100);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timedOut]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 function createHookLifecycle() {
   return {
     startAgent: noOp,
@@ -421,6 +443,227 @@ test("agent dev skips memory extraction when final history persistence fails", a
       }
       assert.deepEqual(order, ["history-failed"]);
     }
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+    memoryExtractionRequestScenario = async () => ({
+      ok: true,
+      acceptedCount: 0,
+      rejectedCount: 0,
+      writtenSlugs: [],
+      emittedMessages: [],
+    });
+  }
+});
+
+test("agent mode releases a completed response when its terminal history write stalls", async () => {
+  const finalAssistant = {
+    ...abortedAssistant,
+    content: [{ type: "text", text: "durable answer" }],
+    stopReason: "stop",
+  };
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "",
+    messages: [],
+  });
+  const persistStarted = deferred();
+  const persistGate = deferred();
+  const userStop = new AbortController();
+  let committed = 0;
+  runAssistantWithToolsScenario = async (params) => {
+    params.onTurnStart?.(1);
+    params.onAssistantMessage?.(finalAssistant, 1);
+    return {
+      assistant: finalAssistant,
+      messages: [finalAssistant],
+      emittedMessages: [finalAssistant],
+    };
+  };
+
+  try {
+    const run = runAgentConversationTurn(
+      createCompletedAgentDevTurnParams({
+        state,
+        persistConversationWithHistorySync: () => {
+          persistStarted.resolve();
+          return persistGate.promise;
+        },
+        extra: {
+          showSilentMemoryExtraction: false,
+          cancellation: {
+            userStop,
+            deriveScope() {
+              return { controller: new AbortController(), release: noOp };
+            },
+          },
+          onTerminalResponseCommitted() {
+            committed += 1;
+          },
+        },
+      }),
+    );
+    await persistStarted.promise;
+    assert.equal(committed, 1);
+
+    userStop.abort();
+    assert.equal(await settlesPromptly(run), true);
+
+    persistGate.resolve(true);
+    await run;
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+  }
+});
+
+test("agent mode releases the follow-up memory history write after Stop", async () => {
+  const finalAssistant = {
+    ...abortedAssistant,
+    content: [{ type: "text", text: "durable answer" }],
+    stopReason: "stop",
+  };
+  const memoryAssistant = {
+    ...finalAssistant,
+    provider: "liveagent",
+    api: "liveagent-memory",
+    content: [{ type: "text", text: "Memory updated" }],
+    timestamp: 5,
+  };
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "",
+    messages: [],
+  });
+  const secondPersistStarted = deferred();
+  const secondPersistGate = deferred();
+  const userStop = new AbortController();
+  let persistCalls = 0;
+  runAssistantWithToolsScenario = async (params) => {
+    params.onTurnStart?.(1);
+    params.onAssistantMessage?.(finalAssistant, 1);
+    return {
+      assistant: finalAssistant,
+      messages: [finalAssistant],
+      emittedMessages: [finalAssistant],
+    };
+  };
+  memoryExtractionRequestScenario = async () => ({
+    ok: true,
+    acceptedCount: 1,
+    rejectedCount: 0,
+    writtenSlugs: ["preference"],
+    emittedMessages: [memoryAssistant],
+  });
+
+  try {
+    const run = runAgentConversationTurn(
+      createCompletedAgentDevTurnParams({
+        state,
+        persistConversationWithHistorySync: () => {
+          persistCalls += 1;
+          if (persistCalls === 1) return Promise.resolve(true);
+          secondPersistStarted.resolve();
+          return secondPersistGate.promise;
+        },
+        extra: {
+          cancellation: {
+            userStop,
+            deriveScope() {
+              return { controller: new AbortController(), release: noOp };
+            },
+          },
+        },
+      }),
+    );
+    await secondPersistStarted.promise;
+
+    userStop.abort();
+    assert.equal(await settlesPromptly(run), true);
+
+    secondPersistGate.resolve(true);
+    await run;
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+    memoryExtractionRequestScenario = async () => ({
+      ok: true,
+      acceptedCount: 0,
+      rejectedCount: 0,
+      writtenSlugs: [],
+      emittedMessages: [],
+    });
+  }
+});
+
+test("agent mode ignores a late silent-memory result after Stop", async () => {
+  const finalAssistant = {
+    ...abortedAssistant,
+    content: [{ type: "text", text: "durable answer" }],
+    stopReason: "stop",
+  };
+  const memoryAssistant = {
+    ...finalAssistant,
+    provider: "liveagent",
+    api: "liveagent-memory",
+    content: [{ type: "text", text: "Memory updated" }],
+    timestamp: 5,
+  };
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "",
+    messages: [],
+  });
+  const extractionStarted = deferred();
+  const extractionGate = deferred();
+  const userStop = new AbortController();
+  const appliedStates = [];
+  let persistCalls = 0;
+  runAssistantWithToolsScenario = async (params) => {
+    params.onTurnStart?.(1);
+    params.onAssistantMessage?.(finalAssistant, 1);
+    return {
+      assistant: finalAssistant,
+      messages: [finalAssistant],
+      emittedMessages: [finalAssistant],
+    };
+  };
+  memoryExtractionRequestScenario = () => {
+    extractionStarted.resolve();
+    return extractionGate.promise;
+  };
+
+  try {
+    const run = runAgentConversationTurn(
+      createCompletedAgentDevTurnParams({
+        state,
+        applyConversationState(nextState) {
+          appliedStates.push(nextState);
+        },
+        persistConversationWithHistorySync() {
+          persistCalls += 1;
+          return Promise.resolve(true);
+        },
+        extra: {
+          cancellation: {
+            userStop,
+            deriveScope() {
+              return { controller: new AbortController(), release: noOp };
+            },
+          },
+        },
+      }),
+    );
+    await extractionStarted.promise;
+
+    userStop.abort();
+    assert.equal(await settlesPromptly(run), true);
+
+    extractionGate.resolve({
+      ok: true,
+      acceptedCount: 1,
+      rejectedCount: 0,
+      writtenSlugs: ["preference"],
+      emittedMessages: [memoryAssistant],
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(persistCalls, 1);
+    assert.equal(appliedStates.length, 1);
   } finally {
     runAssistantWithToolsScenario = replayCancelledHistoryScenario;
     memoryExtractionRequestScenario = async () => ({

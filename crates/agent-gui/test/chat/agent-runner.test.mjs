@@ -472,6 +472,28 @@ function createBaseParams(overrides = {}) {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settlesPromptly(promise) {
+  let timeoutId = null;
+  const timedOut = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 100);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timedOut]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 test("runAssistantWithTools returns terminal stop messages without scheduling a next-turn override", async () => {
   resetFakeStreams(createTextAssistant("done"));
   let beforeNextTurnCalls = 0;
@@ -491,6 +513,37 @@ test("runAssistantWithTools returns terminal stop messages without scheduling a 
   assert.equal(result.messages.length, 2);
   assert.equal(result.messages[0].role, "user");
   assert.equal(result.messages[1].role, "assistant");
+});
+
+test("runAssistantWithTools returns without waiting for diagnostic debug persistence", async () => {
+  resetFakeStreams(createTextAssistant("done"));
+  const flushGate = deferred();
+  let flushCalls = 0;
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const { params } = createBaseParams({
+      debugLogger: {
+        enabled: true,
+        logRequest() {},
+        logResponse() {},
+        logResult() {},
+        logError() {},
+        flush() {
+          flushCalls += 1;
+          return flushGate.promise;
+        },
+      },
+    });
+
+    assert.equal(await settlesPromptly(runAssistantWithTools(params)), true);
+    assert.equal(flushCalls, 1);
+
+    flushGate.reject(new Error("late debug persistence failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("runAssistantWithTools sends tracked deletion rules with a non-empty base prompt", async () => {
@@ -575,6 +628,112 @@ test("runAssistantWithTools waits for delayed hosted search probe finalization",
   } finally {
     await Promise.resolve();
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("runAssistantWithTools cancellation does not wait for a stalled hosted-search probe", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const parserStarted = deferred();
+  let closeResponse;
+
+  globalThis.fetch = async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(streamController) {
+          closeResponse = () => streamController.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+    parserStarted.resolve();
+    return response;
+  };
+
+  try {
+    resetFakeStreams(createTextAssistant("done"));
+    queueStreamSideEffect((options) =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: options.headers,
+        body: JSON.stringify({ prompt_cache_key: "session-1" }),
+      }),
+    );
+    const { params } = createBaseParams({
+      nativeWebSearch: true,
+      signal: controller.signal,
+    });
+    const outcome = runAssistantWithTools(params).then(
+      () => "resolved",
+      () => "rejected",
+    );
+
+    await parserStarted.promise;
+    controller.abort();
+
+    assert.equal(await settlesPromptly(outcome), true);
+    assert.equal(await outcome, "rejected");
+  } finally {
+    closeResponse?.();
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
+test("runAssistantWithTools cancellation interrupts stalled hosted-search bridge finalization", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const parserStarted = deferred();
+  let closeResponse;
+
+  globalThis.fetch = async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(streamController) {
+          closeResponse = () => streamController.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream; charset=utf-8" } },
+    );
+    parserStarted.resolve();
+    return response;
+  };
+
+  try {
+    const webSearchCall = createToolCall("stalled-bridge-search", "web_search", {
+      query: "stalled hosted search",
+    });
+    resetFakeStreams(
+      createAssistant(
+        [{ type: "text", text: "Searching" }, webSearchCall],
+        "stop",
+      ),
+    );
+    queueStreamSideEffect((options) =>
+      fetch("http://127.0.0.1:18080/proxy/codex/v1/responses", {
+        method: "POST",
+        headers: options.headers,
+        body: JSON.stringify({ prompt_cache_key: "session-1" }),
+      }),
+    );
+    const { params } = createBaseParams({
+      nativeWebSearch: true,
+      signal: controller.signal,
+    });
+    const outcome = runAssistantWithTools(params).then(
+      () => "resolved",
+      () => "rejected",
+    );
+
+    await parserStarted.promise;
+    controller.abort();
+
+    assert.equal(await settlesPromptly(outcome), true);
+    assert.equal(await outcome, "rejected");
+  } finally {
+    closeResponse?.();
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve) => setImmediate(resolve));
   }
 });
 

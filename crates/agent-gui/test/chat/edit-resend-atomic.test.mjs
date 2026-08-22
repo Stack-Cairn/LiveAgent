@@ -32,7 +32,7 @@ const messageRef = {
 const sendSource = fs.readFileSync(
   new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 test("edit-resend delegates the replacement anchor to the send preflight", async () => {
   const calls = [];

@@ -5,7 +5,12 @@ import {
   type HostedSearchOrderedBlock,
   mergeHostedSearchBlocks,
 } from "@liveagent/ui/lib/chat/hostedSearch";
-import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
+import { raceWithAbort } from "../../cancellation/abortRace";
+import {
+  buildStreamRequestDebugPayload,
+  flushDebugLoggerInBackground,
+  type StreamDebugLogger,
+} from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
 import { withPowerActivity } from "../../system/powerActivity";
 import {
@@ -442,6 +447,11 @@ export async function streamAssistantMessage(params: {
       enabled: shouldProbeHostedSearch,
       onRawEvent: hostedSearchAggregator.accept,
     });
+    let hostedSearchProbeFinalization: Promise<void> | undefined;
+    const finishHostedSearchProbe = () =>
+      (hostedSearchProbeFinalization ??= hostedSearchProbe.finish());
+    const finishHostedSearchProbeWithAbort = () =>
+      raceWithAbort(finishHostedSearchProbe(), params.signal);
     try {
       let activeContext = callContext;
       for (let toolRecoveryTurn = 0; toolRecoveryTurn < 4; toolRecoveryTurn += 1) {
@@ -468,7 +478,7 @@ export async function streamAssistantMessage(params: {
           }
         }
 
-        let final = await s.result();
+        let final = await raceWithAbort(s.result(), params.signal);
         if (final.stopReason === "error" || final.stopReason === "aborted") {
           throw new Error(
             normalizeErrorMessage(
@@ -495,27 +505,30 @@ export async function streamAssistantMessage(params: {
           continue;
         }
 
-        await hostedSearchProbe.finish();
+        await finishHostedSearchProbeWithAbort();
         final = appendHostedSearchBlocksToAssistant(
           final as AssistantMessage & { content: unknown[] },
           hostedSearchAggregator.complete(),
           { orderedBlocks },
         ) as AssistantMessage;
         params.debugLogger?.logResult(final);
-        await params.debugLogger?.flush();
+        flushDebugLoggerInBackground(params.debugLogger, "text stream");
         return final;
       }
 
       throw new Error("Too many text-mode tool-call recovery attempts");
     } catch (error) {
-      await hostedSearchProbe.finish();
       if (params.signal?.aborted) {
+        // finish() unregisters the probe before it waits for its clone reader.
+        // Do not make cancellation wait for a broken network stream to close.
+        void finishHostedSearchProbe().catch(() => undefined);
         hostedSearchAggregator.dispose();
       } else {
+        await finishHostedSearchProbe();
         hostedSearchAggregator.fail();
       }
       params.debugLogger?.logError(error);
-      await params.debugLogger?.flush();
+      flushDebugLoggerInBackground(params.debugLogger, "text stream");
       throw error;
     }
   });
@@ -576,7 +589,7 @@ export async function completeAssistantMessage(params: {
   return withPowerActivity("assistant-complete", `${params.providerId}:${modelId}`, async () => {
     try {
       const s = streamSimpleByApi(m, callContext, options);
-      const final = await s.result();
+      const final = await raceWithAbort(s.result(), params.signal);
 
       if (final.stopReason === "error" || final.stopReason === "aborted") {
         throw new Error(
@@ -588,11 +601,11 @@ export async function completeAssistantMessage(params: {
       }
 
       params.debugLogger?.logResult(final);
-      await params.debugLogger?.flush();
+      flushDebugLoggerInBackground(params.debugLogger, "text completion");
       return final;
     } catch (error) {
       params.debugLogger?.logError(error);
-      await params.debugLogger?.flush();
+      flushDebugLoggerInBackground(params.debugLogger, "text completion");
       throw error;
     }
   });

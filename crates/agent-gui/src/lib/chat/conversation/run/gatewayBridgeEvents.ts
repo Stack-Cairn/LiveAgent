@@ -218,12 +218,17 @@ export function createGatewayBridgeEventController(
       }
     },
     emitError(message: string, conversationIdOverride?: string) {
-      queueEvent({
+      const sendResult = queueEvent({
         type: "error",
         message,
         conversation_id:
           conversationIdOverride ?? params.resolveErrorConversationId?.() ?? params.conversationId,
       });
+      if (sendResult && typeof (sendResult as Promise<void>).then === "function") {
+        (sendResult as Promise<void>).catch((error) => {
+          console.warn("error event failed", error);
+        });
+      }
     },
     close() {
       streamClosed = true;

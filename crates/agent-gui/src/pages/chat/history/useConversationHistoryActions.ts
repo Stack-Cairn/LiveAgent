@@ -50,6 +50,8 @@ export type PersistConversationParams = {
   createdAt: number;
   titlePromise: Promise<string | null> | null;
   titleLookahead?: boolean;
+  /** Reject a stale run after title lookahead but before touching durable history. */
+  shouldPersist?: () => boolean;
 };
 
 // 成功返回盖好 revision 的持久化状态（revision 是 replace/分页的 CAS 令牌，
@@ -497,6 +499,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       createdAt,
       titlePromise,
       titleLookahead = true,
+      shouldPersist,
     } = params;
 
     const pendingConversationTitle = t("chat.pendingTitle");
@@ -511,6 +514,10 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         titleToStore = quickTitle;
       }
     }
+
+    // A force-stopped run may finish its title lookahead after a replacement run has
+    // installed a new controller. Do not let that stale snapshot enter the history queue.
+    if (shouldPersist && !shouldPersist()) return null;
 
     const updatedAt = Date.now();
     markLocalHistorySnapshotSynced(conversationId, updatedAt);
@@ -537,6 +544,9 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         commitPersistenceCursor: (cursor) =>
           conversationPersistenceCursorRef.current.set(conversationId, cursor),
       });
+      // The replacement run may have taken ownership while the write was in flight.
+      // The durable write is already ordered, but its stale summary must not become visible.
+      if (shouldPersist && !shouldPersist()) return null;
       markLocalHistorySnapshotSynced(conversationId, summary.updatedAt);
       // The write landed, so the durable row now matches `state` exactly —
       // stamp the CAS revision the backend will derive for it. Callers that
@@ -573,6 +583,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       }));
       sidebarStore.upsertLocal({ ...summary, isPending: undefined });
     } catch (err) {
+      if (shouldPersist && !shouldPersist()) return null;
       markLocalHistorySnapshotSynced(conversationId, -1);
       const msg = err instanceof Error ? err.message : String(err);
       const persistFailedMessage = t("chat.history.persistFailed").replace(
@@ -592,6 +603,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     void titlePromise
       .then(async (resolvedTitle) => {
         if (!resolvedTitle || resolvedTitle === initialStoredTitle) return;
+        if (shouldPersist && !shouldPersist()) return;
 
         const currentItem = sidebarStore.peek(conversationId);
         if (!currentItem || currentItem.title !== initialStoredTitle) return;
@@ -605,17 +617,26 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           return;
         }
 
+        if (shouldPersist && !shouldPersist()) return;
         markLocalHistorySnapshotSynced(conversationId, Number.MAX_SAFE_INTEGER);
         const summary = await renameChatHistory(conversationId, resolvedTitle);
+        // The replacement run may have taken ownership while the rename IPC
+        // was in flight. Do not publish the stale title into the new run's
+        // sidebar state.
+        if (shouldPersist && !shouldPersist()) return;
         markLocalHistorySnapshotSynced(summary.id, summary.updatedAt);
         sidebarStore.upsertLocal({ ...summary, isPending: undefined });
       })
       .catch(() => {
+        if (shouldPersist && !shouldPersist()) return;
         markLocalHistorySnapshotSynced(conversationId, -1);
         // ignore late title failures; fallback title is already stored
       })
       .finally(() => {
-        if (titleJobRef.current?.conversationId === conversationId) {
+        if (
+          titleJobRef.current?.conversationId === conversationId &&
+          titleJobRef.current.promise === titlePromise
+        ) {
           titleJobRef.current = null;
         }
       });

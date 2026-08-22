@@ -1,3 +1,5 @@
+import { raceWithAbort } from "../../../lib/cancellation/abortRace";
+
 export const CHAT_RUN_FINALIZATION_TIMEOUT_MS = 2_000;
 
 /** Terminal history writes get a few short retries before the run is marked failed. */
@@ -12,6 +14,25 @@ export function releaseChatRunUi(params: {
   params.clearAbortController();
   params.clearSendingState();
   params.clearToolStatus();
+}
+
+/**
+ * Trajectory persistence is diagnostic. Start its final flush immediately,
+ * but never make chat-run ownership or Stop recovery wait for a slow IPC
+ * write. The recorder keeps its own serial queue, so it can finish safely
+ * after the run's visible state has been released.
+ */
+export function flushTrajectoryInBackground(
+  flush: () => Promise<unknown>,
+  context: "chat turn" | "manual compaction",
+): void {
+  try {
+    void Promise.resolve(flush()).catch((error) => {
+      console.warn(`trajectory ${context} flush failed`, error);
+    });
+  } catch (error) {
+    console.warn(`trajectory ${context} flush failed`, error);
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -122,6 +143,99 @@ export async function trackTerminalHistoryPersist(
     markFailed();
     throw error;
   }
+}
+
+/**
+ * A completed assistant response is already visible before its terminal
+ * history checkpoint returns. Stop must release that foreground wait, while
+ * still observing the persistence promise so a late failure is not unhandled.
+ */
+export async function awaitTerminalHistoryPersistOrStop(
+  persistPromise: Promise<boolean>,
+  signal: AbortSignal,
+): Promise<{ persisted: boolean; stopped: boolean }> {
+  try {
+    return {
+      persisted: await raceWithAbort(persistPromise, signal),
+      stopped: false,
+    };
+  } catch (error) {
+    // A persistence failure can race with Stop. Only consume the exact abort
+    // reason produced by raceWithAbort; otherwise a real history error would
+    // be incorrectly reported as a successful Stop recovery.
+    if (
+      signal.aborted &&
+      (error === signal.reason ||
+        (signal.reason === undefined &&
+          error instanceof DOMException &&
+          error.name === "AbortError"))
+    ) {
+      return { persisted: false, stopped: true };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Keep a terminal write attached to the run that produced it. A force-stopped
+ * run can finish after its replacement has installed a new controller; it
+ * must not enqueue its old snapshot or mark the replacement as persist-failed.
+ */
+export async function persistOwnedTerminalHistory<T extends object>(params: {
+  input: T;
+  ownsRun: () => boolean;
+  persist: (input: T & { shouldPersist: () => boolean }) => Promise<boolean>;
+  markFailed: () => void;
+  options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: (error: unknown, attempt: number, maxAttempts: number) => void;
+  };
+}): Promise<boolean> {
+  const { input, ownsRun, persist, markFailed, options } = params;
+  if (!ownsRun()) return false;
+
+  let ownershipLost = false;
+  const persistWhileOwned = async () => {
+    if (!ownsRun()) {
+      ownershipLost = true;
+      return true;
+    }
+    const persisted = await persist({ ...input, shouldPersist: ownsRun });
+    if (!ownsRun()) {
+      ownershipLost = true;
+      return true;
+    }
+    return persisted;
+  };
+
+  try {
+    const persisted = await persistTerminalHistoryWithRetry(persistWhileOwned, options);
+    if (!persisted && !ownershipLost) {
+      markFailed();
+    }
+    return ownershipLost ? false : persisted;
+  } catch (error) {
+    if (!ownsRun()) return false;
+    markFailed();
+    throw error;
+  }
+}
+
+/**
+ * A force-stopped run can outlive its UI ownership while the next run begins
+ * on the same conversation. In that state the live transcript store belongs
+ * to the replacement run, so an old terminal mirror must fall back to its
+ * own persisted-state projection instead of reading shared live state.
+ */
+export function resolveGatewayTerminalProjectionSource(params: {
+  state: "running" | "completed" | "failed" | "cancelled";
+  hasFrozenProjection: boolean;
+  ownsRun: boolean;
+}): "frozen" | "live" | "history" {
+  if (params.hasFrozenProjection) return "frozen";
+  return params.state === "cancelled" && params.ownsRun ? "live" : "history";
 }
 
 /**

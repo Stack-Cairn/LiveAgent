@@ -12,6 +12,7 @@ import {
   serializeToolCatalog,
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
+import { raceWithAbort } from "../../../lib/cancellation/abortRace";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -108,6 +109,10 @@ import {
   buildPartialAssistantMessage,
   createEmptyAssistantUsage,
 } from "../runtime/chatPageRuntime";
+import {
+  awaitTerminalHistoryPersistOrStop,
+  flushTrajectoryInBackground,
+} from "../runtime/chatRunFinalization";
 import {
   buildGatewayToolCallPreviewArguments,
   summarizeToolCallForApproval,
@@ -351,6 +356,8 @@ export type RunAgentConversationTurnParams = {
   }) => void;
   commitVisibleAbortedConversation: () => boolean;
   freezeGatewayFinalProjection: (state: ConversationViewState, contentComplete?: boolean) => void;
+  /** The complete assistant reply is visible even while its history checkpoint is pending. */
+  onTerminalResponseCommitted?: () => void;
   persistConversationWithHistorySync: (params: PersistConversationParams) => Promise<boolean>;
   memoryExtractionModel?: MemoryExtractionModelConfig;
   onMemoryExtractionModelFailure?: (model: MemoryExtractionModelConfig) => void;
@@ -425,6 +432,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     updatePersistableAgentProgress,
     commitVisibleAbortedConversation,
     freezeGatewayFinalProjection,
+    onTerminalResponseCommitted,
     persistConversationWithHistorySync,
     memoryExtractionModel,
     onMemoryExtractionModelFailure,
@@ -1581,22 +1589,29 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   applyConversationState(finalState);
   freezeGatewayFinalProjection(finalState, true);
   settleLiveTranscript(transcriptStore);
-  const historyPersisted = await persistCompletedState(finalState);
+  onTerminalResponseCommitted?.();
+  const terminalHistory = await awaitTerminalHistoryPersistOrStop(
+    persistCompletedState(finalState),
+    cancellation.userStop.signal,
+  );
+  if (terminalHistory.stopped) return;
+  const historyPersisted = terminalHistory.persisted;
   trajectory.endTurn(
     pendingTerminalAssistantMeta === null
       ? { status: "complete" }
       : trajectoryTerminalInfo(pendingTerminalAssistantMeta.assistant),
   );
   // 落盘与历史写入对齐：turn 边界是账本的一致点，之后的记忆提取不属于本轮轨迹。
-  await trajectory.flush();
+  flushTrajectoryInBackground(trajectory.flush, "chat turn");
 
   // Memory extraction reads the in-memory final state. Only run it after the
   // durable history write succeeds so we never keep "memory has the answer,
   // chat history only has the user prompt" after a failed final persist.
   if (historyPersisted && showSilentMemoryExtraction && shouldRunMemoryExtraction) {
-    const extraction = await runPostTurnMemoryExtraction({
+    const extractionPromise = runPostTurnMemoryExtraction({
       roundOffset: memoryRoundOffset,
       onTurnStart: (round) => {
+        if (cancellation.userStop.signal.aborted) return;
         gatewayBridgeEvents.queueToken("", { round, contextRelevant: false });
         batchLiveRoundsUpdate(
           (prev) => [
@@ -1614,6 +1629,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onTextDelta: (delta, round) => {
+        if (cancellation.userStop.signal.aborted) return;
         gatewayBridgeEvents.queueToken(delta, { round });
         batchLiveRoundsUpdate(
           (prev) =>
@@ -1624,6 +1640,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onThinkingDelta: (delta, round) => {
+        if (cancellation.userStop.signal.aborted) return;
         gatewayBridgeEvents.queueEvent({
           type: "thinking",
           text: delta,
@@ -1640,6 +1657,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onToolCall: (toolCall, round) => {
+        if (cancellation.userStop.signal.aborted) return;
         if (!shouldShowToolEvent(toolCall)) return;
         gatewayBridgeEvents.queueEvent({
           type: "tool_call",
@@ -1659,6 +1677,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onToolExecutionStart: (toolCall, round) => {
+        if (cancellation.userStop.signal.aborted) return;
         if (!shouldShowToolEvent(toolCall)) return;
         gatewayBridgeEvents.queueEvent({
           type: "tool_call",
@@ -1678,6 +1697,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onToolResult: (toolCall, toolResult, round) => {
+        if (cancellation.userStop.signal.aborted) return;
         if (!shouldShowToolEvent(toolCall)) return;
         gatewayBridgeEvents.queueEvent({
           type: "tool_result",
@@ -1709,13 +1729,24 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           transcriptStore,
         );
       },
-      onAssistantMessage: (assistant, round) =>
-        commitAssistantRoundMeta(assistant, round, { contextRelevant: false }),
+      onAssistantMessage: (assistant, round) => {
+        if (cancellation.userStop.signal.aborted) return;
+        commitAssistantRoundMeta(assistant, round, { contextRelevant: false });
+      },
       onToolStatus: (s) => {
+        if (cancellation.userStop.signal.aborted) return;
         gatewayBridgeEvents.queueToolStatus(s, false);
         updateToolStatus(s, transcriptStore);
       },
     });
+    const extraction = await raceWithAbort(
+      extractionPromise,
+      cancellation.userStop.signal,
+    ).catch((error) => {
+      if (cancellation.userStop.signal.aborted) return null;
+      throw error;
+    });
+    if (!extraction || cancellation.userStop.signal.aborted) return;
     if (extraction.emittedMessages.length > 0) {
       completedState = appendRenderOnlyMessagesToConversation(
         finalState,
@@ -1727,7 +1758,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     applyConversationState(completedState);
     freezeGatewayFinalProjection(completedState, true);
     settleLiveTranscript(transcriptStore);
-    await persistCompletedState(completedState);
+    const completedHistory = await awaitTerminalHistoryPersistOrStop(
+      persistCompletedState(completedState),
+      cancellation.userStop.signal,
+    );
+    if (completedHistory.stopped) return;
   }
   if (historyPersisted && !showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     void runPostTurnMemoryExtraction();

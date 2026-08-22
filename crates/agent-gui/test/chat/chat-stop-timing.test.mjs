@@ -1,7 +1,41 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const chatComposerBarSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
+const conversationHistoryActionsSource = readFileSync(
+  new URL("../../src/pages/chat/history/useConversationHistoryActions.ts", import.meta.url),
+  "utf8",
+);
+const sendChatTurnSource = readFileSync(
+  new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
+  "utf8",
+);
+const manualCompactionSource = readFileSync(
+  new URL("../../src/pages/chat/runtime/useManualCompaction.ts", import.meta.url),
+  "utf8",
+);
+const agentConversationTurnSource = readFileSync(
+  new URL("../../src/pages/chat/turns/runAgentConversationTurn.ts", import.meta.url),
+  "utf8",
+);
+const textConversationTurnSource = readFileSync(
+  new URL("../../src/pages/chat/turns/runTextConversationTurn.ts", import.meta.url),
+  "utf8",
+);
+const agentRunnerSource = readFileSync(
+  new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
+  "utf8",
+);
+const textOnlyRuntimeSource = readFileSync(
+  new URL("../../src/lib/providers/runtime/textOnlyRuntime.ts", import.meta.url),
+  "utf8",
+);
 
 function createHookHarness() {
   const refs = [];
@@ -79,6 +113,100 @@ async function flushPromises() {
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("an aborted pre-runtime wait releases without waiting for local work", async () => {
+  const loader = createTsModuleLoader();
+  const { raceWithAbort } = loader.loadModule("src/lib/cancellation/abortRace.ts");
+  const localWork = deferred();
+  const controller = new AbortController();
+  const waiting = raceWithAbort(localWork.promise, controller.signal);
+
+  controller.abort(new Error("cancelled by user"));
+
+  await assert.rejects(waiting, /cancelled by user/);
+  // Finish the underlying local work after cancellation. Its settlement must
+  // remain observed and must not turn into an unhandled rejection.
+  localWork.resolve();
+  await flushPromises();
+});
+
+test("a pre-aborted wait still observes local work that rejects later", async () => {
+  const loader = createTsModuleLoader();
+  const { raceWithAbort } = loader.loadModule("src/lib/cancellation/abortRace.ts");
+  const localWork = deferred();
+  const controller = new AbortController();
+  controller.abort(new Error("already cancelled"));
+
+  await assert.rejects(raceWithAbort(localWork.promise, controller.signal), /already cancelled/);
+  localWork.reject(new Error("late local failure"));
+  await flushPromises();
+});
+
+test("a completed response Stop releases a stalled history checkpoint", async () => {
+  const loader = createTsModuleLoader();
+  const { awaitTerminalHistoryPersistOrStop } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  const persistGate = deferred();
+  const controller = new AbortController();
+  const waiting = awaitTerminalHistoryPersistOrStop(persistGate.promise, controller.signal);
+
+  controller.abort();
+  assert.deepEqual(await waiting, { persisted: false, stopped: true });
+
+  // The underlying IPC may report an error after the foreground Stop has
+  // already recovered. The helper must keep that rejection observed.
+  persistGate.reject(new Error("late history failure"));
+  await flushPromises();
+});
+
+test("a completed response keeps its history write eligible after UI release", () => {
+  assert.match(
+    sendChatTurnSource,
+    /function ownsTerminalHistoryPersist\(\) \{[\s\S]*?activeController === null \|\| activeController === cancellation\.userStop;/,
+  );
+  assert.match(
+    sendChatTurnSource,
+    /persistOwnedTerminalHistory\(\{\s*input,\s*ownsRun: ownsTerminalHistoryPersist,/,
+  );
+});
+
+test("a queued draft keeps a direct Stop control available", () => {
+  assert.match(
+    chatComposerBarSource,
+    /\{canQueueDraftWhileSending \? \(\s*<Button\s+onClick=\{onStop\}/,
+  );
+  assert.match(chatComposerBarSource, /title=\{t\("chat\.stopGeneration"\)\}/);
+  assert.match(chatComposerBarSource, /<Square className="h-3 w-3 fill-current" \/>/);
+});
+
+test("a stale title task cannot publish a failure or clear its replacement", () => {
+  assert.match(
+    conversationHistoryActionsSource,
+    /\.catch\(\(\) => \{\s*if \(shouldPersist && !shouldPersist\(\)\) return;\s*markLocalHistorySnapshotSynced\(conversationId, -1\);/,
+  );
+  assert.match(
+    conversationHistoryActionsSource,
+    /titleJobRef\.current\?\.conversationId === conversationId &&\s*titleJobRef\.current\.promise === titlePromise/,
+  );
+});
+
+test("a pre-runtime failure releases UI and the compaction turn before it exits", () => {
+  assert.match(
+    sendChatTurnSource,
+    /async function finalizePreRuntimeFailure\(message: string, errorCode: string\)[\s\S]*?await finishRequestedStopBeforeRuntime\(\)[\s\S]*?restoreComposerOnStartFailure\(\);\s*releaseConversationRunUi\(\);\s*releaseCompactionTurn\(\);\s*clearConversationStopHandler\(conversationId, handleConversationStop\);\s*await finalizeConversationRun\("failed"\);[\s\S]*?pruneIdleConversationCaches\(\[conversationId\]\);[\s\S]*?requestQueuedChatTurnProcessing\(conversationId\);/,
+  );
+  const skillsFailureStart = sendChatTurnSource.indexOf('gatewayRuntimeErrorCode = "skills_missing"');
+  assert.equal(skillsFailureStart, -1, "the Skill path delegates cleanup to the shared helper");
+  assert.match(sendChatTurnSource, /gateway_user_message_failed/);
+  assert.match(sendChatTurnSource, /runtime_module_load_failed/);
+  assert.match(sendChatTurnSource, /Failed to resolve trajectory turn number/);
+  assert.match(sendChatTurnSource, /Failed to refresh skills before starting chat/);
+  assert.match(
+    sendChatTurnSource,
+    /if \(overrides\?\.afterInitialHistoryPersist && !overrides\.beforeRuntimeStart\) \{\s*try \{\s*const initialPersistResult = await awaitBeforeRuntime\(initialPersist\);[\s\S]*?const message = asErrorMessage\(error, "历史记录保存失败，已取消发送。"\);\s*await finalizePreRuntimeFailure\(message, "history_persist_failed"\);/,
+  );
+});
 
 /**
  * Per-conversation live transcript stores, matching
@@ -597,6 +725,125 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   gate.resolve();
 });
 
+test("trajectory persistence is detached from chat and manual-compaction cleanup", async () => {
+  const loader = createTsModuleLoader();
+  const { flushTrajectoryInBackground } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  const gate = deferred();
+  let flushCalls = 0;
+
+  const result = flushTrajectoryInBackground(() => {
+    flushCalls += 1;
+    return gate.promise;
+  }, "chat turn");
+
+  assert.equal(result, undefined);
+  assert.equal(flushCalls, 1, "the diagnostic flush begins immediately");
+  assert.match(
+    sendChatTurnSource,
+    /flushTrajectoryInBackground\(trajectoryRecording\.recorder\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(sendChatTurnSource, /await trajectoryRecording\.recorder\.flush\(\)/);
+  assert.match(
+    manualCompactionSource,
+    /flushTrajectoryInBackground\(flushRecordedTrajectory, "manual compaction"\);/,
+  );
+  assert.doesNotMatch(manualCompactionSource, /await flushRecordedTrajectory\(\)/);
+  assert.match(
+    agentConversationTurnSource,
+    /flushTrajectoryInBackground\(trajectory\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(agentConversationTurnSource, /await trajectory\.flush\(\)/);
+  assert.match(
+    textConversationTurnSource,
+    /flushTrajectoryInBackground\(trajectory\.flush, "chat turn"\);/,
+  );
+  assert.doesNotMatch(textConversationTurnSource, /await trajectory\.flush\(\)/);
+
+  gate.resolve();
+  await flushPromises();
+});
+
+test("debug persistence is detached from provider completion and cancellation paths", () => {
+  assert.equal(
+    agentRunnerSource.match(
+      /flushDebugLoggerInBackground\(params\.debugLogger, "agent runner"\);/g,
+    )?.length,
+    2,
+  );
+  assert.doesNotMatch(agentRunnerSource, /await params\.debugLogger\?\.flush\(\)/);
+
+  assert.equal(
+    textOnlyRuntimeSource.match(/flushDebugLoggerInBackground\(params\.debugLogger, "text /g)?.length,
+    4,
+  );
+  assert.doesNotMatch(textOnlyRuntimeSource, /await params\.debugLogger\?\.flush\(\)/);
+});
+
+test("hosted-search probe cleanup is abortable while normal completion still waits for sources", () => {
+  assert.match(
+    textOnlyRuntimeSource,
+    /raceWithAbort\(finishHostedSearchProbe\(\), params\.signal\)/,
+  );
+  assert.equal(
+    textOnlyRuntimeSource.match(/raceWithAbort\(s\.result\(\), params\.signal\)/g)?.length,
+    2,
+  );
+  assert.match(
+    agentRunnerSource,
+    /await raceWithAbort\(pending, params\.signal\)/,
+  );
+  assert.match(
+    agentRunnerSource,
+    /await raceWithAbort\(\s*finishHostedSearchRound\(currentRound, "completed"\),\s*params\.signal,\s*\)/,
+  );
+  assert.match(
+    agentRunnerSource,
+    /if \(!assistantRef \|\| params\.signal\?\.aborted\) return;/,
+  );
+});
+
+test("a stale cancelled run cannot read a replacement live transcript for its gateway terminal", () => {
+  const loader = createTsModuleLoader();
+  const { resolveGatewayTerminalProjectionSource } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: false,
+      ownsRun: true,
+    }),
+    "live",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: false,
+      ownsRun: false,
+    }),
+    "history",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "completed",
+      hasFrozenProjection: false,
+      ownsRun: true,
+    }),
+    "history",
+  );
+  assert.equal(
+    resolveGatewayTerminalProjectionSource({
+      state: "cancelled",
+      hasFrozenProjection: true,
+      ownsRun: false,
+    }),
+    "frozen",
+  );
+});
+
 test("finalization flushes the gateway stream only after history persists", async () => {
   const loader = createTsModuleLoader();
   const { finalizeChatRunInOrder } = loader.loadModule(
@@ -693,6 +940,53 @@ test("terminal history persistence marks both false results and thrown errors", 
     /history database unavailable/,
   );
   assert.equal(failures, 2);
+});
+
+test("a stale terminal run cannot enqueue or publish a history snapshot", async () => {
+  const loader = createTsModuleLoader();
+  const { persistOwnedTerminalHistory } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  let ownsRun = false;
+  let persistCalls = 0;
+  let markedFailed = 0;
+
+  const skipped = await persistOwnedTerminalHistory({
+    input: { state: "old terminal snapshot" },
+    ownsRun: () => ownsRun,
+    persist: async () => {
+      persistCalls += 1;
+      return true;
+    },
+    markFailed: () => {
+      markedFailed += 1;
+    },
+  });
+
+  assert.equal(skipped, false);
+  assert.equal(persistCalls, 0);
+  assert.equal(markedFailed, 0);
+
+  ownsRun = true;
+  let persistenceGuard;
+  const persisted = await persistOwnedTerminalHistory({
+    input: { state: "current terminal snapshot" },
+    ownsRun: () => ownsRun,
+    persist: async (input) => {
+      persistCalls += 1;
+      persistenceGuard = input.shouldPersist;
+      return true;
+    },
+    markFailed: () => {
+      markedFailed += 1;
+    },
+  });
+
+  assert.equal(persisted, true);
+  assert.equal(persistCalls, 1);
+  assert.equal(typeof persistenceGuard, "function");
+  assert.equal(persistenceGuard(), true);
+  assert.equal(markedFailed, 0);
 });
 
 test("terminal history persistence retries transient failures before succeeding", async () => {

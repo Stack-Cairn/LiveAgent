@@ -26,6 +26,25 @@ export type StreamDebugLogger = {
   flush: () => Promise<void>;
 };
 
+/**
+ * Agent dev logging is diagnostic only. Keep its queued IPC writes out of
+ * request completion and cancellation paths, while still observing a late
+ * failure so it cannot become an unhandled rejection.
+ */
+export function flushDebugLoggerInBackground(
+  logger: StreamDebugLogger | undefined,
+  context: string,
+): void {
+  if (!logger) return;
+  try {
+    void Promise.resolve(logger.flush()).catch((error) => {
+      console.warn(`Agent dev debug ${context} flush failed`, error);
+    });
+  } catch (error) {
+    console.warn(`Agent dev debug ${context} flush failed`, error);
+  }
+}
+
 const writeQueues = new Map<string, Promise<void>>();
 const REDACTED_DEBUG_CREDENTIAL = "[redacted credential]";
 

@@ -89,6 +89,28 @@ function recorderHarness() {
   return { recorder, calls };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settlesPromptly(promise) {
+  let timeoutId = null;
+  const timedOut = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 100);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timedOut]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 function baseParams(recorder) {
   let state = { messages: [] };
   const stop = new AbortController();
@@ -195,6 +217,64 @@ test("text mode records the exact request boundary, TTFT, terminal model and tur
     { status: "complete" },
   ]);
   assert.equal(calls.at(-1)[0], "flush");
+});
+
+test("text mode releases a completed response when its terminal history write stalls", async () => {
+  const final = assistant();
+  const { runTextConversationTurn } = loadTurn(async (params) => {
+    params.onRequestStart?.({ context: params.context });
+    return final;
+  });
+  const { recorder } = recorderHarness();
+  const params = baseParams(recorder);
+  const persistStarted = deferred();
+  const persistGate = deferred();
+  let committed = 0;
+  params.onTerminalResponseCommitted = () => {
+    committed += 1;
+  };
+  params.persistConversationWithHistorySync = () => {
+    persistStarted.resolve();
+    return persistGate.promise;
+  };
+
+  const run = runTextConversationTurn(params);
+  await persistStarted.promise;
+  assert.equal(committed, 1);
+
+  params.cancellation.userStop.abort();
+  assert.equal(await settlesPromptly(run), true);
+
+  persistGate.resolve(true);
+  await run;
+});
+
+test("text mode does not wait for diagnostic trajectory persistence", async () => {
+  const final = assistant();
+  const { runTextConversationTurn } = loadTurn(async (params) => {
+    params.onRequestStart?.({ context: params.context });
+    return final;
+  });
+  const { recorder } = recorderHarness();
+  const flushGate = deferred();
+  let flushes = 0;
+  recorder.flush = () => {
+    flushes += 1;
+    return flushGate.promise;
+  };
+
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const run = runTextConversationTurn(baseParams(recorder));
+    assert.equal(await settlesPromptly(run), true);
+    assert.equal(flushes, 1);
+
+    flushGate.reject(new Error("late trajectory persistence failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test("text mode preserves error and aborted assistant outcomes at both terminal levels", async () => {

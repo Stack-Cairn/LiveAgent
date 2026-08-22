@@ -1185,6 +1185,22 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+              {canQueueDraftWhileSending ? (
+                <Button
+                  onClick={onStop}
+                  size="sm"
+                  title={t("chat.stopGeneration")}
+                  aria-label={t("chat.stopGeneration")}
+                  style={{
+                    backgroundColor: "hsl(var(--destructive))",
+                    backgroundImage: "none",
+                    color: "hsl(var(--destructive-foreground))",
+                  }}
+                  className="h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-all hover:opacity-90 active:scale-95"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </Button>
+              ) : null}
               <Button
                 disabled={isSending ? false : sendDisabled}
                 onClick={() => {

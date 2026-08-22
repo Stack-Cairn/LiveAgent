@@ -5,6 +5,16 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const agentDebug = loader.loadModule("src/lib/debug/agentDebug.ts");
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 test("debug sanitizer redacts base64 data URLs", () => {
   const payload = {
     input: [
@@ -165,4 +175,33 @@ test("stream request debug payload omits prefix cache when not provided", () => 
   });
 
   assert.equal(payload.prefixCache, undefined);
+});
+
+test("background debug flush does not block and observes a late failure", async () => {
+  const gate = deferred();
+  const warnings = [];
+  const originalWarn = console.warn;
+  let flushCalls = 0;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const result = agentDebug.flushDebugLoggerInBackground(
+      {
+        flush() {
+          flushCalls += 1;
+          return gate.promise;
+        },
+      },
+      "test",
+    );
+
+    assert.equal(result, undefined);
+    assert.equal(flushCalls, 1);
+
+    gate.reject(new Error("late debug write failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0][0]), /Agent dev debug test flush failed/);
+  } finally {
+    console.warn = originalWarn;
+  }
 });

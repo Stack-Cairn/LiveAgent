@@ -73,6 +73,16 @@ function summaryResponse() {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 // 3 个用户消息绕开 MIN_COMPACTION_USER_MESSAGES 冷却窗，方便连续压缩场景。
 function bigState(extraMessages = []) {
   return conversationState.createConversationStateFromContext({
@@ -139,6 +149,17 @@ function bindController(controller, overrides = {}) {
   });
   return { cancellation, recorder };
 }
+
+test("a stale turn lease cannot unbind a replacement compaction binding", () => {
+  const controller = new CompactionController();
+  const oldLease = controller.bindTurn({ sinks: {} });
+  const replacementLease = controller.bindTurn({ sinks: {} });
+
+  assert.equal(controller.unbindTurn(oldLease), false);
+  assert.equal(controller.isTurnBound(replacementLease), true);
+  assert.equal(controller.unbindTurn(replacementLease), true);
+  assert.equal(controller.isTurnBound(replacementLease), false);
+});
 
 test("pre-send compaction: checkpoint, persist, re-appended user message, paired status", async () => {
   const controller = new CompactionController();
@@ -362,6 +383,9 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
   releaseOld();
   await assert.rejects(oldPending, /abort/i);
   assert.equal(oldBinding.recorder.byKind("persist").length, 0);
+  // The old task has now unwound. Its finally block must not clear the
+  // replacement compaction's in-flight guard.
+  assert.equal(controller.shouldProtectMidStream(1_000_000), false);
   assert.equal(observed.at(-1)[0], "start");
 
   releaseNew();
@@ -377,6 +401,68 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
       ["end", "complete"],
     ],
   );
+});
+
+test("a replacement binding keeps a late old terminal on the old observer", async () => {
+  const controller = new CompactionController();
+  const oldObserved = [];
+  const newObserved = [];
+  let releaseOld;
+  const oldGate = new Promise((resolve) => {
+    releaseOld = resolve;
+  });
+
+  const oldBinding = bindController(controller, {
+    observer: {
+      onStart: (info) => oldObserved.push(["start", info]),
+      onEnd: (info) => oldObserved.push(["end", info]),
+    },
+    complete: async () => {
+      await oldGate;
+      return summaryResponse();
+    },
+  });
+  const oldPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  controller.unbindTurn();
+  let releaseNew;
+  const newGate = new Promise((resolve) => {
+    releaseNew = resolve;
+  });
+  const newBinding = bindController(controller, {
+    observer: {
+      onStart: (info) => newObserved.push(["start", info]),
+      onEnd: (info) => newObserved.push(["end", info]),
+    },
+    complete: async () => {
+      await newGate;
+      return summaryResponse();
+    },
+  });
+  const newPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  releaseOld();
+  await assert.rejects(oldPending, /abort/i);
+  assert.deepEqual(
+    oldObserved.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "post-tool"],
+      ["end", "aborted"],
+    ],
+  );
+  assert.deepEqual(
+    newObserved.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [["start", "post-tool"]],
+  );
+
+  releaseNew();
+  const result = await newPending;
+  assert.equal(result.outcome, "compacted");
+  assert.equal(newObserved.at(-1)[1].status, "complete");
+  assert.equal(oldObserved.at(-1)[1].status, "aborted");
+  assert.notEqual(oldBinding.cancellation, newBinding.cancellation);
 });
 
 test("summarizer failure degrades to prune and still returns a usable context", async () => {
@@ -616,6 +702,51 @@ test("a rejected checkpoint persist never switches runtime state to the unpersis
       .byKind("applyStateMidRun")
       .every(([, state]) => state.meta.activeSegmentIndex === 0),
   );
+});
+
+test("a stopped checkpoint write cannot hold compaction open or apply its stale state", async () => {
+  const controller = new CompactionController();
+  const checkpointWrite = deferred();
+  const checkpointWriteStarted = deferred();
+  const baseState = bigState();
+  const pendingUserMessage = user("next question", 9);
+  const { cancellation, recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+    presend: {
+      baseState,
+      pendingUserText: "next question",
+      composerText: "next question",
+      uploadedFiles: [],
+      composeAppliedState: (state) =>
+        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
+    },
+  });
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    checkpointWriteStarted.resolve();
+    return checkpointWrite.promise;
+  };
+
+  const pending = controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(baseState),
+  });
+  await checkpointWriteStarted.promise;
+
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /abort/i);
+
+  assert.equal(recorder.byKind("applyState").length, 0);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+  assert.equal(await controller.handleTurnAbort(), true);
+  assert.equal(recorder.byKind("applyStateMidRun").length, 1);
+  assert.equal(recorder.byKind("applyStateMidRun")[0][1], baseState);
+
+  // The cancelled race keeps the original write observed. A late write failure
+  // must not revive the old checkpoint or surface as an unhandled rejection.
+  checkpointWrite.reject(new Error("late checkpoint persistence failure"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(recorder.byKind("applyState").length, 0);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
 });
 
 test("registry hands out one controller per conversation and disposes cleanly", () => {
