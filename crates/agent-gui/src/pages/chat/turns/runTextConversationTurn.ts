@@ -6,7 +6,10 @@ import {
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
-import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
+import {
+  estimateTextTokenUnits,
+  getMessageObservedTokens,
+} from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
   appendMessagesToConversation,
@@ -213,8 +216,18 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   // the status channel has no other owner between switch and first delta.
   let failoverStatusVisible = false;
 
+  // 本次运行中出现过托管搜索的轮次：其 usage 是服务端多次内部调用的聚合值，
+  // 不能作为上下文锚点（搜索收尾异步替换消息对象，内容检测在提交时刻不可靠）。
+  const hostedSearchRounds = new Set<number>();
+
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
-    const contextUsageTokens = compaction.observeContextMessages([assistant]);
+    const suppressUsageAnchors = hostedSearchRounds.has(round);
+    compaction.observeContextMessages([assistant], { suppressUsageAnchors });
+    // 与 agent 模式同一不变量：contextUsageTokens 只发布 usage 派生的权威锚点，
+    // 无 usage 的轮次绝不把账本估算当权威值外发（倒扫优先读该字段）。
+    const contextUsageTokens = suppressUsageAnchors
+      ? undefined
+      : getMessageObservedTokens(assistant);
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -262,6 +275,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   }
 
   function updateHostedSearch(hostedSearch: HostedSearchBlock, round: number, existingText = "") {
+    hostedSearchRounds.add(round);
     const shouldSeedExistingText = !textModeUsesLiveRounds && existingText.length > 0;
     ensureTextLiveRound(round);
     gatewayBridgeEvents.queueEvent({
@@ -335,7 +349,8 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     compaction.beginRequest(contextWithSkills, getNextConversationState());
     gatewayBridgeEvents.queueToken("", {
       round: textRound,
-      contextUsageTokens: compaction.contextUsageTokens,
+      // 只外发有真实 usage 锚点的读数（首轮无锚点时账本是全量估算）。
+      contextUsageTokens: compaction.anchoredContextUsageTokens,
     });
     hookLifecycle.startTurn(textRound);
     textModeUsesLiveRounds = false;

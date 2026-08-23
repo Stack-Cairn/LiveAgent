@@ -13,7 +13,10 @@ import {
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
-import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
+import {
+  estimateTextTokenUnits,
+  getMessageObservedTokens,
+} from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import { resolveTailBlockAnchorId } from "../../../lib/chat/context/contextTailBlock";
 import {
@@ -859,15 +862,27 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     });
   }
 
+  // 本次运行中出现过托管搜索的轮次。这类轮次的 usage 是服务端多次内部调用的
+  // 聚合值，不能作为上下文锚点；且搜索收尾会异步替换 assistant 消息对象，
+  // 提交时刻按内容块检测不可靠，必须靠这里的显式追踪。
+  const hostedSearchRounds = new Set<number>();
+
   function commitAssistantRoundMeta(
     assistant: AssistantMessage,
     round: number,
     options?: { contextRelevant?: boolean },
   ) {
     const contextRelevant = options?.contextRelevant !== false;
-    const contextUsageTokens = contextRelevant
-      ? compaction.observeContextMessages([assistant])
-      : undefined;
+    const suppressUsageAnchors = hostedSearchRounds.has(round);
+    if (contextRelevant) {
+      compaction.observeContextMessages([assistant], { suppressUsageAnchors });
+    }
+    // meta/gateway 事件的 contextUsageTokens 与印章同一不变量：只发布 usage
+    // 派生的权威锚点。无 usage 的轮次此前把账本读数（无锚点时是含 system/tools
+    // 估值的全量估算）当权威值外发，而倒扫优先读 contextUsageTokens——估算
+    // 落进历史会长期遮蔽真实读数，真实 usage 到来时环无压缩回落。
+    const contextUsageTokens =
+      contextRelevant && !suppressUsageAnchors ? getMessageObservedTokens(assistant) : undefined;
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -898,6 +913,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   }
 
   function updateHostedSearch(hostedSearch: HostedSearchBlock, round: number) {
+    hostedSearchRounds.add(round);
     gatewayBridgeEvents.queueEvent({
       type: "hosted_search",
       id: hostedSearch.id,
@@ -1094,7 +1110,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           protectionCheckChars = 0;
           sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
-          const contextUsageTokens = compaction.contextUsageTokens;
+          // 轮次起点只外发有真实 usage 锚点的读数（首轮无锚点时账本是全量估算）。
+          const contextUsageTokens = compaction.anchoredContextUsageTokens;
           gatewayBridgeEvents.queueToken("", {
             round,
             ...(contextUsageTokens ? { contextUsageTokens } : {}),

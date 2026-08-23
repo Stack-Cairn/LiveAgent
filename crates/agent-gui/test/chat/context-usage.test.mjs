@@ -303,6 +303,93 @@ test("deriveContextUsageTokens returns undefined without any usage", () => {
   );
 });
 
+test("deriveContextUsageTokens never anchors on hosted-search rounds", () => {
+  // 实测数据：搜索轮 usage 报 117,996（服务端多次内部调用的聚合），下一轮实测
+  // 持久上下文仅 52k。含 hostedSearch 块的轮次必须跳过锚点、内容按估算累加，
+  // 且 hostedSearch 块本身（请求侧被剥除）不计任何估算。
+  const searchRound = {
+    meta: { usageTotalTokens: 117_996, contextUsageTokens: 117_996 },
+    blocks: [
+      { kind: "text", text: "综合搜索结果……" },
+      { kind: "hostedSearch", hostedSearch: { queries: ["新闻"], sources: [{ url: "u".repeat(4_000) }] } },
+    ],
+  };
+  const plainRound = {
+    meta: { usageTotalTokens: 117_996, contextUsageTokens: 117_996 },
+    blocks: [{ kind: "text", text: "综合搜索结果……" }],
+  };
+
+  // 搜索轮在末尾：跳过其聚合锚点，回落到更早的可信锚点 + 搜索轮正文估算。
+  const withEarlierAnchor = deriveContextUsageTokens([
+    { kind: "assistant", rounds: [{ meta: { contextUsageTokens: 30_000 }, blocks: [] }] },
+    { kind: "assistant", rounds: [searchRound] },
+  ]);
+  const searchRoundEstimate = deriveContextUsageTokens([
+    { kind: "assistant", rounds: [{ blocks: searchRound.blocks }] },
+  ]);
+  assert.equal(withEarlierAnchor, 30_000 + searchRoundEstimate);
+  // hostedSearch 块不计估算：与纯文本轮次的估算完全一致。
+  assert.equal(
+    searchRoundEstimate,
+    deriveContextUsageTokens([{ kind: "assistant", rounds: [{ blocks: plainRound.blocks }] }]),
+  );
+
+  // 全会话只有搜索轮：无锚点，退回估算（绝不显示 117,996 聚合值）。
+  assert.notEqual(
+    deriveContextUsageTokens([{ kind: "assistant", rounds: [searchRound] }]),
+    117_996,
+  );
+
+  // 搜索轮之后的普通轮次正常锚定（用户会话的第二次请求即由此修正读数）。
+  assert.equal(
+    deriveContextUsageTokens([
+      { kind: "assistant", rounds: [searchRound] },
+      { kind: "assistant", rounds: [{ meta: { contextUsageTokens: 52_730 }, blocks: [] }] },
+    ]),
+    52_730,
+  );
+});
+
+test("deriveContextUsageTokens adds fixed overhead only when unanchored", () => {
+  // 无锚点时倒扫只算可见正文，不补 fixed（system+tools 估算）会与运行中账本
+  // 读数（含 fixed）来回跳变——供应商不回传 usage 的会话上环每次 settle 必跳。
+  const items = [{ kind: "user", text: "a".repeat(400) }];
+  const base = deriveContextUsageTokens(items);
+  assert.equal(base, 100 + 8);
+  assert.equal(
+    deriveContextUsageTokens(items, { unanchoredFixedTokens: 2_000 }),
+    base + 2_000,
+  );
+  // 有 usage 锚点时读数已含 fixed，绝不叠加。
+  const anchored = [{ kind: "assistant", rounds: [{ meta: { usageTotalTokens: 50_000 } }] }];
+  assert.equal(
+    deriveContextUsageTokens(anchored, { unanchoredFixedTokens: 2_000 }),
+    50_000,
+  );
+  // 完全空转录 + fixed：读数为 fixed 本身（system+tools 真实占用上下文）。
+  assert.equal(deriveContextUsageTokens([], { unanchoredFixedTokens: 2_000 }), 2_000);
+  assert.equal(deriveContextUsageTokens([], { unanchoredFixedTokens: 0 }), undefined);
+});
+
+test("deriveContextUsageTokens adds fixed overhead to legacy checkpoint estimates only", () => {
+  const summaryText = "legacy checkpoint summary body".repeat(30);
+  // 旧历史检查点没有权威快照：正文估算不含 system/tools，需补 fixed 对齐口径。
+  assert.equal(
+    deriveContextUsageTokens([{ kind: "summary", content: summaryText }], {
+      unanchoredFixedTokens: 1_500,
+    }),
+    estimateTextTokens(summaryText) + 1_500,
+  );
+  // 权威快照（contextUsageTokens）出自 deriveContextTokens，已含 fixed。
+  assert.equal(
+    deriveContextUsageTokens(
+      [{ kind: "checkpoint", content: summaryText, contextUsageTokens: 40_000 }],
+      { unanchoredFixedTokens: 1_500 },
+    ),
+    40_000,
+  );
+});
+
 test("estimateTextTokens keeps the CJK-aware estimate after the move to shared", () => {
   // tokenLedger re-export 与共享层实现必须是同一函数（迁移不改口径）。
   assert.equal(tokenLedger.estimateTextTokens, estimateTextTokens);

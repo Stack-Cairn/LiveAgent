@@ -1,4 +1,4 @@
-import type { Context, Message, Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context, Message, Usage } from "@earendil-works/pi-ai";
 
 import {
   estimateContentBlockTokenUnits,
@@ -16,10 +16,11 @@ import { readMessageContextUsage, writeAssistantContextUsage } from "./contextUs
 // 这里 re-export 文本估算保持既有调用方与测试不动。
 export { estimateTextTokens, estimateTextTokenUnits };
 
-// liveAgentContextUsage 印章的不变量：totalTokens 只记录 usage 派生的权威值
-//（fixedTokens 随印章携带，供跨端 rebase 补偿 system/tools 开销变化），绝不写
-// 估算——印章随会话持久化且读取侧优先于 usage，一旦写入估算便永久遮蔽后到的
-// 真实读数，且没有任何纠正路径。
+// liveAgentContextUsage 印章的不变量：totalTokens 只记录 usage 派生的权威锚点
+//（prompt 侧 + 可见输出估算，见 getMessageUsageAnchorTokens；fixedTokens 随印章
+// 携带，供跨端 rebase 补偿 system/tools 开销变化），绝不写纯估算——印章随会话
+// 持久化且读取侧优先于 usage，一旦写入估算便永久遮蔽后到的真实读数，且没有
+// 任何纠正路径。
 
 // 消息在本代码库中是不可变值对象（状态变更只新建数组），因此估算结果可跨
 // state/segment/临时 state 按对象身份缓存，热路径不再重复序列化。
@@ -38,6 +39,9 @@ function estimateMessageTokenUnits(message: Message): number {
         units += estimateTextTokenUnits(block.name) + stringifiedTokenUnits(block.arguments);
         continue;
       }
+      // hostedSearch 块（供应商托管搜索的 UI 负载）在请求侧被 sanitizer 剥除，
+      // 从不发送给模型；按序列化估算会把 queries/sources JSON 虚计进上下文。
+      if ((block as { type?: string }).type === "hostedSearch") continue;
       units += estimateContentBlockTokenUnits(block);
     }
     return units;
@@ -90,13 +94,66 @@ export function getUsageTotalTokens(usage: Usage | undefined): number | undefine
   return derivedTotal > 0 ? Math.floor(derivedTotal) : undefined;
 }
 
+// usage 的 prompt 侧（input + cacheRead + cacheWrite）是"这次请求实际发送的
+// 上下文规模"的权威度量。totalTokens 还包含本轮全部 output——推理模型的
+// reasoning 往往占大头，而 OpenAI/Anthropic 在下一个用户轮都会丢弃上轮
+// reasoning、不计入后续 input。拿 totalTokens 当"当前占用"会系统性虚高，
+// 并在下一个真实锚点到来时无压缩回落（用量环 44%→16% 跳水的根因之一）。
+function getUsagePromptSideTokens(usage: Usage | undefined): number | undefined {
+  if (!usage) return undefined;
+  let sum = 0;
+  for (const value of [usage.input, usage.cacheRead, usage.cacheWrite]) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) sum += value;
+  }
+  return sum > 0 ? Math.floor(sum) : undefined;
+}
+
+// 锚点语义 = "下一次请求将要发送的上下文"的最优估计：usage prompt 侧（权威）
+// + 本条消息可见内容估算（正文/工具调用/思维摘要——后续请求会重发的部分）。
+// stopReason 为 toolUse 时本轮 reasoning 仍留在同一 turn 的后续请求里
+//（OpenAI/Anthropic 工具环内都要求回传并计费），补计 usage.reasoning 保证
+// 工具环内的压缩保护不因语义收紧而漏触发；turn 终止（stop 等）则随各家语义
+// 丢弃。prompt 侧缺失（中转只报 totalTokens）时回退旧口径的 totalTokens。
+function getMessageUsageAnchorTokens(message: AssistantMessage): number | undefined {
+  const promptSideTokens = getUsagePromptSideTokens(message.usage);
+  if (promptSideTokens === undefined) return getUsageTotalTokens(message.usage);
+  const reasoning = message.usage?.reasoning;
+  const replayedReasoningTokens =
+    message.stopReason === "toolUse" &&
+    typeof reasoning === "number" &&
+    Number.isFinite(reasoning) &&
+    reasoning > 0
+      ? Math.floor(reasoning)
+      : 0;
+  return promptSideTokens + estimateMessageTokens(message) + replayedReasoningTokens;
+}
+
+// 供应商托管搜索（hostedSearch）轮次的 usage 是服务端多次内部调用的聚合值：
+// 搜索结果全文按 input 计费，却不进入后续请求的上下文。实测（issue：用量环
+// 44%→16% 跳水）一个搜索轮报 input 110k，而下一轮实测整个持久上下文只有 52k。
+// 这类消息一律不作锚点（旧版本盖的印章同为聚合值，一并忽略），内容走估算，
+// 下一个普通轮次的真实 usage 会重新锚定。
+export function messageHasHostedSearchBlocks(message: AssistantMessage): boolean {
+  for (const block of message.content) {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { type?: string }).type === "hostedSearch"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function getMessageObservedTokens(message: Message): number | undefined {
   if (message.role !== "assistant") return undefined;
   // 压缩 checkpoint 消息带的是 summarizer 请求的规模，不代表当前会话上下文。
   // （布尔化避免类型谓词在 else 分支把 AssistantMessage 收窄成 never。）
   const isCheckpoint: boolean = isCompactionAssistantMessage(message);
   if (isCheckpoint) return undefined;
-  return readMessageContextUsage(message)?.totalTokens ?? getUsageTotalTokens(message.usage);
+  if (messageHasHostedSearchBlocks(message)) return undefined;
+  return readMessageContextUsage(message)?.totalTokens ?? getMessageUsageAnchorTokens(message);
 }
 
 export type TokenLedgerSnapshot = {
@@ -168,12 +225,19 @@ export class TokenLedger {
     }
   }
 
-  addMessages(messages: readonly Message[]): void {
+  /**
+   * suppressUsageAnchors：调用方明确知道这批消息的 usage 不可信（如托管搜索
+   * 轮次的聚合值，且消息对象可能尚未带上 hostedSearch 块——搜索收尾是异步
+   * 替换，内容检测在提交时刻不可靠）时强制走估算路径，不锚定也不盖章。
+   */
+  addMessages(messages: readonly Message[], options?: { suppressUsageAnchors?: boolean }): void {
     for (const message of messages) {
       if (!this.hasObservedUsage) {
         this.estimatedTotalTokens += estimateMessageTokens(message);
       }
-      const observed = getMessageObservedTokens(message);
+      const observed = options?.suppressUsageAnchors
+        ? undefined
+        : getMessageObservedTokens(message);
       if (typeof observed === "number") {
         if (
           message.role === "assistant" &&

@@ -33,6 +33,7 @@ export function createContextUsageTokensSource(params: ContextUsageTokensSourceP
     rounds: unknown;
     draft: string;
     runtimeValue: number | undefined;
+    fixedTokens: number | undefined;
     value: number | undefined;
   } | null = null;
   return {
@@ -42,12 +43,17 @@ export function createContextUsageTokensSource(params: ContextUsageTokensSourceP
       const includeLive = isRunning && !live.isSettled;
       const rounds = includeLive ? live.liveRounds : null;
       const draft = includeLive ? live.draftAssistantText : "";
-      const runtimeValue = getCompactionController(conversationId).contextUsageTokens;
+      const controller = getCompactionController(conversationId);
+      const runtimeValue = controller.contextUsageTokens;
+      // 供应商不回传 usage 时倒扫全程无锚点：不补 fixed（system+tools 估算）
+      // 会让空闲读数与运行中账本读数（含 fixed）来回跳变。
+      const fixedTokens = controller.contextFixedTokens;
       if (
         cache &&
         cache.rounds === rounds &&
         cache.draft === draft &&
-        cache.runtimeValue === runtimeValue
+        cache.runtimeValue === runtimeValue &&
+        cache.fixedTokens === fixedTokens
       ) {
         return cache.value;
       }
@@ -64,10 +70,11 @@ export function createContextUsageTokensSource(params: ContextUsageTokensSourceP
       } else {
         const transcriptValue = deriveContextUsageTokens(
           buildContextUsageScanItems(transcriptItems, includeLive ? live : null),
+          { unanchoredFixedTokens: fixedTokens },
         );
         value = transcriptValue ?? runtimeValue;
       }
-      cache = { rounds, draft, runtimeValue, value };
+      cache = { rounds, draft, runtimeValue, fixedTokens, value };
       return value;
     },
   };

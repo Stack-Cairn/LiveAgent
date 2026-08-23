@@ -675,11 +675,13 @@ function manualBinding(overrides = {}) {
 
 test("compactManually skips below the 50% manual threshold", async () => {
   const controller = new CompactionController();
+  // 锚点 = usage prompt 侧 + 可见输出估算（本条短文本 +14），99_000 留足余量
+  // 保证读数停在 100_000（50%）门槛之下。
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
       user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 99_999, 2),
+      assistantWithUsage("working on src/app.ts", 99_000, 2),
     ],
   });
   const { binding, recorder } = manualBinding();

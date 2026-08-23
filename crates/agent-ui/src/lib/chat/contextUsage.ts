@@ -194,6 +194,24 @@ function estimateToolResultTokens(result: { content?: unknown }): number {
   return tokens;
 }
 
+// 供应商托管搜索块的两端统一 kind（GUI 时间线与 WebUI 行都经共享
+// upsertHostedSearchToRound 折叠成该 kind）。含此块的轮次：
+// 1) usage 是服务端多次内部调用的聚合值（搜索结果全文计入 input 却不进入
+//    后续请求），不可作锚点——实测一个搜索轮报 118k 而真实持久上下文 52k，
+//    锚上去会在下一个普通轮次无压缩回落（用量环 44%→16% 跳水）；
+// 2) 块本身在请求侧被 sanitizer 剥除，估算也必须跳过。
+export const HOSTED_SEARCH_BLOCK_KIND = "hostedSearch";
+
+function roundHasHostedSearch(
+  round: NonNullable<ContextUsageScanItem["rounds"]>[number] | undefined,
+): boolean {
+  if (!round?.blocks) return false;
+  for (const block of round.blocks) {
+    if (block.kind === HOSTED_SEARCH_BLOCK_KIND) return true;
+  }
+  return false;
+}
+
 function estimateRoundTokens(
   round: NonNullable<ContextUsageScanItem["rounds"]>[number],
   onlyToolResults: boolean,
@@ -201,6 +219,7 @@ function estimateRoundTokens(
   let assistantUnits = 0;
   let toolResultTokens = 0;
   for (const block of round.blocks ?? []) {
+    if (block.kind === HOSTED_SEARCH_BLOCK_KIND) continue;
     if (block.kind === "tool") {
       const item =
         block.item && typeof block.item === "object"
@@ -233,24 +252,38 @@ export function positiveTokenCount(value: unknown): number | undefined {
     : undefined;
 }
 
+export type DeriveContextUsageOptions = {
+  // 倒扫找不到任何权威锚点（usage/检查点快照）时补进读数的固定开销
+  //（system + tools 的估算，由 GUI 的 TokenLedger 提供）。运行中账本的无锚点
+  // 口径含 fixed，倒扫历来只累加可见消息正文——两套口径在"供应商不回传
+  // usage"的会话上会让空闲读数系统性偏低、与运行中读数来回跳变。有锚点时
+  // usage/快照已含 fixed，绝不叠加。
+  unanchoredFixedTokens?: number;
+};
+
 /**
  * 倒扫 transcript 求当前上下文占用：最近一个 assistant 轮次的真实 API usage
- * 是锚点（usage.totalTokens 已含该 assistant 输出及其之前的 system/tools/历史），
+ * 是锚点（contextUsageTokens 已含该轮之前的 system/tools/历史与本轮可见输出），
  * 再累加锚点之后的用户消息（正文 + 附件元数据）、后续 assistant 内容与工具
  * 结果。压缩检查点优先使用桌面端同步的权威 contextUsageTokens；旧历史没有
- * 该字段时才退回摘要正文估算。
+ * 该字段时才退回摘要正文估算（此时同样补 unanchoredFixedTokens 对齐口径）。
  */
 export function deriveContextUsageTokens(
   items: readonly ContextUsageScanItem[],
+  options?: DeriveContextUsageOptions,
 ): number | undefined {
+  const unanchoredFixedTokens = positiveTokenCount(options?.unanchoredFixedTokens) ?? 0;
   let trailingTokens = 0;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.kind === "summary" || item.kind === "checkpoint") {
-      const checkpointTokens =
-        positiveTokenCount(item.contextUsageTokens) ??
-        (typeof item.content === "string" ? estimateTextTokens(item.content) : undefined);
-      return checkpointTokens === undefined ? undefined : checkpointTokens + trailingTokens;
+      const authoritativeTokens = positiveTokenCount(item.contextUsageTokens);
+      if (authoritativeTokens !== undefined) return authoritativeTokens + trailingTokens;
+      const estimatedTokens =
+        typeof item.content === "string" ? estimateTextTokens(item.content) : undefined;
+      return estimatedTokens === undefined
+        ? undefined
+        : estimatedTokens + trailingTokens + unanchoredFixedTokens;
     }
     if (item.kind === "user") {
       let units = typeof item.text === "string" ? estimateTextTokenUnits(item.text.trim()) : 0;
@@ -269,14 +302,19 @@ export function deriveContextUsageTokens(
     for (let roundIndex = item.rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
       const round = item.rounds[roundIndex];
       if (round?.meta?.contextRelevant === false) continue;
-      const totalTokens =
-        positiveTokenCount(round?.meta?.contextUsageTokens) ??
-        positiveTokenCount(round?.meta?.usageTotalTokens);
-      if (totalTokens !== undefined) {
-        return totalTokens + trailingTokens + estimateRoundTokens(round, true);
+      // 托管搜索轮次的 usage（及旧版本据其写入的 contextUsageTokens）是聚合值，
+      // 跳过锚点、只按估算累加，继续向更早轮次找可信锚点。
+      if (!roundHasHostedSearch(round)) {
+        const totalTokens =
+          positiveTokenCount(round?.meta?.contextUsageTokens) ??
+          positiveTokenCount(round?.meta?.usageTotalTokens);
+        if (totalTokens !== undefined) {
+          return totalTokens + trailingTokens + estimateRoundTokens(round, true);
+        }
       }
       trailingTokens += estimateRoundTokens(round, false);
     }
   }
-  return trailingTokens > 0 ? trailingTokens : undefined;
+  const unanchoredTotal = trailingTokens + unanchoredFixedTokens;
+  return unanchoredTotal > 0 ? unanchoredTotal : undefined;
 }

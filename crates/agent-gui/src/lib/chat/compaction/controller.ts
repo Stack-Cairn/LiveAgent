@@ -293,14 +293,34 @@ export class CompactionController {
     return this.ledger.total();
   }
 
-  observeContextMessages(messages: readonly Context["messages"][number][]) {
-    this.ledger.addMessages(messages);
+  observeContextMessages(
+    messages: readonly Context["messages"][number][],
+    options?: { suppressUsageAnchors?: boolean },
+  ) {
+    this.ledger.addMessages(messages, options);
     return this.ledger.total();
   }
 
   get contextUsageTokens() {
     const totalTokens = this.ledger.total();
     return totalTokens > 0 ? totalTokens : undefined;
+  }
+
+  /**
+   * 仅在账本有真实 usage 锚点时给出读数。外发权威口径（轮次 meta / gateway
+   * 事件的 contextUsageTokens）专用：无锚点时账本读数是含 system/tools 估值的
+   * 全量估算，一旦以权威字段外发并落进历史，倒扫（优先读 contextUsageTokens）
+   * 会长期被估算遮蔽，真实 usage 到来时读数无压缩回落。
+   */
+  get anchoredContextUsageTokens(): number | undefined {
+    const snapshot = this.ledger.snapshot();
+    return snapshot.hasObservedUsage && snapshot.totalTokens > 0 ? snapshot.totalTokens : undefined;
+  }
+
+  /** 账本当前的 system+tools 固定开销估算；供空闲倒扫在无锚点时补齐同口径。 */
+  get contextFixedTokens(): number | undefined {
+    const { fixedTokens } = this.ledger.snapshot();
+    return fixedTokens > 0 ? fixedTokens : undefined;
   }
 
   get contextUsageSnapshot(): ManualContextUsageSnapshot | undefined {
