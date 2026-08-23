@@ -41,21 +41,33 @@ const PERSIST_VERSION = 1;
 
 type StoredEntry = { layoutKey: string; measurements: VirtualItem[] };
 
+// The virtualizer only consumes `key` and `size` from a restored snapshot
+// (positions are always recomputed from sizes), so the persisted form keeps
+// just those two per row — roughly 4x the quota headroom of full items.
+type PersistedRow = [key: string | number, size: number];
+
 function persistKeyFor(namespace: string) {
   return `liveagent.transcript-measurements.v${PERSIST_VERSION}.${namespace}`;
 }
 
-function isPlainVirtualItem(value: unknown): value is VirtualItem {
-  if (typeof value !== "object" || value === null) return false;
-  const item = value as Record<string, unknown>;
+function isPersistedRow(value: unknown): value is PersistedRow {
   return (
-    (typeof item.key === "string" || typeof item.key === "number") &&
-    typeof item.index === "number" &&
-    Number.isFinite(item.start) &&
-    Number.isFinite(item.size) &&
-    Number.isFinite(item.end) &&
-    typeof item.lane === "number"
+    Array.isArray(value) &&
+    value.length === 2 &&
+    (typeof value[0] === "string" || typeof value[0] === "number") &&
+    Number.isFinite(value[1])
   );
+}
+
+function toVirtualItems(rows: PersistedRow[]): VirtualItem[] {
+  return rows.map(([key, size], index) => ({
+    index,
+    key,
+    start: 0,
+    size,
+    end: size,
+    lane: 0,
+  }));
 }
 
 function readPersistedEntries(namespace: string): Map<string, StoredEntry> {
@@ -68,13 +80,16 @@ function readPersistedEntries(namespace: string): Map<string, StoredEntry> {
     if (!Array.isArray(parsed.entries)) return entries;
     for (const pair of parsed.entries) {
       if (!Array.isArray(pair) || pair.length !== 2) continue;
-      const [conversationId, entry] = pair as [unknown, Partial<StoredEntry> | null];
+      const [conversationId, entry] = pair as [
+        unknown,
+        { layoutKey?: unknown; rows?: unknown } | null,
+      ];
       if (typeof conversationId !== "string" || !entry) continue;
-      if (typeof entry.layoutKey !== "string" || !Array.isArray(entry.measurements)) continue;
-      if (!entry.measurements.every(isPlainVirtualItem)) continue;
+      if (typeof entry.layoutKey !== "string" || !Array.isArray(entry.rows)) continue;
+      if (!entry.rows.every(isPersistedRow)) continue;
       entries.set(conversationId, {
         layoutKey: entry.layoutKey,
-        measurements: entry.measurements,
+        measurements: toVirtualItems(entry.rows),
       });
     }
   } catch {
@@ -86,10 +101,16 @@ function readPersistedEntries(namespace: string): Map<string, StoredEntry> {
 function writePersistedEntries(namespace: string, entries: Map<string, StoredEntry>) {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(
-      persistKeyFor(namespace),
-      JSON.stringify({ entries: [...entries.entries()] }),
-    );
+    const persisted = [...entries.entries()].map(([conversationId, entry]) => [
+      conversationId,
+      {
+        layoutKey: entry.layoutKey,
+        rows: entry.measurements.map(
+          (item): PersistedRow => [item.key as string | number, item.size],
+        ),
+      },
+    ]);
+    localStorage.setItem(persistKeyFor(namespace), JSON.stringify({ entries: persisted }));
   } catch {
     // Quota or serialization failure: memory-only from here on is fine.
   }

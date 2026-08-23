@@ -1028,6 +1028,10 @@ export class Virtualizer<
             // After the grace window, attempt to flush. The scroll event
             // for momentum decay may have already fired before our timer.
             this._flushIosDeferredIfReady()
+            // Same for origin debt: if the last scroll event fired inside
+            // the grace window, its rebase attempt was deferred and no
+            // further scroll event will come — settle it now.
+            this.maybeRebaseOrigin()
           }, 150)
         }
         scrollEl.addEventListener(
@@ -1772,6 +1776,19 @@ export class Virtualizer<
     if (this.originOffset === 0) return
     // Programmatic scrolls own their own convergence loop.
     if (this.scrollState) return
+    // A rebase must shift the layout and write scrollTop in the same pass.
+    // On iOS mid-gesture the write would be deferred (writing scrollTop
+    // cancels the momentum), which would leave the already-shifted layout
+    // and the un-adjusted offset visibly inconsistent until the deferred
+    // flush — a double jump. Wait for the gesture to settle instead; scroll
+    // events keep arriving through momentum decay, so the idle rebase below
+    // still runs promptly.
+    if (
+      isIOSWebKit() &&
+      (this.isScrolling || this._iosTouching || this._iosJustTouchEnded)
+    ) {
+      return
+    }
     const size = this.getSize()
     const nearTop =
       this.getScrollOffset() < size * 2 + Math.abs(this.originOffset)

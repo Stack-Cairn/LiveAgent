@@ -194,6 +194,16 @@ test("persisted snapshots round-trip across LRU instances (app restarts)", () =>
   });
 });
 
+test("persisted payload stores compact [key, size] rows, not full items", () => {
+  withFakeLocalStorage((store) => {
+    const lru = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    lru.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
+    const [raw] = [...store.values()];
+    const parsed = JSON.parse(raw);
+    assert.deepEqual(parsed.entries[0][1].rows, [["a", 120]]);
+  });
+});
+
 test("malformed persisted payloads degrade to an empty cache", () => {
   withFakeLocalStorage((store) => {
     const probe = createTranscriptMeasurementsLru({ persistNamespace: "test" });

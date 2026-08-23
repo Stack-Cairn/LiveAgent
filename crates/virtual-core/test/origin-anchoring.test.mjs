@@ -143,6 +143,49 @@ test("approaching the top with debt forces a rebase before the broken zone", () 
   assert.equal(h.blankBandAtViewportTop(), 0);
 });
 
+test("on iOS, forced rebases wait for the gesture to settle", () => {
+  // A rebase must shift the layout and write scrollTop in the same pass. On
+  // iOS mid-gesture the write is deferred (it would cancel the momentum), so
+  // rebasing there would leave the shifted layout visibly inconsistent until
+  // the deferred flush — the rebase itself must wait for settle instead.
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 5 },
+    configurable: true,
+  });
+  const h = originHarness();
+  h.core._resetIOSDetectionForTests();
+  try {
+    h.emitScroll(9880, true);
+
+    // Accumulate over-budget debt: on desktop this forces a mid-scroll rebase.
+    const firstVisible = h.virtualizer.getVirtualItems()[0];
+    for (let step = 0; step < 8; step += 1) {
+      h.virtualizer.resizeItem(firstVisible.index - step, 400);
+    }
+    const debt = h.originOffset();
+    assert.ok(Math.abs(debt) > 2000);
+
+    h.emitScroll(9760, true);
+    assert.equal(h.originOffset(), debt, "mid-gesture rebase must be deferred on iOS");
+    assert.equal(h.writes.length, 0);
+
+    // Gesture settles: the rebase runs with one direct write.
+    h.emitScroll(9760, false);
+    assert.equal(h.originOffset(), 0);
+    assert.equal(h.writes.length, 1);
+    assert.equal(h.writes[0].swallowed, false);
+    assert.equal(h.blankBandAtViewportTop(), 0);
+  } finally {
+    if (previousNavigator) {
+      Object.defineProperty(globalThis, "navigator", previousNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+    h.core._resetIOSDetectionForTests();
+  }
+});
+
 test("swallowed rebase writes self-heal through write verification", () => {
   const h = originHarness();
   h.emitScroll(9880, true);
