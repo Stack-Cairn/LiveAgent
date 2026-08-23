@@ -230,3 +230,26 @@ test("storage write failures degrade to memory-only", () => {
     assert.equal(lru.restore("conv-1", layoutKey(800, 768)), measurements);
   });
 });
+
+test("oversized snapshots skip persistence and prune their stale persisted copy", () => {
+  withFakeLocalStorage(() => {
+    const first = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    first.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
+    first.save("conv-2", layoutKey(800, 768), [item("b", 60)]);
+
+    // conv-1 grows past the per-entry cap: memory keeps serving it, but the
+    // persisted copy must not stay frozen at the old (now stale) snapshot.
+    const oversized = Array.from({ length: 5001 }, (_, i) => item(`row-${i}`, 40));
+    first.save("conv-1", layoutKey(800, 768), oversized);
+    assert.equal(first.restore("conv-1", layoutKey(800, 768)), oversized);
+
+    const second = createTranscriptMeasurementsLru({ persistNamespace: "test" });
+    assert.equal(
+      second.restore("conv-1", layoutKey(800, 768)),
+      null,
+      "a restart must not resurrect the pre-growth snapshot",
+    );
+    // Small entries in the same namespace survive the oversized save.
+    assert.equal(second.restore("conv-2", layoutKey(800, 768)).length, 1);
+  });
+});

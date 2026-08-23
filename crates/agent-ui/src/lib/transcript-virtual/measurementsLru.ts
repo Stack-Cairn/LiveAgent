@@ -35,7 +35,9 @@ export function buildTranscriptLayoutKey(viewportWidth: number, contentWidth: nu
 
 const DEFAULT_CAPACITY = 12;
 // Giant transcripts are cheap to re-measure relative to their storage cost;
-// skip persisting them rather than risk quota churn.
+// exclude them from the persisted payload rather than risk quota churn. The
+// write itself still runs so a previously persisted (now stale) snapshot of
+// the same conversation is pruned instead of surviving into the next restart.
 const PERSIST_MAX_ROWS_PER_ENTRY = 5000;
 const PERSIST_VERSION = 1;
 
@@ -101,15 +103,17 @@ function readPersistedEntries(namespace: string): Map<string, StoredEntry> {
 function writePersistedEntries(namespace: string, entries: Map<string, StoredEntry>) {
   try {
     if (typeof localStorage === "undefined") return;
-    const persisted = [...entries.entries()].map(([conversationId, entry]) => [
-      conversationId,
-      {
-        layoutKey: entry.layoutKey,
-        rows: entry.measurements.map(
-          (item): PersistedRow => [item.key as string | number, item.size],
-        ),
-      },
-    ]);
+    const persisted = [...entries.entries()]
+      .filter(([, entry]) => entry.measurements.length <= PERSIST_MAX_ROWS_PER_ENTRY)
+      .map(([conversationId, entry]) => [
+        conversationId,
+        {
+          layoutKey: entry.layoutKey,
+          rows: entry.measurements.map(
+            (item): PersistedRow => [item.key as string | number, item.size],
+          ),
+        },
+      ]);
     localStorage.setItem(persistKeyFor(namespace), JSON.stringify({ entries: persisted }));
   } catch {
     // Quota or serialization failure: memory-only from here on is fine.
@@ -150,7 +154,7 @@ export function createTranscriptMeasurementsLru(
         if (oldest === undefined) break;
         map.delete(oldest);
       }
-      if (persistNamespace && measurements.length <= PERSIST_MAX_ROWS_PER_ENTRY) {
+      if (persistNamespace) {
         writePersistedEntries(persistNamespace, map);
       }
     },

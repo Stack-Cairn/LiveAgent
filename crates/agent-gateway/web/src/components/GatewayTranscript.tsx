@@ -130,6 +130,17 @@ export type GatewayTranscriptNavHandle = TranscriptNavigationHandle;
 const TRANSCRIPT_ROW_ESTIMATED_HEIGHT = 260;
 const TRANSCRIPT_ROW_GAP = 18;
 
+// Bump when the transcript row model or its measurement semantics change:
+// persisted snapshots outlive releases, and stale heights keyed only by
+// widths would seed wrong layouts (and scroll-compensation churn) after an
+// upgrade. Mirrors the GUI's versioned key.
+const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "gateway-rows-v1";
+
+function buildVersionedTranscriptLayoutKey(viewportWidth: number, contentWidth: number) {
+  const layoutKey = buildTranscriptLayoutKey(viewportWidth, contentWidth);
+  return layoutKey ? `${layoutKey}:${TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION}` : "";
+}
+
 // Measured row heights survive conversation switches: saved on unmount,
 // restored (width-gated) on the next open so the switch lays out with exact
 // heights instead of estimates. Persisted so revisited conversations skip
@@ -655,7 +666,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
       (conversationId && scrollViewport
         ? transcriptMeasurementsLru.restore(
             conversationId,
-            buildTranscriptLayoutKey(scrollViewport.clientWidth, contentWidth),
+            buildVersionedTranscriptLayoutKey(scrollViewport.clientWidth, contentWidth),
           )
         : null) ?? [],
   );
@@ -796,7 +807,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     if (!conversationId || !scrollViewport) return;
     transcriptMeasurementsLru.save(
       conversationId,
-      buildTranscriptLayoutKey(scrollViewport.clientWidth, contentWidth),
+      buildVersionedTranscriptLayoutKey(scrollViewport.clientWidth, contentWidth),
       transcriptVirtualizer.takeSnapshot(),
     );
   };

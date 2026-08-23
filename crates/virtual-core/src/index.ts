@@ -17,9 +17,26 @@ const isIOSWebKit = (): boolean => {
     navigator.platform === 'MacIntel' && mtp !== undefined && mtp > 0)
 }
 
-// Test hook: reset the iOS detection cache. Not exported.
+// WebKit-family detection beyond iOS. macOS WKWebView (Tauri), desktop
+// Safari, and WebKitGTK share the compositor behavior this file works
+// around: during an active wheel/trackpad gesture the compositor owns the
+// viewport and a main-thread scrollTop write can be silently swallowed.
+// Blink/Gecko honor mid-gesture programmatic scrolls, so they are excluded
+// (their UAs carry "AppleWebKit" for legacy reasons only).
+let _isWebKitResult: boolean | undefined
+const isWebKit = (): boolean => {
+  if (_isWebKitResult !== undefined) return _isWebKitResult
+  if (isIOSWebKit()) return (_isWebKitResult = true)
+  if (typeof navigator === 'undefined') return (_isWebKitResult = false)
+  const ua = navigator.userAgent
+  return (_isWebKitResult =
+    /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\/|OPR\/|Android/.test(ua))
+}
+
+// Test hook: reset the browser detection caches. Not exported.
 export const _resetIOSDetectionForTests = () => {
   _isIOSResult = undefined
+  _isWebKitResult = undefined
 }
 
 export { approxEqual, debounce, memo, notUndefined } from './utils'
@@ -482,6 +499,16 @@ export class Virtualizer<
   // intent and the DOM disagrees, the DOM wins: roll the mirror back and
   // recompute. Scroll position has exactly one source of truth — the DOM.
   private _writeVerifyRafId: number | null = null
+  // In-flight rebase transaction ('origin' anchoring). A rebase must move
+  // the layout and the viewport by the same amount in one pass; the layout
+  // shift is synchronous but the scrollTop write can be swallowed or
+  // clamped. Until the write is confirmed (scroll-event echo or the verify
+  // frame), remember the settled debt and the pre-write offset so the
+  // unconfirmed remainder can be put back into the origin instead of being
+  // dropped — dropping it detaches the shifted layout from the unmoved
+  // viewport, which reads as a jump through the transcript.
+  private _pendingRebaseDebt: number | null = null
+  private _pendingRebasePreWriteOffset = 0
   shouldAdjustScrollPositionOnItemSizeChange:
     | undefined
     | ((
@@ -827,14 +854,27 @@ export class Virtualizer<
     if (real === null) return
     // Same tolerance the scroll-event reconciliation uses for subpixel
     // rounding of our own writes.
-    if (Math.abs(real - this._intendedScrollOffset) < 1.5) return
+    if (Math.abs(real - this._intendedScrollOffset) < 1.5) {
+      // Landed. Any pending rebase transaction is fully settled (zero
+      // residual); the echo will consume the intent as usual.
+      this.resolveRebaseTransaction(real)
+      return
+    }
     // The write was swallowed (compositor gesture) or clamped (sizer not
     // grown yet) and produced no scroll event that could re-sync us. Adopt
     // the DOM's value and recompute the range so rendering matches the real
-    // viewport again — without waiting for the user's next scroll.
+    // viewport again — without waiting for the user's next scroll. If the
+    // write belonged to a rebase, the unconfirmed part of the debt returns
+    // to the origin so the already-shifted layout moves back in the same
+    // pass — rows keep their position relative to the real viewport.
     this._intendedScrollOffset = null
+    const rebaseLayoutRolledBack = this.resolveRebaseTransaction(real)
     this.scrollOffset = real
-    this.maybeNotify()
+    if (rebaseLayoutRolledBack) {
+      this.notify(false)
+    } else {
+      this.maybeNotify()
+    }
   }
 
   private maybeNotify = memo(
@@ -889,8 +929,10 @@ export class Virtualizer<
     this._iosJustTouchEnded = false
     // Origin debt is scoped to the current scroll element's DOM scroll
     // position; carrying it to a re-attached element would misplace every
-    // row by the stale debt.
+    // row by the stale debt. Same for an in-flight rebase transaction.
     this.originOffset = 0
+    this._pendingRebaseDebt = null
+    this._pendingRebasePreWriteOffset = 0
     this.lastScrollDirection = null
     this.scrollElement = null
     this.targetWindow = null
@@ -958,13 +1000,21 @@ export class Virtualizer<
           // self-write — by the time the user has moved 1.5 px, the
           // intended value will already have been consumed by a prior
           // scroll event and cleared.
-          if (
-            this._intendedScrollOffset !== null &&
-            Math.abs(offset - this._intendedScrollOffset) < 1.5
-          ) {
-            offset = this._intendedScrollOffset
+          if (this._intendedScrollOffset !== null) {
+            if (Math.abs(offset - this._intendedScrollOffset) < 1.5) {
+              offset = this._intendedScrollOffset
+            }
+            this._intendedScrollOffset = null
+            // A scroll event consumed the intent, so treat any in-flight
+            // rebase as landed. Rolling back from here would misattribute
+            // concurrent user movement as a swallowed write (freezing
+            // visible content for a frame on engines that honor mid-gesture
+            // writes). The genuinely-swallowed case produces no scroll
+            // event at all and is settled by the verify frame instead —
+            // and on WebKit, where swallowing happens, rebase writes are
+            // only issued once the gesture has settled.
+            this._pendingRebaseDebt = null
           }
-          this._intendedScrollOffset = null
 
           this.scrollAdjustments = 0
           // If the offset hasn't moved, this is the echo of our own
@@ -1766,6 +1816,29 @@ export class Virtualizer<
     this.itemSizeCacheVersion++
   }
 
+  // Settle an in-flight rebase transaction against an observed DOM offset.
+  // The rebase shifted the layout by `debt` px and asked the viewport to
+  // follow; `observed - preWriteOffset` is how far the viewport actually
+  // moved. Any unconfirmed remainder returns to the origin so layout and
+  // viewport stay in agreement — a swallowed or clamped write degrades to a
+  // smaller rebase instead of detaching the shifted layout from the unmoved
+  // viewport (a visible jump through the transcript). The returned debt
+  // settles on a later, verified attempt. Returns true when row positions
+  // changed and the consumer must re-render.
+  private resolveRebaseTransaction = (observedOffset: number): boolean => {
+    if (this._pendingRebaseDebt === null) return false
+    const residual =
+      this._pendingRebaseDebt -
+      (observedOffset - this._pendingRebasePreWriteOffset)
+    this._pendingRebaseDebt = null
+    // Same tolerance as the subpixel write reconciliation.
+    if (Math.abs(residual) < 1.5) return false
+    this.originOffset -= residual
+    this.pendingMin = 0
+    this.itemSizeCacheVersion++
+    return true
+  }
+
   // Settle the accumulated origin debt with one verified scrollTop write.
   // Deferred while the gesture owns the viewport; forced when the debt
   // exceeds its budget or the viewport approaches the mis-positioned zone
@@ -1777,14 +1850,18 @@ export class Virtualizer<
     // Programmatic scrolls own their own convergence loop.
     if (this.scrollState) return
     // A rebase must shift the layout and write scrollTop in the same pass.
-    // On iOS mid-gesture the write would be deferred (writing scrollTop
-    // cancels the momentum), which would leave the already-shifted layout
-    // and the un-adjusted offset visibly inconsistent until the deferred
-    // flush — a double jump. Wait for the gesture to settle instead; scroll
-    // events keep arriving through momentum decay, so the idle rebase below
-    // still runs promptly.
+    // Mid-gesture that write is unsafe across the whole WebKit family: on
+    // iOS it would be deferred (writing scrollTop cancels the momentum),
+    // and on macOS WKWebView / desktop Safari the compositor owns the
+    // viewport during a wheel gesture and can silently swallow the write —
+    // the already-shifted layout would detach from the real viewport, the
+    // exact jump this mode exists to remove. Wait for the gesture to
+    // settle instead: scroll events keep arriving through momentum decay,
+    // so the idle rebase below still runs promptly, and a settle-time
+    // write that lands is visually a no-op. Blink/Gecko honor mid-gesture
+    // writes, so the forced paths below stay live there.
     if (
-      isIOSWebKit() &&
+      isWebKit() &&
       (this.isScrolling || this._iosTouching || this._iosJustTouchEnded)
     ) {
       return
@@ -1804,6 +1881,7 @@ export class Virtualizer<
       // so keep waiting — scrolling away from the bottom settles it.
       return
     }
+    const preWriteOffset = this.getScrollOffset()
     const delta = -this.originOffset
     this.originOffset = 0
     this.pendingMin = 0
@@ -1811,6 +1889,11 @@ export class Virtualizer<
     // Mirror + DOM write + write-landing verification; then re-render with
     // the rebased layout and offset in one consistent pass.
     this.applyScrollAdjustment(delta)
+    // Arm the transaction after the write (issuing a write clears any stale
+    // transaction): until a scroll event or the verify frame confirms the
+    // viewport followed, the settled debt is provisional.
+    this._pendingRebaseDebt = delta
+    this._pendingRebasePreWriteOffset = preWriteOffset
     this.notify(false)
   }
 
@@ -2120,6 +2203,11 @@ export class Virtualizer<
       behavior: ScrollBehavior | undefined
     },
   ) => {
+    // A new write supersedes any in-flight rebase transaction — its
+    // observation channels can no longer attribute the DOM's movement to
+    // the old write. (The rebase path re-arms its transaction right after
+    // issuing its own write.)
+    this._pendingRebaseDebt = null
     // Record the intended logical scroll target so the next scroll event
     // can reconcile against subpixel rounding by the browser.
     this._intendedScrollOffset = offset + (adjustments ?? 0)

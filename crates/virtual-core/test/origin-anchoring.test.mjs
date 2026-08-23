@@ -186,22 +186,142 @@ test("on iOS, forced rebases wait for the gesture to settle", () => {
   }
 });
 
+test("on macOS WKWebView (desktop WebKit), forced rebases wait for the gesture to settle", () => {
+  // During a wheel gesture the WKWebView compositor owns the viewport and
+  // can silently swallow a main-thread scrollTop write. A mid-gesture rebase
+  // whose write is swallowed detaches the already-shifted layout from the
+  // real viewport — the exact jump 'origin' mode exists to remove — so even
+  // over-budget debt must wait for settle, where a landed rebase write is
+  // visually a no-op.
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      platform: "MacIntel",
+      maxTouchPoints: 0,
+    },
+    configurable: true,
+  });
+  const h = originHarness();
+  h.core._resetIOSDetectionForTests();
+  try {
+    h.emitScroll(9880, true);
+
+    const firstVisible = h.virtualizer.getVirtualItems()[0];
+    for (let step = 0; step < 8; step += 1) {
+      h.virtualizer.resizeItem(firstVisible.index - step, 400);
+    }
+    const debt = h.originOffset();
+    assert.ok(Math.abs(debt) > 2000);
+
+    h.emitScroll(9760, true);
+    assert.equal(h.originOffset(), debt, "mid-gesture rebase must be deferred on WebKit");
+    assert.equal(h.writes.length, 0);
+
+    const anchor = h.virtualizer.getVirtualItems()[1];
+    const relativeBefore = h.itemByKey(anchor.key).start - h.realScrollTop;
+
+    // Gesture settles: the rebase runs with one landed write, invisibly.
+    h.emitScroll(9760, false);
+    assert.equal(h.originOffset(), 0);
+    assert.equal(h.writes.length, 1);
+    assert.equal(h.writes[0].swallowed, false);
+    assert.equal(
+      h.itemByKey(anchor.key).start - h.realScrollTop,
+      relativeBefore,
+      "a settle-time rebase must keep the viewport visually still",
+    );
+    assert.equal(h.blankBandAtViewportTop(), 0);
+  } finally {
+    if (previousNavigator) {
+      Object.defineProperty(globalThis, "navigator", previousNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+    h.core._resetIOSDetectionForTests();
+  }
+});
+
+test("a swallowed forced rebase rolls its layout shift back within one frame", () => {
+  // Engines that honor mid-gesture writes (default harness navigator) keep
+  // the forced rebase paths; if such a write is still swallowed, the verify
+  // frame must return the unconfirmed debt to the origin so the layout
+  // re-attaches to the unmoved viewport — no jump, debt settles later.
+  const h = originHarness();
+  h.emitScroll(9880, true);
+
+  const firstVisible = h.virtualizer.getVirtualItems()[0];
+  for (let step = 0; step < 8; step += 1) {
+    h.virtualizer.resizeItem(firstVisible.index - step, 400);
+  }
+  const debt = h.originOffset();
+  assert.ok(Math.abs(debt) > 2000);
+
+  const anchor = h.virtualizer.getVirtualItems()[2];
+  const startBefore = h.itemByKey(anchor.key).start;
+
+  // Over-budget debt forces a mid-scroll rebase; the write is swallowed.
+  h.setSwallowWrites(true);
+  h.emitScroll(9760, true);
+  h.setSwallowWrites(false);
+  assert.ok(h.writes.at(-1)?.swallowed);
+  assert.equal(h.originOffset(), 0, "the rebase provisionally settled the debt");
+  assert.ok(h.virtualizer.scrollOffset !== h.realScrollTop, "mirror diverged from the DOM");
+
+  // The verify frame rolls the whole transaction back: mirror re-adopts the
+  // DOM, the origin takes the debt back, rows return to their exact
+  // pre-rebase positions.
+  h.runRafs();
+  assert.equal(h.virtualizer.scrollOffset, h.realScrollTop);
+  assert.equal(h.originOffset(), debt, "unconfirmed debt must return to the origin");
+  assert.equal(
+    h.itemByKey(anchor.key).start,
+    startBefore,
+    "a rolled-back rebase must not move any row",
+  );
+  assert.equal(h.blankBandAtViewportTop(), 0);
+
+  // A later attempt with a landing write settles the debt invisibly.
+  const relativeBefore = h.itemByKey(anchor.key).start - h.realScrollTop;
+  h.emitScroll(9760, false);
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.at(-1)?.swallowed, false);
+  assert.equal(
+    h.itemByKey(anchor.key).start - h.realScrollTop,
+    relativeBefore,
+    "the retried rebase must keep the viewport visually still",
+  );
+  assert.equal(h.blankBandAtViewportTop(), 0);
+});
+
 test("swallowed rebase writes self-heal through write verification", () => {
   const h = originHarness();
   h.emitScroll(9880, true);
   const firstVisible = h.virtualizer.getVirtualItems()[0];
   h.virtualizer.resizeItem(firstVisible.index, ACTUAL);
-  assert.ok(h.originOffset() < 0);
+  const debt = h.originOffset();
+  assert.ok(debt < 0);
+  const anchor = h.virtualizer.getVirtualItems()[1];
+  const startBefore = h.itemByKey(anchor.key).start;
 
   h.setSwallowWrites(true);
   h.emitScroll(9760, false); // idle -> rebase fires, write swallowed
   h.setSwallowWrites(false);
 
-  assert.equal(h.originOffset(), 0);
   assert.ok(h.writes.at(-1)?.swallowed);
   assert.ok(h.virtualizer.scrollOffset !== h.realScrollTop);
 
-  h.runRafs(); // verification adopts the DOM truth
+  // Verification adopts the DOM truth and rolls the layout shift back.
+  h.runRafs();
   assert.equal(h.virtualizer.scrollOffset, h.realScrollTop);
+  assert.equal(h.originOffset(), debt);
+  assert.equal(h.itemByKey(anchor.key).start, startBefore);
+  assert.equal(h.blankBandAtViewportTop(), 0);
+
+  // The next safe moment settles the debt for real.
+  h.emitScroll(9760, false);
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.at(-1)?.swallowed, false);
   assert.equal(h.blankBandAtViewportTop(), 0);
 });
