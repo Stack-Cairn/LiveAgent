@@ -4,7 +4,41 @@ packages:
   - "crates/agent-gateway/web"
   - "crates/virtual-core"
 
+# pnpm 11+ reads these from this file and ignores package.json#pnpm.
+# Keep the same pins as package.json so CI (pnpm 10) and local (11) agree.
+overrides:
+  "@base-ui/react": "1.6.0"
+  "@biomejs/biome": "2.4.15"
+  "@bufbuild/protobuf": "2.12.1"
+  "@git-diff-view/file": "0.1.3"
+  "@git-diff-view/react": "0.1.3"
+  "@iconify-json/gravity-ui": "1.2.12"
+  "@iconify-json/logos": "1.2.11"
+  "@iconify-json/lucide": "1.2.108"
+  "@tanstack/react-virtual": "3.14.6"
+  "@tanstack/virtual-core": "workspace:*"
+  "@types/react": "19.2.14"
+  "@types/react-dom": "19.2.3"
+  "@vitejs/plugin-react": "6.0.1"
+  katex: "0.18.4"
+  monaco-editor: "0.56.0"
+  postcss: "8.5.8"
+  react: "19.2.4"
+  react-dom: "19.2.4"
+  unplugin-icons: "23.0.1"
+  vite: "8.0.5"
+
 allowBuilds:
   "@google/genai": true
   esbuild: true
   protobufjs: true
+
+# local-pkg's importModule() does `import(name)` from its own file, so a
+# bare `@svgr/core` must exist next to local-pkg, not only in the app
+# package that declared it. Without this, Vite 8 / Node 22+ ESM workers
+# fail with ERR_MODULE_NOT_FOUND when compiling ~icons/* to JSX.
+packageExtensions:
+  local-pkg:
+    dependencies:
+      "@svgr/core": "8.1.0"
+      "@svgr/plugin-jsx": "8.1.0"

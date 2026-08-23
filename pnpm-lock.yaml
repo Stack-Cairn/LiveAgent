@@ -26,6 +26,8 @@ overrides:
   unplugin-icons: 23.0.1
   vite: 8.0.5
 
+packageExtensionsChecksum: sha256-MBJdTWKlgmpDNBnkOYQU7ic+VmL95TyVwwdh53gPN1A=
+
 importers:
 
   .:
@@ -165,7 +167,7 @@ importers:
         version: 7.0.2
       unplugin-icons:
         specifier: 23.0.1
-        version: 23.0.1(@svgr/core@8.1.0(typescript@7.0.2))
+        version: 23.0.1(@svgr/core@8.1.0(typescript@7.0.2))(typescript@7.0.2)
       vite:
         specifier: 8.0.5
         version: 8.0.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
@@ -304,7 +306,7 @@ importers:
         version: 7.0.2
       unplugin-icons:
         specifier: 23.0.1
-        version: 23.0.1(@svgr/core@8.1.0(typescript@7.0.2))
+        version: 23.0.1(@svgr/core@8.1.0(typescript@7.0.2))(typescript@7.0.2)
       vite:
         specifier: 8.0.5
         version: 8.0.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
@@ -5593,11 +5595,16 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
-  local-pkg@1.2.1:
+  local-pkg@1.2.1(typescript@7.0.2):
     dependencies:
+      '@svgr/core': 8.1.0(typescript@7.0.2)
+      '@svgr/plugin-jsx': 8.1.0(@svgr/core@8.1.0(typescript@7.0.2))
       mlly: 1.8.2
       pkg-types: 2.3.1
       quansync: 0.2.11
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   lodash-es@4.18.1: {}
 
@@ -6611,15 +6618,18 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  unplugin-icons@23.0.1(@svgr/core@8.1.0(typescript@7.0.2)):
+  unplugin-icons@23.0.1(@svgr/core@8.1.0(typescript@7.0.2))(typescript@7.0.2):
     dependencies:
       '@antfu/install-pkg': 1.1.0
       '@iconify/utils': 3.1.4
-      local-pkg: 1.2.1
+      local-pkg: 1.2.1(typescript@7.0.2)
       obug: 2.1.4
       unplugin: 2.3.11
     optionalDependencies:
       '@svgr/core': 8.1.0(typescript@7.0.2)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   unplugin@2.3.11:
     dependencies:
