@@ -1,24 +1,29 @@
 /**
- * CUA-039 regression test: CuaInstallerPanel 安装日志折叠按钮 chevron 旋转动画
+ * CUA-041 regression test: CuaInstallerPanel 安装日志折叠按钮 chevron 旋转动画
  *
  * 关键要求：
- *   - 收起时 chevron span 的 inline style.transform 应为空（rotate(0)）
- *   - 展开时 chevron span 的 inline style.transform 必须是 "rotate(180deg)"
- *   - 两种状态下 chevron span 的 inline style.transition 必须是 "transform 150ms"
+ *   - chevron span 必须改用 Web Animations API（element.animate(...)）驱动旋转，
+ *     而非 inline-style + CSS transition。CUA-041 复现：Tauri WebView（WKWebView）
+ *     中，async setState 后再 click 时 inline-style transition 不推进，
+ *     computed transform 停在 matrix(1,0,0,1,0,0)。
+ *   - expand 时 keyframes = [{rotate(0deg)}, {rotate(180deg)}]
+ *   - collapse 时 keyframes = [{rotate(180deg)}, {rotate(0deg)}]
+ *   - duration = 150ms
+ *   - chevron span 不再依赖 inline style.transform / style.transition
  *
- * 为什么必须用 inline `transform: rotate(180deg)`（CSS transform 属性），
- * 而不是 Tailwind 的 `rotate-180`（CSS `rotate` 属性）：
- *   - Tailwind v4 把 `rotate-180` 编译成 `rotate: 180deg`，这是单独的 CSS 属性。
- *   - `.transition-transform` 在某些级联顺序下不会 transition `rotate` 属性，
- *     导致 expand 路径 chevron 卡在 0deg（CUA-039）。
- *   - 改用 inline `transform: rotate(180deg)` + `transition: transform 150ms`，
- *     由浏览器原生处理 transition，行为可靠。
+ * 为什么走 Web Animations API 而不是 CSS transition：
+ *   - CUA-038 用 Tailwind .rotate-180 + .transition-transform，卡在 currentTime=0；
+ *   - CUA-039 切到 inline style.transform + transition: "transform 150ms"，但
+ *     WKWebView 在 async setState 后触发 transition 不可靠。
+ *   - element.animate(...) 直接驱动动画，不依赖 CSS transition 管线。
  *
  * 验证策略（两层）：
- *   1. **静态源码检查**：grep 确认 CuaInstallerPanel.tsx 已切到 inline style，
- *      不再依赖 `rotate-180` className。
+ *   1. **静态源码检查**：grep 确认 CuaInstallerPanel.tsx 已切到 Web Animations API：
+ *      - chevron span 有 ref + data-chevron-expanded 属性；
+ *      - 不再有 inline style.transform / style.transition；
+ *      - useEffect 用 chevronRef.current.animate(...) 调动画，duration: 150。
  *   2. **运行时 React 行为**：用 React 在 jsdom 下挂载一个最小复刻 chevron span，
- *      验证 inline style 真的渲染到 DOM 且 transition/transform 属性正确。
+ *      stub Element.prototype.animate 收集调用参数。
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -34,36 +39,79 @@ const panelPath = path.join(
 );
 const panelSource = fs.readFileSync(panelPath, "utf8");
 
-test("CUA-039 静态源码: chevron span 必须使用 inline style.transform + transition", () => {
-  // 抓 chevron 容器 span 的 JSX 块：logExpanded ? "rotate(180deg)" : undefined 是其特征。
-  const inlineStyleBlock = panelSource.match(
-    /className="inline-flex"\s*\n\s*style=\{\{[\s\S]*?\}\s*\}/,
+test("CUA-041 静态源码: chevron span 必须使用 ref + data-chevron-expanded，不再用 inline style.transform/transition", () => {
+  // 抓 chevron 容器 span 的 JSX 块：ref={chevronRef} 与 data-chevron-expanded 是新特征。
+  const chevronBlock = panelSource.match(
+    /<span\s*\n\s*ref=\{chevronRef\}[\s\S]*?<\/span>/,
   );
   assert.ok(
-    inlineStyleBlock,
-    "expected chevron span to use inline style with 'transform' / 'transition'",
+    chevronBlock,
+    "expected chevron span to use ref={chevronRef} + data-chevron-expanded",
   );
-  const block = inlineStyleBlock[0];
+  const block = chevronBlock[0];
 
-  // 不允许再依赖 Tailwind 的 rotate-180 class（这是 CUA-039 卡死的根源）。
+  // 必须绑定 chevronRef。
+  assert.ok(
+    /ref=\{chevronRef\}/.test(block),
+    `chevron span missing ref={chevronRef}: ${block.slice(0, 200)}`,
+  );
+  // 必须暴露 data-chevron-expanded 供 AX / CUA driver 验证。
+  assert.ok(
+    /data-chevron-expanded=\{logExpanded\s*\?\s*"true"\s*:\s*"false"\}/.test(block),
+    `chevron span missing data-chevron-expanded attribute: ${block.slice(0, 200)}`,
+  );
+  // CUA-041 修复不允许再依赖 inline style.transform——正是这个 inline-style
+  // 路径在 WKWebView async setState 后 click 卡死。
+  assert.ok(
+    !/style=\{\{[\s\S]*?transform:[\s\S]*?\}\s*\}/.test(block),
+    `chevron span still uses inline style.transform — would re-trigger CUA-041: ${block.slice(0, 200)}`,
+  );
+  // CUA-041 修复不允许再写 inline transition。
+  assert.ok(
+    !/style=\{\{[\s\S]*?transition:[\s\S]*?\}\s*\}/.test(block),
+    `chevron span still uses inline style.transition — should switch to element.animate(): ${block.slice(0, 200)}`,
+  );
+  // 不允许再依赖 Tailwind 的 rotate-180 class（CUA-038/039 双重回归保护）。
   assert.ok(
     !block.includes("rotate-180"),
-    `chevron span still uses 'rotate-180' class — would re-trigger CUA-039: ${block.slice(0, 200)}`,
+    `chevron span still uses 'rotate-180' class — switch to Web Animations API: ${block.slice(0, 200)}`,
   );
   assert.ok(
     !block.includes("transition-transform"),
-    `chevron span still uses 'transition-transform' Tailwind class — switch to inline style: ${block.slice(0, 200)}`,
+    `chevron span still uses 'transition-transform' Tailwind class — switch to element.animate(): ${block.slice(0, 200)}`,
   );
+});
 
-  // 必须显式声明 inline transition: transform 150ms。
-  assert.ok(
-    /transition:\s*"transform 150ms"/.test(block),
-    `expected inline transition: "transform 150ms" on chevron span, got: ${block.slice(0, 200)}`,
+test("CUA-041 静态源码: 必须有 useEffect 用 el.animate(...) 驱动旋转，duration: 150", () => {
+  // 抓用 chevronRef 的 useEffect 块，验证其调用 element.animate(...)。
+  const effectBlock = panelSource.match(
+    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?chevronRef\.current[\s\S]*?\}\s*,\s*\[logExpanded\]\)/,
   );
-  // 必须根据 logExpanded 切换 transform 值。
   assert.ok(
-    /transform:\s*logExpanded\s*\?\s*"rotate\(180deg\)"\s*:\s*undefined/.test(block),
-    `expected transform ternary on logExpanded: ${block.slice(0, 200)}`,
+    effectBlock,
+    "expected a useEffect watching [logExpanded] that calls chevronRef.current.animate(...)",
+  );
+  const block = effectBlock[0];
+
+  // 必须用 element.animate(...)。
+  assert.ok(
+    /\.animate\(/.test(block),
+    `chevron animation effect should call .animate(...): ${block.slice(0, 200)}`,
+  );
+  // 必须包含 expand 路径 keyframes（0 → 180）。
+  assert.ok(
+    /\{\s*transform:\s*"rotate\(0deg\)"\s*\}\s*,\s*\{\s*transform:\s*"rotate\(180deg\)"\s*\}/.test(block),
+    `expand animation keyframes missing: ${block.slice(0, 200)}`,
+  );
+  // 必须包含 collapse 路径 keyframes（180 → 0）。
+  assert.ok(
+    /\{\s*transform:\s*"rotate\(180deg\)"\s*\}\s*,\s*\{\s*transform:\s*"rotate\(0deg\)"\s*\}/.test(block),
+    `collapse animation keyframes missing: ${block.slice(0, 200)}`,
+  );
+  // duration 必须为 150ms。
+  assert.ok(
+    /duration:\s*150/.test(block),
+    `chevron animation duration should be 150ms: ${block.slice(0, 200)}`,
   );
 });
 
@@ -95,23 +143,54 @@ if (typeof globalThis.structuredClone !== "function") {
   globalThis.structuredClone = (v) => JSON.parse(JSON.stringify(v));
 }
 
+// jsdom 30 不实现 Web Animations API；注入最小 stub 仅用于「验证 animate 被调用、参数正确」。
+const animationCalls = [];
+const ElementProto = dom.window.Element.prototype;
+ElementProto.animate = function (keyframes, options) {
+  const call = { target: this, keyframes, options };
+  animationCalls.push(call);
+  this._animations = this._animations || [];
+  const anim = {
+    playState: "running",
+    cancel() {
+      this.playState = "cancelled";
+    },
+  };
+  this._animations.push(anim);
+  return anim;
+};
+ElementProto.getAnimations = function () {
+  return (this._animations || []).filter((a) => a.playState === "running");
+};
+
 const req = createRequire(import.meta.url);
 const React = req("react");
 const ReactDOMClient = req("react-dom/client");
 
 /**
- * 最小复刻 CuaInstallerPanel 的 chevron span：用同一个 inline style 模式。
- * 验证该 JSX 模式在浏览器侧真的会渲染出 transition + transform。
+ * 最小复刻 CuaInstallerPanel 的 chevron span + animation effect：
+ * 用 ref 绑定 span，useEffect 监听 expanded 调 element.animate(...)。
+ * 验证该模式在浏览器侧真的会按 expand/collapse 触发对应 keyframes 的动画。
  */
 function ChevronSpan({ expanded }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof el.animate !== "function") return;
+    for (const a of el.getAnimations()) a.cancel();
+    const keyframes = expanded
+      ? [{ transform: "rotate(0deg)" }, { transform: "rotate(180deg)" }]
+      : [{ transform: "rotate(180deg)" }, { transform: "rotate(0deg)" }];
+    el.animate(keyframes, { duration: 150, easing: "ease", fill: "forwards" });
+    return () => {
+      for (const a of el.getAnimations()) a.cancel();
+    };
+  }, [expanded]);
   return React.createElement(
     "span",
     {
-      className: "inline-flex",
-      style: {
-        transform: expanded ? "rotate(180deg)" : undefined,
-        transition: "transform 150ms",
-      },
+      ref,
+      "data-chevron-expanded": expanded ? "true" : "false",
     },
     React.createElement("svg", { width: 12, height: 12 }),
   );
@@ -122,45 +201,47 @@ const container = document.getElementById("root");
 const root = ReactDOMClient.createRoot(container);
 
 // React 19 的 commit 是异步的；用 React.act 强制同步 flush 避免跨测试脏读。
-// React.act 在开发模式下会把 state 更新排入当前微任务队列并 flush。
 function setExpanded(expanded) {
+  animationCalls.length = 0;
   return React.act(() => {
     root.render(React.createElement(ChevronSpan, { expanded }));
   });
 }
 
-test("CUA-039 运行时: 收起时 chevron span style.transform 为空、transition 含 transform 150ms", async () => {
+test("CUA-041 运行时: 收起时 chevron span 上调 animate，keyframes 180→0，duration 150", async () => {
   await setExpanded(false);
   const span = container.querySelector("span");
   assert.ok(span, "chevron span should be in DOM");
-  // jsdom 把 undefined 解析成空字符串
-  assert.equal(span.style.transform, "");
-  assert.equal(span.style.transition, "transform 150ms");
-  assert.equal(span.className, "inline-flex");
+  assert.equal(span.getAttribute("data-chevron-expanded"), "false");
+  assert.equal(animationCalls.length, 1, "animate() should be called once when expanded=false");
+  const call = animationCalls[0];
+  assert.equal(call.keyframes[0].transform, "rotate(180deg)");
+  assert.equal(call.keyframes[1].transform, "rotate(0deg)");
+  assert.equal(call.options.duration, 150);
 });
 
-test("CUA-039 运行时: 展开后 chevron span style.transform == 'rotate(180deg)'，transition 仍是 'transform 150ms'", async () => {
+test("CUA-041 运行时: 展开后 chevron span 上调 animate，keyframes 0→180，duration 150", async () => {
   await setExpanded(true);
   const span = container.querySelector("span");
   assert.ok(span);
-  assert.equal(span.style.transform, "rotate(180deg)");
-  assert.equal(span.style.transition, "transform 150ms");
-  assert.equal(span.className, "inline-flex");
+  assert.equal(span.getAttribute("data-chevron-expanded"), "true");
+  assert.equal(animationCalls.length, 1, "animate() should be called once when expanded=true");
+  const call = animationCalls[0];
+  assert.equal(call.keyframes[0].transform, "rotate(0deg)");
+  assert.equal(call.keyframes[1].transform, "rotate(180deg)");
+  assert.equal(call.options.duration, 150);
 });
 
-test("CUA-039 运行时: 收起→展开→收起，transform 来回正确切换", async () => {
+test("CUA-041 运行时: 收起→展开→收起，每次都触发对应方向的 animate 调用", async () => {
   await setExpanded(false);
-  let span = container.querySelector("span");
-  assert.ok(span);
-  assert.equal(span.style.transform, "");
+  assert.equal(animationCalls[0].keyframes[0].transform, "rotate(180deg)");
+  assert.equal(animationCalls[0].keyframes[1].transform, "rotate(0deg)");
 
   await setExpanded(true);
-  span = container.querySelector("span");
-  assert.equal(span.style.transform, "rotate(180deg)");
-  assert.equal(span.style.transition, "transform 150ms");
+  assert.equal(animationCalls[0].keyframes[0].transform, "rotate(0deg)");
+  assert.equal(animationCalls[0].keyframes[1].transform, "rotate(180deg)");
 
   await setExpanded(false);
-  span = container.querySelector("span");
-  assert.equal(span.style.transform, "");
-  assert.equal(span.style.transition, "transform 150ms");
+  assert.equal(animationCalls[0].keyframes[0].transform, "rotate(180deg)");
+  assert.equal(animationCalls[0].keyframes[1].transform, "rotate(0deg)");
 });
