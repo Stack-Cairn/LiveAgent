@@ -1301,7 +1301,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "mcpHub.authNone": "无 / 静态 Headers",
   "mcpHub.authOauth": "OAuth 2.1",
   "mcpHub.authNoneHint": "仅使用上方 Headers（如有）",
-  "mcpHub.authOauthHint": "保存后在卡片上点击「连接」完成浏览器授权；凭据只存系统钥匙串",
+  "mcpHub.authOauthHint":
+    "保存后在卡片上点击「连接」完成浏览器授权；凭据存于系统钥匙串（无钥匙串环境降级为 0600 私有文件），不参与同步、不离开本机",
   "mcpHub.authScope": "Scope（可选）",
   "mcpHub.authScopePlaceholder": "留空则使用服务器声明的 scope",
   "mcpHub.authClientId": "Client ID（可选）",

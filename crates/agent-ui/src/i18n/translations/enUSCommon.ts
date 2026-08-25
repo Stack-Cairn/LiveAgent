@@ -1371,7 +1371,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "mcpHub.authOauth": "OAuth 2.1",
   "mcpHub.authNoneHint": "Only the headers above (if any) are sent",
   "mcpHub.authOauthHint":
-    "After saving, click Connect on the server card to authorize in your browser; credentials live in the system keychain only",
+    "After saving, click Connect on the server card to authorize in your browser; credentials are kept in the system keychain (or a private 0600 file where no keychain is available) and never sync or leave this device",
   "mcpHub.authScope": "Scope (optional)",
   "mcpHub.authScopePlaceholder": "Leave empty to use server-declared scopes",
   "mcpHub.authClientId": "Client ID (optional)",
