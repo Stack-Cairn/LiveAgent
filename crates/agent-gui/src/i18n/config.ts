@@ -277,6 +277,57 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.saving": "正在同步 CUA 配置…",
     "settings.cua.errors.fetch": "无法读取 CUA 状态",
     "settings.cua.errors.save": "保存 CUA 配置失败",
+    // CUA-100: driver installer (zh-CN)
+    "cua.errors.installer.networkUnavailable":
+      "CUA 驱动安装器无法连接网络：{detail}。请检查网络后重试。",
+    "cua.errors.installer.curlFailed": "CUA 驱动安装脚本下载失败：{detail}",
+    "cua.errors.installer.signatureInvalid": "CUA 驱动安装脚本签名校验失败：{detail}",
+    "cua.errors.installer.permissionDenied": "CUA 驱动安装器需要更高权限：{detail}",
+    "cua.errors.installer.unsupportedPlatform": "CUA 驱动安装器在当前平台（{platform}）不可用。",
+    "cua.errors.installer.timeout":
+      "CUA 驱动安装超过 {minutes} 分钟仍未完成，下载可能已卡住，请重试。",
+    "settings.cua.installer.title": "CUA Driver",
+    "settings.cua.installer.description":
+      "LiveAgent 自身不内置 cua-driver；它由 cua.ai 官方脚本下载安装。安装脚本从 cua.ai 拉取、不需要 sudo（Linux 桌面端除外）。",
+    "settings.cua.installer.install": "下载并安装 cua-driver",
+    "settings.cua.installer.restartDaemon": "启动 daemon",
+    "settings.cua.installer.checkUpdate": "检查更新",
+    "settings.cua.installer.applyUpdate": "应用更新",
+    "settings.cua.installer.refresh": "重新检测",
+    "settings.cua.installer.dismiss": "关闭",
+    "settings.cua.installer.statusUnknown": "状态未知",
+    "settings.cua.installer.statusNotInstalled": "未安装",
+    "settings.cua.installer.statusInstalledNotRunning": "已安装，daemon 未运行",
+    "settings.cua.installer.statusInstalledRunning": "已安装，daemon 正在运行",
+    "settings.cua.installer.versionLabel": "v{version}",
+    "settings.cua.installer.versionUnknown": "已安装（版本未知）",
+    "settings.cua.installer.daemonStarted": "daemon 已启动",
+    "settings.cua.installer.daemonNotStarted": "daemon 未启动（首次使用时再启动）",
+    "settings.cua.installer.installSuccess": "安装成功：{version}；{daemon}",
+    "settings.cua.installer.linuxMissingDeps":
+      "Linux 桌面端需要以下系统包，请先在终端执行 `sudo apt install {packages}` 后再继续安装。",
+    "settings.cua.installer.macosPermissionsTitle": "macOS 权限提示",
+    "settings.cua.installer.macosPermissionsBody":
+      "请到「系统设置 → 隐私与安全」授予 CuaDriver：\n· 辅助功能（Accessibility）\n· 屏幕录制（Screen Recording）\n完成后把 LiveAgent 切到前台即可使用。",
+    "settings.cua.installer.macosOpenSettings": "打开系统设置",
+    "settings.cua.installer.logLabel": "安装日志",
+    "settings.cua.installer.stage.starting": "准备安装…",
+    "settings.cua.installer.stage.downloading": "下载官方安装脚本…",
+    "settings.cua.installer.stage.installing": "正在安装…",
+    "settings.cua.installer.stage.startingDaemon": "启动 daemon…",
+    "settings.cua.installer.stage.checkingUpdate": "检查更新…",
+    "settings.cua.installer.stage.applyingUpdate": "应用更新…",
+    "settings.cua.installer.errors.invoke": "无法调用后端 CUA 安装器命令。",
+    "settings.cua.installer.errors.unknown": "未知错误",
+    "settings.cua.installer.errors.exception": "异常：{message}",
+    "settings.cua.installer.errors.daemonStart":
+      "启动 daemon 失败。请检查 cua-driver 是否已正确安装。",
+    // CUA-028: 检查/应用更新是非错误结果——按 info（蓝）或 success（绿）渲染。
+    "settings.cua.installer.update.available":
+      "检测到新版本，请点击「检查更新」旁的 apply 按钮应用。\n\n{log}",
+    "settings.cua.installer.update.upToDate": "已是最新版本。\n\n{log}",
+    "settings.cua.installer.update.applied": "更新成功：{version}。\n\n{log}",
+    "settings.cua.installer.update.failed": "更新失败。\n\n{log}",
   },
   "en-US": {
     "app.windowPinned": "Pinned",
@@ -567,6 +618,60 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.saving": "Syncing CUA config…",
     "settings.cua.errors.fetch": "Failed to read CUA status",
     "settings.cua.errors.save": "Failed to save CUA config",
+    // CUA-100: driver installer (en-US)
+    "cua.errors.installer.networkUnavailable":
+      "CUA driver installer could not reach the network: {detail}. Check your connection and retry.",
+    "cua.errors.installer.curlFailed": "CUA driver installer download failed: {detail}",
+    "cua.errors.installer.signatureInvalid":
+      "CUA driver installer signature check failed: {detail}",
+    "cua.errors.installer.permissionDenied":
+      "CUA driver installer needs elevated permission: {detail}",
+    "cua.errors.installer.unsupportedPlatform":
+      "CUA driver installer is not available on {platform}.",
+    "cua.errors.installer.timeout":
+      "CUA driver installer did not finish within {minutes} minutes; the download may have stalled, please retry.",
+    "settings.cua.installer.title": "CUA Driver",
+    "settings.cua.installer.description":
+      "LiveAgent does not bundle cua-driver; it is downloaded by the official cua.ai installer script. The script pulls from cua.ai and does not require sudo (except for Linux desktop dependencies).",
+    "settings.cua.installer.install": "Download & install cua-driver",
+    "settings.cua.installer.restartDaemon": "Start daemon",
+    "settings.cua.installer.checkUpdate": "Check for update",
+    "settings.cua.installer.applyUpdate": "Apply update",
+    "settings.cua.installer.refresh": "Re-detect",
+    "settings.cua.installer.dismiss": "Dismiss",
+    "settings.cua.installer.statusUnknown": "Status unknown",
+    "settings.cua.installer.statusNotInstalled": "Not installed",
+    "settings.cua.installer.statusInstalledNotRunning": "Installed, daemon not running",
+    "settings.cua.installer.statusInstalledRunning": "Installed, daemon running",
+    "settings.cua.installer.versionLabel": "v{version}",
+    "settings.cua.installer.versionUnknown": "Installed (version unknown)",
+    "settings.cua.installer.daemonStarted": "daemon started",
+    "settings.cua.installer.daemonNotStarted": "daemon not started (will start on first use)",
+    "settings.cua.installer.installSuccess": "Installed: {version}; {daemon}",
+    "settings.cua.installer.linuxMissingDeps":
+      "Linux desktop requires these system packages. Run `sudo apt install {packages}` in a terminal before continuing.",
+    "settings.cua.installer.macosPermissionsTitle": "macOS permissions",
+    "settings.cua.installer.macosPermissionsBody":
+      "Open System Settings → Privacy & Security and grant CuaDriver:\n• Accessibility\n• Screen Recording\nThen bring LiveAgent to the front to use it.",
+    "settings.cua.installer.macosOpenSettings": "Open System Settings",
+    "settings.cua.installer.logLabel": "Install log",
+    "settings.cua.installer.stage.starting": "Preparing…",
+    "settings.cua.installer.stage.downloading": "Downloading official installer…",
+    "settings.cua.installer.stage.installing": "Installing…",
+    "settings.cua.installer.stage.startingDaemon": "Starting daemon…",
+    "settings.cua.installer.stage.checkingUpdate": "Checking for update…",
+    "settings.cua.installer.stage.applyingUpdate": "Applying update…",
+    "settings.cua.installer.errors.invoke": "Failed to invoke the backend CUA installer command.",
+    "settings.cua.installer.errors.unknown": "Unknown error",
+    "settings.cua.installer.errors.exception": "Exception: {message}",
+    "settings.cua.installer.errors.daemonStart":
+      "Failed to start daemon. Verify that cua-driver is installed correctly.",
+    // CUA-028: 检查/应用更新是非错误结果——按 info（蓝）或 success（绿）渲染。
+    "settings.cua.installer.update.available":
+      'A new version is available. Click the apply button next to "Check for update" to install.\n\n{log}',
+    "settings.cua.installer.update.upToDate": "Already up to date.\n\n{log}",
+    "settings.cua.installer.update.applied": "Update applied: {version}.\n\n{log}",
+    "settings.cua.installer.update.failed": "Update failed.\n\n{log}",
   },
 };
 

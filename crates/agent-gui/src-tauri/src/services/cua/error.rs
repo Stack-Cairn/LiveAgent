@@ -106,6 +106,68 @@ impl CuaError {
             serde_json::json!({ "detail": detail }),
         )
     }
+
+    // ───────── Installer error variants (CUA-100 series) ─────────
+
+    /// 网络不可用 / DNS 失败 / 离线。
+    pub fn installer_network_unavailable(detail: &str) -> Self {
+        Self::with_params(
+            "cua.errors.installer.networkUnavailable",
+            format!(
+                "CUA driver installer could not reach the network: {detail}. \
+                 Check your connection and try again."
+            ),
+            serde_json::json!({ "detail": detail }),
+        )
+    }
+
+    /// curl / powershell 启动失败。
+    pub fn installer_curl_failed(detail: &str) -> Self {
+        Self::with_params(
+            "cua.errors.installer.curlFailed",
+            format!("CUA driver installer download failed: {detail}."),
+            serde_json::json!({ "detail": detail }),
+        )
+    }
+
+    /// 脚本签名校验失败（占位；目前 install 脚本未签名，留接口备用）。
+    pub fn installer_signature_invalid(detail: &str) -> Self {
+        Self::with_params(
+            "cua.errors.installer.signatureInvalid",
+            format!("CUA driver installer signature check failed: {detail}."),
+            serde_json::json!({ "detail": detail }),
+        )
+    }
+
+    /// 权限不足（典型：用户拒绝 sudo / 文件 ACL）。
+    pub fn installer_permission_denied(detail: &str) -> Self {
+        Self::with_params(
+            "cua.errors.installer.permissionDenied",
+            format!("CUA driver installer needs elevated permission: {detail}."),
+            serde_json::json!({ "detail": detail }),
+        )
+    }
+
+    /// 当前平台不支持 CUA 安装器（理论上 webUI / 不支持 OS 才会触发）。
+    pub fn installer_unsupported_platform(os: &str) -> Self {
+        Self::with_params(
+            "cua.errors.installer.unsupportedPlatform",
+            format!("CUA driver installer is not available on {os}."),
+            serde_json::json!({ "platform": os }),
+        )
+    }
+
+    /// 安装超时。
+    pub fn installer_timeout(minutes: u64) -> Self {
+        Self::with_params(
+            "cua.errors.installer.timeout",
+            format!(
+                "CUA driver installer did not finish within {minutes} minutes. \
+                 The download may have stalled; please retry."
+            ),
+            serde_json::json!({ "minutes": minutes }),
+        )
+    }
 }
 
 impl std::fmt::Display for CuaError {

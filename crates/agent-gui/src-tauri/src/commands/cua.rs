@@ -14,11 +14,13 @@ use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::AppHandle;
 use tauri::State;
 
 use crate::services::cua::{
-    store::CuaRuntimeConfig, ClickButton, CuaAuditEntry, CuaError, CuaStore, CuaStoreSnapshot,
-    PlatformError, WindowInfo,
+    installer::{CuaDriverDetection, CuaInstallResult, CuaUpdateResult, InstallPreview},
+    store::CuaRuntimeConfig,
+    ClickButton, CuaAuditEntry, CuaError, CuaStore, CuaStoreSnapshot, PlatformError, WindowInfo,
 };
 
 #[derive(Debug, Serialize)]
@@ -378,4 +380,116 @@ pub async fn cua_window_ready(
 #[tauri::command(rename_all = "snake_case")]
 pub fn cua_refresh_a11y(window: tauri::WebviewWindow) -> crate::CuaRefreshA11yResponse {
     crate::cua_refresh_a11y(&window)
+}
+
+// ───────── CUA Driver 安装器（CUA-100） ─────────
+//
+// 设计：不经过 CuaStore 的 enable 守卫——安装器本身就是为了让后续 CUA
+// 操作可用；enable 留到装完再由用户在 UI 中开启。
+
+/// 检测 cua-driver 是否已安装、版本、daemon 状态。无 IO 副作用。
+#[tauri::command(rename_all = "snake_case")]
+pub fn cua_driver_detect() -> CuaDriverDetection {
+    crate::services::cua::detect_driver()
+}
+
+/// 启动 cua-driver daemon（macOS: `open CuaDriver --args serve`）。
+/// 失败时返回结构化 `CuaError`；前端不阻塞在失败上，可重试。
+#[tauri::command(rename_all = "snake_case")]
+pub fn cua_driver_start_daemon(app: AppHandle) -> Result<CuaOpResponse, CuaError> {
+    crate::services::cua::start_driver_daemon(&app)
+        .map(|started| CuaOpResponse {
+            ok: started,
+            error: None,
+        })
+        .map_err(|detail| match std::env::consts::OS {
+            "macos" | "linux" | "windows" => CuaError::not_executed(&detail),
+            other => CuaError::installer_unsupported_platform(other),
+        })
+}
+
+/// 安装 cua-driver。30 分钟超时；进度经 `cua_install_progress` 事件
+/// 推送。装完自动尝试 start_daemon。
+///
+/// 这里用 `spawn_blocking` 把同步阻塞 IO 移出 Tauri 异步运行时——安装
+/// 脚本最长可能跑几分钟，期间不能让 Tauri runtime 卡住。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn cua_driver_install(app: AppHandle) -> Result<CuaInstallResult, CuaError> {
+    let os = std::env::consts::OS;
+    // 不支持平台：直接拒绝，不下到 spawn_blocking。
+    match os {
+        "macos" | "linux" | "windows" => {}
+        other => return Err(CuaError::installer_unsupported_platform(other)),
+    }
+    // 探测 install 脚本：网络 / curl 不可用时立刻失败，避免长等待。
+    let preflight = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || crate::services::cua::install_driver(&app)
+    });
+    match preflight.await {
+        Ok(result) => {
+            if result.success {
+                Ok(result)
+            } else {
+                // 把 installer 文本错误归到最有意义的 kind 上。
+                let detail = result.error.unwrap_or_else(|| "unknown".into());
+                let lower = detail.to_lowercase();
+                let err = if lower.contains("timeout") {
+                    CuaError::installer_timeout(30)
+                } else if lower.contains("network")
+                    || lower.contains("dns")
+                    || lower.contains("could not resolve")
+                    || lower.contains("connection refused")
+                {
+                    CuaError::installer_network_unavailable(&detail)
+                } else if lower.contains("permission") || lower.contains("denied") {
+                    CuaError::installer_permission_denied(&detail)
+                } else {
+                    CuaError::installer_curl_failed(&detail)
+                };
+                Err(err)
+            }
+        }
+        Err(join_err) => Err(CuaError::io(&format!(
+            "installer task join error: {join_err}"
+        ))),
+    }
+}
+
+/// 检查更新 +（可选）应用。`apply=false` 时只跑 `check-update`。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn cua_driver_update(apply: bool) -> Result<CuaUpdateResult, CuaError> {
+    // 同步逻辑交给 blocking pool；install 路径已经示范，这里一致处理。
+    let join = tauri::async_runtime::spawn_blocking(move || {
+        crate::services::cua::update_driver(apply)
+    })
+    .await
+    .map_err(|e| CuaError::io(&format!("update task join error: {e}")))?;
+    if let Some(err) = join.error.as_deref() {
+        // check-update 自身可能因为未安装驱动而失败——但前端应有前置
+        // detect 守卫；这里仍把网络 / 通用 IO 区分。
+        let lower = err.to_lowercase();
+        let mapped = if lower.contains("network")
+            || lower.contains("dns")
+            || lower.contains("connection")
+        {
+            CuaError::installer_network_unavailable(err)
+        } else {
+            CuaError::installer_curl_failed(err)
+        };
+        Err(mapped)
+    } else {
+        Ok(join)
+    }
+}
+
+/// 把 install 命令（program / args）暴露给前端做展示（无 spawn）。主
+/// 要给设置面板「即将运行的命令」用，UI 自行展示。Linux 上额外带
+/// apt 依赖检查结果。
+#[tauri::command(rename_all = "snake_case")]
+pub fn cua_driver_install_preview() -> Result<InstallPreview, CuaError> {
+    crate::services::cua::build_install_preview().map_err(|detail| match std::env::consts::OS {
+        "macos" | "linux" | "windows" => CuaError::not_executed(&detail),
+        other => CuaError::installer_unsupported_platform(other),
+    })
 }

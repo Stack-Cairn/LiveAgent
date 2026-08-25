@@ -5,6 +5,8 @@ import { type CuaErrorPayload, formatCuaError } from "@liveagent/ui/lib/cua/form
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CuaInstallerService } from "./CuaInstaller";
+import { CuaInstallerPanel } from "./CuaInstallerPanel";
 import { AgentActivationSwitch, SettingsGroup, SettingsRow } from "./shared";
 
 export type CuaSettings = {
@@ -36,7 +38,7 @@ export type CuaService = {
   clearAudit: () => Promise<CuaStatus | null>;
   /** 来自后端的平台标签（"macos" / "windows" / "linux"）。 */
   platformLabel: string;
-};
+} & Partial<CuaInstallerService>;
 
 export type CuaSectionProps = {
   settings: CuaSettings;
@@ -355,6 +357,23 @@ export function CuaSection(props: CuaSectionProps) {
       ) : null}
       {persisting ? (
         <div className="text-xs text-muted-foreground">{t("settings.cua.saving")}</div>
+      ) : null}
+
+      {cuaService.detectDriver &&
+      cuaService.installDriver &&
+      cuaService.updateDriver &&
+      cuaService.startDriverDaemon &&
+      cuaService.getInstallPreview ? (
+        <CuaInstallerPanel
+          service={{
+            detectDriver: cuaService.detectDriver.bind(cuaService),
+            installDriver: cuaService.installDriver.bind(cuaService),
+            updateDriver: cuaService.updateDriver.bind(cuaService),
+            startDriverDaemon: cuaService.startDriverDaemon.bind(cuaService),
+            getInstallPreview: cuaService.getInstallPreview.bind(cuaService),
+          }}
+          platform={platform}
+        />
       ) : null}
     </div>
   );

@@ -13,9 +13,16 @@
 
 pub mod driver;
 pub mod error;
+pub mod installer;
 pub mod store;
 
 #[allow(unused_imports)]
 pub use driver::{platform_driver, ClickButton, CuaDriver, PlatformError, WindowInfo};
 pub use error::CuaError;
+pub use installer::{
+    build_install_command, build_install_preview, detect as detect_driver, install as install_driver,
+    is_daemon_running, start_daemon as start_driver_daemon, update as update_driver,
+    CuaDriverDetection, CuaInstallResult, CuaUpdateResult, InstallCommand, InstallPreview,
+    InstallerProgressEvent, InstallerStage,
+};
 pub use store::{CuaAuditEntry, CuaRuntimeConfig, CuaStore, CuaStoreSnapshot};

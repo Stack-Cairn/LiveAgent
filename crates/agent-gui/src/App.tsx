@@ -541,6 +541,45 @@ export default function App() {
     };
   }, [overlay, settingsReady]);
 
+  // CUA-031: 对设置面板内元素做 `delivery_mode: foreground` 输入投递后，
+  // WKWebView 的 a11y surface 会暂时进入 `ax_unresolved` 状态（CUA-021
+  // 回归）。监听 visibilitychange / window focus——这类事件触发意味着刚
+  // 刚发生过「窗口被另一进程抢焦点又还回来」的来回，AppKit 的 AX walker
+  // 可能尚未把新子树提交进 WindowServer。重新触发一次 `cua_refresh_a11y`
+  // 让 Rust 端把 NSWindow 注解 + WKWebView 第一响应 + UIElementCreatedNotification
+  // 重新广播，cua-driver 下一帧 `get_window_state` 不再 `ax_unresolved`。
+  // 用 50 ms 防抖合并短时间内多次可见/聚焦事件，避免在 React 抖动期内
+  // 连续打几帧 RPC。
+  useEffect(() => {
+    if (!settingsReady) return;
+    if (typeof window === "undefined") return;
+    let debounceTimer: number | null = null;
+    const trigger = () => {
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        invoke<{ wk_webview_found: boolean; responder_granted: boolean }>(
+          "cua_refresh_a11y",
+        ).catch((error: unknown) => {
+          console.warn("cua_refresh_a11y failed", error);
+        });
+      }, 50);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") trigger();
+    };
+    const onFocus = () => trigger();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [settingsReady]);
+
   // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
   // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
   const closeSettingsRef = useRef(closeSettings);

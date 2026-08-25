@@ -1225,5 +1225,60 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA operation was not executed: {detail}",
   "cua.errors.io": "CUA subprocess IO error: {detail}",
   "cua.errors.unknown": "unknown reason",
+  // CUA-100 series: driver installer errors
+  "cua.errors.installer.networkUnavailable":
+    "CUA driver installer could not reach the network: {detail}. Check your connection and retry.",
+  "cua.errors.installer.curlFailed": "CUA driver installer download failed: {detail}",
+  "cua.errors.installer.signatureInvalid": "CUA driver installer signature check failed: {detail}",
+  "cua.errors.installer.permissionDenied":
+    "CUA driver installer needs elevated permission: {detail}",
+  "cua.errors.installer.unsupportedPlatform":
+    "CUA driver installer is not available on {platform}.",
+  "cua.errors.installer.timeout":
+    "CUA driver installer did not finish within {minutes} minutes; the download may have stalled, please retry.",
+  // CUA Driver installer panel (CUA-100)
+  "settings.cua.installer.title": "CUA Driver",
+  "settings.cua.installer.description":
+    "LiveAgent does not bundle cua-driver; it is downloaded by the official cua.ai installer script. The script pulls from cua.ai and does not require sudo (except for Linux desktop dependencies).",
+  "settings.cua.installer.install": "Download & install cua-driver",
+  "settings.cua.installer.restartDaemon": "Start daemon",
+  "settings.cua.installer.checkUpdate": "Check for update",
+  "settings.cua.installer.applyUpdate": "Apply update",
+  "settings.cua.installer.refresh": "Re-detect",
+  "settings.cua.installer.dismiss": "Dismiss",
+  "settings.cua.installer.statusUnknown": "Status unknown",
+  "settings.cua.installer.statusNotInstalled": "Not installed",
+  "settings.cua.installer.statusInstalledNotRunning": "Installed, daemon not running",
+  "settings.cua.installer.statusInstalledRunning": "Installed, daemon running",
+  "settings.cua.installer.versionLabel": "v{version}",
+  "settings.cua.installer.versionUnknown": "Installed (version unknown)",
+  "settings.cua.installer.daemonStarted": "daemon started",
+  "settings.cua.installer.daemonNotStarted": "daemon not started (will start on first use)",
+  "settings.cua.installer.installSuccess": "Installed: {version}; {daemon}",
+  "settings.cua.installer.linuxMissingDeps":
+    "Linux desktop requires these system packages. Run `sudo apt install {packages}` in a terminal before continuing.",
+  "settings.cua.installer.macosPermissionsTitle": "macOS permissions",
+  "settings.cua.installer.macosPermissionsBody":
+    "Open System Settings → Privacy & Security and grant CuaDriver:\n• Accessibility\n• Screen Recording\nThen bring LiveAgent to the front to use it.",
+  "settings.cua.installer.macosOpenSettings": "Open System Settings",
+  "settings.cua.installer.logLabel": "Install log",
+  "settings.cua.installer.stage.starting": "Preparing…",
+  "settings.cua.installer.stage.downloading": "Downloading official installer…",
+  "settings.cua.installer.stage.installing": "Installing…",
+  "settings.cua.installer.stage.startingDaemon": "Starting daemon…",
+  "settings.cua.installer.stage.checkingUpdate": "Checking for update…",
+  "settings.cua.installer.stage.applyingUpdate": "Applying update…",
+  "settings.cua.installer.errors.invoke": "Failed to invoke the backend CUA installer command.",
+  "settings.cua.installer.errors.unknown": "Unknown error",
+  "settings.cua.installer.errors.exception": "Exception: {message}",
+  "settings.cua.installer.errors.daemonStart":
+    "Failed to start daemon. Verify that cua-driver is installed correctly.",
+  // CUA-028: 检查/应用更新是非错误结果——按 info（蓝）或 success（绿）渲染，
+  // 不再与 errors.* 混在一起。
+  "settings.cua.installer.update.available":
+    'A new version is available. Click the apply button next to "Check for update" to install.\n\n{log}',
+  "settings.cua.installer.update.upToDate": "Already up to date.\n\n{log}",
+  "settings.cua.installer.update.applied": "Update applied: {version}.\n\n{log}",
+  "settings.cua.installer.update.failed": "Update failed.\n\n{log}",
   "settings.navCua": "CUA Driver",
 } as const satisfies Record<string, string>;

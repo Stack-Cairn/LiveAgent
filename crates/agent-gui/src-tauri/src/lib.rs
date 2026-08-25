@@ -323,6 +323,12 @@ macro_rules! app_invoke_handler {
             commands::cua::cua_drag,
             commands::cua::cua_window_ready,
             commands::cua::cua_refresh_a11y,
+            // CUA driver installer (CUA-100 series).
+            commands::cua::cua_driver_detect,
+            commands::cua::cua_driver_install,
+            commands::cua::cua_driver_update,
+            commands::cua::cua_driver_start_daemon,
+            commands::cua::cua_driver_install_preview,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
