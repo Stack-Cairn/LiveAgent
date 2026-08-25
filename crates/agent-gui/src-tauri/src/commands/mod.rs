@@ -4,6 +4,7 @@ pub mod app_commands;
 pub mod automation_commands;
 #[path = "config/mod.rs"]
 pub mod config_commands;
+pub mod cua;
 #[path = "history/mod.rs"]
 pub mod history_commands;
 #[path = "integration/mod.rs"]

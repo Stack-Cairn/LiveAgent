@@ -309,6 +309,20 @@ macro_rules! app_invoke_handler {
             commands::system::system_begin_power_activity,
             commands::system::system_end_power_activity,
             commands::system::system_clipboard_read_text,
+            commands::cua::cua_status,
+            commands::cua::cua_set_config,
+            commands::cua::cua_clear_audit,
+            commands::cua::cua_list_windows,
+            commands::cua::cua_focus_window,
+            commands::cua::cua_screenshot,
+            commands::cua::cua_click,
+            commands::cua::cua_double_click,
+            commands::cua::cua_type,
+            commands::cua::cua_key,
+            commands::cua::cua_scroll,
+            commands::cua::cua_drag,
+            commands::cua::cua_window_ready,
+            commands::cua::cua_refresh_a11y,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
@@ -352,9 +366,423 @@ fn show_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         window.show()?;
         window.unminimize()?;
         window.set_focus()?;
+        // CUA-007: on macOS, `set_focus()` alone is not enough to reclaim
+        // focus from a previously foreground app (e.g. a stale Problem
+        // Reporter dialog). `NSApp.activate(ignoringOtherApps: true)` plus
+        // `makeKeyAndOrderFront` is the documented pattern for "always
+        // bring this window to the front", which is what cua-driver needs
+        // for `bring_to_front` to land on the dev window.
+        force_activate_main_window(&window);
     }
 
     Ok(())
+}
+
+/// macOS-only: bring the main window to the front by activating NSApp and
+/// ordering the window key. No-op on other platforms.
+#[cfg(target_os = "macos")]
+#[allow(deprecated)] // `activateIgnoringOtherApps` is the documented hook for our case; the new `NSApp.activate` API is not yet available in our objc2-app-kit version.
+pub(crate) fn force_activate_main_window(window: &tauri::WebviewWindow) {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSApplication, NSWindow};
+    use objc2::MainThreadMarker;
+    // `WebviewWindow::ns_window` borrows the window, so the raw pointer we
+    // get back has a lifetime tied to the borrow. To hand it to the main
+    // thread we must first convert it to an integer (raw pointers are not
+    // `Send`); AppKit guarantees the underlying NSWindow outlives the
+    // Tauri handle, so the integer is a faithful stand-in.
+    let ns_window_addr = window
+        .ns_window()
+        .ok()
+        .filter(|ptr| !ptr.is_null())
+        .map(|ptr| ptr.cast::<NSWindow>() as usize)
+        .unwrap_or(0);
+    if ns_window_addr == 0 {
+        return;
+    }
+    let _ = window.run_on_main_thread(move || {
+        let ns_window_ptr = ns_window_addr as *mut NSWindow;
+        // run_on_main_thread guarantees we are on the AppKit main thread;
+        // MainThreadMarker::new() panics on the wrong thread, which would
+        // be a programmer error worth surfacing loudly.
+        let mtm = MainThreadMarker::new().expect("run_on_main_thread must run on the AppKit main thread");
+        let ns_app: Retained<NSApplication> = NSApplication::sharedApplication(mtm);
+        // Ignoring other apps is exactly what we want during dev: cua-driver
+        // needs the LiveAgent window to be frontmost to deliver input. In
+        // production, users would notice this; in dev it is the right knob
+        // because the desktop test harness explicitly summons the window.
+        ns_app.activateIgnoringOtherApps(true);
+        let ns_window: &NSWindow = unsafe { &*ns_window_ptr };
+        ns_window.makeKeyAndOrderFront(None);
+        // CUA-007: the WKWebView child view must be the first responder
+        // for HID events to actually reach the renderer. Without this,
+        // cua-driver's foreground delivery reports `effect: unverifiable`
+        // because the input is dropped at the AppKit layer — the NSWindow
+        // is "frontmost" but no responder consumes the events.
+        // CUA-011: explicitly enable accessibility on the NSWindow so
+        // WindowServer's AX walker can descend into the WKWebView subtree.
+        // Without this, `cua-driver get_window_state` returns
+        // `ax_window_unresolved` because the AppKit surface we present
+        // does not opt into accessibility until *something* queries it.
+        // We call this on every re-activation so a later dev reload still
+        // benefits even if the renderer tears down the previous responder.
+        // CUA-019: also explicitly mark the NSWindow itself as an
+        // accessibility element with role AXWindow so cua-driver's
+        // AXWindow walk has at least one entry. Without this the
+        // window's default `isAccessibilityElement = false` keeps it
+        // out of the AX tree entirely, and even a perfectly-configured
+        // WKWebView subtree is unreachable.
+        //
+        // Caveat: the tao-rs `TaoWindow` class is a runtime-built
+        // subclass of NSWindow. `respondsToSelector(setIsAccessibilityElement:)`
+        // returns false because the subclass is registered with the
+        // bare minimum methods (see tao's WindowClass). Sending the
+        // selector anyway throws `NSInvalidArgumentException`
+        // (unrecognized selector) which terminates the dev binary at
+        // first paint. The CUA-015 guard wraps the call in
+        // `objc2::exception::Exception::catch` so a future tao/wry
+        // release that DOES implement these selectors can take
+        // advantage without us having to ship another round trip.
+        //
+        // The `NSAccessibilitySetOverrideEnabled(true)` function that
+        // would force AppKit to publish the tree regardless of consumer
+        // presence is NOT in the public AppKit symbol table on recent
+        // macOS releases (it's an internal helper), so we can't link
+        // against it without a private framework header. The runtime
+        // configuration must rely on (a) the WKWebView's remote a11y
+        // tree being installed automatically when WKWebView is added
+        // to a window whose `accessibilityEnabled` is true, and (b)
+        // the AX walker picking it up via the `setAccessibilityChildren:`
+        // call below.
+        let _ = objc2::exception::catch(std::panic::AssertUnwindSafe(|| unsafe {
+            let _: () = objc2::msg_send![&*ns_window, setAccessibilityEnabled: true];
+            let _: () = objc2::msg_send![&*ns_window, setIsAccessibilityElement: true];
+            let ax_window_role: Retained<objc2::runtime::AnyObject> = objc2::msg_send![
+                objc2::class!(NSString),
+                stringWithUTF8String: b"AXWindow\0".as_ptr()
+            ];
+            let _: () = objc2::msg_send![&*ns_window, setAccessibilityRole: &*ax_window_role];
+        }));
+        if let Some(content_view) = ns_window.contentView() {
+            // CUA-015: Tauri 2 / wry's NSWindow contentView is a
+            // `wry::WryWebViewParent`, which does NOT implement
+            // `setIsAccessibilityElement:` or `setAccessibilityRole:`.
+            // Calling them unconditionally throws `NSInvalidArgumentException`
+            // (`unrecognized selector sent to instance …`) and terminates
+            // the dev binary at `frontend_ready` time, blocking every
+            // launch. Guard with `respondsToSelector:` so we silently skip
+            // the annotation on classes that haven't opted into
+            // accessibility, and wrap the whole block in
+            // `objc2::exception::Exception::catch` so any future selector
+            // drift in a wry/Tauri release cannot take the binary down.
+            // CUA-011's intent (WindowServer's AX walker can descend into
+            // the WKWebView subtree) is preserved when wry later swaps in a
+            // view that does respond; the `setAccessibilityEnabled:` call on
+            // the NSWindow above is unaffected.
+            use objc2::runtime::NSObjectProtocol;
+            let annotates_accessibility = content_view
+                .respondsToSelector(objc2::sel!(setIsAccessibilityElement:))
+                && content_view.respondsToSelector(objc2::sel!(setAccessibilityRole:));
+            if annotates_accessibility {
+                // Use a raw pointer + AssertUnwindSafe so the closure stays
+                // `UnwindSafe` regardless of `Retained`'s auto-trait impls
+                // (the `Retained<NSView>` itself is still owned by
+                // `content_view` outside the catch).
+                let cv_ptr =
+                    std::ptr::addr_of!(*content_view).cast::<objc2::runtime::AnyObject>();
+                let _ = objc2::exception::catch(
+                    std::panic::AssertUnwindSafe(move || {
+                        let role: objc2::rc::Retained<objc2::runtime::AnyObject> = unsafe {
+                            objc2::msg_send![
+                                objc2::class!(NSString),
+                                stringWithUTF8String: b"AXWindow\0".as_ptr()
+                            ]
+                        };
+                        unsafe {
+                            let _: () = objc2::msg_send![
+                                cv_ptr,
+                                setIsAccessibilityElement: true
+                            ];
+                            let _: () =
+                                objc2::msg_send![cv_ptr, setAccessibilityRole: &*role];
+                        }
+                    }),
+                );
+            }
+            // CUA-017: walk the content view's subviews to find the actual
+            // WKWebView. `wry::WryWebViewParent` inherits NSView's default
+            // `acceptsFirstResponder == false`, so calling
+            // `makeFirstResponder(Some(&content_view))` silently fails on
+            // every dev build — AppKit drops the request because the
+            // receiver refuses to become first responder. The WKWebView
+            // subclass overrides `acceptsFirstResponder` to return `true`
+            // (WebKit consumes keyboard events), so naming it explicitly is
+            // what actually plumbs foreground HID into the renderer.
+            let wk_webview_ptr = find_wk_webview_in_subviews(&content_view);
+            if let Some(wk_ptr) = wk_webview_ptr {
+                let wk_view: &objc2_app_kit::NSView = unsafe { wk_ptr.as_ref() };
+                // Promote the WKWebView to first responder through BOTH
+                // pathways. `makeFirstResponder` is the window-level
+                // delegate; `becomeFirstResponder` is the view-level
+                // confirmation that exercises `acceptsFirstResponder` so
+                // we know the rename actually stuck.
+                let ok = ns_window.makeFirstResponder(Some(wk_view));
+                let became = wk_view.becomeFirstResponder();
+                if !ok || !became {
+                    eprintln!(
+                        "liveagent: WKWebView first responder not granted (makeFirstResponder={ok}, become={became}); falling back to content view"
+                    );
+                    ns_window.makeFirstResponder(Some(&content_view));
+                }
+                // CUA-019: declare the WKWebView as the content view's
+                // accessibility child so WindowServer's AX walker has a
+                // deterministic entry point into the WKWebView subtree.
+                // Without this, `get_window_state` reports
+                // `ax_window_unresolved` because
+                // `wry::WryWebViewParent` doesn't implement
+                // `accessibilityChildren` itself (the selector is
+                // inherited as a no-op). The WKWebView already owns a
+                // remote AX tree; we just need to expose it.
+                unsafe {
+                    let wk_array: Retained<objc2_foundation::NSArray<objc2_app_kit::NSView>> =
+                        objc2::msg_send![
+                            objc2::class!(NSArray),
+                            arrayWithObject: wk_view
+                        ];
+                    let _: () = objc2::msg_send![
+                        &*content_view,
+                        setAccessibilityChildren: &*wk_array
+                    ];
+                }
+                // CUA-019: also explicitly mark the WKWebView itself as
+                // an accessibility element with role AXWebArea so the
+                // WKWebView's own AX bridge has at least one anchor
+                // entry visible to AX walkers that look inside the
+                // window. WebKit installs its remote a11y tree under
+                // this element. The whole block is wrapped in
+                // exception::catch so a future WebKit selector drift
+                // cannot crash the dev binary.
+                let _ = objc2::exception::catch(std::panic::AssertUnwindSafe(|| unsafe {
+                    let _: () = objc2::msg_send![wk_view, setAccessibilityEnabled: true];
+                    let _: () = objc2::msg_send![wk_view, setIsAccessibilityElement: true];
+                    let ax_web_area: Retained<objc2::runtime::AnyObject> = objc2::msg_send![
+                        objc2::class!(NSString),
+                        stringWithUTF8String: b"AXWebArea\0".as_ptr()
+                    ];
+                    let _: () = objc2::msg_send![wk_view, setAccessibilityRole: &*ax_web_area];
+                }));
+                // CUA-019: also broadcast a UIElementCreatedNotification
+                // on the content view. WindowServer's AX walker treats
+                // this as a cue to re-evaluate the window's subtree — if
+                // it had previously cached `ax_window_unresolved`, the
+                // next `get_window_state` call sees the WKWebView's tree.
+                // The notification is cheap; re-broadcasting on every
+                // activation also covers the dev-reload path where the
+                // previous WKWebView was torn down.
+                post_accessibility_element_created(&content_view);
+            } else {
+                // Fallback path: WKWebView not in the view hierarchy yet
+                // (page still loading) or wry swapped implementations.
+                // Keep the CUA-007 behaviour so a partial first paint
+                // still routes input to the responder chain's deepest
+                // accepting view.
+                ns_window.makeFirstResponder(Some(&content_view));
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn find_wk_webview_in_subviews(
+    view: &objc2_app_kit::NSView,
+) -> Option<std::ptr::NonNull<objc2_app_kit::NSView>> {
+    // `class!` would force a hard dependency on the WebKit framework class
+    // list, which is not part of objc2-app-kit. Resolve WKWebView at
+    // runtime via the Objective-C class registry — wry loads WebKit as
+    // part of WKWebView construction, so the class is registered by the
+    // time we get here in production. In tests where no WebKit is
+    // loaded, `get` returns `None` and we silently fall through.
+    let wk_class = objc2::runtime::AnyClass::get(c"WKWebView")?;
+    let is_wk: bool =
+        unsafe { objc2::msg_send![view, isKindOfClass: wk_class] };
+    if is_wk {
+        return Some(std::ptr::NonNull::from(view));
+    }
+    let subviews = view.subviews();
+    for sub in subviews.iter() {
+        if let Some(found) = find_wk_webview_in_subviews(&sub) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn post_accessibility_element_created(view: &objc2_app_kit::NSView) {
+    use objc2::rc::Retained;
+    // `NSAccessibilityPostNotification` is a free C function exported
+    // from AppKit. `NSAccessibility` itself is only a category on
+    // `NSObject` + a protocol — it is NOT a real class, so `class!`
+    // would panic at runtime. Linking the symbol directly is the
+    // supported path (it's how every macOS app calls this entry point).
+    // Wrapping the call in `objc2::exception::catch` keeps a malformed
+    // AppKit from taking the dev binary down if the selector ever
+    // changes signature in a future macOS release.
+    #[link(name = "AppKit", kind = "framework")]
+    extern "C" {
+        fn NSAccessibilityPostNotification(
+            element: *const objc2::runtime::AnyObject,
+            notification: *const objc2::runtime::AnyObject,
+        );
+    }
+    let _ = objc2::exception::catch(std::panic::AssertUnwindSafe(|| {
+        unsafe {
+            let notification_name: Retained<objc2::runtime::AnyObject> = objc2::msg_send![
+                objc2::class!(NSString),
+                stringWithUTF8String: b"NSAccessibilityUIElementCreatedNotification\0".as_ptr()
+            ];
+            NSAccessibilityPostNotification(
+                std::ptr::addr_of!(*view).cast::<objc2::runtime::AnyObject>(),
+                std::ptr::addr_of!(*notification_name).cast::<objc2::runtime::AnyObject>(),
+            );
+        }
+    }));
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn force_activate_main_window(_window: &tauri::WebviewWindow) {}
+
+/// Polled result of `force_activate_main_window`: cua-driver calls
+/// `cua_window_ready` between `bring_to_front` and the first AX /
+/// foreground click, so this is the contract the driver can rely on.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CuaWindowReadyResponse {
+    /// True once `is_focused()` reports true within the poll window.
+    pub focused: bool,
+    /// How long we waited for focus to land (ms). Useful for the caller
+    /// to detect a slow first paint and back off.
+    pub elapsed_ms: u64,
+    /// Whether the macOS-specific NSApp.activate path ran. False on
+    /// non-macOS platforms where the call is a no-op best-effort.
+    pub macos_activated: bool,
+}
+
+/// Best-effort "force focus" command for cua-driver. Re-runs the macOS
+/// NSApp.activate + makeKeyAndOrderFront + makeFirstResponder cycle (see
+/// [`force_activate_main_window`]) and then polls `is_focused()` for up
+/// to 750 ms. cua-driver awaits this between `bring_to_front` and the
+/// next AX / pixel action to avoid the `effect: unverifiable` /
+/// `ax_window_unresolved` regressions seen when the WKWebView is still
+/// settling after first paint (CUA-011).
+pub async fn cua_window_ready(window: tauri::WebviewWindow) -> CuaWindowReadyResponse {
+    let started = std::time::Instant::now();
+    force_activate_main_window(&window);
+    let mut focused = window.is_focused().unwrap_or(false);
+    if !focused {
+        // Poll up to 750 ms, 50 ms cadence — long enough to outlast a
+        // typical first-paint cycle but short enough that the driver
+        // stays interactive. Each iteration re-issues the activation
+        // hint so AppKit keeps LiveAgent on the foreground space.
+        let mut elapsed_ms = 0u64;
+        while elapsed_ms < 750 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            elapsed_ms = started.elapsed().as_millis() as u64;
+            force_activate_main_window(&window);
+            if window.is_focused().unwrap_or(false) {
+                focused = true;
+                break;
+            }
+        }
+    }
+    CuaWindowReadyResponse {
+        focused,
+        elapsed_ms: started.elapsed().as_millis() as u64,
+        macos_activated: cfg!(target_os = "macos"),
+    }
+}
+
+/// CUA-020/021/022: 给前端的「重新发表 AX 表面」诊断响应。
+/// `force_activate_main_window` 是幂等的（NSWindow 注解不变），但每
+/// 次都会重新跑 `makeFirstResponder + becomeFirstResponder` 并在
+/// content view 上重新广播 `UIElementCreatedNotification`，用于
+/// `Settings overlay` 打开 / 路由切换 / WKWebView hot reload 后让
+/// cua-driver 的下一帧 AX 查询拿到刷新后的表面（不再 `unresolved`）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CuaRefreshA11yResponse {
+    /// 重新触发了 `force_activate_main_window` 的次数（带 retry 时 >1）。
+    pub activations: u32,
+    /// 找到的 WKWebView 子视图指针是否非空（false 表示尚未挂载）。
+    pub wk_webview_found: bool,
+    /// NSWindow 是否真的拿到了 first responder（macOS only）。
+    pub responder_granted: bool,
+    /// 是否在 macOS 平台跑了实际注解（非 macOS 是 no-op）。
+    pub macos_activated: bool,
+}
+
+/// 把 `force_activate_main_window` 的内容再次跑一遍——主要给前端在
+/// `Settings overlay` 打开 / 路由切换 / 模态弹出后手动调用一次，让
+/// WKWebView 的 a11y 子树被 cua-driver 看见（CUA-021）。也用于
+/// `cua_window_ready` 之外的「只修 AX、不等 focus」场景。
+pub fn cua_refresh_a11y(window: &tauri::WebviewWindow) -> CuaRefreshA11yResponse {
+    // 在 macOS 上 force_activate_main_window 已经覆盖了：NSWindow 注解
+    // + WKWebView 第一响应 + AX 子树广播。这里再加一次「WKWebView 是
+    // 否真的找到 / 是否真的成 first responder」的诊断，便于前端在
+    // 端到端验证时不用再额外发一次 `cua_window_ready`。
+    let activations = 1u32;
+    // 用 Arc<AtomicBool> 把诊断标志从 `run_on_main_thread` 的闭包里透
+    // 出来——闭包按 move 捕获，无法直接拿 `&mut` 外部变量。
+    let wk_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let resp_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mtm_present = cfg!(target_os = "macos");
+    // CUA-022: 第二次跑确保 WKWebView 在 hot reload / overlay 重渲
+    // 之后重新拿到 first responder——`makeFirstResponder` 不是幂等的，
+    // WKWebView 被 React unmount/remount 后会重置 responder chain。
+    force_activate_main_window(window);
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWindow;
+        if let Ok(ptr) = window.ns_window() {
+            if !ptr.is_null() {
+                let addr = ptr.cast::<NSWindow>() as usize;
+                if addr != 0 {
+                    let wk_flag_inner = std::sync::Arc::clone(&wk_flag);
+                    let resp_flag_inner = std::sync::Arc::clone(&resp_flag);
+                    let _ = window.run_on_main_thread(move || {
+                        let ns_window_ptr = addr as *mut NSWindow;
+                        let ns_window: &NSWindow = unsafe { &*ns_window_ptr };
+                        if let Some(content_view) = ns_window.contentView() {
+                            if let Some(wk_ptr) = find_wk_webview_in_subviews(&content_view) {
+                                wk_flag_inner.store(true, std::sync::atomic::Ordering::SeqCst);
+                                let wk_view: &objc2_app_kit::NSView = unsafe { wk_ptr.as_ref() };
+                                let ok = ns_window.makeFirstResponder(Some(wk_view));
+                                let became = wk_view.becomeFirstResponder();
+                                resp_flag_inner.store(
+                                    ok && became,
+                                    std::sync::atomic::Ordering::SeqCst,
+                                );
+                                // CUA-021: 重广播一次 UIElementCreated 通
+                                // 知，让 WindowServer 的 AX walker 把最近
+                                // 一次渲染（含 Settings overlay 重渲）写
+                                // 进缓存。cua-driver 下一帧
+                                // `get_window_state` 不会再返回
+                                // `ax_window_unresolved`。
+                                post_accessibility_element_created(&content_view);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    }
+    let _ = mtm_present;
+    CuaRefreshA11yResponse {
+        activations,
+        wk_webview_found: wk_flag.load(std::sync::atomic::Ordering::SeqCst),
+        responder_granted: resp_flag.load(std::sync::atomic::Ordering::SeqCst),
+        macos_activated: mtm_present,
+    }
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -733,6 +1161,10 @@ pub fn run() {
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
+    // CUA 默认 disabled。前端首次加载后会把用户的开关 / 名单 push 进来。
+    let cua_store = Arc::new(services::cua::CuaStore::new(
+        services::cua::CuaRuntimeConfig::default(),
+    ));
 
     let builder = tauri::Builder::default();
     // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
@@ -781,19 +1213,65 @@ pub fn run() {
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
+        .manage(cua_store)
         .on_page_load(|webview, payload| {
-            if webview.label() != MAIN_WINDOW_LABEL
-                || !matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
-            {
+            if webview.label() != MAIN_WINDOW_LABEL {
                 return;
             }
             let app = webview.app_handle();
-            if let Some(ready_state) = app.try_state::<Arc<commands::app::FrontendReadyState>>() {
-                ready_state.0.store(false, Ordering::SeqCst);
-            }
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                if window.is_visible().unwrap_or(false) {
-                    let _ = window.hide();
+            match payload.event() {
+                tauri::webview::PageLoadEvent::Started => {
+                    if let Some(ready_state) =
+                        app.try_state::<Arc<commands::app::FrontendReadyState>>()
+                    {
+                        ready_state.0.store(false, Ordering::SeqCst);
+                    }
+                    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                tauri::webview::PageLoadEvent::Finished => {
+                    // CUA-011: re-issue force_activate_main_window after the
+                    // first paint so the WKWebView is the first responder and
+                    // the NSWindow's accessibility surface is wired up before
+                    // cua-driver walks the AX tree. App_frontend_ready fires
+                    // from a static-shell hook (often before the JS bundle is
+                    // parsed); waiting for `Finished` closes the race where
+                    // cua-driver queries the AX tree while the WKWebView
+                    // host view is still being laid out, which is what was
+                    // producing `ax_window_unresolved`.
+                    // CUA-017/019: always run the activation cycle, even when
+                    // the window is still hidden. The function is idempotent
+                    // and the WKWebView is in the view hierarchy by the time
+                    // `Finished` fires — calling it lets the AX walker find
+                    // the WKWebView the moment `show_main_window` unhides
+                    // the window, instead of waiting for cua-driver to issue
+                    // its first foreground action.
+                    // CUA-020: WKWebView's remote AX tree is populated
+                    // asynchronously by the WebContent process — calling
+                    // `force_activate_main_window` exactly at `Finished`
+                    // races the layout pass and yields `ax_window_unresolved`
+                    // on the very first `get_window_state`. Schedule a
+                    // 600 ms deferred re-activation so the second pass lands
+                    // after WebKit has registered its remote a11y children.
+                    // The defer uses tokio (not `run_on_main_thread` +
+                    // `std::thread::sleep`, which would block the AppKit
+                    // main thread and starve the very layout pass we are
+                    // trying to wait out).
+                    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                        force_activate_main_window(&window);
+                        let window_for_retry = window.clone();
+                        let app_handle_for_retry = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                            let _ = app_handle_for_retry
+                                .run_on_main_thread(move || {
+                                    force_activate_main_window(&window_for_retry);
+                                });
+                        });
+                    }
                 }
             }
         })

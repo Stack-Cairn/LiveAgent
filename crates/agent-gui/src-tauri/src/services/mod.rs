@@ -1,5 +1,6 @@
 pub mod automation;
 pub mod chat_run_ledger;
+pub mod cua;
 pub mod gateway;
 pub mod gateway_bridge;
 pub mod memory;

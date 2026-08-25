@@ -39,6 +39,7 @@ pub fn app_frontend_ready(
 ) -> Result<(), String> {
     ready_state.0.store(true, Ordering::SeqCst);
     if window.is_visible().unwrap_or(false) {
+        crate::force_activate_main_window(&window);
         return Ok(());
     }
     window
@@ -46,7 +47,14 @@ pub fn app_frontend_ready(
         .map_err(|error| format!("failed to show frontend-ready window: {error}"))?;
     window
         .set_focus()
-        .map_err(|error| format!("failed to focus frontend-ready window: {error}"))
+        .map_err(|error| format!("failed to focus frontend-ready window: {error}"))?;
+    // CUA-007: macOS-only NSApp.activate + makeKeyAndOrderFront ensures the
+    // window reaches the frontmost-ordinary window state so cua-driver's
+    // `bring_to_front` and foreground delivery actually land on the
+    // WebView. `set_focus` alone can leave the window below the
+    // loginwindow or another system surface in a dev sandbox.
+    crate::force_activate_main_window(&window);
+    Ok(())
 }
 
 /// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经
