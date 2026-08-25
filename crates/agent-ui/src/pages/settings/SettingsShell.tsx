@@ -179,7 +179,15 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                     const active = definition.id === activeSection.id;
                     return (
                       <button
-                        key={definition.id}
+                        // CUA-037: include the active state in the React key so the button
+                        // unmounts/remounts when it toggles between idle and active. The
+                        // Tauri WKWebView occasionally caches a stale composited layer for
+                        // this sidebar region — the DOM class flips correctly but the rendered
+                        // pixel (and getComputedStyle) sticks on the previous active item.
+                        // Forcing a fresh DOM element via key change makes the WebView recompute
+                        // styles from scratch instead of trying to interpolate the bg-accent /
+                        // font-medium transition over its cached frame.
+                        key={`${definition.id}-${active ? "active" : "idle"}`}
                         type="button"
                         onClick={() => setSection(definition.id)}
                         data-testid={`settings-nav-${definition.id}`}
