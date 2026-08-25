@@ -21,6 +21,22 @@ import { join, resolve } from "node:path";
 
 const scriptPath = resolve(import.meta.filename);
 const repoRoot = resolve(import.meta.dirname, "..");
+const agentGuiDir = join(repoRoot, "crates/agent-gui");
+const devPrepareScript = resolve(import.meta.dirname, "dev-prepare.mjs");
+
+// Detect whether `mise` is on PATH once at startup. The CLI uses mise to
+// pin Node/pnpm/go versions; on machines without mise we fall back to
+// direct binary invocation. `LIVEAGENT_DEV_MISE` overrides detection so
+// the test harness can force either path.
+function detectMise() {
+  const override = process.env.LIVEAGENT_DEV_MISE;
+  if (override === "0" || override === "false") return null;
+  if (override) return override;
+  const found = spawnSync("which", ["mise"], { encoding: "utf8", shell: false });
+  if (found.status === 0 && found.stdout.trim()) return "mise";
+  return null;
+}
+const miseBinary = detectMise();
 const userKey =
   typeof process.getuid === "function" ? String(process.getuid()) : (process.env.USERNAME ?? "user");
 const stateDir = resolve(
@@ -171,8 +187,10 @@ function serviceCommand(service) {
     ensureWebUiEmbedStub();
     mkdirSync(gatewayDataDir, { recursive: true });
     return {
-      args: ["exec", "--", "go", "-C", "crates/agent-gateway", "run", "./cmd/gateway"],
-      command: "mise",
+      // `mise exec -- go …` resolves the toolchain from .mise.toml; without
+      // mise we fall back to a plain `go` invocation on PATH.
+      directArgs: ["go", "-C", "crates/agent-gateway", "run", "./cmd/gateway"],
+      miseArgs: ["exec", "--", "go", "-C", "crates/agent-gateway", "run", "./cmd/gateway"],
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -185,7 +203,16 @@ function serviceCommand(service) {
   }
   if (service === "webui") {
     return {
-      args: [
+      directArgs: [
+        "node",
+        "node_modules/vite/bin/vite.js",
+        "--host",
+        "localhost",
+        "--port",
+        String(ports.webui),
+        "--strictPort",
+      ],
+      miseArgs: [
         "exec",
         "--",
         "node",
@@ -196,15 +223,18 @@ function serviceCommand(service) {
         String(ports.webui),
         "--strictPort",
       ],
-      command: "mise",
       cwd: join(repoRoot, "crates/agent-gateway/web"),
       env: { ...process.env, npm_config_proxy_api: urls.gateway },
     };
   }
   return {
-    args: ["exec", "--", "pnpm", "--dir", "crates/agent-gui", "tauri", "dev"],
-    command: "mise",
-    cwd: repoRoot,
+    directArgs: ["pnpm", "--dir", agentGuiDir, "tauri", "dev"],
+    miseArgs: ["exec", "--", "pnpm", "--dir", agentGuiDir, "tauri", "dev"],
+    // CUA-008: Vite must start from `crates/agent-gui` so unplugin-icons
+    // can resolve @iconify-json/* via the workspace's node_modules. Starting
+    // from the repo root leaves ~icons/* un-resolvable and the SPA falls
+    // back to the ErrorOverlay, which then becomes invisible to cua-driver.
+    cwd: agentGuiDir,
     env: {
       ...process.env,
       VITE_LIVEAGENT_SESSION_WORKBENCH: process.env.DEV_SESSION_WORKBENCH ?? "1",
@@ -212,17 +242,101 @@ function serviceCommand(service) {
   };
 }
 
-async function runService(service, token) {
-  process.title = `liveagent-dev-stack-${service}`;
-  const command = serviceCommand(service);
-  mkdirSync(join(stateDir, "go-cache"), { recursive: true });
-  const child = spawn(command.command, command.args, {
-    cwd: command.cwd,
-    env: command.env,
+function runDevPrepare() {
+  try {
+    const result = spawnSync(process.execPath, [devPrepareScript], {
+      encoding: "utf8",
+      stdio: ["ignore", "inherit", "inherit"],
+      windowsHide: true,
+    });
+    if (result.error) {
+      console.error(`dev-stack: dev-prepare failed: ${result.error.message}`);
+    }
+  } catch (error) {
+    console.error(
+      `dev-stack: dev-prepare crashed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+// CUA-016: dev binary crashes that happen AFTER startup can spawn fresh
+// Problem Reporter dialogs that the one-shot dev-prepare sweep misses.
+// Spawn dev-prepare in --watch mode as a detached supervisor so a stale
+// dialog that appears 30 s after launch still gets cleaned up. The
+// watcher is owned by the desktop state directory and dies with the
+// dev-stack session.
+function startProblemReporterWatcher() {
+  // CUA-016 is only meaningful on macOS — Problem Reporter is a
+  // macOS-specific ReportCrash helper. No-op on every other platform.
+  if (process.platform !== "darwin") return null;
+  mkdirSync(stateDir, { recursive: true });
+  // Default sweep cadence: 7 s. Short enough that a freshly-spawned
+  // dialog is dismissed within one tick, long enough that the sweep
+  // doesn't fight ReportCrash's own respawn loop.
+  const intervalMs = process.env.LIVEAGENT_PROBLEM_REPORTER_SWEEP_MS ?? "7000";
+  const logFile = openSync(logPath("problem-reporter-watcher"), "a");
+  const watcher = spawn(
+    process.execPath,
+    [devPrepareScript, "--watch", intervalMs],
+    {
+      detached: true,
+      env: process.env,
+      shell: false,
+      stdio: ["ignore", logFile, logFile],
+      windowsHide: true,
+    },
+  );
+  closeSync(logFile);
+  if (!watcher.pid) {
+    console.error("dev-stack: failed to start Problem Reporter watcher");
+    return null;
+  }
+  watcher.unref();
+  console.log(
+    `dev-stack: Problem Reporter watcher started (pid ${watcher.pid}, sweep every ${intervalMs}ms, log ${logPath("problem-reporter-watcher")})`,
+  );
+  return watcher.pid;
+}
+
+function stopProblemReporterWatcher() {
+  if (process.platform !== "darwin") return;
+  // pkill -f matches the full argv; --watch is unique enough to avoid
+  // hitting dev-prepare's other invocations (which are short-lived).
+  try {
+    spawnSync("pkill", ["-f", `${devPrepareScript}.*--watch`], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+  } catch {}
+}
+
+/// `mise exec` pins tool versions for the dev stack. When mise is not on
+/// PATH (CI sandboxes, minimal local installs) we fall back to running the
+/// underlying binary directly. The mapping here mirrors `serviceCommand`.
+function spawnService(commandSpec) {
+  if (miseBinary) {
+    return spawn(miseBinary, commandSpec.miseArgs, {
+      cwd: commandSpec.cwd,
+      env: commandSpec.env,
+      shell: false,
+      stdio: "inherit",
+      windowsHide: true,
+    });
+  }
+  return spawn(commandSpec.directArgs[0], commandSpec.directArgs.slice(1), {
+    cwd: commandSpec.cwd,
+    env: commandSpec.env,
     shell: false,
     stdio: "inherit",
     windowsHide: true,
   });
+}
+
+async function runService(service, token) {
+  process.title = `liveagent-dev-stack-${service}`;
+  const command = serviceCommand(service);
+  mkdirSync(join(stateDir, "go-cache"), { recursive: true });
+  const child = spawnService(command);
   const startedAt = Date.now();
   const updateHeartbeat = () =>
     writeState({
@@ -250,7 +364,7 @@ async function runService(service, token) {
 
   const exitCode = await new Promise((resolveExitCode) => {
     child.once("error", (error) => {
-      console.error(`Failed to start ${command.command}: ${error.message}`);
+      console.error(`Failed to start ${command.miseArgs[0] ?? "service"}: ${error.message}`);
       resolveExitCode(127);
     });
     child.once("exit", (code) => resolveExitCode(code ?? 1));
@@ -304,6 +418,23 @@ async function waitUntilReady(service, timeoutSeconds) {
 }
 
 async function startService(service) {
+  // CUA-009: keep macOS desktop clean before the dev build opens a
+  // window. Stale liveagent PIDs and Problem Reporter dialogs both keep
+  // frontmost_ordinary_window off the LiveAgent window, which prevents
+  // cua-driver from delivering input. Cleanup is idempotent and a no-op
+  // when the desktop is already in shape.
+  if (service === "desktop") {
+    runDevPrepare();
+    // CUA-016: a freshly-crashed dev binary can spawn a new Problem
+    // Reporter AFTER the one-shot sweep above; the periodic watcher
+    // keeps cleaning up so the dev window can win frontmost_ordinary.
+    // The watcher is idempotent with other startService invocations
+    // because `pkill` in stopService cleans up any prior instance and
+    // pgrep ignores zombie watchers. We start it for both fresh and
+    // already-running cases — multiple sweeps per dialog are harmless.
+    startProblemReporterWatcher();
+  }
+
   const state = managedState(service);
   if (state) {
     if (!stateIsFresh(state)) {
@@ -380,6 +511,11 @@ async function stopService(service) {
     return false;
   }
   removeState(service, state.token);
+  // CUA-016: the Problem Reporter watcher is only spawned for the
+  // desktop service. Stopping it here guarantees it doesn't outlive the
+  // dev stack when the user runs `dev-stack stop desktop`. The watcher
+  // also dies with the desktop supervisor, so this is belt-and-braces.
+  if (service === "desktop") stopProblemReporterWatcher();
   console.log(`${service}: stopped`);
   return true;
 }
