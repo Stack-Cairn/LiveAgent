@@ -567,7 +567,11 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
                 {t("settings.cua.installer.logLabel")}
               </span>
               <span
-                className={cn("inline-flex transition-transform", logExpanded && "rotate-180")}
+                className="inline-flex"
+                style={{
+                  transform: logExpanded ? "rotate(180deg)" : undefined,
+                  transition: "transform 150ms",
+                }}
               >
                 <ChevronDown className="h-3 w-3" />
               </span>
