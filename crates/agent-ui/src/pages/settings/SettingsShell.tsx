@@ -13,22 +13,29 @@ type SettingsShellProps<Context> = {
   hiddenSections?: readonly string[];
 };
 
-// CUA-036: the inner `.settings-section-enter` / `.settings-section-title-enter`
-// keyframe animations are paused by WebKit/Chromium while the document is
-// hidden (background launch, minimized window). CUA-033/034 only cover the
-// outer overlay container; without this fallback the inner section body
-// stays at the `from` state (opacity:0, translateY(14px) scale(0.985)) and
-// the entire settings page reads as blank. Mirrors the LEAVE_FALLBACK_MS
-// shape: subscribe to visibilitychange so the override clears the moment the
-// window becomes visible again.
+// CUA-036 / CUA-043: the inner `.settings-section-enter` /
+// `.settings-section-title-enter` keyframe animations are paused by
+// WebKit/Chromium while the document is hidden (background launch, minimized
+// window). CUA-033/034 only cover the outer overlay container; without this
+// fallback the inner section body stays at the `from` state (opacity:0,
+// translateY(14px) scale(0.985)) and the entire settings page reads as
+// blank. Mirrors the LEAVE_FALLBACK_MS shape: subscribe to visibilitychange
+// so the override clears the moment the window becomes visible again.
+//
+// CUA-043: `document.hidden` and `document.visibilityState` are supposed to
+// stay in sync, but Tauri/WKWebView's background-launch state can leave
+// them out of sync (hidden=true, visibilityState="visible"). Treat either
+// signal as hidden so we still suspend the keyframe animation and surface
+// the section body via the data-anim-suspended + inline style fallback.
+function isDocumentHidden() {
+  if (typeof document === "undefined") return false;
+  return document.hidden || document.visibilityState === "hidden";
+}
+
 function useIsDocumentHidden() {
-  const [hidden, setHidden] = useState(() => {
-    if (typeof document === "undefined") return false;
-    return document.visibilityState === "hidden";
-  });
+  const [hidden, setHidden] = useState(isDocumentHidden);
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    const sync = () => setHidden(document.visibilityState === "hidden");
+    const sync = () => setHidden(isDocumentHidden());
     sync();
     document.addEventListener("visibilitychange", sync);
     return () => {
