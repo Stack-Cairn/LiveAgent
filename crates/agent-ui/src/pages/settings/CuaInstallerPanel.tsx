@@ -111,7 +111,6 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
   const [logExpanded, setLogExpanded] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
-  const chevronRef = useRef<HTMLSpanElement | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -175,32 +174,6 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
       }
     };
   }, [service]);
-
-  // CUA-041：chevron 改用 Web Animations API 驱动旋转，绕开 Tauri WebView
-  // (WKWebView) 中 inline-style + CSS transition 的 quirk——async setState
-  // 后再 click 时 transition 不推进、computed transform 停在 matrix(1,0,0,1,0,0)。
-  // Web Animations API 直接驱动属性值，不依赖 CSS transition 管线。
-  useEffect(() => {
-    const el = chevronRef.current;
-    if (!el || typeof el.animate !== "function") return;
-    // 先 cancel 任何在跑的动画，避免快速 toggle 时留下 stale keyframe。
-    for (const anim of el.getAnimations()) {
-      anim.cancel();
-    }
-    const keyframes = logExpanded
-      ? [{ transform: "rotate(0deg)" }, { transform: "rotate(180deg)" }]
-      : [{ transform: "rotate(180deg)" }, { transform: "rotate(0deg)" }];
-    el.animate(keyframes, {
-      duration: 150,
-      easing: "ease",
-      fill: "forwards",
-    });
-    return () => {
-      for (const anim of el.getAnimations()) {
-        anim.cancel();
-      }
-    };
-  }, [logExpanded]);
 
   const startInstall = useCallback(async () => {
     setErrorBanner(null);
@@ -594,9 +567,12 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
                 {t("settings.cua.installer.logLabel")}
               </span>
               <span
-                ref={chevronRef}
                 className="inline-flex"
                 data-chevron-expanded={logExpanded ? "true" : "false"}
+                style={{
+                  transform: logExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 150ms ease",
+                }}
               >
                 <ChevronDown className="h-3 w-3" />
               </span>
