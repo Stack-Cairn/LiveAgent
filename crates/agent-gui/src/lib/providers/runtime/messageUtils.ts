@@ -1,8 +1,77 @@
 export { assistantMessageToText } from "@liveagent/ui/lib/providers/errorMessage";
 
-const PROVIDER_CITATION_START = "\uE200cite";
-const PROVIDER_CITATION_END = "\uE201";
-const PROVIDER_CITATION_PATTERN = /\uE200cite(?:\uE202[^\uE201]*)+\uE201/g;
+/** OpenAI citation markers: `\uE200cite\uE202<source>[\uE202<locator>...]\uE201`. */
+const CITATION_START = "\uE200cite";
+const CITATION_DELIMITER = "\uE202";
+const CITATION_END = "\uE201";
+
+type CitationMatch = { kind: "complete"; end: number } | { kind: "incomplete" } | { kind: "none" };
+
+function matchCitationAt(text: string, from: number): CitationMatch {
+  const remaining = text.slice(from);
+  if (!remaining.startsWith(CITATION_START)) {
+    return CITATION_START.startsWith(remaining) ? { kind: "incomplete" } : { kind: "none" };
+  }
+
+  let index = from + CITATION_START.length;
+  if (index >= text.length) return { kind: "incomplete" };
+  if (text[index] !== CITATION_DELIMITER) return { kind: "none" };
+
+  while (index < text.length && text[index] === CITATION_DELIMITER) {
+    index += 1;
+    while (
+      index < text.length &&
+      text[index] !== CITATION_END &&
+      text[index] !== CITATION_DELIMITER
+    ) {
+      index += 1;
+    }
+    if (index >= text.length) return { kind: "incomplete" };
+  }
+
+  if (text[index] === CITATION_END) {
+    return { kind: "complete", end: index + CITATION_END.length };
+  }
+  return { kind: "none" };
+}
+
+function longestCitationStartPrefix(text: string) {
+  for (let length = Math.min(CITATION_START.length - 1, text.length); length > 0; length -= 1) {
+    const suffix = text.slice(-length);
+    if (CITATION_START.startsWith(suffix)) return suffix;
+  }
+  return "";
+}
+
+function sanitizeCitationText(text: string, holdIncomplete: boolean) {
+  let visible = "";
+  let index = 0;
+
+  while (index < text.length) {
+    const start = text.indexOf(CITATION_START, index);
+    if (start < 0) {
+      const rest = text.slice(index);
+      const prefix = longestCitationStartPrefix(rest);
+      visible += rest.slice(0, rest.length - prefix.length);
+      return { visible, pending: holdIncomplete ? prefix : "" };
+    }
+
+    visible += text.slice(index, start);
+    const match = matchCitationAt(text, start);
+    if (match.kind === "complete") {
+      index = match.end;
+      continue;
+    }
+    if (match.kind === "incomplete") {
+      return { visible, pending: holdIncomplete ? text.slice(start) : "" };
+    }
+
+    visible += CITATION_START;
+    index = start + CITATION_START.length;
+  }
+
+  return { visible, pending: "" };
+}
 
 /**
  * Provider-native web-search citations are sometimes returned as ChatGPT's
@@ -10,19 +79,7 @@ const PROVIDER_CITATION_PATTERN = /\uE200cite(?:\uE202[^\uE201]*)+\uE201/g;
  * are protocol metadata, not user-visible answer text.
  */
 export function stripProviderCitationMarkers(text: string) {
-  return text.replace(PROVIDER_CITATION_PATTERN, "");
-}
-
-function longestCitationPrefixSuffix(text: string) {
-  for (
-    let length = Math.min(PROVIDER_CITATION_START.length - 1, text.length);
-    length > 0;
-    length -= 1
-  ) {
-    const suffix = text.slice(-length);
-    if (PROVIDER_CITATION_START.startsWith(suffix)) return suffix;
-  }
-  return "";
+  return sanitizeCitationText(text, false).visible;
 }
 
 function createProviderCitationStreamSanitizer() {
@@ -30,29 +87,9 @@ function createProviderCitationStreamSanitizer() {
 
   return {
     append(text: string) {
-      let input = pending + text;
-      pending = "";
-      let output = "";
-
-      while (input) {
-        const start = input.indexOf(PROVIDER_CITATION_START);
-        if (start < 0) {
-          const suffix = longestCitationPrefixSuffix(input);
-          output += input.slice(0, input.length - suffix.length);
-          pending = suffix;
-          break;
-        }
-
-        output += input.slice(0, start);
-        const end = input.indexOf(PROVIDER_CITATION_END, start + PROVIDER_CITATION_START.length);
-        if (end < 0) {
-          pending = input.slice(start);
-          break;
-        }
-        input = input.slice(end + PROVIDER_CITATION_END.length);
-      }
-
-      return output;
+      const result = sanitizeCitationText(pending + text, true);
+      pending = result.pending;
+      return result.visible;
     },
     finish(text: string) {
       pending = "";
