@@ -1382,6 +1382,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "mcpHub.oauthStatusAuthorized": "Authorized",
   "mcpHub.oauthStatusExpired": "Expired",
   "mcpHub.oauthStatusNone": "Not authorized",
+  "mcpHub.oauthDesktopOnly": "OAuth authorization is managed in the desktop app",
   "mcpHub.oauthAuthorizeStarted": "System browser opened; finish authorization there",
   "mcpHub.oauthAuthorizeFailed": "OAuth authorization failed",
   "mcpHub.oauthDisconnectFailed": "Failed to disconnect authorization",

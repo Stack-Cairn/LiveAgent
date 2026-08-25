@@ -1313,6 +1313,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "mcpHub.oauthStatusAuthorized": "已授权",
   "mcpHub.oauthStatusExpired": "已过期",
   "mcpHub.oauthStatusNone": "未授权",
+  "mcpHub.oauthDesktopOnly": "OAuth 授权状态由桌面端管理",
   "mcpHub.oauthAuthorizeStarted": "已打开系统浏览器，请在浏览器中完成授权",
   "mcpHub.oauthAuthorizeFailed": "OAuth 授权失败",
   "mcpHub.oauthDisconnectFailed": "断开授权失败",

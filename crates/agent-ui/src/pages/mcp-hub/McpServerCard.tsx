@@ -39,8 +39,9 @@ function ConfigurationCount(props: { count: number; label: string }) {
 
 /**
  * OAuth 授权徽章 + Connect/断开（docs/design/mcp-oauth.md §5）。授权流仅桌面
- * 端可发起（系统浏览器），WebUI 只展示引导文案；token 永不过前端，这里只
- * 消费状态摘要。
+ * 端可发起（系统浏览器）；WebUI 查不到授权状态（invoke 通道不通），只显示
+ * 中性的鉴权类型徽章 + 「桌面端管理」提示。token 永不过前端，这里只消费
+ * 状态摘要。
  */
 function OauthControls(props: { server: McpServerConfig }) {
   const { server } = props;
@@ -66,8 +67,13 @@ function OauthControls(props: { server: McpServerConfig }) {
   }, [isWebui, server]);
 
   const state = status?.state ?? "none";
-  const stateLabel =
-    state === "authorized"
+  // status 为 null = 状态未知：WebUI 的 invoke 通道不实现这些命令（永远查
+  // 不到），桌面端则是查询尚未返回/失败。未知时只标注鉴权类型，不冒充
+  // 「未授权」——桌面端实际已授权时 WebUI 显示「未授权」是错误信息。
+  const statusUnknown = status === null;
+  const stateLabel = statusUnknown
+    ? t("mcpHub.authOauth")
+    : state === "authorized"
       ? t("mcpHub.oauthStatusAuthorized")
       : state === "expired"
         ? t("mcpHub.oauthStatusExpired")
@@ -112,7 +118,14 @@ function OauthControls(props: { server: McpServerConfig }) {
       <Badge
         variant={badgeVariant}
         className="h-5 px-1.5 text-[10px]"
-        title={error ?? (status?.issuer ? `${stateLabel} · ${status.issuer}` : stateLabel)}
+        title={
+          error ??
+          (isWebui
+            ? t("mcpHub.oauthDesktopOnly")
+            : status?.issuer
+              ? `${stateLabel} · ${status.issuer}`
+              : stateLabel)
+        }
       >
         {stateLabel}
       </Badge>
