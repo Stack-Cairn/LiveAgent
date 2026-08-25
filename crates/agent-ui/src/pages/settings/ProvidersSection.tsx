@@ -51,6 +51,7 @@ import {
   UsagePlanLine,
   usageRelativeTimeText,
 } from "./ProviderPresentation";
+import { RetryErrorSection } from "./RetryErrorSection";
 
 function FailoverNumberField(props: {
   label: string;
@@ -451,6 +452,7 @@ function CustomSettingsDrawer(
               setSettings={setSettings}
               providerType={providerType}
             />
+            <RetryErrorSection settings={settings} setSettings={setSettings} />
           </div>
         </div>
       </SheetContent>

@@ -635,6 +635,26 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.failoverCooldownSeconds": "熔断冷却时间（秒）",
   "settings.failoverCooldownSecondsHint":
     "熔断后跳过该供应商的时长，到期后放行探测请求（5-3600 秒）。",
+  "settings.retryError": "重试错误配置",
+  "settings.retryErrorDesc":
+    "选择哪些上游报错应被流式重试回路视为瞬时错误并按指数退避自动重试。适用于会偶发 Cloudflare 5xx 的中转站/代理。",
+  "settings.retryErrorPresets": "预设状态码",
+  "settings.retryErrorBuiltinNote":
+    "429 / 500 / 502 / 503 / 504 / 524 以及常见的网络/超时错误已由内置引擎自动重试,不受这些开关影响。",
+  "settings.retryError.preset.520": "Web 服务器返回未知错误 (Cloudflare 520)",
+  "settings.retryError.preset.521": "Web 服务器已宕机 (Cloudflare 521)",
+  "settings.retryError.preset.522": "连接超时 (Cloudflare 522)",
+  "settings.retryError.preset.523": "源站不可达 (Cloudflare 523)",
+  "settings.retryError.preset.525": "SSL 握手失败 (Cloudflare 525)",
+  "settings.retryError.preset.526": "SSL 证书无效 (Cloudflare 526)",
+  "settings.retryError.preset.527": "Railgun 请求错误 (Cloudflare 527)",
+  "settings.retryErrorCustomPatterns": "自定义错误关键词",
+  "settings.retryErrorCustomPatternsDesc":
+    "添加大小写不敏感的子串,与错误信息匹配。包含任一关键词的报错都会被重试,例如 \"SSL handshake failed\"。",
+  "settings.retryErrorCustomPatternPlaceholder": "例如:SSL handshake failed",
+  "settings.retryErrorAddPattern": "添加",
+  "settings.retryErrorRemovePattern": "移除",
+  "settings.retryErrorCustomPatternEmpty": "暂无自定义关键词。添加后可让内置引擎不识别的中转站/网关措辞也纳入重试。",
   "settings.agentsTitle": "提示词模板",
   "settings.agentsDesc": "统一管理全局模板与每个项目的专属提示词",
   "settings.agentsGlobalTab": "全局模板",

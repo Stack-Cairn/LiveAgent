@@ -27,6 +27,7 @@ import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
+import { setRetryErrorExtension } from "./lib/providers/runtime/streamRetry";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -386,6 +387,18 @@ export default function App() {
     const timeoutId = window.setTimeout(revealBackgroundHosts, 0);
     return () => window.clearTimeout(timeoutId);
   }, [settingsReady]);
+
+  // Push the user's retry-error classification (preset Cloudflare 5xx toggles +
+  // custom substrings) into the stream-retry runtime. The extension is a pure
+  // function of settings, so re-running on every change keeps the runtime in
+  // sync without any per-call plumbing. The runtime's default already enables
+  // every preset, so this is a no-op until the user actually changes something.
+  useEffect(() => {
+    setRetryErrorExtension({
+      statusCodes: settings.retryErrorSettings.presetStatusCodes,
+      patterns: settings.retryErrorSettings.customPatterns,
+    });
+  }, [settings.retryErrorSettings]);
 
   const queueSettingsSave = useCallback(
     (prev: AppSettings, next: AppSettings, fallback: string, publishSync: boolean) => {

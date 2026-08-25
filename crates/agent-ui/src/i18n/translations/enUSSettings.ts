@@ -661,6 +661,26 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.failoverCooldownSeconds": "Cooldown (seconds)",
   "settings.failoverCooldownSecondsHint":
     "How long an open circuit skips the provider before allowing a probe request (5-3600 seconds).",
+  "settings.retryError": "Retry Error Config",
+  "settings.retryErrorDesc":
+    "Choose which upstream errors the stream-retry loop should treat as transient and retry with exponential backoff. Useful for relay/proxy stations that return intermittent Cloudflare 5xx.",
+  "settings.retryErrorPresets": "Preset status codes",
+  "settings.retryErrorBuiltinNote":
+    "429 / 500 / 502 / 503 / 504 / 524 and common network/timeout errors are already retried by the built-in engine, regardless of these toggles.",
+  "settings.retryError.preset.520": "Web Server Returned an Unknown Error (Cloudflare 520)",
+  "settings.retryError.preset.521": "Web Server Is Down (Cloudflare 521)",
+  "settings.retryError.preset.522": "Connection Timed Out (Cloudflare 522)",
+  "settings.retryError.preset.523": "Origin Is Unreachable (Cloudflare 523)",
+  "settings.retryError.preset.525": "SSL Handshake Failed (Cloudflare 525)",
+  "settings.retryError.preset.526": "Invalid SSL Certificate (Cloudflare 526)",
+  "settings.retryError.preset.527": "Railgun Request Error (Cloudflare 527)",
+  "settings.retryErrorCustomPatterns": "Custom error keywords",
+  "settings.retryErrorCustomPatternsDesc":
+    "Add substrings matched case-insensitively against the error message. Any error containing one of these is retried. e.g. \"SSL handshake failed\".",
+  "settings.retryErrorCustomPatternPlaceholder": "e.g. SSL handshake failed",
+  "settings.retryErrorAddPattern": "Add",
+  "settings.retryErrorRemovePattern": "Remove",
+  "settings.retryErrorCustomPatternEmpty": "No custom keywords. Add one to extend retry to relay/gateway wording the built-in engine doesn't recognize.",
   "settings.agentsTitle": "Prompt Templates",
   "settings.agentsDesc": "Manage global templates and project-specific prompts in one place",
   "settings.agentsGlobalTab": "Global templates",

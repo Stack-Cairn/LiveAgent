@@ -50,6 +50,7 @@ type LocalUiSettings = {
   updates?: unknown;
   selectedModel?: unknown;
   modelFailover?: unknown;
+  retryErrorSettings?: unknown;
   theme?: unknown;
   locale?: unknown;
   closeWindowBehavior?: unknown;
@@ -98,6 +99,12 @@ function readLocalUiSettings(): {
    * with no providers would drop the whole queue.
    */
   modelFailover: unknown;
+  /**
+   * Retry-error config is a local UI preference (not gateway-synced), so it
+   * lives in localStorage like chatRuntimeControls. Read raw; normalizeSettings
+   * validates preset codes and de-dupes custom patterns.
+   */
+  retryErrorSettings: unknown;
   theme: Theme;
   locale: Locale;
   closeWindowBehavior: CloseWindowBehavior;
@@ -137,6 +144,7 @@ function readLocalUiSettings(): {
         updates: defaults.updates,
         selectedModel: defaults.selectedModel,
         modelFailover: defaults.modelFailover,
+        retryErrorSettings: defaults.retryErrorSettings,
         theme: defaults.theme,
         locale: defaults.locale,
         closeWindowBehavior: defaults.closeWindowBehavior,
@@ -157,6 +165,7 @@ function readLocalUiSettings(): {
       updates: normalizeUpdateSettings(parsed?.updates ?? defaults.updates),
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
       modelFailover: parsed?.modelFailover ?? defaults.modelFailover,
+      retryErrorSettings: parsed?.retryErrorSettings ?? defaults.retryErrorSettings,
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(hasStoredLocale ? parsed?.locale : defaults.locale),
       closeWindowBehavior: normalizeCloseWindowBehavior(
@@ -171,6 +180,7 @@ function readLocalUiSettings(): {
       updates: defaults.updates,
       selectedModel: defaults.selectedModel,
       modelFailover: defaults.modelFailover,
+      retryErrorSettings: defaults.retryErrorSettings,
       theme: defaults.theme,
       locale: defaults.locale,
       closeWindowBehavior: defaults.closeWindowBehavior,
@@ -189,6 +199,7 @@ function writeLocalUiSettings(
     | "theme"
     | "locale"
     | "closeWindowBehavior"
+    | "retryErrorSettings"
   >,
 ) {
   const payload = {
@@ -200,6 +211,7 @@ function writeLocalUiSettings(
     theme: settings.theme,
     locale: settings.locale,
     closeWindowBehavior: settings.closeWindowBehavior,
+    retryErrorSettings: settings.retryErrorSettings,
   };
   localStorage.setItem(LOCAL_UI_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
 }
@@ -265,6 +277,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     // the localStorage copy only migrates pre-SQLite installs forward.
     modelFailover: (persisted?.modelFailover ??
       localUi.modelFailover) as AppSettings["modelFailover"],
+    retryErrorSettings: localUi.retryErrorSettings as AppSettings["retryErrorSettings"],
     theme: localUi.theme,
     locale: localUi.locale,
     closeWindowBehavior: localUi.closeWindowBehavior,
@@ -385,7 +398,8 @@ export async function persistSettings(
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale) ||
-    hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior)
+    hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior) ||
+    hasChanged(prev.retryErrorSettings, next.retryErrorSettings)
   ) {
     writeLocalUiSettings({
       skills: next.skills,
@@ -396,6 +410,7 @@ export async function persistSettings(
       theme: next.theme,
       locale: next.locale,
       closeWindowBehavior: next.closeWindowBehavior,
+      retryErrorSettings: next.retryErrorSettings,
     });
   }
 

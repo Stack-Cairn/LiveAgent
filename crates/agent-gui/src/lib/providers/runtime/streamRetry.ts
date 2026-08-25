@@ -5,6 +5,7 @@ import {
   createAssistantMessageEventStream,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
+import { RETRYABLE_PRESET_HTTP_STATUS_CODES } from "@liveagent/ui/lib/settings/types";
 
 export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 
@@ -13,6 +14,83 @@ export const DEFAULT_STREAM_RETRY_MAX_ATTEMPTS = 6;
 
 const STREAM_RETRY_BASE_DELAY_MS = 200;
 const STREAM_RETRY_BACKOFF_FACTOR = 2;
+
+/**
+ * Extra retry classification layered on top of pi-ai's `isRetryableAssistantError`.
+ * Driven by the user's global retry-error settings (see `RetryErrorSettings`):
+ * - `statusCodes`: HTTP status codes (preset toggles) the user wants retried
+ *   beyond pi-ai's hardcoded set (which already covers 429/500/502/503/504/524).
+ * - `patterns`: free-text substrings matched case-insensitively against the error
+ *   message, for relay/gateway wording pi-ai doesn't recognize.
+ *
+ * The default module extension enables every preset code (Cloudflare 520-527),
+ * so relays self-heal out of the box (#608) even before the settings
+ * layer syncs the user's choices in.
+ */
+export type RetryErrorExtension = {
+  statusCodes?: number[];
+  patterns?: string[];
+};
+
+const DEFAULT_RETRY_ERROR_EXTENSION: RetryErrorExtension = {
+  statusCodes: [...RETRYABLE_PRESET_HTTP_STATUS_CODES],
+  patterns: [],
+};
+
+let currentRetryErrorExtension: RetryErrorExtension = DEFAULT_RETRY_ERROR_EXTENSION;
+
+/**
+ * Replaces the process-wide retry-error extension. Called by the settings layer
+ * whenever `retryErrorSettings` changes; the extension is a pure function of
+ * settings, so stale state is impossible once the effect re-runs. Tests can
+ * pass `null` to restore the default.
+ */
+export function setRetryErrorExtension(extension: RetryErrorExtension | null): void {
+  currentRetryErrorExtension = extension ?? DEFAULT_RETRY_ERROR_EXTENSION;
+}
+
+export function getRetryErrorExtension(): RetryErrorExtension {
+  return currentRetryErrorExtension;
+}
+
+function buildStatusCodePattern(codes: readonly number[]): RegExp | undefined {
+  if (codes.length === 0) return undefined;
+  // Word-boundary-ish: match the number not as a substring of a larger number
+  // (so "520" doesn't match "5200"). `\D|$` keeps it simple and sufficient for
+  // status codes embedded in error text like "HTTP 525" or "525 SSL handshake".
+  return new RegExp(`(?:^|\\D)(?:${codes.join("|")})(?:\\D|$)`);
+}
+
+/**
+ * Whether a failed assistant message matches the LiveAgent retry extension
+ * (preset HTTP status codes + user-defined substrings), independently of
+ * pi-ai's `isRetryableAssistantError`. Does not re-check pi-ai's own patterns
+ * — callers OR the two together so the union is retryable.
+ */
+export function isExtensionRetryableError(
+  message: AssistantMessage | undefined,
+  extension: RetryErrorExtension = currentRetryErrorExtension,
+): boolean {
+  if (!message) return false;
+  const errorMessage = (message as { errorMessage?: string }).errorMessage ?? "";
+  if (!errorMessage) return false;
+
+  const codes = extension.statusCodes;
+  if (codes && codes.length > 0) {
+    const pattern = buildStatusCodePattern(codes);
+    if (pattern?.test(errorMessage)) return true;
+  }
+  const patterns = extension.patterns;
+  if (patterns) {
+    const lower = errorMessage.toLowerCase();
+    for (const raw of patterns) {
+      if (typeof raw !== "string") continue;
+      const needle = raw.trim();
+      if (needle && lower.includes(needle.toLowerCase())) return true;
+    }
+  }
+  return false;
+}
 
 export type StreamRetryConfig = {
   maxAttempts?: number;
@@ -24,6 +102,12 @@ export type StreamRetryConfig = {
   onRetry?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
   /** Invoked once a retried attempt commits its first content-bearing event. */
   onRetryRecovered?: () => void;
+  /**
+   * Per-call override for the retry-error extension. Defaults to the
+   * process-wide extension set via `setRetryErrorExtension`; tests pass this
+   * to exercise the classifier without touching shared module state.
+   */
+  retryExtension?: RetryErrorExtension;
 };
 
 export type StreamRetryOptions = StreamRetryConfig & {
@@ -144,7 +228,14 @@ export function withStreamRetry(
       }
 
       if (terminal?.type === "error" && !committed && !disabled && attempt < maxAttempts) {
-        if (isRetryableAssistantError(terminalMessage(terminal))) {
+        const failedMessage = terminalMessage(terminal);
+        // pi-ai's classifier first (preserves its non-retryable quota/billing
+        // guard), then LiveAgent's extension: preset HTTP status codes (Cloudflare
+        // 520-527 for relays, #608) + user-defined substrings from settings.
+        if (
+          isRetryableAssistantError(failedMessage) ||
+          isExtensionRetryableError(failedMessage, options?.retryExtension)
+        ) {
           const errorMessage = terminalMessage(terminal)?.errorMessage || "Unknown error";
           attempt += 1;
           options?.onRetry?.(attempt - 1, maxAttempts - 1, errorMessage);

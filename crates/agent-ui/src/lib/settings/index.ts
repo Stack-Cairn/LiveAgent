@@ -35,6 +35,7 @@ import {
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
 import { normalizeModelFailoverSettings } from "./modelFailover";
+import { normalizeRetryErrorSettings } from "./retryError";
 import {
   normalizeChatTranscriptSettings,
   normalizeFontScaleSettings,
@@ -141,6 +142,7 @@ export {
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
 } from "./modelFailover";
+export { normalizeRetryErrorSettings } from "./retryError";
 export {
   normalizeChatTranscriptSettings,
   normalizeFontScale,
@@ -1583,6 +1585,7 @@ export function getDefaultSettings(): AppSettings {
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
     modelFailover: normalizeModelFailoverSettings({}, customProviders),
+    retryErrorSettings: normalizeRetryErrorSettings({}),
     updates: normalizeUpdateSettings({}),
     skills: {
       enabled: true,
@@ -1624,6 +1627,9 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     modelFailover: normalizeModelFailoverSettings(
       obj.modelFailover ?? defaults.modelFailover,
       customProviders,
+    ),
+    retryErrorSettings: normalizeRetryErrorSettings(
+      obj.retryErrorSettings ?? defaults.retryErrorSettings,
     ),
     updates: normalizeUpdateSettings(obj.updates ?? defaults.updates),
     skills: normalizeSkillsSettings(obj.skills ?? defaults.skills),

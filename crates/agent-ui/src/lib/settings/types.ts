@@ -215,6 +215,41 @@ export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
   };
 }
 
+/**
+ * Cloudflare 5xx status codes that relays surface when their origin
+ * errors. pi-ai's `isRetryableAssistantError` already retries 524; these are
+ * the rest of Cloudflare's transient 5xx family (#608). Offered as toggleable
+ * presets in the settings UI; the runtime retries any error message that
+ * contains the code as a standalone number.
+ */
+export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [
+  520, 521, 522, 523, 525, 526, 527,
+] as const;
+
+/**
+ * User-defined retry-error classification, layered on top of pi-ai's
+ * `isRetryableAssistantError`. Lets users decide which errors the stream-retry
+ * loop should treat as transient (#608) — preset Cloudflare 5xx toggles plus
+ * free-text substrings for relay/gateway wording pi-ai doesn't recognize.
+ */
+export type RetryErrorSettings = {
+  /**
+   * HTTP status codes (from `RETRYABLE_PRESET_HTTP_STATUS_CODES`) the user has
+   * enabled. Defaults to all presets on so relays self-heal out of the box.
+   */
+  presetStatusCodes: number[];
+  /**
+   * Free-text substrings matched case-insensitively against the error message.
+   * An error containing any of these is retried. e.g. "SSL handshake failed".
+   */
+  customPatterns: string[];
+};
+
+export const DEFAULT_RETRY_ERROR_SETTINGS: RetryErrorSettings = {
+  presetStatusCodes: [...RETRYABLE_PRESET_HTTP_STATUS_CODES],
+  customPatterns: [],
+};
+
 export type SystemProxyType = "socks5" | "http";
 
 // 系统级出站代理：注入本地 shell 命令 env，并供勾选了 useSystemProxy 的
@@ -574,6 +609,7 @@ export type AppSettings = {
   memory: MemorySettings;
   customSettings: CustomSettings;
   modelFailover: ModelFailoverSettings;
+  retryErrorSettings: RetryErrorSettings;
   updates: UpdateSettings;
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;

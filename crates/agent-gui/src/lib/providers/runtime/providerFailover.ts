@@ -5,6 +5,7 @@ import {
   createAssistantMessageEventStream,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
+import { isExtensionRetryableError, type RetryErrorExtension } from "./streamRetry";
 
 /**
  * Provider auto-failover runtime (cc-switch inspired).
@@ -182,11 +183,19 @@ const FAILOVER_EXTRA_ELIGIBLE_ERROR_PATTERN = new RegExp(
  * style client errors never fail over even though they may contain digits
  * that look like status codes.
  */
-export function isFailoverEligibleAssistantError(message: AssistantMessage | undefined): boolean {
+export function isFailoverEligibleAssistantError(
+  message: AssistantMessage | undefined,
+  retryExtension?: RetryErrorExtension,
+): boolean {
   if (!message) return false;
   const errorMessage = (message as { errorMessage?: string }).errorMessage ?? "";
   if (FAILOVER_INELIGIBLE_ERROR_PATTERN.test(errorMessage)) return false;
   if (isRetryableAssistantError(message)) return true;
+  // Same LiveAgent extension as withStreamRetry: a transient relay 5xx (#608)
+  // or a user-defined pattern is worth trying a different provider for — a
+  // fallback relay holds an independent origin/key and may not hit the same
+  // Cloudflare edge. Matches pi-ai's existing 524 → failover-eligible behavior.
+  if (isExtensionRetryableError(message, retryExtension)) return true;
   return FAILOVER_EXTRA_ELIGIBLE_ERROR_PATTERN.test(errorMessage);
 }
 
@@ -225,6 +234,13 @@ export type ProviderFailoverStreamOptions = {
    */
   onCommitted?: (candidateIndex: number) => void;
   now?: () => number;
+  /**
+   * Per-call override for the retry-error extension used by the eligibility
+   * classifier. Defaults to the process-wide extension
+   * ({@link setRetryErrorExtension}); kept consistent with withStreamRetry so a
+   * transient error retryable by same-provider retry is also failover-eligible.
+   */
+  retryExtension?: RetryErrorExtension;
 };
 
 type TerminalEvent = Extract<AssistantMessageEvent, { type: "done" | "error" }>;
@@ -368,6 +384,7 @@ export function withProviderFailover(
           } else if (event.reason !== "aborted") {
             terminalEligible = isFailoverEligibleAssistantError(
               terminalMessage(event) as AssistantMessage,
+              options?.retryExtension,
             );
             if (terminalEligible) {
               recordFailoverTargetResult(candidate.key, false, config, now());
