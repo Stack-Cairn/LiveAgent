@@ -58,6 +58,19 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
+      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
+      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      normalizeRuntimePlatform(value) {
+        return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
+      },
+      inferRuntimePlatform() {
+        return "linux";
+      },
+      runtimePlatformLabel(platform) {
+        if (platform === "windows") return "Windows";
+        if (platform === "macos") return "macOS";
+        return "Linux";
+      },
     },
     [memoryExtractionPath]: {
       memoryExtraction: {
@@ -269,6 +282,7 @@ function createHarness(subagents) {
         messages: state.segments.flatMap((segment) => segment.messages),
       }),
       compaction: {
+        noteFixedOverheadTokens() {},
         async maybeCompactPreSend({ budgetContext }) {
           record("pre-send", budgetContext);
         },

@@ -103,7 +103,6 @@ export type ChatEvent = (
       api?: string;
       stopReason?: string;
       usage?: unknown;
-      contextUsageTokens?: number;
       contextRelevant?: boolean;
       checkpoint?: ChatCheckpointPayload;
       conversation_id?: string;

@@ -258,6 +258,47 @@ test("model request sanitizer drops aborted hosted search rounds", () => {
   assert.doesNotMatch(JSON.stringify(context.messages), /call_01_PIQ9ADQKpEaBFU6f38f19272/);
 });
 
+test("model request sanitizer zeros aggregated usage after stripping hosted search", () => {
+  const original = {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "searching" },
+      {
+        type: "hostedSearch",
+        id: "hs-usage",
+        provider: "openai",
+        status: "completed",
+        queries: ["西安 新闻"],
+        sources: [],
+      },
+      { type: "text", text: "要点" },
+    ],
+    stopReason: "stop",
+    usage: {
+      input: 101_156,
+      output: 2_402,
+      cacheRead: 3_456,
+      cacheWrite: 0,
+      reasoning: 1_799,
+      totalTokens: 107_014,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    timestamp: 2,
+  };
+  const sanitized = requestContextSanitizer.sanitizeMessageForModelContext(original);
+
+  assert.deepEqual(
+    sanitized.content.map((block) => block.type),
+    ["thinking", "text"],
+  );
+  assert.equal(sanitized.usage.totalTokens, 0);
+  assert.equal(sanitized.usage.input, 0);
+  assert.equal(sanitized.usage.cacheWrite, 0);
+  assert.equal(sanitized.usage.cacheRead, 3_456);
+  assert.equal(sanitized.usage.output, 2_402);
+  assert.equal(original.usage.totalTokens, 107_014);
+});
+
 test("model request sanitizer strips DSML from text but preserves signed thinking", () => {
   const dsml = "\uFF5C\uFF5CDSML\uFF5C\uFF5C";
   const thinking = `before <${dsml}tool_calls><${dsml}invoke name="Read"></${dsml}invoke></${dsml}tool_calls> after`;

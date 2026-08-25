@@ -14,8 +14,8 @@ import {
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import {
+  estimateTextTokens,
   estimateTextTokenUnits,
-  getMessageObservedTokens,
 } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import { resolveTailBlockAnchorId } from "../../../lib/chat/context/contextTailBlock";
@@ -58,6 +58,7 @@ import {
   type AgentRunnerFailoverParams,
   runAssistantWithTools,
 } from "../../../lib/chat/runner/agentRunner";
+import { buildToolsSuffix } from "../../../lib/chat/runner/toolExecutionPrompt";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
@@ -677,6 +678,21 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       ) !== "deny",
   );
 
+  // 工具执行规则段（toolsSuffix）由 runner 在 provider 边界拼进 systemPrompt，
+  // 传给账本/检查点估值的上下文都在此之前。不注入这份估算，压缩后的无锚点
+  // 窗口（检查点权威值 + 首个真实 usage 到达前）会系统性少算 ~4k，首个 usage
+  // 一到环就跳涨。每轮重注：工具集变化随之更新，文本模式会覆盖为小值。
+  compaction.noteFixedOverheadTokens(
+    estimateTextTokens(
+      buildToolsSuffix(
+        effectiveWorkdir,
+        combinedTools.map((tool) => tool.name),
+        runtimePlatform,
+        additionalRoots,
+      ),
+    ),
+  );
+
   const preCompactionStartedAt = perfNowMs();
   await compaction.maybeCompactPreSend({
     budgetContext: withAgentRuntimeContext(
@@ -877,12 +893,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     if (contextRelevant) {
       compaction.observeContextMessages([assistant], { suppressUsageAnchors });
     }
-    // meta/gateway 事件的 contextUsageTokens 与印章同一不变量：只发布 usage
-    // 派生的权威锚点。无 usage 的轮次此前把账本读数（无锚点时是含 system/tools
-    // 估值的全量估算）当权威值外发，而倒扫优先读 contextUsageTokens——估算
-    // 落进历史会长期遮蔽真实读数，真实 usage 到来时环无压缩回落。
-    const contextUsageTokens =
-      contextRelevant && !suppressUsageAnchors ? getMessageObservedTokens(assistant) : undefined;
+    // 用量环锚点不随事件携带：两端倒扫都从 meta 的 usage + stopReason 现算
+    //（共享层 assistantAnchorTokens），meta 只发原始事实。
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -890,7 +902,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       api: assistant.api,
       stopReason: assistant.stopReason,
       usage: assistant.usage,
-      ...(contextUsageTokens ? { contextUsageTokens } : {}),
       ...(contextRelevant ? {} : { contextRelevant: false }),
     });
     batchLiveRoundsUpdate(
@@ -903,8 +914,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage,
-            usageTotalTokens: assistant.usage?.totalTokens,
-            contextUsageTokens,
             contextRelevant,
           },
         })),
@@ -1110,12 +1119,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           protectionCheckChars = 0;
           sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
-          // 轮次起点只外发有真实 usage 锚点的读数（首轮无锚点时账本是全量估算）。
-          const contextUsageTokens = compaction.anchoredContextUsageTokens;
-          gatewayBridgeEvents.queueToken("", {
-            round,
-            ...(contextUsageTokens ? { contextUsageTokens } : {}),
-          });
           batchLiveRoundsUpdate(
             (prev) => [
               ...prev,
@@ -1123,7 +1126,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
                 key: `r${round}`,
                 round,
                 blocks: [],
-                meta: contextUsageTokens ? { contextUsageTokens } : undefined,
                 runningToolCallIds: [],
                 thinkingOpen: false,
               },

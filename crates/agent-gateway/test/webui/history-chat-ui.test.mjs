@@ -409,7 +409,7 @@ test("turn reducer appends streaming text, dedupes tool cards, and dedupes compa
   assert.equal(turn.entries.length, 1);
   assert.equal(turn.entries[0].kind, "assistant");
   assert.equal(turn.entries[0].text, "hello world");
-  assert.equal(turn.entries[0].meta.usageTotalTokens, 12);
+  assert.equal(turn.entries[0].meta.usage.totalTokens, 12);
 
   const toolCall = { type: "tool_call", id: "call-1", name: "Read", arguments: { path: "README.md" }, round: 1 };
   turn = applyEventToTurn(turn, toolCall);

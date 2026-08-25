@@ -71,7 +71,7 @@ test("gateway runtime snapshot projects live rounds into chat entries", () => {
   assert.equal(entries[5].text, " Next step is ready.");
 });
 
-test("gateway runtime snapshots preserve authoritative usage and render-only metadata", () => {
+test("gateway runtime snapshots preserve raw usage and render-only metadata", () => {
   const entries = buildGatewayRuntimeSnapshotEntries({
     userMessage: null,
     liveTranscript: {
@@ -81,7 +81,7 @@ test("gateway runtime snapshots preserve authoritative usage and render-only met
         {
           key: "round-render-only",
           round: 2,
-          meta: { contextUsageTokens: 150_000, contextRelevant: false },
+          meta: { usage: { totalTokens: 150_000 }, contextRelevant: false },
           runningToolCallIds: [],
           thinkingOpen: false,
           blocks: [],
@@ -93,7 +93,7 @@ test("gateway runtime snapshots preserve authoritative usage and render-only met
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "assistant");
   assert.equal(entries[0].text, "");
-  assert.equal(entries[0].meta.contextUsageTokens, 150_000);
+  assert.equal(entries[0].meta.usage.totalTokens, 150_000);
   assert.equal(entries[0].meta.contextRelevant, false);
 });
 

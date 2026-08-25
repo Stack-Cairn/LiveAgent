@@ -1,4 +1,10 @@
-import type { Context, Message, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import type {
+  Context,
+  Message,
+  TextContent,
+  ToolResultMessage,
+  Usage,
+} from "@earendil-works/pi-ai";
 import { normalizeHostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import { isSubagentCardToolCall } from "../../subagents/card";
 import type { DisplayImageItemDetails, DisplayImageResultDetails } from "../../tools/builtinTypes";
@@ -142,12 +148,30 @@ function sanitizeTextBlocksForModelContext(message: Message): Message {
   return changed ? ({ ...message, content: content as Message["content"] } as Message) : message;
 }
 
+// 清零 input / totalTokens / cacheWrite，而不是整份 usage：这两项是托管搜索
+// 的聚合值（搜索全文计入 input），assistantAnchorTokens 会把环钉在 80k–120k。
+// cacheRead + output 仍是下一请求规模，留给 hostedSearchFollowUpTokens；全零
+// 会逼账本在 beginRequest 时改走 encrypted 估算，空闲 36k、短回复后再掉到 32k。
+function zeroedAggregatedUsage(previous?: Usage): Usage {
+  const keep = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  return {
+    input: 0,
+    output: keep(previous?.output),
+    cacheRead: keep(previous?.cacheRead),
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
 export function sanitizeMessageForModelContext(message: Message): Message {
   let nextMessage = sanitizeTextBlocksForModelContext(message);
 
   if (nextMessage.role === "assistant") {
     const nextContent: unknown[] = [];
     let changed = false;
+    let strippedHostedSearch = false;
     for (const block of nextMessage.content as unknown[]) {
       if (isSubagentCardToolCall(block)) {
         changed = true;
@@ -157,6 +181,7 @@ export function sanitizeMessageForModelContext(message: Message): Message {
       const hostedSearch = normalizeHostedSearchBlock(block);
       if (hostedSearch) {
         changed = true;
+        strippedHostedSearch = true;
         continue;
       }
       nextContent.push(block);
@@ -165,6 +190,14 @@ export function sanitizeMessageForModelContext(message: Message): Message {
       nextMessage = {
         ...nextMessage,
         content: nextContent as Message["content"],
+        // 托管搜索轮的 input / totalTokens 是服务端多次内部调用的聚合值（实测
+        // 报 input ~105k 而真实持久上下文仅 ~31k）。hostedSearch 块是整段锚点
+        // 排除的内容级证据，剥除后这两项必须清零——否则 TokenLedger 对净化后
+        // 上下文 rebase 时会把聚合值当真实锚点（7% → 40%）。cacheRead+output
+        // 保留给 hostedSearchFollowUpTokens。供应商从不读输入消息的 usage。
+        ...(strippedHostedSearch
+          ? { usage: zeroedAggregatedUsage((nextMessage as { usage?: Usage }).usage) }
+          : {}),
       } as Message;
     }
   }

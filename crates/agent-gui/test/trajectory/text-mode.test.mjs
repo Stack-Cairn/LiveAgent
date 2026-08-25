@@ -129,6 +129,7 @@ function baseParams(recorder) {
     buildPreparedContext: () => ({ systemPrompt: "BASE", messages: [] }),
     compaction: {
       contextUsageTokens: 11,
+      noteFixedOverheadTokens() {},
       observeContextMessages: () => 14,
       maybeCompactPreSend: async () => {},
       beginRequest() {},

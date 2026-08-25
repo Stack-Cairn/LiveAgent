@@ -115,23 +115,32 @@ test("buildTurnRows emits the user bubble before any assistant content, tagged w
   assert.equal(rows[1].turnKey, "req:c1");
 });
 
-test("stream token metadata preserves authoritative context usage and render-only markers", () => {
+test("stream token metadata preserves raw usage and render-only markers", () => {
+  // meta 只携带原始事实：用量环锚点由倒扫从 usage + stopReason 现算，
+  // 事件不再携带任何派生 token 字段。
   let turn = createTurn({ key: "run:usage", runId: "run-usage" });
   turn = applyEventToTurn(turn, {
     type: "token",
     text: "memory status",
     round: 2,
-    usage: { totalTokens: 10_000 },
-    contextUsageTokens: 150_000,
+    stopReason: "stop",
+    usage: { input: 9_000, cacheRead: 800, output: 200, totalTokens: 10_000 },
     contextRelevant: false,
   });
   const rows = buildTurnRows(turn);
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].kind, "assistant");
-  assert.equal(rows[0].rounds[0].meta.usageTotalTokens, 10_000);
-  assert.equal(rows[0].rounds[0].meta.contextUsageTokens, 150_000);
+  assert.deepEqual(rows[0].rounds[0].meta.usage, {
+    input: 9_000,
+    cacheRead: 800,
+    output: 200,
+    totalTokens: 10_000,
+  });
+  assert.equal(rows[0].rounds[0].meta.stopReason, "stop");
   assert.equal(rows[0].rounds[0].meta.contextRelevant, false);
+  assert.equal("contextUsageTokens" in rows[0].rounds[0].meta, false);
+  assert.equal("usageTotalTokens" in rows[0].rounds[0].meta, false);
 });
 
 test("interleaved thinking and tool results keep one assistant row and stable block identities", () => {
@@ -351,7 +360,7 @@ test("persisted checkpoints retain the post-compaction context token snapshot", 
   assert.equal(rows[0].contextUsageTokens, 43_210);
 });
 
-test("persisted assistant messages retain the desktop context usage snapshot", () => {
+test("persisted assistant messages carry raw usage; legacy stamps are dead data", () => {
   const entries = parseHistoryMessagesJson(
     JSON.stringify([
       {
@@ -361,7 +370,8 @@ test("persisted assistant messages retain the desktop context usage snapshot", (
         model: "gpt-test",
         api: "openai-responses",
         stopReason: "stop",
-        usage: { totalTokens: 10_000 },
+        usage: { input: 9_500, output: 500, totalTokens: 10_000 },
+        // 旧口径印章：读取侧已无任何消费方，锚点从 usage 现算。
         liveAgentContextUsage: { totalTokens: 150_000, fixedTokens: 25_000 },
         timestamp: 1,
       },
@@ -370,7 +380,9 @@ test("persisted assistant messages retain the desktop context usage snapshot", (
   const rows = buildRowsFromEntries(entries, "history");
 
   assert.equal(rows[0].kind, "assistant");
-  assert.equal(rows[0].rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(rows[0].rounds[0].meta.usage.totalTokens, 10_000);
+  assert.equal(rows[0].rounds[0].meta.stopReason, "stop");
+  assert.equal("contextUsageTokens" in rows[0].rounds[0].meta, false);
 });
 
 test("thinking-first persisted replies emit a meta carrier that rows suppress", () => {

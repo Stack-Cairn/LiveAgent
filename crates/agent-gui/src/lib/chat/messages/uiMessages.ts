@@ -23,7 +23,6 @@ import {
   type SubagentCardDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
 import { isSubagentCardToolCall } from "../../subagents/card";
-import { readMessageContextUsage } from "../compaction/contextUsageMetadata";
 
 export type ToolTraceItem = {
   toolCall: ToolCall;
@@ -37,6 +36,8 @@ export type UiRoundContentBlock =
       // shifted by later inserts, unlike an array index.
       id: string;
       text: string;
+      // OpenAI Responses 重放的 reasoning item 估算；UI 仍只渲染 text 摘要。
+      replayTokenUnits?: number;
     }
   | {
       kind: "tool";
@@ -64,8 +65,6 @@ export type UiRound = {
     api?: string;
     stopReason?: string;
     usage?: Usage;
-    usageTotalTokens?: number;
-    contextUsageTokens?: number;
     contextRelevant?: boolean;
   };
 };
@@ -89,6 +88,7 @@ export type UiMessage = {
 import {
   appendTextDeltaToRound,
   appendTextLikeBlock,
+  appendThinkingBlockFromAssistant,
   appendThinkingDeltaToRound,
   assistantMessageToThinkingText,
   buildSubagentPlaceholderToolCalls,
@@ -114,6 +114,7 @@ import {
 export {
   appendTextDeltaToRound,
   appendTextLikeBlock,
+  appendThinkingBlockFromAssistant,
   appendThinkingDeltaToRound,
   assistantMessageToThinkingText,
   buildSubagentPlaceholderToolCalls,
@@ -445,7 +446,7 @@ function buildUiRoundBlocks(
       continue;
     }
     if (block.type === "thinking") {
-      blocks = appendTextLikeBlock(blocks, "thinking", block.thinking);
+      blocks = appendThinkingBlockFromAssistant(blocks, block);
       continue;
     }
     if (block.type === "toolCall") {
@@ -496,7 +497,6 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
       if (messages[i].role === "assistant") {
         roundNum += 1;
         const assistant = messages[i] as AssistantMessage;
-        const contextUsage = readMessageContextUsage(assistant);
         lastAssistantTimestamp = assistant.timestamp ?? lastAssistantTimestamp;
 
         const toolResults: ToolResultMessage[] = [];
@@ -527,8 +527,6 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage as Usage | undefined,
-            usageTotalTokens: assistant.usage?.totalTokens,
-            contextUsageTokens: contextUsage?.totalTokens,
           },
         });
       } else {

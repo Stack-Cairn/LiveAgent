@@ -139,6 +139,19 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
+      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
+      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      normalizeRuntimePlatform(value) {
+        return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
+      },
+      inferRuntimePlatform() {
+        return "linux";
+      },
+      runtimePlatformLabel(platform) {
+        if (platform === "windows") return "Windows";
+        if (platform === "macos") return "macOS";
+        return "Linux";
+      },
     },
     [memoryExtractionPath]: {
       memoryExtraction: {
@@ -235,6 +248,7 @@ function createCompletedAgentDevTurnParams({
       messages: currentState.segments.flatMap((segment) => segment.messages),
     }),
     compaction: {
+      noteFixedOverheadTokens: noOp,
       async maybeCompactPreSend() {},
       beginRequest: noOp,
       observeContextMessages: () => 0,
@@ -561,6 +575,7 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
     applyConversationState: noOp,
     buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
     compaction: {
+      noteFixedOverheadTokens: noOp,
       async maybeCompactPreSend() {},
       beginRequest: noOp,
       observeContextMessages: () => 0,
@@ -733,6 +748,7 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
       applyConversationState: noOp,
       buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
       compaction: {
+        noteFixedOverheadTokens: noOp,
         async maybeCompactPreSend() {},
         beginRequest: noOp,
         observeContextMessages: () => 0,

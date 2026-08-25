@@ -22,8 +22,6 @@ type GatewayAssistantMeta = {
   api?: string;
   stopReason?: string;
   usage?: Usage;
-  usageTotalTokens?: number;
-  contextUsageTokens?: number;
   contextRelevant?: boolean;
 };
 

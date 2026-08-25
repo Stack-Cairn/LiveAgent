@@ -21,7 +21,7 @@ export type SharedChatEntry<
       round?: number;
       meta?: TAssistantMeta;
     } & TAssistantExtra)
-  | { id: string; kind: "thinking"; text: string; round?: number }
+  | { id: string; kind: "thinking"; text: string; round?: number; replayTokenUnits?: number }
   | {
       id: string;
       kind: "tool_call";

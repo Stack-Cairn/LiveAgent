@@ -79,8 +79,8 @@ export function buildPreparedContext(params: {
   /** 轨迹埋点用的分段回调；不传时零开销。 */
   captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
-  // AGENTS / Skills prompts are fixed runtime instructions and should not be
-  // folded into compaction input or token accounting.
+  // AGENTS / Skills / memory 段会拼进 systemPrompt，beginRequest 的 fixedTokens
+  // 按这份全文估算——不是「不算进用量」。它们只是不该再被单独叠进压缩输入。
   const withTools = buildCompactionContext(params.state, params.tools, {
     includeAbortedMessages: params.includeAbortedMessages,
     includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,

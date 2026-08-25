@@ -211,7 +211,7 @@ test("assistant meta merge never wipes an existing anchor with a later own-undef
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));
   store.applyEvent(runStarted("run-1", 2));
-  // 首帧携带 contextUsageTokens 锚点。
+  // 首帧携带 usage（用量环锚点的现算输入）。
   store.applyEvent({
     type: "token",
     conversation_id: "conv-1",
@@ -219,12 +219,13 @@ test("assistant meta merge never wipes an existing anchor with a later own-undef
     seq: 3,
     round: 0,
     text: "answer ",
-    contextUsageTokens: 150_000,
+    stopReason: "stop",
+    usage: { input: 140_000, cacheRead: 9_000, output: 1_000, totalTokens: 150_000 },
   });
   store.flush();
 
-  // 同轮后续帧带其他 meta 字段但不带 contextUsageTokens：旧代码会用 own-undefined
-  // 键把锚点抹掉；修复后锚点保留，新字段并入。
+  // 同轮后续帧带其他 meta 字段但不带 usage：旧代码会用 own-undefined
+  // 键把锚点输入抹掉；修复后 usage 保留，新字段并入。
   store.applyEvent({
     type: "token",
     conversation_id: "conv-1",
@@ -239,7 +240,8 @@ test("assistant meta merge never wipes an existing anchor with a later own-undef
   const snapshot = store.getSnapshot();
   const assistantRow = allRows(snapshot).find((row) => row.kind === "assistant");
   assert.ok(assistantRow, "expected an assistant row");
-  assert.equal(assistantRow.rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(assistantRow.rounds[0].meta.usage.totalTokens, 150_000);
+  assert.equal(assistantRow.rounds[0].meta.stopReason, "stop");
   assert.equal(assistantRow.rounds[0].meta.model, "claude-sonnet");
 });
 
@@ -1075,7 +1077,7 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
           kind: "assistant",
           text: "rebuilt from snapshot",
           round: 0,
-          meta: { contextUsageTokens: 150_000, contextRelevant: false },
+          meta: { usage: { totalTokens: 150_000 }, contextRelevant: false },
         },
       ]),
       toolStatus: "Vibing",
@@ -1093,7 +1095,7 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
   assert.match(text, /rebuilt from snapshot/);
   assert.doesNotMatch(text, /will be lost/);
   const assistantRow = allRows(snapshot).find((row) => row.kind === "assistant");
-  assert.equal(assistantRow.rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(assistantRow.rounds[0].meta.usage.totalTokens, 150_000);
   assert.equal(assistantRow.rounds[0].meta.contextRelevant, false);
 });
 

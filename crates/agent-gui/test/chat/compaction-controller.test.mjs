@@ -675,7 +675,7 @@ function manualBinding(overrides = {}) {
 
 test("compactManually skips below the 50% manual threshold", async () => {
   const controller = new CompactionController();
-  // 锚点 = usage prompt 侧 + 可见输出估算（本条短文本 +14），99_000 留足余量
+  // 锚点 = usage 纯算术（prompt 侧 + 可见输出，本例 output 为 0），99_000
   // 保证读数停在 100_000（50%）门槛之下。
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
@@ -755,6 +755,53 @@ test("compactManually honors the persisted usage snapshot and fixed-token anchor
       .contextTokensAfter,
     checkpointTokens,
   );
+});
+
+// 压缩后的无锚点窗口（新 segment 尚无真实 usage）：空闲环显示检查点权威值，
+// 发送后运行中环改读账本。现算估算的任何输入漂移（激活工具子集收窄、memory
+// 段重冻结、重启丢 overhead）都可能低于检查点值——账本必须以检查点为 fixed
+// 下界，否则环先倒退、首个真实 usage 到达再跳涨。
+test("post-compaction beginRequest never dips below the checkpoint anchor", async () => {
+  const controller = new CompactionController();
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      assistantWithUsage("working on src/app.ts", 100_000, 2),
+    ],
+  });
+  const { binding, recorder } = manualBinding();
+  // 大 fixedTokens 快照抬高检查点权威值，模拟“检查点值 > 下一次发送的现算估算”。
+  const result = await controller.compactManually(binding, state, {
+    totalTokens: 100_000,
+    fixedTokens: 40_000,
+  });
+  assert.deepEqual(result, { status: "compacted" });
+  const [, checkpointState, checkpointTokens] = recorder.byKind("queueCheckpoint")[0];
+  assert.ok(checkpointTokens >= 40_000);
+
+  // 压缩后下一次发送：现算 fixed（sys + 摘要）远低于检查点值。
+  const nextState = conversationState.appendMessagesToConversation(checkpointState, [
+    user("接着做下一件事", 30),
+  ]);
+  const nextContext = conversationState.buildRequestContext(nextState);
+  const total = controller.beginRequest(nextContext, nextState);
+  assert.ok(
+    total >= checkpointTokens,
+    `post-compaction beginRequest total ${total} must not dip below checkpoint ${checkpointTokens}`,
+  );
+
+  // 跨重启：全新控制器（无 overhead、无账本快照）从持久化状态恢复同一下界。
+  const freshController = new CompactionController();
+  const freshTotal = freshController.beginRequest(nextContext, nextState);
+  assert.ok(
+    freshTotal >= checkpointTokens,
+    `fresh-controller beginRequest total ${freshTotal} must not dip below checkpoint ${checkpointTokens}`,
+  );
+
+  // 真实 usage 锚点出现后，下界退场、读数回到锚点算术。
+  controller.observeContextMessages([assistantWithUsage("done", 41_000, 31)]);
+  assert.equal(controller.contextUsageTokens, 41_000);
 });
 
 test("compactManually refuses while a turn is bound or a compaction is in flight", async () => {

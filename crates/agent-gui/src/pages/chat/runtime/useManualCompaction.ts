@@ -2,19 +2,20 @@ import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import { invoke } from "@tauri-apps/api/core";
 import type { MutableRefObject } from "react";
 import { useCallback } from "react";
-import { readMessageContextUsage } from "../../../lib/chat/compaction/contextUsageMetadata";
 import type {
   CompactionController,
   CompactionSinks,
   ManualCompactionOutcome,
   ManualContextUsageSnapshot,
 } from "../../../lib/chat/compaction/controller";
+import { estimateTextTokens } from "../../../lib/chat/compaction/tokenLedger";
 import type { CompactionDecisionReason } from "../../../lib/chat/compaction/types";
 import { getActiveSegment } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { createGatewayBridgeEventController } from "../../../lib/chat/conversation/run/gatewayBridgeEvents";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import { memoryTurnInjection } from "../../../lib/chat/memory/injectionController";
+import { buildToolsSuffix } from "../../../lib/chat/runner/toolExecutionPrompt";
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import type { AppSettings } from "../../../lib/settings";
@@ -48,26 +49,17 @@ export type ManualCompactionRequest = {
   onAccepted?: () => void;
 };
 
-// 手动压缩的读数快照：优先用控制器账本，缺失才退到转录扫描与最近一条
-// 带 fixedTokens 的消息元数据。
+// 手动压缩的读数快照：优先用控制器账本，缺失（本会话尚未发过请求）才退到
+// 转录扫描；fixedTokens 缺省时探针的 rebase 会按当前上下文自行估算。
 function resolveManualContextUsage(
   controller: CompactionController,
   runtimeEntry: ConversationRuntimeEntry,
 ): ManualContextUsageSnapshot {
   const runtimeSnapshot = controller.contextUsageSnapshot;
-  const messages = getActiveSegment(runtimeEntry.state)?.messages ?? [];
-  let fixedTokens: number | undefined;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const usage = readMessageContextUsage(messages[index]);
-    if (usage) {
-      fixedTokens = usage.fixedTokens;
-      break;
-    }
-  }
   return {
     totalTokens:
       runtimeSnapshot?.totalTokens ?? deriveContextUsageTokens(runtimeEntry.state.transcript.items),
-    fixedTokens: runtimeSnapshot?.fixedTokens ?? fixedTokens,
+    fixedTokens: runtimeSnapshot?.fixedTokens,
   };
 }
 
@@ -360,6 +352,25 @@ export function useManualCompaction(params: {
         };
 
         const compactionController = getCompactionController(conversationId);
+        // 重启后直接手动压缩：控制器还没有任何轮次注入过 provider 边界追加段
+        //（agent 模式 toolsSuffix 实测 ~4k），检查点权威值会系统性偏低，下一次
+        // 发送时环台阶式上跳。按持久化工具集补一份回退估算；本会话已有轮次
+        // 注入的现值（出自真实请求参数）优先，绝不覆盖。
+        if (compactionController.contextFixedOverheadTokens === 0) {
+          const persistedTools = runtimeEntry.state.meta.tools;
+          if (Array.isArray(persistedTools) && persistedTools.length > 0) {
+            compactionController.noteFixedOverheadTokens(
+              estimateTextTokens(
+                buildToolsSuffix(
+                  runtimeEntry.workdir ?? "",
+                  persistedTools
+                    .map((tool) => (typeof tool?.name === "string" ? tool.name : ""))
+                    .filter(Boolean),
+                ),
+              ),
+            );
+          }
+        }
         const trajectoryRecording = acquireTrajectoryRecorder(
           conversationId,
           getActiveSegment(runtimeEntry.state)?.segmentIndex ??

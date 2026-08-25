@@ -7,6 +7,7 @@ import type {
 } from "@liveagent/app/lib/agentTypes";
 import { assistantMessageToText } from "@liveagent/app/lib/providers/llm";
 import { ASK_USER_QUESTION_DEADLINE_ARG } from "@liveagent/ui/lib/chat/askUserQuestion";
+import { estimateThinkingReplayTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
 import {
   enrichHostedSearchContentWithText,
   type HostedSearchBlock,
@@ -52,6 +53,8 @@ export type UiRoundContentBlock =
       // shifted by later inserts, unlike an array index.
       id: string;
       text: string;
+      // OpenAI Responses 重放的 reasoning item 估算；UI 仍只渲染 text 摘要。
+      replayTokenUnits?: number;
     }
   | {
       kind: "tool";
@@ -76,8 +79,6 @@ export type UiRound = {
     api?: string;
     stopReason?: string;
     usage?: Usage;
-    usageTotalTokens?: number;
-    contextUsageTokens?: number;
     contextRelevant?: boolean;
   };
 };
@@ -792,10 +793,43 @@ export function appendTextLikeBlock(
       kind,
       id: last.id,
       text: last.text + delta,
+      ...(kind === "thinking" && last.kind === "thinking" && last.replayTokenUnits
+        ? { replayTokenUnits: last.replayTokenUnits }
+        : {}),
     };
     return next;
   }
   return [...blocks, { kind, id: nextTextLikeBlockId(blocks, kind), text: delta }];
+}
+
+function appendThinkingReplayUnits(blocks: UiRoundContentBlock[], replayTokenUnits: number) {
+  if (!(replayTokenUnits > 0)) return blocks;
+  const last = blocks[blocks.length - 1];
+  if (last?.kind === "thinking") {
+    return [
+      ...blocks.slice(0, -1),
+      { ...last, replayTokenUnits: (last.replayTokenUnits ?? 0) + replayTokenUnits },
+    ];
+  }
+  return [
+    ...blocks,
+    {
+      kind: "thinking" as const,
+      id: nextTextLikeBlockId(blocks, "thinking"),
+      text: "",
+      replayTokenUnits,
+    },
+  ];
+}
+
+export function appendThinkingBlockFromAssistant(
+  blocks: UiRoundContentBlock[],
+  block: { thinking?: string; thinkingSignature?: string },
+) {
+  const replayTokenUnits = Math.ceil(estimateThinkingReplayTokenUnits(block));
+  const thinking = typeof block.thinking === "string" ? block.thinking : "";
+  const next = thinking ? appendTextLikeBlock(blocks, "thinking", thinking) : blocks;
+  return appendThinkingReplayUnits(next, replayTokenUnits);
 }
 
 function rebalanceHostedSearchTextBoundaries(blocks: UiRoundContentBlock[]): UiRoundContentBlock[] {
@@ -1420,7 +1454,7 @@ function buildUiRoundBlocks(
       continue;
     }
     if (block.type === "thinking") {
-      blocks = appendTextLikeBlock(blocks, "thinking", block.thinking);
+      blocks = appendThinkingBlockFromAssistant(blocks, block);
       continue;
     }
     if (block.type === "toolCall") {
@@ -1497,7 +1531,6 @@ export function buildUiMessages(messages: Message[]): UiMessage[] {
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage as Usage | undefined,
-            usageTotalTokens: assistant.usage?.totalTokens,
           },
         });
       } else {

@@ -7,8 +7,8 @@ import {
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import {
+  estimateTextTokens,
   estimateTextTokenUnits,
-  getMessageObservedTokens,
 } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
@@ -44,6 +44,7 @@ import {
 } from "../../../lib/chat/search/providerNativeSearchStatus";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
+import { buildTextOnlySystemSuffix } from "../../../lib/providers/runtime/textOnlyRuntime";
 import type { ProviderId } from "../../../lib/settings";
 import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
 import {
@@ -223,11 +224,8 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
     const suppressUsageAnchors = hostedSearchRounds.has(round);
     compaction.observeContextMessages([assistant], { suppressUsageAnchors });
-    // 与 agent 模式同一不变量：contextUsageTokens 只发布 usage 派生的权威锚点，
-    // 无 usage 的轮次绝不把账本估算当权威值外发（倒扫优先读该字段）。
-    const contextUsageTokens = suppressUsageAnchors
-      ? undefined
-      : getMessageObservedTokens(assistant);
+    // 与 agent 模式同一约定：用量环锚点不随事件携带，两端倒扫都从 meta 的
+    // usage + stopReason 现算（共享层 assistantAnchorTokens），meta 只发原始事实。
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -235,7 +233,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
       api: assistant.api,
       stopReason: assistant.stopReason,
       usage: assistant.usage,
-      contextUsageTokens,
     });
     batchLiveRoundsUpdate(
       (prev) =>
@@ -247,8 +244,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage,
-            usageTotalTokens: assistant.usage?.totalTokens,
-            contextUsageTokens,
           },
         })),
       transcriptStore,
@@ -331,6 +326,11 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     trajectory.stepStart(textRound, headerId);
   }
 
+  // 文本模式同样在 provider 边界追加 system 后缀（textOnlyRuntime 的规则段），
+  // 且必须每轮重注：控制器按会话常驻，切回文本模式后若残留 agent 模式的
+  // toolsSuffix 估算（~4k），账本与检查点估值会系统性虚高。
+  compaction.noteFixedOverheadTokens(estimateTextTokens(buildTextOnlySystemSuffix()));
+
   await compaction.maybeCompactPreSend({
     budgetContext: buildPreparedContext(getNextConversationState(), undefined, {
       includeUploadedFilesMetadata: true,
@@ -347,11 +347,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
       });
     pendingTextContext = null;
     compaction.beginRequest(contextWithSkills, getNextConversationState());
-    gatewayBridgeEvents.queueToken("", {
-      round: textRound,
-      // 只外发有真实 usage 锚点的读数（首轮无锚点时账本是全量估算）。
-      contextUsageTokens: compaction.anchoredContextUsageTokens,
-    });
     hookLifecycle.startTurn(textRound);
     textModeUsesLiveRounds = false;
     trajectoryFailoverAttempt = 0;

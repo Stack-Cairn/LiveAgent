@@ -1,26 +1,25 @@
-import type { AssistantMessage, Context, Message, Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
 
 import {
+  assistantAnchorTokens,
+  contentReplaysReasoning,
   estimateContentBlockTokenUnits,
   estimateContentTokenUnits,
+  estimateJsonTokens,
   estimateTextTokens,
   estimateTextTokenUnits,
+  estimateThinkingReplayTokenUnits,
+  hostedSearchFollowUpTokens,
+  isStrippedHostedSearchUsage,
   MESSAGE_ENVELOPE_TOKENS,
   stringifiedTokenUnits,
 } from "@liveagent/ui/lib/chat/contextUsage";
 import { isCompactionAssistantMessage } from "../conversation/conversationState";
-import { readMessageContextUsage, writeAssistantContextUsage } from "./contextUsageMetadata";
 
 // CJK 感知的文本估算、消息包裹常量与非文本值序列化估算全部取自共享层
 //（用量环的检查点估值与 WebUI 倒扫复用同一口径，调参只改共享层）；
 // 这里 re-export 文本估算保持既有调用方与测试不动。
 export { estimateTextTokens, estimateTextTokenUnits };
-
-// liveAgentContextUsage 印章的不变量：totalTokens 只记录 usage 派生的权威锚点
-//（prompt 侧 + 可见输出估算，见 getMessageUsageAnchorTokens；fixedTokens 随印章
-// 携带，供跨端 rebase 补偿 system/tools 开销变化），绝不写纯估算——印章随会话
-// 持久化且读取侧优先于 usage，一旦写入估算便永久遮蔽后到的真实读数，且没有
-// 任何纠正路径。
 
 // 消息在本代码库中是不可变值对象（状态变更只新建数组），因此估算结果可跨
 // state/segment/临时 state 按对象身份缓存，热路径不再重复序列化。
@@ -66,73 +65,40 @@ export function estimateToolsTokens(tools: Context["tools"]): number {
   if (!tools || tools.length === 0) return 0;
   const cached = toolsTokenCache.get(tools);
   if (cached !== undefined) return cached;
-  const tokens = estimateTextTokens(JSON.stringify(tools));
+  // 工具定义是 JSON schema，不是散文：走 estimateJsonTokens（约 2.5 字/token），
+  // 不要用 chars/4，否则 fixedTokens 会比真实首轮 prompt 少 4–8k。
+  const tokens = estimateJsonTokens(JSON.stringify(tools));
   toolsTokenCache.set(tools, tokens);
   return tokens;
 }
 
-export function deriveContextTokens(context: Context, options?: { fixedTokens?: number }): number {
+export type TokenLedgerRebaseOptions = {
+  /**
+   * fixed 的下界校准（不是替换）：来自上一次真实请求口径的账本快照，可能
+   * 含当前上下文缺失的段（后台会话拿不到 skills/memory 提示词）。压缩后
+   * systemPrompt 已含新摘要，若整段替换会把摘要从估值里丢掉——首次压缩后
+   * 检查点偏低、下一次发送环猛增；旧快照偏大时则检查点偏高、发送时倒退。
+   */
+  fixedTokens?: number;
+  /**
+   * provider 边界才拼进 systemPrompt 的追加段估算（agent 模式的工具执行
+   * 规则 toolsSuffix 实测 ~4k token）。传入账本的上下文都在拼接之前，不补
+   * 会让压缩后的无锚点窗口（检查点值 + 首个回复到达前）系统性少算，首个
+   * 真实 usage 一到环就跳涨。
+   */
+  fixedOverheadTokens?: number;
+};
+
+export function deriveContextTokens(context: Context, options?: TokenLedgerRebaseOptions): number {
   const ledger = new TokenLedger();
   ledger.rebase(context, options);
   return ledger.total();
 }
 
-export function getUsageTotalTokens(usage: Usage | undefined): number | undefined {
-  if (!usage) return undefined;
-
-  const totalTokens = usage.totalTokens;
-  if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
-    return Math.max(0, Math.floor(totalTokens));
-  }
-
-  // usage.reasoning 是 output 的子集（pi-ai types.d.ts），推导时绝不能单独累加。
-  const parts = [usage.input, usage.output, usage.cacheRead, usage.cacheWrite];
-  const derivedTotal = parts.reduce<number>((sum, value) => {
-    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return sum;
-    return sum + value;
-  }, 0);
-  return derivedTotal > 0 ? Math.floor(derivedTotal) : undefined;
-}
-
-// usage 的 prompt 侧（input + cacheRead + cacheWrite）是"这次请求实际发送的
-// 上下文规模"的权威度量。totalTokens 还包含本轮全部 output——推理模型的
-// reasoning 往往占大头，而 OpenAI/Anthropic 在下一个用户轮都会丢弃上轮
-// reasoning、不计入后续 input。拿 totalTokens 当"当前占用"会系统性虚高，
-// 并在下一个真实锚点到来时无压缩回落（用量环 44%→16% 跳水的根因之一）。
-function getUsagePromptSideTokens(usage: Usage | undefined): number | undefined {
-  if (!usage) return undefined;
-  let sum = 0;
-  for (const value of [usage.input, usage.cacheRead, usage.cacheWrite]) {
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) sum += value;
-  }
-  return sum > 0 ? Math.floor(sum) : undefined;
-}
-
-// 锚点语义 = "下一次请求将要发送的上下文"的最优估计：usage prompt 侧（权威）
-// + 本条消息可见内容估算（正文/工具调用/思维摘要——后续请求会重发的部分）。
-// stopReason 为 toolUse 时本轮 reasoning 仍留在同一 turn 的后续请求里
-//（OpenAI/Anthropic 工具环内都要求回传并计费），补计 usage.reasoning 保证
-// 工具环内的压缩保护不因语义收紧而漏触发；turn 终止（stop 等）则随各家语义
-// 丢弃。prompt 侧缺失（中转只报 totalTokens）时回退旧口径的 totalTokens。
-function getMessageUsageAnchorTokens(message: AssistantMessage): number | undefined {
-  const promptSideTokens = getUsagePromptSideTokens(message.usage);
-  if (promptSideTokens === undefined) return getUsageTotalTokens(message.usage);
-  const reasoning = message.usage?.reasoning;
-  const replayedReasoningTokens =
-    message.stopReason === "toolUse" &&
-    typeof reasoning === "number" &&
-    Number.isFinite(reasoning) &&
-    reasoning > 0
-      ? Math.floor(reasoning)
-      : 0;
-  return promptSideTokens + estimateMessageTokens(message) + replayedReasoningTokens;
-}
-
-// 供应商托管搜索（hostedSearch）轮次的 usage 是服务端多次内部调用的聚合值：
-// 搜索结果全文按 input 计费，却不进入后续请求的上下文。实测（issue：用量环
-// 44%→16% 跳水）一个搜索轮报 input 110k，而下一轮实测整个持久上下文只有 52k。
-// 这类消息一律不作锚点（旧版本盖的印章同为聚合值，一并忽略），内容走估算，
-// 下一个普通轮次的真实 usage 会重新锚定。
+// 供应商托管搜索（hostedSearch）轮次的 usage.input / totalTokens 是服务端多次
+// 内部调用的聚合值：搜索结果全文按 input 计费，却不进入后续请求。实测一个
+// 搜索轮报 input 110k，而下一轮持久上下文只有 52k——这两项绝不能当整段锚点。
+// 热缓存时 cacheRead+output 仍是下一请求规模（hostedSearchFollowUpTokens）。
 export function messageHasHostedSearchBlocks(message: AssistantMessage): boolean {
   for (const block of message.content) {
     if (
@@ -146,14 +112,47 @@ export function messageHasHostedSearchBlocks(message: AssistantMessage): boolean
   return false;
 }
 
-export function getMessageObservedTokens(message: Message): number | undefined {
+// 锚点扣减所需的思维链估算（仅确认不重放、且 usage 未上报 reasoning 时生效）。
+function messageThinkingTokenUnits(message: AssistantMessage): number {
+  let units = 0;
+  for (const block of message.content) {
+    if (!block || typeof block !== "object" || block.type !== "thinking") continue;
+    units += estimateThinkingReplayTokenUnits(block);
+  }
+  return units;
+}
+
+// 锚点语义唯一定义在共享层：普通轮走 assistantAnchorTokens（usage 纯算术，
+// 绝不掺正文估算）；托管搜索 / sanitizer 剥离后的副本只走
+// hostedSearchFollowUpTokens（cacheRead+output）。压缩 checkpoint 带的是
+// summarizer 请求规模，一律排除。
+export function getMessageObservedTokens(
+  message: Message,
+  options?: { minPrefixTokens?: number },
+): number | undefined {
   if (message.role !== "assistant") return undefined;
-  // 压缩 checkpoint 消息带的是 summarizer 请求的规模，不代表当前会话上下文。
   // （布尔化避免类型谓词在 else 分支把 AssistantMessage 收窄成 never。）
   const isCheckpoint: boolean = isCompactionAssistantMessage(message);
   if (isCheckpoint) return undefined;
-  if (messageHasHostedSearchBlocks(message)) return undefined;
-  return readMessageContextUsage(message)?.totalTokens ?? getMessageUsageAnchorTokens(message);
+  const minPrefixTokens =
+    typeof options?.minPrefixTokens === "number" &&
+    Number.isFinite(options.minPrefixTokens) &&
+    options.minPrefixTokens > 0
+      ? Math.floor(options.minPrefixTokens)
+      : 0;
+  if (messageHasHostedSearchBlocks(message) || isStrippedHostedSearchUsage(message.usage)) {
+    return hostedSearchFollowUpTokens(message.usage, minPrefixTokens);
+  }
+  return assistantAnchorTokens({
+    usage: message.usage,
+    stopReason: message.stopReason,
+    thinkingTokenUnits: messageThinkingTokenUnits(message),
+    replayReasoning: contentReplaysReasoning(message.content, {
+      api: message.api,
+      stopReason: message.stopReason,
+      reasoningTokens: message.usage?.reasoning,
+    }),
+  });
 }
 
 export type TokenLedgerSnapshot = {
@@ -163,16 +162,15 @@ export type TokenLedgerSnapshot = {
   // 仅在无 usage 锚点时维护（total() 也只在该情形读取）；有锚点时恒为 fixedTokens。
   estimatedTotalTokens: number;
   hasObservedUsage: boolean;
-  hasFixedTokenAnchor: boolean;
   totalTokens: number;
 };
 
 /**
- * 每会话上下文规模账本：observed（最近一次真实 usage，已含 system/tools/全部历史）
- * + trailing（其后消息的估算增量）。有 usage 锚点时读数恒为 observed + trailing——
- * 估算口径有意偏保守（高估），绝不允许覆盖真实读数；仅在完全没有 usage 锚点时
- * 退回 fixed（system+tools 估算）+ 逐消息估算。所有读数 O(1)，重建仅在每次请求
- * 开始时执行一次。
+ * 每会话上下文规模账本：observed（最近一次真实 usage 锚点，已含 system/tools/
+ * 全部历史）+ trailing（其后消息的估算增量）。有 usage 锚点时读数恒为
+ * observed + trailing——估算口径有意偏保守（高估），绝不允许覆盖真实读数；
+ * 仅在完全没有 usage 锚点时退回 fixed（system+tools 估算）+ 逐消息估算。
+ * 所有读数 O(1)，重建仅在每次请求开始时执行一次。
  */
 export class TokenLedger {
   private fixedTokens = 0;
@@ -180,35 +178,44 @@ export class TokenLedger {
   private trailingTokens = 0;
   private estimatedTotalTokens = 0;
   private hasObservedUsage = false;
-  private hasFixedTokenAnchor = false;
 
-  rebase(context: Context, options?: { fixedTokens?: number }): void {
+  rebase(context: Context, options?: TokenLedgerRebaseOptions): void {
+    const fixedOverheadTokens =
+      typeof options?.fixedOverheadTokens === "number" &&
+      Number.isFinite(options.fixedOverheadTokens) &&
+      options.fixedOverheadTokens > 0
+        ? Math.floor(options.fixedOverheadTokens)
+        : 0;
     const estimatedFixedTokens =
-      estimateTextTokens(context.systemPrompt ?? "") + estimateToolsTokens(context.tools);
-    this.fixedTokens =
+      estimateTextTokens(context.systemPrompt ?? "") +
+      estimateToolsTokens(context.tools) +
+      fixedOverheadTokens;
+    const calibrationFixedTokens =
       typeof options?.fixedTokens === "number" &&
       Number.isFinite(options.fixedTokens) &&
       options.fixedTokens >= 0
         ? Math.floor(options.fixedTokens)
-        : estimatedFixedTokens;
+        : undefined;
+    // 校准值只作下界（见 TokenLedgerRebaseOptions.fixedTokens）：取 max 保证
+    // 本上下文真实存在的段（新摘要）绝不被旧快照替换掉。
+    this.fixedTokens =
+      calibrationFixedTokens === undefined
+        ? estimatedFixedTokens
+        : Math.max(estimatedFixedTokens, calibrationFixedTokens);
     this.observedTokens = 0;
     this.trailingTokens = 0;
     this.estimatedTotalTokens = this.fixedTokens;
     this.hasObservedUsage = false;
-    this.hasFixedTokenAnchor = false;
 
     const messages = context.messages;
     let anchorIndex = -1;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      const observed = getMessageObservedTokens(message);
+      const observed = getMessageObservedTokens(messages[index], {
+        minPrefixTokens: this.fixedTokens,
+      });
       if (typeof observed === "number") {
-        const anchored = readMessageContextUsage(message);
-        this.observedTokens = anchored
-          ? Math.max(0, observed + this.fixedTokens - anchored.fixedTokens)
-          : observed;
+        this.observedTokens = observed;
         this.hasObservedUsage = true;
-        this.hasFixedTokenAnchor = anchored !== undefined;
         anchorIndex = index;
         break;
       }
@@ -226,9 +233,10 @@ export class TokenLedger {
   }
 
   /**
-   * suppressUsageAnchors：调用方明确知道这批消息的 usage 不可信（如托管搜索
-   * 轮次的聚合值，且消息对象可能尚未带上 hostedSearch 块——搜索收尾是异步
-   * 替换，内容检测在提交时刻不可靠）时强制走估算路径，不锚定也不盖章。
+   * suppressUsageAnchors：调用方明确知道这批消息的 input/totalTokens 不可信
+   *（托管搜索聚合值，且消息对象可能尚未带上 hostedSearch 块——搜索收尾是
+   * 异步替换，内容检测在提交时刻不可靠）。整段锚点仍禁止；热缓存时仍可用
+   * cacheRead+output 作为下一请求规模。
    */
   addMessages(messages: readonly Message[], options?: { suppressUsageAnchors?: boolean }): void {
     for (const message of messages) {
@@ -236,25 +244,15 @@ export class TokenLedger {
         this.estimatedTotalTokens += estimateMessageTokens(message);
       }
       const observed = options?.suppressUsageAnchors
-        ? undefined
-        : getMessageObservedTokens(message);
+        ? hostedSearchFollowUpTokens(
+            message.role === "assistant" ? message.usage : undefined,
+            this.fixedTokens,
+          )
+        : getMessageObservedTokens(message, { minPrefixTokens: this.fixedTokens });
       if (typeof observed === "number") {
-        if (
-          message.role === "assistant" &&
-          !isCompactionAssistantMessage(message) &&
-          readMessageContextUsage(message) === undefined
-        ) {
-          // 印章只盖 usage 派生的权威值（见文件头部不变量）；无 usage 的
-          // assistant 消息不盖章，走下方 trailing 估算路径。
-          writeAssistantContextUsage(message, {
-            totalTokens: observed,
-            fixedTokens: this.fixedTokens,
-          });
-        }
         // 新 usage 已覆盖它之前的全部上下文，trailing 归零重新累计。
         this.observedTokens = observed;
         this.hasObservedUsage = true;
-        this.hasFixedTokenAnchor = readMessageContextUsage(message) !== undefined;
         this.trailingTokens = 0;
         continue;
       }
@@ -286,7 +284,6 @@ export class TokenLedger {
       trailingTokens: this.trailingTokens,
       estimatedTotalTokens: this.estimatedTotalTokens,
       hasObservedUsage: this.hasObservedUsage,
-      hasFixedTokenAnchor: this.hasFixedTokenAnchor,
       totalTokens: this.total(),
     };
   }

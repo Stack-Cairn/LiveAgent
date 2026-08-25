@@ -254,13 +254,39 @@ export function buildRowsFromEntries(
 
     if (entry.kind === "thinking") {
       const sanitizedThinking = stripRecoveredToolCallMarkup(entry.text);
-      if (sanitizedThinking === "") {
+      const replayTokenUnits =
+        typeof entry.replayTokenUnits === "number" &&
+        Number.isFinite(entry.replayTokenUnits) &&
+        entry.replayTokenUnits > 0
+          ? Math.ceil(entry.replayTokenUnits)
+          : 0;
+      if (sanitizedThinking === "" && replayTokenUnits <= 0) {
         continue;
       }
-      updateTranscriptRound(assistantGroup, roundNumber, (round) => ({
-        ...(appendThinkingDeltaToRound(round, sanitizedThinking) as GatewayTranscriptRound),
-        thinkingOpen: true,
-      }));
+      updateTranscriptRound(assistantGroup, roundNumber, (round) => {
+        const next = sanitizedThinking
+          ? (appendThinkingDeltaToRound(round, sanitizedThinking) as GatewayTranscriptRound)
+          : round;
+        if (replayTokenUnits <= 0) {
+          return { ...next, thinkingOpen: true };
+        }
+        const blocks = next.blocks.slice();
+        const last = blocks[blocks.length - 1];
+        if (last?.kind === "thinking") {
+          blocks[blocks.length - 1] = {
+            ...last,
+            replayTokenUnits: (last.replayTokenUnits ?? 0) + replayTokenUnits,
+          };
+        } else {
+          blocks.push({
+            kind: "thinking",
+            id: `th-replay-${round.round}`,
+            text: "",
+            replayTokenUnits,
+          });
+        }
+        return { ...next, blocks, thinkingOpen: true };
+      });
       continue;
     }
 
