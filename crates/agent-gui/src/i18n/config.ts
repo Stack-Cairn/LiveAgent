@@ -109,16 +109,15 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.navShortcuts": "快捷键",
     "settings.navBackup": "备份与同步",
     "settings.backupLocalTitle": "本地备份",
-    "settings.backupLocalDesc":
-      "把服务商、MCP、系统设置和技能启用状态导出为单个 JSON 文件；导入会整域覆盖对应配置。",
     "settings.backupExport": "导出配置",
+    "settings.backupExportHint": "保存为单个 JSON 文件",
     "settings.backupImport": "导入配置",
+    "settings.backupImportHint": "从备份文件整域恢复",
     "settings.backupExportDone": "已导出到：",
     "settings.backupExportFailed": "导出失败",
     "settings.backupImportDone": "导入完成：",
     "settings.backupImportFailed": "导入失败",
-    "settings.backupAutoBackupHint":
-      "导入前会自动把当前配置备份到 ~/.liveagent/backups/，保留最近 10 份。",
+    "settings.backupAutoBackupHint": "导入前自动备份当前配置，保留最近 10 份。",
     "settings.backupImportConfirmTitle": "确认导入配置",
     "settings.backupImportConfirmSubtitle": "备份文件中包含的配置域会被整域覆盖，此操作不可撤销。",
     "settings.backupImportConfirmAction": "覆盖导入",
@@ -131,11 +130,21 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupDomainSystem": "系统设置",
     "settings.backupDomainSkills": "技能",
     "settings.backupScopeTitle": "备份范围",
-    "settings.backupScopeDesc":
-      "仅覆盖服务商、MCP、系统设置和技能启用状态。对话历史、记忆库、上传文件和 SSH 私钥不在备份范围内。",
+    "settings.backupScopeIncluded": "包含",
+    "settings.backupScopeExcluded": "不包含",
+    "settings.backupScopeChat": "对话历史",
+    "settings.backupScopeMemory": "记忆库",
+    "settings.backupScopeUploads": "上传文件",
+    "settings.backupScopeSshKeys": "SSH 私钥",
     "settings.backupSyncTitle": "WebDAV 同步",
-    "settings.backupSyncDesc":
-      "把同一份配置同步到你自己的 WebDAV 网盘，在多台设备之间共用。WebDAV 账号密码只保存在本机，不会随配置同步出去。",
+    "settings.backupSyncCredentialNote": "账号密码仅保存在本机",
+    "settings.backupSyncLoading": "正在读取同步配置…",
+    "settings.backupSyncStatusReady": "云同步已就绪",
+    "settings.backupSyncStatusNeverSynced": "尚未同步，点击「上传」推送本机配置",
+    "settings.backupSyncStatusNotConfigured": "未配置云同步",
+    "settings.backupSyncStatusNotConfiguredHint": "填写 WebDAV 信息，在多台设备间同步配置",
+    "settings.backupSyncAutoOn": "自动同步已开启",
+    "settings.backupSyncAutoOff": "手动同步",
     "settings.backupSyncPreset": "服务商预设",
     "settings.backupSyncPreset_jianguoyun": "坚果云",
     "settings.backupSyncPreset_nextcloud": "Nextcloud",
@@ -150,8 +159,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncProfileHint":
       "同一账号下可用不同配置档名隔离多套配置，留空则使用 liveagent / default。",
     "settings.backupSyncAuto": "自动同步",
-    "settings.backupSyncAutoHint":
-      "配置变更后自动上传到远端。自动同步只上传，不会自动覆盖本机配置。",
+    "settings.backupSyncAutoHint": "配置变更后自动上传，不会覆盖本机",
     "settings.backupSyncAutoDone": "已自动同步到远端",
     "settings.backupSyncAutoConfirmTitle": "开启自动同步？",
     "settings.backupSyncAutoConfirmSubtitle": "此后每次配置变更都会自动上传到远端，不再逐次询问。",
@@ -359,16 +367,16 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.navShortcuts": "Shortcuts",
     "settings.navBackup": "Backup & Sync",
     "settings.backupLocalTitle": "Local backup",
-    "settings.backupLocalDesc":
-      "Export providers, MCP, system settings and skill activation to a single JSON file. Importing replaces each included domain wholesale.",
     "settings.backupExport": "Export config",
+    "settings.backupExportHint": "Save as a single JSON file",
     "settings.backupImport": "Import config",
+    "settings.backupImportHint": "Restore from a backup file",
     "settings.backupExportDone": "Exported to: ",
     "settings.backupExportFailed": "Export failed",
     "settings.backupImportDone": "Import complete: ",
     "settings.backupImportFailed": "Import failed",
     "settings.backupAutoBackupHint":
-      "Before importing, the current config is backed up to ~/.liveagent/backups/ (last 10 kept).",
+      "The current config is auto-backed up before import (last 10 kept).",
     "settings.backupImportConfirmTitle": "Confirm config import",
     "settings.backupImportConfirmSubtitle":
       "Every domain present in the backup file will be replaced wholesale. This cannot be undone.",
@@ -382,11 +390,23 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupDomainSystem": "System",
     "settings.backupDomainSkills": "Skills",
     "settings.backupScopeTitle": "Backup scope",
-    "settings.backupScopeDesc":
-      "Only providers, MCP, system settings and skill activation are covered. Chat history, memory, uploads and SSH private keys are not included.",
+    "settings.backupScopeIncluded": "Included",
+    "settings.backupScopeExcluded": "Not included",
+    "settings.backupScopeChat": "Chat history",
+    "settings.backupScopeMemory": "Memory",
+    "settings.backupScopeUploads": "Uploads",
+    "settings.backupScopeSshKeys": "SSH keys",
     "settings.backupSyncTitle": "WebDAV Sync",
-    "settings.backupSyncDesc":
-      "Sync one configuration across devices through your own WebDAV storage. The WebDAV account and password stay on this machine and are never included in synced snapshots.",
+    "settings.backupSyncCredentialNote": "Credentials never leave this device",
+    "settings.backupSyncLoading": "Loading sync settings…",
+    "settings.backupSyncStatusReady": "Cloud sync ready",
+    "settings.backupSyncStatusNeverSynced":
+      "Not synced yet — use Upload to push this machine's config",
+    "settings.backupSyncStatusNotConfigured": "Cloud sync not set up",
+    "settings.backupSyncStatusNotConfiguredHint":
+      "Fill in the WebDAV details to sync your config across devices",
+    "settings.backupSyncAutoOn": "Auto sync on",
+    "settings.backupSyncAutoOff": "Manual sync",
     "settings.backupSyncPreset": "Provider Preset",
     "settings.backupSyncPreset_jianguoyun": "Jianguoyun",
     "settings.backupSyncPreset_nextcloud": "Nextcloud",
@@ -401,8 +421,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncProfileHint":
       "Use different profiles to keep separate configuration sets under one account. Defaults to liveagent / default when left blank.",
     "settings.backupSyncAuto": "Auto Sync",
-    "settings.backupSyncAutoHint":
-      "Upload automatically after configuration changes. Auto sync only uploads and never overwrites this machine.",
+    "settings.backupSyncAutoHint": "Upload after changes; never overwrites this machine",
     "settings.backupSyncAutoDone": "Auto-synced to remote",
     "settings.backupSyncAutoConfirmTitle": "Enable auto sync?",
     "settings.backupSyncAutoConfirmSubtitle":
