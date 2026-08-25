@@ -2496,6 +2496,39 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
   assert.equal(remoteWithOversizedPort.gatewayPort, 65_535);
 });
 
+test("mcp auth config keeps oauth with trimmed fields and drops none/invalid shapes", () => {
+  const oauth = settings.normalizeMcpServerConfig({
+    id: "srv",
+    enabled: true,
+    transport: "http",
+    url: "https://mcp.example.com/mcp",
+    auth: { type: "oauth", scope: " mcp.read mcp.write ", clientId: " cid " },
+  });
+  assert.deepEqual(oauth.auth, { type: "oauth", scope: "mcp.read mcp.write", clientId: "cid" });
+
+  const oauthBare = settings.normalizeMcpServerConfig({
+    id: "srv",
+    enabled: true,
+    transport: "http",
+    url: "https://mcp.example.com/mcp",
+    auth: { type: "oauth", scope: "  ", clientId: "" },
+  });
+  assert.deepEqual(oauthBare.auth, { type: "oauth" });
+
+  // "none"/未知/非对象 一律不落壳对象——旧配置形态零变化。
+  for (const auth of [{ type: "none" }, { type: "basic" }, "oauth", 42, null, undefined]) {
+    const normalized = settings.normalizeMcpServerConfig({
+      id: "srv",
+      enabled: true,
+      transport: "http",
+      url: "https://mcp.example.com/mcp",
+      auth,
+    });
+    assert.equal(normalized.auth, undefined);
+    assert.ok(!("auth" in normalized));
+  }
+});
+
 test("font scale settings normalize invalid values to 1 and clamp out-of-range values", () => {
   const defaults = settings.normalizeFontScaleSettings(undefined);
   assert.deepEqual(defaults, { sidebar: 1, chat: 1, rightDock: 1 });

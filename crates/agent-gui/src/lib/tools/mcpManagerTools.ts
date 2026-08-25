@@ -880,9 +880,20 @@ export function createMcpManagerTools(params: {
 
     if (action === "delete") {
       const serverId = requireServerId(args.server_id);
+      const deleted = requireExistingServer(currentSettings(), serverId);
       commitDelete(serverId);
       const runtimeWarnings: string[] = [];
       const stopped = await stopRuntimeAfterCommit([serverId], runtimeWarnings, signal);
+      // OAuth server：卸载即清 keychain 条目（roadmap 验收项）；best effort。
+      if (deleted.auth?.type === "oauth") {
+        try {
+          await invoke("mcp_oauth_clear", { server_id: serverId });
+        } catch (err) {
+          runtimeWarnings.push(
+            `failed to clear OAuth credentials for ${serverId}: ${asErrorMessage(err)}`,
+          );
+        }
+      }
       return { action, serverId, changed: true, stopped, runtimeWarnings };
     }
 

@@ -72,6 +72,7 @@ import type {
   EffectivePromptSettings,
   EffectiveWorkspaceResources,
   ExecutionMode,
+  McpAuthConfig,
   McpServerConfig,
   McpSettings,
   McpTransport,
@@ -1364,6 +1365,19 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
   };
 }
 
+function normalizeMcpAuthConfig(input: unknown): McpAuthConfig | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const obj = input as Record<string, unknown>;
+  if (obj.type !== "oauth") return undefined; // "none"/未知值 = 现状，不存壳对象
+  const scope = typeof obj.scope === "string" ? obj.scope.trim() : "";
+  const clientId = typeof obj.clientId === "string" ? obj.clientId.trim() : "";
+  return {
+    type: "oauth",
+    ...(scope ? { scope } : {}),
+    ...(clientId ? { clientId } : {}),
+  };
+}
+
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id.trim() : "";
@@ -1371,6 +1385,7 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const docsUrl = typeof obj.docsUrl === "string" ? obj.docsUrl.trim() : "";
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
   const messageUrl = typeof obj.messageUrl === "string" ? obj.messageUrl.trim() : "";
+  const auth = normalizeMcpAuthConfig(obj.auth);
 
   return {
     id,
@@ -1386,6 +1401,7 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
     headers: normalizeRecordStringString(obj.headers),
     timeoutMs: normalizeTimeoutMs(obj.timeoutMs),
     messageUrl: messageUrl || undefined,
+    ...(auth ? { auth } : {}),
   };
 }
 

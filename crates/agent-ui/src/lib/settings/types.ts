@@ -12,6 +12,21 @@ export type ReasoningLevel = "off" | ThinkingLevel;
 
 export type McpTransport = "stdio" | "http" | "sse";
 
+/**
+ * MCP OAuth 鉴权配置（docs/design/mcp-oauth.md）。缺省 = "none"（现状，静态
+ * headers 继续生效）。token 永不落 settings——只存 keychain（Rust 侧），
+ * 因此该结构可安全进 Gateway 同步与 WebDAV 备份。
+ */
+export type McpAuthType = "none" | "oauth";
+
+export type McpAuthConfig = {
+  type: McpAuthType;
+  /** 覆盖 PRM scopes_supported 的空格分隔 scope 列表。 */
+  scope?: string;
+  /** 静态 client_id（企业 AS）；缺省走 RFC 7591 动态注册。 */
+  clientId?: string;
+};
+
 export type McpServerConfig = {
   id: string;
   description?: string;
@@ -26,6 +41,7 @@ export type McpServerConfig = {
   headers?: Record<string, string>;
   timeoutMs: number;
   messageUrl?: string;
+  auth?: McpAuthConfig;
 };
 
 export type McpSettings = {

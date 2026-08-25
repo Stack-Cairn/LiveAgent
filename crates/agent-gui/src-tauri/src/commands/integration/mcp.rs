@@ -1,5 +1,5 @@
 use reqwest::blocking::Client as HttpClient;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CONTENT_TYPE};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::StatusCode;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -22,13 +22,27 @@ const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 const LEGACY_SSE_ENDPOINT_WAIT_MS: u64 = 3_000;
 const STDERR_TAIL_MAX_LINES: usize = 200;
 
-async fn run_blocking<R: Send + 'static>(
+pub(crate) async fn run_blocking<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
     tauri::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| format!("{label} join failed: {e}"))?
+}
+
+/// OAuth 鉴权配置（docs/design/mcp-oauth.md）。缺省/`type:"none"` = 现状
+/// （静态 `headers` 继续生效）；`type:"oauth"` 且 transport 为 http/sse 时
+/// 启用 Bearer 注入与 401 刷新链。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAuthConfig {
+    #[serde(rename = "type")]
+    pub auth_type: String,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -45,6 +59,8 @@ pub struct McpServerConfig {
     pub headers: Option<BTreeMap<String, String>>,
     pub timeout_ms: Option<u64>,
     pub message_url: Option<String>,
+    #[serde(default)]
+    pub auth: Option<McpAuthConfig>,
 }
 
 impl McpServerConfig {
@@ -57,7 +73,7 @@ impl McpServerConfig {
         Duration::from_millis(ms)
     }
 
-    fn url_trimmed(&self) -> Option<&str> {
+    pub(crate) fn url_trimmed(&self) -> Option<&str> {
         self.url
             .as_deref()
             .map(|s| s.trim())
@@ -69,6 +85,31 @@ impl McpServerConfig {
             .as_deref()
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
+    }
+
+    pub(crate) fn oauth_enabled(&self) -> bool {
+        matches!(self.transport().trim(), "http" | "sse")
+            && self
+                .auth
+                .as_ref()
+                .is_some_and(|auth| auth.auth_type.trim() == "oauth")
+    }
+
+    pub(crate) fn oauth_server(&self) -> Option<crate::services::mcp_oauth::OauthServer> {
+        let url = self.url_trimmed()?;
+        let auth = self.auth.as_ref();
+        Some(crate::services::mcp_oauth::OauthServer {
+            id: self.id.trim().to_string(),
+            url: url.to_string(),
+            scope_override: auth
+                .and_then(|a| a.scope.clone())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            static_client_id: auth
+                .and_then(|a| a.client_id.clone())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        })
     }
 }
 
@@ -226,6 +267,17 @@ pub struct McpRuntimeTestResponse {
     pub tools: Vec<McpDiagnosticToolInfo>,
     pub error: Option<String>,
     pub stderr_tail: Option<String>,
+    /// oauth 启用时的授权诊断（状态/过期/存储后端），永不含 token 本体。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<crate::services::mcp_oauth::OauthStatusInfo>,
+}
+
+fn oauth_diag(cfg: &McpServerConfig) -> Option<crate::services::mcp_oauth::OauthStatusInfo> {
+    if !cfg.oauth_enabled() {
+        return None;
+    }
+    cfg.oauth_server()
+        .map(|server| crate::services::mcp_oauth::status(&server))
 }
 
 #[derive(Debug, Deserialize)]
@@ -238,6 +290,8 @@ struct JsonRpcError {
 enum McpTransportError {
     Message(String),
     SessionExpired404,
+    /// oauth 启用时的 401：上层做一次被动刷新重试，不可行则转标记性错误。
+    Unauthorized,
 }
 
 impl McpTransportError {
@@ -602,14 +656,18 @@ impl HttpTransport {
     fn apply_common_headers(
         &self,
         mut builder: reqwest::blocking::RequestBuilder,
+        bearer: Option<&str>,
     ) -> reqwest::blocking::RequestBuilder {
         if !self.headers.is_empty() {
             builder = builder.headers(self.headers.clone());
         }
+        if let Some(bearer) = bearer {
+            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+        }
         builder.header(ACCEPT, "application/json, text/event-stream")
     }
 
-    fn notify(&mut self, method: &str, params: Value) -> Result<(), String> {
+    fn notify(&mut self, bearer: Option<&str>, method: &str, params: Value) -> Result<(), String> {
         let req = json!({
             "jsonrpc": "2.0",
             "method": method,
@@ -617,7 +675,7 @@ impl HttpTransport {
         });
 
         let mut builder = self.client.post(self.endpoint.clone());
-        builder = self.apply_common_headers(builder);
+        builder = self.apply_common_headers(builder, bearer);
 
         if let Some(v) = &self.protocol_version {
             builder = builder.header("MCP-Protocol-Version", v);
@@ -644,6 +702,8 @@ impl HttpTransport {
 
     fn request(
         &mut self,
+        oauth: bool,
+        bearer: Option<&str>,
         id: u64,
         method: &str,
         params: Value,
@@ -656,7 +716,7 @@ impl HttpTransport {
         });
 
         let mut builder = self.client.post(self.endpoint.clone());
-        builder = self.apply_common_headers(builder);
+        builder = self.apply_common_headers(builder, bearer);
 
         // Negotiated protocol version.
         if let Some(v) = &self.protocol_version {
@@ -685,6 +745,11 @@ impl HttpTransport {
             .map_err(|e| {
                 McpTransportError::msg(format!("MCP HTTP request failed: method={method} err={e}"))
             })?;
+
+        // oauth 启用时 401 走专属通道：被动刷新一次后重试（上层处理）。
+        if oauth && resp.status() == StatusCode::UNAUTHORIZED {
+            return Err(McpTransportError::Unauthorized);
+        }
 
         if resp.status() == StatusCode::NOT_FOUND
             && self.session_id.is_some()
@@ -806,6 +871,11 @@ impl SseTransport {
         let thread_headers = headers.clone();
         let thread_stop = stop.clone();
         let thread_client = client_get.clone();
+        // oauth：GET 长连在每次（重）连时取当下 Bearer——token 刷新后重连即生效，
+        // 不把 spawn 时刻的 token 固化进线程。
+        let thread_oauth = config.oauth_enabled();
+        let thread_server_id = config.id.trim().to_string();
+        let thread_server_url = url.to_string();
 
         let handle = std::thread::spawn(move || loop {
             if thread_stop.load(Ordering::Relaxed) {
@@ -815,6 +885,14 @@ impl SseTransport {
             let mut builder = thread_client.get(thread_sse_url.clone());
             if !thread_headers.is_empty() {
                 builder = builder.headers(thread_headers.clone());
+            }
+            if thread_oauth {
+                if let Some(bearer) = crate::services::mcp_oauth::ensure_bearer(
+                    &thread_server_id,
+                    &thread_server_url,
+                ) {
+                    builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+                }
             }
             builder = builder.header(ACCEPT, "text/event-stream");
 
@@ -948,7 +1026,13 @@ impl SseTransport {
         )
     }
 
-    fn notify(&mut self, timeout: Duration, method: &str, params: Value) -> Result<(), String> {
+    fn notify(
+        &mut self,
+        timeout: Duration,
+        bearer: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<(), String> {
         let post_url = self.wait_or_guess_post_url(timeout)?;
 
         let req = json!({
@@ -960,6 +1044,9 @@ impl SseTransport {
         let mut builder = self.client_post.post(post_url);
         if !self.headers.is_empty() {
             builder = builder.headers(self.headers.clone());
+        }
+        if let Some(bearer) = bearer {
+            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
         }
         let resp = builder
             .header(CONTENT_TYPE, "application/json")
@@ -980,11 +1067,15 @@ impl SseTransport {
     fn request(
         &mut self,
         timeout: Duration,
+        oauth: bool,
+        bearer: Option<&str>,
         id: u64,
         method: &str,
         params: Value,
-    ) -> Result<Value, String> {
-        let post_url = self.wait_or_guess_post_url(timeout)?;
+    ) -> Result<Value, McpTransportError> {
+        let post_url = self
+            .wait_or_guess_post_url(timeout)
+            .map_err(McpTransportError::msg)?;
 
         let req = json!({
             "jsonrpc": "2.0",
@@ -997,17 +1088,26 @@ impl SseTransport {
         if !self.headers.is_empty() {
             builder = builder.headers(self.headers.clone());
         }
+        if let Some(bearer) = bearer {
+            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+        }
         let resp = builder
             .header(CONTENT_TYPE, "application/json")
             .body(req.to_string())
             .send()
-            .map_err(|e| format!("MCP SSE request failed: method={method} err={e}"))?;
+            .map_err(|e| {
+                McpTransportError::msg(format!("MCP SSE request failed: method={method} err={e}"))
+            })?;
+
+        if oauth && resp.status() == StatusCode::UNAUTHORIZED {
+            return Err(McpTransportError::Unauthorized);
+        }
 
         if !resp.status().is_success() {
-            return Err(format!(
+            return Err(McpTransportError::msg(format!(
                 "MCP SSE request failed: method={method} status={}",
                 resp.status()
-            ));
+            )));
         }
 
         let deadline = Instant::now()
@@ -1016,17 +1116,19 @@ impl SseTransport {
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                return Err(format!(
+                return Err(McpTransportError::msg(format!(
                     "MCP SSE request timed out: method={method} id={id}"
-                ));
+                )));
             }
 
             let msg = self.rx.recv_timeout(remaining).map_err(|e| {
-                format!("Failed to wait for the SSE response or the wait timed out: {e}")
+                McpTransportError::msg(format!(
+                    "Failed to wait for the SSE response or the wait timed out: {e}"
+                ))
             })?;
 
             if msg.get("id") == Some(&json!(id)) {
-                return parse_jsonrpc_result(method, id, &msg);
+                return parse_jsonrpc_result(method, id, &msg).map_err(McpTransportError::msg);
             }
         }
     }
@@ -1073,6 +1175,16 @@ impl McpTransport {
         }
     }
 
+    /// oauth 启用时取当前 Bearer（进程内缓存 + 将过期主动刷新）；未授权返回
+    /// None，请求裸发，401 由上层转成「需授权」标记错误。
+    fn bearer_for(cfg: &McpServerConfig) -> Option<String> {
+        if !cfg.oauth_enabled() {
+            return None;
+        }
+        let url = cfg.url_trimmed()?;
+        crate::services::mcp_oauth::ensure_bearer(cfg.id.trim(), url)
+    }
+
     fn notify(
         &mut self,
         cfg: &McpServerConfig,
@@ -1080,11 +1192,14 @@ impl McpTransport {
         params: Value,
     ) -> Result<(), McpTransportError> {
         let timeout = cfg.timeout();
+        let bearer = Self::bearer_for(cfg);
         match self {
             McpTransport::Stdio(t) => t.notify(method, params).map_err(McpTransportError::msg),
-            McpTransport::Http(t) => t.notify(method, params).map_err(McpTransportError::msg),
+            McpTransport::Http(t) => t
+                .notify(bearer.as_deref(), method, params)
+                .map_err(McpTransportError::msg),
             McpTransport::Sse(t) => t
-                .notify(timeout, method, params)
+                .notify(timeout, bearer.as_deref(), method, params)
                 .map_err(McpTransportError::msg),
         }
     }
@@ -1097,14 +1212,16 @@ impl McpTransport {
         params: Value,
     ) -> Result<Value, McpTransportError> {
         let timeout = cfg.timeout();
+        let oauth = cfg.oauth_enabled();
+        let bearer = Self::bearer_for(cfg);
         match self {
             McpTransport::Stdio(t) => t
                 .request(timeout, id, method, params)
                 .map_err(McpTransportError::msg),
-            McpTransport::Http(t) => t.request(id, method, params),
-            McpTransport::Sse(t) => t
-                .request(timeout, id, method, params)
-                .map_err(McpTransportError::msg),
+            McpTransport::Http(t) => t.request(oauth, bearer.as_deref(), id, method, params),
+            McpTransport::Sse(t) => {
+                t.request(timeout, oauth, bearer.as_deref(), id, method, params)
+            }
         }
     }
 }
@@ -1119,6 +1236,15 @@ struct McpClient {
     transport: McpTransport,
     next_id: u64,
     initialized: bool,
+}
+
+/// 组成带稳定标记的「需授权」错误：前端/诊断按标记引导用户去 MCP Hub Connect。
+fn oauth_required_error(cfg: &McpServerConfig, reason: &str) -> String {
+    format!(
+        "MCP server `{}` 需要 OAuth 授权（{}）。请在 MCP Hub 中对该 server 执行 Connect 完成授权。原因：{reason}",
+        cfg.id.trim(),
+        crate::services::mcp_oauth::AUTH_REQUIRED_MARKER
+    )
 }
 
 impl McpClient {
@@ -1147,6 +1273,18 @@ impl McpClient {
         id
     }
 
+    /// 401 被动刷新（每次调用点只允许一次）。成功后 transport 下个请求会经
+    /// `bearer_for` 拿到新 token；失败返回「需授权」标记错误。
+    fn recover_unauthorized(&mut self) -> Result<(), String> {
+        let url = self
+            .config
+            .url_trimmed()
+            .ok_or_else(|| oauth_required_error(&self.config, "server 未配置 URL"))?;
+        crate::services::mcp_oauth::refresh_after_unauthorized(self.config.id.trim(), url)
+            .map(|_| ())
+            .map_err(|reason| oauth_required_error(&self.config, &reason))
+    }
+
     fn ensure_initialized(&mut self) -> Result<(), String> {
         if self.initialized {
             return Ok(());
@@ -1160,6 +1298,9 @@ impl McpClient {
             "2024-10-07",
         ];
         let mut last_err: Option<String> = None;
+        // 整个 initialize 尝试序列共享一次被动刷新额度：401 与协议版本无关，
+        // 刷新后重试当前版本；再 401 或刷新失败直接判「需授权」，不再空转其余版本。
+        let mut auth_retry_used = false;
 
         for v in candidates {
             let init_params = json!({
@@ -1168,25 +1309,39 @@ impl McpClient {
                 "capabilities": {}
             });
 
-            let id = self.next_rpc_id();
-            match self
-                .transport
-                .request(&self.config, id, "initialize", init_params)
-            {
-                Ok(_) => {
-                    // Some servers require this notification before accepting further requests.
-                    let _ =
-                        self.transport
-                            .notify(&self.config, "notifications/initialized", json!({}));
-                    self.initialized = true;
-                    return Ok(());
-                }
-                Err(e) => match e {
-                    McpTransportError::Message(msg) => last_err = Some(msg),
-                    McpTransportError::SessionExpired404 => {
-                        last_err = Some("Session expired during initialize (404)".to_string());
+            loop {
+                let id = self.next_rpc_id();
+                match self
+                    .transport
+                    .request(&self.config, id, "initialize", init_params.clone())
+                {
+                    Ok(_) => {
+                        // Some servers require this notification before accepting further requests.
+                        let _ = self.transport.notify(
+                            &self.config,
+                            "notifications/initialized",
+                            json!({}),
+                        );
+                        self.initialized = true;
+                        return Ok(());
                     }
-                },
+                    Err(McpTransportError::Unauthorized) => {
+                        if auth_retry_used {
+                            return Err(oauth_required_error(&self.config, "刷新后仍返回 401"));
+                        }
+                        auth_retry_used = true;
+                        self.recover_unauthorized()?;
+                        continue;
+                    }
+                    Err(McpTransportError::Message(msg)) => {
+                        last_err = Some(msg);
+                        break;
+                    }
+                    Err(McpTransportError::SessionExpired404) => {
+                        last_err = Some("Session expired during initialize (404)".to_string());
+                        break;
+                    }
+                }
             }
         }
 
@@ -1213,8 +1368,31 @@ impl McpClient {
                 {
                     Ok(v) => Ok(v),
                     Err(McpTransportError::Message(msg)) => Err(msg),
+                    Err(McpTransportError::Unauthorized) => {
+                        Err(oauth_required_error(&self.config, "会话重建后返回 401"))
+                    }
                     Err(McpTransportError::SessionExpired404) => Err(
                         "MCP session still returned 404 after retry (the server may be unhealthy)"
+                            .to_string(),
+                    ),
+                }
+            }
+            Err(McpTransportError::Unauthorized) => {
+                // token 过期/被撤销：被动刷新一次后重试原请求。
+                self.recover_unauthorized()?;
+
+                let retry_id = self.next_rpc_id();
+                match self
+                    .transport
+                    .request(&self.config, retry_id, method, params)
+                {
+                    Ok(v) => Ok(v),
+                    Err(McpTransportError::Message(msg)) => Err(msg),
+                    Err(McpTransportError::Unauthorized) => {
+                        Err(oauth_required_error(&self.config, "刷新后仍返回 401"))
+                    }
+                    Err(McpTransportError::SessionExpired404) => Err(
+                        "MCP session returned 404 right after refresh (the server may be unhealthy)"
                             .to_string(),
                     ),
                 }
@@ -1405,6 +1583,7 @@ fn run_client_test(
     client: &mut McpClient,
     include_schema: bool,
 ) -> McpRuntimeTestResponse {
+    let oauth = oauth_diag(&client.config);
     let mut phase = "tools_list".to_string();
     let tools = match client.tools_list() {
         Ok(tools) => tools,
@@ -1415,6 +1594,8 @@ fn run_client_test(
             if !initialized {
                 phase = "initialize".to_string();
             }
+            // 401 →「需授权」标记错误发生后再取一次状态，让 expired 等新鲜可见。
+            let oauth = oauth_diag(&client.config);
             return McpRuntimeTestResponse {
                 server_id: id,
                 ok: false,
@@ -1427,6 +1608,7 @@ fn run_client_test(
                 tools: Vec::new(),
                 error: Some(error),
                 stderr_tail,
+                oauth,
             };
         }
     };
@@ -1446,6 +1628,7 @@ fn run_client_test(
         tools: to_diagnostic_tools(tools, include_schema),
         error: None,
         stderr_tail,
+        oauth,
     }
 }
 
@@ -1578,6 +1761,7 @@ impl McpRuntimeManager {
                     tools: Vec::new(),
                     error: Some(error),
                     stderr_tail: None,
+                    oauth: oauth_diag(&cfg),
                 });
             }
             let mut client = match McpClient::spawn(cfg) {
@@ -1596,6 +1780,7 @@ impl McpRuntimeManager {
                         tools: Vec::new(),
                         error: Some(error),
                         stderr_tail: None,
+                        oauth: None,
                     });
                 }
             };
@@ -1624,6 +1809,7 @@ impl McpRuntimeManager {
                     tools: Vec::new(),
                     error: Some(error),
                     stderr_tail: None,
+                    oauth: None,
                 });
             }
         };
@@ -1834,6 +2020,7 @@ mod tests {
             headers: None,
             timeout_ms: Some(1_000),
             message_url: None,
+            auth: None,
         }
     }
 
@@ -1850,7 +2037,70 @@ mod tests {
             headers: None,
             timeout_ms: Some(1_000),
             message_url: None,
+            auth: None,
         }
+    }
+
+    #[test]
+    fn oauth_enabled_requires_remote_transport_and_oauth_type() {
+        let mut cfg = url_config("srv", "http", Some("https://mcp.example.com/mcp"));
+        assert!(!cfg.oauth_enabled(), "无 auth 配置 = 现状");
+
+        cfg.auth = Some(McpAuthConfig {
+            auth_type: "none".to_string(),
+            scope: None,
+            client_id: None,
+        });
+        assert!(!cfg.oauth_enabled(), "type=none = 现状");
+
+        cfg.auth = Some(McpAuthConfig {
+            auth_type: "oauth".to_string(),
+            scope: Some(" mcp.read ".to_string()),
+            client_id: Some("".to_string()),
+        });
+        assert!(cfg.oauth_enabled());
+        let server = cfg.oauth_server().expect("oauth server");
+        assert_eq!(server.id, "srv");
+        assert_eq!(server.scope_override.as_deref(), Some("mcp.read"));
+        assert_eq!(server.static_client_id, None, "空串 client_id 视作未配置");
+
+        // stdio 上配 oauth 无意义，必须不生效。
+        let mut stdio = stdio_config("local", "server-bin");
+        stdio.auth = Some(McpAuthConfig {
+            auth_type: "oauth".to_string(),
+            scope: None,
+            client_id: None,
+        });
+        assert!(!stdio.oauth_enabled());
+    }
+
+    #[test]
+    fn server_config_deserializes_with_and_without_auth() {
+        let legacy: McpServerConfig = serde_json::from_value(json!({
+            "id": "srv",
+            "enabled": true,
+            "transport": "http",
+            "command": "",
+            "args": [],
+            "url": "https://mcp.example.com/mcp"
+        }))
+        .expect("legacy config");
+        assert_eq!(legacy.auth, None);
+
+        let with_auth: McpServerConfig = serde_json::from_value(json!({
+            "id": "srv",
+            "enabled": true,
+            "transport": "http",
+            "command": "",
+            "args": [],
+            "url": "https://mcp.example.com/mcp",
+            "auth": { "type": "oauth", "scope": "a b", "clientId": "cid" }
+        }))
+        .expect("auth config");
+        let auth = with_auth.auth.expect("auth present");
+        assert_eq!(auth.auth_type, "oauth");
+        assert_eq!(auth.scope.as_deref(), Some("a b"));
+        assert_eq!(auth.client_id.as_deref(), Some("cid"));
     }
 
     #[test]

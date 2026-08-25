@@ -36,6 +36,9 @@ type ServerDraft = {
   url: string;
   messageUrl: string;
   headersText: string;
+  authType: "none" | "oauth";
+  authScope: string;
+  authClientId: string;
 };
 
 function formatKeyValueRecord(input: Record<string, string> | undefined) {
@@ -97,6 +100,9 @@ function blankDraft(existingIds: string[]): ServerDraft {
     url: "",
     messageUrl: "",
     headersText: "",
+    authType: "none",
+    authScope: "",
+    authClientId: "",
   };
 }
 
@@ -115,6 +121,9 @@ function draftFromServer(server: McpServerConfig): ServerDraft {
     url: server.url ?? "",
     messageUrl: server.messageUrl ?? "",
     headersText: formatKeyValueRecord(server.headers),
+    authType: server.auth?.type === "oauth" ? "oauth" : "none",
+    authScope: server.auth?.scope ?? "",
+    authClientId: server.auth?.clientId ?? "",
   };
 }
 
@@ -156,6 +165,7 @@ function buildServerFromDraft(
       messageUrl: undefined,
       headers: undefined,
       timeoutMs,
+      auth: undefined,
     };
   }
 
@@ -163,6 +173,8 @@ function buildServerFromDraft(
   if (!url) {
     throw new Error(t("mcpHub.invalidUrl"));
   }
+  const authScope = draft.authScope.trim();
+  const authClientId = draft.authClientId.trim();
   return {
     ...(base ?? {}),
     id,
@@ -178,6 +190,14 @@ function buildServerFromDraft(
     cwd: undefined,
     env: undefined,
     timeoutMs,
+    auth:
+      draft.authType === "oauth"
+        ? {
+            type: "oauth",
+            ...(authScope ? { scope: authScope } : {}),
+            ...(authClientId ? { clientId: authClientId } : {}),
+          }
+        : undefined,
   };
 }
 export function McpServerEditModal(props: {
@@ -440,6 +460,73 @@ export function McpServerEditModal(props: {
                           })
                         }
                       />
+                    </div>
+                    <div className="grid gap-x-3 gap-y-4 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mcp-edit-auth-type"
+                          className="text-xs text-muted-foreground"
+                        >
+                          {t("mcpHub.authType")}
+                        </Label>
+                        <Select
+                          value={draft.authType}
+                          onValueChange={(value) =>
+                            updateDraft({ authType: value === "oauth" ? "oauth" : "none" })
+                          }
+                        >
+                          <SelectTrigger id="mcp-edit-auth-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{t("mcpHub.authNone")}</SelectItem>
+                            <SelectItem value="oauth">{t("mcpHub.authOauth")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {draft.authType === "oauth"
+                            ? t("mcpHub.authOauthHint")
+                            : t("mcpHub.authNoneHint")}
+                        </p>
+                      </div>
+                      {draft.authType === "oauth" ? (
+                        <>
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="mcp-edit-auth-scope"
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("mcpHub.authScope")}
+                            </Label>
+                            <Input
+                              id="mcp-edit-auth-scope"
+                              value={draft.authScope}
+                              placeholder={t("mcpHub.authScopePlaceholder")}
+                              className="font-mono text-[12.5px]"
+                              onChange={(event) =>
+                                updateDraft({ authScope: event.currentTarget.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="mcp-edit-auth-client-id"
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("mcpHub.authClientId")}
+                            </Label>
+                            <Input
+                              id="mcp-edit-auth-client-id"
+                              value={draft.authClientId}
+                              placeholder={t("mcpHub.authClientIdPlaceholder")}
+                              className="font-mono text-[12.5px]"
+                              onChange={(event) =>
+                                updateDraft({ authClientId: event.currentTarget.value })
+                              }
+                            />
+                          </div>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 )}

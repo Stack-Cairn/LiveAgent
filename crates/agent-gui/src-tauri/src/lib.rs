@@ -115,6 +115,10 @@ macro_rules! app_invoke_handler {
             commands::mcp::mcp_stop_server,
             commands::mcp::mcp_test_server,
             commands::mcp::mcp_restart_server,
+            // MCP OAuth
+            commands::mcp_oauth::mcp_oauth_authorize,
+            commands::mcp_oauth::mcp_oauth_status,
+            commands::mcp_oauth::mcp_oauth_clear,
             // Memory
             commands::memory::memory_list,
             commands::memory::memory_read,
