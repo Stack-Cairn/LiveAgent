@@ -7,6 +7,20 @@
     animation: settingsSectionTitleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /*
+   * CUA-036: WebKit/Chromium pause CSS keyframe animations while the
+   * document is hidden, which leaves `.settings-section-enter` and
+   * `.settings-section-title-enter` stuck at their `from` state (opacity:0,
+   * translateY/scale). SettingsShell flips `data-anim-suspended` to "true"
+   * while `document.visibilityState === "hidden"` so the inner section body
+   * stays visible during background launch / minimized windows; removing the
+   * attribute when the tab becomes visible re-enables the animation.
+   */
+  .settings-section-enter[data-anim-suspended="true"],
+  .settings-section-title-enter[data-anim-suspended="true"] {
+    animation: none;
+  }
+
   .provider-panel-enter {
     animation: providerPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }

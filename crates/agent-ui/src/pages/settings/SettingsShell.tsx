@@ -13,6 +13,31 @@ type SettingsShellProps<Context> = {
   hiddenSections?: readonly string[];
 };
 
+// CUA-036: the inner `.settings-section-enter` / `.settings-section-title-enter`
+// keyframe animations are paused by WebKit/Chromium while the document is
+// hidden (background launch, minimized window). CUA-033/034 only cover the
+// outer overlay container; without this fallback the inner section body
+// stays at the `from` state (opacity:0, translateY(14px) scale(0.985)) and
+// the entire settings page reads as blank. Mirrors the LEAVE_FALLBACK_MS
+// shape: subscribe to visibilitychange so the override clears the moment the
+// window becomes visible again.
+function useIsDocumentHidden() {
+  const [hidden, setHidden] = useState(() => {
+    if (typeof document === "undefined") return false;
+    return document.visibilityState === "hidden";
+  });
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => setHidden(document.visibilityState === "hidden");
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+  return hidden;
+}
+
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {
     case "saving":
@@ -49,6 +74,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
   const [navQuery, setNavQuery] = useState("");
+  const isDocumentHidden = useIsDocumentHidden();
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
@@ -213,6 +239,12 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               <div
                 key={activeSection.id}
                 className="settings-section-title-enter text-[28px] font-semibold tracking-tight"
+                data-anim-suspended={isDocumentHidden ? "true" : undefined}
+                style={
+                  isDocumentHidden
+                    ? { animation: "none", opacity: 1, transform: "none" }
+                    : undefined
+                }
               >
                 {t(activeSection.labelKey)}
               </div>
@@ -234,6 +266,12 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               `settings-content-${activeSection.id}`,
               fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
             )}
+            data-anim-suspended={isDocumentHidden ? "true" : undefined}
+            style={
+              isDocumentHidden
+                ? { animation: "none", opacity: 1, transform: "none" }
+                : undefined
+            }
           >
             <div
               className={cn(
