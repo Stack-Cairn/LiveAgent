@@ -566,9 +566,11 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
               <span className="font-medium uppercase tracking-wide">
                 {t("settings.cua.installer.logLabel")}
               </span>
-              <ChevronDown
-                className={cn("h-3 w-3 transition-transform", logExpanded && "rotate-180")}
-              />
+              <span
+                className={cn("inline-flex transition-transform", logExpanded && "rotate-180")}
+              >
+                <ChevronDown className="h-3 w-3" />
+              </span>
             </button>
             {logExpanded ? (
               <pre
