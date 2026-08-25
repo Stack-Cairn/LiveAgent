@@ -1,35 +1,37 @@
 /**
- * CUA-042 regression test: CuaInstallerPanel 安装日志折叠按钮 chevron 旋转动画
+ * CUA-044 regression test: CuaInstallerPanel 安装日志折叠按钮 chevron 旋转动画
  *
- * 关键要求：
- *   - 不再用 Web Animations API（CUA-041 在 WKWebView 中 animation.currentTime
- *     全程冻结、playState='running' 不前进）。改回 React state 直接驱动
- *     inline style.transform + style.transition，由浏览器 CSS transition 管线
- *     推进旋转动画，绕开 WAAPI 在 hidden-gated playback clock 下的停摆。
- *   - expand 时 transform = rotate(180deg)
- *   - collapse 时 transform = rotate(0deg)
- *   - transition = "transform 150ms ease"
- *   - chevron span 必须暴露 data-chevron-expanded 供 AX / CUA driver 验证
+ * 关键要求（CUA-044 修复后）：
+ *   - 不再依赖 inline style.transform（CUA-042 证明 inline style 会被 WKWebView
+ *     丢弃——aria-expanded / data-chevron-expanded 已切，但 getComputedStyle
+ *     .transform 永远 matrix(1,0,0,1,0,0)）。
+ *   - 改用 Tailwind className 切换 + transition-transform + duration-150：
+ *       className={cn("... transition-transform duration-150",
+ *                     logExpanded ? "rotate-180" : "rotate-0")}
+ *     className 由 React commit 同步写入，浏览器 CSS transition 通过样式表
+ *     pipeline 推进，不依赖 WAAPI 时钟（CUA-041 已证 WAAPI playback clock
+ *     在 WKWebView 全程冻结）。
+ *   - chevron span 必须暴露 data-chevron-expanded 供 AX / CUA driver 验证。
+ *   - 用 useLayoutEffect 读取 offsetWidth 强制 layout flush——给 WKWebView
+ *     一个明确的 reflow 触发点，避免 className 切换被下一帧 batch 掉。
  *
- * 为什么走 inline style + CSS transition 而不是 WAAPI：
- *   - CUA-038 用 Tailwind .rotate-180 + .transition-transform，卡在 currentTime=0；
- *   - CUA-039 切到 inline style.transform + transition，在 WKWebView async setState
- *     后 click 时 transition 不可靠；
- *   - CUA-041 切到 element.animate(...)，但 WKWebView WAAPI playback clock 冻结，
- *     animation.currentTime 始终 0、transform 停在首帧矩阵；
- *   - CUA-042 把 transform / transition 写在同一个 inline style 对象里，由
- *     React 同步 commit，避免内联 style 序列化顺序问题——React 把整个 cssText
- *     一次性写入 style 属性，浏览器将其视为同帧的属性变化，CSS transition
- *     必然推进（不依赖 WAAPI clock）。
+ * 失败历史：
+ *   - CUA-038：Tailwind rotate-180 + transition-transform 在 SVG 上 WAAPI
+ *     时钟冻结；
+ *   - CUA-039：inline style.transform + transition，expand 路径 transition
+ *     不推进；
+ *   - CUA-041：Web Animations API，WKWebView 整页 hidden 时
+ *     animation.currentTime 永远 0；
+ *   - CUA-042：inline style.transform 写在统一 style 对象里，computed
+ *     transform 永远单位矩阵——inline style 被 WKWebView 丢弃；
+ *   - CUA-044：className 切换 + useLayoutEffect + offsetWidth flush（当前）。
  *
  * 验证策略（两层）：
- *   1. **静态源码检查**：grep 确认 CuaInstallerPanel.tsx 已切回 inline style：
- *      - chevron span 有 data-chevron-expanded 属性；
- *      - 必须有 inline style.transform（由 logExpanded 驱动）；
- *      - 必须有 inline style.transition（"transform 150ms ease"）；
- *      - 必须移除 chevronRef 与 el.animate(...) 调用。
- *   2. **运行时 React 行为**：用 React 在 jsdom 下挂载一个最小复刻 chevron span，
- *     验证 toggle 时 inline style.transform 跟随 React state 同步切换。
+ *   1. **静态源码检查**：grep 确认 CuaInstallerPanel.tsx 已切到 className
+ *      驱动，并移除 inline style.transform / style.transition；
+ *   2. **运行时 React 行为**：用 React 在 jsdom 下挂载一个最小复刻 chevron
+ *      span，验证 toggle 时 className 跟随 React state 同步切换
+ *      rotate-180 / rotate-0。
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -45,55 +47,74 @@ const panelPath = path.join(
 );
 const panelSource = fs.readFileSync(panelPath, "utf8");
 
-test("CUA-042 静态源码: chevron span 必须有 data-chevron-expanded + inline style.transform/transition", () => {
-  // 抓 chevron 容器 span 的 JSX 块：data-chevron-expanded 与 inline style 是关键。
-  const chevronBlock = panelSource.match(
-    /<span\s*\n[\s\S]*?data-chevron-expanded=\{logExpanded[\s\S]*?<\/span>/,
-  );
-  assert.ok(
-    chevronBlock,
-    "expected chevron span to use data-chevron-expanded + inline style",
-  );
-  const block = chevronBlock[0];
+test("CUA-044 静态源码: chevron span 必须用 className 驱动 rotate-180/rotate-0", () => {
+  // 抓 chevron 容器 span 的 JSX 块：通过 ref={chevronRef} 锚点定位起始 <span，
+  // 再匹配下一个 </span>，避免 JSX 嵌套导致单正则跨多个 span。
+  const chevronRefIdx = panelSource.indexOf("ref={chevronRef}");
+  assert.ok(chevronRefIdx > 0, "panel source must contain ref={chevronRef}");
+  const beforeChevron = panelSource.slice(0, chevronRefIdx);
+  const lastSpanStart = beforeChevron.lastIndexOf("<span");
+  assert.ok(lastSpanStart > 0, "expected a <span tag before ref={chevronRef}");
+  const closeSpanIdx = panelSource.indexOf("</span>", chevronRefIdx);
+  assert.ok(closeSpanIdx > chevronRefIdx, "expected a </span> closing tag after ref={chevronRef}");
+  const block = panelSource.slice(lastSpanStart, closeSpanIdx + "</span>".length);
 
   // 必须暴露 data-chevron-expanded 供 AX / CUA driver 验证。
   assert.ok(
     /data-chevron-expanded=\{logExpanded\s*\?\s*"true"\s*:\s*"false"\}/.test(block),
     `chevron span missing data-chevron-expanded attribute: ${block.slice(0, 200)}`,
   );
-  // 必须有 inline style.transform，且由 logExpanded 驱动。
+  // 必须用 className 切换 rotate-180（不依赖 inline style.transform）。
   assert.ok(
-    /style=\{\{[\s\S]*?transform:\s*logExpanded\s*\?\s*"rotate\(180deg\)"\s*:\s*"rotate\(0deg\)"[\s\S]*?\}\s*\}/.test(
+    /className=\{cn\([\s\S]*?logExpanded\s*\?\s*"rotate-180"\s*:\s*"rotate-0"[\s\S]*?\)\s*\}/.test(
       block,
     ),
-    `chevron span inline style.transform must be driven by logExpanded: ${block.slice(0, 200)}`,
+    `chevron span must toggle rotate-180 via className: ${block.slice(0, 200)}`,
   );
-  // 必须有 inline style.transition，150ms。
+  // 必须有 Tailwind transition + duration 类（让 CSS transition 管线推进旋转）。
   assert.ok(
-    /style=\{\{[\s\S]*?transition:\s*"transform\s+150ms[\s\S]*?\}\s*\}/.test(block),
-    `chevron span missing inline style.transition 'transform 150ms ...': ${block.slice(0, 200)}`,
+    /transition-transform/.test(block) && /duration-150/.test(block),
+    `chevron span must declare transition-transform + duration-150: ${block.slice(0, 200)}`,
   );
-  // 不允许再依赖 Tailwind 的 rotate-180 class（CUA-038/039 双重回归保护）。
+  // 不允许再有 inline style.transform / style.transition（CUA-044 关键要求）。
   assert.ok(
-    !block.includes("rotate-180"),
-    `chevron span still uses 'rotate-180' class — should use inline style.transform: ${block.slice(0, 200)}`,
+    !/style=\{\{[\s\S]*?transform:\s*logExpanded/.test(block),
+    `chevron span still has inline style.transform — CUA-044 forbids it: ${block.slice(0, 200)}`,
+  );
+  assert.ok(
+    !/style=\{\{[\s\S]*?transition:\s*"transform\s+150ms/.test(block),
+    `chevron span still has inline style.transition — should use Tailwind classes: ${block.slice(0, 200)}`,
   );
 });
 
-test("CUA-042 静态源码: 必须移除 chevronRef 与 WAAPI el.animate(...) 路径", () => {
-  // CUA-041 路径不再使用：refs 到 chevron span 的 useEffect + element.animate(...).
+test("CUA-044 静态源码: 必须用 useLayoutEffect + offsetWidth 强制 layout flush", () => {
+  // 必须有 chevronRef（指向 chevron span）。
   assert.ok(
-    !/chevronRef/.test(panelSource),
-    `panel still references chevronRef — CUA-042 should drop WAAPI path entirely`,
+    /chevronRef\s*=\s*useRef<HTMLSpanElement[^>]*>/.test(panelSource),
+    `panel is missing chevronRef for layout flush anchor`,
   );
+  // 必须有 useLayoutEffect 读 offsetWidth 强制 reflow。
+  assert.ok(
+    /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*?offsetWidth[\s\S]*?\}\s*,\s*\[logExpanded\]\)/.test(
+      panelSource,
+    ),
+    `panel is missing useLayoutEffect + offsetWidth flush`,
+  );
+});
+
+test("CUA-044 静态源码: 必须移除 WAAPI .animate(...) 与旧的 inline-style 注释锚点", () => {
   assert.ok(
     !/\.animate\(/.test(panelSource),
-    `panel still calls .animate(...) on an element — should switch to inline style: ${panelSource.match(/[^\n]*\.animate\([^\n]*/)?.[0]?.slice(0, 200) ?? ""}`,
+    `panel still calls .animate(...) on an element — should switch to className: ${
+      panelSource.match(/[^\n]*\.animate\([^\n]*/)?.[0]?.slice(0, 200) ?? ""
+    }`,
   );
-  // 不允许再有「CUA-041」注释锚点。
+  // 不允许再有「CUA-041」注释锚点（CUA-041 是被 CUA-042 取代的 WAAPI 路径）；
+  // CUA-042 可以出现在注释里作为 inline-style 路径被否决的历史，但本测试只
+  // 校验 WAAPI 路径已彻底移除。
   assert.ok(
     !/CUA-041/.test(panelSource),
-    `panel still has 'CUA-041' reference — should be CUA-042 now`,
+    `panel still references CUA-041 — should be CUA-044 now`,
   );
 });
 
@@ -130,19 +151,22 @@ const React = req("react");
 const ReactDOMClient = req("react-dom/client");
 
 /**
- * 最小复刻 CuaInstallerPanel 的 chevron span：
- * 用 React state 直接驱动 inline style.transform + style.transition，
- * 验证该模式在浏览器侧真的会按 expand/collapse 切换 transform。
+ * 最小复刻 CuaInstallerPanel 的 chevron span（CUA-044 className 驱动版）：
+ * 用 React state 直接驱动 className 上的 rotate-180 / rotate-0 切换。
  */
 function ChevronSpan({ expanded }) {
   return React.createElement(
     "span",
     {
       "data-chevron-expanded": expanded ? "true" : "false",
-      style: {
-        transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-        transition: "transform 150ms ease",
-      },
+      className: [
+        "inline-flex",
+        "transition-transform",
+        "duration-150",
+        expanded ? "rotate-180" : "rotate-0",
+      ]
+        .filter(Boolean)
+        .join(" "),
     },
     React.createElement("svg", { width: 12, height: 12 }),
   );
@@ -159,48 +183,65 @@ function setExpanded(expanded) {
   });
 }
 
-function readStyle(span) {
-  // jsdom 把 style 上的 camelCase 字段返回为字符串（"rotate(180deg)" 等），
-  // 不需要 getComputedStyle——inline style 直接读取即可。
-  return {
-    transform: span.style.transform,
-    transition: span.style.transition,
-  };
+function readClasses(span) {
+  return (span.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
 }
 
-test("CUA-042 运行时: 收起时 chevron span inline style.transform = rotate(0deg)", async () => {
+test("CUA-044 运行时: 收起时 chevron span 有 rotate-0、无 rotate-180", async () => {
   await setExpanded(false);
   const span = container.querySelector("span");
   assert.ok(span, "chevron span should be in DOM");
   assert.equal(span.getAttribute("data-chevron-expanded"), "false");
-  const style = readStyle(span);
-  assert.equal(style.transform, "rotate(0deg)", `unexpected transform: ${style.transform}`);
+  const classes = readClasses(span);
   assert.ok(
-    /transform\s+150ms/.test(style.transition),
-    `unexpected transition: ${style.transition}`,
+    classes.includes("rotate-0"),
+    `chevron span should have rotate-0 when collapsed: ${classes.join(" ")}`,
+  );
+  assert.ok(
+    !classes.includes("rotate-180"),
+    `chevron span should NOT have rotate-180 when collapsed: ${classes.join(" ")}`,
+  );
+  assert.ok(
+    classes.includes("transition-transform") && classes.includes("duration-150"),
+    `chevron span should declare transition-transform + duration-150: ${classes.join(" ")}`,
   );
 });
 
-test("CUA-042 运行时: 展开后 chevron span inline style.transform = rotate(180deg)", async () => {
+test("CUA-044 运行时: 展开后 chevron span 有 rotate-180、无 rotate-0", async () => {
   await setExpanded(true);
   const span = container.querySelector("span");
   assert.ok(span);
   assert.equal(span.getAttribute("data-chevron-expanded"), "true");
-  const style = readStyle(span);
-  assert.equal(style.transform, "rotate(180deg)", `unexpected transform: ${style.transform}`);
+  const classes = readClasses(span);
   assert.ok(
-    /transform\s+150ms/.test(style.transition),
-    `unexpected transition: ${style.transition}`,
+    classes.includes("rotate-180"),
+    `chevron span should have rotate-180 when expanded: ${classes.join(" ")}`,
+  );
+  assert.ok(
+    !classes.includes("rotate-0"),
+    `chevron span should NOT have rotate-0 when expanded: ${classes.join(" ")}`,
   );
 });
 
-test("CUA-042 运行时: 收起→展开→收起，每次都触发对应方向的 transform 切换", async () => {
+test("CUA-044 运行时: 收起→展开→收起，每次都触发对应方向的 className 切换", async () => {
   await setExpanded(false);
-  assert.equal(readStyle(container.querySelector("span")).transform, "rotate(0deg)");
+  let classes = readClasses(container.querySelector("span"));
+  assert.ok(
+    classes.includes("rotate-0") && !classes.includes("rotate-180"),
+    `collapsed classes: ${classes.join(" ")}`,
+  );
 
   await setExpanded(true);
-  assert.equal(readStyle(container.querySelector("span")).transform, "rotate(180deg)");
+  classes = readClasses(container.querySelector("span"));
+  assert.ok(
+    classes.includes("rotate-180") && !classes.includes("rotate-0"),
+    `expanded classes: ${classes.join(" ")}`,
+  );
 
   await setExpanded(false);
-  assert.equal(readStyle(container.querySelector("span")).transform, "rotate(0deg)");
+  classes = readClasses(container.querySelector("span"));
+  assert.ok(
+    classes.includes("rotate-0") && !classes.includes("rotate-180"),
+    `re-collapsed classes: ${classes.join(" ")}`,
+  );
 });

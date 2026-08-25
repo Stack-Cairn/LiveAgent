@@ -19,7 +19,7 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type {
   CuaDriverDetection,
@@ -111,6 +111,21 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
   const [logExpanded, setLogExpanded] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
+  const chevronRef = useRef<HTMLSpanElement | null>(null);
+
+  // CUA-044: WKWebView (Tauri WebView) 在 hidden / 隐藏式面板里会丢 className
+  // 切换的 layout flush——Tailwind rotate-180 编译后的 transform: rotate(180deg)
+  // 已经写入 stylesheet 但下一帧之前没有触发同步 layout，导致视觉不旋转。
+  // useLayoutEffect 在 React commit 后、浏览器 paint 前同步运行；显式读
+  // offsetWidth 强制一次同步 reflow，让 className 切换被立即提交。
+  // （不再使用 inline style.transform——之前几轮的 inline style 路径在
+  // WKWebView 中会被丢弃，className 走样式表 pipeline 更稳。）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logExpanded is the trigger — re-run after every expand/collapse so the WebView reflows and the rotate-180 class actually paints.
+  useLayoutEffect(() => {
+    const el = chevronRef.current;
+    if (!el) return;
+    void el.offsetWidth;
+  }, [logExpanded]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -567,12 +582,12 @@ export function CuaInstallerPanel(props: CuaInstallerPanelProps) {
                 {t("settings.cua.installer.logLabel")}
               </span>
               <span
-                className="inline-flex"
+                ref={chevronRef}
+                className={cn(
+                  "inline-flex transition-transform duration-150",
+                  logExpanded ? "rotate-180" : "rotate-0",
+                )}
                 data-chevron-expanded={logExpanded ? "true" : "false"}
-                style={{
-                  transform: logExpanded ? "rotate(180deg)" : "rotate(0deg)",
-                  transition: "transform 150ms ease",
-                }}
               >
                 <ChevronDown className="h-3 w-3" />
               </span>
