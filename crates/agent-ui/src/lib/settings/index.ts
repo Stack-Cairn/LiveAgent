@@ -35,7 +35,6 @@ import {
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
 import { normalizeModelFailoverSettings } from "./modelFailover";
-import { normalizeRetryErrorSettings } from "./retryError";
 import {
   normalizeChatTranscriptSettings,
   normalizeFontScaleSettings,
@@ -43,6 +42,7 @@ import {
   normalizePositiveInteger,
   normalizeStringArray,
 } from "./normalizers";
+import { normalizeRetryErrorSettings } from "./retryError";
 import {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockFileTreeExpandedPaths,
@@ -143,12 +143,12 @@ export {
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
 } from "./modelFailover";
-export { normalizeRetryErrorSettings } from "./retryError";
 export {
   normalizeChatTranscriptSettings,
   normalizeFontScale,
   normalizeFontScaleSettings,
 } from "./normalizers";
+export { normalizeRetryErrorSettings } from "./retryError";
 export {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockBackgroundTasksState,
@@ -1781,6 +1781,13 @@ export function updateSkills(prev: AppSettings, patch: Partial<SkillsSettings>):
   });
 }
 
+/** 代码索引 per-workspace opt-in（docs/design/code-index.md）。默认关闭。 */
+export function isWorkspaceCodeIndexEnabled(settings: AppSettings, workdir: string): boolean {
+  const pathKey = workspaceProjectPathKey(workdir);
+  if (!pathKey) return false;
+  return settings.system.workspaceResourceSettings[pathKey]?.codeIndexEnabled === true;
+}
+
 export function resolveWorkspaceResources(
   settings: AppSettings,
   workdir: string,
@@ -1855,7 +1862,12 @@ export function updateWorkspaceResourceSettings(
   prev: AppSettings,
   workdir: string,
   patch: Pick<WorkspaceResourceSettings, "mode" | "skillNames" | "mcpServerIds"> &
-    Partial<Pick<WorkspaceResourceSettings, "projectPrompt" | "projectPromptStrategy">>,
+    Partial<
+      Pick<
+        WorkspaceResourceSettings,
+        "projectPrompt" | "projectPromptStrategy" | "codeIndexEnabled"
+      >
+    >,
 ): AppSettings {
   const pathKey = workspaceProjectPathKey(workdir);
   if (!pathKey) return prev;

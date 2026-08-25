@@ -79,6 +79,23 @@ chardetng = "0.1.17"
 # MCP OAuth（docs/design/mcp-oauth.md）：token 只进 OS keystore；PKCE/state 熵源。
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 getrandom = "0.3.4"
+# 代码库索引（docs/design/code-index.md）：tree-sitter 语法感知切块，首批
+# TS/JS/TSX、Rust、Go、Python、Java；无 grammar 语言回退滑窗。
+tree-sitter = "0.26.13"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-rust = "0.24.2"
+tree-sitter-go = "0.25.0"
+tree-sitter-python = "0.25.0"
+tree-sitter-java = "0.23.5"
+# 向量检索扩展：静态链接进 bundled rusqlite（sqlite3_vec_init 注册）。
+sqlite-vec = "0.1.9"
+# 本地 CPU embedding（ONNX）。裁掉默认 feature：不要 image-models（纯文本
+# 模型即可），TLS 与仓库其余部分统一走 rustls（模型下载 + ort 二进制下载）。
+fastembed = { version = "6.0.1", default-features = false, features = [
+    "hf-hub-rustls-tls",
+    "ort-download-binaries-rustls-tls",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSButton", "NSControl", "NSView", "NSWindow"] }

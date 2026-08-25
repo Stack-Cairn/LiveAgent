@@ -221,6 +221,22 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsPrimaryDirectory": "Primary directory",
   "chat.workspaceSettingsPrimaryHint":
     "The primary directory remains the default location for conversations, Git, terminals, and the file tree. Additional directories do not change project ownership.",
+  "chat.workspaceSettingsCodeIndexTitle": "Code index",
+  "chat.workspaceSettingsCodeIndexDescription":
+    "Build a local code index for this project (hybrid lexical + semantic retrieval) so the Agent can locate code by intent with CodeSearch instead of blind Grep. The index and embeddings never leave this machine.",
+  "chat.workspaceSettingsCodeIndexToggle": "Enable code index",
+  "chat.workspaceSettingsCodeIndexDisabledHint":
+    "Not enabled. Turning it on builds the index in the background (first run downloads a ~120MB local embedding model).",
+  "chat.workspaceSettingsCodeIndexStats": "{fileCount} files · {chunkCount} chunks · {size}",
+  "chat.workspaceSettingsCodeIndexIndexing": "Indexing: {processed}/{total} files",
+  "chat.workspaceSettingsCodeIndexPhaseDownloading":
+    "Preparing embedding model (downloads on first run)…",
+  "chat.workspaceSettingsCodeIndexPhaseWalking": "Scanning workspace files…",
+  "chat.workspaceSettingsCodeIndexError": "Indexing failed: {error}",
+  "chat.workspaceSettingsCodeIndexRebuild": "Rebuild index",
+  "chat.workspaceSettingsCodeIndexCancel": "Cancel",
+  "chat.workspaceSettingsCodeIndexDesktopOnly":
+    "The code index is managed on the desktop app; this view is status-only.",
   "chat.workspaceSettingsDirectoriesDescription":
     "Add out-of-project roots for structured file tools and control read or write access. This setting does not sandbox Bash or process tools; command access still follows existing tool policy.",
   "chat.workspaceSettingsAddDirectory": "Add directory",

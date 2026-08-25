@@ -1,5 +1,6 @@
 pub mod automation;
 pub mod chat_run_ledger;
+pub mod code_index;
 pub mod gateway;
 pub mod gateway_bridge;
 pub mod mcp_oauth;

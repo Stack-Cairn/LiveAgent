@@ -89,6 +89,13 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   if (command.startsWith("memory_")) {
     return invokeGatewayMemory<T>(command, args);
   }
+  if (command.startsWith("code_index_")) {
+    // 代码索引管理/检索目前是桌面端专属（docs/design/code-index.md §10）；
+    // WebUI 聊天经 chat_queue 驱动桌面端执行工具，天然不走本 shim。
+    throw new Error(
+      "代码索引操作需在桌面端完成（WebUI 远程管理将随 CodeIndexManage 直通臂后续提供）",
+    );
+  }
 
   switch (command) {
     // 轨迹是只读诊断视图；两端共用同一份宿主实现，差异只在这里的路由。

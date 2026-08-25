@@ -201,6 +201,20 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsPrimaryDirectory": "主目录",
   "chat.workspaceSettingsPrimaryHint":
     "主目录是会话、Git、终端和文件树的默认工作位置。附加目录不会改变项目归属。",
+  "chat.workspaceSettingsCodeIndexTitle": "代码索引",
+  "chat.workspaceSettingsCodeIndexDescription":
+    "为本项目建立本地代码索引（词法 + 语义混合检索），让 Agent 用 CodeSearch 按意图定位代码而非盲目 Grep。索引与向量全部保存在本机。",
+  "chat.workspaceSettingsCodeIndexToggle": "启用代码索引",
+  "chat.workspaceSettingsCodeIndexDisabledHint":
+    "未启用。开启后将在后台建立索引（首次需下载约 120MB 的本地 embedding 模型）。",
+  "chat.workspaceSettingsCodeIndexStats": "{fileCount} 个文件 · {chunkCount} 个代码块 · {size}",
+  "chat.workspaceSettingsCodeIndexIndexing": "索引中：{processed}/{total} 个文件",
+  "chat.workspaceSettingsCodeIndexPhaseDownloading": "正在准备 embedding 模型（首次需下载）…",
+  "chat.workspaceSettingsCodeIndexPhaseWalking": "正在扫描工作区文件…",
+  "chat.workspaceSettingsCodeIndexError": "索引失败：{error}",
+  "chat.workspaceSettingsCodeIndexRebuild": "重建索引",
+  "chat.workspaceSettingsCodeIndexCancel": "取消",
+  "chat.workspaceSettingsCodeIndexDesktopOnly": "代码索引在桌面端管理；此处仅显示状态。",
   "chat.workspaceSettingsDirectoriesDescription":
     "为结构化文件工具添加项目外目录，并分别控制读取或写入权限。该设置不限制 Bash 或进程工具；命令访问仍遵循现有工具策略。",
   "chat.workspaceSettingsAddDirectory": "添加目录",

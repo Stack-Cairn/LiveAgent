@@ -13,6 +13,7 @@ import type {
   WorkspaceProjectRootGrant,
 } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { codeIndexDisable, codeIndexEnable } from "@liveagent/ui/lib/codeIndex/api";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useEffect, useMemo, useState } from "react";
@@ -57,6 +58,7 @@ type ResourceSettingsDraft = {
   mcpServerIds: string[];
   projectPrompt: string;
   projectPromptStrategy: ProjectPromptStrategy;
+  codeIndexEnabled: boolean;
 };
 
 export function WorkspaceProjectSettingsModal(props: {
@@ -107,6 +109,7 @@ export function WorkspaceProjectSettingsModal(props: {
   const [projectPromptStrategy, setProjectPromptStrategy] = useState<ProjectPromptStrategy>(
     saved?.projectPromptStrategy ?? "append",
   );
+  const [codeIndexEnabled, setCodeIndexEnabled] = useState(saved?.codeIndexEnabled === true);
   const [tab, setTab] = useState<WorkspaceResourceTab>("skills");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<StoreCategoryValue>("all");
@@ -263,7 +266,21 @@ export function WorkspaceProjectSettingsModal(props: {
         mcpServerIds: [...mcpServerIds],
         projectPrompt: projectPrompt.trim(),
         projectPromptStrategy,
+        codeIndexEnabled,
       });
+      // 开关翻转的 side effect：建库+后台索引 / 删除索引目录。设置本身已保存，
+      // 桌面端专属命令在 WebUI 抛错时不回滚（下次桌面端打开会话时对账）。
+      if (codeIndexEnabled !== (saved?.codeIndexEnabled === true)) {
+        try {
+          if (codeIndexEnabled) {
+            await codeIndexEnable(project.path);
+          } else {
+            await codeIndexDisable(project.path);
+          }
+        } catch (error) {
+          console.warn("code index toggle side effect failed", error);
+        }
+      }
       requestClose();
     } catch (error) {
       setRootError(error instanceof Error ? error.message : String(error));
@@ -392,6 +409,8 @@ export function WorkspaceProjectSettingsModal(props: {
                 projectNameInvalid={projectNameInvalid}
                 saving={saving}
                 onProjectNameChange={setProjectName}
+                codeIndexEnabled={codeIndexEnabled}
+                onCodeIndexEnabledChange={setCodeIndexEnabled}
               />
             ) : null}
 

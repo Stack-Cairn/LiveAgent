@@ -12,7 +12,8 @@ export type BuiltinToolGroupId =
   | "system"
   | "mcp"
   | "subagent"
-  | "memory";
+  | "memory"
+  | "code-index";
 
 export type BuiltinToolDisplayCategory =
   | "file"
@@ -347,6 +348,25 @@ export type GrepResultDetails = {
   files: GrepResultFileSummary[];
 };
 
+export type CodeSearchResultMatch = {
+  path: string;
+  startLine: number;
+  endLine: number;
+  kind: string;
+  symbol: string;
+  score: number;
+  source: string;
+};
+
+export type CodeSearchResultDetails = {
+  kind: "code_search";
+  query: string;
+  mode: string;
+  matchCount: number;
+  degraded?: string;
+  matches: CodeSearchResultMatch[];
+};
+
 export type BuiltinToolResultDetails =
   | ReadTextResultDetails
   | ReadImageResultDetails
@@ -366,4 +386,5 @@ export type BuiltinToolResultDetails =
   | GlobResultDetails
   | GrepResultDetails
   | TaskListResultDetails
+  | CodeSearchResultDetails
   | Record<string, unknown>;

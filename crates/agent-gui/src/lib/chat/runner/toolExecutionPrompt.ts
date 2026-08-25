@@ -44,6 +44,7 @@ export function buildToolsSuffix(
   if (fileTools.length > 0) toolGroups.push(`file tools (${fileTools.join(" / ")})`);
   if (has("SkillsManager")) toolGroups.push("skill tools (SkillsManager)");
   if (has("MemoryManager")) toolGroups.push("persistent memory (MemoryManager)");
+  if (has("CodeSearch")) toolGroups.push("indexed code search (CodeSearch)");
   if (has("McpManager")) toolGroups.push("MCP configuration management (McpManager)");
   if (has("CronTaskManager")) toolGroups.push("scheduled task management (CronTaskManager)");
   if (has("Agent")) toolGroups.push("subagent delegation (Agent)");
@@ -166,6 +167,11 @@ export function buildToolsSuffix(
     if (hasAny("Grep", "Glob", "List")) {
       lines.push(
         "- For search, use `Grep.output_mode=content|files|count` with `head_limit`, `offset`, and `context` instead of dumping raw matches.",
+      );
+    }
+    if (has("CodeSearch")) {
+      lines.push(
+        "- This workspace has a prebuilt code index. Use CodeSearch FIRST when locating code by intent, concept, or behavior (hybrid lexical+semantic retrieval; natural-language and Chinese queries work). Reserve Grep for exact literal strings or regex patterns, and Glob for filename patterns.",
       );
     }
     if (has("SkillsManager") && hasReadFamily) {

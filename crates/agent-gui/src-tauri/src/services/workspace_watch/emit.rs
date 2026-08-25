@@ -42,6 +42,16 @@ impl WorkspaceWatchService {
             truncated,
         };
 
+        // 代码索引失效 sink：内部只入队（绝不阻塞 watcher 线程），未启用索引
+        // 的 workdir 一次 stat 即返回。git-only 事件不触发（索引只关心工作树）。
+        if fs {
+            crate::services::code_index::global_code_index_service().notify_workspace_activity(
+                workdir,
+                &payload.changed_paths,
+                payload.truncated,
+            );
+        }
+
         if let Err(error) = self
             .app_handle
             .emit(WORKSPACE_ACTIVITY_EVENT, payload.clone())

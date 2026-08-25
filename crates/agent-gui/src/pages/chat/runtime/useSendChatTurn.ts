@@ -64,6 +64,7 @@ import {
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  isWorkspaceCodeIndexEnabled,
   removeWorkspaceResourceReferences,
   resolveEffectivePromptSettings,
   resolveWorkspaceResources,
@@ -401,6 +402,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
     const workspaceResources = resolveWorkspaceResources(settings, effectiveWorkdir);
     const effectiveSkillsEnabled = workspaceResources.skillsEnabled && effectiveIsAgentMode;
+    const effectiveCodeIndexEnabled =
+      isWorkspaceCodeIndexEnabled(settings, effectiveWorkdir) && effectiveIsAgentMode;
     const selectedSkillNames = effectiveSkillsEnabled ? workspaceResources.skillNames : [];
     const getEffectiveMcpSettings = () =>
       filterMcpSettingsForWorkspace(getMcpSettings(), workspaceResources);
@@ -1678,6 +1681,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             effectiveWorkdir,
             additionalRoots,
             effectiveSkillsEnabled,
+            codeIndexEnabled: effectiveCodeIndexEnabled,
             showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
             skillsRootDir: skillsRootDirForTools,
             skillAccessPolicy: skillAccessPolicyForTools,

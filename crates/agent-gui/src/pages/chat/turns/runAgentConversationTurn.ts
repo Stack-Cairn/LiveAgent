@@ -290,6 +290,8 @@ export type RunAgentConversationTurnParams = {
   effectiveWorkdir: string;
   additionalRoots?: readonly AdditionalProjectRoot[];
   effectiveSkillsEnabled: boolean;
+  /** 代码索引 per-workspace opt-in(turn 级快照):开启才注册 CodeSearch。 */
+  codeIndexEnabled?: boolean;
   showSilentMemoryExtraction: boolean;
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
@@ -386,6 +388,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     effectiveWorkdir,
     additionalRoots,
     effectiveSkillsEnabled,
+    codeIndexEnabled,
     showSilentMemoryExtraction,
     skillsRootDir,
     skillAccessPolicy,
@@ -630,6 +633,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       turnId: checkpointTurnId?.trim() || crypto.randomUUID(),
     },
     skillsEnabled: effectiveSkillsEnabled,
+    codeIndexEnabled,
     skillsRootDir,
     skillAccessPolicy,
     onManagedSkillsChanged,

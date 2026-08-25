@@ -332,6 +332,8 @@ export type WorkspaceResourceSettings = {
   mcpServerIds: string[];
   projectPrompt: string;
   projectPromptStrategy: ProjectPromptStrategy;
+  /** 代码索引 per-workspace opt-in（docs/design/code-index.md）。默认关闭。 */
+  codeIndexEnabled: boolean;
   stateVersion: number;
   writerId: string;
   updatedAt: number;

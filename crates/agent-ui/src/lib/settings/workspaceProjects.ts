@@ -81,6 +81,7 @@ export function normalizeWorkspaceResourceSettingsEntry(input: unknown): Workspa
     mcpServerIds: mode === "custom" ? normalizeStringArray(obj.mcpServerIds) : [],
     projectPrompt: typeof obj.projectPrompt === "string" ? obj.projectPrompt.trim() : "",
     projectPromptStrategy: normalizeProjectPromptStrategy(obj.projectPromptStrategy),
+    codeIndexEnabled: obj.codeIndexEnabled === true,
     stateVersion: Number.isSafeInteger(stateVersion) && stateVersion > 0 ? stateVersion : 1,
     writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 64) : "",
     updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0,
@@ -114,6 +115,7 @@ export function normalizeWorkspaceResourceSettings(
     if (
       entry.mode === "inherit" &&
       !entry.projectPrompt &&
+      !entry.codeIndexEnabled &&
       entry.updatedAt > 0 &&
       now - entry.updatedAt > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
     ) {
@@ -126,8 +128,12 @@ export function normalizeWorkspaceResourceSettings(
       const aEntry = entries[a];
       const bEntry = entries[b];
       const byActiveMode =
-        Number(bEntry.mode !== "inherit" || Boolean(bEntry.projectPrompt)) -
-        Number(aEntry.mode !== "inherit" || Boolean(aEntry.projectPrompt));
+        Number(
+          bEntry.mode !== "inherit" || Boolean(bEntry.projectPrompt) || bEntry.codeIndexEnabled,
+        ) -
+        Number(
+          aEntry.mode !== "inherit" || Boolean(aEntry.projectPrompt) || aEntry.codeIndexEnabled,
+        );
       if (byActiveMode !== 0) return byActiveMode;
       const byUpdatedAt = bEntry.updatedAt - aEntry.updatedAt;
       if (byUpdatedAt !== 0) return byUpdatedAt;

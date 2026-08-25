@@ -1,0 +1,187 @@
+// 代码库语义/混合检索工具（docs/design/code-index.md）。
+// 仅在 per-workspace 开关（workspaceResourceSettings[pathKey].codeIndexEnabled）
+// 开启时注册——不注册即“工具表 + system prompt 双不注入”，天然满足验收项。
+// 执行层直通 Rust `code_index_search`（检索在桌面端本地索引上进行）。
+
+import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { CodeSearchResultDetails } from "@liveagent/ui/contracts/builtinTools";
+import { invoke } from "@tauri-apps/api/core";
+import { Type } from "typebox";
+import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
+import { waitForAbortablePromise } from "./invokeWithAbort";
+
+export const CODE_SEARCH_TOOL_NAME = "CodeSearch";
+
+const MAX_RESULTS_LIMIT = 20;
+const DEFAULT_RESULTS = 8;
+
+type CodeIndexSearchMatch = {
+  path: string;
+  startLine: number;
+  endLine: number;
+  kind: string;
+  symbol: string;
+  snippet: string;
+  score: number;
+  source: string;
+};
+
+type CodeIndexSearchResponse = {
+  matches: CodeIndexSearchMatch[];
+  mode: string;
+  degraded?: string | null;
+};
+
+function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
+  return {
+    role: "toolResult",
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    content: [{ type: "text", text }],
+    details: {},
+    isError: true,
+    timestamp: Date.now(),
+  };
+}
+
+export function createCodeSearchTools(params: { workdir: string }): BuiltinToolBundle {
+  const toolCodeSearch: Tool = {
+    name: CODE_SEARCH_TOOL_NAME,
+    description: [
+      "Search this workspace's code index (hybrid lexical BM25 + semantic embeddings). The index is prebuilt and kept fresh by the workspace watcher.",
+      'PREFER this over blind Grep when looking for functionality by intent or concept ("where is retry logic", "auth token refresh"), including natural-language and Chinese queries. Use Grep only for exact literal strings/regexes.',
+      "Returns file:line ranges with symbol names and code snippets, ranked by fused relevance.",
+    ].join("\n"),
+    parameters: Type.Object({
+      query: Type.String({
+        description:
+          "What to find, phrased by intent or concept (natural language works). Identifier fragments also fine.",
+      }),
+      mode: Type.Optional(
+        Type.Union([Type.Literal("hybrid"), Type.Literal("semantic"), Type.Literal("lexical")], {
+          description:
+            "hybrid (default) fuses both routes; semantic = embeddings only; lexical = BM25 only.",
+        }),
+      ),
+      path: Type.Optional(
+        Type.String({
+          description: 'Workspace-relative path prefix filter, e.g. "src/services".',
+        }),
+      ),
+      max_results: Type.Optional(
+        Type.Number({
+          description: `How many matches to return (default ${DEFAULT_RESULTS}, max ${MAX_RESULTS_LIMIT}).`,
+        }),
+      ),
+    }),
+  };
+
+  async function executeToolCall(
+    toolCall: ToolCall,
+    signal?: AbortSignal,
+  ): Promise<ToolResultMessage> {
+    if (toolCall.name !== CODE_SEARCH_TOOL_NAME) {
+      return buildErrorResult(toolCall, `Unknown tool: ${toolCall.name}`);
+    }
+    const args = (toolCall.arguments || {}) as Record<string, unknown>;
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) {
+      return buildErrorResult(toolCall, "query is required.");
+    }
+    const mode =
+      args.mode === "semantic" || args.mode === "lexical" || args.mode === "hybrid"
+        ? args.mode
+        : undefined;
+    const path = typeof args.path === "string" && args.path.trim() ? args.path.trim() : undefined;
+    const maxResults =
+      typeof args.max_results === "number" && Number.isFinite(args.max_results)
+        ? Math.min(Math.max(Math.floor(args.max_results), 1), MAX_RESULTS_LIMIT)
+        : undefined;
+
+    let response: CodeIndexSearchResponse;
+    try {
+      response = await waitForAbortablePromise(
+        invoke<CodeIndexSearchResponse>("code_index_search", {
+          args: { workdir: params.workdir, query, mode, path, maxResults },
+        }),
+        signal,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return buildErrorResult(toolCall, `CodeSearch failed: ${message}`);
+    }
+
+    const details: CodeSearchResultDetails = {
+      kind: "code_search",
+      query,
+      mode: response.mode,
+      matchCount: response.matches.length,
+      ...(response.degraded ? { degraded: response.degraded } : {}),
+      matches: response.matches.map((match) => ({
+        path: match.path,
+        startLine: match.startLine,
+        endLine: match.endLine,
+        kind: match.kind,
+        symbol: match.symbol,
+        score: match.score,
+        source: match.source,
+      })),
+    };
+
+    if (response.matches.length === 0) {
+      return {
+        role: "toolResult",
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        content: [
+          {
+            type: "text",
+            text: `No matches for "${query}" (mode: ${response.mode}). Try broader phrasing, a different mode, or fall back to Grep for exact strings.`,
+          },
+        ],
+        details,
+        isError: false,
+        timestamp: Date.now(),
+      };
+    }
+
+    const lines = response.matches.map((match) => {
+      const location = `${match.path}:${match.startLine}-${match.endLine}`;
+      const heading = match.symbol
+        ? `## ${location} · ${match.kind} \`${match.symbol}\` (${match.source})`
+        : `## ${location} (${match.source})`;
+      return match.snippet ? `${heading}\n\`\`\`\n${match.snippet}\n\`\`\`` : heading;
+    });
+    const header = response.degraded
+      ? `${response.matches.length} match(es), mode: ${response.mode} — ${response.degraded}`
+      : `${response.matches.length} match(es), mode: ${response.mode}`;
+
+    return {
+      role: "toolResult",
+      toolCallId: toolCall.id,
+      toolName: toolCall.name,
+      content: [{ type: "text", text: [header, "", ...lines].join("\n") }],
+      details,
+      isError: false,
+      timestamp: Date.now(),
+    };
+  }
+
+  return {
+    groupId: "code-index",
+    tools: [toolCodeSearch],
+    executeToolCall,
+    metadataByName: createBuiltinMetadataMap([
+      [
+        CODE_SEARCH_TOOL_NAME,
+        {
+          groupId: "code-index",
+          kind: "code_search",
+          // 只读：只查本地索引与现读文件，plan mode / 子代理天然可用。
+          isReadOnly: true,
+          displayCategory: "search",
+        },
+      ],
+    ]),
+  };
+}

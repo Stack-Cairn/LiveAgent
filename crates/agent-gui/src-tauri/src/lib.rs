@@ -119,6 +119,14 @@ macro_rules! app_invoke_handler {
             commands::mcp_oauth::mcp_oauth_authorize,
             commands::mcp_oauth::mcp_oauth_status,
             commands::mcp_oauth::mcp_oauth_clear,
+            // Code index（docs/design/code-index.md）
+            commands::code_index::code_index_enable,
+            commands::code_index::code_index_disable,
+            commands::code_index::code_index_rebuild,
+            commands::code_index::code_index_status,
+            commands::code_index::code_index_job_status,
+            commands::code_index::code_index_job_cancel,
+            commands::code_index::code_index_search,
             // Memory
             commands::memory::memory_list,
             commands::memory::memory_read,

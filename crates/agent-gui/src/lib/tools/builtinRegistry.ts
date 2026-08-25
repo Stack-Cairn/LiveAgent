@@ -22,6 +22,7 @@ import type {
   BuiltinToolExecutionContext,
   BuiltinToolMetadata,
 } from "./builtinTypes";
+import { createCodeSearchTools } from "./codeSearchTools";
 import { createCronTools } from "./cronTools";
 import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
@@ -187,6 +188,9 @@ type BuildBuiltinBaseToolRegistryParams = {
   onMcpLoadError?: (message: string) => void;
   mcpLoadFailureMode?: "continue" | "throw";
   memoryToolMode?: "rw" | "ro";
+  /** 代码索引 per-workspace opt-in：开启才注册 CodeSearch（关闭 = 工具表与
+   * system prompt 双不注入，docs/design/code-index.md 验收项）。 */
+  codeIndexEnabled?: boolean;
   remoteWebTunnelsEnabled?: boolean;
   tunnelProjectPathKey?: string;
   tunnelPublicBaseUrl?: string;
@@ -261,6 +265,13 @@ async function buildBaseBuiltinToolBundles(
       workdir: params.workdir,
       mode: params.memoryToolMode ?? "rw",
     }),
+    ...(params.codeIndexEnabled
+      ? [
+          createCodeSearchTools({
+            workdir: params.workdir,
+          }),
+        ]
+      : []),
     createTunnelManagerTools({
       enabled: params.remoteWebTunnelsEnabled === true && params.runtimeScope === "chat",
       runtimeScope: params.runtimeScope,
@@ -451,6 +462,9 @@ export async function buildBuiltinToolRegistry(
                 applyMcpOps: undefined,
                 mcpLoadFailureMode: "continue",
                 memoryToolMode: "ro",
+                // 代码索引是 per-workspace 的：worktree 子代理的 workdir 是
+                // 临时目录，无索引可查——只有沿用父工作区时才保留 CodeSearch。
+                codeIndexEnabled: params.codeIndexEnabled && workdir === params.workdir,
                 // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
                 // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
                 // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
