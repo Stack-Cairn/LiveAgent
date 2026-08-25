@@ -156,6 +156,9 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                         key={definition.id}
                         type="button"
                         onClick={() => setSection(definition.id)}
+                        data-testid={`settings-nav-${definition.id}`}
+                        data-settings-nav-id={definition.id}
+                        data-active={active ? "true" : "false"}
                         className={cn(
                           "settings-nav-item group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-150",
                           active

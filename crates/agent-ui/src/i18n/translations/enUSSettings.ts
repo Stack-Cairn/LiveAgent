@@ -1184,4 +1184,46 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.hooksActiveHooks": "Active",
   "settings.hooksInactiveHooks": "Inactive",
   "settings.hooksSelectedEvent": "Selected Event",
+  "settings.cua.title": "CUA (Computer Use Agent) Driver",
+  "settings.cua.enable": "Enable CUA",
+  "settings.cua.enableDesc":
+    "When enabled, the Agent can operate the desktop through cua_* tools (window listing, screenshot, click, type, etc.).",
+  "settings.cua.enableDescUnsupported":
+    "The CUA driver is not implemented for this platform yet; all operations will fail when enabled.",
+  "settings.cua.platform": "Driver platform",
+  "settings.cua.platformDesc":
+    "Selected at build time by the Rust target (macOS / Windows / Linux).",
+  "settings.cua.platformNotes.macos.accessibility":
+    "LiveAgent needs the Accessibility permission to send mouse and keyboard events.",
+  "settings.cua.platformNotes.macos.screenRecording":
+    "LiveAgent needs the Screen Recording permission to capture screenshots.",
+  "settings.cua.platformNotes.macos.dragAndDrop":
+    "Drag-and-drop requires `cliclick` installed first (`brew install cliclick`).",
+  "settings.cua.platformNotes.unsupported":
+    "Driver not implemented; all CUA operations will fail when enabled",
+  "settings.cua.allowedOwners": "Allowed target apps",
+  "settings.cua.allowedOwnersDesc":
+    "When non-empty, only listed owner names are allowed for focus / input / click. Screenshots and window listing bypass this list.",
+  "settings.cua.allowedOwnersHint": "e.g. Finder, Safari, Terminal",
+  "settings.cua.audit": "Audit log",
+  "settings.cua.auditLimit": "Audit log limit",
+  "settings.cua.auditLimitDesc": "Keep the most recent N CUA operations in memory (0 = disable).",
+  "settings.cua.auditCurrent": "{count} entries",
+  "settings.cua.auditEmpty": "No CUA operations recorded yet.",
+  "settings.cua.auditClear": "Clear log",
+  "settings.cua.saving": "Syncing CUA config…",
+  "settings.cua.errors.fetch": "Failed to read CUA status",
+  "settings.cua.errors.save": "Failed to save CUA config",
+  "cua.errors.disabled":
+    "CUA is not enabled. Open Settings → CUA Driver and turn the master switch on, then retry.",
+  "cua.errors.deniedByAllowlist":
+    "CUA operation denied: target \"{target}\" is not in the allowlist {allowed}.",
+  "cua.errors.unsupportedPlatform":
+    "CUA driver is not available on {platform}; only macOS is implemented right now.",
+  "cua.errors.permissionRequired":
+    "CUA needs the macOS {permission} permission. Open System Settings → Privacy & Security and grant LiveAgent the {permission} permission, then retry.",
+  "cua.errors.notExecuted": "CUA operation was not executed: {detail}",
+  "cua.errors.io": "CUA subprocess IO error: {detail}",
+  "cua.errors.unknown": "unknown reason",
+  "settings.navCua": "CUA Driver",
 } as const satisfies Record<string, string>;

@@ -1129,4 +1129,40 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hooksActiveHooks": "已启用",
   "settings.hooksInactiveHooks": "已禁用",
   "settings.hooksSelectedEvent": "当前事件",
+  "settings.cua.title": "CUA（Computer Use Agent）驱动",
+  "settings.cua.enable": "启用 CUA",
+  "settings.cua.enableDesc":
+    "开启后，Agent 可通过 cua_* 工具操作电脑界面（窗口枚举、截屏、点击、输入等）。",
+  "settings.cua.enableDescUnsupported": "当前平台尚未实现 CUA 驱动；启用后所有操作都会失败。",
+  "settings.cua.platform": "驱动平台",
+  "settings.cua.platformDesc": "由 Rust 端按编译目标决定（macOS / Windows / Linux）。",
+  "settings.cua.platformNotes.macos.accessibility":
+    "需要授予 LiveAgent「辅助功能」权限，用于向系统发送鼠标 / 键盘事件。",
+  "settings.cua.platformNotes.macos.screenRecording":
+    "需要授予 LiveAgent「屏幕录制」权限，用于截屏。",
+  "settings.cua.platformNotes.macos.dragAndDrop":
+    "拖拽需要先安装 `cliclick`（brew install cliclick）。",
+  "settings.cua.platformNotes.unsupported": "驱动尚未实现；启用后所有 CUA 操作都会失败",
+  "settings.cua.allowedOwners": "允许的目标应用",
+  "settings.cua.allowedOwnersDesc":
+    "非空时生效，名单内的 owner 名才允许 focus / 输入 / 点击。截屏与窗口枚举不受名单限制。",
+  "settings.cua.allowedOwnersHint": "例：Finder, Safari, Terminal",
+  "settings.cua.audit": "审计日志",
+  "settings.cua.auditLimit": "审计日志上限",
+  "settings.cua.auditLimitDesc": "内存中保留最近 N 条 CUA 操作（0 = 关闭）。",
+  "settings.cua.auditCurrent": "当前 {count} 条",
+  "settings.cua.auditEmpty": "暂无 CUA 操作记录。",
+  "settings.cua.auditClear": "清空日志",
+  "settings.cua.saving": "正在同步 CUA 配置…",
+  "settings.cua.errors.fetch": "无法读取 CUA 状态",
+  "settings.cua.errors.save": "保存 CUA 配置失败",
+  "cua.errors.disabled": "CUA 未启用。请到「设置 → CUA 驱动」打开总开关后再试。",
+  "cua.errors.deniedByAllowlist": "CUA 操作被拒绝：目标「{target}」不在白名单 {allowed} 中。",
+  "cua.errors.unsupportedPlatform": "CUA 驱动在当前平台（{platform}）不可用，目前仅在 macOS 上实现。",
+  "cua.errors.permissionRequired":
+    "CUA 操作需要 macOS 权限（{permission}）。请到「系统设置 → 隐私与安全」授予 LiveAgent「{permission}」权限后重试。",
+  "cua.errors.notExecuted": "CUA 操作未执行：{detail}",
+  "cua.errors.io": "CUA 子进程 IO 错误：{detail}",
+  "cua.errors.unknown": "未知原因",
+  "settings.navCua": "CUA 驱动",
 } as const satisfies Record<string, string>;
