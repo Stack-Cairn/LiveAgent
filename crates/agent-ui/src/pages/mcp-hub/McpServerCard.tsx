@@ -277,9 +277,13 @@ export const McpServerCard = memo(function McpServerCard(props: {
         <ConfirmDeletePopover
           name={server.id || `Server ${idx + 1}`}
           onConfirm={() => {
-            // OAuth server 删除时同步清理 keychain 条目（best effort，失败不阻塞删除）。
+            // OAuth server 删除时同步清理 keychain 条目（best effort，失败不阻塞
+            // 删除，但要留痕——卡片随删除卸载，无处挂 error 态，与 mcpManagerTools
+            // 的 runtimeWarnings 对应的最低限度是 console.warn）。
             if (isOauthServer(server) && !isGatewayWebuiRuntime()) {
-              void mcpOauthClear(server.id).catch(() => {});
+              void mcpOauthClear(server.id).catch((err: unknown) => {
+                console.warn(`[mcp-hub] failed to clear OAuth credentials for ${server.id}:`, err);
+              });
             }
             setSettings((prev) =>
               removeWorkspaceResourceReferences(

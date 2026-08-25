@@ -1,7 +1,8 @@
 //! MCP OAuth token 存储（docs/design/mcp-oauth.md §3）。
 //!
 //! 凭据纪律：token/client_secret 只进 OS keystore（keyring v3），keyring 不可用
-//! 时降级 `~/.liveagent/mcp-oauth-tokens.json`（0600 明文，诊断标注 `file`）——
+//! 时降级 `~/.liveagent/mcp-oauth-tokens.json`（明文，诊断标注 `file`；Unix 上
+//! chmod 0600，Windows 无此语义、依赖 `%USERPROFILE%` 默认 ACL）——
 //! 永不进 settings/SQLite，Gateway 同步与 WebDAV 备份天然不含凭据。
 //! Keychain IPC 有毫秒级开销，故挂进程内缓存：只在 miss/授权/刷新/清除时碰后端。
 
@@ -213,8 +214,8 @@ pub fn save(server_id: &str, record: &TokenRecord) -> Result<(), String> {
             }
         }
         Err(keyring_error) => {
-            let path = file_store_path()
-                .map_err(|e| format!("{keyring_error}；文件降级也失败：{e}"))?;
+            let path =
+                file_store_path().map_err(|e| format!("{keyring_error}；文件降级也失败：{e}"))?;
             let mut map = load_file_map_at(&path);
             map.insert(id.to_string(), record.clone());
             save_file_map_at(&path, &map)

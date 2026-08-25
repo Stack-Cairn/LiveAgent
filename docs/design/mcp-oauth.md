@@ -24,10 +24,10 @@ remote MCP server（transport=http/sse）目前只支持静态 `headers` 鉴权�
 |---|---|---|
 | 授权触发 | **只由显式用户手势触发**（MCP Hub 卡片 Connect / McpManager test 引导）；transport 内 401 只做静默刷新 + 标记性错误，绝不弹浏览器 | 对话中途并发工具调用会弹 N 个浏览器窗口；授权是配置态动作不是运行态动作 |
 | 发现链 | 401 `WWW-Authenticate` 的 `resource_metadata`（RFC 9728）→ PRM `authorization_servers[0]` → RFC 8414 AS 元数据（路径感知探测 + OIDC fallback）；无 `WWW-Authenticate` 时按 server URL 推导 PRM well-known，再退 2025-03-26 旧规范（AS=server origin，缺元数据时默认 `/authorize` `/token` `/register` 端点） | 兼容新旧两代托管 server；旧 Cloudflare workers 类 server 只有默认端点 |
-| 客户端 | 配置可带静态 `auth.clientId`；否则 RFC 7591 动态注册（`token_endpoint_auth_method:"none"` 公共客户端），注册结果随 token 同存 keychain；复用失败（invalid_client 等）清掉重注册一次 | 托管 server 普遍开 DCR；静态 client 供企业 AS 用 |
+| 客户端 | 配置可带静态 `auth.clientId`；否则 RFC 7591 动态注册（`token_endpoint_auth_method:"none"` 公共客户端），注册结果随 token 同存 keychain；复用后授权失败（invalid_client、超时等）只把该 client 标记为可疑（进程内），下次授权跳过复用直接重注册——存量 token 保留，防止一次未完成的 Reauthorize 销毁仍有效的凭据 | 托管 server 普遍开 DCR；静态 client 供企业 AS 用 |
 | 授权流 | Authorization Code + **PKCE(S256) + state 校验**；系统浏览器（`tauri-plugin-opener`）+ `127.0.0.1:随机端口` loopback 回调（RFC 8252）；authorize/token 请求都带 RFC 8707 `resource` 参数（server URL 规范化） | MCP 规范强制 PKCE 与 resource 绑定；loopback 随机端口免冲突 |
 | scope | `auth.scope` 覆盖 > PRM `scopes_supported` 全量 > 省略 | 对齐 MCP 规范推荐 |
-| 存储 | `keyring` v3（macOS Keychain / Windows Credential Manager / Linux secret-service）；keyring 不可用（无 secret-service、headless）降级 `~/.liveagent/mcp-oauth-tokens.json`（0600） | roadmap 凭据纪律；降级保证 Linux 可用 |
+| 存储 | `keyring` v3（macOS Keychain / Windows Credential Manager / Linux secret-service）；keyring 不可用（无 secret-service、headless）降级 `~/.liveagent/mcp-oauth-tokens.json`（明文；Unix 上 0600，Windows 依赖用户目录默认 ACL） | roadmap 凭据纪律；降级保证 Linux 可用 |
 | 存储键 | service=`LiveAgent MCP OAuth`，account=server id；blob 内含 `server_url`，与当前配置 URL 不符即视为无 token | 防 URL 改指向后 token 串用到别的 server（audience 混淆） |
 | 进程内缓存 | `mcp_oauth::store` 持全局 `Mutex<HashMap<server_id, TokenRecord>>`，keyring 只在 miss/授权/刷新/清除时读写 | Keychain IPC 有毫秒级开销，不能每请求一次 |
 | 刷新 | 请求前 `expires_at - 60s` 窗口主动刷新；401 被动刷新一次并重试（沿用 `SessionExpired404` 的单次重试骨架）；refresh token 轮换即持久化 | 无感续期；重试骨架已被验证 |
@@ -98,7 +98,7 @@ SSE transport：长连 GET 流每次重连时从 store 取当前 Bearer（不固
 ## 6. 安全要点
 
 - loopback 只绑 `127.0.0.1`，one-shot，5 分钟超时；`state` 恒定比较校验；回调页为纯静态成功/失败 HTML
-- 浏览器只打开 `https:` 或 `http://127.0.0.1` 的授权 URL（阻断 `javascript:` 等注入面）
+- 浏览器只打开 `https:` 或 loopback `http`（`127.0.0.1`/`localhost`，RFC 8252 §7.3）的授权 URL（阻断 `javascript:` 等注入面）
 - token/client_secret 不落日志、不进 settings/DB/同步/备份；诊断输出仅状态与过期时间
 - Bearer 只发给配置里的 server URL（TokenRecord.server_url 一致性校验，防 audience 混淆）
 - `resource` 参数（RFC 8707）绑定 token 受众

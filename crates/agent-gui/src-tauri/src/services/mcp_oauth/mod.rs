@@ -94,6 +94,7 @@ pub fn status(server: &OauthServer) -> OauthStatusInfo {
 
 /// 卸载 server / 用户断开授权时调用：清 keychain 与文件降级条目。
 pub fn clear(server_id: &str) -> Result<(), String> {
+    clear_client_suspect(server_id);
     store::delete(server_id)
 }
 
@@ -122,7 +123,9 @@ impl AuthorizeSlot {
             .lock()
             .map_err(|_| "授权互斥锁失败".to_string())?;
         if !guard.insert(server_id.to_string()) {
-            return Err(format!("server `{server_id}` 的授权正在进行中，请先完成或等待超时"));
+            return Err(format!(
+                "server `{server_id}` 的授权正在进行中，请先完成或等待超时"
+            ));
         }
         Ok(Self(server_id.to_string()))
     }
@@ -133,6 +136,34 @@ impl Drop for AuthorizeSlot {
         if let Ok(mut guard) = authorize_guard().lock() {
             guard.remove(&self.0);
         }
+    }
+}
+
+/// 浏览器阶段/换码失败过的存量 client（server id 集合，进程内）。命中的
+/// server 下次授权跳过复用、直接动态重注册自愈；keychain 记录原样保留——
+/// 授权失败可能只是超时/用户关页，存量 token/refresh_token 运行时仍有效，
+/// 不能因一次未完成的 Reauthorize 就销毁可用凭据。
+fn suspect_clients() -> &'static Mutex<HashSet<String>> {
+    static SUSPECTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    SUSPECTS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn is_client_suspect(server_id: &str) -> bool {
+    suspect_clients()
+        .lock()
+        .map(|set| set.contains(server_id))
+        .unwrap_or(false)
+}
+
+fn mark_client_suspect(server_id: &str) {
+    if let Ok(mut set) = suspect_clients().lock() {
+        set.insert(server_id.to_string());
+    }
+}
+
+fn clear_client_suspect(server_id: &str) {
+    if let Ok(mut set) = suspect_clients().lock() {
+        set.remove(server_id);
     }
 }
 
@@ -156,10 +187,12 @@ pub fn authorize(
     let redirect_uri = loopback.redirect_uri();
 
     // client 凭据：静态配置 > keychain 存量注册（issuer 一致才复用）> 动态注册。
+    // 上次授权失败过的存量 client 视作可疑，跳过复用直接重注册。
     let stored = load_matching(server_id, &server.url);
-    let reused_stored_client = stored
-        .as_ref()
-        .is_some_and(|record| record.issuer == discovered.issuer && !record.client_id.is_empty());
+    let reused_stored_client = !is_client_suspect(server_id)
+        && stored.as_ref().is_some_and(|record| {
+            record.issuer == discovered.issuer && !record.client_id.is_empty()
+        });
     let (client_id, client_secret, auth_method) = if let Some(static_id) = server
         .static_client_id
         .as_deref()
@@ -199,8 +232,7 @@ pub fn authorize(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .or_else(|| {
-            (!discovered.scopes_supported.is_empty())
-                .then(|| discovered.scopes_supported.join(" "))
+            (!discovered.scopes_supported.is_empty()).then(|| discovered.scopes_supported.join(" "))
         });
 
     let pkce = flow::new_pkce()?;
@@ -222,10 +254,10 @@ pub fn authorize(
     let code = match loopback.wait_for_code(&state, flow::AUTHORIZE_TIMEOUT) {
         Ok(code) => code,
         Err(error) => {
-            // 复用的存量 client 可能已被 AS 作废（浏览器阶段报错）。清掉记录，
-            // 下次重试走全新动态注册自愈。
+            // 失败原因无法区分「AS 作废了复用的 client」与超时/用户关页等无关
+            // 故障，只标记 client 可疑（下次授权重注册），存量 token 保留。
             if reused_stored_client && server.static_client_id.is_none() {
-                let _ = store::delete(server_id);
+                mark_client_suspect(server_id);
             }
             return Err(error);
         }
@@ -244,7 +276,14 @@ pub fn authorize(
         &pkce.verifier,
         &redirect_uri,
         &discovered.resource,
-    )?;
+    )
+    .map_err(|error| {
+        // 换码被拒（如 invalid_client）同样只标记，等下次授权走重注册。
+        if reused_stored_client && server.static_client_id.is_none() {
+            mark_client_suspect(server_id);
+        }
+        error
+    })?;
 
     let now = store::now_ms();
     let record = TokenRecord {
@@ -267,6 +306,7 @@ pub fn authorize(
             .unwrap_or(0),
     };
     store::save(server_id, &record)?;
+    clear_client_suspect(server_id);
     Ok(status_of(&record))
 }
 
@@ -370,9 +410,28 @@ mod tests {
         let slot = AuthorizeSlot::acquire("dup-server").expect("first");
         let second = AuthorizeSlot::acquire("dup-server");
         assert!(second.is_err(), "同 server 并发授权必须被拒");
-        assert!(AuthorizeSlot::acquire("other-server").is_ok(), "不同 server 不受影响");
+        assert!(
+            AuthorizeSlot::acquire("other-server").is_ok(),
+            "不同 server 不受影响"
+        );
         drop(slot);
-        assert!(AuthorizeSlot::acquire("dup-server").is_ok(), "释放后可再授权");
+        assert!(
+            AuthorizeSlot::acquire("dup-server").is_ok(),
+            "释放后可再授权"
+        );
+    }
+
+    #[test]
+    fn suspect_marking_skips_reuse_without_touching_other_servers() {
+        assert!(!is_client_suspect("suspect-a"));
+        mark_client_suspect("suspect-a");
+        assert!(is_client_suspect("suspect-a"), "标记后下次授权应跳过复用");
+        assert!(!is_client_suspect("suspect-b"), "标记只影响该 server");
+        clear_client_suspect("suspect-a");
+        assert!(!is_client_suspect("suspect-a"), "授权成功/clear 后解除标记");
+        // 重复 clear 幂等。
+        clear_client_suspect("suspect-a");
+        assert!(!is_client_suspect("suspect-a"));
     }
 
     #[test]

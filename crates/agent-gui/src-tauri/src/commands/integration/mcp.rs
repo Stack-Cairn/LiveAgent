@@ -314,6 +314,20 @@ fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<Header
     Ok(map)
 }
 
+/// 合并静态 headers 与 OAuth Bearer。Bearer 必须经 `HeaderMap::insert` 覆盖
+/// 同名条目：静态配置里残留的 `Authorization`（如迁移到 OAuth 前手工填的
+/// token）若走 reqwest `RequestBuilder::header`（append 语义）追加，请求会
+/// 带上两个 Authorization 头，server/代理可能取错凭据或直接拒收。
+fn headers_with_bearer(static_headers: &HeaderMap, bearer: Option<&str>) -> HeaderMap {
+    let mut merged = static_headers.clone();
+    if let Some(bearer) = bearer {
+        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {bearer}")) {
+            merged.insert(AUTHORIZATION, value);
+        }
+    }
+    merged
+}
+
 fn append_stderr_tail(tail: &Arc<Mutex<Vec<String>>>, line: String) {
     if line.is_empty() {
         return;
@@ -658,11 +672,9 @@ impl HttpTransport {
         mut builder: reqwest::blocking::RequestBuilder,
         bearer: Option<&str>,
     ) -> reqwest::blocking::RequestBuilder {
-        if !self.headers.is_empty() {
-            builder = builder.headers(self.headers.clone());
-        }
-        if let Some(bearer) = bearer {
-            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+        let merged = headers_with_bearer(&self.headers, bearer);
+        if !merged.is_empty() {
+            builder = builder.headers(merged);
         }
         builder.header(ACCEPT, "application/json, text/event-stream")
     }
@@ -883,16 +895,14 @@ impl SseTransport {
             }
 
             let mut builder = thread_client.get(thread_sse_url.clone());
-            if !thread_headers.is_empty() {
-                builder = builder.headers(thread_headers.clone());
-            }
-            if thread_oauth {
-                if let Some(bearer) = crate::services::mcp_oauth::ensure_bearer(
-                    &thread_server_id,
-                    &thread_server_url,
-                ) {
-                    builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
-                }
+            let bearer = if thread_oauth {
+                crate::services::mcp_oauth::ensure_bearer(&thread_server_id, &thread_server_url)
+            } else {
+                None
+            };
+            let merged = headers_with_bearer(&thread_headers, bearer.as_deref());
+            if !merged.is_empty() {
+                builder = builder.headers(merged);
             }
             builder = builder.header(ACCEPT, "text/event-stream");
 
@@ -1042,11 +1052,9 @@ impl SseTransport {
         });
 
         let mut builder = self.client_post.post(post_url);
-        if !self.headers.is_empty() {
-            builder = builder.headers(self.headers.clone());
-        }
-        if let Some(bearer) = bearer {
-            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+        let merged = headers_with_bearer(&self.headers, bearer);
+        if !merged.is_empty() {
+            builder = builder.headers(merged);
         }
         let resp = builder
             .header(CONTENT_TYPE, "application/json")
@@ -1085,11 +1093,9 @@ impl SseTransport {
         });
 
         let mut builder = self.client_post.post(post_url);
-        if !self.headers.is_empty() {
-            builder = builder.headers(self.headers.clone());
-        }
-        if let Some(bearer) = bearer {
-            builder = builder.header(AUTHORIZATION, format!("Bearer {bearer}"));
+        let merged = headers_with_bearer(&self.headers, bearer);
+        if !merged.is_empty() {
+            builder = builder.headers(merged);
         }
         let resp = builder
             .header(CONTENT_TYPE, "application/json")
@@ -2039,6 +2045,31 @@ mod tests {
             message_url: None,
             auth: None,
         }
+    }
+
+    #[test]
+    fn bearer_overrides_static_authorization_header() {
+        let mut static_headers = HeaderMap::new();
+        static_headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer stale"));
+        static_headers.insert("x-extra", HeaderValue::from_static("keep"));
+
+        let merged = headers_with_bearer(&static_headers, Some("fresh"));
+        let values: Vec<_> = merged.get_all(AUTHORIZATION).iter().collect();
+        assert_eq!(
+            values.len(),
+            1,
+            "OAuth Bearer 必须覆盖静态 Authorization，不能追加"
+        );
+        assert_eq!(values[0], "Bearer fresh");
+        assert_eq!(
+            merged.get("x-extra").unwrap(),
+            "keep",
+            "其余静态 header 保留"
+        );
+
+        // 无 bearer 时原样透传（含静态 Authorization 的现状行为）。
+        let untouched = headers_with_bearer(&static_headers, None);
+        assert_eq!(untouched.get(AUTHORIZATION).unwrap(), "Bearer stale");
     }
 
     #[test]
