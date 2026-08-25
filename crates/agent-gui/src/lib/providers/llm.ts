@@ -16,7 +16,11 @@ export {
   isOfficialGeminiApiBaseUrl,
   normalizeGeminiThoughtSignatures,
 } from "./runtime/geminiToolPayload";
-export { assistantMessageToText, createStreamingTextReconciler } from "./runtime/messageUtils";
+export {
+  assistantMessageToText,
+  createStreamingTextReconciler,
+  sanitizeAssistantMessage,
+} from "./runtime/messageUtils";
 export { createModelFromConfig } from "./runtime/modelFactory";
 export { parseModelValue, toModelValue } from "./runtime/modelValue";
 export { attachProviderNativeWebSearch } from "./runtime/nativeSearchPayload";

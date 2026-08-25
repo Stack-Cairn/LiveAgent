@@ -46,6 +46,7 @@ import {
   isProviderNativeWebFetchToolName,
   isProviderNativeWebSearchToolName,
 } from "../../providers/nativeWebSearch";
+import { sanitizeAssistantMessage } from "../../providers/runtime/messageUtils";
 import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
@@ -1721,7 +1722,7 @@ export async function runAssistantWithTools(params: {
                   : "completed";
             const hostedSearchBlocks = getHostedSearchBlocksForRound(currentRound);
             const assistantWithCanonicalToolNames = normalizeAssistantToolCallNamesForExecution(
-              event.message as AssistantMessage,
+              sanitizeAssistantMessage(event.message as AssistantMessage),
             );
             const assistantWithHostedSearch = applyHostedSearchBlocksToAssistant(
               assistantWithCanonicalToolNames,
