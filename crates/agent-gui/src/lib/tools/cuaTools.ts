@@ -5,12 +5,9 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_LOCALE, type Locale, t } from "@liveagent/app/i18n/config";
-import {
-  formatUnknownCuaError,
-  type CuaErrorPayload,
-} from "@liveagent/ui/lib/cua/formatCuaError";
+import { type CuaErrorPayload, formatUnknownCuaError } from "@liveagent/ui/lib/cua/formatCuaError";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { BuiltinToolBundle, BuiltinToolMetadata } from "./builtinTypes";
 import { createBuiltinMetadataMap } from "./builtinTypes";
@@ -116,8 +113,7 @@ function jsonResult<T>(toolCall: ToolCall, payload: T, summary: string): ToolRes
 export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinToolBundle {
   const resolveLocale = (): Locale =>
     params?.getLocale ? safeReadLocale(params.getLocale) : DEFAULT_LOCALE;
-  const formatError = (input: unknown): string =>
-    formatUnknownCuaError(input, t, resolveLocale());
+  const formatError = (input: unknown): string => formatUnknownCuaError(input, t, resolveLocale());
   const formatOpError = (payload: CuaErrorPayload | undefined): string => {
     if (payload) {
       return formatUnknownCuaError(payload, t, resolveLocale());
@@ -126,10 +122,16 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
   };
   const metadataEntries: Array<[string, BuiltinToolMetadata]> = [
     ["cua_list_windows", { groupId: "cua", kind: "cua", isReadOnly: true, displayCategory: "cua" }],
-    ["cua_focus_window", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
+    [
+      "cua_focus_window",
+      { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" },
+    ],
     ["cua_screenshot", { groupId: "cua", kind: "cua", isReadOnly: true, displayCategory: "cua" }],
     ["cua_click", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
-    ["cua_double_click", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
+    [
+      "cua_double_click",
+      { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" },
+    ],
     ["cua_type", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
     ["cua_key", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
     ["cua_scroll", { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" }],
@@ -212,8 +214,7 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
     },
     {
       name: "cua_type",
-      description:
-        "[CUA] 模拟键盘输入字符串。targetOwner 可选：指定后操作会经后端白名单校验。",
+      description: "[CUA] 模拟键盘输入字符串。targetOwner 可选：指定后操作会经后端白名单校验。",
       parameters: normalizeToolParametersSchema(
         {
           type: "object",
@@ -271,8 +272,7 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
     },
     {
       name: "cua_drag",
-      description:
-        "[CUA] 拖拽（macOS 上需要 `brew install cliclick`）。从 (x1, y1) 到 (x2, y2)。",
+      description: "[CUA] 拖拽（macOS 上需要 `brew install cliclick`）。从 (x1, y1) 到 (x2, y2)。",
       parameters: normalizeToolParametersSchema(
         {
           type: "object",
@@ -301,7 +301,10 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
         case "cua_list_windows": {
           const wins = await invokeCua<CuaWindow[]>("cua_list_windows", {});
           if (wins.length === 0) {
-            return textResult(toolCall, "未发现可见窗口（可能前台应用没有窗口，或缺少屏幕录制权限）。");
+            return textResult(
+              toolCall,
+              "未发现可见窗口（可能前台应用没有窗口，或缺少屏幕录制权限）。",
+            );
           }
           return jsonResult(toolCall, wins, `共 ${wins.length} 个可见窗口：`);
         }
@@ -322,11 +325,7 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
           const resp = await invokeCua<CuaScreenshotResponse>("cua_screenshot", {
             windowOwner,
           });
-          return imageResult(
-            toolCall,
-            resp,
-            `截图成功：${resp.width}×${resp.height}`,
-          );
+          return imageResult(toolCall, resp, `截图成功：${resp.width}×${resp.height}`);
         }
         case "cua_click": {
           const x = Number(args.x);

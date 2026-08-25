@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { CuaService, CuaSettings, CuaStatus } from "@liveagent/ui/pages/settings/CuaSection";
+import { invoke } from "@tauri-apps/api/core";
 
 /**
  * 桌面端到 Rust `cua_*` Tauri Command 的桥。设置面板与 Settings 扩展

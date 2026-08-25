@@ -166,9 +166,7 @@ function readLocalUiSettings(): {
       closeWindowBehavior: normalizeCloseWindowBehavior(
         parsed?.closeWindowBehavior ?? defaults.closeWindowBehavior,
       ),
-      cua: parsed?.cua
-        ? normalizeCuaSettings(parsed.cua)
-        : defaults.cua,
+      cua: parsed?.cua ? normalizeCuaSettings(parsed.cua) : defaults.cua,
     };
   } catch {
     return {

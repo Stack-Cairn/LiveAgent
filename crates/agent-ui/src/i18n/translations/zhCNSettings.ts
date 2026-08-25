@@ -1158,7 +1158,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cua.errors.save": "保存 CUA 配置失败",
   "cua.errors.disabled": "CUA 未启用。请到「设置 → CUA 驱动」打开总开关后再试。",
   "cua.errors.deniedByAllowlist": "CUA 操作被拒绝：目标「{target}」不在白名单 {allowed} 中。",
-  "cua.errors.unsupportedPlatform": "CUA 驱动在当前平台（{platform}）不可用，目前仅在 macOS 上实现。",
+  "cua.errors.unsupportedPlatform":
+    "CUA 驱动在当前平台（{platform}）不可用，目前仅在 macOS 上实现。",
   "cua.errors.permissionRequired":
     "CUA 操作需要 macOS 权限（{permission}）。请到「系统设置 → 隐私与安全」授予 LiveAgent「{permission}」权限后重试。",
   "cua.errors.notExecuted": "CUA 操作未执行：{detail}",

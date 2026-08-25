@@ -544,7 +544,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.enableDescUnsupported":
       "CUA is not implemented for this platform yet; turning it on will fail every operation.",
     "settings.cua.platform": "Driver platform",
-    "settings.cua.platformDesc": "Selected at build time by the Rust target (macOS / Windows / Linux).",
+    "settings.cua.platformDesc":
+      "Selected at build time by the Rust target (macOS / Windows / Linux).",
     "settings.cua.platformNotes.macos.accessibility":
       "Accessibility — System Events drives mouse / keyboard",
     "settings.cua.platformNotes.macos.screenRecording":

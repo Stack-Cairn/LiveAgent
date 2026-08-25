@@ -1217,7 +1217,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "cua.errors.disabled":
     "CUA is not enabled. Open Settings → CUA Driver and turn the master switch on, then retry.",
   "cua.errors.deniedByAllowlist":
-    "CUA operation denied: target \"{target}\" is not in the allowlist {allowed}.",
+    'CUA operation denied: target "{target}" is not in the allowlist {allowed}.',
   "cua.errors.unsupportedPlatform":
     "CUA driver is not available on {platform}; only macOS is implemented right now.",
   "cua.errors.permissionRequired":

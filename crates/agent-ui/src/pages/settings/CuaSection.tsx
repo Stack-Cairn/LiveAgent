@@ -1,23 +1,11 @@
-import {
-  Eye,
-  EyeOff,
-  MonitorSmartphone,
-  Trash2,
-} from "@liveagent/ui/components/IconSet";
+import { Eye, EyeOff, MonitorSmartphone, Trash2 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { type CuaErrorPayload, formatCuaError } from "@liveagent/ui/lib/cua/formatCuaError";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
-import {
-  formatCuaError,
-  type CuaErrorPayload,
-} from "@liveagent/ui/lib/cua/formatCuaError";
-import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AgentActivationSwitch,
-  SettingsGroup,
-  SettingsRow,
-} from "./shared";
+import { AgentActivationSwitch, SettingsGroup, SettingsRow } from "./shared";
 
 export type CuaSettings = {
   enabled: boolean;
@@ -130,9 +118,7 @@ export function CuaSection(props: CuaSectionProps) {
   const { t, locale } = useLocale();
   const [status, setStatus] = useState<CuaStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [ownersDraft, setOwnersDraft] = useState<string>(
-    joinOwners(settings.allowedOwners),
-  );
+  const [ownersDraft, setOwnersDraft] = useState<string>(joinOwners(settings.allowedOwners));
   const [persisting, setPersisting] = useState(false);
   const lastSyncedSettingsRef = useRef<CuaSettings>(settings);
 
@@ -217,10 +203,7 @@ export function CuaSection(props: CuaSectionProps) {
   }, [cuaService]);
 
   const auditCount = status?.recent.length ?? 0;
-  const previewEntries = useMemo(
-    () => (status?.recent ?? []).slice(-10).reverse(),
-    [status],
-  );
+  const previewEntries = useMemo(() => (status?.recent ?? []).slice(-10).reverse(), [status]);
 
   return (
     <div className="space-y-6" data-testid="cua-section">
@@ -321,16 +304,11 @@ export function CuaSection(props: CuaSectionProps) {
         />
         <div className="px-5 pb-4">
           {previewEntries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {t("settings.cua.auditEmpty")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("settings.cua.auditEmpty")}</p>
           ) : (
             <ul className="divide-y divide-border/40 text-xs">
               {previewEntries.map((entry, idx) => (
-                <li
-                  key={`${entry.timestamp}-${idx}`}
-                  className="flex items-center gap-3 py-1.5"
-                >
+                <li key={`${entry.timestamp}-${idx}`} className="flex items-center gap-3 py-1.5">
                   <span
                     className={cn(
                       "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
@@ -340,11 +318,7 @@ export function CuaSection(props: CuaSectionProps) {
                     )}
                     title={entry.ok ? "ok" : "error"}
                   >
-                    {entry.ok ? (
-                      <Eye className="h-3 w-3" />
-                    ) : (
-                      <EyeOff className="h-3 w-3" />
-                    )}
+                    {entry.ok ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                   </span>
                   <span className="font-mono text-[11px] text-muted-foreground">
                     {formatTimestamp(entry.timestamp)}

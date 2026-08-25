@@ -15,7 +15,8 @@ export type SectionId =
   | "hooks"
   | "cron"
   | "devices"
-  | "remote";
+  | "remote"
+  | "cua";
 
 export type SettingsPageProps = {
   settings: AppSettings;
@@ -29,6 +30,8 @@ export type SettingsPageProps = {
   sttSettingsService: SttSettingsService;
   /** 临时切换语音输入运行供应商，不触发配置保存。 */
   onSttProviderChange?: (provider: SttProviderId) => void;
+  /** CUA 后端桥；WebUI 不提供（无 cuaService 时 SettingsPage 不渲染 CUA 段）。 */
+  cuaService?: never;
 };
 
 export type SettingsSectionProps = {

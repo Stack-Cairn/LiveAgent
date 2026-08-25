@@ -7,9 +7,7 @@ import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 
-export function createSettingsExtension(
-  props: SettingsPageProps,
-): {
+export function createSettingsExtension(props: SettingsPageProps): {
   surface: "desktop";
   iconClassName: string;
   slots: UiExtensionSlots;

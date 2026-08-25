@@ -24,11 +24,11 @@ import type {
   BuiltinToolMetadata,
 } from "./builtinTypes";
 import { createCronTools } from "./cronTools";
+import { createCuaTools } from "./cuaTools";
 import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
-import { createCuaTools } from "./cuaTools";
 import { createMemoryTools } from "./memoryTools";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
@@ -297,9 +297,7 @@ async function buildBaseBuiltinToolBundles(
           }),
         ]
       : []),
-    ...(params.cuaEnabled
-      ? [createCuaTools({ getLocale: params.getLocale })]
-      : []),
+    ...(params.cuaEnabled ? [createCuaTools({ getLocale: params.getLocale })] : []),
   ];
 
   const enabledServers = selectEnabledMcpServers(params.getMcpSettings());

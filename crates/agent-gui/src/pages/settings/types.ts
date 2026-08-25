@@ -1,8 +1,8 @@
 import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
+import type { CuaService } from "@liveagent/ui/pages/settings/CuaSection";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import type { AppSettings, SttProviderId } from "../../lib/settings";
 import type { SettingsSaveState } from "../../lib/settings/storage";
-import type { CuaService } from "@liveagent/ui/pages/settings/CuaSection";
 
 export type SetSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
 
