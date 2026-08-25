@@ -249,6 +249,34 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.remoteWebTunnelsHint":
       "开启后，已登录 WebUI 可为 localhost 或 IP 地址 HTTP 服务创建和关闭临时访问链接。",
     "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
+    "settings.navCua": "CUA 驱动",
+    "settings.cua.title": "CUA（Computer Use Agent）驱动",
+    "settings.cua.enable": "启用 CUA",
+    "settings.cua.enableDesc":
+      "开启后，Agent 可通过 cua_* 工具操作电脑界面（窗口枚举、截屏、点击、输入等）。",
+    "settings.cua.enableDescUnsupported": "当前平台尚未实现 CUA 驱动；启用后所有操作都会失败。",
+    "settings.cua.platform": "驱动平台",
+    "settings.cua.platformDesc": "由 Rust 端按编译目标决定（macOS / Windows / Linux）。",
+    "settings.cua.platformNotes.macos.accessibility":
+      "辅助功能（Accessibility）— System Events 操控鼠标 / 键盘",
+    "settings.cua.platformNotes.macos.screenRecording":
+      "屏幕录制（Screen Recording）— screencapture 截屏",
+    "settings.cua.platformNotes.macos.dragAndDrop":
+      "拖拽需安装 `cliclick`（brew install cliclick）",
+    "settings.cua.platformNotes.unsupported": "驱动尚未实现；启用后所有 CUA 操作都会失败",
+    "settings.cua.allowedOwners": "允许的目标应用",
+    "settings.cua.allowedOwnersDesc":
+      "白名单：仅这些 owner（应用名）的输入 / 焦点 / 点击会被放行。空 = 不限制。多个 owner 用英文逗号或换行分隔。",
+    "settings.cua.allowedOwnersHint": "例：Finder, Safari, Terminal",
+    "settings.cua.audit": "审计日志",
+    "settings.cua.auditLimit": "审计日志上限",
+    "settings.cua.auditLimitDesc": "内存中保留最近 N 条 CUA 操作（0 = 关闭）。",
+    "settings.cua.auditCurrent": "当前 {count} 条",
+    "settings.cua.auditEmpty": "暂无 CUA 操作记录。",
+    "settings.cua.auditClear": "清空日志",
+    "settings.cua.saving": "正在同步 CUA 配置…",
+    "settings.cua.errors.fetch": "无法读取 CUA 状态",
+    "settings.cua.errors.save": "保存 CUA 配置失败",
   },
   "en-US": {
     "app.windowPinned": "Pinned",
@@ -508,6 +536,36 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.remoteWebTunnelsHint":
       "Allow authenticated WebUI clients to create and close temporary links for localhost or IP-address HTTP services.",
     "settings.remoteHeartbeatHint": "How often the local Agent reports liveness to the Gateway",
+    "settings.navCua": "CUA Driver",
+    "settings.cua.title": "CUA (Computer Use Agent) Driver",
+    "settings.cua.enable": "Enable CUA",
+    "settings.cua.enableDesc":
+      "When enabled, the Agent can operate the desktop through cua_* tools (window listing, screenshot, click, type, etc.).",
+    "settings.cua.enableDescUnsupported":
+      "CUA is not implemented for this platform yet; turning it on will fail every operation.",
+    "settings.cua.platform": "Driver platform",
+    "settings.cua.platformDesc": "Selected at build time by the Rust target (macOS / Windows / Linux).",
+    "settings.cua.platformNotes.macos.accessibility":
+      "Accessibility — System Events drives mouse / keyboard",
+    "settings.cua.platformNotes.macos.screenRecording":
+      "Screen Recording — screencapture for screenshots",
+    "settings.cua.platformNotes.macos.dragAndDrop":
+      "Drag operations require `cliclick` (brew install cliclick)",
+    "settings.cua.platformNotes.unsupported":
+      "Driver is not implemented yet; every CUA operation will fail when enabled",
+    "settings.cua.allowedOwners": "Allowed target apps",
+    "settings.cua.allowedOwnersDesc":
+      "Allowlist: only these owner (app) names are allowed to receive typed / focused / clicked input. Empty = no restriction. Separate multiple owners with commas or newlines.",
+    "settings.cua.allowedOwnersHint": "e.g. Finder, Safari, Terminal",
+    "settings.cua.audit": "Audit log",
+    "settings.cua.auditLimit": "Audit log limit",
+    "settings.cua.auditLimitDesc": "Keep the most recent N CUA operations in memory (0 = disable).",
+    "settings.cua.auditCurrent": "{count} entries",
+    "settings.cua.auditEmpty": "No CUA operations recorded yet.",
+    "settings.cua.auditClear": "Clear log",
+    "settings.cua.saving": "Syncing CUA config…",
+    "settings.cua.errors.fetch": "Failed to read CUA status",
+    "settings.cua.errors.save": "Failed to save CUA config",
   },
 };
 

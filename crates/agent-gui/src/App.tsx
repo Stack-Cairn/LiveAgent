@@ -27,6 +27,7 @@ import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
+import { desktopCuaService } from "./lib/cua/cuaService";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -513,6 +514,33 @@ export default function App() {
 
   const closeSettings = closeSettingsOverlay;
 
+  // CUA-021/022: Settings overlay 打开/关闭后会切换一棵新 React 子树，
+  // WKWebView 的 AX walker 会先短暂失效再重建。让前端在过渡结束、覆
+  // 盖层真正可见之后主动 `cua_refresh_a11y` 一次，让 Rust 把
+  // NSWindow/WKWebView 的 a11y 注解重新广播一遍——cua-driver 下一帧
+  // `get_window_state` 不会再 `ax_window_unresolved`。`cua_window_ready`
+  // 是入口前置命令，这个是在它之后的「再补一刀」。
+  useEffect(() => {
+    if (!settingsReady) return;
+    // overlay 状态切到 open/closed 后再触发，避开 React 渲染抖动。
+    if (overlay !== "open" && overlay !== "closed") return;
+    let cancelled = false;
+    // 给 AppKit 50 ms 让它把当前 frame 的 AX 提交到 WindowServer——
+    // 立即调用经常仍然拿到前一帧的缓存。
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      invoke<{ wk_webview_found: boolean; responder_granted: boolean }>("cua_refresh_a11y").catch(
+        (error: unknown) => {
+          console.warn("cua_refresh_a11y failed", error);
+        },
+      );
+    }, 50);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [overlay, settingsReady]);
+
   // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
   // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
   const closeSettingsRef = useRef(closeSettings);
@@ -744,6 +772,7 @@ export default function App() {
                   sttSettingsService={desktopSttSettingsService}
                   onSttProviderChange={setSttProviderOverride}
                   reloadSettings={reloadPersistedSettings}
+                  cuaService={desktopCuaService}
                 />
               </Suspense>
             </AppErrorBoundary>

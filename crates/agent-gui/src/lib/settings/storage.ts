@@ -14,6 +14,7 @@ import {
   normalizeChatRuntimeControls,
   normalizeChatTranscriptSettings,
   normalizeCloseWindowBehavior,
+  normalizeCuaSettings,
   normalizeFontFamily,
   normalizeFontScaleSettings,
   normalizeRightDockSettings,
@@ -53,6 +54,7 @@ type LocalUiSettings = {
   theme?: unknown;
   locale?: unknown;
   closeWindowBehavior?: unknown;
+  cua?: unknown;
 };
 
 export type SettingsSaveState =
@@ -101,6 +103,7 @@ function readLocalUiSettings(): {
   theme: Theme;
   locale: Locale;
   closeWindowBehavior: CloseWindowBehavior;
+  cua: AppSettings["cua"];
 } {
   const defaults = getDefaultSettings();
 
@@ -140,6 +143,7 @@ function readLocalUiSettings(): {
         theme: defaults.theme,
         locale: defaults.locale,
         closeWindowBehavior: defaults.closeWindowBehavior,
+        cua: defaults.cua,
       };
     }
 
@@ -162,6 +166,9 @@ function readLocalUiSettings(): {
       closeWindowBehavior: normalizeCloseWindowBehavior(
         parsed?.closeWindowBehavior ?? defaults.closeWindowBehavior,
       ),
+      cua: parsed?.cua
+        ? normalizeCuaSettings(parsed.cua)
+        : defaults.cua,
     };
   } catch {
     return {
@@ -174,6 +181,7 @@ function readLocalUiSettings(): {
       theme: defaults.theme,
       locale: defaults.locale,
       closeWindowBehavior: defaults.closeWindowBehavior,
+      cua: defaults.cua,
     };
   }
 }
@@ -189,6 +197,7 @@ function writeLocalUiSettings(
     | "theme"
     | "locale"
     | "closeWindowBehavior"
+    | "cua"
   >,
 ) {
   const payload = {
@@ -200,6 +209,7 @@ function writeLocalUiSettings(
     theme: settings.theme,
     locale: settings.locale,
     closeWindowBehavior: settings.closeWindowBehavior,
+    cua: settings.cua,
   };
   localStorage.setItem(LOCAL_UI_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
 }
@@ -268,6 +278,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     theme: localUi.theme,
     locale: localUi.locale,
     closeWindowBehavior: localUi.closeWindowBehavior,
+    cua: localUi.cua,
   });
 
   return {
@@ -385,7 +396,8 @@ export async function persistSettings(
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale) ||
-    hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior)
+    hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior) ||
+    hasChanged(prev.cua, next.cua)
   ) {
     writeLocalUiSettings({
       skills: next.skills,
@@ -396,6 +408,7 @@ export async function persistSettings(
       theme: next.theme,
       locale: next.locale,
       closeWindowBehavior: next.closeWindowBehavior,
+      cua: next.cua,
     });
   }
 

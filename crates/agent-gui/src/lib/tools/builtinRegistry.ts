@@ -1,4 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Locale } from "@liveagent/app/i18n/config";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { homeDir } from "@tauri-apps/api/path";
 import type { RuntimePlatform } from "../runtimePlatform";
@@ -27,6 +28,7 @@ import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
+import { createCuaTools } from "./cuaTools";
 import { createMemoryTools } from "./memoryTools";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
@@ -195,6 +197,13 @@ type BuildBuiltinBaseToolRegistryParams = {
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void | Promise<void>;
   onTunnelsChanged?: (change: TunnelManagerChange) => void | Promise<void>;
+  /** CUA 总开关；只有 `true` 时才把 cua_* 工具挂进注册表（后端仍会再次
+   * 校验 enabled，白名单也是后端权威）。 */
+  cuaEnabled?: boolean;
+  /** 当前 UI locale；cua_* 工具用此把后端结构化错误翻译成用户语言。
+   * 不传则由 tool bundle 自己 fallback 到 detectSystemLocale（仅在 Tauri WebView
+   * 上下文中可用）；Web/Cron 等非用户场景保持默认 zh-CN。 */
+  getLocale?: () => Locale;
 };
 
 const resolveHomeDir = () => homeDir();
@@ -287,6 +296,9 @@ async function buildBaseBuiltinToolBundles(
             workdir: params.workdir,
           }),
         ]
+      : []),
+    ...(params.cuaEnabled
+      ? [createCuaTools({ getLocale: params.getLocale })]
       : []),
   ];
 

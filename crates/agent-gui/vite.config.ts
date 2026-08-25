@@ -1,11 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import Icons from "unplugin-icons/vite";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+const projectRoot = path.dirname(new URL(import.meta.url).pathname);
 const packageJson = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  readFileSync(path.join(projectRoot, "package.json"), "utf8"),
 ) as { version?: string };
 
 // @ts-expect-error process is a nodejs global
@@ -13,16 +14,39 @@ const env = process.env as Record<string, string | undefined>;
 const appVersion = env.LIVEAGENT_APP_VERSION?.trim() || packageJson.version || "0.0.0";
 const host = env.TAURI_DEV_HOST;
 
+// Pin the workspace root so `unplugin-icons` resolves @iconify-json/* even
+// when `vite` is launched from `crates/agent-gui/src-tauri/` (Tauri runs
+// `beforeDevCommand` from the config directory, which sits one level below
+// the package.json). CUA-008: without this, every `~icons/lucide/*` import
+// fails with "Icon not found" and the SPA renders the ErrorOverlay.
+const iconifyCollectionsNodeResolvePath = [
+  path.join(projectRoot, "node_modules"),
+  path.join(projectRoot, "../node_modules"),
+  path.join(projectRoot, "../../node_modules"),
+].filter((candidate) => existsSync(candidate));
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), Icons({ compiler: "jsx", jsx: "react" })],
+  root: projectRoot,
+  plugins: [
+    react(),
+    Icons({
+      compiler: "jsx",
+      jsx: "react",
+      // Hint unplugin-icons at the workspace's iconify-json directories so
+      // it never has to fall back to cwd-relative discovery.
+      ...(iconifyCollectionsNodeResolvePath.length > 0
+        ? { collectionsNodeResolvePath: iconifyCollectionsNodeResolvePath }
+        : {}),
+    }),
+  ],
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
-      "@liveagent/app": path.resolve(__dirname, "./src"),
-      "@liveagent/adapters": path.resolve(__dirname, "./src/agent-ui-adapters"),
-      "@liveagent/ui": path.resolve(__dirname, "../agent-ui/src"),
-      "node:fs": path.resolve(__dirname, "../agent-ui/src/shims/nodeFs.ts"),
+      "@liveagent/app": path.resolve(projectRoot, "./src"),
+      "@liveagent/adapters": path.resolve(projectRoot, "./src/agent-ui-adapters"),
+      "@liveagent/ui": path.resolve(projectRoot, "../agent-ui/src"),
+      "node:fs": path.resolve(projectRoot, "../agent-ui/src/shims/nodeFs.ts"),
     },
   },
   define: {

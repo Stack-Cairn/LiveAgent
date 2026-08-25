@@ -5,6 +5,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import type { Locale } from "@liveagent/app/i18n/config";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import {
@@ -314,6 +315,10 @@ export type RunAgentConversationTurnParams = {
   associatedSshHostIds?: string[];
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void;
+  /** CUA 总开关的实时读取（权威 settingsRef，非 turn 级快照）。 */
+  getCuaEnabled?: () => boolean;
+  /** 当前 UI locale：cua_* 工具用来把后端结构化错误按用户语言翻译。 */
+  getLocale?: () => Locale;
   sessionId: string;
   /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
   taskStateStore: TaskStateStore;
@@ -403,6 +408,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     associatedSshHostIds,
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
+    getCuaEnabled,
+    getLocale,
     sessionId,
     taskStateStore,
     conversationId,
@@ -645,6 +652,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
     onTunnelsChanged,
+    cuaEnabled: getCuaEnabled?.() === true,
+    getLocale,
     onMcpLoadError: (message) => {
       const warning = `MCP 工具加载失败，已跳过并继续对话：${message || "未知错误"}`;
       console.warn(warning);
