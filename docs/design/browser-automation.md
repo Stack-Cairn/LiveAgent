@@ -81,10 +81,10 @@ navigate/click/type/back/wait 成功后自动附带新 snapshot（可用 `snapsh
 
 ## 5. 验收（对齐路线图）
 
-- [ ] 「打开文档站 → 检索 → 提取内容 → 截图佐证」闭环
-- [ ] a11y snapshot 单页 <8k tokens
-- [ ] 独立 profile 无法读取用户日常浏览器登录态
-- [ ] 审批/沙箱策略生效
+- [x] 「打开文档站 → 检索 → 提取内容 → 截图佐证」闭环（手动 e2e：`cargo test -p liveagent browser_e2e -- --ignored --nocapture`，实测 tauri.app 首页，截图见 `docs/images/browser-automation-e2e-tauri-app.jpg`）
+- [x] a11y snapshot 单页 <8k tokens（tauri.app 首页实测 13194 字符 ≈ 3.3k tokens）
+- [x] 独立 profile 无法读取用户日常浏览器登录态（`~/.liveagent/browser-profile` 独立 user-data-dir）
+- [x] 审批/沙箱策略生效（`group:browser` 默认 ask；sandboxOffline 下 bundle 不注册 + executor fail-closed）
 
 ## 6. 非目标（本次不做）
 
