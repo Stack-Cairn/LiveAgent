@@ -185,7 +185,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.projectPromptAppendHint": "先应用当前全局提示词，再追加这个项目的专属要求。",
   "chat.projectPromptReplace": "覆盖",
   "chat.projectPromptReplaceHint": "这个项目只使用项目提示词，不加载全局提示词。",
-  "chat.projectPromptContent": "提示词内容",
   "chat.projectPromptContentHint": "留空表示该项目仅使用全局提示词。",
   "chat.projectPromptPlaceholder": "输入这个项目专属的背景、约束和工作方式...",
   "chat.workspaceSettingsTitle": "项目配置",
@@ -193,9 +192,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsGeneral": "通用配置",
   "chat.workspaceSettingsDirectories": "目录与权限",
   "chat.workspaceSettingsResources": "资源配置",
-  "chat.workspaceSettingsGeneralDescription": "管理项目名称，并查看项目类型和默认工作目录。",
   "chat.workspaceSettingsProjectName": "项目名称",
-  "chat.workspaceSettingsProjectNameDescription": "名称会显示在侧边栏和项目选择位置。",
   "chat.workspaceSettingsProjectNameRequired": "项目名称不能为空。",
   "chat.workspaceSettingsProjectNameReadonly": "默认工作区名称不可修改。",
   "chat.workspaceSettingsProjectType": "项目类型",
@@ -203,21 +200,16 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsKindFolder": "本地文件夹",
   "chat.workspaceSettingsKindHistory": "历史工作区",
   "chat.workspaceSettingsPrimaryDirectory": "主目录",
-  "chat.workspaceSettingsPrimaryHint":
-    "主目录是会话、Git、终端和文件树的默认工作位置。附加目录不会改变项目归属。",
+  "chat.workspaceSettingsPrimaryHint": "主目录是会话、Git、终端和文件树的默认工作位置。",
   "chat.workspaceSettingsDirectoriesDescription":
-    "为结构化文件工具添加项目外目录，并分别控制读取或写入权限。该设置不限制 Bash 或进程工具；命令访问仍遵循现有工具策略。",
+    "附加目录授权仅作用于结构化文件工具，命令与进程工具仍遵循现有策略。",
   "chat.workspaceSettingsAddDirectory": "添加目录",
-  "chat.workspaceSettingsPrimaryBadge": "默认工作区",
   "chat.workspaceSettingsDirectoriesUnavailable": "目录授权服务不可用",
   "chat.workspaceSettingsDirectoriesDesktopOnly":
     "当前环境尚未连接本机目录授权服务，请在桌面端完成配置。",
   "chat.workspaceSettingsDirectoriesGatewayDescription":
     "当前 WebUI 尚未连接目标桌面 Agent，连接恢复后即可远程管理目录授权。",
   "chat.workspaceSettingsDirectoriesLoading": "正在读取目录权限…",
-  "chat.workspaceSettingsDirectoriesEmpty": "尚未添加附加目录",
-  "chat.workspaceSettingsDirectoriesEmptyDescription":
-    "添加共享代码、接口定义或文档目录后，Agent 可以按授予的权限访问它们。",
   "chat.workspaceSettingsDirectoryAlias": "目录别名",
   "chat.workspaceSettingsDirectoryStateActive": "正常",
   "chat.workspaceSettingsDirectoryStateMissing": "目录缺失",
@@ -225,8 +217,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsDirectoryStatePendingApproval": "等待批准",
   "chat.workspaceSettingsRemoveDirectory": "移除目录",
   "chat.workspaceSettingsDirectoryAccess": "访问权限",
-  "chat.workspaceSettingsDirectoryRead": "只读参考",
-  "chat.workspaceSettingsDirectoryWrite": "允许编辑",
+  "chat.workspaceSettingsDirectoryRead": "只读",
+  "chat.workspaceSettingsDirectoryWrite": "读写",
   "chat.workspaceSettingsDirectoryDuplicate": "该目录已经添加到当前项目。",
   "chat.workspaceSettingsResourcesDescription":
     "控制此项目会向 Agent 提供哪些 Skills 与 MCP 服务。",

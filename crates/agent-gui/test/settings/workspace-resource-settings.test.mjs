@@ -185,9 +185,8 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedDirectoryPanel, /maxLength=\{32\}/);
   assert.match(sharedDirectoryPanel, /pattern="\[a-z\]\[a-z0-9_-\]\{0,31\}"/);
   assert.match(sharedDirectoryPanel, /<Input/);
-  assert.match(sharedDirectoryPanel, /<Select\b/);
-  assert.match(sharedDirectoryPanel, /<SelectItem value="read"/);
-  assert.match(sharedDirectoryPanel, /<SelectItem value="write"/);
+  assert.match(sharedDirectoryPanel, /\["read", "write"\] as const/);
+  assert.match(sharedDirectoryPanel, /aria-pressed=\{value === option\}/);
   assert.doesNotMatch(sharedDirectoryPanel, /<(?:input|select|option)\b/);
   assert.doesNotMatch(sharedResourcePanel, /McpImportView|McpRegistryBrowser|SkillsStoreView/);
 });

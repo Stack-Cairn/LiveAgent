@@ -6,11 +6,43 @@ import type {
 } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { AlertCircle, Folder, FolderTree, Loader2, Plus, Trash2 } from "../../IconSet";
+import { AlertCircle, Folder, FolderTree, Info, Lock, Plus, Trash2 } from "../../IconSet";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { rootStateTone } from "./workspaceProjectSettingsUtils";
+
+const ROOT_ACCESS_OPTIONS = ["read", "write"] as const;
+
+function RootAccessToggle(props: {
+  value: WorkspaceProjectRootAccess;
+  disabled: boolean;
+  ariaLabel: string;
+  readLabel: string;
+  writeLabel: string;
+  onChange: (access: WorkspaceProjectRootAccess) => void;
+}) {
+  const { value, disabled, ariaLabel, readLabel, writeLabel, onChange } = props;
+  return (
+    <fieldset className="flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+      <legend className="sr-only">{ariaLabel}</legend>
+      {ROOT_ACCESS_OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={value === option}
+          disabled={disabled}
+          className={cn(
+            "rounded-md px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+            value === option && "bg-background text-foreground shadow-sm",
+          )}
+          onClick={() => onChange(option)}
+        >
+          {option === "read" ? readLabel : writeLabel}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
 
 export function WorkspaceDirectorySettingsPanel(props: {
   project: WorkspaceProject;
@@ -42,48 +74,124 @@ export function WorkspaceDirectorySettingsPanel(props: {
 
   return (
     <section className="mx-auto max-w-[720px] space-y-4 p-6 max-[720px]:p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-base font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
-          <p className="mt-1 max-w-[560px] text-xs leading-5 text-muted-foreground">
-            {t("chat.workspaceSettingsDirectoriesDescription")}
-          </p>
-        </div>
-        {rootClient ? (
-          <Button
-            size="sm"
-            className="shrink-0 gap-1.5"
-            onClick={onAdd}
-            disabled={!loaded || loading}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("chat.workspaceSettingsAddDirectory")}
-          </Button>
-        ) : null}
-      </div>
+      <h3 className="text-base font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
 
-      <div className="rounded-xl border border-primary/20 bg-primary/[0.035] px-3 py-2.5">
-        <div className="flex items-center gap-2.5">
+      {/* 主目录与附加目录合并为同一张列表卡片，形成统一的目录清单。 */}
+      <div className="overflow-hidden rounded-xl border border-border/60">
+        <div className="flex items-center gap-3 px-4 py-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Folder className="h-3.5 w-3.5" />
+            <FolderTree className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">
-                {t("chat.workspaceSettingsPrimaryDirectory")}
-              </span>
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                {t("chat.workspaceSettingsPrimaryBadge")}
-              </span>
-            </div>
+            <div className="text-sm font-medium">{t("chat.workspaceSettingsPrimaryDirectory")}</div>
             <div
-              className="mt-0.5 truncate font-mono text-[11px] leading-5 text-muted-foreground"
+              className="truncate font-mono text-[11px] leading-4 text-muted-foreground"
               title={project.path}
             >
               {project.path}
             </div>
           </div>
+          <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Lock className="h-3 w-3" />
+            {t("chat.workspaceSettingsDirectoryWrite")}
+          </div>
         </div>
+
+        {loading ? (
+          <div className="space-y-2 border-t border-border/50 px-4 py-3">
+            <span className="sr-only" role="status">
+              {t("chat.workspaceSettingsDirectoriesLoading")}
+            </span>
+            {[0, 1].map((row) => (
+              <div key={row} className="flex animate-pulse items-center gap-3 py-1">
+                <div className="h-8 w-8 shrink-0 rounded-lg bg-muted/70" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="h-3 w-24 rounded bg-muted/70" />
+                  <div className="h-2.5 w-48 max-w-full rounded bg-muted/50" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          roots.map((root) => (
+            <div
+              key={root.id}
+              className="flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors hover:bg-muted/25 max-[560px]:flex-wrap"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                <Folder className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Input
+                    value={root.alias}
+                    onChange={(event) => onAliasChange(root.id, event.currentTarget.value)}
+                    aria-label={t("chat.workspaceSettingsDirectoryAlias")}
+                    maxLength={32}
+                    pattern="[a-z][a-z0-9_-]{0,31}"
+                    disabled={!loaded}
+                    className="h-6 min-w-0 max-w-[180px] border-transparent bg-transparent px-1 text-sm font-medium shadow-none hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10"
+                  />
+                  {/* 正常状态不显示徽标，只有异常/待批准时提醒。 */}
+                  {root.state !== "active" ? (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                        rootStateTone(root.state),
+                      )}
+                    >
+                      {t(
+                        `chat.workspaceSettingsDirectoryState${root.state
+                          .split("-")
+                          .map((part) => part[0].toUpperCase() + part.slice(1))
+                          .join("")}`,
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+                <div
+                  className="truncate font-mono text-[11px] leading-4 text-muted-foreground"
+                  title={root.displayPath}
+                >
+                  {root.displayPath}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 max-[560px]:w-full max-[560px]:justify-end">
+                <RootAccessToggle
+                  value={root.access}
+                  disabled={!loaded}
+                  ariaLabel={t("chat.workspaceSettingsDirectoryAccess")}
+                  readLabel={t("chat.workspaceSettingsDirectoryRead")}
+                  writeLabel={t("chat.workspaceSettingsDirectoryWrite")}
+                  onChange={(access) => onAccessChange(root.id, access)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  title={t("chat.workspaceSettingsRemoveDirectory")}
+                  disabled={!loaded}
+                  onClick={() => onRemove(root.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+
+        {rootClient ? (
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={!loaded || loading}
+            className="flex w-full items-center justify-center gap-1.5 border-t border-dashed border-border/60 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("chat.workspaceSettingsAddDirectory")}
+          </button>
+        ) : null}
       </div>
 
       {!rootClient ? (
@@ -98,100 +206,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
             </p>
           </div>
         </div>
-      ) : loading ? (
-        <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {t("chat.workspaceSettingsDirectoriesLoading")}
-        </div>
-      ) : roots.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/70 px-6 py-9 text-center">
-          <FolderTree className="mx-auto h-6 w-6 text-muted-foreground/70" />
-          <div className="mt-3 text-sm font-medium">
-            {t("chat.workspaceSettingsDirectoriesEmpty")}
-          </div>
-          <p className="mx-auto mt-1 max-w-[420px] text-xs leading-5 text-muted-foreground">
-            {t("chat.workspaceSettingsDirectoriesEmptyDescription")}
-          </p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-background/60">
-          {roots.map((root) => (
-            <div
-              key={root.id}
-              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5 transition-colors hover:bg-muted/30 max-[560px]:grid-cols-1"
-            >
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Input
-                    value={root.alias}
-                    onChange={(event) => onAliasChange(root.id, event.currentTarget.value)}
-                    aria-label={t("chat.workspaceSettingsDirectoryAlias")}
-                    maxLength={32}
-                    pattern="[a-z][a-z0-9_-]{0,31}"
-                    disabled={!loaded}
-                    className="h-7 min-w-0 max-w-[180px] border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10"
-                  />
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
-                      rootStateTone(root.state),
-                    )}
-                  >
-                    {t(
-                      `chat.workspaceSettingsDirectoryState${root.state
-                        .split("-")
-                        .map((part) => part[0].toUpperCase() + part.slice(1))
-                        .join("")}`,
-                    )}
-                  </span>
-                </div>
-                <div
-                  className="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground"
-                  title={root.displayPath}
-                >
-                  {root.displayPath}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center justify-end gap-1 max-[560px]:justify-between">
-                <label className="sr-only" htmlFor={`workspace-root-access-${root.id}`}>
-                  {t("chat.workspaceSettingsDirectoryAccess")}
-                </label>
-                <Select
-                  value={root.access}
-                  disabled={!loaded}
-                  onValueChange={(value) =>
-                    onAccessChange(root.id, value as WorkspaceProjectRootAccess)
-                  }
-                >
-                  <SelectTrigger
-                    id={`workspace-root-access-${root.id}`}
-                    className="h-8 w-auto min-w-24 border-border/60 px-2.5 text-xs"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    <SelectItem value="read">{t("chat.workspaceSettingsDirectoryRead")}</SelectItem>
-                    <SelectItem value="write">
-                      {t("chat.workspaceSettingsDirectoryWrite")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                  title={t("chat.workspaceSettingsRemoveDirectory")}
-                  disabled={!loaded}
-                  onClick={() => onRemove(root.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      ) : null}
 
       {error ? (
         <div className="flex gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
@@ -199,6 +214,11 @@ export function WorkspaceDirectorySettingsPanel(props: {
           <span>{error}</span>
         </div>
       ) : null}
+
+      <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        {t("chat.workspaceSettingsDirectoriesDescription")}
+      </p>
     </section>
   );
 }

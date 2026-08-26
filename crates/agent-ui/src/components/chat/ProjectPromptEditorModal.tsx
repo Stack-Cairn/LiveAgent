@@ -4,7 +4,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
-import { BookOpen, Check, FileText, Layers, Loader2 } from "@liveagent/ui/components/IconSet";
+import { BookOpen, Check, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -30,88 +30,57 @@ export function ProjectPromptSettingsPanel(props: {
   strategy: ProjectPromptStrategy;
   onProjectPromptChange: (value: string) => void;
   onStrategyChange: (value: ProjectPromptStrategy) => void;
+  className?: string;
 }) {
-  const { projectPrompt, strategy, onProjectPromptChange, onStrategyChange } = props;
+  const { projectPrompt, strategy, onProjectPromptChange, onStrategyChange, className } = props;
   const { t } = useLocale();
 
   return (
-    <>
-      <section>
-        <div className="mb-3 flex items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-            <Layers className="h-4 w-4" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold">{t("chat.projectPromptStrategy")}</h3>
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-              {t("chat.projectPromptStrategyHint")}
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+    <section className={cn("flex min-h-full flex-col p-6 max-[720px]:p-4", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h3 className="text-base font-semibold">{t("chat.projectPromptTitle")}</h3>
+        <fieldset className="flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+          <legend className="sr-only">{t("chat.projectPromptStrategy")}</legend>
           {(["append", "replace"] as const).map((value) => (
             <button
               key={value}
               type="button"
               aria-pressed={strategy === value}
               className={cn(
-                "min-h-20 rounded-xl border px-4 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                strategy === value
-                  ? "border-violet-500/40 bg-violet-500/[0.07]"
-                  : "border-border/60 bg-card hover:border-border",
+                "rounded-md px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                strategy === value && "bg-background text-foreground shadow-sm",
               )}
               onClick={() => onStrategyChange(value)}
             >
-              <span className="flex items-center justify-between gap-3 text-sm font-medium">
-                {t(value === "append" ? "chat.projectPromptAppend" : "chat.projectPromptReplace")}
-                <span
-                  className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-full border",
-                    strategy === value
-                      ? "border-violet-500 bg-violet-500 text-white"
-                      : "border-border",
-                  )}
-                >
-                  {strategy === value ? <Check className="h-3 w-3" /> : null}
-                </span>
-              </span>
-              <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
-                {t(
-                  value === "append"
-                    ? "chat.projectPromptAppendHint"
-                    : "chat.projectPromptReplaceHint",
-                )}
-              </span>
+              {t(value === "append" ? "chat.projectPromptAppend" : "chat.projectPromptReplace")}
             </button>
           ))}
-        </div>
-      </section>
+        </fieldset>
+      </div>
+      {/* 只解释当前选中的组合策略，随切换实时更新。 */}
+      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+        {t(
+          strategy === "append" ? "chat.projectPromptAppendHint" : "chat.projectPromptReplaceHint",
+        )}
+      </p>
 
-      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-xs">
-        <div className="mb-3 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-              <FileText className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">{t("chat.projectPromptContent")}</h3>
-              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                {t("chat.projectPromptContentHint")}
-              </p>
-            </div>
-          </div>
-          <span className="shrink-0 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
-            {projectPrompt.length.toLocaleString()} {t("settings.agentsCharacters")}
-          </span>
-        </div>
-        <Textarea
-          value={projectPrompt}
-          placeholder={t("chat.projectPromptPlaceholder")}
-          className="h-64 min-h-64 resize-none overflow-y-auto p-4 font-mono text-[13px] leading-6"
-          onChange={(event) => onProjectPromptChange(event.currentTarget.value)}
-        />
-      </section>
-    </>
+      <Textarea
+        value={projectPrompt}
+        placeholder={t("chat.projectPromptPlaceholder")}
+        aria-label={t("chat.projectPromptTitle")}
+        className="mt-3 min-h-52 flex-1 resize-none overflow-y-auto rounded-xl p-4 font-mono text-[13px] leading-6"
+        onChange={(event) => onProjectPromptChange(event.currentTarget.value)}
+      />
+
+      <div className="mt-2 flex items-baseline justify-between gap-3 px-1 text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {projectPrompt ? null : t("chat.projectPromptContentHint")}
+        </span>
+        <span className="shrink-0 tabular-nums">
+          {projectPrompt.length.toLocaleString()} {t("settings.agentsCharacters")}
+        </span>
+      </div>
+    </section>
   );
 }
 
@@ -169,15 +138,16 @@ export function ProjectPromptEditorModal(props: {
           </div>
         </DialogHeader>
 
-        <DialogBody className="space-y-5 overflow-y-auto px-6 py-5">
+        <DialogBody className="flex flex-col p-0">
           <ProjectPromptSettingsPanel
             projectPrompt={projectPrompt}
             strategy={strategy}
             onProjectPromptChange={setProjectPrompt}
             onStrategyChange={setStrategy}
+            className="px-6 py-5"
           />
 
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          {error ? <p className="px-6 pb-4 text-xs text-destructive">{error}</p> : null}
         </DialogBody>
 
         <DialogFooter className="px-6">
