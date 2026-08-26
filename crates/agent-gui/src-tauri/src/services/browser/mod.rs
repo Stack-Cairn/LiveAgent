@@ -218,3 +218,61 @@ async fn fetch_browser_ws_url(port: u16) -> Result<String, String> {
 pub fn profile_dir() -> Result<PathBuf, String> {
     launcher::automation_profile_dir()
 }
+
+#[cfg(test)]
+mod e2e_tests {
+    use super::*;
+    use base64::Engine;
+
+    /// 验收闭环手动 e2e：导航文档站 → a11y snapshot → 截图落盘。
+    /// 需要本机已装 Chrome/Edge，不进 CI：
+    /// `cargo test -p liveagent browser_e2e -- --ignored --nocapture`
+    /// 截图输出路径可用 LIVEAGENT_BROWSER_E2E_SHOT 覆盖。
+    #[test]
+    #[ignore = "requires an installed Chromium-family browser; manual acceptance evidence"]
+    fn browser_e2e_manual() {
+        tauri::async_runtime::block_on(async {
+            let manager = BrowserManager::default();
+
+            let navigated = manager
+                .execute(BrowserActionArgs {
+                    action: "navigate".to_string(),
+                    url: Some("https://tauri.app".to_string()),
+                    ..Default::default()
+                })
+                .await
+                .expect("navigate should succeed");
+            let snapshot = navigated.snapshot.expect("navigate returns a snapshot");
+            println!(
+                "== navigate ==\nurl={:?} title={:?}\nsnapshot chars={} (~{} tokens)\n{}",
+                navigated.url,
+                navigated.title,
+                snapshot.len(),
+                snapshot.len() / 4,
+                snapshot
+            );
+            assert!(snapshot.contains("[ref=e"), "snapshot should carry ref ids");
+            assert!(snapshot.len() < 32_000, "snapshot must stay within budget");
+
+            let shot = manager
+                .execute(BrowserActionArgs {
+                    action: "screenshot".to_string(),
+                    ..Default::default()
+                })
+                .await
+                .expect("screenshot should succeed");
+            let data = shot
+                .screenshot_base64
+                .expect("screenshot returns base64 data");
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&data)
+                .expect("screenshot base64 decodes");
+            let out = std::env::var("LIVEAGENT_BROWSER_E2E_SHOT")
+                .unwrap_or_else(|_| "browser-e2e-screenshot.jpg".to_string());
+            std::fs::write(&out, &bytes).expect("screenshot file writes");
+            println!("== screenshot == {} bytes -> {out}", bytes.len());
+
+            manager.close().await.expect("close should succeed");
+        });
+    }
+}

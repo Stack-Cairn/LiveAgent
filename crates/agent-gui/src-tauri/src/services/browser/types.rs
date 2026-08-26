@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// `Browser` 工具单命令的入参：action + 各 action 的可选字段。
 /// 字段校验在 dispatch 处做（缺参报错指明 action），保持 TS 侧 schema 宽松。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserActionArgs {
     pub action: String,
