@@ -141,6 +141,8 @@ export function MacOsTitleBarToggle({
         <button
           type="button"
           onClick={onOpenSettings}
+          data-testid="open-settings"
+          aria-label="Open settings"
           className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
           style={{
             height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,

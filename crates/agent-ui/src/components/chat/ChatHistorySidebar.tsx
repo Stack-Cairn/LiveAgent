@@ -1975,6 +1975,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <Button
             type="button"
             variant="ghost"
+            // CUA-014: same data-testid as the macOS titlebar Settings button
+            // so cua-driver / E2E tooling can address the default first-screen
+            // settings entry without falling back to title or pixel guesswork.
+            data-testid="open-settings"
+            // CUA-025: 显式 aria-label 与 titlebar 版本一致（"Open settings"），
+            // 让 cua-driver 的 AX 树里能稳定用 label 而不是默认 i18n
+            // 文案定位——前端用户的 locale 不应影响 cua-driver 脚本。
+            aria-label="Open settings"
             onClick={onOpenSettings}
             className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
             title={t("tooltip.settings")}
