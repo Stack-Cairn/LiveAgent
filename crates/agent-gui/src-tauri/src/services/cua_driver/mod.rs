@@ -51,6 +51,10 @@ pub struct CuaDriverProbe {
     /// 这里跟着变，不需要我们发版。
     pub mcp_command: Option<String>,
     pub mcp_args: Vec<String>,
+    /// 本平台是否存在需要用户处理的系统授权门槛。只有 macOS 有 TCC，
+    /// Windows / Linux 恒 false —— 前端据此**立即**决定要不要渲染授权
+    /// 那一节，不必等 `permissions_status` 那趟子进程回来。
+    pub permissions_required: bool,
     /// 探测失败的原因（未安装是正常状态，不算错误，此时为 None）。
     pub error: Option<String>,
 }
@@ -206,12 +210,16 @@ fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {
 /// 探测安装状态。未安装不是错误——返回 `installed: false, error: None`。
 pub fn probe() -> CuaDriverProbe {
     let Some(path) = find_binary() else {
-        return CuaDriverProbe::default();
+        return CuaDriverProbe {
+            permissions_required: cfg!(target_os = "macos"),
+            ..Default::default()
+        };
     };
 
     let mut probe = CuaDriverProbe {
         installed: true,
         path: Some(path.to_string_lossy().into_owned()),
+        permissions_required: cfg!(target_os = "macos"),
         ..Default::default()
     };
 
@@ -291,11 +299,16 @@ pub fn permissions_status() -> CuaDriverPermissions {
 
     // 守护进程状态单独问一次：`permissions status` 在守护进程没起来时
     // 只会报 unknown，不区分「没装」和「没跑」，对用户不可读。
-    let daemon_running = run_capture(&path, &["status"])
-        .map(|out| out.contains("is running"))
-        .unwrap_or(false);
+    //
+    // 两次调用各要 spawn 一个进程、并可能等守护进程握手，串起来就是用户
+    // 盯着空白等两轮。彼此无依赖，并行跑。
+    let daemon_path = path.clone();
+    let daemon_probe =
+        std::thread::spawn(move || run_capture(&daemon_path, &["status"]).is_ok_and(|out| out.contains("is running")));
+    let status = run_capture(&path, &["permissions", "status", "--json"]);
+    let daemon_running = daemon_probe.join().unwrap_or(false);
 
-    match run_capture(&path, &["permissions", "status", "--json"]) {
+    match status {
         Ok(raw) => match serde_json::from_str::<Value>(&raw) {
             Ok(payload) => CuaDriverPermissions {
                 supported: true,
@@ -461,6 +474,18 @@ mod tests {
         // 就在于「看到的即将执行的」。
         assert!(preview.display.contains(&preview.source_url));
         assert!(preview.args.iter().any(|arg| arg.contains(&preview.source_url)));
+    }
+
+    #[test]
+    fn permissions_required_tracks_the_platform_tcc_gate() {
+        // 前端靠这一位决定要不要渲染授权那一节；不能等 permissions_status
+        // 那趟慢查询回来才知道平台，否则卡片会「先没有、后长出来」。
+        assert_eq!(probe().permissions_required, cfg!(target_os = "macos"));
+        assert_eq!(
+            CuaDriverProbe::default().permissions_required,
+            false,
+            "Default 用于「探测彻底失败」的兜底，不该声称有授权门槛"
+        );
     }
 
     #[test]

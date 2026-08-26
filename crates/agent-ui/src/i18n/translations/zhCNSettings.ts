@@ -1176,4 +1176,6 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "默认关闭：LiveAgent 自己的窗口不会出现在 CUA 的枚举结果里，也不能被直接操作——否则模型可以点掉自己的审批弹窗、改写这里的设置、甚至关掉应用。只有需要用 LiveAgent 自动化测试 LiveAgent 时才打开。",
   "settings.cuaDriver.timeoutLabel": "单次调用超时（毫秒）",
   "settings.cuaDriver.timeoutHint": "上限 600000。启动应用、等待窗口就绪这类操作可能需要更长时间。",
+  "settings.cuaDriver.permissionsChecking": "正在检查授权状态…",
+  "settings.cuaDriver.permissionsUnknown": "无法读取授权状态",
 } as const satisfies Record<string, string>;

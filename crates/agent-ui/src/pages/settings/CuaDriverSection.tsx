@@ -76,6 +76,8 @@ type Probe = {
   version?: string | null;
   mcpCommand?: string | null;
   mcpArgs?: string[];
+  /** 本平台是否有系统授权门槛。只有 macOS 为 true。 */
+  permissionsRequired?: boolean;
   error?: string | null;
 };
 
@@ -127,6 +129,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   const [installing, setInstalling] = useState(false);
   const [granting, setGranting] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [log, setLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -148,23 +151,26 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setTimeoutDraft(String(serverEntry?.timeoutMs ?? 60_000));
   }, [serverEntry?.timeoutMs]);
 
+  /**
+   * 两个探测并行发。
+   *
+   * 权限查询要 spawn 子进程、还可能等 CuaDriver.app 的守护进程握手，比
+   * probe 慢得多；串行的话用户会先看到驱动信息、隔一会儿授权那节才「长
+   * 出来」，整页跳一下。并行之后授权节的骨架随第一帧就位，只有里面的
+   * 状态文字在等。
+   *
+   * 授权查询失败不清空已有结果：`permissions grant` 之后重查若临时失败，
+   * 直接归零会把刚拿到的授权显示成「未授权」。
+   */
   const refresh = useCallback(async () => {
     setChecking(true);
+    setPermissionsLoading(true);
+    const probeTask = invoke<Probe>("cua_driver_probe");
+    const permissionsTask = invoke<Permissions>("cua_driver_permissions_status").catch(() => null);
+
     try {
-      const next = await invoke<Probe>("cua_driver_probe");
-      if (!mountedRef.current) return;
-      setProbe(next);
-      if (next.installed) {
-        try {
-          const perms = await invoke<Permissions>("cua_driver_permissions_status");
-          if (mountedRef.current) setPermissions(perms);
-        } catch {
-          // 权限查询失败不该拖垮整节：它只是补充信息。
-          if (mountedRef.current) setPermissions(null);
-        }
-      } else if (mountedRef.current) {
-        setPermissions(null);
-      }
+      const next = await probeTask;
+      if (mountedRef.current) setProbe(next);
     } catch (err) {
       if (mountedRef.current) {
         setProbe({ installed: false });
@@ -173,6 +179,11 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     } finally {
       if (mountedRef.current) setChecking(false);
     }
+
+    const perms = await permissionsTask;
+    if (!mountedRef.current) return;
+    if (perms) setPermissions(perms);
+    setPermissionsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -195,8 +206,12 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   }, [installing]);
 
   const installed = probe?.installed === true;
+  // 是否渲染授权那一节只看平台与安装状态——两者都在 probe 里，不必等权限
+  // 查询回来。Windows / Linux 没有 TCC 门槛，整节不存在。
+  const showPermissions = installed && probe?.permissionsRequired === true;
+  const permissionsKnown = permissions?.supported === true;
   const permissionsPending =
-    permissions?.supported === true && (!permissions.accessibility || !permissions.screenRecording);
+    permissionsKnown && (!permissions.accessibility || !permissions.screenRecording);
 
   async function beginInstall() {
     setError(null);
@@ -439,36 +454,48 @@ export function CuaDriverSection(props: SettingsSectionProps) {
       </div>
 
       {/* macOS TCC。授权归 CuaDriver.app 而非 LiveAgent —— 这是刻意选择的
-          代理模式，宿主不需要任何辅助功能 / 屏幕录制权限。 */}
-      {installed && permissions?.supported ? (
+          代理模式，宿主不需要任何辅助功能 / 屏幕录制权限。
+
+          渲染条件只看 probe 里的平台位：Windows / Linux 没有这道门槛，整
+          节不存在；macOS 上则整节随第一帧就位，只有里面的状态在等查询，
+          不会出现「卡片过一会儿才长出来」的跳动。 */}
+      {showPermissions ? (
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <SectionCardHeader icon={Shield} title={t("settings.cuaDriver.permissionsTitle")} />
           <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 text-sm font-medium">
-                {permissionsPending ? (
+                {!permissionsKnown ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                ) : permissionsPending ? (
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                 ) : (
                   <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                 )}
-                {permissionsPending
-                  ? t("settings.cuaDriver.permissionsPending")
-                  : t("settings.cuaDriver.statusGranted")}
+                {!permissionsKnown
+                  ? permissionsLoading
+                    ? t("settings.cuaDriver.permissionsChecking")
+                    : t("settings.cuaDriver.permissionsUnknown")
+                  : permissionsPending
+                    ? t("settings.cuaDriver.permissionsPending")
+                    : t("settings.cuaDriver.statusGranted")}
               </div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {permissionsPending
+                {!permissionsKnown || permissionsPending
                   ? t("settings.cuaDriver.permissionsDesc")
                   : t("settings.cuaDriver.permissionsGranted").replace(
                       "{bundleId}",
-                      permissions.attributedTo ?? "com.trycua.driver",
+                      permissions?.attributedTo ?? "com.trycua.driver",
                     )}
               </p>
             </div>
-            {permissionsPending ? (
+            {permissionsKnown && !permissionsPending ? null : (
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 shrink-0 gap-1.5"
+                // 读不到状态时也要能点：授权引导本身是修复手段，把它锁住
+                // 只会让用户卡在「无法读取」这一步。
                 disabled={granting}
                 onClick={() => void grantPermissions()}
               >
@@ -479,7 +506,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
                 )}
                 {t("settings.cuaDriver.grantPermissions")}
               </Button>
-            ) : null}
+            )}
           </div>
         </div>
       ) : null}
