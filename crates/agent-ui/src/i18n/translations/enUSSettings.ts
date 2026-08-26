@@ -1234,7 +1234,4 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.timeoutLabel": "Per-call timeout (ms)",
   "settings.cuaDriver.timeoutHint":
     "Capped at 600000. Launching an app or waiting for a window can take a while.",
-  "settings.cuaDriver.invocationLabel": "Driver launch command",
-  "settings.cuaDriver.invocationHint":
-    "Supplied by `cua-driver manifest` and tracked automatically across driver upgrades; no manual upkeep.",
 } as const satisfies Record<string, string>;

@@ -24,7 +24,6 @@ import {
   Settings2,
   Shield,
   ShieldOff,
-  Terminal,
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import {
@@ -545,21 +544,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground/70">
             {t("settings.cuaDriver.timeoutHint")}
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Terminal className="h-3 w-3" />
-            {t("settings.cuaDriver.invocationLabel")}
-          </div>
-          <pre className="overflow-x-auto rounded-lg bg-muted/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {serverEntry
-              ? [serverEntry.command, ...serverEntry.args].join(" ")
-              : [probe?.mcpCommand ?? "cua-driver", ...(probe?.mcpArgs ?? ["mcp"])].join(" ")}
-          </pre>
-          <p className="text-[11px] leading-relaxed text-muted-foreground/70">
-            {t("settings.cuaDriver.invocationHint")}
           </p>
         </div>
       </div>
