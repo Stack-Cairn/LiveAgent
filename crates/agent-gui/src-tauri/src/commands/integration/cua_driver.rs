@@ -9,7 +9,7 @@
 use tauri::AppHandle;
 
 use crate::services::cua_driver::{
-    self, CuaDriverPermissions, CuaDriverProbe, InstallCommandPreview,
+    self, CuaDriverPermissions, CuaDriverProbe, InstallCommandPreview, SelfIdentity,
 };
 
 /// 探测二进制位置、版本与 MCP 调用方式。未安装返回 `installed: false`，
@@ -59,4 +59,11 @@ pub async fn cua_driver_permissions_grant() -> Result<CuaDriverPermissions, Stri
     tauri::async_runtime::spawn_blocking(cua_driver::permissions_grant)
         .await
         .map_err(|error| format!("cua_driver_permissions_grant join failed: {error}"))?
+}
+
+/// LiveAgent 自身的进程身份。前端用它把 cua-driver 的窗口 / 应用列表里
+/// 属于宿主的记录裁掉，并拦下直接以宿主 pid 为目标的调用。只读。
+#[tauri::command(rename_all = "camelCase")]
+pub fn cua_driver_self_identity() -> SelfIdentity {
+    cua_driver::self_identity()
 }

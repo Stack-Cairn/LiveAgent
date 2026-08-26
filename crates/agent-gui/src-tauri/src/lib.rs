@@ -318,6 +318,7 @@ macro_rules! app_invoke_handler {
             commands::cua_driver::cua_driver_install,
             commands::cua_driver::cua_driver_permissions_status,
             commands::cua_driver::cua_driver_permissions_grant,
+            commands::cua_driver::cua_driver_self_identity,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,

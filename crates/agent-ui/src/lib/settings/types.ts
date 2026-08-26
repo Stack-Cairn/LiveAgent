@@ -258,6 +258,15 @@ export type SystemSettings = {
    * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
    */
   toolPolicies?: Record<string, ToolPolicy>;
+  /**
+   * 允许 CUA 工具把 LiveAgent 自己当作操作目标。缺省 false。
+   *
+   * 关闭时（默认）宿主的窗口既不会出现在 cua-driver 的枚举结果里，也不
+   * 能被直接寻址——模型操作宿主界面等于能点掉自己的审批弹窗、改写这份
+   * 权限设置、或者直接关掉应用。打开它的正当场景只有一个：用 LiveAgent
+   * 自动化测试 LiveAgent。实现见 `lib/tools/cuaSelfGuard.ts`。
+   */
+  cuaAllowSelfTargeting?: boolean;
   commandSafetyMode: CommandSafetyMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];

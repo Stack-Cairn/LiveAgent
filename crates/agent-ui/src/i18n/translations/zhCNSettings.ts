@@ -1168,4 +1168,16 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.statusIdle": "未启用",
   "settings.cuaDriver.statusNotInstalled": "未安装驱动",
   "settings.cuaDriver.permissionsPending": "尚未授权",
+  "settings.cuaDriver.groupBehavior": "行为",
+  "settings.cuaDriver.policyTitle": "工具审批",
+  "settings.cuaDriver.policyDesc":
+    "CUA 的工具会真实点击、输入、关闭应用。默认每次调用都询问；改为「允许」即不再打断，「拒绝」则整组停用。",
+  "settings.cuaDriver.allowSelfTitle": "允许操作 LiveAgent 自身",
+  "settings.cuaDriver.allowSelfDesc":
+    "默认关闭：LiveAgent 自己的窗口不会出现在 CUA 的枚举结果里，也不能被直接操作——否则模型可以点掉自己的审批弹窗、改写这里的设置、甚至关掉应用。只有需要用 LiveAgent 自动化测试 LiveAgent 时才打开。",
+  "settings.cuaDriver.timeoutLabel": "单次调用超时（毫秒）",
+  "settings.cuaDriver.timeoutHint": "上限 600000。启动应用、等待窗口就绪这类操作可能需要更长时间。",
+  "settings.cuaDriver.invocationLabel": "MCP 启动命令",
+  "settings.cuaDriver.invocationHint":
+    "由 cua-driver manifest 提供，随驱动升级自动跟进，不需要手动维护。",
 } as const satisfies Record<string, string>;

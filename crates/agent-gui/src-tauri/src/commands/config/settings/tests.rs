@@ -1185,13 +1185,14 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 12);
+        assert_eq!(row_count, 13);
         assert_eq!(
             keys,
             vec![
                 SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY.to_string(),
                 SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
+                SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
@@ -1207,6 +1208,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1506,6 +1508,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1560,6 +1563,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1631,6 +1635,7 @@ mod tests {
             loaded,
             json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],

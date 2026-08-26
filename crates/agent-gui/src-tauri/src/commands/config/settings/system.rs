@@ -463,6 +463,17 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
         normalize_command_safety_mode_value(system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY)),
     );
+    // 缺省 false：安全侧的开关，任何非 true 的值（缺失、null、字符串）
+    // 都收敛成「不允许自指」。
+    system.insert(
+        SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY.to_string(),
+        Value::Bool(
+            system
+                .get(SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY)
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        ),
+    );
 
     Value::Object(system)
 }
@@ -572,6 +583,7 @@ fn save_system_with_default_workdir(
         SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
+        SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY,
     ] {
         let value = system.get(key).cloned().unwrap_or(Value::Null);
         tx.execute(

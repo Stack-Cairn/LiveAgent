@@ -5,10 +5,12 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import { CUA_DRIVER_SERVER_ID } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { McpServerConfig } from "../settings";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
+import { type CuaSelfGuard, resolveCuaSelfGuard } from "./cuaSelfGuard";
 import {
   createToolRunId,
   invokeWithAbort,
@@ -97,6 +99,12 @@ export async function createMcpTools(params: {
   servers: McpServerConfig[];
   onLoadError?: (message: string) => void;
   loadFailureMode?: "continue" | "throw";
+  /**
+   * 允许 cua-driver 的工具看到并操作 LiveAgent 自己的窗口。默认 false
+   * ——自指操作能绕过工具审批、改写权限设置、关闭应用本身。见
+   * `cuaSelfGuard.ts`。
+   */
+  cuaAllowSelfTargeting?: boolean;
 }): Promise<
   BuiltinToolBundle<{
     /** Maps the safe tool name (used by LLM) to the underlying MCP server/tool. */
@@ -105,6 +113,12 @@ export async function createMcpTools(params: {
 > {
   const servers = params.servers ?? [];
   const enabledServers = servers.filter((s) => s.enabled);
+  // 只有真的挂了 cua-driver 才去问宿主 pid，别的组合零开销。
+  const cuaSelfGuard: CuaSelfGuard | null = enabledServers.some(
+    (server) => server.id?.trim().toLowerCase() === CUA_DRIVER_SERVER_ID,
+  )
+    ? await resolveCuaSelfGuard(params.cuaAllowSelfTargeting === true)
+    : null;
 
   const invalid: Array<{ label: string; reason: string }> = [];
   for (const s of enabledServers) {
@@ -256,6 +270,22 @@ export async function createMcpTools(params: {
       };
     }
 
+    // 自指闸门：拦在发出调用之前，宿主窗口的 pid / window_id 直接拒绝。
+    if (cuaSelfGuard && mapped.serverId.trim().toLowerCase() === CUA_DRIVER_SERVER_ID) {
+      const refusal = cuaSelfGuard.refuse(toolCall.arguments);
+      if (refusal) {
+        return {
+          role: "toolResult",
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          content: [{ type: "text", text: refusal }],
+          details: { serverId: mapped.serverId, tool: mapped.toolName, blocked: "self_target" },
+          isError: true,
+          timestamp: now,
+        };
+      }
+    }
+
     try {
       return await withMcpServerCallLock(
         mapped.serverId,
@@ -285,11 +315,23 @@ export async function createMcpTools(params: {
             { onAbort: () => requestRuntimeCancel(runId) },
           );
 
+          // 出参过滤：把宿主自己的记录从窗口 / 应用枚举里摘掉，顺手记下
+          // 它的 window_id 供后续入参拦截使用。
+          const rawContent = res?.content ?? [{ type: "text", text: "" }];
+          const content =
+            cuaSelfGuard && mapped.serverId.trim().toLowerCase() === CUA_DRIVER_SERVER_ID
+              ? rawContent.map((block) =>
+                  block.type === "text"
+                    ? { ...block, text: cuaSelfGuard.strip(block.text) }
+                    : block,
+                )
+              : rawContent;
+
           return {
             role: "toolResult",
             toolCallId: toolCall.id,
             toolName: toolCall.name,
-            content: res?.content ?? [{ type: "text", text: "" }],
+            content,
             details: {
               serverId: mapped.serverId,
               serverLabel: mapped.serverLabel,

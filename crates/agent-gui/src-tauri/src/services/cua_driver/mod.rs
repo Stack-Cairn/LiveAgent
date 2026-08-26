@@ -253,6 +253,28 @@ pub fn probe() -> CuaDriverProbe {
     probe
 }
 
+// ───────── 宿主自身身份 ─────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfIdentity {
+    pub pid: u32,
+    pub bundle_id: Option<String>,
+}
+
+/// LiveAgent 自己的进程身份，供前端把 cua-driver 的视野裁掉宿主窗口。
+///
+/// 让模型操作 LiveAgent 自己的界面是危险的自指：它能点掉自己的审批弹窗、
+/// 改自己的权限策略、或者直接把自己关了。过滤在前端做（Rust 侧的
+/// `mcp_call_tool` 是所有 MCP server 共用的通道，不该塞 cua 专属逻辑），
+/// 这里只提供比对用的事实。
+pub fn self_identity() -> SelfIdentity {
+    SelfIdentity {
+        pid: std::process::id(),
+        bundle_id: option_env!("TAURI_BUNDLE_IDENTIFIER").map(str::to_owned),
+    }
+}
+
 // ───────── 权限（macOS） ─────────
 
 pub fn permissions_status() -> CuaDriverPermissions {

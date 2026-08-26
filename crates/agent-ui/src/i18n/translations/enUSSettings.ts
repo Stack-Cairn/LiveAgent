@@ -1224,4 +1224,17 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.statusIdle": "Disabled",
   "settings.cuaDriver.statusNotInstalled": "Driver missing",
   "settings.cuaDriver.permissionsPending": "Not granted yet",
+  "settings.cuaDriver.groupBehavior": "Behavior",
+  "settings.cuaDriver.policyTitle": "Tool approval",
+  "settings.cuaDriver.policyDesc":
+    'CUA tools really click, type, and quit applications. Every call asks by default; "allow" stops interrupting you, "deny" disables the whole group.',
+  "settings.cuaDriver.allowSelfTitle": "Allow targeting LiveAgent itself",
+  "settings.cuaDriver.allowSelfDesc":
+    "Off by default: LiveAgent's own windows are stripped from CUA's enumerations and cannot be targeted — otherwise the model could dismiss its own approval prompts, rewrite these settings, or quit the app. Turn it on only to automate LiveAgent with LiveAgent.",
+  "settings.cuaDriver.timeoutLabel": "Per-call timeout (ms)",
+  "settings.cuaDriver.timeoutHint":
+    "Capped at 600000. Launching an app or waiting for a window can take a while.",
+  "settings.cuaDriver.invocationLabel": "MCP launch command",
+  "settings.cuaDriver.invocationHint":
+    "Supplied by `cua-driver manifest` and tracked automatically across driver upgrades; no manual upkeep.",
 } as const satisfies Record<string, string>;

@@ -32,3 +32,22 @@ export function hardcodedServerPolicyDefault(serverId: string): ToolPolicy | und
 export function effectiveServerPolicyDefault(serverId: string): ToolPolicy {
   return hardcodedServerPolicyDefault(serverId) ?? "allow";
 }
+
+/** cua-driver 的 MCP server id。设置页与 MCP Hub 都要认它。 */
+export const CUA_DRIVER_SERVER_ID = "cua-driver";
+
+/**
+ * 由专属设置页托管、不在 MCP Hub 里露面的 server。
+ *
+ * cua-driver 的 MCP 条目是「设置 → CUA」那个开关的实现细节，不是用户
+ * 手动维护的对象：command 由 `cua-driver manifest` 决定、args 不该随意
+ * 改、权限策略与超时都在 CUA 那一节里调。在 Hub 里再列一遍只会制造两
+ * 个都能改同一份配置的入口，改完还互相看不见对方的语义（比如在 Hub 里
+ * 删掉条目，CUA 那节的开关会莫名变成关）。
+ */
+const HUB_HIDDEN_SERVER_IDS: ReadonlySet<string> = new Set([CUA_DRIVER_SERVER_ID]);
+
+/** 该 server 是否由专属设置页托管（MCP Hub 应当隐藏它）。 */
+export function isHubHiddenServerId(serverId: string): boolean {
+  return HUB_HIDDEN_SERVER_IDS.has(serverId.trim().toLowerCase());
+}

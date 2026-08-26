@@ -1,11 +1,18 @@
-import { type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
+import {
+  type McpServerConfig,
+  type ToolPolicy,
+  updateMcp,
+  updateSystem,
+} from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
+import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
 import {
   AlertTriangle,
   Check,
   Circle,
+  Clock3,
   Download,
   ExternalLink,
   Hand,
@@ -14,8 +21,16 @@ import {
   Package,
   Plug,
   RefreshCw,
+  Settings2,
   Shield,
+  ShieldOff,
+  Terminal,
 } from "@liveagent/ui/components/IconSet";
+import { Input } from "@liveagent/ui/components/ui/input";
+import {
+  CUA_DRIVER_SERVER_ID as CUA_SERVER_ID,
+  effectiveServerPolicyDefault,
+} from "@liveagent/ui/contracts/mcpServerDefaults";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
@@ -37,13 +52,16 @@ function SectionCardHeader({ icon: Icon, title }: { icon: IconComponent; title: 
  *
  * 能力本身没有任何专属代码路径——`cua-driver mcp` 就是一个普通 stdio MCP
  * server，接进来之后约 60 个工具由 `tools/list` 自动发现，调用、审批、
- * 截图渲染全部复用既有 MCP 链路。这一节只解决它前面那三个一次性问题：
- * 装了吗、macOS 授权了吗、server 配置怎么填。
+ * 截图渲染全部复用既有 MCP 链路。
  *
- * 装完并接入之后，日常管理（启停、改策略、改参数）都在 MCP Hub 的
- * server 卡片上，这一节只保留状态展示与「去 MCP Hub 管理」的指引。
+ * 但它的 MCP 条目**不在 MCP Hub 里露面**（见
+ * `contracts/mcpServerDefaults.ts` 的 `isHubHiddenServerId`）：那条目是
+ * 这里总开关的实现细节，command 由 `cua-driver manifest` 决定、args 不该
+ * 随意改。两个入口都能写同一份配置只会让人搞不清哪边说了算——所以启停、
+ * 审批策略、超时、自指闸门全部收在这一节。
  *
- * 仅桌面端注册（见 `SettingsPage`）：这些命令依赖 Tauri 后端。
+ * 仅桌面端注册（见 agent-gui 的 `settingsExtension`）：探测 / 安装 /
+ * 授权都依赖 Tauri 命令。
  */
 
 export const CUA_DRIVER_SERVER_ID = "cua-driver";
@@ -115,9 +133,21 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   const mountedRef = useRef(true);
 
   // 总开关的真实状态就是这个 MCP server 的启用状态——没有第二份配置。
-  const enabled = settings.mcp.servers.some(
-    (server) => server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID && server.enabled,
+  const serverEntry = settings.mcp.servers.find(
+    (server) => server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID,
   );
+  const enabled = serverEntry?.enabled === true;
+
+  const policyKey = `server:${CUA_SERVER_ID}`;
+  const policy: ToolPolicy =
+    settings.system.toolPolicies?.[policyKey] ?? effectiveServerPolicyDefault(CUA_SERVER_ID);
+  const allowSelfTargeting = settings.system.cuaAllowSelfTargeting === true;
+
+  // 超时用受控草稿：边打字边写回会把 "6" 这种中间态存成 6ms。
+  const [timeoutDraft, setTimeoutDraft] = useState(() => String(serverEntry?.timeoutMs ?? 60_000));
+  useEffect(() => {
+    setTimeoutDraft(String(serverEntry?.timeoutMs ?? 60_000));
+  }, [serverEntry?.timeoutMs]);
 
   const refresh = useCallback(async () => {
     setChecking(true);
@@ -230,6 +260,42 @@ export function CuaDriverSection(props: SettingsSectionProps) {
         ),
       });
     });
+  }
+
+  function setPolicy(next: ToolPolicy) {
+    setSettings((prev) => {
+      const current = { ...(prev.system.toolPolicies ?? {}) };
+      // 与 McpServersForm 同一条规则：等于该 server 的缺省值才删 key。
+      // cua-driver 的缺省是 ask，所以「始终允许」必须显式落库。
+      if (next === effectiveServerPolicyDefault(CUA_SERVER_ID)) delete current[policyKey];
+      else current[policyKey] = next;
+      return updateSystem(prev, {
+        toolPolicies: Object.keys(current).length > 0 ? current : undefined,
+      });
+    });
+  }
+
+  function setAllowSelfTargeting(next: boolean) {
+    setSettings((prev) => updateSystem(prev, { cuaAllowSelfTargeting: next }));
+  }
+
+  function commitTimeout() {
+    const parsed = Number.parseInt(timeoutDraft.trim(), 10);
+    const next =
+      Number.isFinite(parsed) && parsed > 0
+        ? Math.min(parsed, 600_000)
+        : (serverEntry?.timeoutMs ?? 60_000);
+    setTimeoutDraft(String(next));
+    if (!serverEntry || next === serverEntry.timeoutMs) return;
+    setSettings((prev) =>
+      updateMcp(prev, {
+        servers: prev.mcp.servers.map((server) =>
+          server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID
+            ? { ...server, timeoutMs: next }
+            : server,
+        ),
+      }),
+    );
   }
 
   const statusText = !installed
@@ -418,6 +484,85 @@ export function CuaDriverSection(props: SettingsSectionProps) {
           </div>
         </div>
       ) : null}
+
+      {/* 参数全在这里改，MCP Hub 不再列出 cua-driver 这一条——两个入口都能
+          写同一份配置只会让人搞不清哪边说了算。 */}
+      <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
+        <SectionCardHeader icon={Settings2} title={t("settings.cuaDriver.groupBehavior")} />
+
+        <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">{t("settings.cuaDriver.policyTitle")}</div>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              {t("settings.cuaDriver.policyDesc")}
+            </p>
+          </div>
+          <ToolPolicyToggle
+            value={policy}
+            ariaLabel={t("settings.cuaDriver.policyTitle")}
+            size="sm"
+            onChange={setPolicy}
+          />
+        </div>
+
+        {/* 自指闸门。默认关闭：模型操作宿主界面能点掉自己的审批弹窗、改写
+            这份设置、甚至关掉应用。 */}
+        <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <ShieldOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {t("settings.cuaDriver.allowSelfTitle")}
+            </div>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              {t("settings.cuaDriver.allowSelfDesc")}
+            </p>
+          </div>
+          <AgentActivationSwitch
+            checked={allowSelfTargeting}
+            title={t("settings.cuaDriver.allowSelfTitle")}
+            onToggle={() => setAllowSelfTargeting(!allowSelfTargeting)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="cua-driver-timeout"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+          >
+            <Clock3 className="h-3 w-3" />
+            {t("settings.cuaDriver.timeoutLabel")}
+          </label>
+          <Input
+            id="cua-driver-timeout"
+            type="text"
+            inputMode="numeric"
+            value={timeoutDraft}
+            disabled={!serverEntry}
+            onChange={(event) => setTimeoutDraft(event.target.value)}
+            onBlur={commitTimeout}
+            placeholder="60000"
+            className="w-40 font-mono text-[13px]"
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+            {t("settings.cuaDriver.timeoutHint")}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Terminal className="h-3 w-3" />
+            {t("settings.cuaDriver.invocationLabel")}
+          </div>
+          <pre className="overflow-x-auto rounded-lg bg-muted/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            {serverEntry
+              ? [serverEntry.command, ...serverEntry.args].join(" ")
+              : [probe?.mcpCommand ?? "cua-driver", ...(probe?.mcpArgs ?? ["mcp"])].join(" ")}
+          </pre>
+          <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+            {t("settings.cuaDriver.invocationHint")}
+          </p>
+        </div>
+      </div>
 
       <div className="space-y-3 rounded-xl border border-border/60 bg-card p-5">
         <SectionCardHeader icon={Plug} title={t("settings.cuaDriver.groupAbout")} />
