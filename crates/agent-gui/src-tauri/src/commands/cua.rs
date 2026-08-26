@@ -174,6 +174,12 @@ fn extract_screenshot(value: &Value) -> Option<(Vec<u8>, u32, u32)> {
 /// required` / 内部 panic 栈）。返回拼接后的字符串，给 caller 包
 /// 进 `CuaError::io` 透传给前端，避免真实错误被吞成「no image
 /// content」。
+///
+/// 注意：本 helper 只看 `content[].type==="text"`，**不**检查
+/// `isError`。CUA-064：成功路径下 cua-driver 也会在 content 数组
+/// 里带 type:text 描述项（zoom 区域说明 / get_desktop_state 文案
+/// 等），所以 caller 必须用 `extract_io_error_on_failure` 而不是
+/// 直接调本 helper——后者统一负责 `isError=true` 守门。
 fn extract_error_text(value: &Value) -> Option<String> {
     let arr = value.get("content")?.as_array()?;
     let mut chunks: Vec<String> = Vec::new();
@@ -189,6 +195,20 @@ fn extract_error_text(value: &Value) -> Option<String> {
     } else {
         Some(chunks.join("\n"))
     }
+}
+
+/// CUA-064：cua-driver 成功响应（zoom / get_desktop_state）也带
+/// type:text 描述项，所以 caller 不能盲调 `extract_error_text`——
+/// 否则成功截图会被强行翻成 `cua.errors.io`，`extract_screenshot`
+/// 永远走不到（CUA-059 / CUA-061 后端路径全部失效）。本 helper 把
+/// `isError==Some(true)` 守门与文本抽取合并成一步：成功 / 缺标记
+/// 永远返回 `None`，仅在 `isError=true` 且 content 有文本时返回
+/// 拼接后的错误消息。
+fn extract_io_error_on_failure(value: &Value) -> Option<String> {
+    if value.get("isError").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    extract_error_text(value)
 }
 
 /// 窗口 bounds（CUA-059）：从 list_windows 返回的 window 对象里
@@ -303,7 +323,7 @@ fn finalize_op(
 ///
 /// 每次取快照都从持久化 system settings 重读 `sandbox_offline`——避免
 /// 命令安全模式被外部切到 sandboxOffline 后 CUA UI 仍按旧值渲染。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_status(store: State<'_, Arc<CuaStore>>) -> CuaStoreSnapshot {
     let sandbox_offline = current_sandbox_offline();
     store.refresh_sandbox_offline(sandbox_offline);
@@ -315,7 +335,7 @@ pub fn cua_status(store: State<'_, Arc<CuaStore>>) -> CuaStoreSnapshot {
 /// 服务端权威地维护 `sandbox_offline`：从前端传过来的字段总是被
 /// 当前命令安全模式覆盖——保证 `group:cua` 在 sandboxOffline 下必
 /// 拒（CUA-reviewer 安全门控 #2），不会被前端脏数据绕过。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_set_config(
     store: State<'_, Arc<CuaStore>>,
     config: CuaRuntimeConfig,
@@ -338,13 +358,13 @@ fn current_sandbox_offline() -> bool {
         .unwrap_or(false)
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_clear_audit(store: State<'_, Arc<CuaStore>>) -> CuaStoreSnapshot {
     store.clear_audit();
     store.snapshot()
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_list_windows(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -366,7 +386,7 @@ pub fn cua_list_windows(
     mapped
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_focus_window(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -436,7 +456,7 @@ pub fn cua_focus_window(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_screenshot(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -519,13 +539,19 @@ pub fn cua_screenshot(
     };
     match result {
         Ok(value) => {
-            // CUA-061：cua-driver 在 zoom 参数错误、permission 拒绝、
+            // CUA-061 + CUA-064：cua-driver 在 zoom 参数错误、permission 拒绝、
             // 内部 panic 等场景会返回 isError=true + content 是文本
             // 错误消息；直接走 extract_screenshot 会拿到 None 然后
             // 被翻成 'no image content'，真实错误（'x2 must be > x1' /
-            // 'TCC permission required'）被吞掉。这里先检查 isError，
-            // 把文本 detail 透传给 CuaError::io。
-            if let Some(err_detail) = extract_error_text(&value) {
+            // 'TCC permission required'）被吞掉。
+            //
+            // CUA-064：成功路径（zoom / get_desktop_state）下 cua-driver 也
+            // 会在 content 数组里同时塞 type:text 描述项（例如 'Zoom
+            // region (260,68)–(1660,868) → 500×286 px JPEG.'）。
+            // `extract_io_error_on_failure` 内置 isError 守门，所以成功
+            // 响应不会被误判；只有 isError=true 时才把文本 detail 当错误
+            // 透传给 CuaError::io，其它一律走正常的 image 抽取路径。
+            if let Some(err_detail) = extract_io_error_on_failure(&value) {
                 let err = CuaError::io(&err_detail);
                 store.inner().record(CuaAuditEntry {
                     timestamp: started,
@@ -598,7 +624,7 @@ pub fn cua_screenshot(
     }
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_click(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -642,7 +668,7 @@ pub fn cua_click(
     ))
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_double_click(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -678,7 +704,7 @@ pub fn cua_double_click(
     ))
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_type(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -762,7 +788,7 @@ pub fn cua_type(
     ))
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_key(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -863,7 +889,7 @@ pub fn cua_key(
     ))
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_scroll(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -899,7 +925,7 @@ pub fn cua_scroll(
     ))
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_drag(
     store: State<'_, Arc<CuaStore>>,
     client: State<'_, CuaClient>,
@@ -1076,7 +1102,7 @@ fn pick_window_id_for_owner(
 /// cua-driver 入口命令：把主窗口重新推到最前并等待 `is_focused()` 落
 /// 住。命令不依赖 CUA enable 开关——它的目的正是让 enable=true 之
 /// 后的 click / AX 路径能找到 WebView。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn cua_window_ready(
     window: tauri::WebviewWindow,
 ) -> Result<crate::CuaWindowReadyResponse, String> {
@@ -1086,7 +1112,7 @@ pub async fn cua_window_ready(
 /// CUA-020/021/022: 在路由切换、overlay 打开/关闭、cua-driver 主动唤
 /// 起等场景重新触发 NSWindow/WKWebView 的 AX 注解 + 一回弹广播
 /// UIElementCreatedNotification。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_refresh_a11y(window: tauri::WebviewWindow) -> crate::CuaRefreshA11yResponse {
     crate::cua_refresh_a11y(&window)
 }
@@ -1098,14 +1124,14 @@ pub fn cua_refresh_a11y(window: tauri::WebviewWindow) -> crate::CuaRefreshA11yRe
 // 操作可用；enable 留到装完再由用户在 UI 中开启。
 
 /// 检测 cua-driver 是否已安装、版本、daemon 状态。无 IO 副作用。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_driver_detect() -> CuaDriverDetection {
     crate::services::cua::detect_driver()
 }
 
 /// 启动 cua-driver daemon（macOS: `open CuaDriver --args serve`）。
 /// 失败时返回结构化 `CuaError`；前端不阻塞在失败上，可重试。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_driver_start_daemon(app: AppHandle) -> Result<CuaOpResponse, CuaError> {
     crate::services::cua::start_driver_daemon(&app)
         .map(|started| CuaOpResponse {
@@ -1120,7 +1146,7 @@ pub fn cua_driver_start_daemon(app: AppHandle) -> Result<CuaOpResponse, CuaError
 
 /// 安装 cua-driver。30 分钟超时；进度经 `cua_install_progress` 事件
 /// 推送。装完自动尝试 start_daemon。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn cua_driver_install(app: AppHandle) -> Result<CuaInstallResult, CuaError> {
     let os = std::env::consts::OS;
     match os {
@@ -1161,7 +1187,7 @@ pub async fn cua_driver_install(app: AppHandle) -> Result<CuaInstallResult, CuaE
 }
 
 /// 检查更新 +（可选）应用。`apply=false` 时只跑 `check-update`。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn cua_driver_update(apply: bool) -> Result<CuaUpdateResult, CuaError> {
     let join = tauri::async_runtime::spawn_blocking(move || {
         crate::services::cua::update_driver(apply)
@@ -1185,7 +1211,7 @@ pub async fn cua_driver_update(apply: bool) -> Result<CuaUpdateResult, CuaError>
 }
 
 /// 把 install 命令（program / args）暴露给前端做展示（无 spawn）。
-#[tauri::command(rename_all = "snake_case")]
+#[tauri::command(rename_all = "camelCase")]
 pub fn cua_driver_install_preview() -> Result<InstallPreview, CuaError> {
     crate::services::cua::build_install_preview().map_err(|detail| match std::env::consts::OS {
         "macos" | "linux" | "windows" => CuaError::not_executed(&detail),
@@ -1574,9 +1600,65 @@ mod tests {
         // 必须先用 isError=true 守门。这里验证 helper 自身的抽取行为。
         let detail = extract_error_text(&value);
         // 即使 image 也存在，文本条目仍会被收集；这是有意的——helper
-        // 单纯做文本提取，是否调用由 caller 决定。caller 已经先 isError
-        // 守门，所以不会误用。
+        // 单纯做文本提取，是否调用由 caller 决定。caller 应该走
+        // extract_io_error_on_failure 而不是直接调本 helper。
         assert_eq!(detail.as_deref(), Some("ok"));
+    }
+
+    // ───────── CUA-064 守门 helper 回归测试 ─────────
+
+    /// CUA-064：成功响应（zoom / get_desktop_state）下 content 同时
+    /// 含 type:text 描述项 + type:image 字节。`extract_io_error_on_failure`
+    /// 必须返回 None（不进 io error 分支），让 caller 走图像抽取。
+    #[test]
+    fn extract_io_error_on_failure_returns_none_on_success_with_text() {
+        let value = json!({
+            "isError": false,
+            "content": [
+                { "type": "text", "text": "Zoom region (260,68)–(1660,868) → 500×286 px JPEG." },
+                { "type": "image", "data": "AAAA", "mimeType": "image/png" }
+            ]
+        });
+        assert!(extract_io_error_on_failure(&value).is_none());
+    }
+
+    /// CUA-064 反向：isError 缺失（null）也按成功处理，不透出文本。
+    #[test]
+    fn extract_io_error_on_failure_returns_none_on_missing_iserror() {
+        let value = json!({
+            "content": [
+                { "type": "text", "text": "any description" },
+                { "type": "image", "data": "AAAA", "mimeType": "image/png" }
+            ]
+        });
+        assert!(extract_io_error_on_failure(&value).is_none());
+    }
+
+    /// CUA-064 失败路径：isError=true 时仍按之前的行为透出真实错误。
+    #[test]
+    fn extract_io_error_on_failure_returns_text_on_iserror_true() {
+        let value = json!({
+            "isError": true,
+            "content": [
+                { "type": "text", "text": "x2 must be > x1 and y2 must be > y1" },
+                { "type": "image", "data": "AAAA", "mimeType": "image/png" }
+            ]
+        });
+        let detail = extract_io_error_on_failure(&value).expect("must surface failure text");
+        assert!(detail.contains("x2 must be > x1"));
+    }
+
+    /// CUA-064 失败路径：isError=true 但 content 里只有 image 时
+    /// 仍返回 None（与原有 extract_error_text 行为一致）。
+    #[test]
+    fn extract_io_error_on_failure_returns_none_when_only_image() {
+        let value = json!({
+            "isError": true,
+            "content": [
+                { "type": "image", "data": "AAAA", "mimeType": "image/png" }
+            ]
+        });
+        assert!(extract_io_error_on_failure(&value).is_none());
     }
 
     /// CUA-059：extract_window_bounds 同时识别 nested `bounds` 对象
