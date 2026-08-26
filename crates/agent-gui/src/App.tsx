@@ -27,7 +27,6 @@ import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
-import { desktopCuaService } from "./lib/cua/cuaService";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -811,7 +810,6 @@ export default function App() {
                   sttSettingsService={desktopSttSettingsService}
                   onSttProviderChange={setSttProviderOverride}
                   reloadSettings={reloadPersistedSettings}
-                  cuaService={desktopCuaService}
                 />
               </Suspense>
             </AppErrorBoundary>

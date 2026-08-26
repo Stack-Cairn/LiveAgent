@@ -67,7 +67,6 @@ import type {
   CloseWindowBehavior,
   CodexRequestFormat,
   CommandSafetyMode,
-  CuaSettings,
   CustomProvider,
   CustomSettings,
   EffectivePromptSettings,
@@ -1594,7 +1593,6 @@ export function getDefaultSettings(): AppSettings {
     theme: "light",
     locale: detectSystemLocale(),
     closeWindowBehavior: "minimize",
-    cua: normalizeCuaSettings({}),
   };
 }
 
@@ -1636,25 +1634,7 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     theme: normalizeTheme(obj.theme),
     locale: normalizeLocale(locale),
     closeWindowBehavior: normalizeCloseWindowBehavior(obj.closeWindowBehavior),
-    cua: normalizeCuaSettings(obj.cua ?? defaults.cua),
   };
-}
-
-export function normalizeCuaSettings(input: unknown): CuaSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Partial<CuaSettings>;
-  const enabled = obj.enabled === true;
-  const allowedOwners = Array.isArray(obj.allowedOwners)
-    ? obj.allowedOwners
-        .filter((s): s is string => typeof s === "string")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-    : [];
-  const auditLogLimit =
-    typeof obj.auditLogLimit === "number" && Number.isFinite(obj.auditLogLimit)
-      ? Math.max(0, Math.min(1000, Math.floor(obj.auditLogLimit)))
-      : 100;
-  const trustMode = obj.trustMode === true;
-  return { enabled, allowedOwners, auditLogLimit, trustMode };
 }
 
 export function updateSystem(prev: AppSettings, patch: Partial<SystemSettings>): AppSettings {

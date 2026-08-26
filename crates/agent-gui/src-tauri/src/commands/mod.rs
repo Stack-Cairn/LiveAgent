@@ -4,7 +4,6 @@ pub mod app_commands;
 pub mod automation_commands;
 #[path = "config/mod.rs"]
 pub mod config_commands;
-pub mod cua;
 #[path = "history/mod.rs"]
 pub mod history_commands;
 #[path = "integration/mod.rs"]
@@ -15,6 +14,7 @@ pub mod runtime_commands;
 pub mod workspace_commands;
 
 pub use app_commands::app;
+pub use app_commands::ax;
 pub use app_commands::system;
 pub use app_commands::tray;
 pub use app_commands::update;

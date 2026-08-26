@@ -57,30 +57,73 @@ test("normalizeSystemSettings 透传 toolPolicies 且旧快照缺失时不报错
   assert.equal(legacy.toolPolicies, undefined);
 });
 
-test("CUA 默认 ask：没有用户策略也没有 trustMode 时，group:cua 走 ask 缺省", () => {
-  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, undefined), "ask");
-  assert.equal(resolveToolPolicy("cua_screenshot", cuaMeta, undefined), "ask");
+// cua-driver 作为普通 MCP server 接入,工具的 groupId 是 "mcp"。若只靠
+// 「mcp 缺省 allow」,kill_app / type_text / clipboard_write 会被隐式放行。
+const cuaDriverMeta = (over = {}) => ({
+  groupId: "mcp",
+  kind: "mcp",
+  isReadOnly: false,
+  displayCategory: "mcp",
+  serverId: "cua-driver",
+  ...over,
 });
 
-test("CUA 用户显式策略覆盖 ask 缺省", () => {
-  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "deny" }), "deny");
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "allow" }), "allow");
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { cua_click: "deny" }), "deny");
+test("cua-driver 默认 ask：没有用户策略时不走 mcp 的 allow 缺省", () => {
+  assert.equal(resolveToolPolicy("mcp_cua-driver_click", cuaDriverMeta(), undefined), "ask");
+  // 只读工具也要 ask：截屏会把整个桌面内容交给模型。
+  assert.equal(
+    resolveToolPolicy("mcp_cua-driver_get_desktop_state", cuaDriverMeta({ isReadOnly: true }), undefined),
+    "ask",
+  );
+  // 其他 MCP server 不受影响,仍是 allow。
+  assert.equal(
+    resolveToolPolicy("mcp_other_t", cuaDriverMeta({ serverId: "other" }), undefined),
+    "allow",
+  );
 });
 
-test("CUA trustMode 开启时 extraGroupDefaults 把 group:cua 强制 allow，但仍低于用户策略", () => {
-  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
-  const trust = { cua: "allow" };
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, undefined, trust), "allow");
-  // 用户 deny 仍然生效（用户策略 > extra defaults > 硬编码默认）。
-  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "deny" }, trust), "deny");
+test("cua-driver 用户显式策略覆盖 ask 缺省", () => {
+  const meta = cuaDriverMeta();
+  assert.equal(resolveToolPolicy("mcp_cua-driver_click", meta, { "server:cua-driver": "deny" }), "deny");
+  assert.equal(
+    resolveToolPolicy("mcp_cua-driver_click", meta, { "server:cua-driver": "allow" }),
+    "allow",
+  );
+  assert.equal(
+    resolveToolPolicy("mcp_cua-driver_click", meta, { "mcp_cua-driver_click": "deny" }),
+    "deny",
+  );
 });
 
-test("isHardcodedGroupDefault 暴露 CUA ask 缺省供 UI 提示", () => {
+test("server 级硬编码缺省优先于 group:mcp 的用户策略", () => {
+  // 用户把「所有 MCP 工具」设为 allow,cua-driver 仍单独保持 ask——组级放
+  // 行不该顺带放行一个能敲键盘杀进程的 server;要放行得显式写 server:。
+  assert.equal(
+    resolveToolPolicy("mcp_cua-driver_click", cuaDriverMeta(), { "group:mcp": "allow" }),
+    "ask",
+  );
+});
+
+test("hardcodedServerPolicyDefault / effectiveServerPolicyDefault 与解析结果一致", () => {
+  const defaults = loader.loadModule("../agent-ui/src/contracts/mcpServerDefaults.ts");
+  assert.equal(defaults.hardcodedServerPolicyDefault("cua-driver"), "ask");
+  assert.equal(defaults.hardcodedServerPolicyDefault("other"), undefined);
+  assert.equal(defaults.effectiveServerPolicyDefault("cua-driver"), "ask");
+  assert.equal(defaults.effectiveServerPolicyDefault("other"), "allow");
+});
+
+test("isHardcodedGroupDefault 机制保留但当前表为空", () => {
   const { isHardcodedGroupDefault } = toolPolicy;
-  assert.equal(isHardcodedGroupDefault("cua"), "ask");
   assert.equal(isHardcodedGroupDefault("mcp"), undefined);
   assert.equal(isHardcodedGroupDefault("shell"), undefined);
+  assert.equal(isHardcodedGroupDefault("cua"), undefined);
+});
+
+test("extraGroupDefaults 仍低于用户策略、高于硬编码组缺省", () => {
+  const meta = { groupId: "plugin", kind: "x", isReadOnly: false, displayCategory: "other" };
+  assert.equal(resolveToolPolicy("plugin_x", meta, undefined, { plugin: "deny" }), "deny");
+  assert.equal(
+    resolveToolPolicy("plugin_x", meta, { "group:plugin": "allow" }, { plugin: "deny" }),
+    "allow",
+  );
 });

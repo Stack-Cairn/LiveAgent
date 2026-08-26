@@ -5,7 +5,6 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import type { Locale } from "@liveagent/app/i18n/config";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import {
@@ -315,13 +314,6 @@ export type RunAgentConversationTurnParams = {
   associatedSshHostIds?: string[];
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void;
-  /** CUA 总开关的实时读取（权威 settingsRef，非 turn 级快照）。 */
-  getCuaEnabled?: () => boolean;
-  /** CUA 信任模式（trustMode=true 时 group:cua 工具不再 ask）。
-   * 实时读取；用户切信任时立即生效，不需要回到设置面板改策略表。 */
-  getCuaTrustMode?: () => boolean;
-  /** 当前 UI locale：cua_* 工具用来把后端结构化错误按用户语言翻译。 */
-  getLocale?: () => Locale;
   sessionId: string;
   /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
   taskStateStore: TaskStateStore;
@@ -411,9 +403,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     associatedSshHostIds,
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
-    getCuaEnabled,
-    getCuaTrustMode,
-    getLocale,
     sessionId,
     taskStateStore,
     conversationId,
@@ -656,8 +645,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
     onTunnelsChanged,
-    cuaEnabled: getCuaEnabled?.() === true,
-    getLocale,
     onMcpLoadError: (message) => {
       const warning = `MCP 工具加载失败，已跳过并继续对话：${message || "未知错误"}`;
       console.warn(warning);
@@ -682,17 +669,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // 策略为 deny 的工具干脆不发给模型:省 token,且模型不会白白尝试再被拦。
   // resolveToolGate 的 deny 分支保留为后备(理论上模型已看不到,不会触发)。
   const toolPoliciesSnapshot = getToolPolicies?.();
-  // CUA 信任模式：开启时把 group:cua 默认 allow（盖过 isHardcodedGroupDefault
-  // 返回的 ask），用户在 settings.system.toolPolicies 里写过 group:cua 的仍按
-  // 用户策略——`extraGroupDefaults` 优先级低于用户策略。
-  const cuaExtraDefaults = getCuaTrustMode?.() === true ? { cua: "allow" as const } : undefined;
   const combinedTools = builtinRegistry.tools.filter(
     (tool) =>
       resolveToolPolicy(
         tool.name,
         builtinRegistry.metadataByName.get(tool.name),
         toolPoliciesSnapshot,
-        cuaExtraDefaults,
       ) !== "deny",
   );
 
@@ -787,12 +769,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         return repeatGate;
       }
     }
-    const policy = resolveToolPolicy(
-      toolCall.name,
-      metadata,
-      getToolPolicies?.(),
-      cuaExtraDefaults,
-    );
+    const policy = resolveToolPolicy(toolCall.name, metadata, getToolPolicies?.());
     if (policy === "deny") {
       return {
         allow: false,

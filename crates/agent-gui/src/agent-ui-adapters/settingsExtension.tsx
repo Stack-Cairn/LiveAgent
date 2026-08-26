@@ -1,7 +1,6 @@
 import { Archive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
-import { desktopCuaService } from "../lib/cua/cuaService";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
@@ -12,7 +11,6 @@ export function createSettingsExtension(props: SettingsPageProps): {
   iconClassName: string;
   slots: UiExtensionSlots;
   sections: SettingsSectionDefinition<void>[];
-  cuaService: SettingsPageProps["cuaService"];
 } {
   const { settings, setSettings, appUpdate, reloadSettings } = props;
   return {
@@ -61,6 +59,5 @@ export function createSettingsExtension(props: SettingsPageProps): {
         ),
       },
     ],
-    cuaService: props.cuaService ?? desktopCuaService,
   };
 }

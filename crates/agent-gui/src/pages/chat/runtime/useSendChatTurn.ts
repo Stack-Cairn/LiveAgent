@@ -1719,9 +1719,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
                 ensureSshTunnelToolTab(change.projectPathKey);
               }
             },
-            getCuaEnabled: () => settings.cua?.enabled === true,
-            getCuaTrustMode: () => settings.cua?.trustMode === true,
-            getLocale: () => settings.locale,
             onTunnelsChanged: (change) => {
               if (change.action === "create") {
                 ensureTunnelToolTab(change.projectPathKey);

@@ -582,28 +582,6 @@ export type AppSettings = {
   locale: Locale;
   /** Desktop-only: close title-bar X to hide to tray or exit the application. */
   closeWindowBehavior: CloseWindowBehavior;
-  /**
-   * CUA (Computer Use Agent) 驱动配置。决定 `cua_*` 工具组是否在 Agent
-   * 工具注册表中挂载——总开关 = 工具是否对模型可见；白名单决定输入 /
-   * 焦点 / 点击能否进入目标应用。
-   *
-   * 桌面端 MVP：存 localStorage（与 skills / chatRuntimeControls / 主题
-   * 同源），不写 SQLite。`liveagent_lib` 后端持一份镜像（启动时由
-   * `cua_set_config` 同步），运行期修改立即下发。
-   */
-  cua: CuaSettings;
-};
-
-export type CuaSettings = {
-  enabled: boolean;
-  /** 允许的目标应用名（owner）列表；非空时仅这些 owner 的输入/点击会被放行。 */
-  allowedOwners: string[];
-  /** 审计日志上限（最近 N 条），默认 100。0 视作关闭。 */
-  auditLogLimit: number;
-  /** 「信任模式」开关：开启后 `group:cua` 工具在前端不再弹审批（用户
-   * 自担风险）。关闭时由 `toolPolicy.ts` 走默认 `ask`（CUA-reviewer
-   * 要求：默认逐次审批，显式 trust 才免审）。 */
-  trustMode: boolean;
 };
 
 export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {

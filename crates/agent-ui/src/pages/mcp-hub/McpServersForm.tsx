@@ -8,6 +8,7 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { useMemo } from "react";
+import { effectiveServerPolicyDefault } from "../../contracts/mcpServerDefaults";
 import { McpServerCard } from "./McpServerCard";
 
 export { McpServerEditModal } from "./McpServerEditModal";
@@ -88,12 +89,18 @@ export function McpServersForm(props: McpServersFormProps) {
                 searchQuery={query}
                 setSettings={setSettings}
                 onEdit={() => onEditServer?.(server, idx)}
-                policy={settings.system.toolPolicies?.[serverPolicyKey(server.id)] ?? "allow"}
+                policy={
+                  settings.system.toolPolicies?.[serverPolicyKey(server.id)] ??
+                  effectiveServerPolicyDefault(server.id)
+                }
                 onPolicyChange={(next) =>
                   setSettings((prev) => {
                     const current = { ...(prev.system.toolPolicies ?? {}) };
                     const key = serverPolicyKey(server.id);
-                    if (next === "allow") delete current[key];
+                    // 只有回到该 server 的缺省值才删 key——对普通 server 缺省是
+                    // allow，对硬编码为 ask 的 server（cua-driver）则相反：显式
+                    // 存下 "allow" 才能盖过缺省，删掉反而会退回 ask。
+                    if (next === effectiveServerPolicyDefault(server.id)) delete current[key];
                     else current[key] = next;
                     return updateSystem(prev, {
                       toolPolicies: Object.keys(current).length > 0 ? current : undefined,

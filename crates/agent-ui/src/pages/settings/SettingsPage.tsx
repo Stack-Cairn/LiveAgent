@@ -7,7 +7,6 @@ import {
   Clock3,
   Cloud,
   Cpu,
-  Hand,
   Key,
   Mic,
   Settings2,
@@ -18,7 +17,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";
 import { CronSection } from "./CronSection";
-import { CuaSection } from "./CuaSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { ProvidersSection } from "./ProvidersSection";
@@ -46,7 +44,6 @@ export function SettingsPage(props: SettingsPageProps) {
     hiddenSections = [],
     sttSettingsService,
     onSttProviderChange,
-    cuaService,
   } = props;
   const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
   const [sttSelectedProvider, setSttSelectedProvider] = useState<SttProviderId>(
@@ -193,27 +190,6 @@ export function SettingsPage(props: SettingsPageProps) {
         icon: <Cloud className={extension.iconClassName} />,
         render: () => <RemoteSection settings={settings} setSettings={setSettings} />,
       },
-      ...(cuaService
-        ? [
-            {
-              id: "cua",
-              groupKey: "settings.groupConnectivity",
-              groupOrder: 40,
-              order: 30,
-              labelKey: "settings.navCua",
-              icon: <Hand className={extension.iconClassName} />,
-              render: () => (
-                <CuaSection
-                  settings={settings.cua}
-                  setSettings={(updater) =>
-                    setSettings((prev) => ({ ...prev, cua: updater(prev.cua) }))
-                  }
-                  cuaService={cuaService}
-                />
-              ),
-            },
-          ]
-        : []),
       ...extension.sections,
     ],
     [

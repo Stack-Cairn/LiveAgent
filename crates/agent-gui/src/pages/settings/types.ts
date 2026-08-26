@@ -1,5 +1,4 @@
 import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
-import type { CuaService } from "@liveagent/ui/pages/settings/CuaSection";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import type { AppSettings, SttProviderId } from "../../lib/settings";
 import type { SettingsSaveState } from "../../lib/settings/storage";
@@ -18,7 +17,6 @@ export type SectionId =
   | "hooks"
   | "cron"
   | "remote"
-  | "cua"
   | "about";
 
 export type SettingsPageProps = {
@@ -35,8 +33,6 @@ export type SettingsPageProps = {
   onSttProviderChange?: (provider: SttProviderId) => void;
   /** 绕过 setSettings 从 SQLite 重新载入（备份还原后用，见 SettingsSectionProps）。 */
   reloadSettings?: () => Promise<void>;
-  /** CUA 后端桥；桌面端由 `settingsExtension` 注入，WebUI 不提供。 */
-  cuaService?: CuaService;
 };
 
 export type SettingsSectionProps = {

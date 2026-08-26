@@ -12,8 +12,7 @@ export type BuiltinToolGroupId =
   | "system"
   | "mcp"
   | "subagent"
-  | "memory"
-  | "cua";
+  | "memory";
 
 export type BuiltinToolDisplayCategory =
   | "file"
@@ -21,7 +20,6 @@ export type BuiltinToolDisplayCategory =
   | "terminal"
   | "system"
   | "mcp"
-  | "cua"
   | "other";
 
 export type BuiltinToolMetadata = {

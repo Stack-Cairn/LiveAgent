@@ -309,26 +309,10 @@ macro_rules! app_invoke_handler {
             commands::system::system_begin_power_activity,
             commands::system::system_end_power_activity,
             commands::system::system_clipboard_read_text,
-            commands::cua::cua_status,
-            commands::cua::cua_set_config,
-            commands::cua::cua_clear_audit,
-            commands::cua::cua_list_windows,
-            commands::cua::cua_focus_window,
-            commands::cua::cua_screenshot,
-            commands::cua::cua_click,
-            commands::cua::cua_double_click,
-            commands::cua::cua_type,
-            commands::cua::cua_key,
-            commands::cua::cua_scroll,
-            commands::cua::cua_drag,
-            commands::cua::cua_window_ready,
-            commands::cua::cua_refresh_a11y,
-            // CUA driver installer (CUA-100 series).
-            commands::cua::cua_driver_detect,
-            commands::cua::cua_driver_install,
-            commands::cua::cua_driver_update,
-            commands::cua::cua_driver_start_daemon,
-            commands::cua::cua_driver_install_preview,
+            // AX 辅助命令：让外部自动化工具（cua-driver）能读到本窗口的
+            // 无障碍树。与「操作用户电脑」无关——那条链路走 MCP Hub。
+            commands::ax::cua_window_ready,
+            commands::ax::cua_refresh_a11y,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
@@ -1167,13 +1151,6 @@ pub fn run() {
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
-    // CUA 默认 disabled。前端首次加载后会把用户的开关 / 名单 push 进来。
-    let cua_store = Arc::new(services::cua::CuaStore::new(
-        services::cua::CuaRuntimeConfig::default(),
-    ));
-    // 共享 cua-driver MCP 子进程客户端。第一次 cua_* 命令才懒 spawn，
-    // 失败时由上层把 IO 错误翻译成结构化 CuaError。
-    let cua_client = services::cua::CuaClient::new();
 
     let builder = tauri::Builder::default();
     // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
@@ -1220,8 +1197,6 @@ pub fn run() {
         .manage(Arc::clone(&close_window_behavior))
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
-        .manage(Arc::clone(&cua_store))
-        .manage(cua_client.clone())
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
         .on_page_load(|webview, payload| {
