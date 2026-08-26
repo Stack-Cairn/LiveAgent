@@ -288,6 +288,14 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.errors.save": "保存 CUA 配置失败",
     "cua.errors.sandboxOffline":
       "当前命令安全模式是 sandboxOffline，CUA 工具已全部禁用。请把命令安全模式切换为 ask / auto / sandbox 后再使用 CUA。",
+    // CUA-060: cua_screenshot / cua_type / cua_key 拿到具体 owner 但
+    // list_apps + list_windows 找不到对应进程 / 窗口时的结构化错误，
+    // 替代原先「静默回退 get_desktop_state 后被 CUA-051 后置防线翻
+    // 译成 TCC 失效」的掩盖行为。
+    "cua.errors.ownerNotFound":
+      "找不到 owner「{owner}」对应的运行窗口。请确认应用名 / bundle id 拼写正确，且该应用至少有 1 个可见窗口后再重试。",
+    "cua.errors.ownerNotFoundDetail":
+      "找不到 owner「{owner}」对应的运行窗口。请确认应用名 / bundle id 拼写正确，且该应用至少有 1 个可见窗口后再重试。",
     // CUA-100: driver installer (zh-CN)
     "cua.errors.installer.networkUnavailable":
       "CUA 驱动安装器无法连接网络：{detail}。请检查网络后重试。",
@@ -641,6 +649,14 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.errors.save": "Failed to save CUA config",
     "cua.errors.sandboxOffline":
       "CUA tools are disabled while the command safety mode is sandboxOffline. Switch the command safety mode to ask / auto / sandbox to use CUA.",
+    // CUA-060: cua_screenshot / cua_type / cua_key 拿到具体 owner 但
+    // list_apps + list_windows 找不到对应进程 / 窗口时的结构化错误，
+    // 替代原先「静默回退 get_desktop_state 后被 CUA-051 后置防线翻
+    // 译成 TCC 失效」的掩盖行为。
+    "cua.errors.ownerNotFound":
+      "Could not find a running window for owner \"{owner}\". Verify the app name / bundle id and that it has at least one visible window before retrying.",
+    "cua.errors.ownerNotFoundDetail":
+      "Could not find a running window for owner \"{owner}\". Verify the app name / bundle id and that it has at least one visible window before retrying.",
     // CUA-100: driver installer (en-US)
     "cua.errors.installer.networkUnavailable":
       "CUA driver installer could not reach the network: {detail}. Check your connection and retry.",

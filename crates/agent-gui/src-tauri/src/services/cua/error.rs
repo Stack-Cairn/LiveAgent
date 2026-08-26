@@ -113,6 +113,22 @@ impl CuaError {
         )
     }
 
+    /// CUA-060：cua_screenshot / cua_type / cua_key 拿到具体 owner 但
+    /// `list_apps` + `list_windows` 找不到对应进程 / 窗口时上报一个
+    /// 明确的「owner 找不到」错误，而不是默默退回 get_desktop_state
+    /// 后触发 CUA-051 后置防线被翻译成「TCC 失效」。
+    pub fn owner_not_found(owner: &str) -> Self {
+        Self::with_params(
+            "cua.errors.ownerNotFound",
+            format!(
+                "Could not find a running window for owner \"{owner}\". \
+                 Verify the app name / bundle id and that it has at least \
+                 one visible window before retrying."
+            ),
+            serde_json::json!({ "owner": owner }),
+        )
+    }
+
     /// 子进程 IO 失败（osascript / screencapture 启动失败等）。
     pub fn io(detail: &str) -> Self {
         Self::with_params(

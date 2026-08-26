@@ -1235,6 +1235,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA operation was not executed: {detail}",
   "cua.errors.io": "CUA subprocess IO error: {detail}",
   "cua.errors.unknown": "unknown reason",
+  // CUA-060: cua_screenshot / cua_type / cua_key 拿到具体 owner 但
+  // list_apps + list_windows 找不到对应进程 / 窗口时的结构化错误，
+  // 替代原先「静默回退 get_desktop_state 后被 CUA-051 后置防线翻
+  // 译成 TCC 失效」的掩盖行为。
+  "cua.errors.ownerNotFound":
+    "Could not find a running window for owner \"{owner}\". Verify the app name / bundle id and that it has at least one visible window before retrying.",
+  "cua.errors.ownerNotFoundDetail":
+    "Could not find a running window for owner \"{owner}\". Verify the app name / bundle id and that it has at least one visible window before retrying.",
   // CUA-051: cua-driver 没有在 CuaDriver.app bundle 内启动导致
   // ScreenCaptureKit attribution 失效 → get_desktop_state 返回全黑帧。
   "cua.errors.screenCaptureUnavailable":

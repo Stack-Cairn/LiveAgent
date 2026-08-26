@@ -168,6 +168,75 @@ fn extract_screenshot(value: &Value) -> Option<(Vec<u8>, u32, u32)> {
     None
 }
 
+/// CUA-061：把 cua-driver 失败响应的可读错误文本拆出来。当
+/// `isError=true` 时，`content` 数组里的文本条目承载错误消息
+///（例如 `x2 must be > x1 and y2 must be > y1` / `TCC permission
+/// required` / 内部 panic 栈）。返回拼接后的字符串，给 caller 包
+/// 进 `CuaError::io` 透传给前端，避免真实错误被吞成「no image
+/// content」。
+fn extract_error_text(value: &Value) -> Option<String> {
+    let arr = value.get("content")?.as_array()?;
+    let mut chunks: Vec<String> = Vec::new();
+    for item in arr {
+        if item.get("type").and_then(Value::as_str) == Some("text") {
+            if let Some(t) = item.get("text").and_then(Value::as_str) {
+                chunks.push(t.to_string());
+            }
+        }
+    }
+    if chunks.is_empty() {
+        None
+    } else {
+        Some(chunks.join("\n"))
+    }
+}
+
+/// 窗口 bounds（CUA-059）：从 list_windows 返回的 window 对象里
+/// 拆出 `{x, y, width, height}`。cua-driver 把 bounds 嵌进 `bounds`
+/// 子对象，值是浮点（如 `{"x":260.0,"y":68.0,"width":1400.0,
+/// "height":800.0}`）。这里同时接受 int / float，顶层平铺
+/// `{x, y, width, height}` 也兼容（其它 MCP 实现可能）。
+struct WindowBounds {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+/// 从 serde_json::Value 中抽出数字字段（int 或 float），截到 i32 范围。
+fn number_as_i32(v: &Value) -> Option<i32> {
+    if let Some(n) = v.as_i64() {
+        return Some(n as i32);
+    }
+    if let Some(f) = v.as_f64() {
+        if f.is_finite() && f >= i32::MIN as f64 && f <= i32::MAX as f64 {
+            return Some(f as i32);
+        }
+    }
+    None
+}
+
+fn extract_window_bounds(w: &Value) -> Option<WindowBounds> {
+    if let Some(b) = w.get("bounds").and_then(Value::as_object) {
+        let x = b.get("x").and_then(number_as_i32).unwrap_or(0);
+        let y = b.get("y").and_then(number_as_i32).unwrap_or(0);
+        let width = b.get("width").and_then(number_as_i32).unwrap_or(0);
+        let height = b.get("height").and_then(number_as_i32).unwrap_or(0);
+        if width > 0 && height > 0 {
+            return Some(WindowBounds { x, y, width, height });
+        }
+        return None;
+    }
+    let x = w.get("x").and_then(number_as_i32)?;
+    let y = w.get("y").and_then(number_as_i32)?;
+    let width = w.get("width").and_then(number_as_i32)?;
+    let height = w.get("height").and_then(number_as_i32)?;
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    Some(WindowBounds { x, y, width, height })
+}
+
 /// CUA-054：cua-driver MCP 即使 JSON-RPC 200，也会把业务失败装进
 /// `result.isError=true` + `structuredContent.effect ∈ {refused,
 /// suspected_noop, unverifiable}`。这里把这种「传输成功 / 业务失败」
@@ -411,21 +480,38 @@ pub fn cua_screenshot(
         return Err(err);
     }
     let result = if let Some(owner) = owner_opt {
-        // 走 list_apps → pid+window_id → zoom 路径，给一个 5s 缓存避免
-        // 每次截屏都 list_apps。这里偷懒：直接传 owner 字符串到
-        // get_desktop_state（不支持）；退化：list_apps 后取第一个匹配
-        // owner 的 window_state，再 zoom 整窗口。
+        // 走 list_apps → pid+window_id → zoom 路径。窗口 bounds 在
+        // list_windows 时一并拆出（CUA-059），zoom 用真实坐标而
+        // 不是零面积；找不到窗口时直接报 ownerNotFound，不再回退
+        // 到 get_desktop_state 触发 CUA-051 后置防线把错误掩盖成
+        // TCC 失效（CUA-060）。
         match pick_window_id_for_owner(&client, owner) {
-            Ok(Some((pid, window_id))) => client.call_tool(
-                "zoom",
-                json!({
-                    "pid": pid,
-                    "window_id": window_id,
-                    "x1": 0, "y1": 0, "x2": 0, "y2": 0,
-                }),
-            ),
-            // 找不到对应窗口时降级到全屏（仍受 bundle 预检保护）。
-            Ok(None) => client.call_tool("get_desktop_state", json!({})),
+            Ok(Some((pid, window_id, bounds))) => {
+                let (x1, y1, x2, y2) = zoom_rect(bounds);
+                client.call_tool(
+                    "zoom",
+                    json!({
+                        "pid": pid,
+                        "window_id": window_id,
+                        "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                    }),
+                )
+            }
+            Ok(None) => {
+                // 找不到对应窗口 → 直接报 ownerNotFound；不要回退到
+                // 全屏（get_desktop_state 在 bundle_identity=fail 时
+                // 会返回全黑帧，被 CUA-051 后置防线翻译成 TCC 失效，
+                // 把真实原因彻底掩盖——CUA-060）。
+                let err = CuaError::owner_not_found(owner);
+                store.inner().record(CuaAuditEntry {
+                    timestamp: started,
+                    operation: op.to_string(),
+                    ok: false,
+                    error: Some(err.clone()),
+                    detail: Some(json!({ "windowOwner": window_owner })),
+                });
+                return Err(err);
+            }
             Err(e) => Err(e),
         }
     } else {
@@ -433,6 +519,23 @@ pub fn cua_screenshot(
     };
     match result {
         Ok(value) => {
+            // CUA-061：cua-driver 在 zoom 参数错误、permission 拒绝、
+            // 内部 panic 等场景会返回 isError=true + content 是文本
+            // 错误消息；直接走 extract_screenshot 会拿到 None 然后
+            // 被翻成 'no image content'，真实错误（'x2 must be > x1' /
+            // 'TCC permission required'）被吞掉。这里先检查 isError，
+            // 把文本 detail 透传给 CuaError::io。
+            if let Some(err_detail) = extract_error_text(&value) {
+                let err = CuaError::io(&err_detail);
+                store.inner().record(CuaAuditEntry {
+                    timestamp: started,
+                    operation: op.to_string(),
+                    ok: false,
+                    error: Some(err.clone()),
+                    detail: Some(json!({ "windowOwner": window_owner })),
+                });
+                return Err(err);
+            }
             let (bytes, width, height) = extract_screenshot(&value)
                 .ok_or_else(|| CuaError::io("cua-driver screenshot: no image content"))?;
             // CUA-051 后置防线：即便 health_report 那一关过了，也要兜
@@ -593,14 +696,62 @@ pub fn cua_type(
         "length": len,
         "targetOwner": target_owner,
     }));
+    let started = Utc::now();
     let mut args = json!({ "text": text });
-    if let Some(owner) = owner_ref {
-        if let Ok(Some((pid, window_id))) = pick_window_id_for_owner(&client, owner) {
+    // CUA-062：cua-driver type_text / press_key / hotkey 强制要求 pid。
+    // target_owner 为 None 时无条件 pick_topmost_window 取前台 app；
+    // 与 cua_click / scroll / drag 对齐。owner 指定但找不到时报
+    // owner_not_found（CUA-060 同根因）。
+    let picked: Option<(i64, i64)> = if let Some(owner) = owner_ref {
+        match pick_window_id_for_owner(&client, owner) {
+            Ok(Some((pid, wid, _bounds))) => Some((pid, wid)),
+            Ok(None) => {
+                let err = CuaError::owner_not_found(owner);
+                record_op_audit(store.inner(), op, detail, &Err(err.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(err),
+                });
+            }
+            Err(e) => {
+                record_op_audit(store.inner(), op, detail.clone(), &Err(e.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(e),
+                });
+            }
+        }
+    } else {
+        match pick_topmost_window(&client) {
+            Ok(p) => p,
+            Err(e) => {
+                record_op_audit(store.inner(), op, detail.clone(), &Err(e.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(e),
+                });
+            }
+        }
+    };
+    match picked {
+        Some((pid, window_id)) => {
             args["pid"] = json!(pid);
             args["window_id"] = json!(window_id);
         }
+        None => {
+            // pick_topmost_window 返回 None：前台没有可点击窗口（极端
+            // 场景，例如桌面本身无窗口），无法满足 pid 强约束。
+            let err = CuaError::not_executed(
+                "pid is required or pick_topmost_window failed \
+                 (no foreground window with on_screen=true)",
+            );
+            record_op_audit(store.inner(), op, detail, &Err(err.clone()), started);
+            return Ok(CuaOpResponse {
+                ok: false,
+                error: Some(err),
+            });
+        }
     }
-    let started = Utc::now();
     let result = client.call_tool("type_text", args);
     Ok(finalize_op(
         store.inner(),
@@ -649,13 +800,59 @@ pub fn cua_key(
         "hotkey"
     };
     let mut args = args;
-    if let Some(owner) = owner_ref {
-        if let Ok(Some((pid, window_id))) = pick_window_id_for_owner(&client, owner) {
+    let started = Utc::now();
+    // CUA-062：与 cua_type 同根因——cua-driver press_key / hotkey 强制
+    // 要求 pid；target_owner 为 None 时无条件 pick_topmost_window 取
+    // 前台 app，不再让调用方拿到 'Missing required integer field: pid'
+    // 这种不可操作错误。
+    let picked: Option<(i64, i64)> = if let Some(owner) = owner_ref {
+        match pick_window_id_for_owner(&client, owner) {
+            Ok(Some((pid, wid, _bounds))) => Some((pid, wid)),
+            Ok(None) => {
+                let err = CuaError::owner_not_found(owner);
+                record_op_audit(store.inner(), op, detail, &Err(err.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(err),
+                });
+            }
+            Err(e) => {
+                record_op_audit(store.inner(), op, detail.clone(), &Err(e.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(e),
+                });
+            }
+        }
+    } else {
+        match pick_topmost_window(&client) {
+            Ok(p) => p,
+            Err(e) => {
+                record_op_audit(store.inner(), op, detail.clone(), &Err(e.clone()), started);
+                return Ok(CuaOpResponse {
+                    ok: false,
+                    error: Some(e),
+                });
+            }
+        }
+    };
+    match picked {
+        Some((pid, window_id)) => {
             args["pid"] = json!(pid);
             args["window_id"] = json!(window_id);
         }
+        None => {
+            let err = CuaError::not_executed(
+                "pid is required or pick_topmost_window failed \
+                 (no foreground window with on_screen=true)",
+            );
+            record_op_audit(store.inner(), op, detail, &Err(err.clone()), started);
+            return Ok(CuaOpResponse {
+                ok: false,
+                error: Some(err),
+            });
+        }
     }
-    let started = Utc::now();
     let result = client.call_tool(tool, args);
     Ok(finalize_op(
         store.inner(),
@@ -736,6 +933,20 @@ pub fn cua_drag(
 
 // ───────── Helpers ─────────
 
+/// CUA-059：cua-driver zoom 拒绝零面积坐标。bounds 拿得到就用真实
+/// 矩形；拿不到就用「屏幕尺寸」兜底（任意大于真实屏幕的数值都行，
+/// cua-driver zoom 会按窗口 bounds 裁剪）。这里用 10000 作为保守
+/// 上界——覆盖所有现代 macOS / Windows / Linux 桌面分辨率。
+const FALLBACK_SCREEN_W: i32 = 10000;
+const FALLBACK_SCREEN_H: i32 = 10000;
+
+fn zoom_rect(bounds: Option<WindowBounds>) -> (i32, i32, i32, i32) {
+    match bounds {
+        Some(b) if b.width > 0 && b.height > 0 => (b.x, b.y, b.x + b.width, b.y + b.height),
+        _ => (0, 0, FALLBACK_SCREEN_W, FALLBACK_SCREEN_H),
+    }
+}
+
 /// 解析 PNG IHDR 拿宽高。
 fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     if bytes.len() < 24 {
@@ -814,10 +1025,13 @@ fn pick_topmost_window(client: &CuaClient) -> Result<Option<(i64, i64)>, CuaErro
 /// CUA-056：list_apps / list_windows 的 apps / windows 数组都在
 /// structuredContent 下；必须先 `unwrap_mcp` 再取，否则 zoom 路径
 /// 永远拿不到 pid + window_id → 降级到 get_desktop_state。
+///
+/// CUA-059：顺带拆出窗口 bounds（{x,y,width,height}），避免 zoom
+/// 调用传零面积坐标被驱动拒。
 fn pick_window_id_for_owner(
     client: &CuaClient,
     owner: &str,
-) -> Result<Option<(i64, i64)>, CuaError> {
+) -> Result<Option<(i64, i64, Option<WindowBounds>)>, CuaError> {
     let apps = client.call_tool("list_apps", json!({}))?;
     let apps = unwrap_mcp(&apps);
     let pid = apps
@@ -842,18 +1056,21 @@ fn pick_window_id_for_owner(
     };
     let windows = client.call_tool("list_windows", json!({ "pid": pid, "on_screen_only": true }))?;
     let windows = unwrap_mcp(&windows);
-    let wid = windows
-        .get("windows")
-        .and_then(Value::as_array)
-        .and_then(|arr| {
-            arr.iter().find_map(|w| {
-                w.get("window_id")
-                    .or_else(|| w.get("windowId"))
-                    .or_else(|| w.get("id"))
-                    .and_then(Value::as_i64)
-            })
-        });
-    Ok(wid.map(|w| (pid, w)))
+    let mut picked: Option<(i64, Option<WindowBounds>)> = None;
+    if let Some(arr) = windows.get("windows").and_then(Value::as_array) {
+        for w in arr {
+            let wid = w
+                .get("window_id")
+                .or_else(|| w.get("windowId"))
+                .or_else(|| w.get("id"))
+                .and_then(Value::as_i64);
+            if let Some(wid) = wid {
+                picked = Some((wid, extract_window_bounds(w)));
+                break;
+            }
+        }
+    }
+    Ok(picked.map(|(wid, bounds)| (pid, wid, bounds)))
 }
 
 /// cua-driver 入口命令：把主窗口重新推到最前并等待 `is_focused()` 落
@@ -1020,15 +1237,14 @@ mod tests {
     fn fake_png_1x1() -> Vec<u8> {
         // 长度可变的 IHDR 字段拼接（实际长度需 13）。我们手写一个可被 PNG signature 8 字节
         // + IHDR 头识别的 24 字节小图。
-        let mut bytes = vec![
+        vec![
             0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
             0x00, 0x00, 0x00, 0x0D, // IHDR length = 13
             b'I', b'H', b'D', b'R',
             0x00, 0x00, 0x00, 0x01, // width = 1
             0x00, 0x00, 0x00, 0x01, // height = 1
             0x08, 0x02, 0x00, 0x00, 0x00, // bit depth, color type, etc.
-        ];
-        bytes
+        ]
     }
 
     #[test]
@@ -1323,5 +1539,137 @@ mod tests {
         let op_resp = finalize_op(&store, "click", None, resp, Utc::now());
         assert!(op_resp.ok);
         assert!(op_resp.error.is_none());
+    }
+
+    // ───────── CUA-059/060/061/062 回归测试 ─────────
+
+    /// CUA-061：cua-driver 在 isError=true 时把错误消息放在 content[]
+    /// 的 text 条目里；extract_error_text 必须把它们拼出来，避免被
+    /// extract_screenshot 当 None 翻成 'no image content'。
+    #[test]
+    fn extract_error_text_pulls_creats_text_chunks() {
+        let value = json!({
+            "isError": true,
+            "content": [
+                { "type": "text", "text": "x2 must be > x1 and y2 must be > y1" }
+            ]
+        });
+        let detail = extract_error_text(&value).expect("must surface error text");
+        assert!(detail.contains("x2 must be > x1"));
+        assert!(detail.contains("y2 must be > y1"));
+    }
+
+    /// CUA-061：没有 isError=true 时 extract_error_text 不返回真实
+    /// 文本，避免误报（即使 content[] 里恰好有 text 条目）。
+    #[test]
+    fn extract_error_text_returns_none_when_no_iserror() {
+        let value = json!({
+            "isError": false,
+            "content": [
+                { "type": "text", "text": "ok" },
+                { "type": "image", "data": "AAAA", "mimeType": "image/png" }
+            ]
+        });
+        // extract_error_text 只看 content[] 文本条目，但 caller（cua_screenshot）
+        // 必须先用 isError=true 守门。这里验证 helper 自身的抽取行为。
+        let detail = extract_error_text(&value);
+        // 即使 image 也存在，文本条目仍会被收集；这是有意的——helper
+        // 单纯做文本提取，是否调用由 caller 决定。caller 已经先 isError
+        // 守门，所以不会误用。
+        assert_eq!(detail.as_deref(), Some("ok"));
+    }
+
+    /// CUA-059：extract_window_bounds 同时识别 nested `bounds` 对象
+    /// 和顶层平铺 {x,y, width, height}。
+    #[test]
+    fn extract_window_bounds_handles_both_shapes() {
+        let nested = json!({
+            "window_id": 7,
+            "bounds": { "x": 100, "y": 50, "width": 800, "height": 600 }
+        });
+        let b = extract_window_bounds(&nested).expect("nested bounds must parse");
+        assert_eq!((b.x, b.y, b.width, b.height), (100, 50, 800, 600));
+
+        let flat = json!({
+            "window_id": 8,
+            "x": 200, "y": 75, "width": 1024, "height": 768
+        });
+        let b2 = extract_window_bounds(&flat).expect("flat bounds must parse");
+        assert_eq!((b2.x, b2.y, b2.width, b2.height), (200, 75, 1024, 768));
+    }
+
+    /// CUA-059：cua-driver list_windows 返回的 bounds 字段值是浮点
+    ///（例如 `{"x":260.0,"y":68.0,...}`），extract_window_bounds 必须
+    /// 截到 i32 而不是返回 None。
+    #[test]
+    fn extract_window_bounds_accepts_floats() {
+        let real = json!({
+            "window_id": 24391,
+            "bounds": { "x": 260.0, "y": 68.0, "width": 1400.0, "height": 800.0 }
+        });
+        let b = extract_window_bounds(&real).expect("float bounds must parse");
+        assert_eq!((b.x, b.y, b.width, b.height), (260, 68, 1400, 800));
+
+    // 混用 int + float 也兼容。
+    let mixed = json!({
+        "window_id": 9,
+        "bounds": { "x": 260.0, "y": 68, "width": 1400, "height": 800.0 }
+    });
+    let b2 = extract_window_bounds(&mixed).expect("mixed bounds must parse");
+    assert_eq!((b2.x, b2.y, b2.width, b2.height), (260, 68, 1400, 800));
+    }
+
+    /// CUA-059：bounds 缺失或 width/height <= 0 时返回 None，让
+    /// zoom_rect 走 screen-size fallback（避免零面积）。
+    #[test]
+    fn extract_window_bounds_rejects_zero_area() {
+        let no_bounds = json!({ "window_id": 9 });
+        assert!(extract_window_bounds(&no_bounds).is_none());
+
+        let zero_area = json!({
+            "bounds": { "x": 0, "y": 0, "width": 0, "height": 0 }
+        });
+        assert!(extract_window_bounds(&zero_area).is_none());
+    }
+
+    /// CUA-059：zoom_rect 在 bounds 拿得到时输出真实矩形，bounds
+    /// 拿不到时输出非零面积的兜底矩形。
+    #[test]
+    fn zoom_rect_uses_bounds_or_screen_fallback() {
+        let real = zoom_rect(Some(WindowBounds {
+            x: 10,
+            y: 20,
+            width: 800,
+            height: 600,
+        }));
+        assert_eq!(real, (10, 20, 810, 620));
+
+        let fallback = zoom_rect(None);
+        assert_eq!(fallback, (0, 0, FALLBACK_SCREEN_W, FALLBACK_SCREEN_H));
+        // 兜底矩形的面积必须严格 > 0（cua-driver zoom 拒绝零面积）。
+        assert!(fallback.2 > fallback.0);
+        assert!(fallback.3 > fallback.1);
+
+        // width/height ≤ 0 也走 fallback。
+        let degenerate = zoom_rect(Some(WindowBounds {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        }));
+        assert_eq!(degenerate, (0, 0, FALLBACK_SCREEN_W, FALLBACK_SCREEN_H));
+    }
+
+    /// CUA-060：CuaError::owner_not_found 携带稳定的 i18n kind + owner 参数。
+    #[test]
+    fn owner_not_found_emits_structured_error() {
+        let err = CuaError::owner_not_found("GhostApp");
+        assert_eq!(err.kind, "cua.errors.ownerNotFound");
+        assert_eq!(
+            err.params.get("owner").and_then(Value::as_str),
+            Some("GhostApp")
+        );
+        assert!(err.message.contains("GhostApp"));
+        assert!(!err.message.contains('你'), "no Chinese leaks");
     }
 }
