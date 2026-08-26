@@ -241,9 +241,12 @@ impl CuaClient {
         }
         // slow path：调 health_report 拿 bundle_identity。失败 / 超时
         // 一律按 fail 处理（保守；宁可错杀不要返回全黑帧）。
+        // cua-driver MCP 2025-06-18 把 `checks` 放在 structuredContent 下，
+        // 必须先 unwrap 再取（CUA-053）。
         let parsed = self
             .call_tool("health_report", json!({}))
             .ok()
+            .map(|v| unwrap_mcp(&v))
             .and_then(|v| v.get("checks").and_then(Value::as_array).cloned())
             .and_then(|checks| {
                 checks
@@ -278,6 +281,22 @@ impl Drop for CuaClient {
 
 fn child_exited(child: &mut Child) -> bool {
     matches!(child.try_wait(), Ok(Some(_)))
+}
+
+/// 解开 cua-driver MCP 2025-06-18 `{content, structuredContent}` 包装。
+/// 返回内部 `structuredContent`（如存在），否则 fallback 到原 `result`。
+///
+/// MCP 2025-06-18 把工具响应拆成「人类可读 content 数组 + 结构化
+/// structuredContent」，但 cua-driver 把数据（`windows` / `apps` /
+/// `checks` / `effect`）放在 `structuredContent` 里；很多旧路径
+/// 直接 `result.get("xxx")` 顶层取，结果永远拿不到。所有解析点都
+/// 必须先过这一层（CUA-053 / 055 / 056 / 057 同根因）。
+pub(crate) fn unwrap_mcp(result: &Value) -> Value {
+    if let Some(sc) = result.get("structuredContent") {
+        sc.clone()
+    } else {
+        result.clone()
+    }
 }
 
 /// 起一个 `cua-driver mcp --direct` 子进程。stdout / stdin 都 pipe。
@@ -360,5 +379,44 @@ mod tests {
         let c = CuaClient::new();
         let _c2 = c.clone();
         assert!(Arc::strong_count(&c.inner) >= 2);
+    }
+
+    /// CUA-053：health_report 返回的 `checks` 在 structuredContent 下，
+    /// 顶层没有 `checks` 字段。`unwrap_mcp` 必须穿透这一层。
+    #[test]
+    fn unwrap_mcp_extracts_structured_content() {
+        let v = json!({
+            "content": [{"type": "text", "text": "all good"}],
+            "structuredContent": {
+                "checks": [
+                    {"name": "bundle_identity", "status": "pass"},
+                    {"name": "ax", "status": "pass"}
+                ]
+            },
+            "isError": false
+        });
+        let inner = unwrap_mcp(&v);
+        let checks = inner
+            .get("checks")
+            .and_then(Value::as_array)
+            .expect("checks array");
+        assert_eq!(checks.len(), 2);
+        assert_eq!(
+            checks[0].get("name").and_then(Value::as_str),
+            Some("bundle_identity")
+        );
+        assert_eq!(
+            checks[0].get("status").and_then(Value::as_str),
+            Some("pass")
+        );
+    }
+
+    /// 没有 structuredContent 包装时（如未来协议简化），`unwrap_mcp`
+    /// 必须保持原值可用，避免误删数据。
+    #[test]
+    fn unwrap_mcp_passthrough_when_no_structured_content() {
+        let v = json!({ "checks": [{"name": "bundle_identity", "status": "pass"}] });
+        let inner = unwrap_mcp(&v);
+        assert_eq!(inner.get("checks").and_then(Value::as_array).map(|a| a.len()), Some(1));
     }
 }

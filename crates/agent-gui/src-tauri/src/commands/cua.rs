@@ -21,7 +21,7 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tauri::State;
 
-use crate::services::cua::cua_client::CuaClient;
+use crate::services::cua::cua_client::{unwrap_mcp, CuaClient};
 use crate::services::cua::{
     installer::{CuaDriverDetection, CuaInstallResult, CuaUpdateResult, InstallPreview},
     store::CuaRuntimeConfig,
@@ -168,19 +168,64 @@ fn extract_screenshot(value: &Value) -> Option<(Vec<u8>, u32, u32)> {
     None
 }
 
-fn run_op<F>(
+/// CUA-054：cua-driver MCP 即使 JSON-RPC 200，也会把业务失败装进
+/// `result.isError=true` + `structuredContent.effect ∈ {refused,
+/// suspected_noop, unverifiable}`。这里把这种「传输成功 / 业务失败」
+/// 翻成 `CuaError`，让 caller 用统一的 ok=false + 结构化 error 透传。
+///
+/// 只在 `isError=true` 时生效；isError=false 的成功响应（含 effect
+/// 未给出）一律视为成功，不影响老路径。
+fn check_effect_failure(result: &Result<Value, CuaError>) -> Option<CuaError> {
+    let v = result.as_ref().ok()?;
+    if v.get("isError").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let sc = unwrap_mcp(v);
+    let effect = sc.get("effect").and_then(Value::as_str).unwrap_or("unknown");
+    let code = sc.get("code").and_then(Value::as_str).unwrap_or("");
+    let detail_msg = match effect {
+        "refused" => format!(
+            "cua-driver refused the operation (code={code}); \
+             target likely off-screen or AX-unresolved; \
+             check window focus / coordinates and retry"
+        ),
+        "suspected_noop" => format!(
+            "cua-driver reports suspected_noop (code={code}); \
+             the action likely had no visible effect; \
+             verify target state before retrying"
+        ),
+        "unverifiable" => format!(
+            "cua-driver cannot verify the operation result (code={code}); \
+             treat as inconclusive"
+        ),
+        other => format!(
+            "cua-driver reported effect={other} (code={code}); \
+             treating as failure"
+        ),
+    };
+    Some(CuaError::not_executed(&detail_msg))
+}
+
+/// CUA-054：把 call_tool 的 Result 收尾成 `CuaOpResponse`。把业务层
+/// effect 失败（`isError=true`）和传输层失败（`Err`）都翻译成
+/// `ok=false` + 结构化 `error`，并按失败写审计。
+///
+/// 取代原先「只看 `result.is_ok()`」的简化版本——之前 Agent 收不到
+/// 业务失败，盲目继续推进决策。
+fn finalize_op(
     store: &Arc<CuaStore>,
     op: &str,
     detail: Option<Value>,
-    f: F,
-) -> Result<(), CuaError>
-where
-    F: FnOnce() -> Result<Value, CuaError>,
-{
-    let started = Utc::now();
-    let result = f();
-    record_op_audit(store, op, detail, &result, started);
-    result.map(|_| ())
+    result: Result<Value, CuaError>,
+    started: chrono::DateTime<Utc>,
+) -> CuaOpResponse {
+    let effect_err = check_effect_failure(&result);
+    let recorded = effect_err.map(Err).unwrap_or(result);
+    record_op_audit(store, op, detail, &recorded, started);
+    CuaOpResponse {
+        ok: recorded.is_ok(),
+        error: recorded.err(),
+    }
 }
 
 // ───────── Commands ─────────
@@ -240,8 +285,16 @@ pub fn cua_list_windows(
     // on_screen_only=true 过滤掉离屏窗口，避免给 Agent 噪音。
     let started = Utc::now();
     let result = client.call_tool("list_windows", json!({ "on_screen_only": true }));
-    record_op_audit(store.inner(), op, None, &result, started);
-    result
+    // cua-driver MCP 2025-06-18 把 windows 数组放进 structuredContent；
+    // 前端契约是「纯 windows 数组」，所以透传前先解包（CUA-055）。
+    let mapped = result.map(|v| {
+        unwrap_mcp(&v)
+            .get("windows")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new()))
+    });
+    record_op_audit(store.inner(), op, None, &mapped, started);
+    mapped
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -260,23 +313,27 @@ pub fn cua_focus_window(
     let started = Utc::now();
     let find = client.call_tool("list_apps", json!({}));
     let pid = match find {
-        Ok(v) => v
-            .get("apps")
-            .and_then(Value::as_array)
-            .and_then(|apps| {
-                apps.iter()
-                    .find(|a| {
-                        a.get("name")
-                            .and_then(Value::as_str)
-                            .map(|s| s.eq_ignore_ascii_case(&owner_ref))
-                            .unwrap_or(false)
-                            || a.get("bundle_id")
+        Ok(v) => {
+            // cua-driver MCP 2025-06-18 把 apps 数组放进 structuredContent；
+            // 顶层 v.get("apps") 永远拿不到（CUA-055）。
+            unwrap_mcp(&v)
+                .get("apps")
+                .and_then(Value::as_array)
+                .and_then(|apps| {
+                    apps.iter()
+                        .find(|a| {
+                            a.get("name")
                                 .and_then(Value::as_str)
                                 .map(|s| s.eq_ignore_ascii_case(&owner_ref))
                                 .unwrap_or(false)
-                    })
-                    .and_then(|a| a.get("pid").and_then(Value::as_i64))
-            }),
+                                || a.get("bundle_id")
+                                    .and_then(Value::as_str)
+                                    .map(|s| s.eq_ignore_ascii_case(&owner_ref))
+                                    .unwrap_or(false)
+                        })
+                        .and_then(|a| a.get("pid").and_then(Value::as_i64))
+                })
+        }
         Err(e) => {
             record_op_audit(store.inner(), op, detail, &Err(e.clone()), started);
             return Err(e);
@@ -473,14 +530,13 @@ pub fn cua_click(
         args["window_id"] = json!(window_id);
     }
     let result = client.call_tool("click", args);
-    match &result {
-        Ok(v) => record_op_audit(store.inner(), op, detail, &Ok(v.clone()), started),
-        Err(e) => record_op_audit(store.inner(), op, detail, &Err(e.clone()), started),
-    }
-    Ok(CuaOpResponse {
-        ok: result.is_ok(),
-        error: result.err(),
-    })
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -510,14 +566,13 @@ pub fn cua_double_click(
         args["window_id"] = json!(window_id);
     }
     let result = client.call_tool("double_click", args);
-    match &result {
-        Ok(v) => record_op_audit(store.inner(), op, detail, &Ok(v.clone()), started),
-        Err(e) => record_op_audit(store.inner(), op, detail, &Err(e.clone()), started),
-    }
-    Ok(CuaOpResponse {
-        ok: result.is_ok(),
-        error: result.err(),
-    })
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -545,13 +600,15 @@ pub fn cua_type(
             args["window_id"] = json!(window_id);
         }
     }
-    run_op(store.inner(), op, detail, || {
-        client.call_tool("type_text", args.clone())
-    })?;
-    Ok(CuaOpResponse {
-        ok: true,
-        error: None,
-    })
+    let started = Utc::now();
+    let result = client.call_tool("type_text", args);
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -598,13 +655,15 @@ pub fn cua_key(
             args["window_id"] = json!(window_id);
         }
     }
-    run_op(store.inner(), op, detail, || {
-        client.call_tool(tool, args.clone())
-    })?;
-    Ok(CuaOpResponse {
-        ok: true,
-        error: None,
-    })
+    let started = Utc::now();
+    let result = client.call_tool(tool, args);
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -632,13 +691,15 @@ pub fn cua_scroll(
         args["pid"] = json!(pid);
         args["window_id"] = json!(window_id);
     }
-    run_op(store.inner(), op, detail, || {
-        client.call_tool("scroll", args.clone())
-    })?;
-    Ok(CuaOpResponse {
-        ok: true,
-        error: None,
-    })
+    let started = Utc::now();
+    let result = client.call_tool("scroll", args);
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -662,13 +723,15 @@ pub fn cua_drag(
         args["pid"] = json!(pid);
         args["window_id"] = json!(window_id);
     }
-    run_op(store.inner(), op, detail, || {
-        client.call_tool("drag", args.clone())
-    })?;
-    Ok(CuaOpResponse {
-        ok: true,
-        error: None,
-    })
+    let started = Utc::now();
+    let result = client.call_tool("drag", args);
+    Ok(finalize_op(
+        store.inner(),
+        op,
+        detail,
+        result,
+        started,
+    ))
 }
 
 // ───────── Helpers ─────────
@@ -715,12 +778,15 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// 用 `list_windows` 拿最前面的窗口（layer 0 + on_screen_only）。
 /// 返回 (pid, window_id) 或 None。
+///
+/// CUA-057：cua-driver MCP 2025-06-18 把 windows 数组放在
+/// `structuredContent` 下；顶层 `content` 是 `[{type:"text", text:"…"}]`
+/// 文本条目数组，把「Found 9 window(s).」当 window 对象解析永远
+/// 不命中 `pid` / `window_id`。所以这里只信任 `unwrap_mcp(...).windows`。
 fn pick_topmost_window(client: &CuaClient) -> Result<Option<(i64, i64)>, CuaError> {
     let value = client.call_tool("list_windows", json!({ "on_screen_only": true }))?;
-    let wins = value
-        .get("windows")
-        .and_then(Value::as_array)
-        .or_else(|| value.get("content").and_then(Value::as_array));
+    let value = unwrap_mcp(&value);
+    let wins = value.get("windows").and_then(Value::as_array);
     if let Some(arr) = wins {
         for w in arr {
             let pid = w.get("pid").and_then(Value::as_i64);
@@ -744,11 +810,16 @@ fn pick_topmost_window(client: &CuaClient) -> Result<Option<(i64, i64)>, CuaErro
 
 /// 通过 owner 名匹配 `list_apps` 的 pid，再查其首个可见 window。
 /// 找不到时返回 Ok(None) 而不是 Err（best-effort）。
+///
+/// CUA-056：list_apps / list_windows 的 apps / windows 数组都在
+/// structuredContent 下；必须先 `unwrap_mcp` 再取，否则 zoom 路径
+/// 永远拿不到 pid + window_id → 降级到 get_desktop_state。
 fn pick_window_id_for_owner(
     client: &CuaClient,
     owner: &str,
 ) -> Result<Option<(i64, i64)>, CuaError> {
     let apps = client.call_tool("list_apps", json!({}))?;
+    let apps = unwrap_mcp(&apps);
     let pid = apps
         .get("apps")
         .and_then(Value::as_array)
@@ -770,6 +841,7 @@ fn pick_window_id_for_owner(
         return Ok(None);
     };
     let windows = client.call_tool("list_windows", json!({ "pid": pid, "on_screen_only": true }))?;
+    let windows = unwrap_mcp(&windows);
     let wid = windows
         .get("windows")
         .and_then(Value::as_array)
@@ -1073,5 +1145,183 @@ mod tests {
     fn min_threshold_is_sane() {
         assert!(MIN_NON_BLACK_PIXELS >= 100, "threshold too small");
         assert!(MIN_NON_BLACK_PIXELS <= 100_000, "threshold too large");
+    }
+
+    // ───────── CUA-053/055/056/057 unwrap_mcp 路径测试 ─────────
+
+    /// CUA-057：pick_topmost_window 不再退回错误地把 `content` 文本数组
+    /// 当 windows 数组解析。只有 structuredContent.windows 才是权威来源。
+    #[test]
+    fn pick_topmost_window_ignores_content_text_array() {
+        // 模拟 cua-driver MCP 包过的响应：content 是文本、windows 在
+        // structuredContent 下。
+        let value = json!({
+            "content": [{"type":"text", "text":"Found 9 window(s)."}],
+            "structuredContent": {
+                "windows": [
+                    {"pid": 42, "window_id": 7, "on_screen": true},
+                    {"pid": 42, "window_id": 8, "on_screen": true}
+                ]
+            },
+            "isError": false
+        });
+        // 直接调用 helper 不方便（要 client），但我们可以验证
+        // `unwrap_mcp` + `value.get("windows")` 这条路径的语义：
+        let inner = unwrap_mcp(&value);
+        let wins = inner.get("windows").and_then(Value::as_array).expect("windows array");
+        assert_eq!(wins.len(), 2);
+        assert_eq!(wins[0].get("pid").and_then(Value::as_i64), Some(42));
+        // 反例：旧的 content fallback 不会拿到 pid。
+        assert!(value
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|arr| arr[0].get("pid"))
+            .is_none());
+    }
+
+    /// CUA-056：pick_window_id_for_owner 的 list_apps 解析只信任
+    /// structuredContent.apps（顶层 v.get("apps") 拿不到）。
+    #[test]
+    fn pick_window_id_for_owner_uses_structured_apps() {
+        let apps_resp = json!({
+            "content": [{"type":"text", "text":"2 apps"}],
+            "structuredContent": {
+                "apps": [
+                    {"name": "Finder", "pid": 100},
+                    {"name": "LiveAgent", "pid": 200, "bundle_id": "com.liveagent.desktop"}
+                ]
+            }
+        });
+        let pid = unwrap_mcp(&apps_resp)
+            .get("apps")
+            .and_then(Value::as_array)
+            .and_then(|arr| arr.iter().find(|a| a.get("name").and_then(Value::as_str) == Some("LiveAgent")))
+            .and_then(|a| a.get("pid").and_then(Value::as_i64))
+            .expect("must resolve pid");
+        assert_eq!(pid, 200);
+    }
+
+    /// CUA-055：cua_list_windows 返回纯 windows 数组，而不是 MCP 包装。
+    #[test]
+    fn list_windows_unwraps_to_pure_array() {
+        let mcp_resp = json!({
+            "content": [{"type":"text", "text":"9 windows"}],
+            "structuredContent": {
+                "windows": [
+                    {"pid": 1, "window_id": 11},
+                    {"pid": 2, "window_id": 22}
+                ]
+            }
+        });
+        // 模拟 cua_list_windows 的解包路径：
+        let mapped = unwrap_mcp(&mcp_resp)
+            .get("windows")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new()));
+        let arr = mapped.as_array().expect("must be array");
+        assert_eq!(arr.len(), 2);
+        // 不应再嵌套 content / structuredContent。
+        assert!(arr[0].get("content").is_none());
+        assert!(arr[0].get("structuredContent").is_none());
+    }
+
+    // ───────── CUA-054 业务层 effect 失败检测 ─────────
+
+    /// cua_click 拿到 {isError:true, effect:"refused"} 时，finalize_op
+    /// 必须返回 ok=false + 结构化 CuaError，而不是吞掉 effect 当成功。
+    #[test]
+    fn finalize_op_translates_refused_effect_to_error() {
+        let mcp_resp: Result<Value, CuaError> = Ok(json!({
+            "isError": true,
+            "content": [{"type":"text", "text":"refused"}],
+            "structuredContent": {
+                "effect": "refused",
+                "code": "off_space_or_ax_unresolved",
+                "escalation": {"recommended": "foreground"}
+            }
+        }));
+        let err = check_effect_failure(&mcp_resp).expect("must surface effect failure");
+        assert_eq!(err.kind, "cua.errors.notExecuted");
+        assert!(err.message.contains("refused"));
+        assert!(err.message.contains("off_space_or_ax_unresolved"));
+    }
+
+    #[test]
+    fn finalize_op_translates_suspected_noop() {
+        let mcp_resp: Result<Value, CuaError> = Ok(json!({
+            "isError": true,
+            "structuredContent": {"effect": "suspected_noop", "code": "no_focus_change"}
+        }));
+        let err = check_effect_failure(&mcp_resp).expect("must surface");
+        assert!(err.message.contains("suspected_noop"));
+    }
+
+    #[test]
+    fn finalize_op_translates_unverifiable() {
+        let mcp_resp: Result<Value, CuaError> = Ok(json!({
+            "isError": true,
+            "structuredContent": {"effect": "unverifiable", "code": "ax_timeout"}
+        }));
+        let err = check_effect_failure(&mcp_resp).expect("must surface");
+        assert!(err.message.contains("cannot verify"));
+    }
+
+    /// isError=false 的成功响应（含无 effect 字段）保持 ok=true。
+    #[test]
+    fn check_effect_failure_passes_through_success() {
+        let mcp_resp: Result<Value, CuaError> = Ok(json!({
+            "isError": false,
+            "content": [{"type":"text", "text":"clicked"}]
+        }));
+        assert!(check_effect_failure(&mcp_resp).is_none());
+
+        // effect 字段缺失但 isError=false：也视为成功（保守）。
+        let mcp_resp2: Result<Value, CuaError> = Ok(json!({
+            "isError": false,
+            "structuredContent": {"foo": "bar"}
+        }));
+        assert!(check_effect_failure(&mcp_resp2).is_none());
+    }
+
+    /// isError 缺失但 effect=refused 的响应：保守起见，只信任 isError
+    /// 这个明确标记；这里 effect 单独不足以判定失败。
+    #[test]
+    fn check_effect_failure_requires_iserror_flag() {
+        let mcp_resp: Result<Value, CuaError> = Ok(json!({
+            // 没有 isError:true
+            "structuredContent": {"effect": "refused"}
+        }));
+        assert!(check_effect_failure(&mcp_resp).is_none());
+    }
+
+    /// 传输层失败（Err）时 effect 检查不动（caller 走 Err 分支）。
+    #[test]
+    fn check_effect_failure_ignores_transport_error() {
+        let transport_err: Result<Value, CuaError> = Err(CuaError::io("subprocess died"));
+        assert!(check_effect_failure(&transport_err).is_none());
+    }
+
+    /// finalize_op 端到端：isError=true 应落地 ok=false。
+    #[test]
+    fn finalize_op_returns_failure_on_iserror_true() {
+        let store = Arc::new(CuaStore::new(CuaRuntimeConfig::default()));
+        let resp = Ok(json!({
+            "isError": true,
+            "structuredContent": {"effect": "refused", "code": "x"}
+        }));
+        let op_resp = finalize_op(&store, "click", None, resp, Utc::now());
+        assert!(!op_resp.ok);
+        assert!(op_resp.error.is_some());
+        assert!(op_resp.error.unwrap().message.contains("refused"));
+    }
+
+    /// finalize_op 端到端：成功路径保持 ok=true、error=None。
+    #[test]
+    fn finalize_op_keeps_success_on_iserror_false() {
+        let store = Arc::new(CuaStore::new(CuaRuntimeConfig::default()));
+        let resp = Ok(json!({"isError": false, "content": []}));
+        let op_resp = finalize_op(&store, "click", None, resp, Utc::now());
+        assert!(op_resp.ok);
+        assert!(op_resp.error.is_none());
     }
 }
