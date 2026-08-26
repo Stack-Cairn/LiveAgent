@@ -67,6 +67,18 @@ pub(crate) fn active_job_for_workdir(workdir: &str) -> Option<CodeIndexJobSnapsh
         .map(job_snapshot)
 }
 
+/// 最近一个已完结的 job（done/cancelled/error；保留期 1 小时内）。
+/// status 用它把索引失败暴露给 UI——active job 视角永远看不到 error 终态。
+pub(crate) fn last_finished_job_for_workdir(workdir: &str) -> Option<CodeIndexJobSnapshot> {
+    let mut jobs = code_index_jobs().lock().ok()?;
+    // 保留期在此处同样生效：读取也裁剪，避免只写不清时过期 error 挂在面板上。
+    prune_old_jobs(&mut jobs, now_ms());
+    jobs.values()
+        .filter(|job| job.workdir == workdir && job.finished_at.is_some())
+        .max_by_key(|job| job.finished_at.unwrap_or(0))
+        .map(job_snapshot)
+}
+
 pub(crate) fn insert_job(workdir: &str) -> Result<(CodeIndexJobSnapshot, Arc<AtomicBool>), String> {
     let mut jobs = code_index_jobs()
         .lock()
@@ -114,17 +126,6 @@ where
         .ok_or_else(|| format!("代码索引任务不存在：{job_id}"))?;
     updater(job);
     job.updated_at = now_ms();
-    Ok(job_snapshot(job))
-}
-
-pub(crate) fn get_job_snapshot(job_id: &str) -> Result<CodeIndexJobSnapshot, String> {
-    let mut jobs = code_index_jobs()
-        .lock()
-        .map_err(|_| "代码索引任务表锁被污染".to_string())?;
-    prune_old_jobs(&mut jobs, now_ms());
-    let job = jobs
-        .get(job_id)
-        .ok_or_else(|| format!("代码索引任务不存在：{job_id}"))?;
     Ok(job_snapshot(job))
 }
 

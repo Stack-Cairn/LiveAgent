@@ -110,6 +110,14 @@ export function WorkspaceProjectSettingsModal(props: {
     saved?.projectPromptStrategy ?? "append",
   );
   const [codeIndexEnabled, setCodeIndexEnabled] = useState(saved?.codeIndexEnabled === true);
+  // 只有用户在本次弹窗里亲手拨过开关，保存时才触发 enable/disable side effect。
+  // draft 是打开时刻的快照——若期间远端同步翻转了 saved 值，仅按“draft ≠ saved”
+  // 判断会在用户只改名的保存里误删/误建索引。
+  const [codeIndexTouched, setCodeIndexTouched] = useState(false);
+  const handleCodeIndexEnabledChange = (enabled: boolean) => {
+    setCodeIndexTouched(true);
+    setCodeIndexEnabled(enabled);
+  };
   const [tab, setTab] = useState<WorkspaceResourceTab>("skills");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<StoreCategoryValue>("all");
@@ -269,8 +277,8 @@ export function WorkspaceProjectSettingsModal(props: {
         codeIndexEnabled,
       });
       // 开关翻转的 side effect：建库+后台索引 / 删除索引目录。设置本身已保存，
-      // 桌面端专属命令在 WebUI 抛错时不回滚（下次桌面端打开会话时对账）。
-      if (codeIndexEnabled !== (saved?.codeIndexEnabled === true)) {
+      // 桌面端专属命令在 WebUI 抛错时不回滚（CodeSearch 执行层对账兜底）。
+      if (codeIndexTouched && codeIndexEnabled !== (saved?.codeIndexEnabled === true)) {
         try {
           if (codeIndexEnabled) {
             await codeIndexEnable(project.path);
@@ -410,7 +418,7 @@ export function WorkspaceProjectSettingsModal(props: {
                 saving={saving}
                 onProjectNameChange={setProjectName}
                 codeIndexEnabled={codeIndexEnabled}
-                onCodeIndexEnabledChange={setCodeIndexEnabled}
+                onCodeIndexEnabledChange={handleCodeIndexEnabledChange}
               />
             ) : null}
 

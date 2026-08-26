@@ -1,8 +1,10 @@
 //! Walker：`ignore` crate 遍历（尊重 .gitignore/.ignore）+ 内置排除 + 配额。
 //! 增量判定在 service 层结合 store 完成；这里只产出候选文件清单。
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use ignore::WalkBuilder;
 use sha2::{Digest, Sha256};
 
@@ -49,6 +51,9 @@ pub(crate) struct WalkedFile {
 
 pub(crate) struct WalkOutcome {
     pub(crate) files: Vec<WalkedFile>,
+    /// 遍历期间被跳过的出错条目数（不可读目录、瞬时消失等）。非零时清单
+    /// 可能不完整，调用方不得据此做“消失文件”删除对账。
+    pub(crate) walk_errors: usize,
 }
 
 fn extension_excluded(path: &Path) -> bool {
@@ -77,7 +82,15 @@ pub(crate) fn walk_workspace(
     workdir: &Path,
     should_cancel: &dyn Fn() -> bool,
 ) -> Result<WalkOutcome, String> {
+    // 根目录不可达必须是硬错误：吞掉会得到“空工作区”，触发全量删除对账。
+    let root_meta = std::fs::metadata(workdir)
+        .map_err(|e| format!("无法访问工作区目录 {}：{e}", workdir.display()))?;
+    if !root_meta.is_dir() {
+        return Err(format!("工作区路径不是目录：{}", workdir.display()));
+    }
+
     let mut files = Vec::new();
+    let mut walk_errors = 0usize;
     let mut total_bytes: u64 = 0;
 
     let walker = WalkBuilder::new(workdir)
@@ -85,6 +98,9 @@ pub(crate) fn walk_workspace(
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
+        // 非 git 目录同样尊重 .gitignore：隐私优先（.env 等约定排除物不进索引），
+        // 也与 watch 增量的 WatchPathFilter 行为一致。
+        .require_git(false)
         .follow_links(false)
         .filter_entry(|entry| {
             // depth 0 是 workdir 根自身：即使名字撞上排除表（如仓库就叫
@@ -101,7 +117,10 @@ pub(crate) fn walk_workspace(
         if should_cancel() {
             return Err(super::jobs::INDEX_CANCELLED_ERROR.to_string());
         }
-        let Ok(entry) = entry else { continue };
+        let Ok(entry) = entry else {
+            walk_errors += 1;
+            continue;
+        };
         let Some(file_type) = entry.file_type() else {
             continue;
         };
@@ -113,6 +132,9 @@ pub(crate) fn walk_workspace(
             continue;
         }
         let Ok(metadata) = entry.metadata() else {
+            // 文件存在但 stat 失败（瞬时抖动/权限）：必须计入错误——清单缺了
+            // 它，若不计数，删除对账会把活文件当“消失”移出索引。
+            walk_errors += 1;
             continue;
         };
         let size = metadata.len();
@@ -150,7 +172,119 @@ pub(crate) fn walk_workspace(
         }
     }
 
-    Ok(WalkOutcome { files })
+    Ok(WalkOutcome { files, walk_errors })
+}
+
+/// watch 增量路径的排除过滤：与全量遍历同源的规则（内置目录/扩展名 +
+/// 根到变更文件各级目录的 .gitignore/.ignore + .git/info/exclude）。
+///
+/// 取保守语义：任一 matcher 判 ignore 即排除；跨文件的 `!pattern` 白名单
+/// 还原不实现——漏索引的文件由下一次全量/增量 job 对账补回，而误索引
+/// gitignore 内容（如 .env 密钥）是这里必须堵住的方向。
+pub(crate) struct WatchPathFilter {
+    workdir: PathBuf,
+    /// (matcher 根目录, matcher)。matched_path_or_any_parents 对不在其根下的
+    /// 路径会 assert panic，匹配前必须按根前缀筛选。
+    matchers: Vec<(PathBuf, Gitignore)>,
+    /// 全局 gitignore（core.excludesFile）。其根在用户配置目录，工作区路径
+    /// 不在其下，只能走无断言的 `matched()`（按文件与各级祖先目录逐一判）。
+    global: Option<Gitignore>,
+}
+
+impl WatchPathFilter {
+    pub(crate) fn new(workdir: &Path, rel_paths: &BTreeSet<String>) -> Self {
+        // 变更路径涉及的目录链：根 + 每个相对路径的所有祖先目录。
+        let mut dirs: BTreeSet<PathBuf> = BTreeSet::new();
+        dirs.insert(workdir.to_path_buf());
+        for rel_path in rel_paths {
+            let mut current = workdir.to_path_buf();
+            if let Some(parent) = Path::new(rel_path).parent() {
+                for component in parent.components() {
+                    current = current.join(component);
+                    dirs.insert(current.clone());
+                }
+            }
+        }
+        // 工作区位于更大仓库内部时，外层目录的 .gitignore 同样约束全量遍历
+        //（WalkBuilder parents 默认开启）：向上收集到仓库根（.git 所在层）为止。
+        if !workdir.join(".git").exists() {
+            let mut above = workdir.parent();
+            let mut hops = 0;
+            while let Some(dir) = above {
+                dirs.insert(dir.to_path_buf());
+                if hops >= 16 || dir.join(".git").exists() {
+                    break;
+                }
+                above = dir.parent();
+                hops += 1;
+            }
+        }
+        let mut matchers = Vec::new();
+        for dir in &dirs {
+            for name in [".gitignore", ".ignore"] {
+                let ignore_file = dir.join(name);
+                if ignore_file.is_file() {
+                    let mut builder = GitignoreBuilder::new(dir);
+                    builder.add(&ignore_file);
+                    if let Ok(matcher) = builder.build() {
+                        matchers.push((dir.clone(), matcher));
+                    }
+                }
+            }
+        }
+        let git_exclude = workdir.join(".git").join("info").join("exclude");
+        if git_exclude.is_file() {
+            let mut builder = GitignoreBuilder::new(workdir);
+            builder.add(&git_exclude);
+            if let Ok(matcher) = builder.build() {
+                matchers.push((workdir.to_path_buf(), matcher));
+            }
+        }
+        // 全局 gitignore（core.excludesFile）：全量遍历开了 git_global，这里对齐。
+        let (global, _error) = Gitignore::global();
+        let global = (global.num_ignores() > 0).then_some(global);
+        Self {
+            workdir: workdir.to_path_buf(),
+            matchers,
+            global,
+        }
+    }
+
+    pub(crate) fn allows(&self, rel_path: &str) -> bool {
+        if rel_path
+            .split('/')
+            .any(|segment| EXCLUDED_DIRS.contains(&segment))
+        {
+            return false;
+        }
+        if extension_excluded(Path::new(rel_path)) {
+            return false;
+        }
+        let abs = self.workdir.join(rel_path);
+        if self.matchers.iter().any(|(root, matcher)| {
+            abs.starts_with(root)
+                && matcher.matched_path_or_any_parents(&abs, false).is_ignore()
+        }) {
+            return false;
+        }
+        if let Some(global) = &self.global {
+            // 文件本体 + 工作区内的各级祖先目录逐一判（补齐 dir/ 形态的模式）。
+            if global.matched(&abs, false).is_ignore() {
+                return false;
+            }
+            let mut ancestor = abs.parent();
+            while let Some(dir) = ancestor {
+                if !dir.starts_with(&self.workdir) || dir == self.workdir {
+                    break;
+                }
+                if global.matched(dir, true).is_ignore() {
+                    return false;
+                }
+                ancestor = dir.parent();
+            }
+        }
+        true
+    }
 }
 
 /// 读文件正文；非 UTF-8（含 BOM 之外的二进制）返回 None 跳过。

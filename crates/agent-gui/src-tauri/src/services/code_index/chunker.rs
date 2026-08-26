@@ -136,6 +136,11 @@ pub(crate) fn chunk_source(rel_path: &str, language: &str, source: &str) -> Vec<
 
     let mut chunks = syntax_chunks;
     chunks.extend(window_uncovered(rel_path, &lines, &covered));
+    if chunks.is_empty() {
+        // 整个文件都没产出块（如 1–2 行的短文件低于碎片阈值）：整文件成窗，
+        // 保证任何非空文本文件都可被检索到。
+        chunks = window_range(rel_path, &lines, 1, lines.len(), "");
+    }
     chunks.sort_by_key(|chunk| chunk.start_line);
     chunks
 }
@@ -204,6 +209,19 @@ fn slice_lines(lines: &[&str], start_line: usize, end_line: usize) -> Option<Str
     Some(lines[start_line - 1..end].join("\n"))
 }
 
+/// 按字节上限截断，退到最近的 UTF-8 字符边界（`String::truncate` 落在多字节
+/// 字符中间会 panic——CJK 内容 3 字节/字，命中概率极高）。
+fn truncate_at_char_boundary(content: &mut String, max_bytes: usize) {
+    if content.len() <= max_bytes {
+        return;
+    }
+    let mut cut = max_bytes;
+    while cut > 0 && !content.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    content.truncate(cut);
+}
+
 /// 对未被语法块覆盖的行做滑窗，连续未覆盖区间独立成窗。
 fn window_uncovered(rel_path: &str, lines: &[&str], covered: &[bool]) -> Vec<CodeChunk> {
     let mut chunks = Vec::new();
@@ -239,9 +257,7 @@ fn window_range(
         let window_end = (window_start + WINDOW_LINES - 1).min(end_line);
         if let Some(mut content) = slice_lines(lines, window_start, window_end) {
             // 极端长行（压缩产物漏网）截断，保证 embedding 输入有界。
-            if content.len() > MAX_CHUNK_CHARS {
-                content.truncate(MAX_CHUNK_CHARS);
-            }
+            truncate_at_char_boundary(&mut content, MAX_CHUNK_CHARS);
             if !content.trim().is_empty() {
                 chunks.push(CodeChunk {
                     start_line: window_start as u32,

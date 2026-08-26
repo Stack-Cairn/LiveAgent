@@ -234,6 +234,7 @@ jobs:
         run: >
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
           chat_history ssh_local_forward shell_runner integration_commands::mcp
+          code_index workspace_resource
 
   ui-boundaries:
     name: Shared UI Boundaries

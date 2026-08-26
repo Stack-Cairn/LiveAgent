@@ -234,6 +234,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsCodeIndexPhaseWalking": "Scanning workspace files…",
   "chat.workspaceSettingsCodeIndexError": "Indexing failed: {error}",
   "chat.workspaceSettingsCodeIndexRebuild": "Rebuild index",
+  "chat.workspaceSettingsCodeIndexBuildNow": "Build index",
+  "chat.workspaceSettingsCodeIndexPendingHint":
+    "Enabled, but the local index has not been built yet. Save the settings or build it now.",
   "chat.workspaceSettingsCodeIndexCancel": "Cancel",
   "chat.workspaceSettingsCodeIndexDesktopOnly":
     "The code index is managed on the desktop app; this view is status-only.",

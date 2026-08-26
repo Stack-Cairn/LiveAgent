@@ -92,9 +92,12 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   if (command.startsWith("code_index_")) {
     // 代码索引管理/检索目前是桌面端专属（docs/design/code-index.md §10）；
     // WebUI 聊天经 chat_queue 驱动桌面端执行工具，天然不走本 shim。
-    throw new Error(
+    // error.name 是稳定标识（agent-ui 据此与网络/后端错误区分）。
+    const desktopOnly = new Error(
       "代码索引操作需在桌面端完成（WebUI 远程管理将随 CodeIndexManage 直通臂后续提供）",
     );
+    desktopOnly.name = "CodeIndexDesktopOnlyError";
+    throw desktopOnly;
   }
 
   switch (command) {

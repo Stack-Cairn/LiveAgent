@@ -1319,6 +1319,7 @@ mod tests {
                         "mode": "custom",
                         "skillNames": ["review", "review", ""],
                         "mcpServerIds": ["github", "github", 42],
+                        "codeIndexEnabled": true,
                         "stateVersion": 3,
                         "writerId": " client-a ",
                         "updatedAt": 100
@@ -1347,6 +1348,7 @@ mod tests {
                     "mode": "custom",
                     "skillNames": ["review"],
                     "mcpServerIds": ["github"],
+                    "codeIndexEnabled": true,
                     "stateVersion": 3,
                     "writerId": "client-a",
                     "updatedAt": 100
@@ -1355,6 +1357,7 @@ mod tests {
                     "mode": "inherit",
                     "skillNames": [],
                     "mcpServerIds": [],
+                    "codeIndexEnabled": false,
                     "stateVersion": 4,
                     "writerId": "client-b",
                     "updatedAt": now
@@ -1424,6 +1427,33 @@ mod tests {
         assert_eq!(normalized["/tmp/custom"]["mode"], "custom");
         assert_eq!(normalized["/tmp/off"]["mode"], "off");
         assert_eq!(normalized["/tmp/recent-tombstone"]["mode"], "inherit");
+    }
+
+    #[test]
+    fn workspace_resource_code_index_flag_survives_normalize_and_tombstone_ttl() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_millis() as u64;
+        let old = now - WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS - 1;
+        let normalized = normalize_workspace_resource_settings(Some(&json!({
+            "/tmp/indexed-inherit": {
+                "mode": "inherit",
+                "codeIndexEnabled": true,
+                "stateVersion": 1,
+                "updatedAt": old
+            },
+            "/tmp/plain-old-inherit": {
+                "mode": "inherit",
+                "codeIndexEnabled": false,
+                "stateVersion": 1,
+                "updatedAt": old
+            }
+        })));
+        let normalized = normalized.as_object().expect("normalized workspace resources");
+        // codeIndexEnabled 是活跃标记：inherit + 过期也必须保留，且标志本身要留存。
+        assert_eq!(normalized["/tmp/indexed-inherit"]["codeIndexEnabled"], true);
+        assert!(!normalized.contains_key("/tmp/plain-old-inherit"));
     }
 
     #[test]

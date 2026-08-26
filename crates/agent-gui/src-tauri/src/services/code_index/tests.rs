@@ -92,6 +92,137 @@ fn empty_source_produces_no_chunks() {
     assert!(chunk_source("empty.ts", "typescript", "").is_empty());
 }
 
+#[test]
+fn cjk_heavy_windows_truncate_on_char_boundary_without_panic() {
+    // 80 行 × 90 个 3 字节汉字 ≫ 6000 字节：截断点大概率落在多字节字符
+    // 中间，回归 String::truncate 的 char boundary panic。
+    let line = "设".repeat(90);
+    let source = vec![line.as_str(); 200].join("\n");
+    let chunks = chunk_source("docs/design.md", "plain", &source);
+    assert!(!chunks.is_empty());
+    for chunk in &chunks {
+        assert!(chunk.content.len() <= 6_100, "chunk stays bounded");
+        // 内容仍是合法 UTF-8 由 String 类型保证；只需确认没 panic 且非空。
+        assert!(!chunk.content.trim().is_empty());
+    }
+}
+
+#[test]
+fn tiny_files_still_get_indexed() {
+    // 1–2 行短文件低于碎片阈值，但整文件必须仍可检索。
+    let chunks = chunk_source("VERSION", "plain", "1.2.3");
+    assert_eq!(chunks.len(), 1);
+    assert!(chunks[0].content.contains("1.2.3"));
+}
+
+#[test]
+fn windows_verbatim_prefix_is_stripped_from_normalized_workdir() {
+    use std::path::Path;
+
+    use crate::services::code_index::service::strip_windows_verbatim_prefix;
+
+    // verbatim 语义下 '/' 不是分隔符，与 POSIX 相对路径 join 后 stat 必败——
+    // 归一化输出必须回到 Win32 常规拼写。
+    assert_eq!(
+        strip_windows_verbatim_prefix(Path::new(r"\\?\C:\ws")),
+        r"C:\ws"
+    );
+    assert_eq!(
+        strip_windows_verbatim_prefix(Path::new(r"\\?\UNC\server\share\ws")),
+        r"\\server\share\ws"
+    );
+    assert_eq!(
+        strip_windows_verbatim_prefix(Path::new("/Users/dev/ws")),
+        "/Users/dev/ws"
+    );
+}
+
+mod walker_tests {
+    use std::collections::BTreeSet;
+    use std::fs;
+
+    use crate::services::code_index::walker::{walk_workspace, WatchPathFilter};
+
+    #[test]
+    fn walking_missing_root_is_an_error_not_an_empty_workspace() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("gone");
+        let result = walk_workspace(&missing, &|| false);
+        assert!(result.is_err(), "missing root must not look like empty repo");
+    }
+
+    /// 非 git 目录同样尊重 .gitignore（require_git(false)）：隐私优先，且与
+    /// watch 增量的过滤行为一致（否则会出现 job 收录、watch 排除的振荡）。
+    #[test]
+    fn walk_honors_gitignore_without_git_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join(".gitignore"), ".env\n").expect("gitignore");
+        fs::write(dir.path().join(".env"), "SECRET=1\n").expect("env");
+        fs::write(dir.path().join("kept.txt"), "hello\n").expect("kept");
+        let outcome = walk_workspace(dir.path(), &|| false).expect("walk");
+        let paths: Vec<&str> = outcome
+            .files
+            .iter()
+            .map(|file| file.rel_path.as_str())
+            .collect();
+        assert!(!paths.contains(&".env"), "gitignored secret excluded: {paths:?}");
+        assert!(paths.contains(&"kept.txt"));
+    }
+
+    #[test]
+    fn watch_filter_applies_gitignore_and_builtin_excludes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join(".gitignore"), ".env\nsecrets/\n").expect("gitignore");
+        fs::create_dir_all(dir.path().join("src")).expect("mkdir");
+
+        let mut rel_paths = BTreeSet::new();
+        for path in [".env", "secrets/key.pem", "node_modules/x.js", "a.png", "src/main.rs"] {
+            rel_paths.insert(path.to_string());
+        }
+        let filter = WatchPathFilter::new(dir.path(), &rel_paths);
+        assert!(!filter.allows(".env"), "gitignored secret file");
+        assert!(!filter.allows("secrets/key.pem"), "gitignored directory");
+        assert!(!filter.allows("node_modules/x.js"), "builtin excluded dir");
+        assert!(!filter.allows("a.png"), "excluded extension");
+        assert!(filter.allows("src/main.rs"), "normal source file");
+    }
+
+    #[test]
+    fn watch_filter_respects_nested_gitignore() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(dir.path().join("sub")).expect("mkdir");
+        fs::write(dir.path().join("sub/.gitignore"), "generated/\n").expect("nested gitignore");
+
+        let mut rel_paths = BTreeSet::new();
+        rel_paths.insert("sub/generated/out.ts".to_string());
+        rel_paths.insert("sub/src.ts".to_string());
+        let filter = WatchPathFilter::new(dir.path(), &rel_paths);
+        assert!(!filter.allows("sub/generated/out.ts"));
+        assert!(filter.allows("sub/src.ts"));
+    }
+
+    /// 同批次变更横跨多个各带 .gitignore 的兄弟目录：matcher 只能应用于自己
+    /// 根下的路径（matched_path_or_any_parents 对根外路径 assert panic）。
+    #[test]
+    fn watch_filter_handles_sibling_dirs_with_own_gitignores() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for sub in ["a", "b"] {
+            fs::create_dir_all(dir.path().join(sub)).expect("mkdir");
+        }
+        fs::write(dir.path().join("a/.gitignore"), "ignored-a.ts\n").expect("gitignore a");
+        fs::write(dir.path().join("b/.gitignore"), "ignored-b.ts\n").expect("gitignore b");
+
+        let mut rel_paths = BTreeSet::new();
+        rel_paths.insert("a/ignored-a.ts".to_string());
+        rel_paths.insert("b/kept.ts".to_string());
+        let filter = WatchPathFilter::new(dir.path(), &rel_paths);
+        assert!(!filter.allows("a/ignored-a.ts"));
+        assert!(!filter.allows("b/ignored-b.ts"));
+        assert!(filter.allows("a/kept.ts"));
+        assert!(filter.allows("b/kept.ts"));
+    }
+}
+
 mod store_tests {
     use crate::services::code_index::chunker::CodeChunk;
     use crate::services::code_index::schema::open_code_index_connection;
@@ -318,5 +449,127 @@ export function unrelatedHelper(): void {
         )
         .expect("search after remove");
         assert!(empty.matches.is_empty());
+    }
+
+    /// 路径过滤按目录边界：`src` 不得吞掉 `src2/`。
+    #[test]
+    fn path_prefix_filter_respects_directory_boundary() {
+        let workdir = tempfile::tempdir().expect("workdir");
+        let write_source = |rel: &str| {
+            let abs = workdir.path().join(rel);
+            fs::create_dir_all(abs.parent().unwrap()).expect("mkdir");
+            let source = format!(
+                "export function marker_{}(): void {{\n  console.log(\"shared_marker\");\n  console.log(\"tail\");\n}}\n",
+                rel.replace(['/', '.'], "_")
+            );
+            fs::write(&abs, &source).expect("write");
+            source
+        };
+        let db_dir = tempfile::tempdir().expect("db dir");
+        let store = CodeIndexStore::open_at(
+            workdir.path().to_str().unwrap(),
+            db_dir.path().join("code-index.sqlite3"),
+        )
+        .expect("open store");
+        for rel in ["src/a.ts", "src2/b.ts"] {
+            let source = write_source(rel);
+            let chunks = chunk_source(rel, language_for_path(rel), &source);
+            store
+                .replace_file(rel, 1, source.len() as u64, &sha256_hex(source.as_bytes()), "typescript", &chunks, &[])
+                .expect("replace_file");
+        }
+
+        let response = search::search(
+            &store,
+            &CodeIndexSearchArgs {
+                workdir: store.workdir.clone(),
+                query: "shared_marker".to_string(),
+                mode: Some("lexical".to_string()),
+                path: Some("src".to_string()),
+                max_results: None,
+            },
+        )
+        .expect("filtered search");
+        assert!(!response.matches.is_empty());
+        assert!(
+            response.matches.iter().all(|m| m.path.starts_with("src/")),
+            "src2/ must not leak into src filter: {:?}",
+            response.matches.iter().map(|m| m.path.as_str()).collect::<Vec<_>>()
+        );
+
+        // "./"、"." 归一为无过滤（空串前缀进 SQL 会一条都匹配不上）。
+        for noop_filter in ["./", ".", "/"] {
+            let unfiltered = search::search(
+                &store,
+                &CodeIndexSearchArgs {
+                    workdir: store.workdir.clone(),
+                    query: "shared_marker".to_string(),
+                    mode: Some("lexical".to_string()),
+                    path: Some(noop_filter.to_string()),
+                    max_results: None,
+                },
+            )
+            .expect("noop-filtered search");
+            assert_eq!(
+                unfiltered.matches.len(),
+                2,
+                "'{noop_filter}' should behave as no filter"
+            );
+        }
+    }
+
+    /// 目录删除/重命名后按前缀清幽灵行；变空文件也清旧块。
+    #[test]
+    fn directory_prefix_removal_clears_ghost_rows() {
+        let db_dir = tempfile::tempdir().expect("db dir");
+        let store = CodeIndexStore::open_at("/tmp/ghost-ws", db_dir.path().join("code-index.sqlite3"))
+            .expect("open store");
+        let chunk = crate::services::code_index::chunker::CodeChunk {
+            start_line: 1,
+            end_line: 3,
+            kind: "function",
+            symbol: "f".to_string(),
+            content: "function f() { legacy_marker(); }".to_string(),
+        };
+        for rel in ["src/legacy/a.ts", "src/legacy/deep/b.ts", "src/live.ts", "src/legacy.ts"] {
+            store
+                .replace_file(rel, 1, 10, "hash", "typescript", std::slice::from_ref(&chunk), &[])
+                .expect("replace_file");
+        }
+        let removed = store.remove_files_under_dir("src/legacy").expect("remove prefix");
+        assert_eq!(removed, 2, "only files under src/legacy/ removed");
+        let (file_count, chunk_count, _) = store.stats().expect("stats");
+        assert_eq!(file_count, 2, "src/live.ts and src/legacy.ts survive");
+        assert_eq!(chunk_count, 2);
+    }
+
+    /// 词法降级期入库的文件计入缺向量统计；带向量入库则不计。
+    #[test]
+    fn vectorless_files_are_tracked_for_backfill() {
+        let db_dir = tempfile::tempdir().expect("db dir");
+        let store = CodeIndexStore::open_at("/tmp/vec-ws", db_dir.path().join("code-index.sqlite3"))
+            .expect("open store");
+        let chunk = crate::services::code_index::chunker::CodeChunk {
+            start_line: 1,
+            end_line: 3,
+            kind: "function",
+            symbol: "f".to_string(),
+            content: "function f() {}".to_string(),
+        };
+        store
+            .replace_file("lex.ts", 1, 10, "h1", "typescript", std::slice::from_ref(&chunk), &[])
+            .expect("lexical-only file");
+        let embedding = vec![vec![0.5f32; 384]];
+        store
+            .replace_file("vec.ts", 1, 10, "h2", "typescript", std::slice::from_ref(&chunk), &embedding)
+            .expect("embedded file");
+        assert_eq!(store.vectorless_file_count().expect("count"), 1);
+        assert!(store.file_meta("vec.ts").expect("meta").expect("row").has_vectors);
+        assert!(!store.file_meta("lex.ts").expect("meta").expect("row").has_vectors);
+        // 同文件补上向量后不再计数（回填路径）。
+        store
+            .replace_file("lex.ts", 2, 10, "h1b", "typescript", std::slice::from_ref(&chunk), &embedding)
+            .expect("backfill");
+        assert_eq!(store.vectorless_file_count().expect("count"), 0);
     }
 }

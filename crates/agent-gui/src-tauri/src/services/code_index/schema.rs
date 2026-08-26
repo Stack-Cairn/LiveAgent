@@ -14,7 +14,8 @@ use rusqlite::Connection;
 
 use super::now_ms;
 
-pub(crate) const SCHEMA_VERSION: i64 = 1;
+/// v2：files 增加 has_vectors（词法降级期索引的文件待模型就绪后回填向量）。
+pub(crate) const SCHEMA_VERSION: i64 = 2;
 /// multilingual-e5-small 的输出维度；写死进 DDL，换模型即换 schema 版本重建。
 pub(crate) const EMBEDDING_DIM: usize = 384;
 pub(crate) const EMBEDDING_MODEL_ID: &str = "multilingual-e5-small";
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS files (
     size_bytes   INTEGER NOT NULL,
     content_hash TEXT    NOT NULL,
     language     TEXT    NOT NULL,
+    has_vectors  INTEGER NOT NULL DEFAULT 0,
     indexed_at   INTEGER NOT NULL
 );
 
@@ -179,9 +181,8 @@ pub(crate) fn quarantine_db_files(db_path: &Path) -> Result<(), String> {
     let root = db_path
         .parent()
         .ok_or_else(|| "code index db path has no parent".to_string())?;
-    let quarantine = root
-        .join(".quarantine")
-        .join(format!("corrupt-{}", now_ms()));
+    let quarantine_root = root.join(".quarantine");
+    let quarantine = quarantine_root.join(format!("corrupt-{}", now_ms()));
     fs::create_dir_all(&quarantine).map_err(|e| format!("创建代码索引隔离目录失败：{e}"))?;
     for suffix in ["", "-wal", "-shm"] {
         let src = PathBuf::from(format!("{}{suffix}", db_path.to_string_lossy()));
@@ -192,6 +193,43 @@ pub(crate) fn quarantine_db_files(db_path: &Path) -> Result<(), String> {
                 .unwrap_or_else(|| format!("{}{suffix}", DB_QUARANTINE_STEM).into());
             fs::rename(&src, quarantine.join(file_name))
                 .map_err(|e| format!("隔离损坏代码索引失败：{e}"))?;
+        }
+    }
+    prune_quarantine_dirs(&quarantine_root);
+    Ok(())
+}
+
+/// 隔离区只留最近 N 份：损坏是异常路径，留最近现场足够排障，别让磁盘无界增长。
+const MAX_QUARANTINE_DIRS: usize = 2;
+
+fn prune_quarantine_dirs(quarantine_root: &Path) {
+    let Ok(entries) = fs::read_dir(quarantine_root) else {
+        return;
+    };
+    // corrupt-<ms 时间戳> 目录名按字典序即按时间序（同位数时间戳）。
+    let mut dirs: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    dirs.sort();
+    if dirs.len() <= MAX_QUARANTINE_DIRS {
+        return;
+    }
+    for dir in &dirs[..dirs.len() - MAX_QUARANTINE_DIRS] {
+        if let Err(error) = fs::remove_dir_all(dir) {
+            eprintln!("code index: prune quarantine {} failed: {error}", dir.display());
+        }
+    }
+}
+
+/// 健康库的重建（rebuild）直接删除 db 文件——quarantine 只留给损坏路径，
+/// 否则每次重建都会在磁盘上永久复制一整份索引。
+pub(crate) fn remove_db_files(db_path: &Path) -> Result<(), String> {
+    for suffix in ["", "-wal", "-shm"] {
+        let target = PathBuf::from(format!("{}{suffix}", db_path.to_string_lossy()));
+        if target.exists() {
+            fs::remove_file(&target).map_err(|e| format!("删除代码索引库文件失败：{e}"))?;
         }
     }
     Ok(())

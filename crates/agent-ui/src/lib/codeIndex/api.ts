@@ -35,7 +35,17 @@ export type CodeIndexStatus = {
   lastFullIndexAt?: number | null;
   embeddingModel?: string | null;
   activeJob?: CodeIndexJobSnapshot | null;
+  /** 最近一个已完结的 job（1 小时保留期内）——失败终态只能从这里看到。 */
+  lastJob?: CodeIndexJobSnapshot | null;
 };
+
+/** WebUI shim 对 code_index_* 抛的“桌面端专属”错误（按 error.name 识别，
+ * 与网络/后端错误区分：后者不该把整个区块降级成桌面端提示）。 */
+export const CODE_INDEX_DESKTOP_ONLY_ERROR_NAME = "CodeIndexDesktopOnlyError";
+
+export function isCodeIndexDesktopOnlyError(error: unknown): boolean {
+  return error instanceof Error && error.name === CODE_INDEX_DESKTOP_ONLY_ERROR_NAME;
+}
 
 export function codeIndexEnable(workdir: string): Promise<CodeIndexJobSnapshot> {
   return invoke<CodeIndexJobSnapshot>("code_index_enable", { args: { workdir } });
@@ -51,10 +61,6 @@ export function codeIndexRebuild(workdir: string): Promise<CodeIndexJobSnapshot>
 
 export function codeIndexStatus(workdir: string): Promise<CodeIndexStatus> {
   return invoke<CodeIndexStatus>("code_index_status", { args: { workdir } });
-}
-
-export function codeIndexJobStatus(jobId: string): Promise<CodeIndexJobSnapshot> {
-  return invoke<CodeIndexJobSnapshot>("code_index_job_status", { args: { jobId } });
 }
 
 export function codeIndexJobCancel(jobId: string): Promise<CodeIndexJobSnapshot> {

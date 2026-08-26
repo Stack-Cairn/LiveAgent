@@ -124,7 +124,6 @@ macro_rules! app_invoke_handler {
             commands::code_index::code_index_disable,
             commands::code_index::code_index_rebuild,
             commands::code_index::code_index_status,
-            commands::code_index::code_index_job_status,
             commands::code_index::code_index_job_cancel,
             commands::code_index::code_index_search,
             // Memory

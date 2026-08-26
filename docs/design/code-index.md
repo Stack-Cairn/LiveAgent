@@ -160,11 +160,16 @@ fused:    RRF  score(c) = Σ_r 1 / (60 + rank_r(c))       -- k=60 经典常数
 - **实时失效**：`workspace_watch` 的 `emit_activity`（已有 250ms debounce）旁挂
   第三 sink → `code_index::notify_workspace_activity(workdir, changed_paths)`。
   service 内部核对该 workdir 已启用且非 job 进行中，将变更路径入队，2s 静默窗
-  后跑一次小增量（只处理入队路径，验收要求增量 < 2s）。watch 未覆盖时（会话
-  未打开）由下次 enable/search 前的 staleness 检查兜底。
-- **重建**：`code_index_rebuild` = quarantine 现库（memory 同款 `.quarantine/
-  corrupt-<ts>/`）+ 全量 job。索引损坏（integrity_check 失败）时 open 路径
-  自动走同一逻辑——“损坏一键重建”验收项。
+  后跑一次小增量（只处理入队路径，验收要求增量 < 2s）。增量路径应用与全量
+  遍历同源的排除规则（内置目录/扩展名 + .gitignore 链），gitignore 的密钥
+  文件不会经 watch 路进入索引。watch 未覆盖时（会话未打开）的对账：
+  CodeSearch 执行层发现“设置已开启但本地索引缺失”时自动触发一次 enable；
+  search 发现存量文件缺向量（词法降级期入库）且模型已就绪时自动安排增量
+  job 回填。
+- **重建**：`code_index_rebuild` = 全量 job（job 内先 reset——先过“同 workdir
+  单 job”闸门再清库，避免与进行中的 job 竞争毁掉现有索引）。健康库的 reset
+  直接删除 db 文件；`.quarantine/corrupt-<ts>/` 只留给损坏路径（integrity_check
+  失败时 open 自动隔离重建，隔离区仅保留最近 2 份）——“损坏一键重建”验收项。
 
 ## 8. 工具面（TS）
 
@@ -185,7 +190,8 @@ fused:    RRF  score(c) = Σ_r 1 / (60 + rank_r(c))       -- k=60 经典常数
 
 - `WorkspaceGeneralSettingsPanel` 加“代码索引”区：开关（写 draft 的
   `codeIndexEnabled`）+ 状态行（未启用 / 索引中 x% / 就绪：N 文件 · M 块 ·
-  体积）+ 重建按钮。索引 job 进行中每 1.5s 轮询 `code_index_job_status`。
+  体积）+ 重建按钮。索引 job 进行中每 1.5s 轮询 `code_index_status`（响应含
+  activeJob 与最近完结 job，失败终态由 lastJob 暴露）。
 - 文案进 `agent-ui` 共享翻译（zh-CN + en-US 成对），key 前缀
   `workspaceSettings.codeIndex.*`。
 
@@ -212,6 +218,6 @@ fused:    RRF  score(c) = Σ_r 1 / (60 + rank_r(c))       -- k=60 经典常数
 | 风险 | 处置 |
 |---|---|
 | ort/onnxruntime 链接与打包（各平台 dylib/静态库差异） | `ort-download-binaries` 构建期获取；release gate 增加三平台 bundle 冒烟项（P4） |
-| 模型首次下载体积/失败 | job `downloading-model` 阶段可见、可取消、可重试；失败不影响词法检索可用性（降级 `mode:"lexical"`） |
-| 大仓库嵌入耗时 | 批量 embed（batch 64）+ 增量为主；全量仅 enable/rebuild 时发生 |
-| 索引落后磁盘 | 片段现读文件；watch 增量 + search 前 staleness 兜底 |
+| 模型首次下载体积/失败 | job `downloading-model` 阶段可见、可取消；失败不影响词法检索可用性（降级 `mode:"lexical"`）；初始化失败不缓存为终态——下次 enable/rebuild 重试（`ensure_ready`），检索路非阻塞探测（下载中也立即降级返回，不被拖住）；词法降级期入库的文件带 `has_vectors=0` 标记，模型就绪后由增量 job 回填向量 |
+| 大仓库嵌入耗时 | 批量 embed（batch 64）+ 增量为主；全量仅 enable/rebuild 时发生；检索的查询嵌入限时等锁（2s），超时降级词法 |
+| 索引落后磁盘 | 片段现读文件；watch 增量 + CodeSearch 层对账兜底；遍历出错时跳过“消失文件”删除对账（不可读 ≠ 不存在） |

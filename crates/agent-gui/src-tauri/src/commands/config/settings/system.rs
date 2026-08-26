@@ -244,7 +244,16 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
             .get("updatedAt")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        let code_index_enabled = entry
+            .get("codeIndexEnabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        // codeIndexEnabled 是活跃标记（对齐前端 workspaceProjects.ts 的裁剪
+        // 判定）：inherit 模式的条目带着它也不作 tombstone 过期。
+        // 注意：projectPrompt/projectPromptStrategy 仍缺白名单与活跃判定，
+        // 保存即丢——见 #633，修复时同样在此处补齐。
         if mode == "inherit"
+            && !code_index_enabled
             && updated_at > 0
             && now.saturating_sub(updated_at) > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
         {
@@ -264,6 +273,7 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
                 } else {
                     Value::Array(Vec::new())
                 },
+                "codeIndexEnabled": code_index_enabled,
                 "stateVersion": state_version,
                 "writerId": writer_id,
                 "updatedAt": updated_at,
@@ -272,8 +282,11 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
     }
     let mut normalized_entries = normalized_by_path.into_iter().collect::<Vec<_>>();
     normalized_entries.sort_by(|(path_a, entry_a), (path_b, entry_b)| {
-        let active_a = entry_a["mode"] != "inherit";
-        let active_b = entry_b["mode"] != "inherit";
+        let entry_active = |entry: &Value| {
+            entry["mode"] != "inherit" || entry["codeIndexEnabled"].as_bool().unwrap_or(false)
+        };
+        let active_a = entry_active(entry_a);
+        let active_b = entry_active(entry_b);
         active_b
             .cmp(&active_a)
             .then_with(|| {

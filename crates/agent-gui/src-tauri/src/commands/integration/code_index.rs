@@ -5,8 +5,8 @@
 
 use crate::services::code_index::{
     global_code_index_service, CodeIndexDisableArgs, CodeIndexEnableArgs, CodeIndexJobCancelArgs,
-    CodeIndexJobSnapshot, CodeIndexJobStatusArgs, CodeIndexRebuildArgs, CodeIndexSearchArgs,
-    CodeIndexSearchResponse, CodeIndexStatusArgs, CodeIndexStatusResponse,
+    CodeIndexJobSnapshot, CodeIndexRebuildArgs, CodeIndexSearchArgs, CodeIndexSearchResponse,
+    CodeIndexStatusArgs, CodeIndexStatusResponse,
 };
 
 #[tauri::command]
@@ -39,15 +39,6 @@ pub async fn code_index_status(
     tauri::async_runtime::spawn_blocking(move || global_code_index_service().status(args))
         .await
         .map_err(|e| format!("code_index_status join 失败：{e}"))?
-}
-
-#[tauri::command]
-pub async fn code_index_job_status(
-    args: CodeIndexJobStatusArgs,
-) -> Result<CodeIndexJobSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || global_code_index_service().job_status(args))
-        .await
-        .map_err(|e| format!("code_index_job_status join 失败：{e}"))?
 }
 
 #[tauri::command]

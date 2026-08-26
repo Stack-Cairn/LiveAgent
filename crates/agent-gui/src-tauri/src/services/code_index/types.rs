@@ -28,12 +28,6 @@ pub struct CodeIndexRebuildArgs {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodeIndexJobStatusArgs {
-    pub job_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CodeIndexJobCancelArgs {
     pub job_id: String,
 }
@@ -79,6 +73,9 @@ pub struct CodeIndexStatusResponse {
     pub embedding_model: Option<String>,
     /// 该 workdir 当前进行中的 job（若有）。
     pub active_job: Option<CodeIndexJobSnapshot>,
+    /// 最近一个已完结的 job（1 小时保留期内）。UI 靠它展示失败终态——
+    /// activeJob 只包含进行中的 job，error/cancelled 完结即从那里消失。
+    pub last_job: Option<CodeIndexJobSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize)]

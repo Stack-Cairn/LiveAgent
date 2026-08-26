@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use super::chunker::CodeChunk;
 use super::now_ms;
 use super::paths::{db_size_bytes, ensure_project_dir, project_db_path, DB_FILENAME};
-use super::schema::{open_code_index_connection, quarantine_db_files};
+use super::schema::{open_code_index_connection, remove_db_files};
 
 pub(crate) struct CodeIndexStore {
     pub(crate) workdir: String,
@@ -23,6 +23,8 @@ pub(crate) struct IndexedFileMeta {
     pub(crate) id: i64,
     pub(crate) mtime_ms: i64,
     pub(crate) content_hash: String,
+    /// 该文件的块已带向量入库。false = 词法降级期索引，待模型就绪后回填。
+    pub(crate) has_vectors: bool,
 }
 
 impl CodeIndexStore {
@@ -48,29 +50,41 @@ impl CodeIndexStore {
             .map_err(|_| "代码索引数据库锁被污染".to_string())
     }
 
-    /// 隔离当前库文件并换上全新连接。rebuild 的第一步。
+    /// 清空当前库并换上全新连接。rebuild 用：健康库直接删文件（quarantine
+    /// 只留给损坏路径，避免每次重建都在磁盘复制一份完整索引）。
     pub(crate) fn reset(&self) -> Result<(), String> {
         let mut guard = self.lock_conn()?;
-        // 先换成内存连接释放文件句柄，再隔离旧文件、开新库。
+        // 先换成内存连接释放文件句柄，再删旧文件、开新库。
         let placeholder =
             Connection::open_in_memory().map_err(|e| format!("创建代码索引占位连接失败：{e}"))?;
         let old = std::mem::replace(&mut *guard, placeholder);
         drop(old);
-        quarantine_db_files(&self.db_path)?;
-        *guard = open_code_index_connection(&self.db_path)?;
-        Ok(())
+        let removal = remove_db_files(&self.db_path);
+        // 无论删除是否成功都要重开真库：占位连接没有 schema，留在 guard 里
+        // 会让后续所有 status/search 报 “no such table”。
+        match open_code_index_connection(&self.db_path) {
+            Ok(conn) => {
+                *guard = conn;
+                removal
+            }
+            Err(open_error) => {
+                removal?;
+                Err(open_error)
+            }
+        }
     }
 
     pub(crate) fn file_meta(&self, path: &str) -> Result<Option<IndexedFileMeta>, String> {
         let conn = self.lock_conn()?;
         conn.query_row(
-            "SELECT id, mtime_ms, content_hash FROM files WHERE path = ?1",
+            "SELECT id, mtime_ms, content_hash, has_vectors FROM files WHERE path = ?1",
             [path],
             |row| {
                 Ok(IndexedFileMeta {
                     id: row.get(0)?,
                     mtime_ms: row.get(1)?,
                     content_hash: row.get(2)?,
+                    has_vectors: row.get::<_, i64>(3)? != 0,
                 })
             },
         )
@@ -119,14 +133,15 @@ impl CodeIndexStore {
 
         delete_file_rows(&tx, path)?;
         tx.execute(
-            "INSERT INTO files (path, mtime_ms, size_bytes, content_hash, language, indexed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO files (path, mtime_ms, size_bytes, content_hash, language, has_vectors, indexed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 path,
                 mtime_ms,
                 size_bytes as i64,
                 content_hash,
                 language,
+                (!embeddings.is_empty()) as i64,
                 now_ms()
             ],
         )
@@ -174,6 +189,46 @@ impl CodeIndexStore {
         delete_file_rows(&tx, path)?;
         tx.commit()
             .map_err(|e| format!("提交代码索引删除事务失败：{e}"))
+    }
+
+    /// 删除目录前缀下的全部文件行（watch 收到目录删除/重命名时清幽灵数据）。
+    /// `dir_rel_path` 不带尾部斜杠。返回删除的文件数。
+    pub(crate) fn remove_files_under_dir(&self, dir_rel_path: &str) -> Result<usize, String> {
+        let paths: Vec<String> = {
+            let conn = self.lock_conn()?;
+            let like = format!("{}/%", escape_like(dir_rel_path));
+            let mut stmt = conn
+                .prepare("SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\'")
+                .map_err(|e| format!("准备目录清理查询失败：{e}"))?;
+            let rows = stmt
+                .query_map([like], |row| row.get::<_, String>(0))
+                .map_err(|e| format!("查询目录下索引文件失败：{e}"))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("读取目录下索引文件失败：{e}"))?
+        };
+        let mut guard = self.lock_conn()?;
+        let tx = guard
+            .transaction()
+            .map_err(|e| format!("开启目录清理事务失败：{e}"))?;
+        for path in &paths {
+            delete_file_rows(&tx, path)?;
+        }
+        tx.commit()
+            .map_err(|e| format!("提交目录清理事务失败：{e}"))?;
+        Ok(paths.len())
+    }
+
+    /// 尚无向量的文件数（词法降级期入库的存量，模型就绪后由增量 job 回填）。
+    pub(crate) fn vectorless_file_count(&self) -> Result<u64, String> {
+        let conn = self.lock_conn()?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE has_vectors = 0",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("统计缺向量文件失败：{e}"))?;
+        Ok(count.max(0) as u64)
     }
 
     pub(crate) fn set_meta(&self, key: &str, value: &str) -> Result<(), String> {
@@ -250,6 +305,14 @@ pub(crate) fn embedding_bytes(embedding: &[f32]) -> Vec<u8> {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
     bytes
+}
+
+/// LIKE 通配符转义（路径来自模型参数或索引行，防御 % 与 _）。
+pub(crate) fn escape_like(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 /// disable 时整目录删除（含模型无关的 db/wal/标记文件）。

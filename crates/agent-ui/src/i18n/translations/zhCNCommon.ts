@@ -213,6 +213,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsCodeIndexPhaseWalking": "正在扫描工作区文件…",
   "chat.workspaceSettingsCodeIndexError": "索引失败：{error}",
   "chat.workspaceSettingsCodeIndexRebuild": "重建索引",
+  "chat.workspaceSettingsCodeIndexBuildNow": "立即建立索引",
+  "chat.workspaceSettingsCodeIndexPendingHint": "已开启，但本地索引尚未建立。保存设置或立即建立。",
   "chat.workspaceSettingsCodeIndexCancel": "取消",
   "chat.workspaceSettingsCodeIndexDesktopOnly": "代码索引在桌面端管理；此处仅显示状态。",
   "chat.workspaceSettingsDirectoriesDescription":

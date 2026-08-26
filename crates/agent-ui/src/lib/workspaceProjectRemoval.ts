@@ -8,6 +8,7 @@ import {
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
 import { useCallback } from "react";
+import { codeIndexDisable } from "./codeIndex/api";
 import { errorMessageWithFallback } from "./shared/value";
 import {
   getDefaultWorkspaceProjectPath,
@@ -170,6 +171,13 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
       try {
         await beforeRemoveWorkspaceProject?.(project);
         handleRemoveWorkspaceProjectFromSettings(project);
+        // 索引目录随项目移除清理（best-effort：桌面端专属命令，WebUI shim
+        // 同步抛错、测试宿主无 invoke 时都静默跳过；未启用过索引时是无害 no-op）。
+        try {
+          void codeIndexDisable(project.path).catch(() => {});
+        } catch {
+          // 宿主不支持 code_index_*：忽略，不影响项目移除本身。
+        }
         return true;
       } catch (error) {
         setErrorMessage(errorMessageWithFallback(error, t("chat.workspaceRootGrantsRevokeFailed")));

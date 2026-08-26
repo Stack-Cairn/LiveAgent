@@ -7,7 +7,7 @@ use std::path::Path;
 use rusqlite::params;
 
 use super::embedder;
-use super::store::{embedding_bytes, CodeIndexStore};
+use super::store::{embedding_bytes, escape_like, CodeIndexStore};
 use super::types::{CodeIndexSearchArgs, CodeIndexSearchMatch, CodeIndexSearchResponse};
 
 /// 每路候选数：融合前 top-K。
@@ -54,42 +54,71 @@ pub(crate) fn search(
         .path
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
         .map(|value| {
             value
                 .trim_start_matches("./")
                 .trim_end_matches('/')
                 .to_string()
-        });
+        })
+        // "./"、"/"、"." 都归一为“无过滤”——归一后的空串若进入 SQL 会变成
+        // `path = '' OR LIKE '/%'`，一条都匹配不上。
+        .filter(|value| !value.is_empty() && value != ".");
 
-    // 语义路可用性判定：请求了语义/混合但模型不可用 → 降级并说明。
+    // 语义路可用性判定：非阻塞探测——模型在下载/加载中也立即降级词法返回，
+    // 绝不让检索挂在首启的模型下载上。
     let mut degraded = None;
     let semantic_wanted = requested_mode != "lexical";
-    let semantic_active = semantic_wanted && embedder::embedder_available();
+    let availability = embedder::availability();
+    let mut semantic_active =
+        semantic_wanted && matches!(availability, embedder::EmbedderAvailability::Ready);
     if semantic_wanted && !semantic_active {
-        let reason =
-            embedder::embedder_error().unwrap_or_else(|| "embedding 模型未就绪".to_string());
+        let reason = match availability {
+            embedder::EmbedderAvailability::Initializing => {
+                "embedding 模型正在准备（首次使用需下载）".to_string()
+            }
+            embedder::EmbedderAvailability::Unavailable(reason) => reason,
+            embedder::EmbedderAvailability::Ready => unreachable!(),
+        };
         if requested_mode == "semantic" {
             return Err(format!("语义检索不可用：{reason}"));
         }
         degraded = Some(format!("语义路不可用，已降级纯词法检索：{reason}"));
     }
-    let effective_mode = if semantic_active {
-        requested_mode
-    } else {
-        "lexical"
-    };
+    // 词法降级期入库的文件没有向量：语义结果对它们是盲的，如实告知
+    //（回填由 service 层的检索自愈按节流安排，不保证本次已触发）。
+    if semantic_active {
+        let vectorless = store.vectorless_file_count()?;
+        if vectorless > 0 {
+            degraded = Some(format!(
+                "{vectorless} 个文件尚无语义向量（索引早于模型就绪），本次语义命中可能不完整；待后台回填或手动重建补齐"
+            ));
+        }
+    }
 
     // 两路各自产出 chunk_id 的有序候选（rank 从 0 起）。
-    let lexical_ranked: Vec<i64> = if effective_mode != "semantic" {
+    let lexical_ranked: Vec<i64> = if requested_mode != "semantic" {
         lexical_route(store, query, path_prefix.as_deref())?
     } else {
         Vec::new()
     };
-    let semantic_ranked: Vec<i64> = if effective_mode != "lexical" {
-        semantic_route(store, query, path_prefix.as_deref())?
+    let semantic_ranked: Vec<i64> = if semantic_active {
+        match semantic_route(store, query, path_prefix.as_deref()) {
+            Ok(ranked) => ranked,
+            Err(error) if requested_mode == "semantic" => return Err(error),
+            Err(error) => {
+                // hybrid 下语义路临时失败（如模型被索引批量占用超时）：降级词法。
+                degraded = Some(format!("语义路本次不可用，已降级纯词法检索：{error}"));
+                semantic_active = false;
+                Vec::new()
+            }
+        }
     } else {
         Vec::new()
+    };
+    let effective_mode = if semantic_active {
+        requested_mode
+    } else {
+        "lexical"
     };
 
     // RRF：score(c) = Σ_r 1 / (RRF_K + rank_r(c))。
@@ -109,7 +138,12 @@ pub(crate) fn search(
         .into_iter()
         .map(|(chunk_id, (score, lexical, semantic))| (chunk_id, score, lexical, semantic))
         .collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    // 同分按 chunk_id 决胜，保证结果顺序确定（HashMap 迭代序不稳定）。
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
     ranked.truncate(limit);
 
     let rows = load_chunk_rows(store, ranked.iter().map(|item| item.0))?;
@@ -145,6 +179,7 @@ pub(crate) fn search(
 
 /// FTS5 词法路。查询词逐词加引号转义（memory-index 同款），OR 连接：
 /// 代码检索里“任一词命中”召回优先，排序交给 bm25。
+/// 路径过滤按目录边界：`src` 命中 `src/**` 与文件 `src` 本身，不吞 `src2/`。
 fn lexical_route(
     store: &CodeIndexStore,
     query: &str,
@@ -160,35 +195,43 @@ fn lexical_route(
     }
     let match_expr = terms.join(" OR ");
     let conn = store.lock_conn()?;
-    let (sql, use_prefix) = match path_prefix {
-        Some(_) => (
-            "SELECT chunk_id, bm25(chunks_fts) AS score FROM chunks_fts
-             WHERE chunks_fts MATCH ?1 AND path LIKE ?2 ESCAPE '\\'
-             ORDER BY score LIMIT ?3",
-            true,
-        ),
-        None => (
-            "SELECT chunk_id, bm25(chunks_fts) AS score FROM chunks_fts
-             WHERE chunks_fts MATCH ?1
-             ORDER BY score LIMIT ?2",
-            false,
-        ),
-    };
-    let mut stmt = conn
-        .prepare(sql)
-        .map_err(|e| format!("准备词法检索失败：{e}"))?;
-    let map_row = |row: &rusqlite::Row<'_>| row.get::<_, i64>(0);
-    let rows = if use_prefix {
-        let like = format!("{}%", escape_like(path_prefix.unwrap_or_default()));
-        stmt.query_map(params![match_expr, like, PER_ROUTE_LIMIT as i64], map_row)
-            .map_err(|e| format!("词法检索失败：{e}"))?
-            .collect::<Result<Vec<_>, _>>()
-    } else {
-        stmt.query_map(params![match_expr, PER_ROUTE_LIMIT as i64], map_row)
-            .map_err(|e| format!("词法检索失败：{e}"))?
-            .collect::<Result<Vec<_>, _>>()
-    };
-    rows.map_err(|e| format!("读取词法检索结果失败：{e}"))
+    match path_prefix {
+        Some(prefix) => {
+            let like = format!("{}/%", escape_like(prefix));
+            let mut stmt = conn
+                .prepare(
+                    "SELECT chunk_id, bm25(chunks_fts) AS score FROM chunks_fts
+                     WHERE chunks_fts MATCH ?1
+                       AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')
+                     ORDER BY score LIMIT ?4",
+                )
+                .map_err(|e| format!("准备词法检索失败：{e}"))?;
+            let rows = stmt
+                .query_map(
+                    params![match_expr, prefix, like, PER_ROUTE_LIMIT as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|e| format!("词法检索失败：{e}"))?
+                .collect::<Result<Vec<_>, _>>();
+            rows.map_err(|e| format!("读取词法检索结果失败：{e}"))
+        }
+        None => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT chunk_id, bm25(chunks_fts) AS score FROM chunks_fts
+                     WHERE chunks_fts MATCH ?1
+                     ORDER BY score LIMIT ?2",
+                )
+                .map_err(|e| format!("准备词法检索失败：{e}"))?;
+            let rows = stmt
+                .query_map(params![match_expr, PER_ROUTE_LIMIT as i64], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .map_err(|e| format!("词法检索失败：{e}"))?
+                .collect::<Result<Vec<_>, _>>();
+            rows.map_err(|e| format!("读取词法检索结果失败：{e}"))
+        }
+    }
 }
 
 /// sqlite-vec 语义路。vec0 的 KNN 语法：`embedding MATCH ? AND k = ?`。
@@ -224,18 +267,19 @@ fn semantic_route(
     let Some(prefix) = path_prefix else {
         return Ok(candidates);
     };
-    // 后置路径过滤：按候选顺序保留命中前缀的块。
-    let like = format!("{}%", escape_like(prefix));
+    // 后置路径过滤：按候选顺序保留命中前缀的块（目录边界语义同词法路）。
+    let like = format!("{}/%", escape_like(prefix));
     let mut filtered = Vec::new();
     let mut path_stmt = conn
         .prepare(
             "SELECT 1 FROM chunks JOIN files ON files.id = chunks.file_id
-             WHERE chunks.id = ?1 AND files.path LIKE ?2 ESCAPE '\\'",
+             WHERE chunks.id = ?1
+               AND (files.path = ?2 OR files.path LIKE ?3 ESCAPE '\\')",
         )
         .map_err(|e| format!("准备语义路径过滤失败：{e}"))?;
     for chunk_id in candidates {
         let hit: Option<i64> = path_stmt
-            .query_row(params![chunk_id, like], |row| row.get(0))
+            .query_row(params![chunk_id, prefix, like], |row| row.get(0))
             .map(Some)
             .or_else(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -318,12 +362,4 @@ fn read_snippet(workdir: &Path, rel_path: &str, start_line: u32, end_line: u32) 
 fn quote_fts_term(term: &str) -> String {
     let escaped = term.replace('"', "\"\"");
     format!("\"{escaped}\"")
-}
-
-/// LIKE 通配符转义（前缀过滤输入来自模型参数，防御 % 与 _）。
-fn escape_like(input: &str) -> String {
-    input
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_")
 }

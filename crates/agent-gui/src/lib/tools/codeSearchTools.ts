@@ -15,6 +15,9 @@ export const CODE_SEARCH_TOOL_NAME = "CodeSearch";
 const MAX_RESULTS_LIMIT = 20;
 const DEFAULT_RESULTS = 8;
 
+// 每 workdir 只自动补一次 enable，避免持久失败时每轮工具调用都重复触发。
+const autoEnableAttempted = new Set<string>();
+
 type CodeIndexSearchMatch = {
   path: string;
   startLine: number;
@@ -108,6 +111,22 @@ export function createCodeSearchTools(params: { workdir: string }): BuiltinToolB
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // 对账：CodeSearch 已注册说明设置开关是开的，但本地索引缺失（在 WebUI/
+      // 异端开启后同步过来、或当时 enable side effect 失败）。触发一次后台
+      // 建索引，把模型引导去 Grep 兜底，避免整轮对话陷在必败的工具错误里。
+      // 错误文案与 Rust service.search 的“未启用代码索引”保持一致。
+      if (message.includes("未启用代码索引") && !autoEnableAttempted.has(params.workdir)) {
+        autoEnableAttempted.add(params.workdir);
+        void invoke("code_index_enable", { args: { workdir: params.workdir } }).catch(
+          (enableError) => {
+            console.warn("code index auto-enable failed", enableError);
+          },
+        );
+        return buildErrorResult(
+          toolCall,
+          "Code index is enabled in settings but missing locally; background indexing has just been started. Use Grep for this query and retry CodeSearch later in the conversation.",
+        );
+      }
       return buildErrorResult(toolCall, `CodeSearch failed: ${message}`);
     }
 
