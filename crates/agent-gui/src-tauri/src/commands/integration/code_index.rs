@@ -6,7 +6,7 @@
 use crate::services::code_index::{
     global_code_index_service, CodeIndexDisableArgs, CodeIndexEnableArgs, CodeIndexJobCancelArgs,
     CodeIndexJobSnapshot, CodeIndexRebuildArgs, CodeIndexSearchArgs, CodeIndexSearchResponse,
-    CodeIndexStatusArgs, CodeIndexStatusResponse,
+    CodeIndexStatusArgs, CodeIndexStatusResponse, CodeIndexWarmArgs,
 };
 
 #[tauri::command]
@@ -57,4 +57,13 @@ pub async fn code_index_search(
     tauri::async_runtime::spawn_blocking(move || global_code_index_service().search(args))
         .await
         .map_err(|e| format!("code_index_search join 失败：{e}"))?
+}
+
+/// 预热 embedding 模型（fire-and-forget）：CodeSearch 工具注册时调用，
+/// 避免应用重启后的第一波检索因模型未加载而降级词法。
+#[tauri::command]
+pub async fn code_index_warm(args: CodeIndexWarmArgs) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || global_code_index_service().warm(args))
+        .await
+        .map_err(|e| format!("code_index_warm join 失败：{e}"))
 }

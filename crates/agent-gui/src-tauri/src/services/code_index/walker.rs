@@ -33,12 +33,23 @@ const EXCLUDED_DIRS: &[&str] = &[
 ];
 
 /// 明确的二进制/媒体扩展名，避免浪费一次 UTF-8 探测读。
+/// svg 虽是文本，但内容是路径坐标噪声，实测污染语义路，按媒体处理。
 const EXCLUDED_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp", "tiff", "avif", "mp3", "mp4", "mov",
-    "avi", "mkv", "wav", "flac", "ogg", "zip", "tar", "gz", "zst", "br", "7z", "rar", "jar",
+    "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp", "tiff", "avif", "svg", "mp3", "mp4",
+    "mov", "avi", "mkv", "wav", "flac", "ogg", "zip", "tar", "gz", "zst", "br", "7z", "rar", "jar",
     "class", "pyc", "wasm", "so", "dylib", "dll", "exe", "bin", "dat", "pdf", "woff", "woff2",
-    "ttf", "otf", "eot", "sqlite", "sqlite3", "db", "lock", "min.js", "map",
+    "ttf", "otf", "eot", "sqlite", "sqlite3", "db", "lock", "lockb", "min.js", "map",
 ];
+
+/// 按整名排除的生成物锁文件：`.lock` 扩展名兜不住这些拼法（package-lock.json
+/// 是 .json）。实测它们以 JSON 元数据大量挤占语义路 top-k（小工作区里
+/// 7 个 package-lock 占掉 11% 的块），检索价值为零。
+const EXCLUDED_FILENAMES: &[&str] = &["package-lock.json", "pnpm-lock.yaml", "npm-shrinkwrap.json"];
+
+/// 内置排除规则的版本号。改动 EXCLUDED_* 任一清单时 +1：service 检索路
+/// 发现索引落后于当前规则会自愈拉起增量 job，靠“消失文件对账”清掉
+/// 已入库的新排除物（增量对未变化文件短路，代价只有一次遍历）。
+pub(crate) const WALKER_RULES_VERSION: &str = "2";
 
 #[derive(Debug, Clone)]
 pub(crate) struct WalkedFile {
@@ -62,6 +73,9 @@ fn extension_excluded(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
+    if EXCLUDED_FILENAMES.iter().any(|excluded| name == *excluded) {
+        return true;
+    }
     EXCLUDED_EXTENSIONS
         .iter()
         .any(|ext| name.ends_with(&format!(".{ext}")))

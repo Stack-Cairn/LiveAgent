@@ -202,7 +202,9 @@ impl CodeIndexService {
         // - 库是空的（schema/模型版本升级时 DROP 重建过，但 status 仍 indexed）
         //   → 拉起增量 job 重建，否则空库会永远安静地返回零结果；
         // - 模型不可用（如离线首启的缓存失败）→ 后台节流重试初始化；
-        // - 模型已就绪但存量文件缺向量（词法降级期入库）→ 安排增量 job 回填。
+        // - 模型已就绪但存量文件缺向量（词法降级期入库）→ 安排增量 job 回填；
+        // - 索引早于当前 walker 排除规则 → 增量 job 靠消失文件对账清掉
+        //   新排除物（如 package-lock.json）的存量行。
         let index_is_empty = store
             .stats()
             .map(|(file_count, _, _)| file_count == 0)
@@ -211,19 +213,46 @@ impl CodeIndexService {
             embedder::availability(),
             embedder::EmbedderAvailability::Ready
         ) && store.vectorless_file_count().unwrap_or(0) > 0;
+        let rules_stale = store
+            .get_meta("walker_rules_version")
+            .unwrap_or(None)
+            .as_deref()
+            != Some(walker::WALKER_RULES_VERSION);
         if matches!(
             embedder::availability(),
             embedder::EmbedderAvailability::Unavailable(_)
         ) {
             embedder::spawn_background_init();
         }
-        if (index_is_empty || needs_backfill)
+        if (index_is_empty || needs_backfill || rules_stale)
             && jobs::active_job_for_workdir(&workdir).is_none()
             && self_heal_throttle_ok(&workdir)
         {
             let _ = self.spawn_index_job(store.clone(), IndexJobKind::Incremental);
         }
         search::search(&store, &args)
+    }
+
+    /// 预热：会话/工具注册时调用，把模型加载提前到首次检索之前。
+    /// 否则应用重启后模型停在 Idle，第一波查询必然降级词法（模型文件
+    /// 明明在盘上，只是没人触发加载）。非阻塞；只做廉价检查，不开 store
+    /// （integrity_check 非无成本），未启用索引的 workdir 是 no-op。
+    pub fn warm(&self, args: CodeIndexWarmArgs) {
+        let Ok(workdir) = normalize_workdir(&args.workdir) else {
+            return;
+        };
+        let Ok(db_path) = project_db_path(&workdir) else {
+            return;
+        };
+        if !db_path.exists() || disabled_marker_exists(&workdir) {
+            return;
+        }
+        if !matches!(
+            embedder::availability(),
+            embedder::EmbedderAvailability::Ready
+        ) {
+            embedder::spawn_background_init();
+        }
     }
 
     // ---- workspace watch 失效（emit_activity 第三 sink）----
@@ -555,6 +584,13 @@ fn run_index_job(
     }
 
     store.set_meta("last_full_index_at", &super::now_ms().to_string())?;
+    // 消失文件对账真正跑过（walk_errors == 0），索引才算对齐本版排除规则。
+    // 遍历有错时对账被跳过——此时标版本会让新排除物（如 package-lock.json）
+    // 的存量行永远清不掉：版本已“新”，检索路自愈不再触发。留稳过期版本，
+    // 下一次成功 job 重试对账后再标。
+    if outcome.walk_errors == 0 {
+        store.set_meta("walker_rules_version", walker::WALKER_RULES_VERSION)?;
+    }
     Ok(())
 }
 

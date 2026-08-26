@@ -34,6 +34,12 @@ pub struct CodeIndexJobCancelArgs {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodeIndexWarmArgs {
+    pub workdir: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeIndexSearchArgs {
     pub workdir: String,
     pub query: String,

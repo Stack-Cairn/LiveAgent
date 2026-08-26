@@ -48,6 +48,12 @@ function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
 }
 
 export function createCodeSearchTools(params: { workdir: string }): BuiltinToolBundle {
+  // 预热 embedding 模型（fire-and-forget）：工具注册发生在会话构建时，早于
+  // 首次检索——不预热的话应用重启后第一波查询必然因模型未加载降级词法。
+  // Rust 侧幂等且自带节流，重复调用是廉价 no-op。
+  void invoke("code_index_warm", { args: { workdir: params.workdir } }).catch(() => {
+    // 预热失败不影响功能（检索路有降级与自愈），静默即可。
+  });
   const toolCodeSearch: Tool = {
     name: CODE_SEARCH_TOOL_NAME,
     description: [
