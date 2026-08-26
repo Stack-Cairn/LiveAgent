@@ -1,4 +1,7 @@
-import { ProviderSettingsExtension } from "@liveagent/adapters/providerSettings";
+import {
+  ProviderCopyConfigButton,
+  ProviderSettingsExtension,
+} from "@liveagent/adapters/providerSettings";
 import {
   getProviderUsageCardDisplay,
   type ProviderUsageState,
@@ -746,6 +749,7 @@ function ProviderList(props: {
                       ) : null}
                     </div>
                     <div className="settings-card-actions settings-hover-actions flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                      <ProviderCopyConfigButton provider={provider} />
                       {usageDisplay.show ? (
                         <Button
                           variant="ghost"

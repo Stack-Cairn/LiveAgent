@@ -572,6 +572,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerUsageStale": "Stale",
   "settings.providerUsageStaleTitle": "Refresh failed; showing the last successful result",
   "settings.providerUsageRefresh": "Refresh usage",
+  "settings.providerCopyConfig": "Copy Base URL and API Key",
+  "settings.providerCopyConfigCopied": "Copied to clipboard",
   "settings.providerUsageInvalid": "Plan expired",
   "settings.providerUsageNoData": "No usage data",
   "settings.providerUsageUpdated.justNow": "just now",

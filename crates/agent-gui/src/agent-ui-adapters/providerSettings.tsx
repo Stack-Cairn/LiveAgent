@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -355,6 +356,29 @@ function CcsImportModal(props: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 桌面端复制内容：Base URL 与 API Key 各占一行，空值省略。 */
+export function formatProviderCopyConfig(provider: Pick<CustomProvider, "baseUrl" | "apiKey">) {
+  return [provider.baseUrl.trim(), provider.apiKey.trim()].filter(Boolean).join("\n");
+}
+
+/**
+ * 供应商卡片上的一键复制按钮（仅桌面端）：把 Base URL 与 API Key 复制到
+ * 剪贴板。WebUI 会对 API Key 做脱敏，因此 gateway 端的同名适配器返回 null。
+ */
+export function ProviderCopyConfigButton(props: {
+  provider: Pick<CustomProvider, "baseUrl" | "apiKey">;
+}) {
+  const { provider } = props;
+  const { t } = useLocale();
+  return (
+    <CopyButton
+      value={formatProviderCopyConfig(provider)}
+      label={t("settings.providerCopyConfig")}
+      copiedLabel={t("settings.providerCopyConfigCopied")}
+    />
   );
 }
 

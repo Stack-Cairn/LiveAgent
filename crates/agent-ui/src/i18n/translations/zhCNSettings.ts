@@ -548,6 +548,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerUsageStale": "旧数据",
   "settings.providerUsageStaleTitle": "刷新失败，展示上次成功结果",
   "settings.providerUsageRefresh": "刷新用量",
+  "settings.providerCopyConfig": "复制 Base URL 和 API Key",
+  "settings.providerCopyConfigCopied": "已复制到剪贴板",
   "settings.providerUsageInvalid": "套餐已失效",
   "settings.providerUsageNoData": "暂无用量数据",
   "settings.providerUsageUpdated.justNow": "刚刚",
