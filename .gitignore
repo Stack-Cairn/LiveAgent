@@ -53,3 +53,5 @@ workspace.zip
 /.trellis
 /AGENTS.md
 /CLAUDE.md
+/issue_board.md
+/.github/automation/

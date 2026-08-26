@@ -1213,4 +1213,56 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.hooksActiveHooks": "Active",
   "settings.hooksInactiveHooks": "Inactive",
   "settings.hooksSelectedEvent": "Selected Event",
+  "settings.navCua": "CUA",
+  "settings.cuaDriver.title": "CUA",
+  "settings.cuaDriver.subtitle": "Computer Use Agent — let the AI operate this machine directly",
+  "settings.cuaDriver.description":
+    "Once enabled, the AI can list windows, take screenshots, click, type, invoke native menus, and drive the browser — around 60 capabilities, all provided by the driver. The driver comes from",
+  "settings.cuaDriver.groupDriver": "Driver",
+  "settings.cuaDriver.recheck": "Re-check",
+  "settings.cuaDriver.detected": "cua-driver installed",
+  "settings.cuaDriver.detectedWithVersion": "cua-driver {version} installed",
+  "settings.cuaDriver.notInstalledTitle": "cua-driver not found",
+  "settings.cuaDriver.notInstalledDesc":
+    "LiveAgent can run the official installer for you, or install it yourself and hit Re-check above.",
+  "settings.cuaDriver.install": "Install driver",
+  "settings.cuaDriver.installing": "Installing…",
+  "settings.cuaDriver.confirmTitle": "About to run an installer script",
+  "settings.cuaDriver.confirmDesc":
+    "The command below downloads a script from {url} and runs it immediately. Review it first — you can also copy it and run it in your own terminal.",
+  "settings.cuaDriver.confirmRun": "Run it",
+  "settings.cuaDriver.confirmCancel": "Cancel",
+  "settings.cuaDriver.permissionsTitle": "macOS permissions",
+  "settings.cuaDriver.permissionsDesc":
+    "Accessibility and Screen Recording are required. The grants belong to CuaDriver.app, not LiveAgent — the button lets it request them under its own identity.",
+  "settings.cuaDriver.permissionsGranted": "Granted, attributed to {bundleId}.",
+  "settings.cuaDriver.grantPermissions": "Grant permissions",
+  "settings.cuaDriver.statusGranted": "Granted",
+  "settings.cuaDriver.enableTitle": "Enable CUA",
+  "settings.cuaDriver.enableDesc":
+    "Turn this on to let the AI operate this computer — around 60 capabilities become available.",
+  "settings.cuaDriver.enabledDesc":
+    "The AI can operate this computer. Approval behaviour and other settings are below.",
+  "settings.cuaDriver.enableNeedsDriver": "Install cua-driver first.",
+  "settings.cuaDriver.enable": "Enable CUA",
+  "settings.cuaDriver.disable": "Disable CUA",
+  "settings.cuaDriver.policyNote":
+    "Every CUA action lands on this real machine — clicks, keystrokes, and quitting apps cannot be undone. It asks each time by default; switch to always-allow only when you trust the task at hand.",
+  "settings.cuaDriver.groupAbout": "About",
+  "settings.cuaDriver.statusActive": "Enabled",
+  "settings.cuaDriver.statusIdle": "Disabled",
+  "settings.cuaDriver.statusNotInstalled": "Driver missing",
+  "settings.cuaDriver.permissionsPending": "Not granted yet",
+  "settings.cuaDriver.groupBehavior": "Behavior",
+  "settings.cuaDriver.policyTitle": "Tool approval",
+  "settings.cuaDriver.policyDesc":
+    'CUA tools really click, type, and quit applications. Every call asks by default; "allow" stops interrupting you, "deny" disables the whole group.',
+  "settings.cuaDriver.allowSelfTitle": "Allow targeting LiveAgent itself",
+  "settings.cuaDriver.allowSelfDesc":
+    "Off by default: LiveAgent's own windows are stripped from CUA's enumerations and cannot be targeted — otherwise the model could dismiss its own approval prompts, rewrite these settings, or quit the app. Turn it on only to automate LiveAgent with LiveAgent.",
+  "settings.cuaDriver.timeoutLabel": "Per-call timeout (ms)",
+  "settings.cuaDriver.timeoutHint":
+    "Capped at 600000. Launching an app or waiting for a window can take a while.",
+  "settings.cuaDriver.permissionsChecking": "Checking permissions…",
+  "settings.cuaDriver.permissionsUnknown": "Could not read permission status",
 } as const satisfies Record<string, string>;

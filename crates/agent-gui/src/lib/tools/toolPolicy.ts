@@ -1,3 +1,5 @@
+import { hardcodedServerPolicyDefault } from "@liveagent/ui/contracts/mcpServerDefaults";
+
 import type { ToolPolicy } from "../settings";
 import type { BuiltinToolMetadata } from "./builtinTypes";
 
@@ -31,10 +33,13 @@ export function toolServerPolicyKey(serverId: string): string {
  * 判定顺序(由细到粗,任一命中即返回):
  * 1. 该工具名的显式覆盖(toolPolicies[toolName])—— 最细,最高优先级。
  * 2. MCP 按 server 的策略(server:<serverId>,仅对带 serverId 的 MCP 工具)。
- * 3. 工具组级默认(group:<groupId>,如把"所有 MCP 工具"设为 ask/deny)。
- *    2、3 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
- * 4. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
- * 5. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
+ * 3. server 级硬编码缺省(`hardcodedServerPolicyDefault`):个别 server
+ *    的工具面直接操作用户机器(如 cua-driver 的 kill_app / type_text),
+ *    不能靠第 6 步的兜底 allow 隐式放行。用户在第 2 步显式表态即可盖过。
+ * 4. 工具组级默认(group:<groupId>,如把"所有 MCP 工具"设为 ask/deny)。
+ *    2、4 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
+ * 5. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
+ * 6. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
  */
 export function resolveToolPolicy(
   toolName: string,
@@ -43,10 +48,13 @@ export function resolveToolPolicy(
 ): ToolPolicy {
   const explicit = policies?.[toolName];
   if (explicit) return explicit;
-  const serverPolicy = metadata?.serverId
-    ? policies?.[toolServerPolicyKey(metadata.serverId)]
-    : undefined;
+  const serverId = metadata?.serverId;
+  const serverPolicy = serverId ? policies?.[toolServerPolicyKey(serverId)] : undefined;
   if (serverPolicy) return serverPolicy;
+  if (serverId) {
+    const hardcodedServer = hardcodedServerPolicyDefault(serverId);
+    if (hardcodedServer) return hardcodedServer;
+  }
   const groupId = metadata?.groupId;
   const groupPolicy = groupId ? policies?.[toolGroupPolicyKey(groupId)] : undefined;
   if (groupPolicy) return groupPolicy;

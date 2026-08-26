@@ -8,6 +8,10 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { useMemo } from "react";
+import {
+  effectiveServerPolicyDefault,
+  isHubHiddenServerId,
+} from "../../contracts/mcpServerDefaults";
 import { McpServerCard } from "./McpServerCard";
 
 export { McpServerEditModal } from "./McpServerEditModal";
@@ -31,25 +35,30 @@ type McpServersFormProps = {
 export function McpServersForm(props: McpServersFormProps) {
   const { settings, setSettings, query, onAddServer, onEditServer } = props;
   const { t } = useLocale();
-  const servers = settings.mcp.servers;
+  // 由专属设置页托管的 server 不在 Hub 里露面（当前是 cua-driver，归
+  // 「设置 → CUA」管）。过滤后仍需拿到原始下标：McpServerCard 的编辑 /
+  // 删除都按 settings.mcp.servers 的位置写回。
+  const servers = useMemo(
+    () =>
+      settings.mcp.servers
+        .map((server, idx) => ({ server, idx }))
+        .filter(({ server }) => !isHubHiddenServerId(server.id)),
+    [settings.mcp.servers],
+  );
   const serverCount = servers.length;
 
   const filtered = useMemo(() => {
-    return rankFuzzySearchResults(
-      servers.map((server, idx) => ({ server, idx })),
-      query,
-      ({ server }) => [
-        server.id,
-        server.description,
-        server.docsUrl,
-        server.command,
-        server.url,
-        server.transport,
-        ...(server.args ?? []),
-        ...Object.keys(server.env ?? {}),
-        ...Object.keys(server.headers ?? {}),
-      ],
-    );
+    return rankFuzzySearchResults(servers, query, ({ server }) => [
+      server.id,
+      server.description,
+      server.docsUrl,
+      server.command,
+      server.url,
+      server.transport,
+      ...(server.args ?? []),
+      ...Object.keys(server.env ?? {}),
+      ...Object.keys(server.headers ?? {}),
+    ]);
   }, [query, servers]);
 
   return (
@@ -88,12 +97,18 @@ export function McpServersForm(props: McpServersFormProps) {
                 searchQuery={query}
                 setSettings={setSettings}
                 onEdit={() => onEditServer?.(server, idx)}
-                policy={settings.system.toolPolicies?.[serverPolicyKey(server.id)] ?? "allow"}
+                policy={
+                  settings.system.toolPolicies?.[serverPolicyKey(server.id)] ??
+                  effectiveServerPolicyDefault(server.id)
+                }
                 onPolicyChange={(next) =>
                   setSettings((prev) => {
                     const current = { ...(prev.system.toolPolicies ?? {}) };
                     const key = serverPolicyKey(server.id);
-                    if (next === "allow") delete current[key];
+                    // 只有回到该 server 的缺省值才删 key——对普通 server 缺省是
+                    // allow，对硬编码为 ask 的 server（cua-driver）则相反：显式
+                    // 存下 "allow" 才能盖过缺省，删掉反而会退回 ask。
+                    if (next === effectiveServerPolicyDefault(server.id)) delete current[key];
                     else current[key] = next;
                     return updateSystem(prev, {
                       toolPolicies: Object.keys(current).length > 0 ? current : undefined,

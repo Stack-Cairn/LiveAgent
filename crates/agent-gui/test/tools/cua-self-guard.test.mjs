@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const loader = createTsModuleLoader();
+const guard = loader.loadModule("src/lib/tools/cuaSelfGuard.ts");
+
+const { refuseSelfTargetedCall, stripSelfFromJsonText, resetCuaSelfGuardCaches } = guard;
+
+const SELF_PID = 4242;
+const OTHER_PID = 99;
+
+test.beforeEach(() => resetCuaSelfGuardCaches());
+
+test("宿主 pid 的调用被拒绝，其他 pid 放行", () => {
+  assert.ok(refuseSelfTargetedCall({ pid: SELF_PID }, SELF_PID));
+  assert.equal(refuseSelfTargetedCall({ pid: OTHER_PID }, SELF_PID), null);
+  assert.equal(refuseSelfTargetedCall({}, SELF_PID), null);
+  assert.equal(refuseSelfTargetedCall(undefined, SELF_PID), null);
+});
+
+test("拿不到宿主 pid 时不拦截——宁可不拦，也不误伤正常目标", () => {
+  assert.equal(refuseSelfTargetedCall({ pid: SELF_PID }, null), null);
+});
+
+test("窗口枚举结果剔除宿主记录", () => {
+  const payload = JSON.stringify({
+    windows: [
+      { window_id: 1, pid: SELF_PID, app_name: "LiveAgent" },
+      { window_id: 2, pid: OTHER_PID, app_name: "Safari" },
+    ],
+  });
+  const stripped = JSON.parse(stripSelfFromJsonText(payload, SELF_PID));
+  assert.deepEqual(
+    stripped.windows.map((w) => w.pid),
+    [OTHER_PID],
+  );
+});
+
+test("过滤时学到的 window_id 让后续按 window_id 的调用也被拦下", () => {
+  // 过滤之前拦不住：window_id 与 pid 的对应关系只有 cua-driver 知道。
+  assert.equal(refuseSelfTargetedCall({ window_id: 1 }, SELF_PID), null);
+
+  stripSelfFromJsonText(
+    JSON.stringify([{ window_id: 1, pid: SELF_PID }, { window_id: 2, pid: OTHER_PID }]),
+    SELF_PID,
+  );
+
+  assert.ok(refuseSelfTargetedCall({ window_id: 1 }, SELF_PID));
+  assert.equal(refuseSelfTargetedCall({ window_id: 2 }, SELF_PID), null);
+});
+
+test("嵌套结构里的宿主记录同样被剔除", () => {
+  const payload = JSON.stringify({
+    desktop: { apps: [{ pid: SELF_PID }, { pid: OTHER_PID }] },
+  });
+  const stripped = JSON.parse(stripSelfFromJsonText(payload, SELF_PID));
+  assert.deepEqual(stripped.desktop.apps, [{ pid: OTHER_PID }]);
+});
+
+test("非 JSON 载荷与无宿主记录的载荷原样返回", () => {
+  const plain = "Screenshot captured: 1920x1080";
+  assert.equal(stripSelfFromJsonText(plain, SELF_PID), plain);
+
+  const malformed = "{not json";
+  assert.equal(stripSelfFromJsonText(malformed, SELF_PID), malformed);
+
+  // 没有命中就不该重新序列化——避免无谓地改写模型看到的原文格式。
+  const clean = JSON.stringify({ windows: [{ window_id: 2, pid: OTHER_PID }] });
+  assert.equal(stripSelfFromJsonText(clean, SELF_PID), clean);
+});
+
+test("拿不到宿主 pid 时不过滤", () => {
+  const payload = JSON.stringify([{ pid: SELF_PID }]);
+  assert.equal(stripSelfFromJsonText(payload, null), payload);
+});
