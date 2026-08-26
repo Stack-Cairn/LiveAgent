@@ -1129,4 +1129,43 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hooksActiveHooks": "已启用",
   "settings.hooksInactiveHooks": "已禁用",
   "settings.hooksSelectedEvent": "当前事件",
+  "settings.navCua": "CUA",
+  "settings.cuaDriver.title": "CUA",
+  "settings.cuaDriver.subtitle": "Computer Use Agent —— 让 AI 直接操作这台电脑",
+  "settings.cuaDriver.description":
+    "接入 cua-driver 后，AI 可以枚举窗口、截屏、点击、输入、调用原生菜单并控制浏览器。它以一个普通 MCP server 的形式接入，约 60 个工具由 tools/list 自动发现，日常管理在 MCP Hub 的 server 卡片上。驱动来自",
+  "settings.cuaDriver.groupDriver": "驱动",
+  "settings.cuaDriver.recheck": "重新检测",
+  "settings.cuaDriver.detected": "已安装 cua-driver",
+  "settings.cuaDriver.detectedWithVersion": "已安装 cua-driver {version}",
+  "settings.cuaDriver.notInstalledTitle": "未检测到 cua-driver",
+  "settings.cuaDriver.notInstalledDesc":
+    "可以让 LiveAgent 运行官方安装脚本，也可以自行安装后点右上角「重新检测」。",
+  "settings.cuaDriver.install": "安装驱动",
+  "settings.cuaDriver.installing": "安装中…",
+  "settings.cuaDriver.confirmTitle": "即将运行安装脚本",
+  "settings.cuaDriver.confirmDesc":
+    "下面这条命令会从 {url} 下载一段脚本并立即执行。请先确认命令内容；你也可以复制它自行到终端运行。",
+  "settings.cuaDriver.confirmRun": "确认运行",
+  "settings.cuaDriver.confirmCancel": "取消",
+  "settings.cuaDriver.permissionsTitle": "macOS 系统授权",
+  "settings.cuaDriver.permissionsDesc":
+    "需要「辅助功能」与「屏幕录制」权限。授权对象是 CuaDriver.app 而不是 LiveAgent —— 点右侧按钮由它以自己的身份发起请求。",
+  "settings.cuaDriver.permissionsGranted": "已授权，归属 {bundleId}。",
+  "settings.cuaDriver.grantPermissions": "前往授权",
+  "settings.cuaDriver.statusGranted": "已授权",
+  "settings.cuaDriver.enableTitle": "启用 CUA",
+  "settings.cuaDriver.enableDesc": "开启后接入 MCP，约 60 个操作工具随即对 AI 可见。",
+  "settings.cuaDriver.enabledDesc":
+    "已接入 MCP。参数与权限策略可在 MCP Hub 的 cua-driver 卡片里调整。",
+  "settings.cuaDriver.enableNeedsDriver": "需要先安装 cua-driver。",
+  "settings.cuaDriver.enable": "启用 CUA",
+  "settings.cuaDriver.disable": "停用 CUA",
+  "settings.cuaDriver.policyNote":
+    "该 server 默认逐次询问（ask）。这些工具会真实点击、输入、关闭应用，接入后可在 MCP Hub 的 server 卡片里改为始终允许或禁止。",
+  "settings.cuaDriver.groupAbout": "关于",
+  "settings.cuaDriver.statusActive": "已启用",
+  "settings.cuaDriver.statusIdle": "未启用",
+  "settings.cuaDriver.statusNotInstalled": "未安装驱动",
+  "settings.cuaDriver.permissionsPending": "尚未授权",
 } as const satisfies Record<string, string>;

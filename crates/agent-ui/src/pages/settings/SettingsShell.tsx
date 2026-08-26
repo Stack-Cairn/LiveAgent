@@ -283,9 +283,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
             )}
             data-anim-suspended={isDocumentHidden ? "true" : undefined}
             style={
-              isDocumentHidden
-                ? { animation: "none", opacity: 1, transform: "none" }
-                : undefined
+              isDocumentHidden ? { animation: "none", opacity: 1, transform: "none" } : undefined
             }
           >
             <div

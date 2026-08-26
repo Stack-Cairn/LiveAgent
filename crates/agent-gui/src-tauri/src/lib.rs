@@ -313,6 +313,11 @@ macro_rules! app_invoke_handler {
             // 无障碍树。与「操作用户电脑」无关——那条链路走 MCP Hub。
             commands::ax::cua_window_ready,
             commands::ax::cua_refresh_a11y,
+            commands::cua_driver::cua_driver_probe,
+            commands::cua_driver::cua_driver_install_command,
+            commands::cua_driver::cua_driver_install,
+            commands::cua_driver::cua_driver_permissions_status,
+            commands::cua_driver::cua_driver_permissions_grant,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,

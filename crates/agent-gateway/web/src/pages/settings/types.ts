@@ -15,7 +15,8 @@ export type SectionId =
   | "hooks"
   | "cron"
   | "devices"
-  | "remote";
+  | "remote"
+  | "cua";
 
 export type SettingsPageProps = {
   settings: AppSettings;
