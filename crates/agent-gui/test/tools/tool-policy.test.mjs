@@ -56,3 +56,31 @@ test("normalizeSystemSettings 透传 toolPolicies 且旧快照缺失时不报错
   const legacy = settings.normalizeSystemSettings({});
   assert.equal(legacy.toolPolicies, undefined);
 });
+
+test("CUA 默认 ask：没有用户策略也没有 trustMode 时，group:cua 走 ask 缺省", () => {
+  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, undefined), "ask");
+  assert.equal(resolveToolPolicy("cua_screenshot", cuaMeta, undefined), "ask");
+});
+
+test("CUA 用户显式策略覆盖 ask 缺省", () => {
+  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "deny" }), "deny");
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "allow" }), "allow");
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { cua_click: "deny" }), "deny");
+});
+
+test("CUA trustMode 开启时 extraGroupDefaults 把 group:cua 强制 allow，但仍低于用户策略", () => {
+  const cuaMeta = { groupId: "cua", kind: "cua", isReadOnly: false, displayCategory: "cua" };
+  const trust = { cua: "allow" };
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, undefined, trust), "allow");
+  // 用户 deny 仍然生效（用户策略 > extra defaults > 硬编码默认）。
+  assert.equal(resolveToolPolicy("cua_click", cuaMeta, { "group:cua": "deny" }, trust), "deny");
+});
+
+test("isHardcodedGroupDefault 暴露 CUA ask 缺省供 UI 提示", () => {
+  const { isHardcodedGroupDefault } = toolPolicy;
+  assert.equal(isHardcodedGroupDefault("cua"), "ask");
+  assert.equal(isHardcodedGroupDefault("mcp"), undefined);
+  assert.equal(isHardcodedGroupDefault("shell"), undefined);
+});

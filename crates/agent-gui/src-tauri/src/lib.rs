@@ -1171,6 +1171,9 @@ pub fn run() {
     let cua_store = Arc::new(services::cua::CuaStore::new(
         services::cua::CuaRuntimeConfig::default(),
     ));
+    // 共享 cua-driver MCP 子进程客户端。第一次 cua_* 命令才懒 spawn，
+    // 失败时由上层把 IO 错误翻译成结构化 CuaError。
+    let cua_client = services::cua::CuaClient::new();
 
     let builder = tauri::Builder::default();
     // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
@@ -1217,9 +1220,10 @@ pub fn run() {
         .manage(Arc::clone(&close_window_behavior))
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
+        .manage(Arc::clone(&cua_store))
+        .manage(cua_client.clone())
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
-        .manage(cua_store)
         .on_page_load(|webview, payload| {
             if webview.label() != MAIN_WINDOW_LABEL {
                 return;

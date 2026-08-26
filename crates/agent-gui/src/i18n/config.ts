@@ -258,16 +258,25 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.platform": "驱动平台",
     "settings.cua.platformDesc": "由 Rust 端按编译目标决定（macOS / Windows / Linux）。",
     "settings.cua.platformNotes.macos.accessibility":
-      "辅助功能（Accessibility）— System Events 操控鼠标 / 键盘",
+      "辅助功能（Accessibility）— CuaDriver.app 通过 AX API 操控鼠标 / 键盘",
     "settings.cua.platformNotes.macos.screenRecording":
-      "屏幕录制（Screen Recording）— screencapture 截屏",
-    "settings.cua.platformNotes.macos.dragAndDrop":
-      "拖拽需安装 `cliclick`（brew install cliclick）",
+      "屏幕录制（Screen Recording）— CuaDriver.app 截屏",
+    "settings.cua.platformNotes.macos.dragAndDrop": "拖拽由 cua-driver 内置支持，无需第三方工具",
     "settings.cua.platformNotes.unsupported": "驱动尚未实现；启用后所有 CUA 操作都会失败",
     "settings.cua.allowedOwners": "允许的目标应用",
     "settings.cua.allowedOwnersDesc":
       "白名单：仅这些 owner（应用名）的输入 / 焦点 / 点击会被放行。空 = 不限制。多个 owner 用英文逗号或换行分隔。",
     "settings.cua.allowedOwnersHint": "例：Finder, Safari, Terminal",
+    "settings.cua.trustModeGroup": "信任模式",
+    "settings.cua.trustMode": "信任 CUA 工具",
+    "settings.cua.trustModeDesc":
+      "关闭时所有 cua_* 工具每次调用都会弹审批（默认）。开启后不再逐次弹窗，但 CUA 仍受后端白名单与审计日志约束。",
+    "settings.cua.trustModeHint":
+      "CUA 会接管鼠标键盘，启用后相当于把控制权交给 Agent；截图等敏感操作也会被捕获。建议日常保持关闭，仅在批量自动化场景下临时开启。",
+    "settings.cua.sandboxOfflineBanner":
+      "当前命令安全模式是 sandboxOffline（断网沙箱）。CUA 工具已全部禁用，避免 CUA 子进程绕过强制断网。切换命令安全模式后可重新启用。",
+    "settings.cua.enableDescSandboxOffline":
+      "当前命令安全模式是 sandboxOffline；CUA 已禁用，无法开启。",
     "settings.cua.audit": "审计日志",
     "settings.cua.auditLimit": "审计日志上限",
     "settings.cua.auditLimitDesc": "内存中保留最近 N 条 CUA 操作（0 = 关闭）。",
@@ -277,6 +286,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.saving": "正在同步 CUA 配置…",
     "settings.cua.errors.fetch": "无法读取 CUA 状态",
     "settings.cua.errors.save": "保存 CUA 配置失败",
+    "cua.errors.sandboxOffline":
+      "当前命令安全模式是 sandboxOffline，CUA 工具已全部禁用。请把命令安全模式切换为 ask / auto / sandbox 后再使用 CUA。",
     // CUA-100: driver installer (zh-CN)
     "cua.errors.installer.networkUnavailable":
       "CUA 驱动安装器无法连接网络：{detail}。请检查网络后重试。",
@@ -598,17 +609,27 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.platformDesc":
       "Selected at build time by the Rust target (macOS / Windows / Linux).",
     "settings.cua.platformNotes.macos.accessibility":
-      "Accessibility — System Events drives mouse / keyboard",
+      "Accessibility — CuaDriver.app drives mouse / keyboard via the AX API",
     "settings.cua.platformNotes.macos.screenRecording":
-      "Screen Recording — screencapture for screenshots",
+      "Screen Recording — CuaDriver.app captures screenshots",
     "settings.cua.platformNotes.macos.dragAndDrop":
-      "Drag operations require `cliclick` (brew install cliclick)",
+      "Drag is built into cua-driver; no third-party tool required",
     "settings.cua.platformNotes.unsupported":
       "Driver is not implemented yet; every CUA operation will fail when enabled",
     "settings.cua.allowedOwners": "Allowed target apps",
     "settings.cua.allowedOwnersDesc":
       "Allowlist: only these owner (app) names are allowed to receive typed / focused / clicked input. Empty = no restriction. Separate multiple owners with commas or newlines.",
     "settings.cua.allowedOwnersHint": "e.g. Finder, Safari, Terminal",
+    "settings.cua.trustModeGroup": "Trust mode",
+    "settings.cua.trustMode": "Trust CUA tools",
+    "settings.cua.trustModeDesc":
+      "Off (default): every cua_* tool call prompts for approval. On: prompts are skipped, but the backend allowlist and audit log still apply.",
+    "settings.cua.trustModeHint":
+      "CUA takes over the mouse and keyboard; screenshots are also captured. Leave this off by default and only enable it for short batch automation runs.",
+    "settings.cua.sandboxOfflineBanner":
+      "The current command safety mode is sandboxOffline. All CUA tools are disabled so the cua-driver subprocess cannot bypass the offline sandbox. Switch the command safety mode to re-enable CUA.",
+    "settings.cua.enableDescSandboxOffline":
+      "The current command safety mode is sandboxOffline; CUA is disabled and cannot be turned on here.",
     "settings.cua.audit": "Audit log",
     "settings.cua.auditLimit": "Audit log limit",
     "settings.cua.auditLimitDesc": "Keep the most recent N CUA operations in memory (0 = disable).",
@@ -618,6 +639,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.cua.saving": "Syncing CUA config…",
     "settings.cua.errors.fetch": "Failed to read CUA status",
     "settings.cua.errors.save": "Failed to save CUA config",
+    "cua.errors.sandboxOffline":
+      "CUA tools are disabled while the command safety mode is sandboxOffline. Switch the command safety mode to ask / auto / sandbox to use CUA.",
     // CUA-100: driver installer (en-US)
     "cua.errors.installer.networkUnavailable":
       "CUA driver installer could not reach the network: {detail}. Check your connection and retry.",

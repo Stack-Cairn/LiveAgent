@@ -52,6 +52,17 @@ impl CuaError {
         )
     }
 
+    /// 当前命令安全模式是 sandboxOffline：CUA 工具一律拒绝，避免
+    /// 通过 cua-driver 突破 sandbox 强制断网（CUA-reviewer 要求）。
+    pub fn sandbox_offline() -> Self {
+        Self::new(
+            "cua.errors.sandboxOffline",
+            "CUA tools are disabled while the command safety mode is sandboxOffline. \
+             CUA would bypass the offline sandbox by spawning a separate network-capable \
+             process. Switch the command safety mode to ask / auto / sandbox to use CUA.",
+        )
+    }
+
     /// 目标 owner 不在白名单。
     pub fn denied_by_allowlist(target: &str, allowed: &[String]) -> Self {
         Self::with_params(
@@ -66,7 +77,11 @@ impl CuaError {
         )
     }
 
-    /// 当前 OS 尚未实现 CUA 驱动。
+    /// 当前 OS 尚未实现 CUA 驱动。`platform` 是 OS 标签如 "macos"。
+    /// 历史上用于自研 `MacOsDriver` / `UnsupportedDriver` 的 stub；
+    /// cua-driver 跨平台后这条路径只会在子进程 spawn 失败时由
+    /// `cua_client` 兜底翻出来。
+    #[allow(dead_code)]
     pub fn unsupported_platform(os: &str) -> Self {
         Self::with_params(
             "cua.errors.unsupportedPlatform",
@@ -131,6 +146,7 @@ impl CuaError {
     }
 
     /// 脚本签名校验失败（占位；目前 install 脚本未签名，留接口备用）。
+    #[allow(dead_code)]
     pub fn installer_signature_invalid(detail: &str) -> Self {
         Self::with_params(
             "cua.errors.installer.signatureInvalid",

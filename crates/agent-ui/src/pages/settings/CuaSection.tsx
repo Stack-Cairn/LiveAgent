@@ -13,6 +13,9 @@ export type CuaSettings = {
   enabled: boolean;
   allowedOwners: string[];
   auditLogLimit: number;
+  /** 「信任模式」开关：开启后 `group:cua` 工具在前端不再弹审批
+   * （CUA-reviewer 要求：默认逐次审批）。 */
+  trustMode: boolean;
 };
 
 export type CuaAuditEntry = {
@@ -28,7 +31,12 @@ export type CuaAuditEntry = {
 export type CuaStatus = {
   config: CuaSettings;
   platform: string;
+  /** cua-driver 是否可用（installed + daemon running）。与 config.enabled
+   * 独立——开关在前端 UI / backend CuaStore，driver 在 installer 路径。 */
   available: boolean;
+  /** 后端 CuaRuntimeConfig.sandboxOffline 镜像。当前命令安全模式是
+   * sandboxOffline 时为 true；UI 据此展示离线指示器与禁用状态。 */
+  sandboxOffline?: boolean;
   recent: CuaAuditEntry[];
 };
 
@@ -189,6 +197,15 @@ export function CuaSection(props: CuaSectionProps) {
     [settings, persist, setSettings],
   );
 
+  const handleTrustModeToggle = useCallback(
+    (value: boolean) => {
+      const next: CuaSettings = { ...settings, trustMode: value };
+      setSettings(() => next);
+      void persist(next);
+    },
+    [settings, persist, setSettings],
+  );
+
   const handleOwnersCommit = useCallback(() => {
     const next: CuaSettings = {
       ...settings,
@@ -206,24 +223,37 @@ export function CuaSection(props: CuaSectionProps) {
 
   const auditCount = status?.recent.length ?? 0;
   const previewEntries = useMemo(() => (status?.recent ?? []).slice(-10).reverse(), [status]);
+  const sandboxOffline = status?.sandboxOffline === true;
 
   return (
     <div className="space-y-6" data-testid="cua-section">
+      {sandboxOffline ? (
+        <div
+          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200"
+          data-testid="cua-sandbox-offline-banner"
+          role="status"
+        >
+          {t("settings.cua.sandboxOfflineBanner")}
+        </div>
+      ) : null}
       <SettingsGroup title={t("settings.cua.title")}>
         <SettingsRow
           title={t("settings.cua.enable")}
           description={
-            platformNote.supported
-              ? t("settings.cua.enableDesc")
-              : t("settings.cua.enableDescUnsupported")
+            sandboxOffline
+              ? t("settings.cua.enableDescSandboxOffline")
+              : platformNote.supported
+                ? t("settings.cua.enableDesc")
+                : t("settings.cua.enableDescUnsupported")
           }
           control={
             <AgentActivationSwitch
-              checked={settings.enabled}
+              checked={settings.enabled && !sandboxOffline}
               onToggle={() => handleEnabledToggle(!settings.enabled)}
               title={t("settings.cua.enable")}
               data-testid="cua-enable-switch"
               data-cua-enabled={settings.enabled ? "true" : "false"}
+              disabled={sandboxOffline}
             />
           }
         />
@@ -249,6 +279,27 @@ export function CuaSection(props: CuaSectionProps) {
               </li>
             ))}
           </ul>
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.cua.trustModeGroup")}>
+        <SettingsRow
+          title={t("settings.cua.trustMode")}
+          description={t("settings.cua.trustModeDesc")}
+          control={
+            <AgentActivationSwitch
+              checked={settings.trustMode}
+              onToggle={() => handleTrustModeToggle(!settings.trustMode)}
+              title={t("settings.cua.trustMode")}
+              data-testid="cua-trust-mode-switch"
+              data-cua-trust-mode={settings.trustMode ? "true" : "false"}
+            />
+          }
+        />
+        <div className="px-5 pb-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("settings.cua.trustModeHint")}
+          </p>
         </div>
       </SettingsGroup>
 

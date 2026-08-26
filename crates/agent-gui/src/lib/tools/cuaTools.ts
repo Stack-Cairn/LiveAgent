@@ -272,7 +272,7 @@ export function createCuaTools(params?: { getLocale?: () => Locale }): BuiltinTo
     },
     {
       name: "cua_drag",
-      description: "[CUA] 拖拽（macOS 上需要 `brew install cliclick`）。从 (x1, y1) 到 (x2, y2)。",
+      description: "[CUA] 拖拽（cua-driver 内置支持，无需第三方工具）。从 (x1, y1) 到 (x2, y2)。",
       parameters: normalizeToolParametersSchema(
         {
           type: "object",

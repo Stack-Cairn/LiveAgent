@@ -1653,7 +1653,8 @@ export function normalizeCuaSettings(input: unknown): CuaSettings {
     typeof obj.auditLogLimit === "number" && Number.isFinite(obj.auditLogLimit)
       ? Math.max(0, Math.min(1000, Math.floor(obj.auditLogLimit)))
       : 100;
-  return { enabled, allowedOwners, auditLogLimit };
+  const trustMode = obj.trustMode === true;
+  return { enabled, allowedOwners, auditLogLimit, trustMode };
 }
 
 export function updateSystem(prev: AppSettings, patch: Partial<SystemSettings>): AppSettings {

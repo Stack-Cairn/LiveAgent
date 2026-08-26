@@ -1198,13 +1198,23 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cua.platformNotes.macos.screenRecording":
     "LiveAgent needs the Screen Recording permission to capture screenshots.",
   "settings.cua.platformNotes.macos.dragAndDrop":
-    "Drag-and-drop requires `cliclick` installed first (`brew install cliclick`).",
+    "Drag-and-drop is built into cua-driver; no third-party tool is required.",
   "settings.cua.platformNotes.unsupported":
     "Driver not implemented; all CUA operations will fail when enabled",
   "settings.cua.allowedOwners": "Allowed target apps",
   "settings.cua.allowedOwnersDesc":
     "When non-empty, only listed owner names are allowed for focus / input / click. Screenshots and window listing bypass this list.",
   "settings.cua.allowedOwnersHint": "e.g. Finder, Safari, Terminal",
+  "settings.cua.trustModeGroup": "Trust mode",
+  "settings.cua.trustMode": "Trust CUA tools",
+  "settings.cua.trustModeDesc":
+    "Off (default): every cua_* tool call prompts for approval. On: prompts are skipped, but the backend allowlist and audit log still apply.",
+  "settings.cua.trustModeHint":
+    "CUA takes over the mouse and keyboard; screenshots are also captured. Leave this off by default and only enable it for short batch automation runs.",
+  "settings.cua.sandboxOfflineBanner":
+    "The current command safety mode is sandboxOffline. All CUA tools are disabled so the cua-driver subprocess cannot bypass the offline sandbox. Switch the command safety mode to re-enable CUA.",
+  "settings.cua.enableDescSandboxOffline":
+    "The current command safety mode is sandboxOffline; CUA is disabled and cannot be turned on here.",
   "settings.cua.audit": "Audit log",
   "settings.cua.auditLimit": "Audit log limit",
   "settings.cua.auditLimitDesc": "Keep the most recent N CUA operations in memory (0 = disable).",
@@ -1225,6 +1235,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA operation was not executed: {detail}",
   "cua.errors.io": "CUA subprocess IO error: {detail}",
   "cua.errors.unknown": "unknown reason",
+  "cua.errors.sandboxOffline":
+    "CUA tools are disabled while the command safety mode is sandboxOffline. Switch the command safety mode to ask / auto / sandbox to use CUA.",
   // CUA-100 series: driver installer errors
   "cua.errors.installer.networkUnavailable":
     "CUA driver installer could not reach the network: {detail}. Check your connection and retry.",

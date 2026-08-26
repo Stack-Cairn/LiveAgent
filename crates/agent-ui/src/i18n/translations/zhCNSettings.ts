@@ -1147,6 +1147,16 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cua.allowedOwnersDesc":
     "非空时生效，名单内的 owner 名才允许 focus / 输入 / 点击。截屏与窗口枚举不受名单限制。",
   "settings.cua.allowedOwnersHint": "例：Finder, Safari, Terminal",
+  "settings.cua.trustModeGroup": "信任模式",
+  "settings.cua.trustMode": "信任 CUA 工具",
+  "settings.cua.trustModeDesc":
+    "关闭时所有 cua_* 工具每次调用都会弹审批（默认）。开启后不再逐次弹窗，但 CUA 仍受后端白名单与审计日志约束。",
+  "settings.cua.trustModeHint":
+    "CUA 会接管鼠标键盘，启用后相当于把控制权交给 Agent；截图等敏感操作也会被捕获。建议日常保持关闭，仅在批量自动化场景下临时开启。",
+  "settings.cua.sandboxOfflineBanner":
+    "当前命令安全模式是 sandboxOffline（断网沙箱）。CUA 工具已全部禁用，避免 CUA 子进程绕过强制断网。切换命令安全模式后可重新启用。",
+  "settings.cua.enableDescSandboxOffline":
+    "当前命令安全模式是 sandboxOffline；CUA 已禁用，无法开启。",
   "settings.cua.audit": "审计日志",
   "settings.cua.auditLimit": "审计日志上限",
   "settings.cua.auditLimitDesc": "内存中保留最近 N 条 CUA 操作（0 = 关闭）。",
@@ -1165,6 +1175,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA 操作未执行：{detail}",
   "cua.errors.io": "CUA 子进程 IO 错误：{detail}",
   "cua.errors.unknown": "未知原因",
+  "cua.errors.sandboxOffline":
+    "当前命令安全模式是 sandboxOffline，CUA 工具已全部禁用。请把命令安全模式切换为 ask / auto / sandbox 后再使用 CUA。",
   // CUA-100 系列：driver 安装器错误
   "cua.errors.installer.networkUnavailable":
     "CUA 驱动安装器无法连接网络：{detail}。请检查网络后重试。",

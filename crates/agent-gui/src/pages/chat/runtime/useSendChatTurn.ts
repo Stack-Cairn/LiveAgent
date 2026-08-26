@@ -1720,6 +1720,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
               }
             },
             getCuaEnabled: () => settings.cua?.enabled === true,
+            getCuaTrustMode: () => settings.cua?.trustMode === true,
             getLocale: () => settings.locale,
             onTunnelsChanged: (change) => {
               if (change.action === "create") {

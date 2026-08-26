@@ -560,11 +560,11 @@ export default function App() {
       }
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
-        invoke<{ wk_webview_found: boolean; responder_granted: boolean }>(
-          "cua_refresh_a11y",
-        ).catch((error: unknown) => {
-          console.warn("cua_refresh_a11y failed", error);
-        });
+        invoke<{ wk_webview_found: boolean; responder_granted: boolean }>("cua_refresh_a11y").catch(
+          (error: unknown) => {
+            console.warn("cua_refresh_a11y failed", error);
+          },
+        );
       }, 50);
     };
     const onVisibility = () => {

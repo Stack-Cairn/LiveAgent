@@ -600,6 +600,10 @@ export type CuaSettings = {
   allowedOwners: string[];
   /** 审计日志上限（最近 N 条），默认 100。0 视作关闭。 */
   auditLogLimit: number;
+  /** 「信任模式」开关：开启后 `group:cua` 工具在前端不再弹审批（用户
+   * 自担风险）。关闭时由 `toolPolicy.ts` 走默认 `ask`（CUA-reviewer
+   * 要求：默认逐次审批，显式 trust 才免审）。 */
+  trustMode: boolean;
 };
 
 export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {

@@ -62,6 +62,17 @@ pub struct CuaRuntimeConfig {
     /// 最大审计日志条数（默认 100；<=0 视作关闭）。
     #[serde(default = "default_audit_limit")]
     pub audit_log_limit: usize,
+    /// 「信任模式」开关：开启后 `group:cua` 工具在前端不再弹审批（用户
+    /// 自担风险）。关闭时由 `toolPolicy.ts` 走默认 `ask`。
+    /// CUA-reviewer 要求：默认逐次审批，显式 trust 才免审。
+    #[serde(default)]
+    pub trust_mode: bool,
+    /// 当前命令安全模式是否 sandboxOffline。CUA 进程会绕过 sandbox 边界
+    /// 起子进程，因此 sandboxOffline 下必须强制 deny 全部 `cua_*` 工具。
+    /// 由 Tauri 侧 `cua_set_config` 在写入时按 `system.commandSafetyMode`
+    /// 自动设置；前端仅展示。
+    #[serde(default)]
+    pub sandbox_offline: bool,
 }
 
 fn default_audit_limit() -> usize {
@@ -74,6 +85,8 @@ impl Default for CuaRuntimeConfig {
             enabled: false,
             allowed_owners: Vec::new(),
             audit_log_limit: AUDIT_LOG_MAX,
+            trust_mode: false,
+            sandbox_offline: false,
         }
     }
 }
@@ -99,6 +112,10 @@ pub struct CuaStoreSnapshot {
     pub config: CuaRuntimeConfig,
     pub platform: &'static str,
     pub available: bool,
+    /// 与 `config.sandboxOffline` 同字段；显式平铺便于 UI 渲染沙箱
+    /// 离线指示器时不必走整份 config（CUA-reviewer 要求）。
+    #[serde(default)]
+    pub sandbox_offline: bool,
     pub recent: Vec<CuaAuditEntry>,
 }
 
@@ -129,6 +146,7 @@ impl CuaStore {
             config: inner.config.clone(),
             platform: platform_label_const(),
             available: inner.config.enabled,
+            sandbox_offline: inner.config.sandbox_offline,
             recent: inner.recent.clone(),
         }
     }
@@ -138,15 +156,29 @@ impl CuaStore {
         inner.config = config;
     }
 
+    /// 把 store 内的 sandbox_offline 同步到传入值。`cua_status` 每次
+    /// 取快照前调用，保证 UI 看到的是当前命令安全模式的最新真值，
+    /// 而不是上一次 `cua_set_config` 时写入的陈旧值。
+    pub fn refresh_sandbox_offline(&self, sandbox_offline: bool) {
+        let mut inner = self.inner.lock().expect("cua store poisoned");
+        inner.config.sandbox_offline = sandbox_offline;
+    }
+
     /// 命令执行前调用：返回 ok 或对应的结构化拒绝原因。
-    /// - 未启用 → `CuaError::disabled()`
-    /// - 有白名单且 owner 不在表里 → `CuaError::denied_by_allowlist(...)`
+    /// 优先级（由粗到细，任一命中即返回）：
+    /// 1. 命令安全模式 = sandboxOffline → `CuaError::sandbox_offline()`
+    ///    （防止 CUA 子进程突破 sandbox 强制断网）。
+    /// 2. 未启用 → `CuaError::disabled()`
+    /// 3. 有白名单且 owner 不在表里 → `CuaError::denied_by_allowlist(...)`
     pub fn enforce(
         &self,
         op: &str,
         owner: Option<&str>,
     ) -> Result<(), CuaError> {
         let inner = self.inner.lock().expect("cua store poisoned");
+        if inner.config.sandbox_offline {
+            return Err(CuaError::sandbox_offline());
+        }
         if !inner.config.enabled {
             return Err(CuaError::disabled());
         }
@@ -200,6 +232,8 @@ mod tests {
             enabled,
             allowed_owners: Vec::new(),
             audit_log_limit,
+            trust_mode: false,
+            sandbox_offline: false,
         }
     }
 
@@ -298,5 +332,35 @@ mod tests {
             Some("Safari".into())
         );
         assert!(!err.message.contains('你'));
+    }
+
+    /// CUA-reviewer 安全门控：命令安全模式 = sandboxOffline 时，
+    /// 即使 enabled=true + 白名单匹配，也必须强制 deny 全部 cua_*，
+    /// 防止 CUA 子进程突破 sandbox 的强制断网。
+    #[test]
+    fn enforce_denies_when_sandbox_offline() {
+        let mut cfg = fake_config(100, true);
+        cfg.allowed_owners = vec!["Finder".into()];
+        cfg.sandbox_offline = true;
+        let store = CuaStore::new(cfg);
+        let err = store
+            .enforce("click", Some("Finder"))
+            .expect_err("must reject under sandboxOffline");
+        assert_eq!(err.kind, "cua.errors.sandboxOffline");
+        // 即使 enabled 关闭也应该 deny，验证优先级：sandboxOffline > disabled。
+        let mut cfg2 = fake_config(100, false);
+        cfg2.sandbox_offline = true;
+        let store2 = CuaStore::new(cfg2);
+        assert_eq!(
+            store2.enforce("list_windows", None).unwrap_err().kind,
+            "cua.errors.sandboxOffline"
+        );
+        // 关掉 sandboxOffline 后回到 enabled=true 走通。
+        let mut cfg3 = fake_config(100, true);
+        cfg3.allowed_owners = vec!["Finder".into()];
+        let store3 = CuaStore::new(cfg3);
+        store3
+            .enforce("click", Some("Finder"))
+            .expect("must allow when sandboxOffline=false");
     }
 }
