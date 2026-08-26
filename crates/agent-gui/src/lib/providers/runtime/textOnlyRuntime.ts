@@ -17,7 +17,7 @@ import {
 import { providerSupportsNativeWebSearch } from "../nativeWebSearch";
 import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
-import { createStreamingTextReconciler } from "./messageUtils";
+import { createStreamingTextReconciler, sanitizeAssistantMessage } from "./messageUtils";
 import { createModelFromConfig } from "./modelFactory";
 import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
@@ -469,7 +469,7 @@ export async function streamAssistantMessage(params: {
           }
         }
 
-        let final = await s.result();
+        let final = sanitizeAssistantMessage(await s.result());
         if (final.stopReason === "error" || final.stopReason === "aborted") {
           throw new Error(
             normalizeErrorMessage(

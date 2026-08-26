@@ -37,24 +37,16 @@ export default defineConfig(() => ({
     outDir: "dist",
     emptyOutDir: true,
     // Monaco language workers are emitted as indivisible lazy assets (largest
-    // is the TypeScript worker at ~6.6 MB). Application modules are still held
-    // to the 450 KB code-splitting group below.
+    // is the TypeScript worker at ~6.6 MB). Bump the warning limit so those
+    // known-large chunks don't drown out real regressions in the console.
     chunkSizeWarningLimit: 7_000,
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          minSize: 20_000,
-          maxSize: 450_000,
-          groups: [
-            {
-              name: "liveagent-webui",
-              test: /\/crates\/(?:agent-ui|agent-gateway\/web)\/src\//,
-              entriesAware: true,
-            },
-          ],
-        },
-      },
-    },
+    // Do not restore `rolldownOptions.output.codeSplitting` with a
+    // `liveagent-webui` group / `maxSize: 450_000`. That size-based split cut
+    // `GatewayTerminalStreamHandle extends TerminalStreamBuffer` across chunks
+    // and created a circular ESM cycle, crashing load with
+    // "Class extends value undefined is not a constructor or null".
+    // `codeSplitting: false` (used by the GUI in #613) inlines every overlay
+    // into a ~23 MB main bundle, which is fine for Tauri but not for WebUI.
   },
   server: {
     proxy: {

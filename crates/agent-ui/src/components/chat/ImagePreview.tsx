@@ -191,8 +191,8 @@ function ImagePreviewToolButton(props: {
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-35",
-        pressed && "bg-white/15 text-white",
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        pressed && "bg-muted text-foreground",
       )}
       title={label}
       aria-label={label}
@@ -690,7 +690,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
       <DialogContent
         ref={dialogRef}
         initialFocus={dialogRef}
-        className="chat-image-preview-dialog flex h-[min(78vh,760px)] w-[min(82vw,1120px)] max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-white/15 bg-black/90 p-0 text-white"
+        className="chat-image-preview-dialog flex h-[min(78vh,760px)] w-[min(82vw,1120px)] max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border bg-background p-0 text-foreground"
         onKeyDown={(event) => {
           if (
             (event.ctrlKey || event.metaKey) &&
@@ -709,7 +709,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
         }}
       >
         <DialogTitle className="sr-only">{t("chat.imageViewer.viewer")}</DialogTitle>
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-black/30 px-2">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/90 px-2">
           <div className="flex min-w-0 items-center gap-1">
             {imageCount > 1 ? (
               <>
@@ -727,7 +727,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 >
                   <ChevronRight className="h-4 w-4" />
                 </ImagePreviewToolButton>
-                <span className="ml-1 shrink-0 text-[11px] tabular-nums text-white/65">
+                <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">
                   {clampedIndex + 1} / {imageCount}
                 </span>
               </>
@@ -741,7 +741,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
             >
               <Minus className="h-4 w-4" />
             </ImagePreviewToolButton>
-            <span className="w-11 text-center text-[11px] tabular-nums text-white/65">
+            <span className="w-11 text-center text-[11px] tabular-nums text-muted-foreground">
               {Math.round(viewerState.scale * 100)}%
             </span>
             <ImagePreviewToolButton
@@ -815,7 +815,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </ImagePreviewToolButton>
             <DialogClose
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={closeLabel}
               aria-label={closeLabel}
             >
@@ -828,7 +828,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           role="application"
           aria-label={t("chat.imageViewer.viewer")}
           className={cn(
-            "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
+            "relative min-h-0 flex-1 touch-none select-none overflow-hidden bg-muted/25",
             isDragging ? "cursor-grabbing" : canPan ? "cursor-grab" : "cursor-default",
           )}
           onWheel={(event) => {
@@ -931,7 +931,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           {actionError ? (
             <div
               role="alert"
-              className="absolute left-3 top-3 z-10 max-w-[min(28rem,calc(100%-1.5rem))] rounded-md border border-red-300/30 bg-red-950/85 px-3 py-2 text-xs text-red-100 shadow-lg"
+              className="absolute left-3 top-3 z-10 max-w-[min(28rem,calc(100%-1.5rem))] rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur"
             >
               {actionError}
             </div>
@@ -939,13 +939,13 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           {showInfo ? (
             <aside
               aria-label={t("chat.imageViewer.infoPanel")}
-              className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-white/15 bg-black/80 p-3 text-xs text-white shadow-xl backdrop-blur"
+              className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-border bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur"
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-sm font-semibold">{t("chat.imageViewer.infoPanel")}</div>
                 <button
                   type="button"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/65 hover:bg-white/10 hover:text-white"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   title={closeLabel}
                   aria-label={closeLabel}
                   onClick={() => setShowInfo(false)}
@@ -953,21 +953,21 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-white/60">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-muted-foreground">
                 <dt>{t("chat.imageViewer.fileName")}</dt>
                 <dd
-                  className="truncate text-right text-white"
+                  className="truncate text-right text-foreground"
                   title={getImagePreviewDisplayName(slide)}
                 >
                   {getImagePreviewDisplayName(slide)}
                 </dd>
                 <dt>{t("chat.imageViewer.dimensions")}</dt>
-                <dd className="text-right text-white">{formatDimensions(naturalSize)}</dd>
+                <dd className="text-right text-foreground">{formatDimensions(naturalSize)}</dd>
                 <dt>{t("chat.imageViewer.fileSize")}</dt>
-                <dd className="text-right text-white">{formatBytes(slide.sizeBytes)}</dd>
+                <dd className="text-right text-foreground">{formatBytes(slide.sizeBytes)}</dd>
                 <dt>{t("chat.imageViewer.fileType")}</dt>
                 <dd
-                  className="truncate text-right text-white"
+                  className="truncate text-right text-foreground"
                   title={getImagePreviewMimeType(slide)}
                 >
                   {getImagePreviewMimeType(slide)}
@@ -976,14 +976,14 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   <>
                     <dt>{t("chat.imageViewer.absolutePath")}</dt>
                     <dd
-                      className="truncate text-right text-white"
+                      className="truncate text-right text-foreground"
                       title={verifiedAttachment.absolutePath}
                     >
                       {verifiedAttachment.absolutePath}
                     </dd>
                     <dt>{t("chat.imageViewer.relativePath")}</dt>
                     <dd
-                      className="truncate text-right text-white"
+                      className="truncate text-right text-foreground"
                       title={verifiedAttachment.relativePath}
                     >
                       {verifiedAttachment.relativePath}
