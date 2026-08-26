@@ -13,6 +13,38 @@ type SettingsShellProps<Context> = {
   hiddenSections?: readonly string[];
 };
 
+// CUA-036 / CUA-043: the inner `.settings-section-enter` /
+// `.settings-section-title-enter` keyframe animations are paused by
+// WebKit/Chromium while the document is hidden (background launch, minimized
+// window). CUA-033/034 only cover the outer overlay container; without this
+// fallback the inner section body stays at the `from` state (opacity:0,
+// translateY(14px) scale(0.985)) and the entire settings page reads as
+// blank. Mirrors the LEAVE_FALLBACK_MS shape: subscribe to visibilitychange
+// so the override clears the moment the window becomes visible again.
+//
+// CUA-043: `document.hidden` and `document.visibilityState` are supposed to
+// stay in sync, but Tauri/WKWebView's background-launch state can leave
+// them out of sync (hidden=true, visibilityState="visible"). Treat either
+// signal as hidden so we still suspend the keyframe animation and surface
+// the section body via the data-anim-suspended + inline style fallback.
+function isDocumentHidden() {
+  if (typeof document === "undefined") return false;
+  return document.hidden || document.visibilityState === "hidden";
+}
+
+function useIsDocumentHidden() {
+  const [hidden, setHidden] = useState(isDocumentHidden);
+  useEffect(() => {
+    const sync = () => setHidden(isDocumentHidden());
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+  return hidden;
+}
+
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {
     case "saving":
@@ -49,6 +81,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
   const [navQuery, setNavQuery] = useState("");
+  const isDocumentHidden = useIsDocumentHidden();
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
@@ -156,6 +189,9 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                         key={definition.id}
                         type="button"
                         onClick={() => setSection(definition.id)}
+                        data-testid={`settings-nav-${definition.id}`}
+                        data-settings-nav-id={definition.id}
+                        data-active={active ? "true" : "false"}
                         className={cn(
                           "settings-nav-item group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-150",
                           active
@@ -210,6 +246,12 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               <div
                 key={activeSection.id}
                 className="settings-section-title-enter text-[28px] font-semibold tracking-tight"
+                data-anim-suspended={isDocumentHidden ? "true" : undefined}
+                style={
+                  isDocumentHidden
+                    ? { animation: "none", opacity: 1, transform: "none" }
+                    : undefined
+                }
               >
                 {t(activeSection.labelKey)}
               </div>
@@ -231,6 +273,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               `settings-content-${activeSection.id}`,
               fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
             )}
+            data-anim-suspended={isDocumentHidden ? "true" : undefined}
+            style={
+              isDocumentHidden ? { animation: "none", opacity: 1, transform: "none" } : undefined
+            }
           >
             <div
               className={cn(
