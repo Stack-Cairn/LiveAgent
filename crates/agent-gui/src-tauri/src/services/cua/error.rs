@@ -122,6 +122,24 @@ impl CuaError {
         )
     }
 
+    /// 截屏不可用：CUA 工具能跑通协议但 `get_desktop_state` 返回全黑
+    /// 帧（cua-driver 没有在 CuaDriver.app bundle 内启动 → TCC Screen
+    /// Recording attribution 失效；或权限被吊销）。Agent 拿到全黑图
+    /// 对决策毫无意义，所以由后端在 health_report.bundle_identity /
+    /// 全黑帧检测触发时直接拒（CUA-051）。
+    pub fn screen_capture_unavailable(detail: &str) -> Self {
+        Self::with_params(
+            "cua.errors.screenCaptureUnavailable",
+            format!(
+                "CUA screen capture is unavailable: {detail}. \
+                 Launch cua-driver inside CuaDriver.app (so TCC Screen Recording \
+                 attributes to com.trycua.driver) or re-grant Screen Recording \
+                 for CuaDriver in System Settings → Privacy & Security, then retry."
+            ),
+            serde_json::json!({ "detail": detail }),
+        )
+    }
+
     // ───────── Installer error variants (CUA-100 series) ─────────
 
     /// 网络不可用 / DNS 失败 / 离线。

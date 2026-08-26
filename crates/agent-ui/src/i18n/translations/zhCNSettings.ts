@@ -1175,6 +1175,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA 操作未执行：{detail}",
   "cua.errors.io": "CUA 子进程 IO 错误：{detail}",
   "cua.errors.unknown": "未知原因",
+  // CUA-051: cua-driver 没有在 CuaDriver.app bundle 内启动导致
+  // ScreenCaptureKit attribution 失效 → get_desktop_state 返回全黑帧。
+  "cua.errors.screenCaptureUnavailable":
+    "CUA 截屏不可用：{detail}。请把 cua-driver 在 CuaDriver.app 内启动（TCC Screen Recording 会归属到 com.trycua.driver），或到「系统设置 → 隐私与安全 → 屏幕录制」重新授权 CuaDriver 后再试。",
   "cua.errors.sandboxOffline":
     "当前命令安全模式是 sandboxOffline，CUA 工具已全部禁用。请把命令安全模式切换为 ask / auto / sandbox 后再使用 CUA。",
   // CUA-100 系列：driver 安装器错误
@@ -1209,7 +1213,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "Linux 桌面端需要以下系统包，请先在终端执行 `sudo apt install {packages}` 后再继续安装。",
   "settings.cua.installer.macosPermissionsTitle": "macOS 权限提示",
   "settings.cua.installer.macosPermissionsBody":
-    "请到「系统设置 → 隐私与安全」授予 CuaDriver：\n· 辅助功能（Accessibility）\n· 屏幕录制（Screen Recording）\n完成后把 LiveAgent 切到前台即可使用。",
+    "请到「系统设置 → 隐私与安全」授予 CuaDriver：\n· 辅助功能（Accessibility）\n· 屏幕录制（Screen Recording）\n完成后把 LiveAgent 切到前台即可使用。\n\n如果 `cua_screenshot` 拿到的画面是全黑，cua-driver 大概率没在 CuaDriver.app bundle 内启动，TCC Screen Recording 没有归属到 com.trycua.driver。建议用 `open -n -g -a CuaDriver --args serve`（启动 daemon）或重新运行安装脚本走 bundle 路径。",
   "settings.cua.installer.macosOpenSettings": "打开系统设置",
   "settings.cua.installer.logLabel": "安装日志",
   "settings.cua.installer.stage.starting": "准备安装…",

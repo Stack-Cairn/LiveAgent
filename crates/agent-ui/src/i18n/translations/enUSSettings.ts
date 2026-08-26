@@ -1235,6 +1235,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "cua.errors.notExecuted": "CUA operation was not executed: {detail}",
   "cua.errors.io": "CUA subprocess IO error: {detail}",
   "cua.errors.unknown": "unknown reason",
+  // CUA-051: cua-driver 没有在 CuaDriver.app bundle 内启动导致
+  // ScreenCaptureKit attribution 失效 → get_desktop_state 返回全黑帧。
+  "cua.errors.screenCaptureUnavailable":
+    "CUA screen capture is unavailable: {detail}. Launch cua-driver inside CuaDriver.app (so TCC Screen Recording attributes to com.trycua.driver), or re-grant Screen Recording for CuaDriver in System Settings → Privacy & Security, then retry.",
   "cua.errors.sandboxOffline":
     "CUA tools are disabled while the command safety mode is sandboxOffline. Switch the command safety mode to ask / auto / sandbox to use CUA.",
   // CUA-100 series: driver installer errors
@@ -1271,7 +1275,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Linux desktop requires these system packages. Run `sudo apt install {packages}` in a terminal before continuing.",
   "settings.cua.installer.macosPermissionsTitle": "macOS permissions",
   "settings.cua.installer.macosPermissionsBody":
-    "Open System Settings → Privacy & Security and grant CuaDriver:\n• Accessibility\n• Screen Recording\nThen bring LiveAgent to the front to use it.",
+    "Open System Settings → Privacy & Security and grant CuaDriver:\n• Accessibility\n• Screen Recording\nThen bring LiveAgent to the front to use it.\n\nIf `cua_screenshot` returns a fully-black frame, cua-driver is likely running outside the CuaDriver.app bundle and TCC Screen Recording is not attributed to com.trycua.driver. Launch cua-driver via `open -n -g -a CuaDriver --args serve` (the daemon) or rerun the installer so the bundle path is used.",
   "settings.cua.installer.macosOpenSettings": "Open System Settings",
   "settings.cua.installer.logLabel": "Install log",
   "settings.cua.installer.stage.starting": "Preparing…",

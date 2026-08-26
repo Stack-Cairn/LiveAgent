@@ -37,6 +37,11 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// 一次 deadline 检查 + child 状态探测。
 const READ_SLICE: Duration = Duration::from_millis(250);
 
+/// `health_report` 的 bundle_identity 缓存有效期。短到能在「用户重新授权 /
+/// 重启 CuaDriver.app」后尽快恢复有效，长到不至于每次截屏都重发一次
+/// health_report（每次 ~200ms；同帧多次调用浪费）。
+const BUNDLE_ATTRIBUTION_CACHE: Duration = Duration::from_secs(60);
+
 /// cua-driver 可执行文件名（与 `installer::find_cua_driver` 同源；
 /// 这里直接 `Command::new` 让 OS 走 PATH，不再做二次候选目录 walk，
 /// 启动期由 installer 把 PATH 准备好）。
@@ -54,6 +59,9 @@ struct Inner {
     child: Option<RunningProcess>,
     /// MCP 请求 id 自增；初始化握手与后续 tools/call 共享同一计数器。
     next_id: AtomicU64,
+    /// `health_report.bundle_identity` 缓存 + 取样时间。`None` 表示
+    /// 还没取过；超时或子进程重启后会重新拉一次（CUA-051）。
+    bundle_attribution: Mutex<Option<(bool, Instant)>>,
 }
 
 /// 拆出 stdio 句柄后剩下的子进程字段。
@@ -72,6 +80,7 @@ impl CuaClient {
             inner: Arc::new(Mutex::new(Inner {
                 child: None,
                 next_id: AtomicU64::new(1),
+                bundle_attribution: Mutex::new(None),
             })),
         }
     }
@@ -207,6 +216,51 @@ impl CuaClient {
                 let _ = proc.child.wait();
             }
         }
+    }
+
+    /// CUA-051：检测 cua-driver 是否带 CFBundleIdentifier 启动。
+    /// `true` 表示 health_report 中 `bundle_identity` 为 pass，可以
+    /// 信任 `get_desktop_state` 返回真实屏幕像素；`false` 表示该路径
+    /// 会返回全黑帧（TCC Screen Recording attribution 失效），调用方
+    /// 应该改走 `zoom`（按窗口寻址，attribution 不依赖 bundle）或直接
+    /// 报 `screen_capture_unavailable`。
+    ///
+    /// 结果缓存 `BUNDLE_ATTRIBUTION_CACHE`（60s），避免每次截屏都发
+    /// health_report 浪费时间。子进程重启 / `shutdown()` 后下次调用
+    /// 会重发——`bundle_attribution` 是与 child 同寿命的字段。
+    pub fn check_bundle_attribution(&self) -> bool {
+        // fast path：缓存有效就直接返回。
+        if let Ok(guard) = self.inner.lock() {
+            if let Ok(attr) = guard.bundle_attribution.lock() {
+                if let Some((ok, at)) = *attr {
+                    if at.elapsed() < BUNDLE_ATTRIBUTION_CACHE {
+                        return ok;
+                    }
+                }
+            }
+        }
+        // slow path：调 health_report 拿 bundle_identity。失败 / 超时
+        // 一律按 fail 处理（保守；宁可错杀不要返回全黑帧）。
+        let parsed = self
+            .call_tool("health_report", json!({}))
+            .ok()
+            .and_then(|v| v.get("checks").and_then(Value::as_array).cloned())
+            .and_then(|checks| {
+                checks
+                    .into_iter()
+                    .find(|c| c.get("name").and_then(Value::as_str) == Some("bundle_identity"))
+            });
+        let ok = parsed
+            .as_ref()
+            .and_then(|c| c.get("status").and_then(Value::as_str))
+            .map(|s| s == "pass")
+            .unwrap_or(false);
+        if let Ok(guard) = self.inner.lock() {
+            if let Ok(mut attr) = guard.bundle_attribution.lock() {
+                *attr = Some((ok, Instant::now()));
+            }
+        }
+        ok
     }
 }
 

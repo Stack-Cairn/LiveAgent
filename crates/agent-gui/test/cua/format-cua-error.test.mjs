@@ -86,6 +86,37 @@ test("formatUnknownCuaError: en-US renders structured error translated", () => {
   assert.ok(out.includes("CUA is not enabled"));
 });
 
+// CUA-051: get_desktop_state 返回全黑帧时后端抛 screenCaptureUnavailable，
+// 前端必须能在 zh-CN / en-US 两种 locale 下都翻译成可读消息 + 正确的占位。
+test("formatCuaError: screenCaptureUnavailable renders in en-US with detail interpolated", () => {
+  const payload = {
+    kind: "cua.errors.screenCaptureUnavailable",
+    message: "fallback",
+    params: { detail: "bundle_identity=fail" },
+  };
+  const out = formatCuaError(payload, t, "en-US");
+  assert.ok(out.includes("bundle_identity=fail"), `expected detail in: ${out}`);
+  assert.ok(
+    out.includes("CuaDriver.app") || out.includes("Screen Recording"),
+    `expected remediation hint in: ${out}`,
+  );
+  assert.ok(!out.includes("{detail}"), `expected placeholder interpolated in: ${out}`);
+});
+
+test("formatCuaError: screenCaptureUnavailable renders in zh-CN with detail interpolated", () => {
+  const payload = {
+    kind: "cua.errors.screenCaptureUnavailable",
+    message: "fallback",
+    params: { detail: "bundle_identity=fail" },
+  };
+  const out = formatCuaError(payload, t, "zh-CN");
+  assert.ok(out.includes("bundle_identity=fail"), `expected detail in: ${out}`);
+  assert.ok(
+    out.includes("CuaDriver.app") || out.includes("屏幕录制") || out.includes("Screen Recording"),
+    `expected remediation hint in: ${out}`,
+  );
+});
+
 test("DEFAULT_LOCALE is one of the supported locales", () => {
   assert.ok(DEFAULT_LOCALE === "en-US" || DEFAULT_LOCALE === "zh-CN");
 });

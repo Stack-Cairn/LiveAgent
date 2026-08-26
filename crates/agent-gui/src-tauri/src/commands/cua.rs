@@ -13,8 +13,10 @@
 
 use base64::Engine;
 use chrono::Utc;
+use image::ImageReader;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::Cursor;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri::State;
@@ -324,7 +326,34 @@ pub fn cua_screenshot(
     // 沙箱遮罩：window_owner 给定时再尝试 `zoom`（cua-driver 内置
     // window owner 寻址）；否则回退到全屏。LiveAgent 自身 / cua-driver
     // helper 的遮罩交给 cua-driver 自身的窗口排除逻辑。
-    let result = if let Some(owner) = window_owner.as_deref().filter(|s| !s.is_empty()) {
+    //
+    // CUA-051：当 window_owner 为空需要走全屏路径前，先确认 cua-driver
+    // 是带 CFBundleIdentifier 启动的（`health_report.bundle_identity`
+    // pass）。裸 bin 启动时 TCC Screen Recording attribution 落到
+    // 临时进程而非 com.trycua.driver，ScreenCaptureKit 会返回合法
+    // 但内容全黑的 PNG——Agent 拿到全黑帧做不了任何决策。bundle 失
+    // 效时直接拒，避免把黑帧当真截图透传。
+    let owner_opt = window_owner
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let needs_full_desktop = owner_opt.is_none();
+    if needs_full_desktop && !client.check_bundle_attribution() {
+        let err = CuaError::screen_capture_unavailable(
+            "cua-driver is not running inside CuaDriver.app bundle \
+             (health_report.bundle_identity=fail); \
+             get_desktop_state would return a fully-black frame",
+        );
+        store.inner().record(CuaAuditEntry {
+            timestamp: started,
+            operation: op.to_string(),
+            ok: false,
+            error: Some(err.clone()),
+            detail: Some(json!({ "windowOwner": window_owner })),
+        });
+        return Err(err);
+    }
+    let result = if let Some(owner) = owner_opt {
         // 走 list_apps → pid+window_id → zoom 路径，给一个 5s 缓存避免
         // 每次截屏都 list_apps。这里偷懒：直接传 owner 字符串到
         // get_desktop_state（不支持）；退化：list_apps 后取第一个匹配
@@ -338,10 +367,8 @@ pub fn cua_screenshot(
                     "x1": 0, "y1": 0, "x2": 0, "y2": 0,
                 }),
             ),
-            Ok(None) => client.call_tool(
-                "get_desktop_state",
-                json!({}),
-            ),
+            // 找不到对应窗口时降级到全屏（仍受 bundle 预检保护）。
+            Ok(None) => client.call_tool("get_desktop_state", json!({})),
             Err(e) => Err(e),
         }
     } else {
@@ -351,6 +378,34 @@ pub fn cua_screenshot(
         Ok(value) => {
             let (bytes, width, height) = extract_screenshot(&value)
                 .ok_or_else(|| CuaError::io("cua-driver screenshot: no image content"))?;
+            // CUA-051 后置防线：即便 health_report 那一关过了，也要兜
+            // 一道「帧内像素统计」。少部分边界情况（Screen Recording
+            // 被吊销但 bundle 仍 ok、屏幕本身黑屏、cua-driver 半瘫）
+            // 仍可能让 get_desktop_state 返回低信息量的图；非黑像素
+            // 数量低于阈值就直接拒，转成 screen_capture_unavailable。
+            if let Some(non_black) = count_non_black_pixels(&bytes) {
+                if non_black < MIN_NON_BLACK_PIXELS {
+                    let err = CuaError::screen_capture_unavailable(&format!(
+                        "cua-driver returned a near-empty screen capture \
+                         ({non_black} non-black pixels); \
+                         TCC Screen Recording attribution is broken or screen is off"
+                    ));
+                    store.inner().record(CuaAuditEntry {
+                        timestamp: started,
+                        operation: op.to_string(),
+                        ok: false,
+                        error: Some(err.clone()),
+                        detail: Some(json!({
+                            "width": width,
+                            "height": height,
+                            "windowOwner": window_owner,
+                            "sizeBytes": bytes.len(),
+                            "nonBlackPixels": non_black,
+                        })),
+                    });
+                    return Err(err);
+                }
+            }
             let base64_png = base64::engine::general_purpose::STANDARD.encode(&bytes);
             store.inner().record(CuaAuditEntry {
                 timestamp: started,
@@ -849,6 +904,39 @@ pub fn cua_driver_install_preview() -> Result<InstallPreview, CuaError> {
     })
 }
 
+// ───────── CUA-051 截屏黑屏兜底 ─────────
+
+/// CUA-051 阈值：1920×1080 = 2,073,600 像素；阈值 1000 ≈ 0.05%。低于
+/// 这值几乎一定是 ScreenCaptureKit attribution 失效（裸 bin 启动）或
+/// 屏幕本身关闭，返回全黑 / 接近全黑帧。低于阈值的「截屏」对 Agent
+/// 决策毫无意义，所以由后端直接拒。
+///
+/// 调高会让一些「真黑屏」（夜间模式 + 空桌面）误报；调低会让全黑帧
+/// 漏过去。1000 是经验值——cua-driver 真截图在最小桌面也会远高于此。
+const MIN_NON_BLACK_PIXELS: u64 = 1000;
+
+/// 把 cua-driver 返回的 PNG / JPEG 字节解码成 RGBA8 数非黑像素数。
+/// `None` 表示解码失败（不是 PNG / JPEG / 文件坏）——caller 应该
+/// 把这种当成 decode error 而不是 black-screen。
+///
+/// 与 PIL.Image(...).getdata() 等价的最小实现：只统计
+/// (R, G, B) != (0, 0, 0) 的像素。alpha < 255 也算黑（透明像素不携带
+/// 信息，对 Agent 来说一样没用）。
+fn count_non_black_pixels(bytes: &[u8]) -> Option<u64> {
+    let mut reader = ImageReader::new(Cursor::new(bytes));
+    reader = reader.with_guessed_format().ok()?;
+    let decoded = reader.decode().ok()?;
+    let rgba = decoded.to_rgba8();
+    let mut count = 0u64;
+    for px in rgba.pixels() {
+        let [r, g, b, a] = px.0;
+        if a > 0 && (r != 0 || g != 0 || b != 0) {
+            count += 1;
+        }
+    }
+    Some(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -925,5 +1013,65 @@ mod tests {
     #[test]
     fn png_dimensions_rejects_non_png() {
         assert_eq!(png_dimensions(b"not a png"), None);
+    }
+
+    #[test]
+    fn screen_capture_unavailable_emits_structured_error() {
+        let err = CuaError::screen_capture_unavailable("bundle_identity=fail");
+        assert_eq!(err.kind, "cua.errors.screenCaptureUnavailable");
+        assert_eq!(
+            err.params.get("detail").and_then(Value::as_str),
+            Some("bundle_identity=fail")
+        );
+        assert!(err.message.contains("CuaDriver.app"));
+        assert!(err.message.contains("Screen Recording"));
+    }
+
+    /// 4×4 全 0 RGB PNG → 0 个非黑像素。
+    #[test]
+    fn count_non_black_pixels_all_black() {
+        let mut out: Vec<u8> = Vec::new();
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([0, 0, 0, 255]))
+            .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        let n = count_non_black_pixels(&out);
+        assert_eq!(n, Some(0));
+    }
+
+    /// 4×4 全 255 RGB PNG → 16 个非黑像素。
+    #[test]
+    fn count_non_black_pixels_all_white() {
+        let mut out: Vec<u8> = Vec::new();
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 255, 255, 255]))
+            .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        let n = count_non_black_pixels(&out);
+        assert_eq!(n, Some(16));
+    }
+
+    /// alpha=0 的像素视为黑（透传不携带信息）。
+    #[test]
+    fn count_non_black_pixels_treats_transparent_as_black() {
+        let mut out: Vec<u8> = Vec::new();
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 255, 255, 0]))
+            .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        let n = count_non_black_pixels(&out);
+        assert_eq!(n, Some(0));
+    }
+
+    #[test]
+    fn count_non_black_pixels_returns_none_on_garbage() {
+        // 不是图片字节流 → 解码失败 → None。
+        assert_eq!(count_non_black_pixels(b"not an image at all"), None);
+    }
+
+    /// 校验 MIN_NON_BLACK_PIXELS 阈值：CUA-051 要求非黑像素低于阈值的
+    /// 截屏被拒。改这个常量会直接影响 cua_screenshot 的语义，所以
+    /// 留个 sanity 测试。
+    #[test]
+    fn min_threshold_is_sane() {
+        assert!(MIN_NON_BLACK_PIXELS >= 100, "threshold too small");
+        assert!(MIN_NON_BLACK_PIXELS <= 100_000, "threshold too large");
     }
 }
