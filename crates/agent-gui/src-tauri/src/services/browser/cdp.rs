@@ -116,6 +116,9 @@ impl CdpConnection {
                 .map(str::to_string);
             let params = value.get("params").cloned().unwrap_or(Value::Null);
             if let Ok(mut waiters) = self.event_waiters.lock() {
+                // 先清掉接收端已放弃（超时/提前返回）的等待者：既防 Vec 泄漏，
+                // 也避免这些僵尸条目被后续同名事件"命中"。
+                waiters.retain(|(_, _, sender)| !sender.is_closed());
                 let mut index = 0;
                 while index < waiters.len() {
                     let matches = waiters[index].0 == method

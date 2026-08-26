@@ -81,6 +81,13 @@ pub(crate) struct LaunchedBrowser {
     pub debug_port: u16,
 }
 
+impl LaunchedBrowser {
+    /// 浏览器主进程 pid（供 BrowserManager 旁路记录，shutdown 兜底 kill 用）。
+    pub(crate) fn child_pid(&self) -> u32 {
+        self.child.id()
+    }
+}
+
 impl Drop for LaunchedBrowser {
     fn drop(&mut self) {
         kill_child_process_tree_best_effort(&mut self.child);

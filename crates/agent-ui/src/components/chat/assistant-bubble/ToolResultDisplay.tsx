@@ -11,6 +11,7 @@ import {
 } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import {
+  type BrowserResultDetails,
   type DeleteResultDetails,
   deriveFileToolPreview,
   type EditResultDetails,
@@ -1151,6 +1152,27 @@ export function ToolResultDisplay({
           ))}
         </div>
         {/\S/.test(text) ? <CodePreview text={text} maxChars={3000} /> : null}
+      </div>
+    );
+  }
+
+  // Browser 非截图结果:MetaTags 概览 + 结果正文(Page 行 / eval 输出 / a11y
+  // snapshot)。截图结果在上面的 images 分支渲染(图 + 附带文本)。
+  if (kind === "browser") {
+    const details = result.details as BrowserResultDetails;
+    return (
+      <div className="space-y-2">
+        <ToolSurface>
+          <MetaTags
+            tags={[
+              { label: "action", value: details.action || "unknown" },
+              ...(details.url ? [{ label: "url", value: details.url }] : []),
+              ...(details.title ? [{ label: "title", value: details.title }] : []),
+              ...(details.hasSnapshot ? [{ label: "snapshot", value: "included" }] : []),
+            ]}
+          />
+        </ToolSurface>
+        {/\S/.test(text) ? <CodePreview text={text} maxChars={8000} /> : null}
       </div>
     );
   }

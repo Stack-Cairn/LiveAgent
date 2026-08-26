@@ -11,13 +11,17 @@ use serde_json::{json, Value};
 use super::cdp::CdpConnection;
 use super::snapshot::{render_ax_tree, SnapshotOutcome};
 
-/// snapshot 字符预算：a11y 树控制在 <8k tokens（验收线），按 ~4 chars/token 取 28k。
-const SNAPSHOT_MAX_CHARS: usize = 28_000;
+/// snapshot 预算按 UTF-8 字节数（非字符数）控制：bytes/token 跨文字系统近似
+/// 恒定（ASCII ~1B/char、4 chars/token ≈ 4B/token；CJK ~3B/char、~1.5 chars/token
+/// ≈ 4.5B/token），28k 字节 ≈ 6-7k tokens，稳守 <8k tokens 验收线。若按字符数
+/// 计，CJK 页面会放大到 ~3 倍 tokens 直接超线。
+const SNAPSHOT_MAX_BYTES: usize = 28_000;
 const EVAL_RESULT_MAX_CHARS: usize = 8_000;
 
 pub(crate) struct PageSession {
     connection: Arc<CdpConnection>,
     session_id: String,
+    target_id: String,
     ref_to_backend_node: HashMap<String, i64>,
 }
 
@@ -48,7 +52,7 @@ impl PageSession {
             .call(
                 None,
                 "Target.attachToTarget",
-                json!({ "targetId": target_id, "flatten": true }),
+                json!({ "targetId": target_id.as_str(), "flatten": true }),
                 timeout,
             )
             .await?;
@@ -61,6 +65,7 @@ impl PageSession {
         let session = Self {
             connection,
             session_id,
+            target_id,
             ref_to_backend_node: HashMap::new(),
         };
         for domain in [
@@ -82,6 +87,28 @@ impl PageSession {
 
     pub(crate) fn is_connected(&self) -> bool {
         !self.connection.is_closed()
+    }
+
+    /// 附着的页面 target 是否仍存在。用户只关掉自动化窗口/标签页（browser-level
+    /// WS 不断）或 tab 崩溃时，session 已死但 `is_connected` 仍为真，需以此探测。
+    /// 走 browser-level 命令，不受页面 JS 卡死影响；探测失败一律按已失效处理。
+    pub(crate) async fn target_alive(&self) -> bool {
+        let Ok(targets) = self
+            .connection
+            .call(None, "Target.getTargets", json!({}), Duration::from_secs(3))
+            .await
+        else {
+            return false;
+        };
+        targets
+            .get("targetInfos")
+            .and_then(Value::as_array)
+            .map(|infos| {
+                infos.iter().any(|info| {
+                    info.get("targetId").and_then(Value::as_str) == Some(self.target_id.as_str())
+                })
+            })
+            .unwrap_or(false)
     }
 
     pub(crate) async fn current_url_and_title(&self) -> Result<(String, String), String> {
@@ -120,9 +147,17 @@ impl PageSession {
         } else {
             format!("https://{url}")
         };
-        let load_event = self
-            .connection
-            .wait_event("Page.loadEventFired", Some(&self.session_id));
+        // 只放行 http/https：file:// 可绕过应用文件权限模型读任意本地文件，
+        // chrome://、devtools:// 等特权页面同理，一律拒绝（fail-closed）。
+        let scheme_allowed = {
+            let lower = normalized.trim_start().to_ascii_lowercase();
+            lower.starts_with("https://") || lower.starts_with("http://")
+        };
+        if !scheme_allowed {
+            return Err(format!(
+                "仅支持 http/https URL，拒绝打开 \"{normalized}\"（file://、chrome:// 等本地或特权 scheme 不可用）"
+            ));
+        }
         let result = self
             .call("Page.navigate", json!({ "url": normalized }), timeout)
             .await?;
@@ -131,26 +166,62 @@ impl PageSession {
                 return Err(format!("导航失败：{error_text}"));
             }
         }
-        // load 事件可能已错过（如同页锚点），失败则回退轮询 readyState。
-        if tokio::time::timeout(timeout, load_event).await.is_err() {
-            self.wait_for_ready_state(timeout).await?;
+        // loaderId 精确绑定本次导航：轮询到该 loader 的文档提交且就绪才算完成，
+        // 不依赖 Page.loadEventFired——按 (method, session) 匹配的事件 waiter 会被
+        // 迟到的旧导航 load 事件误触发，且未提交前读 readyState 会读到旧文档。
+        // 同文档导航（锚点等）不产生新 loader（无 loaderId 返回），立即完成。
+        if let Some(loader_id) = result.get("loaderId").and_then(Value::as_str) {
+            let loader_id = loader_id.to_string();
+            self.wait_for_navigation_commit(&loader_id, timeout).await?;
         }
         self.ref_to_backend_node.clear();
         Ok(())
     }
 
+    /// 等待指定 loader 的文档提交（frame 当前 loaderId 与之相符）且 readyState
+    /// 达到 interactive/complete。
+    async fn wait_for_navigation_commit(
+        &self,
+        loader_id: &str,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let started = Instant::now();
+        loop {
+            let frame_tree = self
+                .call("Page.getFrameTree", json!({}), Duration::from_secs(5))
+                .await?;
+            let committed = frame_tree
+                .pointer("/frameTree/frame/loaderId")
+                .and_then(Value::as_str)
+                == Some(loader_id);
+            if committed && self.ready_state_ok().await? {
+                return Ok(());
+            }
+            if started.elapsed() >= timeout {
+                return Err("等待页面加载超时".to_string());
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    async fn ready_state_ok(&self) -> Result<bool, String> {
+        let result = self
+            .call(
+                "Runtime.evaluate",
+                json!({ "expression": "document.readyState", "returnByValue": true }),
+                Duration::from_secs(5),
+            )
+            .await?;
+        Ok(matches!(
+            result.pointer("/result/value").and_then(Value::as_str),
+            Some("interactive") | Some("complete")
+        ))
+    }
+
     async fn wait_for_ready_state(&self, timeout: Duration) -> Result<(), String> {
         let started = Instant::now();
         loop {
-            let result = self
-                .call(
-                    "Runtime.evaluate",
-                    json!({ "expression": "document.readyState", "returnByValue": true }),
-                    Duration::from_secs(5),
-                )
-                .await?;
-            let state = result.pointer("/result/value").and_then(Value::as_str);
-            if matches!(state, Some("interactive") | Some("complete")) {
+            if self.ready_state_ok().await? {
                 return Ok(());
             }
             if started.elapsed() >= timeout {
@@ -171,7 +242,7 @@ impl PageSession {
         let SnapshotOutcome {
             text,
             ref_to_backend_node,
-        } = render_ax_tree(nodes, SNAPSHOT_MAX_CHARS);
+        } = render_ax_tree(nodes, SNAPSHOT_MAX_BYTES);
         self.ref_to_backend_node = ref_to_backend_node;
         Ok(text)
     }
@@ -259,22 +330,38 @@ impl PageSession {
             timeout,
         )
         .await?;
-        self.call("Input.insertText", json!({ "text": text }), timeout)
+        if text.is_empty() {
+            // 空文本 = 清空字段：Input.insertText 传空串是 no-op，改为删除全选内容。
+            self.call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "document.execCommand('delete', false, null)",
+                    "returnByValue": true
+                }),
+                timeout,
+            )
             .await?;
-        if submit {
-            for event_type in ["keyDown", "keyUp"] {
-                self.call(
-                    "Input.dispatchKeyEvent",
-                    json!({
-                        "type": event_type,
-                        "key": "Enter",
-                        "code": "Enter",
-                        "windowsVirtualKeyCode": 13,
-                        "nativeVirtualKeyCode": 13
-                    }),
-                    timeout,
-                )
+        } else {
+            self.call("Input.insertText", json!({ "text": text }), timeout)
                 .await?;
+        }
+        if submit {
+            // keyDown 必须带 text 才会产生 keypress 语义：无 text 时 CDP 按
+            // rawKeyDown 派发，多数表单/搜索框不会触发隐式提交（Puppeteer 对
+            // Enter 同样发 text:"\r"）。keyUp 不带 text。
+            for (event_type, key_text) in [("keyDown", Some("\r")), ("keyUp", None)] {
+                let mut params = json!({
+                    "type": event_type,
+                    "key": "Enter",
+                    "code": "Enter",
+                    "windowsVirtualKeyCode": 13,
+                    "nativeVirtualKeyCode": 13
+                });
+                if let Some(key_text) = key_text {
+                    params["text"] = Value::String(key_text.to_string());
+                    params["unmodifiedText"] = Value::String(key_text.to_string());
+                }
+                self.call("Input.dispatchKeyEvent", params, timeout).await?;
             }
         }
         Ok(())
@@ -311,11 +398,26 @@ impl PageSession {
                 timeout,
             )
             .await?;
-        if let Some(exception) = result.pointer("/exceptionDetails/exception/description") {
-            return Err(format!(
-                "eval 抛出异常：{}",
-                exception.as_str().unwrap_or("unknown")
-            ));
+        // 有 exceptionDetails 即失败。message 依可用性取：Error 有 description；
+        // 抛出原语（throw "..."/Promise.reject(42)）只有 value；再退 text 字段。
+        if let Some(details) = result.get("exceptionDetails") {
+            let message = details
+                .pointer("/exception/description")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    details
+                        .pointer("/exception/value")
+                        .map(|value| value.to_string())
+                })
+                .or_else(|| {
+                    details
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(format!("eval 抛出异常：{message}"));
         }
         let value = result
             .pointer("/result/value")
@@ -389,9 +491,11 @@ impl PageSession {
             timeout,
         )
         .await?;
-        if tokio::time::timeout(timeout, load_event).await.is_err() {
-            self.wait_for_ready_state(timeout).await?;
-        }
+        // load 事件只作快路径信号（同文档回退不产生 load 事件），最多等 3s，
+        // 无论是否等到都以 readyState 复核——事件 waiter 可能被迟到的旧导航
+        // 事件误触发；慢页面由 readyState 轮询在完整 timeout 内兜住。
+        let _ = tokio::time::timeout(timeout.min(Duration::from_secs(3)), load_event).await;
+        self.wait_for_ready_state(timeout).await?;
         self.ref_to_backend_node.clear();
         Ok(())
     }

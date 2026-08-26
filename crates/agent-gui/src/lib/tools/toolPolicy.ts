@@ -35,6 +35,8 @@ export function toolServerPolicyKey(serverId: string): string {
  *    2、3 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
  * 4. browser 组无显式配置时缺省 ask:浏览器可出网、可交互外部站点,
  *    首次使用必须过一次用户审批(用户可 approve_session 放行本会话)。
+ *    该缺省同时声明在 agent-ui builtinToolCatalog 的 defaultPolicy 字段
+ *    (设置页据此展示缺省并决定何时写显式键),两处需保持同步。
  * 5. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
  * 6. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
  */

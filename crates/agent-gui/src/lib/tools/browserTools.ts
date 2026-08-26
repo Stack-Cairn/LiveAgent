@@ -40,7 +40,10 @@ const BROWSER_PARAMETERS = Type.Object({
     Type.Literal("back"),
   ]),
   url: Type.Optional(
-    Type.String({ description: "navigate: target URL. https:// is assumed when no scheme." }),
+    Type.String({
+      description:
+        "navigate: target URL. https:// is assumed when no scheme. Only http/https is allowed (file://, chrome:// etc. are rejected).",
+    }),
   ),
   ref: Type.Optional(
     Type.String({
@@ -48,7 +51,12 @@ const BROWSER_PARAMETERS = Type.Object({
         'click/type: element ref id from the latest snapshot output, e.g. "e12". Take a fresh snapshot after any page change before reusing refs.',
     }),
   ),
-  text: Type.Optional(Type.String({ description: "type: text to enter into the element." })),
+  text: Type.Optional(
+    Type.String({
+      description:
+        "type: text to enter into the element (replaces existing content; empty string clears the field).",
+    }),
+  ),
   submit: Type.Optional(
     Type.Boolean({ description: "type: press Enter after typing (submit forms/searches)." }),
   ),

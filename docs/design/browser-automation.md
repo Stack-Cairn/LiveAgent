@@ -47,37 +47,46 @@ services/browser/
 
 | action | CDP |
 |---|---|
-| navigate | `Page.enable` + `Page.navigate`，等 `Page.loadEventFired` 或 readyState 轮询（超时 30s），返回落地 URL+标题+精简 snapshot |
-| snapshot | `Accessibility.getFullAXTree` → 过滤 ignored/generic 空节点 → 缩进文本 `- role "name" [ref=eN]`；ref→backendDOMNodeId 存会话映射 |
-| click | ref → `DOM.resolveNode`/`DOM.getBoxModel` 取中心坐标 → `Input.dispatchMouseEvent` press+release |
-| type | click 聚焦后 `Input.insertText`；`submit: true` 时补 Enter keyDown/keyUp |
+| navigate | scheme 校验（仅 http/https）→ `Page.navigate`，按响应中的 `loaderId` 轮询 `Page.getFrameTree` 等该 loader 提交且 readyState 就绪（同文档导航无 loaderId，立即完成），返回落地 URL+标题+精简 snapshot |
+| snapshot | `Accessibility.getFullAXTree` → 过滤 ignored/generic 空节点 → 缩进文本 `- role "name" [ref=eN]`；ref→backendDOMNodeId 存会话映射；name 压平换行/转义引号（不可信页面文本不得伪造快照行结构） |
+| click | ref → `DOM.scrollIntoViewIfNeeded`/`DOM.getBoxModel` 取中心坐标 → `Input.dispatchMouseEvent` press+release |
+| type | click 聚焦后全选，`Input.insertText`（空文本＝清空字段）；`submit: true` 时补 Enter（keyDown 带 `text:"\r"` 以产生 keypress 语义，否则表单不会隐式提交） |
 | screenshot | `Page.captureScreenshot`(jpeg q80) → base64 image content block |
-| eval | `Runtime.evaluate`（returnByValue），结果 JSON 截断 ≤8k 字符 |
+| eval | `Runtime.evaluate`（returnByValue + awaitPromise），存在 `exceptionDetails` 即报错（含抛出原语值），结果 JSON 截断 ≤8k 字符 |
 | wait | 等 selector 出现（`Runtime.evaluate` 轮询 `document.querySelector`）或纯延时 |
-| back | `Page.getNavigationHistory` + `Page.navigateToHistoryEntry` |
+| back | `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`，load 事件只作 ≤3s 快路径信号，readyState 轮询兜底 |
 
-navigate/click/type/back/wait 成功后自动附带新 snapshot（可用 `snapshot: false` 关闭），保证模型每步都有页面状态。
+navigate/click/type/back/wait 成功后自动附带新 snapshot（可用 `includeSnapshot: false` 关闭），保证模型每步都有页面状态；附带 snapshot 失败不连累已成功执行的动作（错误降级为结果备注，防模型误判失败而重复副作用）。snapshot 预算按 UTF-8 字节数（28k bytes ≈ 7k tokens，bytes/token 跨文字系统近似恒定，CJK 页面不超验收线）。
 
 ### 2.4 命令层
 
-`commands/integration/browser.rs`：`browser_action(args) -> Result<BrowserActionResponse, String>` 单命令承载全部 action（Rust 侧 dispatch），另加 `browser_status` / `browser_close`。注册进 `app_invoke_handler!`；取消复用 `runtime_cancel` run-id 模式。
+`commands/integration/browser.rs`：`browser_action(args) -> Result<BrowserActionResponse, String>` 单命令承载全部 action（Rust 侧 dispatch），另加 `browser_status` / `browser_close`。注册进 `app_invoke_handler!`。
+
+**当前限制（后续迭代）**：动作执行期间不可取消（TS 侧仅在发起前检查 AbortSignal，未接 `runtime_cancel` run-id 链路），且 `BrowserManager` 单锁贯穿整个动作——执行中的动作会让 `browser_status`/`browser_close` 排队等待（最长一个动作超时 120s）。接取消链路时应一并把生命周期管理与动作执行拆锁。
+
+### 2.5 会话生命周期与失效恢复
+
+- 浏览器进程随 app `ExitRequested` 清理块回收；`shutdown_cleanup` 先 `try_lock` 取出会话触发 kill-tree，拿不到锁（退出瞬间有动作在跑）时按旁路记录的 pid 直接 `signal_process_tree_by_pid` 兜底，避免残留实例锁死 profile。
+- 会话失效自动重建，两类失效都覆盖：WS 断开（用户整个退出浏览器）；WS 未断但页面 target 消失（用户只关自动化窗口/标签、tab 崩溃）——每次动作前经 browser-level `Target.getTargets` 探测 target 存活。
 
 ## 3. TS 侧
 
 - `agent-ui/src/contracts/builtinTools.ts`：`BuiltinToolGroupId` 加 `"browser"`；新增 `BrowserResultDetails` 入 details union。
 - `agent-gui/src/lib/tools/browserTools.ts`：`createBrowserTools({ sandbox })` bundle，typebox schema（action union + url/ref/text/selector/timeoutMs/snapshot 等可选参数），executor 调 `invoke("browser_action")`；`sandbox.enabled && !allowNetwork`（即 sandboxOffline）时 executor 直接拒绝（双保险）。
 - `builtinRegistry.ts`：条件注册——sandboxOffline 下整个 bundle 不注入（模型不可见）。
-- `toolPolicy.ts`：resolver 中 `group:browser` 未显式配置时默认 `ask`（现有 fall-through 是 allow，需专门分支）。
+- `toolPolicy.ts`：resolver 中 `group:browser` 未显式配置时默认 `ask`（现有 fall-through 是 allow，需专门分支）；缺省同时声明在 `builtinToolCatalog` 的 `defaultPolicy` 字段——设置页据此展示真实缺省，且用户显式选 `allow` 时写显式键（而非删键回落到 ask），两处保持同步。
 - `toolExecutionPrompt.ts`：`has("Browser")` 使用指引段 + Available Tools 条目。
 - `builtinToolCatalog.ts` + i18n（en/zh）：设置页可配 policy。
-- 截图渲染：`{type:"image", data, mimeType}` content block，桌面/WebUI 现有链路零改动；proto 无需变更（tool 事件 JSON 直通）。
+- 截图渲染：`{type:"image", data, mimeType}` content block，桌面/WebUI 现有链路零改动；proto 无需变更（tool 事件 JSON 直通）。非截图结果由 `ToolResultDisplay` 的 `kind === "browser"` 分支渲染（MetaTags 概览 + 正文/快照），错误与状态行摘要经共享 `summarizeToolCall` 的 Browser 分支。
 
 ## 4. 安全模型
 
 1. `group:browser` 默认 `ask`——每次 Browser 调用出审批卡（用户可 approve_session）。
 2. `sandboxOffline`：注册期跳过 + executor fail-closed 拒绝，离线语义覆盖浏览器出网。
 3. 独立 profile：不读用户日常浏览器登录态/Cookie。
-4. `eval` 属高危 action，审批摘要中显式标注 action + URL（`summarizeToolCallForApproval` 特判）。
+4. navigate 仅放行 http/https：`file://` 会绕过应用文件权限模型读任意本地文件，`chrome://` 等特权页面同理，Rust 侧统一拒绝（URL allowlist 仍为后续预留项）。
+5. 审批摘要按 action 精确展示对应参数（`summarizeToolCallForApproval` 特判）：navigate 显 URL、click 显 ref、type 完整显示输入文本（含 +Enter）、eval 完整显示表达式——不能取"第一个非空字段"，否则模型可用无关字段（如 eval 附带 url）顶掉真实执行内容。
+6. a11y snapshot 中的页面文本（name/valuetext）压平换行并转义引号，防不可信页面伪造快照树行（如注入假 `[ref=..]` 行）。
 
 ## 5. 验收（对齐路线图）
 
@@ -88,4 +97,4 @@ navigate/click/type/back/wait 成功后自动附带新 snapshot（可用 `snapsh
 
 ## 6. 非目标（本次不做）
 
-- Phase A 预设卡片（独立提交）；Right Dock Browser 面板（后续 UI 迭代）；URL allowlist（预留 policy 位）；Firefox 支持；多 tab 管理（单页会话，navigate 复用同一 target）。
+- Phase A 预设卡片（独立提交）；Right Dock Browser 面板（后续 UI 迭代）；URL allowlist（预留 policy 位，scheme 级 http/https 限制已内置）；Firefox 支持；多 tab 管理（单页会话，navigate 复用同一 target）；动作中途取消与生命周期/执行拆锁（见 2.4 当前限制）；跨 snapshot 的 ref 代际校验（ref 每次快照重编号，模型侧以"页面变化后必须用新快照"提示约束）。

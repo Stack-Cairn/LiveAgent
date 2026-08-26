@@ -12,7 +12,11 @@ import { Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useMemo } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
-import { BUILTIN_TOOL_CATALOG, BUILTIN_TOOL_CATEGORIES } from "../../lib/tools/builtinToolCatalog";
+import {
+  BUILTIN_TOOL_CATALOG,
+  BUILTIN_TOOL_CATEGORIES,
+  type BuiltinToolCatalogEntry,
+} from "../../lib/tools/builtinToolCatalog";
 
 export function SystemToolsSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -30,19 +34,24 @@ export function SystemToolsSection(props: SettingsSectionProps) {
   );
 
   // 只读工具无副作用,恒定放行(与 resolveToolPolicy 的缺省一致),不提供切换。
-  function effectivePolicy(toolName: string, isReadOnly: boolean): ToolPolicy {
-    if (isReadOnly) return "allow";
-    return policies[toolName] ?? "allow";
+  // 非只读工具的缺省取目录里的 defaultPolicy(如 Browser 缺省 ask),缺省
+  // 显示与运行时裁决才不会背离。
+  function effectivePolicy(entry: BuiltinToolCatalogEntry): ToolPolicy {
+    if (entry.isReadOnly) return "allow";
+    return policies[entry.toolName] ?? entry.defaultPolicy ?? "allow";
   }
 
-  function setPolicy(toolName: string, next: ToolPolicy) {
+  function setPolicy(entry: BuiltinToolCatalogEntry, next: ToolPolicy) {
     setSettings((prev) => {
       const current = { ...(prev.system.toolPolicies ?? {}) };
-      // allow 是内置工具的缺省,显式写入无意义 → 删除该键保持配置精简。
-      if (next === "allow") {
-        delete current[toolName];
+      // 选中该工具自身的缺省值时显式写入无意义 → 删除该键保持配置精简;
+      // 选中非缺省值(含把缺省 ask 的 Browser 改成 allow)则必须显式写入,
+      // 否则 resolveToolPolicy 会回落到缺省分支,用户的选择被静默还原。
+      const fallback: ToolPolicy = entry.defaultPolicy ?? "allow";
+      if (next === fallback) {
+        delete current[entry.toolName];
       } else {
-        current[toolName] = next;
+        current[entry.toolName] = next;
       }
       return updateSystem(prev, {
         toolPolicies: Object.keys(current).length > 0 ? current : undefined,
@@ -79,7 +88,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
             </div>
             <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-background/60">
               {entries.map((entry) => {
-                const policy = effectivePolicy(entry.toolName, entry.isReadOnly);
+                const policy = effectivePolicy(entry);
                 return (
                   <div key={entry.id} className="flex items-center gap-3 px-3 py-2.5">
                     <div className="min-w-0 flex-1">
@@ -108,7 +117,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                       <ToolPolicyToggle
                         value={policy}
                         ariaLabel={entry.toolName}
-                        onChange={(next) => setPolicy(entry.toolName, next)}
+                        onChange={(next) => setPolicy(entry, next)}
                       />
                     )}
                   </div>

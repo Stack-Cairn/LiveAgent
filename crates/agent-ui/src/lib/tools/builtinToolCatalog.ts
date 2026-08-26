@@ -48,6 +48,12 @@ export type BuiltinToolCatalogEntry = {
   runtimeScopes: readonly SystemToolRuntimeScope[];
   /** Registered only when its feature is enabled/associated (shown as a hint). */
   conditional?: boolean;
+  /**
+   * 无显式配置时的审批缺省。绝大多数内置工具缺省 allow(字段缺省);与
+   * agent-gui resolveToolPolicy 的缺省分支保持一致——设置页据此展示真实
+   * 缺省值,并在用户选中缺省值时删除显式键(选非缺省值则显式写入)。
+   */
+  defaultPolicy?: "ask" | "deny";
 };
 
 export type BuiltinToolCategory = {
@@ -285,6 +291,8 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: false,
     runtimeScopes: CHAT_AND_CRON,
     conditional: true,
+    // 与 resolveToolPolicy 的 group:browser 缺省 ask 分支同步。
+    defaultPolicy: "ask",
   },
   {
     id: "mcp_manager",

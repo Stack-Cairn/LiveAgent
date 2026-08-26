@@ -23,7 +23,9 @@ pub struct BrowserActionArgs {
     pub timeout_ms: Option<u64>,
     /// type 后是否追加 Enter。
     pub submit: Option<bool>,
-    /// 动作完成后是否附带新 snapshot（默认 true，snapshot/screenshot/eval 除外）。
+    /// 动作完成后是否附带新 snapshot。缺省按 action 定：改变/读取页面状态的
+    /// 动作（navigate/snapshot/click/type/back/wait）为 true，screenshot/eval
+    /// 为 false（见 mod.rs default_include）。
     pub include_snapshot: Option<bool>,
 }
 

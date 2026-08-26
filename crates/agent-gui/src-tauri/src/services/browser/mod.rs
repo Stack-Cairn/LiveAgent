@@ -9,11 +9,13 @@ mod snapshot;
 pub mod types;
 
 use std::path::PathBuf;
+use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::Mutex;
 
+use crate::runtime::process::signal_process_tree_by_pid;
 use cdp::CdpConnection;
 use launcher::{discover_browser_executable, launch_browser, LaunchedBrowser};
 use page::PageSession;
@@ -29,6 +31,9 @@ struct ActiveBrowser {
 #[derive(Default)]
 pub struct BrowserManager {
     active: Mutex<Option<ActiveBrowser>>,
+    /// 当前浏览器进程 pid 的旁路记录：shutdown 时若 `active` 锁被执行中的
+    /// 动作占着（try_lock 失败），仍能按 pid 杀进程树，避免退出后残留。
+    child_pid: StdMutex<Option<u32>>,
 }
 
 impl BrowserManager {
@@ -38,10 +43,25 @@ impl BrowserManager {
             // 取出即触发 LaunchedBrowser::drop → kill 进程树。
             guard.take();
         }
+        // 兜底：退出瞬间恰有动作在执行时上面的 try_lock 拿不到锁，按记录的
+        // pid 直接杀进程树（已死进程重复 signal 无害），防止 profile 被残留
+        // 实例锁住导致下次启动失败。
+        if let Ok(mut pid) = self.child_pid.lock() {
+            if let Some(pid) = pid.take() {
+                signal_process_tree_by_pid(pid, true);
+            }
+        }
+    }
+
+    fn record_child_pid(&self, pid: Option<u32>) {
+        if let Ok(mut guard) = self.child_pid.lock() {
+            *guard = pid;
+        }
     }
 
     pub async fn close(&self) -> Result<(), String> {
         self.active.lock().await.take();
+        self.record_child_pid(None);
         Ok(())
     }
 
@@ -72,16 +92,22 @@ impl BrowserManager {
 
     pub async fn execute(&self, args: BrowserActionArgs) -> Result<BrowserActionResponse, String> {
         let mut guard = self.active.lock().await;
-        // 连接失效（用户手关浏览器等）则丢弃重建。
-        if guard
-            .as_ref()
-            .map(|active| !active.page.is_connected())
-            .unwrap_or(false)
-        {
+        // 会话失效则丢弃重建。两类失效：WS 断开（用户整个退出浏览器），以及
+        // WS 仍在但页面 target 没了（用户只关掉自动化窗口/标签页、tab 崩溃——
+        // browser-level 连接不会因此断开）。target 探测走 browser-level 命令，
+        // 不受页面 JS 卡死影响。
+        let session_dead = match guard.as_ref() {
+            Some(active) => !active.page.is_connected() || !active.page.target_alive().await,
+            None => false,
+        };
+        if session_dead {
             guard.take();
+            self.record_child_pid(None);
         }
         if guard.is_none() {
-            *guard = Some(start_browser().await?);
+            let started = start_browser().await?;
+            self.record_child_pid(Some(started.launched.child_pid()));
+            *guard = Some(started);
         }
         let active = guard.as_mut().expect("browser session just ensured");
 
@@ -102,7 +128,12 @@ impl BrowserManager {
             }
             "type" => {
                 let ref_id = required(&args.ref_id, "type", "ref")?;
-                let text = required(&args.text, "type", "text")?;
+                // text 只要求"有传"，不 trim 也不拒绝空串：前后空格可能是刻意
+                // 输入，空串则表示清空字段（page 层做全选删除）。
+                let text = args
+                    .text
+                    .clone()
+                    .ok_or_else(|| "type 缺少必需参数 text".to_string())?;
                 active
                     .page
                     .type_text(&ref_id, &text, args.submit.unwrap_or(false), timeout)
@@ -143,7 +174,21 @@ impl BrowserManager {
         );
         let include_snapshot = args.include_snapshot.unwrap_or(default_include);
         let snapshot_text = if include_snapshot {
-            Some(active.page.snapshot(timeout).await?)
+            match active.page.snapshot(timeout).await {
+                Ok(text) => Some(text),
+                // snapshot 本身就是动作目的时失败必须上抛；附带 snapshot 失败
+                // 则不能连累已成功执行的动作（如 click 触发导航后 AX 树短暂
+                // 不可用）——否则模型会误判动作失败而重试，重复副作用。
+                Err(err) if action == "snapshot" => return Err(err),
+                Err(err) => {
+                    let note = format!("动作已执行成功，但自动附带 snapshot 失败：{err}。可稍后单独执行 snapshot 重试。");
+                    result_text = Some(match result_text.take() {
+                        Some(prev) => format!("{prev}\n{note}"),
+                        None => note,
+                    });
+                    None
+                }
+            }
         } else {
             None
         };
