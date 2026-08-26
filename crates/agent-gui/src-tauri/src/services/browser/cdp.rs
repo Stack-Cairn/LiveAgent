@@ -1,5 +1,7 @@
 //! CDP（Chrome DevTools Protocol）WebSocket 客户端：请求按自增 id 配对响应，
-//! 事件按 method 广播给一次性等待者。仅连 127.0.0.1 调试端口，无 TLS。
+//! 事件按 method 广播给一次性等待者。仅走 127.0.0.1，无 TLS。两种接入：
+//! 主动拨号调试端口（launcher 模式），或包裹扩展桥接服务 accept 到的连接
+//! （extension 模式，见 bridge.rs——远端是浏览器扩展用 chrome.debugger 中继）。
 //! 结构仿 services/stt 的会话模式：读循环独立 task，命令走 mpsc。
 
 use std::collections::HashMap;
@@ -7,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::connect_async;
@@ -32,6 +34,16 @@ impl CdpConnection {
         let (stream, _) = connect_async(ws_url)
             .await
             .map_err(|e| format!("连接 CDP WebSocket 失败：{e}"))?;
+        Ok(Self::from_stream(stream))
+    }
+
+    /// 包裹一条已建立的 WebSocket（拨号或 accept 均可），启动读写循环。
+    /// 扩展桥接模式下由 bridge.rs 把 accept 到的连接交进来。
+    pub(crate) fn from_stream<S, E>(stream: S) -> Arc<Self>
+    where
+        S: Stream<Item = Result<Message, E>> + Sink<Message> + Send + 'static,
+        E: std::fmt::Display + Send,
+    {
         let (mut sink, mut source) = stream.split();
 
         let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Message>();
@@ -64,7 +76,7 @@ impl CdpConnection {
             reader_conn.mark_closed();
         });
 
-        Ok(connection)
+        connection
     }
 
     fn mark_closed(&self) {

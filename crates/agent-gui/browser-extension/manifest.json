@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "LiveAgent Browser Bridge",
+  "version": "0.1.0",
+  "description": "Connects your browser to the LiveAgent desktop app so its Browser tool can drive automation tabs in this browser (reusing your login sessions). Only tabs created by LiveAgent are ever visible to it.",
+  "minimum_chrome_version": "116",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["debugger", "tabs", "alarms"]
+}

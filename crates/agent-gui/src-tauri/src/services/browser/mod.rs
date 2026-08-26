@@ -1,7 +1,14 @@
 //! 浏览器自动化服务（原生 Browser 工具，见 docs/design/browser-automation.md）。
-//! BrowserManager 持有至多一个浏览器会话：首个动作按需拉起浏览器并附着页面，
-//! 进程随 app 退出或 browser_close 一并回收。
+//! BrowserManager 持有至多一个浏览器会话，两种接入模式：
+//! - extension：LiveAgent 浏览器扩展（browser-extension/）已连上桥接服务时，
+//!   直接驱动用户日常浏览器里新开的自动化标签页——复用用户登录态，不另起
+//!   浏览器进程（Claude Code in Chrome 的方式）；
+//! - launcher：扩展未连接时回退——按需以独立 profile 拉起新浏览器进程。
+//!
+//! launcher 进程随 app 退出或 browser_close 一并回收；extension 模式没有
+//! 子进程，close 只关自动化标签页（Target.closeTarget，由扩展映射为关 tab）。
 
+mod bridge;
 mod cdp;
 mod launcher;
 mod page;
@@ -9,6 +16,7 @@ mod snapshot;
 pub mod types;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
@@ -16,6 +24,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use crate::runtime::process::signal_process_tree_by_pid;
+use bridge::ExtensionBridge;
 use cdp::CdpConnection;
 use launcher::{discover_browser_executable, launch_browser, LaunchedBrowser};
 use page::PageSession;
@@ -24,8 +33,19 @@ use types::{
 };
 
 struct ActiveBrowser {
-    launched: LaunchedBrowser,
+    /// launcher 模式的子进程句柄；extension 模式（用户自己的浏览器）为 None。
+    launched: Option<LaunchedBrowser>,
     page: PageSession,
+}
+
+impl ActiveBrowser {
+    fn mode(&self) -> &'static str {
+        if self.launched.is_some() {
+            "launcher"
+        } else {
+            "extension"
+        }
+    }
 }
 
 #[derive(Default)]
@@ -33,10 +53,23 @@ pub struct BrowserManager {
     active: Mutex<Option<ActiveBrowser>>,
     /// 当前浏览器进程 pid 的旁路记录：shutdown 时若 `active` 锁被执行中的
     /// 动作占着（try_lock 失败），仍能按 pid 杀进程树，避免退出后残留。
+    /// extension 模式无子进程，恒为 None。
     child_pid: StdMutex<Option<u32>>,
+    bridge: Arc<ExtensionBridge>,
 }
 
 impl BrowserManager {
+    /// 启动扩展桥接监听（lib.rs run() 里调一次）。桥接不可用不影响
+    /// launcher 回退路径。
+    pub fn start_extension_bridge(&self) {
+        self.bridge.start();
+    }
+
+    /// 桥接服务当前是否有存活的扩展连接（设置页引导 UI 轮询用）。
+    pub fn extension_connected(&self) -> bool {
+        self.bridge.live_connection().is_some()
+    }
+
     /// app 真正退出时的清理钩子（Drop 不保证被调）。
     pub fn shutdown_cleanup(&self) {
         if let Ok(mut guard) = self.active.try_lock() {
@@ -60,7 +93,14 @@ impl BrowserManager {
     }
 
     pub async fn close(&self) -> Result<(), String> {
-        self.active.lock().await.take();
+        let taken = self.active.lock().await.take();
+        if let Some(active) = taken {
+            // extension 模式没有子进程可杀，收尾是关掉自动化标签页（尽力而为，
+            // 用户可能已手关）；launcher 模式由 LaunchedBrowser::drop kill 进程树。
+            if active.launched.is_none() {
+                let _ = active.page.close_target().await;
+            }
+        }
         self.record_child_pid(None);
         Ok(())
     }
@@ -76,13 +116,20 @@ impl BrowserManager {
                     .unwrap_or_default();
                 BrowserStatusResponse {
                     running: true,
+                    mode: Some(active.mode().to_string()),
+                    extension_connected: self.bridge.live_connection().is_some(),
                     url: Some(url),
                     title: Some(title),
-                    executable: Some(active.launched.executable.display().to_string()),
+                    executable: active
+                        .launched
+                        .as_ref()
+                        .map(|launched| launched.executable.display().to_string()),
                 }
             }
             _ => BrowserStatusResponse {
                 running: false,
+                mode: None,
+                extension_connected: self.bridge.live_connection().is_some(),
                 url: None,
                 title: None,
                 executable: discover_browser_executable().map(|path| path.display().to_string()),
@@ -91,6 +138,7 @@ impl BrowserManager {
     }
 
     pub async fn execute(&self, args: BrowserActionArgs) -> Result<BrowserActionResponse, String> {
+        let requested_mode = RequestedMode::parse(args.browser_mode.as_deref());
         let mut guard = self.active.lock().await;
         // 会话失效则丢弃重建。两类失效：WS 断开（用户整个退出浏览器），以及
         // WS 仍在但页面 target 没了（用户只关掉自动化窗口/标签页、tab 崩溃——
@@ -100,13 +148,32 @@ impl BrowserManager {
             Some(active) => !active.page.is_connected() || !active.page.target_alive().await,
             None => false,
         };
-        if session_dead {
-            guard.take();
+        // 用户改了浏览器模式设置后，既有会话与新模式冲突时收掉重建
+        //（auto 不挑剔，沿用现有会话）：userProfile 只接受 extension 会话，
+        // isolated 只接受 launcher 会话。
+        let session_mismatch = match (guard.as_ref(), requested_mode) {
+            (Some(active), RequestedMode::UserProfile) => active.launched.is_some(),
+            (Some(active), RequestedMode::Isolated) => active.launched.is_none(),
+            _ => false,
+        };
+        if session_dead || session_mismatch {
+            if let Some(active) = guard.take() {
+                if session_mismatch && active.launched.is_none() {
+                    // 模式切换收掉 extension 会话时顺手关自动化标签页；
+                    // 失效会话（tab 已没了）无需也无法关。
+                    let _ = active.page.close_target().await;
+                }
+            }
             self.record_child_pid(None);
         }
         if guard.is_none() {
-            let started = start_browser().await?;
-            self.record_child_pid(Some(started.launched.child_pid()));
+            let started = start_browser(&self.bridge, requested_mode).await?;
+            self.record_child_pid(
+                started
+                    .launched
+                    .as_ref()
+                    .map(LaunchedBrowser::child_pid),
+            );
             *guard = Some(started);
         }
         let active = guard.as_mut().expect("browser session just ensured");
@@ -218,9 +285,61 @@ fn required(value: &Option<String>, action: &str, field: &str) -> Result<String,
         .ok_or_else(|| format!("{action} 缺少必需参数 {field}"))
 }
 
-async fn start_browser() -> Result<ActiveBrowser, String> {
+/// 调用方要求的浏览器接入模式（settings.system.browserAutomationMode 透传）。
+#[derive(Clone, Copy, PartialEq)]
+enum RequestedMode {
+    /// 扩展优先，未连接回退 launcher（缺省，含未知值）。
+    Auto,
+    /// 只用用户日常浏览器（扩展桥接）；未连接直接报错并引导安装。
+    UserProfile,
+    /// 只用独立 profile 专用浏览器，即使扩展在线。
+    Isolated,
+}
+
+impl RequestedMode {
+    fn parse(raw: Option<&str>) -> Self {
+        match raw.map(str::trim) {
+            Some("userProfile") => Self::UserProfile,
+            Some("isolated") => Self::Isolated,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// userProfile 模式扩展未连接时的报错。TS 侧原样透传给模型/用户，须自含
+/// 安装路径引导；设置页另有可视化引导（browser_extension_install_info）。
+const EXTENSION_NOT_CONNECTED_ERROR: &str = "浏览器扩展未连接：当前设置要求在你的日常浏览器中操作（复用登录态），但 LiveAgent Browser Bridge 扩展尚未安装或未连上。请到「设置 → 系统工具 → 浏览器自动化」按引导安装扩展（chrome://extensions → 开发者模式 → 加载已解压的扩展程序），或将浏览器模式改为「自动」/「独立浏览器」。";
+
+async fn start_browser(
+    bridge: &ExtensionBridge,
+    mode: RequestedMode,
+) -> Result<ActiveBrowser, String> {
+    // 扩展桥接：直接在用户日常浏览器里开自动化标签页（带登录态、无独立
+    // 进程）。auto 下扩展不可用回退 launcher；userProfile 下则是硬性要求。
+    if mode != RequestedMode::Isolated {
+        if let Some(connection) = bridge.live_connection() {
+            match PageSession::attach_new_tab(Arc::clone(&connection)).await {
+                Ok(page) => {
+                    return Ok(ActiveBrowser {
+                        launched: None,
+                        page,
+                    });
+                }
+                Err(error) => {
+                    if mode == RequestedMode::UserProfile {
+                        return Err(format!("在日常浏览器中打开自动化标签页失败：{error}"));
+                    }
+                    // auto：报因回退，不静默吞掉——launcher 模式语义不同
+                    //（无登录态），用户应可感知。
+                    eprintln!("browser extension bridge: attach_new_tab failed, falling back to launcher: {error}");
+                }
+            }
+        } else if mode == RequestedMode::UserProfile {
+            return Err(EXTENSION_NOT_CONNECTED_ERROR.to_string());
+        }
+    }
     let executable = discover_browser_executable().ok_or_else(|| {
-        "未检测到 Chrome/Edge/Chromium。浏览器自动化需要已安装的 Chromium 系浏览器。".to_string()
+        "未检测到 Chrome/Edge/Chromium。浏览器自动化需要已安装的 Chromium 系浏览器，或安装 LiveAgent 浏览器扩展以复用现有浏览器。".to_string()
     })?;
     let launched = tauri::async_runtime::spawn_blocking({
         let executable = executable.clone();
@@ -232,7 +351,10 @@ async fn start_browser() -> Result<ActiveBrowser, String> {
     let ws_url = fetch_browser_ws_url(launched.debug_port).await?;
     let connection = CdpConnection::connect(&ws_url).await?;
     let page = PageSession::attach(connection).await?;
-    Ok(ActiveBrowser { launched, page })
+    Ok(ActiveBrowser {
+        launched: Some(launched),
+        page,
+    })
 }
 
 /// `GET http://127.0.0.1:<port>/json/version` → webSocketDebuggerUrl。

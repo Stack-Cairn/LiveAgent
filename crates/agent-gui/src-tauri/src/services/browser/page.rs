@@ -48,6 +48,35 @@ impl PageSession {
             .and_then(|info| info.get("targetId").and_then(Value::as_str))
             .map(str::to_string)
             .ok_or_else(|| "未找到可附着的页面 target".to_string())?;
+        Self::attach_target(connection, target_id).await
+    }
+
+    /// 扩展桥接模式入口：在用户浏览器里新开一个自动化标签页并附着。
+    /// 不 attach 既有标签页——自动化的可见/可控范围要严格限定在自己
+    /// 创建的 tab（扩展侧同样只授权该 tab 的 chrome.debugger）。
+    pub(crate) async fn attach_new_tab(connection: Arc<CdpConnection>) -> Result<Self, String> {
+        let timeout = Duration::from_secs(10);
+        let created = connection
+            .call(
+                None,
+                "Target.createTarget",
+                json!({ "url": "about:blank" }),
+                timeout,
+            )
+            .await?;
+        let target_id = created
+            .get("targetId")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| "Target.createTarget 未返回 targetId".to_string())?;
+        Self::attach_target(connection, target_id).await
+    }
+
+    async fn attach_target(
+        connection: Arc<CdpConnection>,
+        target_id: String,
+    ) -> Result<Self, String> {
+        let timeout = Duration::from_secs(10);
         let attached = connection
             .call(
                 None,
@@ -77,6 +106,19 @@ impl PageSession {
             session.call(domain, json!({}), timeout).await?;
         }
         Ok(session)
+    }
+
+    /// 关闭附着的页面 target（extension 模式收尾：关自动化标签页）。
+    pub(crate) async fn close_target(&self) -> Result<(), String> {
+        self.connection
+            .call(
+                None,
+                "Target.closeTarget",
+                json!({ "targetId": self.target_id.as_str() }),
+                Duration::from_secs(5),
+            )
+            .await
+            .map(|_| ())
     }
 
     async fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {

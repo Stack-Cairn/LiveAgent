@@ -104,7 +104,7 @@ export function createBrowserTools(params: { sandbox?: ShellSandboxSettings }): 
   const toolBrowser: Tool = {
     name: "Browser",
     description:
-      "Automate a dedicated Chromium browser (isolated profile, separate from the user's daily browser). Actions: navigate (open URL), snapshot (a11y tree with element refs), click/type (interact via refs from the latest snapshot), screenshot (returns an image), eval (run JavaScript in the page), wait (selector or delay), back (history). Page-changing actions return a fresh snapshot automatically. The browser launches on first use and persists across calls in this session.",
+      "Automate a Chromium browser. Depending on the user's browser-mode setting, actions either run in a new tab of the user's own browser (sharing their login sessions, via the LiveAgent browser extension) or in a dedicated browser with an isolated profile (no logins). Actions: navigate (open URL), snapshot (a11y tree with element refs), click/type (interact via refs from the latest snapshot), screenshot (returns an image), eval (run JavaScript in the page), wait (selector or delay), back (history). Page-changing actions return a fresh snapshot automatically. The browser session starts on first use and persists across calls.",
     parameters: BROWSER_PARAMETERS,
   };
 

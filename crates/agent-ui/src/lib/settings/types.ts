@@ -238,9 +238,7 @@ export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
  * presets in the settings UI; the runtime retries any error message that
  * contains the code as a standalone number.
  */
-export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [
-  520, 521, 522, 523, 525, 526, 527,
-] as const;
+export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [520, 521, 522, 523, 525, 526, 527] as const;
 
 /**
  * User-defined retry-error classification, layered on top of pi-ai's
@@ -300,6 +298,20 @@ export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
   "sandboxOffline",
 ];
 
+// Browser 工具的浏览器接入模式:
+// - auto:扩展已连接则用用户日常浏览器(带登录态),否则回退独立 profile。
+// - userProfile:只用用户日常浏览器;扩展未连接时报错并引导安装,绝不回退
+//   (用户显式要登录态时,静默降级到无登录态的隔离浏览器会造成"看似在操作
+//   我的账号实际不是"的误判)。
+// - isolated:只用独立 profile 的专用浏览器,即使扩展在线也不碰用户浏览器。
+export type BrowserAutomationMode = "auto" | "userProfile" | "isolated";
+
+export const BROWSER_AUTOMATION_MODES: readonly BrowserAutomationMode[] = [
+  "auto",
+  "userProfile",
+  "isolated",
+];
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -310,6 +322,8 @@ export type SystemSettings = {
    */
   toolPolicies?: Record<string, ToolPolicy>;
   commandSafetyMode: CommandSafetyMode;
+  /** Browser 工具的浏览器接入模式;缺省 auto(旧快照缺失该字段时同 auto)。 */
+  browserAutomationMode: BrowserAutomationMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
   activeWorkspaceProjectId?: string;

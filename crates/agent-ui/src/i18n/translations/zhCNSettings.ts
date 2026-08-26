@@ -359,9 +359,23 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.cron_task_manager.detail":
     "让模型创建、查询与管理定时任务，实现按计划自动执行提示词。任务配置可在设置的定时任务分区中查看。",
   "settings.builtinTool.browser.name": "浏览器自动化",
-  "settings.builtinTool.browser.desc": "驱动独立的 Chromium 浏览器",
+  "settings.builtinTool.browser.desc": "驱动 Chromium 浏览器执行网页操作",
   "settings.builtinTool.browser.detail":
-    "以独立 profile 驱动本机已安装的 Chromium 系浏览器（Chrome/Edge），与你日常浏览器的登录态完全隔离。支持导航、页面快照、点击、输入、截图与 JavaScript 执行。默认每次操作需审批；离线沙箱模式下不可用。",
+    "已安装 LiveAgent 浏览器扩展时，直接在你的日常浏览器里新开标签页操作，复用你的登录态（仅能看到并控制它自己创建的标签页）；未安装扩展则回退为以独立 profile 启动的专用浏览器，与登录态完全隔离。支持导航、页面快照、点击、输入、截图与 JavaScript 执行。默认每次操作需审批；离线沙箱模式下不可用。",
+  "settings.browserMode.label": "浏览器模式",
+  "settings.browserMode.auto": "自动",
+  "settings.browserMode.userProfile": "我的浏览器",
+  "settings.browserMode.isolated": "独立浏览器",
+  "settings.browserMode.auto.desc":
+    "扩展已连接时用你的日常浏览器（带登录态），否则自动回退到独立浏览器。",
+  "settings.browserMode.userProfile.desc":
+    "始终在你的日常浏览器里操作（复用登录态）。需要安装 LiveAgent 浏览器扩展；未连接时操作会报错而不是静默降级。",
+  "settings.browserMode.isolated.desc": "始终使用独立 profile 的专用浏览器，与你的登录态完全隔离。",
+  "settings.browserMode.extensionConnected": "扩展已连接",
+  "settings.browserMode.extensionMissing": "扩展未连接",
+  "settings.browserMode.installGuide":
+    "浏览器无法由外部程序静默安装扩展，请手动加载一次（之后自动连接）：打开 chrome://extensions → 开启「开发者模式」→「加载已解压的扩展程序」→ 选择下方目录。",
+  "settings.browserMode.openExtensionDir": "打开扩展目录",
   "settings.builtinTool.mcp_manager.name": "MCP 管理",
   "settings.builtinTool.mcp_manager.desc": "管理 MCP 服务器的接入与开关",
   "settings.builtinTool.mcp_manager.detail":
@@ -654,11 +668,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.retryError.preset.527": "Railgun 请求错误 (Cloudflare 527)",
   "settings.retryErrorCustomPatterns": "自定义错误关键词",
   "settings.retryErrorCustomPatternsDesc":
-    "添加大小写不敏感的子串,与错误信息匹配。包含任一关键词的报错都会被重试,例如 \"SSL handshake failed\"。",
+    '添加大小写不敏感的子串,与错误信息匹配。包含任一关键词的报错都会被重试,例如 "SSL handshake failed"。',
   "settings.retryErrorCustomPatternPlaceholder": "例如:SSL handshake failed",
   "settings.retryErrorAddPattern": "添加",
   "settings.retryErrorRemovePattern": "移除",
-  "settings.retryErrorCustomPatternEmpty": "暂无自定义关键词。添加后可让内置引擎不识别的中转站/网关措辞也纳入重试。",
+  "settings.retryErrorCustomPatternEmpty":
+    "暂无自定义关键词。添加后可让内置引擎不识别的中转站/网关措辞也纳入重试。",
   "settings.agentsTitle": "提示词模板",
   "settings.agentsDesc": "统一管理全局模板与每个项目的专属提示词",
   "settings.agentsGlobalTab": "全局模板",

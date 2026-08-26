@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct BrowserActionArgs {
     pub action: String,
+    /// 浏览器接入模式（settings.system.browserAutomationMode，TS 侧每次调用
+    /// 透传）："auto"（缺省，扩展优先、可回退）/ "userProfile"（只走扩展，
+    /// 未连接报错引导）/ "isolated"（只走独立 profile）。
+    pub browser_mode: Option<String>,
     /// navigate 目标；无 scheme 时按 https:// 处理。
     pub url: Option<String>,
     /// click / type 目标：snapshot 输出中的 ref id（如 "e12"）。
@@ -47,8 +51,14 @@ pub struct BrowserActionResponse {
 #[serde(rename_all = "camelCase")]
 pub struct BrowserStatusResponse {
     pub running: bool,
+    /// "extension"（驱动用户日常浏览器的自动化标签页）或 "launcher"
+    /// （独立 profile 子进程）；未运行时为 None。
+    pub mode: Option<String>,
+    /// 桥接服务当前是否有存活的扩展连接（下一次会话将走 extension 模式）。
+    pub extension_connected: bool,
     pub url: Option<String>,
     pub title: Option<String>,
+    /// launcher 模式的浏览器可执行文件路径；extension 模式为 None。
     pub executable: Option<String>,
 }
 

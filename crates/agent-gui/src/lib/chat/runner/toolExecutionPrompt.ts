@@ -221,7 +221,8 @@ export function buildToolsSuffix(
     sections.push(
       [
         "## Browser Automation",
-        "- The Browser tool drives a dedicated Chromium browser with an isolated profile — it has no access to the user's daily browsing sessions or logins.",
+        "- The Browser tool drives a Chromium browser. Depending on the user's browser-mode setting, it either controls a new tab in the user's own browser sharing their login sessions — treat logged-in pages and any actions on them as acting on the user's behalf, and be conservative with anything that submits, posts, purchases, or deletes — or a dedicated browser with an isolated profile that has no logins.",
+        "- If an action fails because the browser extension is not connected, relay the error's installation guidance to the user instead of retrying; they can also switch the browser mode in Settings → System Tools.",
         "- Typical flow: `navigate` to a URL, read the returned a11y snapshot, then `click`/`type` using the `[ref=eN]` ids from that snapshot.",
         "- Refs are invalidated by page changes. After any navigation, click, or form submission, use the automatically returned fresh snapshot; never reuse stale refs.",
         "- Use `screenshot` when the user should visually see the page, or when the a11y snapshot is insufficient to understand the layout.",

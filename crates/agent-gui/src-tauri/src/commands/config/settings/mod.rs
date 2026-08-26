@@ -40,6 +40,10 @@ const SYSTEM_TOOL_POLICIES_KEY: &str = "toolPolicies";
 // 命令执行方式("ask"/"auto"/"sandbox"/"sandboxOffline"),与前端
 // SystemSettings.commandSafetyMode 对齐;sandbox* 由执行层映射为 OS 沙箱参数。
 const SYSTEM_COMMAND_SAFETY_MODE_KEY: &str = "commandSafetyMode";
+// 浏览器接入模式("auto"/"userProfile"/"isolated"),与前端
+// SystemSettings.browserAutomationMode 对齐;Browser 工具按调用透传给
+// BrowserManager,决定走扩展桥接(用户浏览器)还是独立 profile。
+const SYSTEM_BROWSER_AUTOMATION_MODE_KEY: &str = "browserAutomationMode";
 const SYSTEM_WORKSPACE_PROJECTS_KEY: &str = "workspaceProjects";
 const SYSTEM_WORKSPACE_PROJECT_GROUPS_KEY: &str = "workspaceProjectGroups";
 const SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY: &str = "activeWorkspaceProjectId";
