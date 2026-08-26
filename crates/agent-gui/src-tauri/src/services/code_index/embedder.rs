@@ -7,26 +7,65 @@
 //! - 索引 job 走 [`ensure_ready`]：失败状态可重试（断网首启后重连即恢复，
 //!   不再是进程级一锤定音）；并发调用只有一个线程真正初始化，其余等待。
 //! - 检索路走 [`availability`]（非阻塞探测）与 [`embed_query`]（限时等模型锁，
-//!   索引批量嵌入进行中时短等后放弃，由调用方降级词法），绝不被首启的模型
-//!   下载拖住。
+//!   超时放弃，由调用方降级词法），绝不被首启的模型下载拖住。
+//! - 模型锁按**单批**拿放（[`embed_passages`] 内部分批），批间对等锁的查询
+//!   让路（查询优先）：整文件一次锁几十秒会把检索路的限时等待全部耗尽——
+//!   后台索引期间 hybrid 全数降级词法、semantic 直接失败。让路是必需的，
+//!   Mutex 不公平，索引线程放锁后微秒级就能抢回，轮询中的查询几乎永远输。
 //!
 //! e5 前缀约定（fastembed 不自动加）：入库块 `passage: `，查询 `query: `。
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 use super::paths::models_cache_dir;
 use super::schema::EMBEDDING_DIM;
 
-/// 索引批量大小：单批 embed 的块数。
+/// 索引批量大小：单批 embed 的块数，也是模型锁的持有粒度。
 pub(crate) const EMBED_BATCH_SIZE: usize = 64;
 /// 后台索引不与前台抢核。
 const INTRA_THREADS: usize = 4;
-/// 检索路等模型锁的上限：索引批量嵌入约秒级，超时说明该降级词法了。
-const QUERY_LOCK_WAIT: Duration = Duration::from_secs(2);
+/// 检索路等模型锁的上限：锁粒度是单批推理（慢机上约秒级），加上索引批间
+/// 让路，正常拿锁远快于此；超时说明确有异常，降级词法。
+const QUERY_LOCK_WAIT: Duration = Duration::from_secs(5);
 const QUERY_LOCK_POLL: Duration = Duration::from_millis(50);
+/// 索引批间让路的上限：查询嵌入毫秒级，正常一两个轮询周期就清空；
+/// 达到上限说明查询侧卡住，不再让索引挨饿。
+const INDEX_YIELD_MAX: Duration = Duration::from_secs(5);
+const INDEX_YIELD_POLL: Duration = Duration::from_millis(10);
+
+/// 正在等模型锁的查询数（进程级，跨 workspace——embedder 本身就是进程单例）。
+static QUERY_WAITERS: AtomicUsize = AtomicUsize::new(0);
+
+/// 等锁查询的 RAII 登记：Drop 归还计数，覆盖超时/毒化/成功全部退出路径。
+struct QueryWaiterGuard;
+
+impl QueryWaiterGuard {
+    fn register() -> Self {
+        QUERY_WAITERS.fetch_add(1, Ordering::AcqRel);
+        QueryWaiterGuard
+    }
+}
+
+impl Drop for QueryWaiterGuard {
+    fn drop(&mut self) {
+        QUERY_WAITERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// 索引路批间让路：有查询在等就暂停，直到等待队列清空或达到上限。
+fn yield_to_waiting_queries() {
+    if QUERY_WAITERS.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let deadline = Instant::now() + INDEX_YIELD_MAX;
+    while QUERY_WAITERS.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+        std::thread::sleep(INDEX_YIELD_POLL);
+    }
+}
 
 #[derive(Clone)]
 enum EmbedderPhase {
@@ -201,33 +240,47 @@ fn embed_with_model(
 }
 
 /// 入库块向量化（索引 job 专用：阻塞等模型锁）。
+///
+/// 锁按单批（[`EMBED_BATCH_SIZE`]）拿放而非整个文件持有：大文件几百块一次
+/// 锁几十秒，检索路的限时等锁必然全部超时。每批前先对等锁查询让路——
+/// 查询是毫秒级、批是秒级，让路对索引吞吐的影响可忽略。
 pub(crate) fn embed_passages(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
-    if !matches!(availability(), EmbedderAvailability::Ready) {
-        return Err("embedding 模型未就绪".to_string());
-    }
-    let mut guard = match shared().model.lock() {
-        Ok(guard) => guard,
-        Err(_) => {
-            mark_model_failed("embedding 模型锁被污染，待重建");
-            return Err("embedding 模型锁被污染".to_string());
+    let state = shared();
+    let mut all = Vec::with_capacity(texts.len());
+    for batch in texts.chunks(EMBED_BATCH_SIZE) {
+        yield_to_waiting_queries();
+        // 就绪检查进循环：批间查询若毒化了锁并标记 Failed，索引应立即止损。
+        if !matches!(availability(), EmbedderAvailability::Ready) {
+            return Err("embedding 模型未就绪".to_string());
         }
-    };
-    let model = guard.as_mut().ok_or("embedding 模型未就绪")?;
-    embed_with_model(model, "passage: ", texts)
+        let mut guard = match state.model.lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                mark_model_failed("embedding 模型锁被污染，待重建");
+                return Err("embedding 模型锁被污染".to_string());
+            }
+        };
+        let model = guard.as_mut().ok_or("embedding 模型未就绪")?;
+        all.extend(embed_with_model(model, "passage: ", batch)?);
+    }
+    Ok(all)
 }
 
-/// 查询向量化（检索路：限时等锁，索引批量嵌入占着模型时放弃，调用方降级词法）。
+/// 查询向量化（检索路：限时等锁，超时放弃，调用方降级词法）。
+/// 等待期间通过 [`QueryWaiterGuard`] 登记——索引路批间看到有查询在等会让路，
+/// 所以正常最多等当前一批推理完成。
 pub(crate) fn embed_query(query: &str) -> Result<Vec<f32>, String> {
     if !matches!(availability(), EmbedderAvailability::Ready) {
         return Err("embedding 模型未就绪".to_string());
     }
     let state = shared();
-    let deadline = std::time::Instant::now() + QUERY_LOCK_WAIT;
+    let _waiter = QueryWaiterGuard::register();
+    let deadline = Instant::now() + QUERY_LOCK_WAIT;
     let mut guard = loop {
         match state.model.try_lock() {
             Ok(guard) => break guard,
             Err(std::sync::TryLockError::WouldBlock) => {
-                if std::time::Instant::now() >= deadline {
+                if Instant::now() >= deadline {
                     return Err("embedding 模型正忙（后台索引批量嵌入中）".to_string());
                 }
                 std::thread::sleep(QUERY_LOCK_POLL);
@@ -243,4 +296,57 @@ pub(crate) fn embed_query(query: &str) -> Result<Vec<f32>, String> {
     embeddings
         .pop()
         .ok_or_else(|| "embedding 推理返回空结果".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 让路计数是进程级共享的，测试并行跑会互相干扰：串行化本模块的测试。
+    static TEST_SERIAL: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn query_waiter_guard_counts_all_exit_paths() {
+        let _serial = TEST_SERIAL.lock().unwrap();
+        let before = QUERY_WAITERS.load(Ordering::Acquire);
+        {
+            let _guard = QueryWaiterGuard::register();
+            assert_eq!(QUERY_WAITERS.load(Ordering::Acquire), before + 1);
+            let _second = QueryWaiterGuard::register();
+            assert_eq!(QUERY_WAITERS.load(Ordering::Acquire), before + 2);
+        }
+        assert_eq!(QUERY_WAITERS.load(Ordering::Acquire), before);
+    }
+
+    /// 无查询等待时，批间让路必须是零开销快路径（不 sleep）。
+    #[test]
+    fn yield_is_immediate_without_waiters() {
+        let _serial = TEST_SERIAL.lock().unwrap();
+        let start = Instant::now();
+        yield_to_waiting_queries();
+        assert!(start.elapsed() < Duration::from_millis(100));
+    }
+
+    /// 有查询在等时索引让路，查询侧释放后索引立刻恢复（不等满上限）。
+    #[test]
+    fn yield_waits_until_query_waiters_drain() {
+        let _serial = TEST_SERIAL.lock().unwrap();
+        let guard = QueryWaiterGuard::register();
+        let handle = std::thread::spawn(|| {
+            let start = Instant::now();
+            yield_to_waiting_queries();
+            start.elapsed()
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        drop(guard);
+        let waited = handle.join().expect("yield thread panicked");
+        assert!(
+            waited >= Duration::from_millis(40),
+            "让路未生效：{waited:?}"
+        );
+        assert!(
+            waited < INDEX_YIELD_MAX,
+            "让路未随队列清空提前结束：{waited:?}"
+        );
+    }
 }

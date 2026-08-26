@@ -130,6 +130,10 @@ tree-sitter 按语法切块，首批语言：TS/TSX/JS、Rust、Go、Python、Ja
   job 的 `downloading` 阶段有进度）。此后完全离线。下载失败 → job 报错并
   提示网络（“本地优先”指推理不依赖 provider API，首次取模型仍需一次网络）。
 - `intra_threads` 上限 4：索引是后台任务，不与前台抢核。
+- 模型锁按**单批**（batch 64）拿放，不按整文件持有；批间对等锁的查询让路
+  （查询优先，`QUERY_WAITERS` 计数）——否则大文件一次锁几十秒，后台索引期间
+  检索的限时等锁（5s）必然超时，hybrid 全数降级词法。让路有上限（5s），
+  查询侧异常不会把索引饿死。
 - Cargo feature 裁剪：`default-features = false` + `hf-hub-rustls-tls` +
   `ort-download-binaries-rustls-tls`（不要 image-models；TLS 与仓库统一 rustls）。
 
@@ -219,5 +223,5 @@ fused:    RRF  score(c) = Σ_r 1 / (60 + rank_r(c))       -- k=60 经典常数
 |---|---|
 | ort/onnxruntime 链接与打包（各平台 dylib/静态库差异） | `ort-download-binaries` 构建期获取；release gate 增加三平台 bundle 冒烟项（P4） |
 | 模型首次下载体积/失败 | job `downloading-model` 阶段可见、可取消；失败不影响词法检索可用性（降级 `mode:"lexical"`）；初始化失败不缓存为终态——下次 enable/rebuild 重试（`ensure_ready`），检索路非阻塞探测（下载中也立即降级返回，不被拖住）；词法降级期入库的文件带 `has_vectors=0` 标记，模型就绪后由增量 job 回填向量 |
-| 大仓库嵌入耗时 | 批量 embed（batch 64）+ 增量为主；全量仅 enable/rebuild 时发生；检索的查询嵌入限时等锁（2s），超时降级词法 |
+| 大仓库嵌入耗时 | 批量 embed（batch 64）+ 增量为主；全量仅 enable/rebuild 时发生；模型锁按单批拿放且批间对查询让路（查询优先），检索的查询嵌入限时等锁（5s）正常最多等一批推理；超时降级词法 |
 | 索引落后磁盘 | 片段现读文件；watch 增量 + CodeSearch 层对账兜底；遍历出错时跳过“消失文件”删除对账（不可读 ≠ 不存在） |

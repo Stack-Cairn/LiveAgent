@@ -80,7 +80,10 @@ pub(crate) fn search(
             embedder::EmbedderAvailability::Ready => unreachable!(),
         };
         if requested_mode == "semantic" {
-            return Err(format!("语义检索不可用：{reason}"));
+            // 错误直达模型（Agent）：给出可操作的重试路径，别让它撞死在 semantic 上。
+            return Err(format!(
+                "语义检索不可用：{reason}。可改用 hybrid 或 lexical 模式重试"
+            ));
         }
         degraded = Some(format!("语义路不可用，已降级纯词法检索：{reason}"));
     }
@@ -104,7 +107,11 @@ pub(crate) fn search(
     let semantic_ranked: Vec<i64> = if semantic_active {
         match semantic_route(store, query, path_prefix.as_deref()) {
             Ok(ranked) => ranked,
-            Err(error) if requested_mode == "semantic" => return Err(error),
+            Err(error) if requested_mode == "semantic" => {
+                return Err(format!(
+                    "语义检索不可用：{error}。可改用 hybrid 或 lexical 模式重试"
+                ))
+            }
             Err(error) => {
                 // hybrid 下语义路临时失败（如模型被索引批量占用超时）：降级词法。
                 degraded = Some(format!("语义路本次不可用，已降级纯词法检索：{error}"));
