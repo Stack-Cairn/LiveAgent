@@ -1133,7 +1133,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.title": "CUA",
   "settings.cuaDriver.subtitle": "Computer Use Agent —— 让 AI 直接操作这台电脑",
   "settings.cuaDriver.description":
-    "接入 cua-driver 后，AI 可以枚举窗口、截屏、点击、输入、调用原生菜单并控制浏览器。它以一个普通 MCP server 的形式接入，约 60 个工具由 tools/list 自动发现，日常管理在 MCP Hub 的 server 卡片上。驱动来自",
+    "启用后，AI 可以枚举窗口、截屏、点击、输入、调用原生菜单并控制浏览器，约 60 项操作能力全部由驱动提供。驱动来自",
   "settings.cuaDriver.groupDriver": "驱动",
   "settings.cuaDriver.recheck": "重新检测",
   "settings.cuaDriver.detected": "已安装 cua-driver",
@@ -1155,14 +1155,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.grantPermissions": "前往授权",
   "settings.cuaDriver.statusGranted": "已授权",
   "settings.cuaDriver.enableTitle": "启用 CUA",
-  "settings.cuaDriver.enableDesc": "开启后接入 MCP，约 60 个操作工具随即对 AI 可见。",
-  "settings.cuaDriver.enabledDesc":
-    "已接入 MCP。参数与权限策略可在 MCP Hub 的 cua-driver 卡片里调整。",
+  "settings.cuaDriver.enableDesc": "开启后 AI 即可操作这台电脑，约 60 项操作能力随之可用。",
+  "settings.cuaDriver.enabledDesc": "AI 已可以操作这台电脑。下方可调整审批方式与其他参数。",
   "settings.cuaDriver.enableNeedsDriver": "需要先安装 cua-driver。",
   "settings.cuaDriver.enable": "启用 CUA",
   "settings.cuaDriver.disable": "停用 CUA",
   "settings.cuaDriver.policyNote":
-    "该 server 默认逐次询问（ask）。这些工具会真实点击、输入、关闭应用，接入后可在 MCP Hub 的 server 卡片里改为始终允许或禁止。",
+    "CUA 的每一次操作都会真实作用于这台电脑——点击、输入、关闭应用都不可撤销。默认逐次询问，请只在信任当前任务时改为始终允许。",
   "settings.cuaDriver.groupAbout": "关于",
   "settings.cuaDriver.statusActive": "已启用",
   "settings.cuaDriver.statusIdle": "未启用",
@@ -1177,7 +1176,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "默认关闭：LiveAgent 自己的窗口不会出现在 CUA 的枚举结果里，也不能被直接操作——否则模型可以点掉自己的审批弹窗、改写这里的设置、甚至关掉应用。只有需要用 LiveAgent 自动化测试 LiveAgent 时才打开。",
   "settings.cuaDriver.timeoutLabel": "单次调用超时（毫秒）",
   "settings.cuaDriver.timeoutHint": "上限 600000。启动应用、等待窗口就绪这类操作可能需要更长时间。",
-  "settings.cuaDriver.invocationLabel": "MCP 启动命令",
+  "settings.cuaDriver.invocationLabel": "驱动启动命令",
   "settings.cuaDriver.invocationHint":
     "由 cua-driver manifest 提供，随驱动升级自动跟进，不需要手动维护。",
 } as const satisfies Record<string, string>;

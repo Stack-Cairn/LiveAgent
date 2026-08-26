@@ -1188,7 +1188,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.title": "CUA",
   "settings.cuaDriver.subtitle": "Computer Use Agent — let the AI operate this machine directly",
   "settings.cuaDriver.description":
-    "With cua-driver connected, the AI can list windows, take screenshots, click, type, invoke native menus, and drive the browser. It connects as an ordinary MCP server — its ~60 tools are discovered automatically via tools/list, and day-to-day management lives on its MCP Hub server card. The driver comes from",
+    "Once enabled, the AI can list windows, take screenshots, click, type, invoke native menus, and drive the browser — around 60 capabilities, all provided by the driver. The driver comes from",
   "settings.cuaDriver.groupDriver": "Driver",
   "settings.cuaDriver.recheck": "Re-check",
   "settings.cuaDriver.detected": "cua-driver installed",
@@ -1211,14 +1211,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.statusGranted": "Granted",
   "settings.cuaDriver.enableTitle": "Enable CUA",
   "settings.cuaDriver.enableDesc":
-    "Turning this on connects it over MCP; its ~60 automation tools become visible to the AI.",
+    "Turn this on to let the AI operate this computer — around 60 capabilities become available.",
   "settings.cuaDriver.enabledDesc":
-    "Connected over MCP. Arguments and the permission policy can be tuned on the cua-driver card in MCP Hub.",
+    "The AI can operate this computer. Approval behaviour and other settings are below.",
   "settings.cuaDriver.enableNeedsDriver": "Install cua-driver first.",
   "settings.cuaDriver.enable": "Enable CUA",
   "settings.cuaDriver.disable": "Disable CUA",
   "settings.cuaDriver.policyNote":
-    "This server defaults to asking every time. Its tools really click, type, and quit applications; once connected you can switch it to always-allow or deny on its MCP Hub server card.",
+    "Every CUA action lands on this real machine — clicks, keystrokes, and quitting apps cannot be undone. It asks each time by default; switch to always-allow only when you trust the task at hand.",
   "settings.cuaDriver.groupAbout": "About",
   "settings.cuaDriver.statusActive": "Enabled",
   "settings.cuaDriver.statusIdle": "Disabled",
@@ -1234,7 +1234,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.timeoutLabel": "Per-call timeout (ms)",
   "settings.cuaDriver.timeoutHint":
     "Capped at 600000. Launching an app or waiting for a window can take a while.",
-  "settings.cuaDriver.invocationLabel": "MCP launch command",
+  "settings.cuaDriver.invocationLabel": "Driver launch command",
   "settings.cuaDriver.invocationHint":
     "Supplied by `cua-driver manifest` and tracked automatically across driver upgrades; no manual upkeep.",
 } as const satisfies Record<string, string>;
