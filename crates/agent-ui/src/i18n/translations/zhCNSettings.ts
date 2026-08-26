@@ -358,6 +358,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.cron_task_manager.desc": "创建与管理定时自动任务",
   "settings.builtinTool.cron_task_manager.detail":
     "让模型创建、查询与管理定时任务，实现按计划自动执行提示词。任务配置可在设置的定时任务分区中查看。",
+  "settings.builtinTool.browser.name": "浏览器自动化",
+  "settings.builtinTool.browser.desc": "驱动独立的 Chromium 浏览器",
+  "settings.builtinTool.browser.detail":
+    "以独立 profile 驱动本机已安装的 Chromium 系浏览器（Chrome/Edge），与你日常浏览器的登录态完全隔离。支持导航、页面快照、点击、输入、截图与 JavaScript 执行。默认每次操作需审批；离线沙箱模式下不可用。",
   "settings.builtinTool.mcp_manager.name": "MCP 管理",
   "settings.builtinTool.mcp_manager.desc": "管理 MCP 服务器的接入与开关",
   "settings.builtinTool.mcp_manager.detail":

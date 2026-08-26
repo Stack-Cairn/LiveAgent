@@ -372,6 +372,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.cron_task_manager.desc": "Create and manage scheduled automations",
   "settings.builtinTool.cron_task_manager.detail":
     "Lets the model create, inspect and manage cron tasks that run prompts on a schedule. Task configuration is visible in the Cron section of settings.",
+  "settings.builtinTool.browser.name": "Browser",
+  "settings.builtinTool.browser.desc": "Automate a dedicated Chromium browser",
+  "settings.builtinTool.browser.detail":
+    "Drives a dedicated Chromium browser (Chrome/Edge) with an isolated profile, separate from your daily browsing sessions and logins. Supports navigation, page snapshots, clicking, typing, screenshots and JavaScript evaluation. Each action asks for approval by default; unavailable in offline sandbox mode.",
   "settings.builtinTool.mcp_manager.name": "MCP Manager",
   "settings.builtinTool.mcp_manager.desc": "Manage MCP server connections and toggles",
   "settings.builtinTool.mcp_manager.detail":

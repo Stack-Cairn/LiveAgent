@@ -45,6 +45,14 @@ export function summarizeToolCallForApproval(
   ) {
     // 命令保留原始换行(审批栏以 pre-wrap 完整展示),不折叠空白。
     text = args.command.trim();
+  } else if (toolCall.name === "Browser" && typeof args.action === "string") {
+    // 浏览器操作显式标出 action 与关键目标(URL/ref/表达式),让用户在审批时
+    // 一眼看到即将发生什么,尤其是 eval 这类高危 action。
+    const target =
+      [args.url, args.ref, args.expression, args.selector].find(
+        (value) => typeof value === "string" && value.trim(),
+      ) ?? "";
+    text = [args.action, typeof target === "string" ? target.trim() : ""].filter(Boolean).join(" ");
   } else {
     text = summarizeToolCall(toolCall as ToolCall, {
       includeName: false,

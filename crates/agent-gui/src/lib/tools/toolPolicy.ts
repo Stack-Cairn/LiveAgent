@@ -33,8 +33,10 @@ export function toolServerPolicyKey(serverId: string): string {
  * 2. MCP 按 server 的策略(server:<serverId>,仅对带 serverId 的 MCP 工具)。
  * 3. 工具组级默认(group:<groupId>,如把"所有 MCP 工具"设为 ask/deny)。
  *    2、3 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
- * 4. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
- * 5. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
+ * 4. browser 组无显式配置时缺省 ask:浏览器可出网、可交互外部站点,
+ *    首次使用必须过一次用户审批(用户可 approve_session 放行本会话)。
+ * 5. 只读工具(metadata.isReadOnly)恒 allow:读操作无副作用,不应打断对话。
+ * 6. 其余(内置、mcp、无元数据的未知名)缺省 allow:保持现状,不制造回归。
  */
 export function resolveToolPolicy(
   toolName: string,
@@ -50,6 +52,7 @@ export function resolveToolPolicy(
   const groupId = metadata?.groupId;
   const groupPolicy = groupId ? policies?.[toolGroupPolicyKey(groupId)] : undefined;
   if (groupPolicy) return groupPolicy;
+  if (groupId === "browser") return "ask";
   if (metadata?.isReadOnly) return "allow";
   return "allow";
 }

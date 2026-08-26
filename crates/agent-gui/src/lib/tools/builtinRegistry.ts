@@ -17,6 +17,7 @@ import {
 } from "../subagents";
 import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import { createAskUserQuestionTools } from "./askUserQuestionTools";
+import { createBrowserTools } from "./browserTools";
 import type {
   BuiltinToolBundle,
   BuiltinToolExecutionContext,
@@ -288,6 +289,15 @@ async function buildBaseBuiltinToolBundles(
           }),
         ]
       : []),
+    // sandboxOffline(enabled 且 !allowNetwork)下浏览器出网违背离线语义,
+    // 整个 bundle 不注册,模型工具表内不可见;executor 内另有 fail-closed 兜底。
+    ...(params.sandbox?.enabled === true && !params.sandbox.allowNetwork
+      ? []
+      : [
+          createBrowserTools({
+            sandbox: params.sandbox,
+          }),
+        ]),
   ];
 
   const enabledServers = selectEnabledMcpServers(params.getMcpSettings());

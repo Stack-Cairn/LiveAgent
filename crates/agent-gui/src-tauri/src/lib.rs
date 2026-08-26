@@ -108,6 +108,10 @@ macro_rules! app_invoke_handler {
             commands::subagent_worktree::subagent_worktree_status,
             commands::subagent_worktree::subagent_worktree_apply,
             commands::subagent_worktree::subagent_worktree_cleanup,
+            // Browser automation
+            commands::browser::browser_action,
+            commands::browser::browser_status,
+            commands::browser::browser_close,
             // MCP
             commands::mcp::mcp_list_tools,
             commands::mcp::mcp_call_tool,
@@ -737,6 +741,7 @@ pub fn run() {
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
+    let browser_manager = Arc::new(services::browser::BrowserManager::default());
 
     let builder = tauri::Builder::default();
     // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
@@ -785,6 +790,7 @@ pub fn run() {
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
+        .manage(Arc::clone(&browser_manager))
         .on_page_load(|webview, payload| {
             if webview.label() != MAIN_WINDOW_LABEL
                 || !matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
@@ -928,6 +934,7 @@ pub fn run() {
                 shell_session_manager.shutdown_cleanup();
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
+                browser_manager.shutdown_cleanup();
                 power_activity.clear_all();
             }
         }

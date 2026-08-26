@@ -278,6 +278,15 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
   },
   /* ── Connectivity & integrations ── */
   {
+    id: "browser",
+    toolName: "Browser",
+    icon: "globe",
+    categoryId: "connectivity",
+    isReadOnly: false,
+    runtimeScopes: CHAT_AND_CRON,
+    conditional: true,
+  },
+  {
     id: "mcp_manager",
     toolName: "McpManager",
     icon: "mcp",

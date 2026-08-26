@@ -54,6 +54,7 @@ export function buildToolsSuffix(
     toolGroups.push(`resumable command waiting (${processWaitTools.join(" / ")})`);
   }
   if (has("ManagedProcess")) toolGroups.push("managed local processes (ManagedProcess)");
+  if (has("Browser")) toolGroups.push("browser automation (Browser)");
   if (taskTools.length > 0) {
     toolGroups.push(`durable task planning (${taskTools.join(" / ")})`);
   }
@@ -212,6 +213,20 @@ export function buildToolsSuffix(
         "- If another tool saves, downloads, screenshots, generates, or returns an image file path or image URL and the user should see it, call Image with that path or URL before the final response.",
         "- Your final text may caption or describe images already shown via Image; it must not try to render them itself.",
         "- Final text may describe or caption images already displayed by Image, but must not attempt to render images directly.",
+      ].join("\n"),
+    );
+  }
+
+  if (has("Browser")) {
+    sections.push(
+      [
+        "## Browser Automation",
+        "- The Browser tool drives a dedicated Chromium browser with an isolated profile — it has no access to the user's daily browsing sessions or logins.",
+        "- Typical flow: `navigate` to a URL, read the returned a11y snapshot, then `click`/`type` using the `[ref=eN]` ids from that snapshot.",
+        "- Refs are invalidated by page changes. After any navigation, click, or form submission, use the automatically returned fresh snapshot; never reuse stale refs.",
+        "- Use `screenshot` when the user should visually see the page, or when the a11y snapshot is insufficient to understand the layout.",
+        "- Use `eval` sparingly for data extraction that the snapshot cannot provide; prefer snapshot text when possible.",
+        "- Each action may require user approval. If an action is denied, stop and ask the user instead of retrying.",
       ].join("\n"),
     );
   }

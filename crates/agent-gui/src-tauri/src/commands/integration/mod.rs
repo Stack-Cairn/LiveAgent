@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod gateway;
 pub mod mcp;
 pub mod mcp_oauth;
