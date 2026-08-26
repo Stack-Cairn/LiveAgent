@@ -1918,6 +1918,10 @@ export function resetWorkspaceResourceSettings(prev: AppSettings, workdir: strin
     mcpServerIds: [],
     projectPrompt: "",
     projectPromptStrategy: "append",
+    // 必须显式落 false：patch 是浅合并，漏掉这项会让墓碑保留 true——既让
+    // 90 天墓碑 GC 与 byActiveMode 排序把死条目当活的，也让项目重新添加后
+    // 开关显示为开、CodeSearch 照常注册，而索引目录已随移除删除。
+    codeIndexEnabled: false,
   });
 }
 

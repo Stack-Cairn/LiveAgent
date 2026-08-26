@@ -367,6 +367,7 @@ test("workspace project removal clears every path-scoped setting", () => {
           mode: "custom",
           skillNames: ["skill-a"],
           mcpServerIds: ["mcp-a"],
+          codeIndexEnabled: true,
           stateVersion: 1,
           writerId: "test",
           updatedAt: 1,
@@ -407,6 +408,12 @@ test("workspace project removal clears every path-scoped setting", () => {
   assert.deepEqual(next.system.missingWorkspaceProjectPaths, []);
   assert.deepEqual(next.system.archivedWorkspaceProjectPaths, []);
   assert.equal(next.system.workspaceResourceSettings["/tmp/project-a"].mode, "inherit");
+  // 索引开关必须随移除落回 false：留 true 会让墓碑 GC 与 byActiveMode 把死条目
+  // 当活的，且项目重新添加后开关显示为开、CodeSearch 照常注册，而索引已删除。
+  assert.equal(
+    next.system.workspaceResourceSettings["/tmp/project-a"].codeIndexEnabled,
+    false,
+  );
   assert.deepEqual(next.customSettings.rightDock.projects["/tmp/project-a"].tools, {});
 });
 
