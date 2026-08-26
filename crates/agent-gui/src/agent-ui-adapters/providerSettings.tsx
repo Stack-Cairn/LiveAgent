@@ -7,6 +7,7 @@ import {
   RefreshCw,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import {
   Dialog,
   DialogActions,
@@ -17,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
-import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
