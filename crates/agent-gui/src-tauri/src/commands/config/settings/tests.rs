@@ -1185,7 +1185,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 13);
+        assert_eq!(row_count, 14);
         assert_eq!(
             keys,
             vec![

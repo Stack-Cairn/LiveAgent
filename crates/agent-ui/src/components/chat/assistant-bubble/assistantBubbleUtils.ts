@@ -1,3 +1,4 @@
+import { isCuaDriverServerId } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { isTaskToolName } from "@liveagent/ui/contracts/task";
 import type {
   HostedSearchBlock,
@@ -235,9 +236,16 @@ export function parseDynamicMcpToolName(name: string): { serverId: string; tool:
   return { serverId: rest.slice(0, separator), tool: rest.slice(separator + 1) };
 }
 
-/** cua-driver 的工具会真实操作用户的机器，值得在气泡里一眼可辨。 */
+/**
+ * cua-driver 的工具会真实操作用户的机器，值得在气泡里一眼可辨。
+ *
+ * 走 `isCuaDriverServerId` 而不是直接比字符串：工具名里的 server id 段是
+ * 从配置原文 sanitize 出来的，大小写照抄。这里只影响图标，但同一个判断在
+ * 别处关系到审批缺省，口径不该有两套。
+ */
 export function isCuaDriverToolName(name: string) {
-  return parseDynamicMcpToolName(name)?.serverId === "cua-driver";
+  const parsed = parseDynamicMcpToolName(name);
+  return parsed ? isCuaDriverServerId(parsed.serverId) : false;
 }
 
 export function getToolDisplayName(name: string) {
