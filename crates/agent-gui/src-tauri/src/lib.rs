@@ -108,6 +108,12 @@ macro_rules! app_invoke_handler {
             commands::subagent_worktree::subagent_worktree_status,
             commands::subagent_worktree::subagent_worktree_apply,
             commands::subagent_worktree::subagent_worktree_cleanup,
+            // Browser automation
+            commands::browser::browser_action,
+            commands::browser::browser_status,
+            commands::browser::browser_close,
+            commands::browser::browser_extension_install_info,
+            commands::browser::browser_extension_reveal_dir,
             // MCP
             commands::mcp::mcp_list_tools,
             commands::mcp::mcp_call_tool,
@@ -737,6 +743,10 @@ pub fn run() {
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
+    let browser_manager = Arc::new(services::browser::BrowserManager::default());
+    // 扩展桥接：接受 LiveAgent 浏览器扩展的反向连接，Browser 工具优先驱动
+    // 用户日常浏览器（复用登录态）；未连接时回退独立 profile 启动。
+    browser_manager.start_extension_bridge();
 
     let builder = tauri::Builder::default();
     // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
@@ -785,6 +795,7 @@ pub fn run() {
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
+        .manage(Arc::clone(&browser_manager))
         .on_page_load(|webview, payload| {
             if webview.label() != MAIN_WINDOW_LABEL
                 || !matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
@@ -820,6 +831,12 @@ pub fn run() {
                 app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
+                }
+                // 浏览器扩展同步到 ~/.liveagent/extension：Chrome 加载解压
+                // 扩展记录绝对路径，必须给一个不随应用更新变化的目录。
+                if let Err(error) = commands::browser::sync_bundled_browser_extension(app.handle())
+                {
+                    eprintln!("failed to sync browser extension: {error}");
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
@@ -928,6 +945,7 @@ pub fn run() {
                 shell_session_manager.shutdown_cleanup();
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
+                browser_manager.shutdown_cleanup();
                 power_activity.clear_all();
             }
         }

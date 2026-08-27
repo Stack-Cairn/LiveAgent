@@ -22,7 +22,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-26";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-27";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -146,6 +146,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "glm-5.1", contextWindow: 200000, maxOutputToken: 131072, thinking: { levels: ["high"], off: true } },
     { id: "glm-5.2", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["high", "max"], off: false } },
     { id: "glm-5.3", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "high", "max"], off: false } },
+    { id: "glm-5.3-flash", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "high", "max"], off: false } },
     { id: "glm-5v-turbo", contextWindow: 200000, maxOutputToken: 131072, thinking: { levels: ["high"], off: true } },
   ],
   moonshotai: [
@@ -161,13 +162,13 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "kimi-k3", contextWindow: 1048576, maxOutputToken: 131072, thinking: { levels: ["low", "high", "max"], off: true } },
   ],
   minimax: [
-    { id: "MiniMax-M2", contextWindow: 196608, maxOutputToken: 128000, thinking: { levels: [], off: false } },
+    { id: "MiniMax-M2", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
     { id: "MiniMax-M2.1", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
     { id: "MiniMax-M2.5", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
     { id: "MiniMax-M2.5-highspeed", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
     { id: "MiniMax-M2.7", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
     { id: "MiniMax-M2.7-highspeed", contextWindow: 204800, maxOutputToken: 131072, thinking: { levels: [], off: false } },
-    { id: "MiniMax-M3", contextWindow: 1000000, maxOutputToken: 128000, thinking: { levels: ["high"], off: true } },
+    { id: "MiniMax-M3", contextWindow: 1048576, maxOutputToken: 512000, thinking: { levels: ["high"], off: true } },
   ],
   stepfun: [
     { id: "step-1-32k", contextWindow: 32768, maxOutputToken: 8192 },

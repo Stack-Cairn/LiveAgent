@@ -12,7 +12,8 @@ export type BuiltinToolGroupId =
   | "system"
   | "mcp"
   | "subagent"
-  | "memory";
+  | "memory"
+  | "browser";
 
 export type BuiltinToolDisplayCategory =
   | "file"
@@ -347,6 +348,15 @@ export type GrepResultDetails = {
   files: GrepResultFileSummary[];
 };
 
+export type BrowserResultDetails = {
+  kind: "browser";
+  action: string;
+  url?: string;
+  title?: string;
+  hasSnapshot?: boolean;
+  hasScreenshot?: boolean;
+};
+
 export type BuiltinToolResultDetails =
   | ReadTextResultDetails
   | ReadImageResultDetails
@@ -356,6 +366,7 @@ export type BuiltinToolResultDetails =
   | ReadDocumentResultDetails
   | SkillsManagerResultDetails
   | McpManagerResultDetails
+  | BrowserResultDetails
   | SubagentBatchDetails
   | SubagentCardDetails
   | SubagentMessageDetails

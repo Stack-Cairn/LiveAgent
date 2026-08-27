@@ -459,7 +459,33 @@ export function summarizeToolCall(
                                                 ? `maxBytes=${args.max_bytes}`
                                                 : null,
                                             ]
-                                          : [];
+                                          : name === "Browser"
+                                            ? [
+                                                includeManagerAction &&
+                                                typeof args.action === "string"
+                                                  ? `action=${args.action}`
+                                                  : null,
+                                                typeof args.url === "string"
+                                                  ? `url=${summarizeToolArg(args.url)}`
+                                                  : null,
+                                                typeof args.ref === "string"
+                                                  ? `ref=${summarizeToolArg(args.ref)}`
+                                                  : null,
+                                                typeof args.text === "string"
+                                                  ? `text=${summarizeToolArg(args.text)}`
+                                                  : null,
+                                                typeof args.expression === "string"
+                                                  ? `expression=${summarizeToolArg(args.expression)}`
+                                                  : null,
+                                                typeof args.selector === "string"
+                                                  ? `selector=${summarizeToolArg(args.selector)}`
+                                                  : null,
+                                                typeof args.timeMs === "number"
+                                                  ? `timeMs=${args.timeMs}`
+                                                  : null,
+                                                args.submit === true ? "submit=true" : null,
+                                              ]
+                                            : [];
 
   const summary = parts.filter(Boolean).join(" ");
   if (!summary) return includeName ? name : "";

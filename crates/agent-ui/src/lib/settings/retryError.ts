@@ -1,7 +1,7 @@
 import {
   DEFAULT_RETRY_ERROR_SETTINGS,
-  type RetryErrorSettings,
   RETRYABLE_PRESET_HTTP_STATUS_CODES,
+  type RetryErrorSettings,
 } from "./types";
 
 const PRESET_CODE_SET = new Set<number>(RETRYABLE_PRESET_HTTP_STATUS_CODES);
@@ -26,8 +26,7 @@ export function normalizeRetryErrorSettings(input: unknown): RetryErrorSettings 
   if (Array.isArray(obj.presetStatusCodes)) {
     const seen = new Set<number>();
     for (const raw of obj.presetStatusCodes) {
-      const code =
-        typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : Number.NaN;
+      const code = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : Number.NaN;
       if (!Number.isFinite(code) || !PRESET_CODE_SET.has(code) || seen.has(code)) continue;
       seen.add(code);
       presetStatusCodes.push(code);
