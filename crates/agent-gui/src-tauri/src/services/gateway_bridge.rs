@@ -1395,6 +1395,7 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
         "Agent"
             | "AskUserQuestion"
             | "Bash"
+            | "Browser"
             | "CronTaskManager"
             | "Delete"
             | "Edit"

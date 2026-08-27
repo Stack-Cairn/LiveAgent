@@ -5,8 +5,10 @@ import {
   DeepseekIcon,
   GeminiIcon,
   GrokIcon,
+  Info,
   OpenaiChatgptIcon,
 } from "@liveagent/ui/components/IconSet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   isReservedCustomHeaderKey,
@@ -14,6 +16,7 @@ import {
   isValidCustomHeaderValue,
 } from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { ReactNode } from "react";
 
 // 脚本编写说明里的示例代码(纯代码,locale 无关);语义须与 Rust 沙箱执行
 // 契约一致:声明式单请求 + extractor 接收响应 JSON。
@@ -121,6 +124,91 @@ export function ProviderBrandIcon({ type }: { type: ProviderId }) {
   if (type === "xai") return <GrokIcon height="1em" />;
   if (type === "deepseek") return <DeepseekIcon height="1em" />;
   return <OpenaiChatgptIcon height="1em" className="fill-current dark:text-white" />;
+}
+
+/**
+ * 悬停/聚焦即显的说明气泡：替代抽屉里成段的描述性文字，仅在需要时展开。
+ */
+export function HintTip(props: { text: string; label?: string }) {
+  const { text, label } = props;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={0}
+        render={
+          <button
+            type="button"
+            aria-label={label ?? text}
+            className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        }
+      >
+        <Info className="h-3 w-3" />
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="start"
+        className="max-w-60 px-2.5 py-2 text-[11px] font-normal leading-relaxed text-popover-foreground/90"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** 抽屉字段标签：小号标签 + 可选的说明气泡。 */
+export function DrawerFieldLabel(props: { label: string; hint?: string }) {
+  const { label, hint } = props;
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs font-medium text-foreground/75">{label}</span>
+      {hint ? <HintTip text={hint} label={label} /> : null}
+    </div>
+  );
+}
+
+/**
+ * 抽屉分组标题：微型弱化标题 + 向右延伸的发丝线。
+ * 与字段标签（DrawerFieldLabel）拉开层级：分组标题更小、更淡、带字距，
+ * 视觉上作为"类别分隔"存在，避免与紧随其后的字段标签混为一谈。
+ */
+export function DrawerGroupLabel(props: { label: string; hint?: string }) {
+  const { label, hint } = props;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65">
+        {label}
+        {hint ? <HintTip text={hint} label={label} /> : null}
+      </span>
+      <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-foreground/[0.07]" />
+    </div>
+  );
+}
+
+/** 抽屉分区头：图标块 + 标题 + 说明气泡 + 右侧控件插槽。 */
+export function DrawerSectionHeader(props: {
+  icon: ReactNode;
+  title: string;
+  hint?: string;
+  badge?: ReactNode;
+  action?: ReactNode;
+}) {
+  const { icon, title, hint, badge, action } = props;
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.05] bg-foreground/[0.04] text-foreground/70">
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <h3 className="truncate text-[13px] font-semibold tracking-tight text-foreground/90">
+          {title}
+        </h3>
+        {hint ? <HintTip text={hint} label={title} /> : null}
+        {badge}
+      </div>
+      {action}
+    </div>
+  );
 }
 
 export function DialogSwitch(props: {

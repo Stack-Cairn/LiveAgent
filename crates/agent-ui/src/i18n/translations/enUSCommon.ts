@@ -202,7 +202,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.projectPromptReplace": "Replace",
   "chat.projectPromptReplaceHint":
     "Use only the project prompt here and leave out the global prompt.",
-  "chat.projectPromptContent": "Prompt content",
   "chat.projectPromptContentHint": "Leave empty to use global prompts only for this project.",
   "chat.projectPromptPlaceholder":
     "Describe the context, constraints, and working style specific to this project...",
@@ -211,11 +210,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsGeneral": "General",
   "chat.workspaceSettingsDirectories": "Directories & permissions",
   "chat.workspaceSettingsResources": "Resources",
-  "chat.workspaceSettingsGeneralDescription":
-    "Manage the project name and review its type and default working directory.",
   "chat.workspaceSettingsProjectName": "Project name",
-  "chat.workspaceSettingsProjectNameDescription":
-    "This name appears in the sidebar and project selectors.",
   "chat.workspaceSettingsProjectNameRequired": "Project name is required.",
   "chat.workspaceSettingsProjectNameReadonly": "The default workspace name cannot be changed.",
   "chat.workspaceSettingsProjectType": "Project type",
@@ -224,20 +219,16 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsKindHistory": "History workspace",
   "chat.workspaceSettingsPrimaryDirectory": "Primary directory",
   "chat.workspaceSettingsPrimaryHint":
-    "The primary directory remains the default location for conversations, Git, terminals, and the file tree. Additional directories do not change project ownership.",
+    "The primary directory is the default location for conversations, Git, terminals, and the file tree.",
   "chat.workspaceSettingsDirectoriesDescription":
-    "Add out-of-project roots for structured file tools and control read or write access. This setting does not sandbox Bash or process tools; command access still follows existing tool policy.",
+    "Additional directory grants only apply to structured file tools; command and process tools still follow existing tool policy.",
   "chat.workspaceSettingsAddDirectory": "Add directory",
-  "chat.workspaceSettingsPrimaryBadge": "Default workspace",
   "chat.workspaceSettingsDirectoriesUnavailable": "Directory grant service unavailable",
   "chat.workspaceSettingsDirectoriesDesktopOnly":
     "This environment is not connected to local directory permissions. Configure them in the desktop app.",
   "chat.workspaceSettingsDirectoriesGatewayDescription":
     "WebUI is not connected to the target desktop Agent. Directory grants can be managed remotely after the connection recovers.",
   "chat.workspaceSettingsDirectoriesLoading": "Loading directory permissions…",
-  "chat.workspaceSettingsDirectoriesEmpty": "No additional directories",
-  "chat.workspaceSettingsDirectoriesEmptyDescription":
-    "Add shared code, API schemas, or documentation so the Agent can access them with the permission you choose.",
   "chat.workspaceSettingsDirectoryAlias": "Directory alias",
   "chat.workspaceSettingsDirectoryStateActive": "Available",
   "chat.workspaceSettingsDirectoryStateMissing": "Missing",
@@ -245,8 +236,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsDirectoryStatePendingApproval": "Pending approval",
   "chat.workspaceSettingsRemoveDirectory": "Remove directory",
   "chat.workspaceSettingsDirectoryAccess": "Access",
-  "chat.workspaceSettingsDirectoryRead": "Read-only reference",
-  "chat.workspaceSettingsDirectoryWrite": "Allow edits",
+  "chat.workspaceSettingsDirectoryRead": "Read-only",
+  "chat.workspaceSettingsDirectoryWrite": "Read & write",
   "chat.workspaceSettingsDirectoryDuplicate":
     "This directory has already been added to the project.",
   "chat.workspaceSettingsResourcesDescription":

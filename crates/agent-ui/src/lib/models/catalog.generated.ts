@@ -22,7 +22,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-22";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-26";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -145,6 +145,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "glm-5-turbo", contextWindow: 200000, maxOutputToken: 131072, thinking: { levels: ["high"], off: true } },
     { id: "glm-5.1", contextWindow: 200000, maxOutputToken: 131072, thinking: { levels: ["high"], off: true } },
     { id: "glm-5.2", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["high", "max"], off: false } },
+    { id: "glm-5.3", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "high", "max"], off: false } },
     { id: "glm-5v-turbo", contextWindow: 200000, maxOutputToken: 131072, thinking: { levels: ["high"], off: true } },
   ],
   moonshotai: [

@@ -35,7 +35,6 @@ import {
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
 import { normalizeModelFailoverSettings } from "./modelFailover";
-import { normalizeRetryErrorSettings } from "./retryError";
 import {
   normalizeChatTranscriptSettings,
   normalizeFontScaleSettings,
@@ -43,6 +42,7 @@ import {
   normalizePositiveInteger,
   normalizeStringArray,
 } from "./normalizers";
+import { normalizeRetryErrorSettings } from "./retryError";
 import {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockFileTreeExpandedPaths,
@@ -63,6 +63,7 @@ import {
 import type {
   AgentPromptTemplate,
   AppSettings,
+  BrowserAutomationMode,
   ChatRuntimeControls,
   ChatRuntimeReasoningProviderKey,
   CloseWindowBehavior,
@@ -113,6 +114,7 @@ import type {
   WorkspaceResourceSettings,
 } from "./types";
 import {
+  BROWSER_AUTOMATION_MODES,
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
@@ -145,12 +147,12 @@ export {
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
 } from "./modelFailover";
-export { normalizeRetryErrorSettings } from "./retryError";
 export {
   normalizeChatTranscriptSettings,
   normalizeFontScale,
   normalizeFontScaleSettings,
 } from "./normalizers";
+export { normalizeRetryErrorSettings } from "./retryError";
 export {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockBackgroundTasksState,
@@ -1370,6 +1372,18 @@ export function strictestCommandSafetyMode(
   return COMMAND_SAFETY_MODE_STRICTNESS[a] >= COMMAND_SAFETY_MODE_STRICTNESS[b] ? a : b;
 }
 
+/**
+ * 浏览器接入模式归一。缺失/空串/未知值一律回 `auto`:该设置是行为选择而非
+ * 安全约束(登录态使用与否由 group:browser 审批把关),未知值不需要 fail-closed。
+ */
+export function normalizeBrowserAutomationMode(input: unknown): BrowserAutomationMode {
+  if (typeof input !== "string") return "auto";
+  const mode = input.trim();
+  return (BROWSER_AUTOMATION_MODES as readonly string[]).includes(mode)
+    ? (mode as BrowserAutomationMode)
+    : "auto";
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
@@ -1379,6 +1393,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     // 安全侧开关：任何非 true 的值都收敛成 false。
     cuaAllowSelfTargeting: obj.cuaAllowSelfTargeting === true,
     commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
+    browserAutomationMode: normalizeBrowserAutomationMode(obj.browserAutomationMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     activeWorkspaceProjectId:
@@ -1597,6 +1612,7 @@ export function getDefaultSettings(): AppSettings {
       executionMode: "tools",
       workdir: "",
       commandSafetyMode: "auto",
+      browserAutomationMode: "auto",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

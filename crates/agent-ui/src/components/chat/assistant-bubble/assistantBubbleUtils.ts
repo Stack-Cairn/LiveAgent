@@ -408,6 +408,7 @@ export function isBuiltinShareToolName(name: string) {
     "Agent",
     "AskUserQuestion",
     "Bash",
+    "Browser",
     "CronTaskManager",
     "Delete",
     "Edit",

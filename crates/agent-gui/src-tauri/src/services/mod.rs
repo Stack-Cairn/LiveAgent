@@ -1,4 +1,5 @@
 pub mod automation;
+pub mod browser;
 pub mod chat_run_ledger;
 pub mod cua_driver;
 pub mod gateway;

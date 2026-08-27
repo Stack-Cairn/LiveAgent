@@ -1,5 +1,6 @@
 export type { ImageContent, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 export type {
+  BrowserResultDetails,
   DeleteResultDetails,
   DisplayImageItemDetails,
   DisplayImageResultDetails,

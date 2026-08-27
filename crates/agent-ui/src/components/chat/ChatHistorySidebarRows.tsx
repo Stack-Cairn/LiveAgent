@@ -29,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -1416,51 +1417,22 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   sideOffset={6}
                   className="sidebar-context-menu"
                 >
+                  {/* 第一组：管理 —— 配置、分组归属、归档状态。 */}
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onConfigureProject(project)}
                     className="gap-2"
                   >
-                    <Settings className="h-3.5 w-3.5" />
+                    <Settings className="h-3.5 w-3.5 text-muted-foreground" />
                     {t("chat.workspaceConfigure")}
                   </DropdownMenuItem>
-                  {!isDefaultProject ? (
-                    <>
-                      <DropdownMenuItem
-                        disabled={isInteractionDisabled}
-                        onSelect={handleRequestRemove}
-                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        {t("chat.workspaceRemoveOnly")}
-                      </DropdownMenuItem>
-                      {project.worktree ? (
-                        <DropdownMenuItem
-                          disabled={isInteractionDisabled}
-                          onSelect={handleRequestDeleteWorktree}
-                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {t("chat.workspaceDeleteWorktree")}
-                        </DropdownMenuItem>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {!isArchived && canArchive ? (
-                    <DropdownMenuItem
-                      disabled={isInteractionDisabled}
-                      onSelect={handleArchive}
-                      className="gap-2"
-                    >
-                      <Archive className="h-3.5 w-3.5" />
-                      {t("chat.workspaceArchive")}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {onMoveProjectToGroup ? (
+                  {/* 无任何分组时隐藏“移动到分组”，避免展开空的子菜单。 */}
+                  {onMoveProjectToGroup && workspaceProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2">
-                        <Folder className="h-3.5 w-3.5" />
-                        <span>{t("chat.workspaceGroupMove")}</span>
+                      <DropdownMenuSubTrigger disabled={isInteractionDisabled} className="gap-2">
+                        <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">{t("chat.workspaceGroupMove")}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent
                         side="right"
@@ -1484,16 +1456,29 @@ export const ProjectRow = memo(function ProjectRow(props: {
                           </DropdownMenuItem>
                         ))}
                         {currentGroupId ? (
-                          <DropdownMenuItem
-                            onSelect={() => onMoveProjectToGroup(project.path, null)}
-                            className="gap-2 text-xs"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                            <span>{t("chat.workspaceGroupUngroup")}</span>
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => onMoveProjectToGroup(project.path, null)}
+                              className="gap-2 text-xs"
+                            >
+                              <X className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>{t("chat.workspaceGroupUngroup")}</span>
+                            </DropdownMenuItem>
+                          </>
                         ) : null}
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
+                  ) : null}
+                  {!isArchived && canArchive ? (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleArchive}
+                      className="gap-2"
+                    >
+                      <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                      {t("chat.workspaceArchive")}
+                    </DropdownMenuItem>
                   ) : null}
                   {isArchived ? (
                     <DropdownMenuItem
@@ -1501,9 +1486,13 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       onSelect={handleUnarchive}
                       className="gap-2"
                     >
-                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceUnarchive")}
                     </DropdownMenuItem>
+                  ) : null}
+                  {/* 第二组：浏览定位 —— 在文件树 / 系统资源管理器中打开。 */}
+                  {onBrowseProjectInFileTree || onBrowseProjectInSystemFileManager ? (
+                    <DropdownMenuSeparator />
                   ) : null}
                   {onBrowseProjectInFileTree ? (
                     <DropdownMenuItem
@@ -1511,7 +1500,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       onSelect={handleBrowseInFileTree}
                       className="gap-2"
                     >
-                      <FolderTree className="h-3.5 w-3.5" />
+                      <FolderTree className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInFileTree")}
                     </DropdownMenuItem>
                   ) : null}
@@ -1521,9 +1510,33 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       onSelect={handleBrowseInSystemFileManager}
                       className="gap-2"
                     >
-                      <FolderOpen className="h-3.5 w-3.5" />
+                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInSystemFileManager")}
                     </DropdownMenuItem>
+                  ) : null}
+                  {/* 第三组：危险操作 —— 固定在菜单底部并以分隔线隔开。 */}
+                  {!isDefaultProject ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={isInteractionDisabled}
+                        onSelect={handleRequestRemove}
+                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        {t("chat.workspaceRemoveOnly")}
+                      </DropdownMenuItem>
+                      {project.worktree ? (
+                        <DropdownMenuItem
+                          disabled={isInteractionDisabled}
+                          onSelect={handleRequestDeleteWorktree}
+                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("chat.workspaceDeleteWorktree")}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </>
                   ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
