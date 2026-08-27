@@ -1,4 +1,7 @@
-import { hardcodedServerPolicyDefault } from "@liveagent/ui/contracts/mcpServerDefaults";
+import {
+  canonicalServerId,
+  hardcodedServerPolicyDefault,
+} from "@liveagent/ui/contracts/mcpServerDefaults";
 
 import type { ToolPolicy } from "../settings";
 import type { BuiltinToolMetadata } from "./builtinTypes";
@@ -24,6 +27,22 @@ export const TOOL_SERVER_POLICY_PREFIX = "server:";
 
 export function toolServerPolicyKey(serverId: string): string {
   return `${TOOL_SERVER_POLICY_PREFIX}${serverId}`;
+}
+
+/**
+ * 一个 server 可能命中的两个策略键：写入时用的原文键，以及规范化（去空白
+ * 转小写）后的键。
+ *
+ * 两个都查是为了消除大小写错位：写策略的地方（MCP Hub 卡片、CUA 设置页）
+ * 用的是各自手上那份 id，而运行时拿到的是 MCP server 返回的 id，两者可能
+ * 只差大小写。只查原文键会让显式配置静默失效并退回兜底 `allow`。
+ * 原文优先，规范化键仅作回落，因此不会改变已有配置的解析结果。
+ */
+function serverPolicyKeyCandidates(serverId: string): string[] {
+  const canonical = canonicalServerId(serverId);
+  const raw = toolServerPolicyKey(serverId);
+  const normalized = toolServerPolicyKey(canonical);
+  return raw === normalized ? [raw] : [raw, normalized];
 }
 
 /**
@@ -53,9 +72,11 @@ export function resolveToolPolicy(
   const explicit = policies?.[toolName];
   if (explicit) return explicit;
   const serverId = metadata?.serverId;
-  const serverPolicy = serverId ? policies?.[toolServerPolicyKey(serverId)] : undefined;
-  if (serverPolicy) return serverPolicy;
   if (serverId) {
+    for (const key of serverPolicyKeyCandidates(serverId)) {
+      const serverPolicy = policies?.[key];
+      if (serverPolicy) return serverPolicy;
+    }
     const hardcodedServer = hardcodedServerPolicyDefault(serverId);
     if (hardcodedServer) return hardcodedServer;
   }

@@ -160,8 +160,25 @@ fn candidate_paths() -> Vec<PathBuf> {
     out
 }
 
+/// 构造一个不会弹控制台窗口的子进程命令。
+///
+/// Windows 上从 GUI 进程 spawn 控制台程序会真的开一个黑框窗口——探测、
+/// 权限查询、安装脚本全是后台行为，用户每进一次 CUA 设置页就被闪一下。
+/// `CREATE_NO_WINDOW` 只影响是否分配控制台，stdout / stderr 仍照常通过
+/// 管道拿到。非 Windows 平台没有这个概念，helper 退化成 `Command::new`。
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {
-    let mut child = Command::new(program)
+    let mut child = hidden_command(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -283,6 +300,49 @@ pub fn self_identity() -> SelfIdentity {
     }
 }
 
+/// 宿主自己某个窗口在屏幕坐标系里的矩形，单位是逻辑点（与 macOS 的
+/// Accessibility / cua-driver 的桌面坐标同一套）。
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfWindowRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// LiveAgent 自己所有可见窗口的屏幕矩形。
+///
+/// 用途只有一个：拦下**以桌面为目标、按屏幕坐标**下发的点击 / 拖拽 /
+/// 按键。按 pid 或 window_id 寻址的调用由前端的自指闸门直接拒绝，但坐标
+/// 无法反查归属——模型从整屏截图上量出宿主窗口里某个按钮的位置，再以
+/// `{"target":{"kind":"desktop"},"x":…,"y":…}` 发出来，就绕开了那道闸。
+/// 把矩形交给前端比对，落在里面的坐标一律拒绝。
+///
+/// 不可见 / 最小化的窗口不返回：它们接不到点击，列进来只会误伤那片区域
+/// 下面真正的目标窗口。
+pub fn self_window_rects(app: &AppHandle) -> Vec<SelfWindowRect> {
+    use tauri::Manager;
+
+    app.webview_windows()
+        .values()
+        .filter_map(|window| {
+            if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
+                return None;
+            }
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let position = window.outer_position().ok()?.to_logical::<f64>(scale);
+            let size = window.outer_size().ok()?.to_logical::<f64>(scale);
+            Some(SelfWindowRect {
+                x: position.x,
+                y: position.y,
+                width: size.width,
+                height: size.height,
+            })
+        })
+        .collect()
+}
+
 // ───────── 权限（macOS） ─────────
 
 pub fn permissions_status() -> CuaDriverPermissions {
@@ -388,7 +448,7 @@ pub fn install_command_preview() -> InstallCommandPreview {
 /// `install_command_preview().display` 之后显式确认过。
 pub fn install(app: &AppHandle) -> Result<CuaDriverProbe, String> {
     let preview = install_command_preview();
-    let mut child = Command::new(&preview.program)
+    let mut child = hidden_command(&preview.program)
         .args(&preview.args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

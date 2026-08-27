@@ -111,3 +111,45 @@ test("hardcodedServerPolicyDefault / effectiveServerPolicyDefault 与解析结�
   assert.equal(defaults.effectiveServerPolicyDefault("cua-driver"), "ask");
   assert.equal(defaults.effectiveServerPolicyDefault("other"), "allow");
 });
+
+test("server id 的大小写与空白不影响硬编码缺省", () => {
+  // 一份写成 CUA-DRIVER 的配置照样被识别为受管条目：若这里查不到,缺省会
+  // 从 ask 静默退回到 mcp 的兜底 allow——安全侧的缺省因大小写失效。
+  const defaults = loader.loadModule("../agent-ui/src/contracts/mcpServerDefaults.ts");
+  assert.equal(defaults.hardcodedServerPolicyDefault("CUA-DRIVER"), "ask");
+  assert.equal(defaults.hardcodedServerPolicyDefault(" Cua-Driver "), "ask");
+  assert.ok(defaults.isCuaDriverServerId("CUA-DRIVER"));
+  assert.ok(defaults.isHubHiddenServerId(" CUA-Driver "));
+
+  assert.equal(
+    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
+      "group:mcp": "allow",
+    }),
+    "ask",
+  );
+});
+
+test("server 策略键在大小写错位时回落到规范化键", () => {
+  // 设置页按条目原文写键;运行时拿到的 serverId 可能只差大小写。原文优先,
+  // 规范化键兜底,显式配置不会因此失效。
+  assert.equal(
+    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
+      "server:CUA-DRIVER": "deny",
+    }),
+    "deny",
+  );
+  assert.equal(
+    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
+      "server:cua-driver": "allow",
+    }),
+    "allow",
+  );
+  // 原文键优先于规范化键。
+  assert.equal(
+    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
+      "server:CUA-DRIVER": "deny",
+      "server:cua-driver": "allow",
+    }),
+    "deny",
+  );
+});

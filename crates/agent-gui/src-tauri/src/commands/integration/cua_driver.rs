@@ -9,7 +9,7 @@
 use tauri::AppHandle;
 
 use crate::services::cua_driver::{
-    self, CuaDriverPermissions, CuaDriverProbe, InstallCommandPreview, SelfIdentity,
+    self, CuaDriverPermissions, CuaDriverProbe, InstallCommandPreview, SelfIdentity, SelfWindowRect,
 };
 
 /// 探测二进制位置、版本与 MCP 调用方式。未安装返回 `installed: false`，
@@ -66,4 +66,12 @@ pub async fn cua_driver_permissions_grant() -> Result<CuaDriverPermissions, Stri
 #[tauri::command(rename_all = "camelCase")]
 pub fn cua_driver_self_identity() -> SelfIdentity {
     cua_driver::self_identity()
+}
+
+/// LiveAgent 自己可见窗口的屏幕矩形（逻辑点）。前端用它拦下以桌面为目标、
+/// 按屏幕坐标下发的点击 / 拖拽——那条路径绕得开按 pid / window_id 的判断。
+/// 只读；窗口会移动，所以调用方每次用之前都该重新取。
+#[tauri::command(rename_all = "camelCase")]
+pub fn cua_driver_self_windows(app: AppHandle) -> Vec<SelfWindowRect> {
+    cua_driver::self_window_rects(&app)
 }

@@ -5,7 +5,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { CUA_DRIVER_SERVER_ID } from "@liveagent/ui/contracts/mcpServerDefaults";
+import { isCuaDriverServerId } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { McpServerConfig } from "../settings";
@@ -114,8 +114,8 @@ export async function createMcpTools(params: {
   const servers = params.servers ?? [];
   const enabledServers = servers.filter((s) => s.enabled);
   // 只有真的挂了 cua-driver 才去问宿主 pid，别的组合零开销。
-  const cuaSelfGuard: CuaSelfGuard | null = enabledServers.some(
-    (server) => server.id?.trim().toLowerCase() === CUA_DRIVER_SERVER_ID,
+  const cuaSelfGuard: CuaSelfGuard | null = enabledServers.some((server) =>
+    isCuaDriverServerId(server.id),
   )
     ? await resolveCuaSelfGuard(params.cuaAllowSelfTargeting === true)
     : null;
@@ -270,9 +270,11 @@ export async function createMcpTools(params: {
       };
     }
 
-    // 自指闸门：拦在发出调用之前，宿主窗口的 pid / window_id 直接拒绝。
-    if (cuaSelfGuard && mapped.serverId.trim().toLowerCase() === CUA_DRIVER_SERVER_ID) {
-      const refusal = cuaSelfGuard.refuse(toolCall.arguments);
+    // 自指闸门：拦在发出调用之前。按 pid / window_id 寻址的直接拒绝；以桌面
+    // 为目标、坐标落在宿主窗口矩形内的也拒绝——后者要取一次窗口几何，所以
+    // 这里是异步的。
+    if (cuaSelfGuard && isCuaDriverServerId(mapped.serverId)) {
+      const refusal = await cuaSelfGuard.refuse(toolCall.arguments);
       if (refusal) {
         return {
           role: "toolResult",
@@ -319,7 +321,7 @@ export async function createMcpTools(params: {
           // 它的 window_id 供后续入参拦截使用。
           const rawContent = res?.content ?? [{ type: "text", text: "" }];
           const content =
-            cuaSelfGuard && mapped.serverId.trim().toLowerCase() === CUA_DRIVER_SERVER_ID
+            cuaSelfGuard && isCuaDriverServerId(mapped.serverId)
               ? rawContent.map((block) =>
                   block.type === "text"
                     ? { ...block, text: cuaSelfGuard.strip(block.text) }

@@ -29,6 +29,7 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import {
   CUA_DRIVER_SERVER_ID as CUA_SERVER_ID,
   effectiveServerPolicyDefault,
+  isCuaDriverServerId,
 } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -62,8 +63,6 @@ function SectionCardHeader({ icon: Icon, title }: { icon: IconComponent; title: 
  * 仅桌面端注册（见 agent-gui 的 `settingsExtension`）：探测 / 安装 /
  * 授权都依赖 Tauri 命令。
  */
-
-export const CUA_DRIVER_SERVER_ID = "cua-driver";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const INSTALL_PROGRESS_EVENT = "cua_driver_install_progress";
@@ -99,9 +98,28 @@ type InstallPreview = {
 
 type InstallProgress = { stream: string; line: string };
 
+/**
+ * 探测结果的进程内缓存。
+ *
+ * 每次挂载都重新探测意味着每次切到 CUA 页都要 spawn 三个子进程
+ * （`manifest` / `status` / `permissions status`）——在 Windows 上那是三次
+ * 控制台闪窗，在 macOS 上则可能唤起 CuaDriver.app 的守护进程。这些事实在
+ * 一分钟内不会变，来回切页时没有重查的理由。
+ *
+ * 「重新检测」按钮、安装完成、授权完成三处显式跳过缓存。
+ */
+const PROBE_CACHE_TTL_MS = 60_000;
+
+let probeCache: { at: number; probe: Probe; permissions: Permissions | null } | null = null;
+
+function readProbeCache() {
+  if (!probeCache) return null;
+  return Date.now() - probeCache.at <= PROBE_CACHE_TTL_MS ? probeCache : null;
+}
+
 function serverConfigFrom(probe: Probe): McpServerConfig {
   return {
-    id: CUA_DRIVER_SERVER_ID,
+    id: CUA_SERVER_ID,
     description: "trycua/cua — CUA 驱动（跨平台）",
     docsUrl: UPSTREAM_REPO_URL,
     enabled: true,
@@ -135,12 +153,13 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   const mountedRef = useRef(true);
 
   // 总开关的真实状态就是这个 MCP server 的启用状态——没有第二份配置。
-  const serverEntry = settings.mcp.servers.find(
-    (server) => server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID,
-  );
+  const serverEntry = settings.mcp.servers.find((server) => isCuaDriverServerId(server.id));
   const enabled = serverEntry?.enabled === true;
 
-  const policyKey = `server:${CUA_SERVER_ID}`;
+  // 策略键跟随条目里那份 id 的原文，而不是常量：已有配置可能把 id 写成
+  // `CUA-DRIVER`，此时运行时按原文查 `server:CUA-DRIVER`，这里若硬写
+  // `server:cua-driver` 就会出现「页面显示的策略与实际执行的不是同一条」。
+  const policyKey = `server:${serverEntry?.id.trim() || CUA_SERVER_ID}`;
   const policy: ToolPolicy =
     settings.system.toolPolicies?.[policyKey] ?? effectiveServerPolicyDefault(CUA_SERVER_ID);
   const allowSelfTargeting = settings.system.cuaAllowSelfTargeting === true;
@@ -162,15 +181,25 @@ export function CuaDriverSection(props: SettingsSectionProps) {
    * 授权查询失败不清空已有结果：`permissions grant` 之后重查若临时失败，
    * 直接归零会把刚拿到的授权显示成「未授权」。
    */
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { force?: boolean }) => {
+    const cached = options?.force ? null : readProbeCache();
+    if (cached) {
+      setProbe(cached.probe);
+      if (cached.permissions) setPermissions(cached.permissions);
+      setChecking(false);
+      setPermissionsLoading(false);
+      return;
+    }
+
     setChecking(true);
     setPermissionsLoading(true);
     const probeTask = invoke<Probe>("cua_driver_probe");
     const permissionsTask = invoke<Permissions>("cua_driver_permissions_status").catch(() => null);
 
+    let probed: Probe | null = null;
     try {
-      const next = await probeTask;
-      if (mountedRef.current) setProbe(next);
+      probed = await probeTask;
+      if (mountedRef.current) setProbe(probed);
     } catch (err) {
       if (mountedRef.current) {
         setProbe({ installed: false });
@@ -181,6 +210,8 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     }
 
     const perms = await permissionsTask;
+    // 缓存与组件是否还挂着无关：探测的是机器状态，下次挂载照样能用。
+    if (probed) probeCache = { at: Date.now(), probe: probed, permissions: perms };
     if (!mountedRef.current) return;
     if (perms) setPermissions(perms);
     setPermissionsLoading(false);
@@ -194,16 +225,16 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (!installing) return;
-    let dispose: (() => void) | undefined;
-    void listen<InstallProgress>(INSTALL_PROGRESS_EVENT, (event) => {
-      setLog((prev) => [...prev, event.payload.line].slice(-MAX_LOG_LINES));
-    }).then((unlisten) => {
-      dispose = unlisten;
-    });
-    return () => dispose?.();
-  }, [installing]);
+  // 卸载时兜底摘掉安装进度监听：`confirmInstall` 正常路径自己会摘，但组件
+  // 在安装途中被卸载时那段 finally 还没跑到。
+  const installUnlistenRef = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      installUnlistenRef.current?.();
+      installUnlistenRef.current = null;
+    },
+    [],
+  );
 
   const installed = probe?.installed === true;
   // 是否渲染授权那一节只看平台与安装状态——两者都在 probe 里，不必等权限
@@ -223,17 +254,40 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     }
   }
 
+  /**
+   * 监听必须在 `cua_driver_install` 发出**之前**注册完成。
+   *
+   * 之前是靠 `installing` 触发的 effect 去注册，而 effect 要等下一轮渲染、
+   * `listen()` 本身还是异步的——这两段时间里安装脚本已经在往外打日志了，
+   * 开头那几行直接丢掉。这里改成 `await listen(...)` 之后再发调用，并在
+   * finally 里摘掉；组件若在这中间被卸载，由上面的 ref 兜底。
+   */
   async function confirmInstall() {
     setConfirmingInstall(false);
     setInstalling(true);
     setLog([]);
     setError(null);
+
+    let unlisten: (() => void) | null = null;
     try {
+      unlisten = await listen<InstallProgress>(INSTALL_PROGRESS_EVENT, (event) => {
+        setLog((prev) => [...prev, event.payload.line].slice(-MAX_LOG_LINES));
+      });
+      // 注册与卸载可能已经交错：卸载先发生时立刻摘掉，别把监听器漏在外面。
+      if (!mountedRef.current) {
+        unlisten();
+        unlisten = null;
+        return;
+      }
+      installUnlistenRef.current = unlisten;
+
       await invoke<Probe>("cua_driver_install");
-      await refresh();
+      await refresh({ force: true });
     } catch (err) {
       if (mountedRef.current) setError(String(err));
     } finally {
+      unlisten?.();
+      if (installUnlistenRef.current === unlisten) installUnlistenRef.current = null;
       if (mountedRef.current) setInstalling(false);
     }
   }
@@ -243,6 +297,8 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setError(null);
     try {
       const next = await invoke<Permissions>("cua_driver_permissions_grant");
+      // 授权状态刚变过，缓存里那份已经过时。
+      if (probeCache) probeCache = { ...probeCache, permissions: next };
       if (mountedRef.current) setPermissions(next);
     } catch (err) {
       if (mountedRef.current) setError(String(err));
@@ -261,9 +317,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   function toggleEnabled(next: boolean) {
     if (next && !probe?.installed) return;
     setSettings((prev) => {
-      const index = prev.mcp.servers.findIndex(
-        (server) => server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID,
-      );
+      const index = prev.mcp.servers.findIndex((server) => isCuaDriverServerId(server.id));
       if (index < 0) {
         if (!next || !probe) return prev;
         return updateMcp(prev, { servers: [...prev.mcp.servers, serverConfigFrom(probe)] });
@@ -279,6 +333,9 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   function setPolicy(next: ToolPolicy) {
     setSettings((prev) => {
       const current = { ...(prev.system.toolPolicies ?? {}) };
+      // 规范化键一并清掉：id 写成 `CUA-DRIVER` 时两个键会同时存在，留着那条
+      // 会让 resolveToolPolicy 的回落读到上一次的值。
+      delete current[`server:${CUA_SERVER_ID}`];
       // 与 McpServersForm 同一条规则：等于该 server 的缺省值才删 key。
       // cua-driver 的缺省是 ask，所以「始终允许」必须显式落库。
       if (next === effectiveServerPolicyDefault(CUA_SERVER_ID)) delete current[policyKey];
@@ -304,9 +361,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setSettings((prev) =>
       updateMcp(prev, {
         servers: prev.mcp.servers.map((server) =>
-          server.id.trim().toLowerCase() === CUA_DRIVER_SERVER_ID
-            ? { ...server, timeoutMs: next }
-            : server,
+          isCuaDriverServerId(server.id) ? { ...server, timeoutMs: next } : server,
         ),
       }),
     );
@@ -366,7 +421,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
             size="sm"
             className="h-7 shrink-0 gap-1.5 text-xs"
             disabled={checking || installing}
-            onClick={() => void refresh()}
+            onClick={() => void refresh({ force: true })}
           >
             <RefreshCw className={checking ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
             {t("settings.cuaDriver.recheck")}

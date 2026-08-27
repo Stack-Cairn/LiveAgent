@@ -22,9 +22,22 @@ const HARDCODED_SERVER_DEFAULTS: Readonly<Record<string, ToolPolicy>> = Object.f
   "cua-driver": "ask",
 });
 
+/**
+ * server id 的规范形式：去空白 + 转小写。
+ *
+ * 这张表以及所有「这条 server 是不是那个受管条目」的判断都必须走它。
+ * 否则一份写成 `CUA-DRIVER` 的配置会被一部分代码路径认出来（Hub 隐藏、
+ * 设置页识别）、另一部分认不出来（硬编码缺省查表、`server:<id>` 策略
+ * 键），最终从 `ask` 静默退回到通用 MCP 兜底的 `allow`——安全侧的缺省
+ * 因为大小写而失效是最不该发生的一类错位。
+ */
+export function canonicalServerId(serverId: string): string {
+  return serverId.trim().toLowerCase();
+}
+
 /** 该 server 的硬编码缺省策略；没有登记则返回 undefined。 */
 export function hardcodedServerPolicyDefault(serverId: string): ToolPolicy | undefined {
-  return HARDCODED_SERVER_DEFAULTS[serverId];
+  return HARDCODED_SERVER_DEFAULTS[canonicalServerId(serverId)];
 }
 
 /** 该 server 在无显式配置时的生效策略（含全局兜底 allow）。 */
@@ -48,5 +61,10 @@ const HUB_HIDDEN_SERVER_IDS: ReadonlySet<string> = new Set([CUA_DRIVER_SERVER_ID
 
 /** 该 server 是否由专属设置页托管（MCP Hub 应当隐藏它）。 */
 export function isHubHiddenServerId(serverId: string): boolean {
-  return HUB_HIDDEN_SERVER_IDS.has(serverId.trim().toLowerCase());
+  return HUB_HIDDEN_SERVER_IDS.has(canonicalServerId(serverId));
+}
+
+/** 该 server 是否就是 cua-driver 那条受管条目（大小写与空白不敏感）。 */
+export function isCuaDriverServerId(serverId: string | undefined | null): boolean {
+  return canonicalServerId(serverId ?? "") === CUA_DRIVER_SERVER_ID;
 }
