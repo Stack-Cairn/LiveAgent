@@ -32,7 +32,7 @@
 - 扩展用 `chrome.debugger` 中继 CDP：browser-level 的 `Target.getTargets / createTarget / attachToTarget / closeTarget` 由扩展模拟（**只登记并暴露它自己创建的标签页**，用户其它标签页对桌面端不可见）；session-level 命令按 sessionId→tabId 映射转发 `chrome.debugger.sendCommand`，`chrome.debugger.onEvent` 反向转发为事件帧。线型与原生 CDP 一致，`CdpConnection`/`PageSession` 零改动复用。
 - `BrowserManager` 起会话时先查桥接是否有存活扩展连接：有则 `Target.createTarget` 新开标签页附着（extension 模式）；否则回退 launcher。`browser_close` 在 extension 模式下关自动化标签页（`Target.closeTarget`），launcher 模式 kill 进程树。
 - extension 模式的边界：Chrome 会在被调试标签页顶端显示"正在被调试"横幅，用户点"取消"即剥离（`onDetach`），桌面端经 target 存活探测感知并按需重建；本机恶意进程可伪造 Origin 头连上桥接，但能拿到的能力仅限"在用户浏览器里开一个新标签页并驱动它"，与用户手动开 tab 等价的攻击面之外主要增量是读取该 tab 内容——后续可加 token 握手收紧。
-- 扩展安装引导：浏览器不允许外部程序静默安装扩展（企业策略除外），能自动化的上限是给出目录 + 步骤。`browser_extension_install_info` 返回扩展连接状态与扩展目录（dev 用仓库源码目录，打包产物经 tauri.conf.json `bundle.resources` 带出）；`browser_extension_reveal_dir` 在文件管理器中打开该目录。设置页在 browser 行下内联模式选择 + 连接状态徽标（5s 轮询），未连接且模式需要扩展时展开引导卡（chrome://extensions → 开发者模式 → 加载已解压）。WebUI 端命令不可用（shim 抛错）时引导区隐藏，仅保留模式选择（经 settings sync 到桌面端生效）。
+- 扩展安装引导：浏览器不允许外部程序静默安装扩展（企业策略除外），能自动化的上限是给出目录 + 步骤。扩展的安装目录固定为 `~/.liveagent/extension`——Chrome 加载解压扩展记录的是绝对路径，指向 bundle resources 会随应用更新（安装目录整体替换）失效；应用每次启动把内置扩展资源（打包产物经 tauri.conf.json `bundle.resources` 带出，dev 为 target 下的 resources 拷贝、兜底仓库源码目录）整目录同步到该稳定路径。`browser_extension_install_info` 返回扩展连接状态与该目录（目录缺失时按需补同步自愈）；`browser_extension_reveal_dir` 在文件管理器中打开该目录。设置页在 browser 行下内联模式选择 + 连接状态徽标（5s 轮询），未连接且模式需要扩展时展开引导卡（chrome://extensions → 开发者模式 → 加载已解压）。WebUI 端命令不可用（shim 抛错）时引导区隐藏，仅保留模式选择（经 settings sync 到桌面端生效）。
 
 ## 1. 目标
 

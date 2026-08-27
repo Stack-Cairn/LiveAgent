@@ -832,6 +832,12 @@ pub fn run() {
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
+                // 浏览器扩展同步到 ~/.liveagent/extension：Chrome 加载解压
+                // 扩展记录绝对路径，必须给一个不随应用更新变化的目录。
+                if let Err(error) = commands::browser::sync_bundled_browser_extension(app.handle())
+                {
+                    eprintln!("failed to sync browser extension: {error}");
+                }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
                 // 配置自动同步的后台任务：只消费脏信号并做防抖上传，
