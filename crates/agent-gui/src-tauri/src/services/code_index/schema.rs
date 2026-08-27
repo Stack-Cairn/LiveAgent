@@ -15,7 +15,11 @@ use rusqlite::Connection;
 use super::now_ms;
 
 /// v2：files 增加 has_vectors（词法降级期索引的文件待模型就绪后回填向量）。
-pub(crate) const SCHEMA_VERSION: i64 = 2;
+/// v3：chunks_fts 正文/符号改为 CJK bigram 预切分写入（store::segment_cjk_for_fts，
+/// 查询侧同源切分），embedding 落库前显式 L2 归一化（语义路距离阈值的前提），
+/// 生成物文件（头部 generated 标记/超长行）不再入索引。三者都要求整库重建：
+/// 版本不匹配 → DROP 重建，空库由检索路自愈拉起增量 job 回填。
+pub(crate) const SCHEMA_VERSION: i64 = 3;
 /// multilingual-e5-small 的输出维度；写死进 DDL，换模型即换 schema 版本重建。
 pub(crate) const EMBEDDING_DIM: usize = 384;
 pub(crate) const EMBEDDING_MODEL_ID: &str = "multilingual-e5-small";

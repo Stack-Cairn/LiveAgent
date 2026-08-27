@@ -7,11 +7,14 @@
 //! - [`types`]：对外 DTO（serde camelCase）
 //! - [`paths`]：`~/.liveagent/code-index/` 根目录、per-workspace hash 目录
 //! - [`schema`]：DDL、连接打开、integrity_check + quarantine 重建
-//! - [`store`]：`CodeIndexStore`（单连接 + Mutex，文件/块 upsert 与统计）
-//! - [`walker`]：`ignore` 遍历 + mtime/内容哈希增量判定
+//! - [`store`]：`CodeIndexStore`（单连接 + Mutex，文件/块 upsert 与统计；
+//!   FTS 写入侧 CJK bigram 预切分，与查询侧同源）
+//! - [`walker`]：`ignore` 遍历 + mtime/内容哈希增量判定 + 生成物头部标记探测
 //! - [`chunker`]：tree-sitter 函数/类切块，无 grammar 语言滑窗回退
-//! - [`embedder`]：fastembed 进程级单例（懒初始化，首次下载模型）
-//! - [`search`]：FTS5 BM25 + vec0 KNN，RRF 融合，片段现读
+//! - [`embedder`]：fastembed 进程级单例（懒初始化，首次下载模型；输出显式
+//!   L2 归一化，语义路距离阈值的前提）
+//! - [`search`]：FTS5 BM25 + vec0 KNN（带相关性阈值），RRF 融合，片段现读；
+//!   响应携带 degraded（语义路降级）与 indexing（构建期状态）说明
 //! - [`jobs`]：后台索引 job（进度快照 + `AtomicBool` 协作式取消）
 //! - [`service`]：`CodeIndexService` 对外编排（enable/disable/rebuild/search/watch 失效）
 

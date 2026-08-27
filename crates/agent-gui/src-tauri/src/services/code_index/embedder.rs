@@ -228,15 +228,30 @@ fn embed_with_model(
         Ok(Err(error)) => return Err(format!("embedding 推理失败：{error}")),
         Err(_) => return Err("embedding 推理线程 panic".to_string()),
     };
-    for embedding in &embeddings {
+    let mut embeddings = embeddings;
+    for embedding in &mut embeddings {
         if embedding.len() != EMBEDDING_DIM {
             return Err(format!(
                 "embedding 维度异常：期望 {EMBEDDING_DIM}，得到 {}",
                 embedding.len()
             ));
         }
+        // 显式 L2 归一化：检索路的相关性阈值（search::SEMANTIC_MAX_DISTANCE）
+        // 建立在"vec0 的 L2 距离 ↔ 余弦相似度"换算上，该换算只对单位向量成立。
+        // fastembed 对 e5 系通常已归一化，这里再归一是幂等兜底，不赌上游行为。
+        l2_normalize(embedding);
     }
     Ok(embeddings)
+}
+
+/// 归一化为单位向量；零向量（理论不可达）保持原样避免除零。
+fn l2_normalize(vector: &mut [f32]) {
+    let norm = vector.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if norm > f32::EPSILON {
+        for value in vector.iter_mut() {
+            *value /= norm;
+        }
+    }
 }
 
 /// 入库块向量化（索引 job 专用：阻塞等模型锁）。
@@ -304,6 +319,22 @@ mod tests {
 
     /// 让路计数是进程级共享的，测试并行跑会互相干扰：串行化本模块的测试。
     static TEST_SERIAL: Mutex<()> = Mutex::new(());
+
+    /// 归一化后为单位向量（阈值换算的前提）；零向量不除零。
+    #[test]
+    fn l2_normalize_produces_unit_vectors() {
+        let mut vector = vec![3.0_f32, 4.0];
+        l2_normalize(&mut vector);
+        let norm = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-6, "norm = {norm}");
+        // 已归一的向量再归一是幂等。
+        let snapshot = vector.clone();
+        l2_normalize(&mut vector);
+        assert_eq!(vector, snapshot);
+        let mut zero = vec![0.0_f32; 4];
+        l2_normalize(&mut zero);
+        assert!(zero.iter().all(|v| *v == 0.0));
+    }
 
     #[test]
     fn query_waiter_guard_counts_all_exit_paths() {

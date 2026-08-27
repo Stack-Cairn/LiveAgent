@@ -230,7 +230,28 @@ impl CodeIndexService {
         {
             let _ = self.spawn_index_job(store.clone(), IndexJobKind::Incremental);
         }
-        search::search(&store, &args)
+        let mut response = search::search(&store, &args)?;
+        // 索引状态可观测（评审 #630 条目 1/6 的同根因修复）：冷启动/重建/
+        // 增量期间检索是合法场景（词法与已有向量照常可用），但必须告知
+        // 调用方结果可能不完整、排序会随索引增长漂移——否则构建期的局部
+        // 结果会被当成全量事实，"检索质量差"的误判全部源于此。
+        if let Some(job) = jobs::active_job_for_workdir(&workdir) {
+            let progress = if job.total_files > 0 {
+                format!("{}/{} 文件", job.processed_files, job.total_files)
+            } else {
+                "扫描中".to_string()
+            };
+            response.indexing = Some(format!(
+                "索引构建进行中（阶段 {}，{progress}）：本次结果可能不完整，排序会随索引增长变化；索引就绪后重试可获得稳定结果",
+                job.phase
+            ));
+        } else if index_is_empty {
+            response.indexing = Some(
+                "索引为空（刚启用或版本升级后重建）：后台索引已安排，请先用 Grep 兜底，稍后重试"
+                    .to_string(),
+            );
+        }
+        Ok(response)
     }
 
     /// 预热：会话/工具注册时调用，把模型加载提前到首次检索之前。
@@ -620,6 +641,15 @@ fn index_one_file(
         }
         return Ok(0);
     };
+    if walker::looks_generated(&content) {
+        // 生成物（Cython/protobuf/Go generate 等头部标记、minified 超长行）：
+        // 不入索引，存量行清掉。不在 files 表留痕 → 每轮 job 会重读其头部
+        // 再判一次，代价是页缓存级的，换来"生成器标记消失即自动回归索引"。
+        if existing.is_some() {
+            store.remove_file(&file.rel_path)?;
+        }
+        return Ok(0);
+    }
     let content_hash = sha256_hex(content.as_bytes());
     if kind == IndexJobKind::Incremental {
         if let Some(meta) = &existing {

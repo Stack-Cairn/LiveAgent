@@ -7,7 +7,7 @@ use std::path::Path;
 use rusqlite::params;
 
 use super::embedder;
-use super::store::{embedding_bytes, escape_like, CodeIndexStore};
+use super::store::{embedding_bytes, escape_like, is_cjk, segment_cjk_for_fts, CodeIndexStore};
 use super::types::{CodeIndexSearchArgs, CodeIndexSearchMatch, CodeIndexSearchResponse};
 
 /// 每路候选数：融合前 top-K。
@@ -18,6 +18,17 @@ const DEFAULT_RESULTS: usize = 8;
 const MAX_RESULTS: usize = 20;
 /// 返回片段的字符截断上限。
 const SNIPPET_MAX_CHARS: usize = 1_200;
+/// 语义路相关性门控（单位向量 L2 距离，cos ≈ 1 - d²/2）。真模型实测
+/// （tests::real_model_distance_distribution_matches_threshold，e5-small）：
+/// 相似度分布严重压缩——相关 best ≈ 0.52(EN)/0.59(ZH 跨语言)，垃圾查询
+/// best ≈ 0.64，同库不相关块 ≈ 0.63-0.69，**绝对阈值无法同时拦垃圾和保
+/// 跨语言**。因此两级门控：
+/// 1. GATE：best 距离超过它 → 判定"查询与本库无关"，语义路整路返回空
+///    （无意义查询不再凑 top-k，评审 #630 条目 3）；
+/// 2. TAIL：过了门槛后，只保留 best + delta 邻域内的候选（截远尾噪声，
+///    跨语言分布整体右移+压缩，delta 过紧会先杀伤它们）。
+pub(crate) const SEMANTIC_GATE_DISTANCE: f64 = 0.62;
+pub(crate) const SEMANTIC_TAIL_DELTA: f64 = 0.12;
 
 struct ChunkRow {
     chunk_id: i64,
@@ -181,21 +192,33 @@ pub(crate) fn search(
         matches,
         mode: effective_mode.to_string(),
         degraded,
+        indexing: None,
     })
 }
 
 /// FTS5 词法路。查询词逐词加引号转义（memory-index 同款），OR 连接：
 /// 代码检索里“任一词命中”召回优先，排序交给 bm25。
+/// 查询先过与索引写入侧同源的 CJK bigram 切分（store::segment_cjk_for_fts）：
+/// 否则纯中文查询是一个巨型 token，在 bigram 化的索引上永远 miss。
 /// 路径过滤按目录边界：`src` 命中 `src/**` 与文件 `src` 本身，不吞 `src2/`。
 fn lexical_route(
     store: &CodeIndexStore,
     query: &str,
     path_prefix: Option<&str>,
 ) -> Result<Vec<i64>, String> {
-    let terms: Vec<String> = query
+    let segmented = segment_cjk_for_fts(query);
+    let terms: Vec<String> = segmented
         .split_whitespace()
         .filter(|term| !term.is_empty())
-        .map(quote_fts_term)
+        .map(|term| {
+            // 单字 CJK 词走前缀匹配：索引侧多字段全部展开为 bigram，孤立
+            // 单字 token 只存在于单字段——"锁" 必须以 "锁*" 才能命中 "锁被"。
+            let mut chars = term.chars();
+            match (chars.next(), chars.next()) {
+                (Some(only), None) if is_cjk(only) => format!("{}*", quote_fts_term(term)),
+                _ => quote_fts_term(term),
+            }
+        })
         .collect();
     if terms.is_empty() {
         return Ok(Vec::new());
@@ -242,6 +265,8 @@ fn lexical_route(
 }
 
 /// sqlite-vec 语义路。vec0 的 KNN 语法：`embedding MATCH ? AND k = ?`。
+/// 候选按 [`SEMANTIC_MAX_DISTANCE`] 过滤后再进融合——KNN 的"最近"不等于
+/// "相关"，垃圾查询的最近邻依然是垃圾。
 /// 路径过滤在 KNN 之后 JOIN 过滤（vec0 不支持 WHERE 前置过滤），k 放大补偿。
 fn semantic_route(
     store: &CodeIndexStore,
@@ -262,14 +287,15 @@ fn semantic_route(
              ORDER BY distance",
         )
         .map_err(|e| format!("准备语义检索失败：{e}"))?;
-    let candidates: Vec<i64> = stmt
+    let scored: Vec<(i64, f64)> = stmt
         .query_map(
             params![embedding_bytes(&query_embedding), k as i64],
-            |row| row.get::<_, i64>(0),
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?)),
         )
         .map_err(|e| format!("语义检索失败：{e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("读取语义检索结果失败：{e}"))?;
+    let candidates = filter_semantic_candidates(scored);
 
     let Some(prefix) = path_prefix else {
         return Ok(candidates);
@@ -300,6 +326,25 @@ fn semantic_route(
         }
     }
     Ok(filtered)
+}
+
+/// 相关性两级门控（纯逻辑，供测试直接驱动）：输入按距离升序的 (chunk_id,
+/// distance)。best 超过 [`SEMANTIC_GATE_DISTANCE`] → 整路空（查询与本库
+/// 无关，好过编造 top-k）；否则保留 best + [`SEMANTIC_TAIL_DELTA`] 邻域，
+/// 截掉远尾。hybrid 下语义路空则退化纯词法，两路全空如实返回零结果。
+pub(crate) fn filter_semantic_candidates(scored: Vec<(i64, f64)>) -> Vec<i64> {
+    let Some(best) = scored.first().map(|(_, distance)| *distance) else {
+        return Vec::new();
+    };
+    if best > SEMANTIC_GATE_DISTANCE {
+        return Vec::new();
+    }
+    let cutoff = best + SEMANTIC_TAIL_DELTA;
+    scored
+        .into_iter()
+        .take_while(|(_, distance)| *distance <= cutoff)
+        .map(|(chunk_id, _)| chunk_id)
+        .collect()
 }
 
 fn load_chunk_rows(

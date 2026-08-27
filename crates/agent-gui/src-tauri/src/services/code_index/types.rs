@@ -108,4 +108,8 @@ pub struct CodeIndexSearchResponse {
     pub mode: String,
     /// 语义路不可用（模型未就绪等）而降级为纯词法时置位并说明。
     pub degraded: Option<String>,
+    /// 索引冷启动/重建/增量进行中（或索引为空）时置位并说明：结果可能
+    /// 不完整、排序会随索引增长漂移。调用方（Agent）据此决定是否稍后重试，
+    /// 而不是把构建期的局部结果当成全量事实。
+    pub indexing: Option<String>,
 }

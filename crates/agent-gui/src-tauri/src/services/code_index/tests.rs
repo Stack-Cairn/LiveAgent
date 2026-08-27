@@ -137,6 +137,208 @@ fn windows_verbatim_prefix_is_stripped_from_normalized_workdir() {
     );
 }
 
+mod cjk_fts_tests {
+    use crate::services::code_index::store::segment_cjk_for_fts;
+
+    /// 纯 ASCII 快路径零拷贝：绝大多数代码块不付切分代价。
+    #[test]
+    fn ascii_text_passes_through_unchanged() {
+        let text = "function loadConfig() { return readFile(); }";
+        assert!(matches!(
+            segment_cjk_for_fts(text),
+            std::borrow::Cow::Borrowed(_)
+        ));
+        assert_eq!(segment_cjk_for_fts(text).as_ref(), text);
+    }
+
+    /// CJK 连续段展开为重叠 bigram；单字段保留单字。
+    #[test]
+    fn cjk_runs_become_overlapping_bigrams() {
+        assert_eq!(segment_cjk_for_fts("监听失效").as_ref().trim(), "监听 听失 失效");
+        assert_eq!(segment_cjk_for_fts("锁").as_ref().trim(), "锁");
+        // 混排：ASCII 标识符原样保留，CJK 段独立切分。
+        let mixed = segment_cjk_for_fts("调用notifyWorkspace后失效");
+        let terms: Vec<&str> = mixed.split_whitespace().collect();
+        assert_eq!(terms, ["调用", "notifyWorkspace", "后失", "失效"]);
+    }
+
+    /// 日文假名与谚文同样参与 bigram（跨语言词法路的最低保障）。
+    #[test]
+    fn kana_and_hangul_are_segmented() {
+        let kana = segment_cjk_for_fts("インデックス");
+        assert!(kana.split_whitespace().count() >= 2, "katakana bigrams: {kana}");
+        let hangul = segment_cjk_for_fts("인덱스");
+        assert!(hangul.split_whitespace().count() >= 2, "hangul bigrams: {hangul}");
+    }
+}
+
+mod semantic_threshold_tests {
+    use crate::services::code_index::search::{
+        filter_semantic_candidates, SEMANTIC_GATE_DISTANCE, SEMANTIC_TAIL_DELTA,
+    };
+
+    /// 两级门控：best 过门 → 保留 best+delta 邻域截远尾；best 不过门 →
+    /// 整路空（垃圾查询不凑 top-k）；空输入安全。
+    #[test]
+    fn candidates_beyond_threshold_are_dropped() {
+        // best=0.50 过门，邻域 [0.50, 0.50+delta]；0.70 在界内，0.66? 看 delta。
+        let kept = filter_semantic_candidates(vec![
+            (1, 0.50),
+            (2, 0.50 + SEMANTIC_TAIL_DELTA),
+            (3, 0.50 + SEMANTIC_TAIL_DELTA + 0.01),
+            (4, 1.20),
+        ]);
+        assert_eq!(kept, vec![1, 2], "tail beyond best+delta is dropped");
+
+        // 垃圾查询：best 本身超过门槛 → 全空。
+        let garbage = filter_semantic_candidates(vec![
+            (9, SEMANTIC_GATE_DISTANCE + 0.02),
+            (8, SEMANTIC_GATE_DISTANCE + 0.03),
+        ]);
+        assert!(garbage.is_empty(), "meaningless query must not fill top-k");
+
+        assert!(filter_semantic_candidates(Vec::new()).is_empty());
+    }
+
+    /// 真模型阈值校准（`--ignored` 手动跑；依赖 ~/.liveagent 下已缓存的
+    /// multilingual-e5-small，CI 无模型不跑）。验证两级门控落在真实距离
+    /// 分布的正确一侧：
+    /// - 相关查询（英文同语言、中文跨语言）best < GATE → 语义路存活
+    /// - 无意义查询（乱敲键盘）best > GATE → 整路过滤
+    /// 同时验证与真实语料的"最相关"排序一致。
+    /// 实测分布（2026-08，e5-small）：EN best 0.52 / ZH best 0.59 /
+    /// garbage best 0.64——门槛 0.62 落在 ZH 与 garbage 之间，余量 ~0.03/0.02，
+    /// 换 embedding 模型必须重跑本测试重新校准。
+    #[test]
+    #[ignore = "requires locally cached embedding model"]
+    fn real_model_distance_distribution_matches_threshold() {
+        use crate::services::code_index::embedder;
+
+        embedder::ensure_ready().expect("model cached locally");
+        let passages = vec![
+            // 0: 重试逻辑
+            "// src/net/retry.ts:12 resolveRetryPolicy\nexport function resolveRetryPolicy(attempt: number): number {\n  const base = 200;\n  const jitter = Math.random() * 50;\n  return base * 2 ** attempt + jitter; // exponential backoff with jitter\n}".to_string(),
+            // 1: 鉴权 token 刷新
+            "// src/auth/token.ts:33 refreshAccessToken\nasync function refreshAccessToken(session: Session): Promise<Token> {\n  if (session.expiresAt > Date.now()) return session.token;\n  return await oauthClient.refresh(session.refreshToken);\n}".to_string(),
+            // 2: 配置解析
+            "// src/config/load.ts:8 loadConfig\nfunction loadConfig(path: string): Config {\n  const raw = fs.readFileSync(path, 'utf8');\n  return JSON.parse(raw);\n}".to_string(),
+        ];
+        let passage_vecs = embedder::embed_passages(&passages).expect("embed passages");
+
+        let l2 = |a: &[f32], b: &[f32]| -> f64 {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| ((x - y) as f64).powi(2))
+                .sum::<f64>()
+                .sqrt()
+        };
+        let distances = |query: &str| -> Vec<f64> {
+            let q = embedder::embed_query(query).expect("embed query");
+            passage_vecs.iter().map(|p| l2(&q, p)).collect()
+        };
+
+        // 英文同语言意图查询：最近的必须是重试块，且过门槛。
+        let en = distances("where is the retry backoff logic");
+        let en_best = en
+            .iter()
+            .enumerate()
+            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+        // 中文跨语言意图查询：同样必须指向重试块且过门槛（门槛过紧先杀伤它）。
+        let zh = distances("重试退避逻辑在哪里");
+        let zh_best = zh
+            .iter()
+            .enumerate()
+            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+        // 无意义查询：best 必须被门槛拦下（这正是修复的靶点）。
+        let garbage = distances("asdkjfh qwpoeiru zxmcnvb 阿斯顿飞洒地方");
+        let garbage_min = garbage.iter().cloned().fold(f64::INFINITY, f64::min);
+
+        eprintln!("== real-model distance calibration ==");
+        eprintln!("EN relevant:   {en:?}");
+        eprintln!("ZH crosslang:  {zh:?}");
+        eprintln!("garbage:       {garbage:?}");
+        eprintln!("gate:          {SEMANTIC_GATE_DISTANCE} (+tail {SEMANTIC_TAIL_DELTA})");
+
+        assert_eq!(en_best.0, 0, "retry query must rank retry chunk first: {en:?}");
+        assert!(
+            *en_best.1 < SEMANTIC_GATE_DISTANCE,
+            "relevant EN query must pass gate: d={} vs {SEMANTIC_GATE_DISTANCE}",
+            en_best.1
+        );
+        assert_eq!(zh_best.0, 0, "cross-lingual query must rank retry chunk first: {zh:?}");
+        assert!(
+            *zh_best.1 < SEMANTIC_GATE_DISTANCE,
+            "cross-lingual ZH query must pass gate: d={} vs {SEMANTIC_GATE_DISTANCE}",
+            zh_best.1
+        );
+        assert!(
+            garbage_min > SEMANTIC_GATE_DISTANCE,
+            "garbage query must be gated out: min d={garbage_min} vs {SEMANTIC_GATE_DISTANCE}; all={garbage:?}"
+        );
+    }
+}
+            *zh_best.1 < SEMANTIC_MAX_DISTANCE,
+            "cross-lingual ZH query must survive threshold: d={} vs {SEMANTIC_MAX_DISTANCE}",
+            zh_best.1
+        );
+
+        // 无意义查询：全部候选都必须被阈值拦下（这正是修复的靶点）。
+        let garbage = distances("asdkjfh qwpoeiru zxmcnvb 阿斯顿飞洒地方");
+        let garbage_min = garbage.iter().cloned().fold(f64::INFINITY, f64::min);
+
+        eprintln!("== real-model distance calibration ==");
+        eprintln!("EN relevant:   {en:?}");
+        eprintln!("ZH crosslang:  {zh:?}");
+        eprintln!("garbage:       {garbage:?}");
+        eprintln!("threshold:     {SEMANTIC_MAX_DISTANCE}");
+
+        assert!(
+            garbage_min > SEMANTIC_MAX_DISTANCE,
+            "garbage query must be fully filtered: min d={garbage_min} vs {SEMANTIC_MAX_DISTANCE}; all={garbage:?}"
+        );
+    }
+}
+
+mod generated_detection_tests {
+    use crate::services::code_index::walker::looks_generated;
+
+    #[test]
+    fn generator_head_markers_are_detected() {
+        assert!(looks_generated("/* Generated by Cython 0.29.30 */\n#include <stdio.h>\n"));
+        assert!(looks_generated(
+            "// Code generated by protoc-gen-go. DO NOT EDIT.\npackage pb\n"
+        ));
+        assert!(looks_generated("# @generated\nfrom x import y\n"));
+        assert!(looks_generated(
+            "<!-- This file is auto-generated from templates -->\n<html></html>\n"
+        ));
+    }
+
+    /// 标记不在头部（正文提及"do not edit"字样）不误伤；普通源码放行。
+    #[test]
+    fn normal_sources_are_not_flagged() {
+        assert!(!looks_generated(
+            "function invalidate() {\n  // watch 失效后自动重建索引\n}\n"
+        ));
+        let marker_deep_in_body = format!(
+            "{}\n// tip: generated code usually says do not edit\n",
+            "// normal line\n".repeat(20)
+        );
+        assert!(!looks_generated(&marker_deep_in_body));
+    }
+
+    /// 前 5 行出现超长行（minified/数据 blob）按生成物处理。
+    #[test]
+    fn oversized_head_line_counts_as_generated() {
+        let minified = format!("var a={};", "x".repeat(5_000));
+        assert!(looks_generated(&minified));
+        let long_but_late = format!("{}{}", "short\n".repeat(6), "y".repeat(5_000));
+        assert!(!looks_generated(&long_but_late), "长行在第 6 行之后不触发");
+    }
+}
+
 mod walker_tests {
     use std::collections::BTreeSet;
     use std::fs;
@@ -449,6 +651,70 @@ export function unrelatedHelper(): void {
         )
         .expect("search after remove");
         assert!(empty.matches.is_empty());
+    }
+
+    /// 纯中文查询走词法路必须能命中中文注释/文档（评审 #630 条目 2 回归）：
+    /// unicode61 连续 CJK 成单 token，修复前 "监听失效" 永远 0 结果。
+    #[test]
+    fn pure_chinese_lexical_query_hits_chinese_comment() {
+        let workdir = tempfile::tempdir().expect("workdir");
+        let source = "export function rebuildIndex(): void {\n  // 工作区监听失效后自动重建索引\n  console.log(\"rebuild\");\n  console.log(\"done\");\n}\n";
+        let rel_path = "src/rebuild.ts";
+        let abs_path = workdir.path().join(rel_path);
+        fs::create_dir_all(abs_path.parent().unwrap()).expect("mkdir");
+        fs::write(&abs_path, source).expect("write source");
+
+        let db_dir = tempfile::tempdir().expect("db dir");
+        let store = CodeIndexStore::open_at(
+            workdir.path().to_str().unwrap(),
+            db_dir.path().join("code-index.sqlite3"),
+        )
+        .expect("open store");
+        let chunks = chunk_source(rel_path, language_for_path(rel_path), source);
+        store
+            .replace_file(
+                rel_path,
+                1,
+                source.len() as u64,
+                &sha256_hex(source.as_bytes()),
+                "typescript",
+                &chunks,
+                &[],
+            )
+            .expect("replace_file");
+
+        // 词内子串（跨词边界 bigram）、整词、单字前缀三种形态都要能命中。
+        for query in ["监听失效", "重建索引", "索"] {
+            let response = search::search(
+                &store,
+                &CodeIndexSearchArgs {
+                    workdir: store.workdir.clone(),
+                    query: query.to_string(),
+                    mode: Some("lexical".to_string()),
+                    path: None,
+                    max_results: None,
+                },
+            )
+            .expect("chinese lexical search");
+            assert!(
+                response.matches.iter().any(|m| m.path == rel_path),
+                "query '{query}' should hit the chinese comment"
+            );
+        }
+
+        // 英文标识符查询在同一份 bigram 化索引上不受影响。
+        let english = search::search(
+            &store,
+            &CodeIndexSearchArgs {
+                workdir: store.workdir.clone(),
+                query: "rebuildIndex".to_string(),
+                mode: Some("lexical".to_string()),
+                path: None,
+                max_results: None,
+            },
+        )
+        .expect("english lexical search");
+        assert!(english.matches.iter().any(|m| m.path == rel_path));
     }
 
     /// 路径过滤按目录边界：`src` 不得吞掉 `src2/`。

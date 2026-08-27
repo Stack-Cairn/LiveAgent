@@ -33,6 +33,7 @@ type CodeIndexSearchResponse = {
   matches: CodeIndexSearchMatch[];
   mode: string;
   degraded?: string | null;
+  indexing?: string | null;
 };
 
 function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
@@ -142,6 +143,7 @@ export function createCodeSearchTools(params: { workdir: string }): BuiltinToolB
       mode: response.mode,
       matchCount: response.matches.length,
       ...(response.degraded ? { degraded: response.degraded } : {}),
+      ...(response.indexing ? { indexing: response.indexing } : {}),
       matches: response.matches.map((match) => ({
         path: match.path,
         startLine: match.startLine,
@@ -153,7 +155,10 @@ export function createCodeSearchTools(params: { workdir: string }): BuiltinToolB
       })),
     };
 
+    // 索引构建期/降级态必须直达模型：构建期的"0 结果/少结果"不是终局事实。
+    const notes = [response.indexing, response.degraded].filter(Boolean) as string[];
     if (response.matches.length === 0) {
+      const noteSuffix = notes.length > 0 ? `\n${notes.join("\n")}` : "";
       return {
         role: "toolResult",
         toolCallId: toolCall.id,
@@ -161,7 +166,7 @@ export function createCodeSearchTools(params: { workdir: string }): BuiltinToolB
         content: [
           {
             type: "text",
-            text: `No matches for "${query}" (mode: ${response.mode}). Try broader phrasing, a different mode, or fall back to Grep for exact strings.`,
+            text: `No matches for "${query}" (mode: ${response.mode}). Try broader phrasing, a different mode, or fall back to Grep for exact strings.${noteSuffix}`,
           },
         ],
         details,
@@ -177,9 +182,10 @@ export function createCodeSearchTools(params: { workdir: string }): BuiltinToolB
         : `## ${location} (${match.source})`;
       return match.snippet ? `${heading}\n\`\`\`\n${match.snippet}\n\`\`\`` : heading;
     });
-    const header = response.degraded
-      ? `${response.matches.length} match(es), mode: ${response.mode} — ${response.degraded}`
-      : `${response.matches.length} match(es), mode: ${response.mode}`;
+    const header =
+      notes.length > 0
+        ? `${response.matches.length} match(es), mode: ${response.mode} — ${notes.join("；")}`
+        : `${response.matches.length} match(es), mode: ${response.mode}`;
 
     return {
       role: "toolResult",

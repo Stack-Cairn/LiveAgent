@@ -364,6 +364,8 @@ export type CodeSearchResultDetails = {
   mode: string;
   matchCount: number;
   degraded?: string;
+  /** 索引构建中/索引为空的状态说明（结果可能不完整、排序随索引增长漂移）。 */
+  indexing?: string;
   matches: CodeSearchResultMatch[];
 };
 

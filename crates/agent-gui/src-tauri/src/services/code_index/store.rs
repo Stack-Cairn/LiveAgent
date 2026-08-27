@@ -2,6 +2,7 @@
 //! 单连接 + `Mutex`；写路径都在索引 job 线程或 watch 增量线程上（spawn_blocking /
 //! 专用线程），锁竞争面小。
 
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
@@ -162,10 +163,18 @@ impl CodeIndexStore {
             )
             .map_err(|e| format!("写入代码块失败：{e}"))?;
             let chunk_id = tx.last_insert_rowid();
+            // FTS 正文/符号做 CJK bigram 预切分：unicode61 把连续 CJK 当单
+            // token，纯中文/日文查询在原始文本上永远撞不上词边界。查询侧
+            // （search::lexical_route）用同一函数切分，两侧规则必须同源。
             tx.execute(
                 "INSERT INTO chunks_fts (content, symbol, path, chunk_id)
                  VALUES (?1, ?2, ?3, ?4)",
-                params![chunk.content, chunk.symbol, path, chunk_id],
+                params![
+                    segment_cjk_for_fts(&chunk.content).as_ref(),
+                    segment_cjk_for_fts(&chunk.symbol).as_ref(),
+                    path,
+                    chunk_id
+                ],
             )
             .map_err(|e| format!("写入代码块 FTS 失败：{e}"))?;
             if let Some(embedding) = embeddings.get(index) {
@@ -296,6 +305,71 @@ fn delete_file_rows(tx: &rusqlite::Transaction<'_>, path: &str) -> Result<(), St
     tx.execute("DELETE FROM files WHERE path = ?1", [path])
         .map_err(|e| format!("清理代码索引文件行失败：{e}"))?;
     Ok(())
+}
+
+/// FTS5 unicode61 分词器把连续 CJK 字符当作单个 token：中文/日文/韩文没有
+/// 空格词边界，"工作区监听失效" 整串成一个巨型 token，任何子串查询都无法
+/// 命中（评审 #630 条目 2）。这里在**写入与查询两侧**做同源的 bigram 预切分：
+/// CJK 连续段展开为重叠二字组（"监听失效" → "监听 听失 失效"），单字段保留
+/// 单字；非 CJK 文本原样保留（ASCII 标识符仍靠 unicode61 的 `_`/`-` 分隔）。
+///
+/// 无 CJK 的快路径零拷贝返回（代码主体是 ASCII，绝大多数块不付代价）。
+/// 改动本函数的切分规则需同步升 `schema::SCHEMA_VERSION` 强制重建索引，
+/// 否则新查询打旧索引两侧规则不一致。
+pub(crate) fn segment_cjk_for_fts(text: &str) -> Cow<'_, str> {
+    if !text.chars().any(is_cjk) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut run: Vec<char> = Vec::new();
+    let flush_run = |run: &mut Vec<char>, out: &mut String| {
+        if run.is_empty() {
+            return;
+        }
+        if !out.is_empty() && !out.ends_with(' ') {
+            out.push(' ');
+        }
+        if run.len() == 1 {
+            out.push(run[0]);
+        } else {
+            for (index, pair) in run.windows(2).enumerate() {
+                if index > 0 {
+                    out.push(' ');
+                }
+                out.push(pair[0]);
+                out.push(pair[1]);
+            }
+        }
+        out.push(' ');
+        run.clear();
+    };
+    for ch in text.chars() {
+        if is_cjk(ch) {
+            run.push(ch);
+        } else {
+            flush_run(&mut run, &mut out);
+            out.push(ch);
+        }
+    }
+    flush_run(&mut run, &mut out);
+    Cow::Owned(out)
+}
+
+/// bigram 切分范围：汉字（含扩展A/B、兼容区）、平假名、片假名（含音标扩展）、
+/// 谚文音节/字母。CJK 标点不参与（unicode61 本就视为分隔符）。
+/// search::lexical_route 也用它识别单字 CJK 查询词（走 FTS5 前缀匹配）。
+pub(crate) fn is_cjk(ch: char) -> bool {
+    matches!(u32::from(ch),
+        0x3400..=0x4DBF      // CJK Ext A
+        | 0x4E00..=0x9FFF    // CJK Unified Ideographs
+        | 0xF900..=0xFAFF    // CJK Compatibility Ideographs
+        | 0x3040..=0x309F    // Hiragana
+        | 0x30A0..=0x30FF    // Katakana
+        | 0x31F0..=0x31FF    // Katakana Phonetic Extensions
+        | 0x1100..=0x11FF    // Hangul Jamo
+        | 0xAC00..=0xD7AF    // Hangul Syllables
+        | 0x20000..=0x2A6DF  // CJK Ext B
+    )
 }
 
 /// sqlite-vec 接受 float32 小端字节串作为向量字面量。
