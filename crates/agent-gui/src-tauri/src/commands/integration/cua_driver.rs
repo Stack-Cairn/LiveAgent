@@ -75,3 +75,12 @@ pub fn cua_driver_self_identity() -> SelfIdentity {
 pub fn cua_driver_self_windows(app: AppHandle) -> Vec<SelfWindowRect> {
     cua_driver::self_window_rects(&app)
 }
+
+/// 当前前台应用的 pid。前端用它拦下无 pid / window_id / 坐标的 desktop
+/// 键盘调用（press_key / hotkey / type_text）——那类输入投递给前台应用，
+/// 前台是宿主时等于让模型按掉自己的审批弹窗。只读；焦点随时会变，调用方
+/// 每次判定前都该重新取。取不到返回 Err，前端按 fail-closed 处理。
+#[tauri::command(rename_all = "camelCase")]
+pub fn cua_driver_frontmost_pid() -> Result<u32, String> {
+    cua_driver::frontmost_pid()
+}

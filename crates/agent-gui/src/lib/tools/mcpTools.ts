@@ -295,10 +295,12 @@ export async function createMcpTools(params: {
     }
 
     // 自指闸门：拦在发出调用之前。按 pid / window_id 寻址的直接拒绝；以桌面
-    // 为目标、坐标落在宿主窗口矩形内的也拒绝——后者要取一次窗口几何，所以
-    // 这里是异步的。
+    // 为目标、坐标落在宿主窗口矩形内的也拒绝；无明确目标的键盘输入在宿主处于
+    // 前台时也拒绝——后两条要各取一次系统事实（窗口几何 / 前台应用），所以
+    // 这里是异步的。工具名必须一并传入：键盘类调用没有任何可疑参数字段，
+    // 只看参数认不出来。
     if (cuaSelfGuard && isCuaServerId(mapped.serverId)) {
-      const refusal = await cuaSelfGuard.refuse(toolCall.arguments);
+      const refusal = await cuaSelfGuard.refuse(mapped.toolName, toolCall.arguments);
       if (refusal) {
         return {
           role: "toolResult",

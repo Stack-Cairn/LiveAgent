@@ -180,27 +180,17 @@ test("server 策略键在大小写错位时回落到规范化键", () => {
   );
 });
 
-test("server 策略键在大小写错位时回落到规范化键", () => {
-  // 设置页按条目原文写键;运行时拿到的 serverId 可能只差大小写。原文优先,
-  // 规范化键兜底,显式配置不会因此失效。
-  assert.equal(
-    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
-      "server:CUA-DRIVER": "deny",
-    }),
-    "deny",
-  );
-  assert.equal(
-    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
-      "server:cua-driver": "allow",
-    }),
-    "allow",
-  );
-  // 原文键优先于规范化键。
-  assert.equal(
-    resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
-      "server:CUA-DRIVER": "deny",
-      "server:cua-driver": "allow",
-    }),
-    "deny",
-  );
+test("候选键列表:原文在前、规范化兜底,一致时只有一条", () => {
+  // 这份列表是运行时与设置页共用的唯一顺序来源;顺序一变,两边一起变。
+  assert.deepEqual(defaults.serverPolicyKeyCandidates("CUA-DRIVER"), [
+    "server:CUA-DRIVER",
+    "server:cua-driver",
+  ]);
+  assert.deepEqual(defaults.serverPolicyKeyCandidates("cua-driver"), ["server:cua-driver"]);
+  // 原文候选做过 trim:策略表的键经 normalizeToolPolicies 归一,带空白的键
+  // 根本不会存在,不 trim 的原文候选永远查不到东西。
+  assert.deepEqual(defaults.serverPolicyKeyCandidates(" Cua-Driver "), [
+    "server:Cua-Driver",
+    "server:cua-driver",
+  ]);
 });

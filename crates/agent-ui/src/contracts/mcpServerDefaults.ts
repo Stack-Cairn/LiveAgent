@@ -71,6 +71,38 @@ export function isCuaDriverServer(server: ServerIdentity | undefined | null): bo
 }
 
 /**
+ * MCP 按 server 的策略以 `server:<serverId>` 为键存储。粒度介于「单个工具」
+ * 与「整组 MCP」之间：未对某 server 显式设置时，回落到组级（group:mcp）再
+ * 回落到缺省。
+ */
+export const TOOL_SERVER_POLICY_PREFIX = "server:";
+
+export function toolServerPolicyKey(serverId: string): string {
+  return `${TOOL_SERVER_POLICY_PREFIX}${serverId}`;
+}
+
+/**
+ * 一个 server 可能命中的策略键，**按查找顺序**排列：原文键（去空白）优先，
+ * 规范化（转小写）键兜底。
+ *
+ * 两个都查是为了消除大小写错位：写策略的地方（MCP Hub 卡片、CUA 设置页）
+ * 用的是各自手上那份 id，而运行时拿到的是 MCP server 返回的 id，两者可能
+ * 只差大小写。只查原文键会让显式配置静默失效并退回兜底 `allow`。
+ * 原文优先、规范化键仅作回落，因此不会改变已有配置的解析结果。
+ *
+ * **所有读策略的地方都必须走这份列表、按同一顺序**——运行时
+ * （`resolveToolPolicy`）与设置页（`readCuaPolicy`）各自实现一份的话，
+ * 「设置页显示 ask、运行时执行 allow」这类显示与执行不一致就会回来。
+ * 原文键做过 trim：策略表的键经 `normalizeToolPolicies` 归一，带空白的
+ * 键根本不会存在，不 trim 的原文候选永远查不到东西。
+ */
+export function serverPolicyKeyCandidates(serverId: string): string[] {
+  const raw = toolServerPolicyKey(serverId.trim());
+  const normalized = toolServerPolicyKey(canonicalServerId(serverId));
+  return raw === normalized ? [raw] : [raw, normalized];
+}
+
+/**
  * 该 server 的硬编码缺省策略；不属于「直接操作用户机器」那一类则返回
  * undefined，由调用方回落到通用兜底。
  */

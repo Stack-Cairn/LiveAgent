@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
  * 的机制（capability manifest 是工具/资源白名单，且在代理模式下归
  * CuaDriver.app 的守护进程管），所以这道闸只能开在宿主侧。
  *
- * 三条路径都要拦：
+ * 四条路径都要拦：
  * - **按 pid / window_id 寻址**：递归扫描整个入参。上游现约把目标包在
  *   `target` 对象里（`{"target":{"kind":"window","pid":…,"window_id":…}}`），
  *   只看顶层字段等于没拦——早期只认扁平参数的实现可以被官方写法直接绕过。
@@ -17,6 +17,12 @@ import { invoke } from "@tauri-apps/api/core";
  *   模型完全可以从整屏截图上量出「允许」按钮的位置，再以
  *   `{"target":{"kind":"desktop"},"x":…,"y":…}` 发出来。窗口矩形每次调用
  *   前重新取（见 `loadSelfWindowRects`），窗口移动后判断依然成立。
+ * - **无目标的键盘输入**：`press_key` / `hotkey` / `type_text` 在 desktop
+ *   作用域下不要求 pid / window_id / 坐标，输入投递给**前台应用**——上面
+ *   两道闸都管不到。`{"scope":"desktop","key":"return"}` 在宿主处于前台时
+ *   等于按掉审批弹窗，`{"keys":["cmd","q"]}` 等于关掉应用。所以这类调用要
+ *   查一次当前前台应用：前台是宿主就拒绝；**查不到也拒绝**（fail-closed，
+ *   带 pid / window_id 的显式目标不受影响，能力不算丢失）。
  * - **出参**：`list_windows` / `list_apps` / `get_accessibility_tree` 的
  *   结果里剔除宿主记录。不剔的话模型下一步就会拿着这些 id 来敲门，白白
  *   撞上入参拦截。官方 MCP 的文本块常带 `✅ …` 之类的摘要前缀，所以不能
@@ -27,8 +33,12 @@ import { invoke } from "@tauri-apps/api/core";
  * 举之前，模型手里本来也不会有 window_id，拦不住也无从利用。
  *
  * 残留面（明知且接受）：整屏截图里仍然能**看到**宿主窗口——图片没法像
- * JSON 那样做结构化剔除。但看到不等于能操作：落在宿主窗口矩形内的坐标
- * 操作会被上面第二条拦掉，所以这是信息可见性问题，不是审批绕过。
+ * JSON 那样做结构化剔除。但看到不等于能操作：坐标操作被矩形比对拦掉，
+ * 无目标的键盘输入被前台检查拦掉，所以这是信息可见性问题，不是审批绕过。
+ *
+ * 已知极限：前台检查与驱动实际投递之间存在极短的 TOCTOU 窗口（检查通过
+ * 后、按键落地前，焦点恰好切到宿主）。宿主侧守卫无法原子化这两步；检查
+ * 已经做在发出调用的那一刻，这是能做到的最紧位置。
  *
  * `cuaAllowSelfTargeting` 置 true 可整体关掉这道闸——用 LiveAgent 自动化
  * 测试 LiveAgent 时需要。默认关闭。
@@ -43,6 +53,16 @@ const SELF_REGION_REFUSAL =
   "该坐标落在 LiveAgent 自身的窗口范围内，已被拒绝：以桌面为目标按屏幕坐标操作宿主界面，" +
   "同样可以点掉审批弹窗或改写权限设置。请改为操作其他应用的窗口。（如确需自动化 LiveAgent " +
   "本身，在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
+
+const SELF_FOREGROUND_REFUSAL =
+  "LiveAgent 当前是前台应用，这次无明确目标的桌面键盘输入会直接落在宿主界面上" +
+  "（可以按掉审批弹窗、用快捷键关闭应用），已被拒绝。请先聚焦目标应用（例如先点击它的窗口），" +
+  "或改用带 pid / window_id 的显式窗口目标。（如确需自动化 LiveAgent 本身，" +
+  "在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
+
+const SELF_FOREGROUND_UNKNOWN_REFUSAL =
+  "无法确认当前前台应用，已拒绝这次无明确目标的桌面键盘输入：确认不了它不会落在 LiveAgent " +
+  "自己身上。请改用带 pid / window_id 的显式窗口目标，或稍后重试。";
 
 type SelfIdentity = { pid: number };
 
@@ -88,6 +108,19 @@ async function loadSelfWindowRects(): Promise<SelfWindowRect[]> {
   const rects = await invoke<SelfWindowRect[]>("cua_driver_self_windows").catch(() => []);
   selfRectsCache = { at: Date.now(), rects: Array.isArray(rects) ? rects : [] };
   return selfRectsCache.rects;
+}
+
+/**
+ * 当前前台应用的 pid。**不缓存**：焦点变化以百毫秒计，键盘调用本身不高频，
+ * 每次判定过一趟 IPC 换来的是判断永远基于当下事实。取不到返回 null，
+ * 调用方按 fail-closed 处理。
+ */
+async function loadFrontmostPid(): Promise<number | null> {
+  try {
+    return readNumber(await invoke<number>("cua_driver_frontmost_pid"));
+  } catch {
+    return null;
+  }
 }
 
 /** 出参过滤时学到的宿主 window_id。进程级缓存，无需持久化。 */
@@ -263,6 +296,71 @@ export function refuseSelfRegionCall(
 }
 
 /**
+ * 投递语义是「发给键盘焦点」的工具：desktop 作用域下不带 pid / window_id /
+ * 坐标也能生效，v0.22.0 契约里 `press_key` 只要求 `key`、`hotkey` 只要求
+ * `keys`、`type_text` 只要求 `text`。
+ */
+const FOCUS_DELIVERY_TOOLS = new Set(["type_text", "press_key", "hotkey"]);
+
+/**
+ * 这次调用是否是「无明确进程身份的键盘输入」——即投递目标由**当前焦点**
+ * 决定、而不是由参数决定的那类。
+ *
+ * 两个条件：
+ * - 是键盘 / 文本注入调用。除了按工具名认（上游现约的三个），还按参数形态
+ *   兜底：带字符串 `key` 或字符串数组 `keys` 的调用一律算——上游改名或新增
+ *   `hold_key` 之类的工具时不至于漏网。`text` 字段刻意**不**参与形态兜底：
+ *   `clipboard_write` / 查找类工具也带 text，投递语义与焦点无关，误伤它们
+ *   只会让守卫显得不可预测；`type_text` 本身已由工具名覆盖。
+ * - 参数里**没有任何** pid / window_id。按契约，带了身份的调用（包括
+ *   desktop scope + pid 的后台投递写法）投递给那个窗口，不跟焦点走；宿主
+ *   自己的身份在此之前已被 `refuseSelfTargetedCall` 拒掉，所以走到这里的
+ *   身份必然指向别的应用。刻意不看 `target.kind`：`kind: "window"` 但不带
+ *   身份的调用本来就寻址不到任何窗口，按焦点投递处理是 fail-closed。
+ */
+export function isDesktopKeyboardCall(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+): boolean {
+  const name = toolName.trim().toLowerCase();
+  const byName = FOCUS_DELIVERY_TOOLS.has(name);
+  const byShape =
+    !byName &&
+    args !== undefined &&
+    scanRecords(args, (record) => {
+      if (typeof record.key === "string") return true;
+      return Array.isArray(record.keys) && record.keys.some((k) => typeof k === "string");
+    }) === "hit";
+  if (!byName && !byShape) return false;
+
+  const identified =
+    args !== undefined &&
+    scanRecords(args, (record) =>
+      [...PID_KEYS, ...WINDOW_ID_KEYS].some((key) => readNumber(record[key]) !== null),
+    ) === "hit";
+  return !identified;
+}
+
+/**
+ * 入参检查：无明确目标的键盘输入，在宿主处于前台（或前台不可知）时拒绝。
+ *
+ * `frontmostPid` 为 null（查询失败 / 平台不支持）时**同样拒绝**：这里不能
+ * 学窗口矩形那样「取不到就放行」——键盘输入不存在「误伤矩形下方真实目标」
+ * 的二义性，而放行的代价是模型可以对宿主敲任意按键。拒绝话术会引导模型
+ * 改用带 pid / window_id 的显式目标，能力不算丢失。
+ */
+export function refuseDesktopKeyboardCall(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  selfPid: number,
+  frontmostPid: number | null,
+): string | null {
+  if (!isDesktopKeyboardCall(toolName, args)) return null;
+  if (frontmostPid === null) return SELF_FOREGROUND_UNKNOWN_REFUSAL;
+  return frontmostPid === selfPid ? SELF_FOREGROUND_REFUSAL : null;
+}
+
+/**
  * 从 `from` 起找出下一段结构完整的 JSON，返回它在原文中的区间。
  *
  * 官方 MCP 的文本块通常是「一行 `✅ Windows listed` 摘要 + 一段 JSON」，
@@ -380,8 +478,8 @@ export function resetCuaSelfGuardCaches() {
 }
 
 export type CuaSelfGuard = {
-  /** 调用前检查；返回拒绝理由或 null。 */
-  refuse: (args: Record<string, unknown> | undefined) => Promise<string | null>;
+  /** 调用前检查；返回拒绝理由或 null。`toolName` 是 MCP 侧的原始工具名。 */
+  refuse: (toolName: string, args: Record<string, unknown> | undefined) => Promise<string | null>;
   /** 结果文本过滤。 */
   strip: (text: string) => string;
 };
@@ -397,10 +495,21 @@ export async function resolveCuaSelfGuard(
   const selfPid = await loadSelfPid();
   if (selfPid === null) return null;
   return {
-    refuse: async (args) => {
+    refuse: async (toolName, args) => {
       const targeted = refuseSelfTargetedCall(args, selfPid);
       if (targeted) return targeted;
-      // 窗口矩形要过一趟 IPC，只在这次调用真的带了桌面坐标时才去取。
+      // 无明确目标的键盘输入跟着焦点走，前台是宿主（或不可知）就拒绝。
+      // 前台查询要过一趟 IPC，只在这次调用真的属于该类时才去取。
+      if (isDesktopKeyboardCall(toolName, args)) {
+        const keyboard = refuseDesktopKeyboardCall(
+          toolName,
+          args,
+          selfPid,
+          await loadFrontmostPid(),
+        );
+        if (keyboard) return keyboard;
+      }
+      // 窗口矩形同理，只在这次调用真的带了桌面坐标时才去取。
       if (!usesDesktopScreenCoordinates(args)) return null;
       return refuseSelfRegionCall(args, await loadSelfWindowRects());
     },
@@ -411,3 +520,5 @@ export async function resolveCuaSelfGuard(
 export const CUA_SELF_TARGET_REFUSAL = SELF_TARGET_REFUSAL;
 export const CUA_SELF_REGION_REFUSAL = SELF_REGION_REFUSAL;
 export const CUA_SELF_SCAN_DEPTH_REFUSAL = SELF_SCAN_DEPTH_REFUSAL;
+export const CUA_SELF_FOREGROUND_REFUSAL = SELF_FOREGROUND_REFUSAL;
+export const CUA_SELF_FOREGROUND_UNKNOWN_REFUSAL = SELF_FOREGROUND_UNKNOWN_REFUSAL;

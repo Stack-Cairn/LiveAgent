@@ -47,6 +47,23 @@ test("缺省是 ask，显式配置优先", () => {
   assert.equal(form.readCuaPolicy({ "server:cua-driver": "allow" }, managed()), "allow");
 });
 
+test("读取走与运行时同一候选顺序：原文优先，规范化兜底", () => {
+  // 一份 id 写成 CUA-DRIVER、策略写在规范化键上的旧配置。运行时会回落到
+  // server:cua-driver 读到 allow;这一页若只查原文键就会显示 ask——界面
+  // 告诉用户的权限状态与实际执行的不是同一条。
+  const entry = managed({ id: "CUA-DRIVER" });
+  assert.equal(form.readCuaPolicy({ "server:cua-driver": "allow" }, entry), "allow");
+  // 原文键优先于规范化键,与运行时一致。
+  assert.equal(
+    form.readCuaPolicy({ "server:CUA-DRIVER": "deny", "server:cua-driver": "allow" }, entry),
+    "deny",
+  );
+  assert.deepEqual(form.cuaPolicyKeyCandidates(entry), [
+    "server:CUA-DRIVER",
+    "server:cua-driver",
+  ]);
+});
+
 test("写回策略：等于缺省才删 key，并清掉大小写重影", () => {
   const entry = managed({ id: "CUA-DRIVER" });
 

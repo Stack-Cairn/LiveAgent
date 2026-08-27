@@ -81,7 +81,7 @@ keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sy
 getrandom = "0.3.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSButton", "NSControl", "NSView", "NSWindow"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSButton", "NSControl", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication"] }
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 block2 = "0.6"
@@ -99,6 +99,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Environment",
     "Win32_System_Registry",
     "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

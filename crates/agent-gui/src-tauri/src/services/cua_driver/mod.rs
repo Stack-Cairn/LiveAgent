@@ -312,6 +312,53 @@ pub fn self_identity() -> SelfIdentity {
     }
 }
 
+/// 当前前台（持有键盘焦点的）应用的 pid。
+///
+/// 存在的理由：cua-driver 的 `press_key` / `hotkey` / `type_text` 在
+/// desktop 作用域下不要求 pid / window_id / 坐标，输入投递给**前台应用**。
+/// 这类调用按 pid 与按坐标的两道闸都管不到——只有知道前台是谁，才能判断
+/// 这次按键会不会落在宿主自己身上（按掉审批弹窗、`cmd+q` 关掉应用）。
+///
+/// 取不到时返回 `Err`，前端按 **fail-closed** 处理（拒绝并让模型改用带
+/// pid / window_id 的显式目标）。这里不能学窗口矩形那样「取不到就放行」：
+/// 键盘输入不存在「误伤矩形下方真实目标」的二义性，而放行的代价是模型
+/// 可以对宿主敲任意按键。
+pub fn frontmost_pid() -> Result<u32, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWorkspace;
+        let workspace = NSWorkspace::sharedWorkspace();
+        let front = workspace
+            .frontmostApplication()
+            .ok_or_else(|| "no frontmost application".to_string())?;
+        let pid = front.processIdentifier();
+        u32::try_from(pid).map_err(|_| format!("invalid frontmost pid: {pid}"))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow, GetWindowThreadProcessId,
+        };
+        let hwnd = unsafe { GetForegroundWindow() };
+        if hwnd.is_null() {
+            return Err("no foreground window".to_string());
+        }
+        let mut pid: u32 = 0;
+        let thread = unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+        if thread == 0 || pid == 0 {
+            return Err("failed to resolve foreground window process".to_string());
+        }
+        Ok(pid)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        // Linux 没有跨 X11 / Wayland 的统一前台查询。返回 Err 让前端
+        // fail-closed：无明确目标的桌面键盘调用被拒，带 pid / window_id
+        // 的显式目标不受影响，能力不算丢失。
+        Err("frontmost application detection is not supported on this platform".to_string())
+    }
+}
+
 /// 宿主自己某个窗口在屏幕坐标系里的矩形，单位是逻辑点（与 macOS 的
 /// Accessibility / cua-driver 的桌面坐标同一套）。
 #[derive(Debug, Clone, Copy, Serialize)]

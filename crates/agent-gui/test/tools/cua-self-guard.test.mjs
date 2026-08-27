@@ -11,6 +11,8 @@ const {
   usesDesktopScreenCoordinates,
   stripSelfFromJsonText,
   resetCuaSelfGuardCaches,
+  isDesktopKeyboardCall,
+  refuseDesktopKeyboardCall,
 } = guard;
 
 const SELF_PID = 4242;
@@ -182,6 +184,85 @@ test("嵌套过深的入参被拒绝，而不是扫不完就放行", () => {
     refuseSelfTargetedCall({ target: { kind: "window", window_id: 42 } }, SELF_PID),
     null,
   );
+});
+
+test("无明确目标的 desktop 键盘调用在宿主处于前台时被拒绝", () => {
+  // v0.22.0 契约:press_key 只要求 key、hotkey 只要求 keys、type_text 只要求
+  // text,pid / window_id / 坐标均非必填,输入投递给前台应用。按 pid 与按
+  // 坐标的两道闸对这类调用完全不参与——不查前台就是一条现成的绕过。
+  const cases = [
+    ["press_key", { scope: "desktop", key: "return" }],
+    ["press_key", { target: { kind: "desktop", display_id: "primary" }, key: "return" }],
+    ["hotkey", { scope: "desktop", keys: ["cmd", "q"] }],
+    ["type_text", { scope: "desktop", text: "allow" }],
+    // 扁平写法:连 scope 都没有,投递语义同样是前台。
+    ["press_key", { key: "return" }],
+  ];
+  for (const [tool, args] of cases) {
+    assert.ok(isDesktopKeyboardCall(tool, args), `${tool} 应被识别为焦点投递调用`);
+    assert.ok(
+      refuseDesktopKeyboardCall(tool, args, SELF_PID, SELF_PID),
+      `${tool} 在宿主前台时应被拒绝`,
+    );
+  }
+});
+
+test("前台是其他应用时键盘调用放行", () => {
+  assert.equal(
+    refuseDesktopKeyboardCall("press_key", { scope: "desktop", key: "return" }, SELF_PID, OTHER_PID),
+    null,
+  );
+  assert.equal(
+    refuseDesktopKeyboardCall("type_text", { scope: "desktop", text: "hi" }, SELF_PID, OTHER_PID),
+    null,
+  );
+});
+
+test("前台查不到时 fail-closed 拒绝,而不是放行", () => {
+  // 窗口矩形取不到可以放行(误伤的是矩形下方的真实目标);前台查不到不行——
+  // 键盘输入没有那种二义性,放行的代价是模型可以对宿主敲任意按键。
+  assert.ok(refuseDesktopKeyboardCall("press_key", { scope: "desktop", key: "return" }, SELF_PID, null));
+});
+
+test("带明确非宿主身份的键盘调用不过前台检查", () => {
+  // 契约里带 pid / window_id 的调用(含 desktop scope + pid 的后台投递写法)
+  // 投递给那个窗口,不跟焦点走;宿主自己的身份在这之前已被 pid 闸拒掉。
+  assert.equal(
+    isDesktopKeyboardCall("press_key", { target: { kind: "window", pid: OTHER_PID }, key: "return" }),
+    false,
+  );
+  assert.equal(
+    isDesktopKeyboardCall("type_text", { scope: "desktop", pid: OTHER_PID, text: "hi" }),
+    false,
+  );
+  assert.equal(
+    refuseDesktopKeyboardCall(
+      "press_key",
+      { target: { kind: "window", pid: OTHER_PID }, key: "return" },
+      SELF_PID,
+      SELF_PID,
+    ),
+    null,
+  );
+});
+
+test("非键盘工具不受前台检查影响", () => {
+  assert.equal(isDesktopKeyboardCall("click", { scope: "desktop", x: 1, y: 2 }), false);
+  assert.equal(isDesktopKeyboardCall("get_desktop_state", {}), false);
+  assert.equal(
+    refuseDesktopKeyboardCall("click", { scope: "desktop", x: 1, y: 2 }, SELF_PID, SELF_PID),
+    null,
+  );
+});
+
+test("参数形态兜底:不认识的工具名带 key / keys 也按键盘调用处理", () => {
+  // 上游改名或新增 hold_key 之类的工具时,靠载荷特征仍能认出来。
+  assert.ok(isDesktopKeyboardCall("hold_key", { scope: "desktop", key: "shift" }));
+  assert.ok(isDesktopKeyboardCall("send_keys", { keys: ["cmd", "w"] }));
+  // text 字段刻意不参与形态兜底:clipboard_write / 查找类工具也带 text,
+  // 投递语义与焦点无关;type_text 本身已由工具名覆盖。
+  assert.equal(isDesktopKeyboardCall("clipboard_write", { text: "hello" }), false);
+  assert.equal(isDesktopKeyboardCall("find_element", { scope: "desktop", text: "OK" }), false);
 });
 
 test("JSON 片段的括号配对认字符串字面量", () => {

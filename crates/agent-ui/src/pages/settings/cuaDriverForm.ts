@@ -3,6 +3,7 @@ import {
   CUA_DRIVER_SERVER_ID,
   effectiveServerPolicyDefault,
   isCuaDriverServerId,
+  serverPolicyKeyCandidates,
 } from "@liveagent/ui/contracts/mcpServerDefaults";
 
 /**
@@ -69,14 +70,23 @@ export function findCuaDriverServerIndex(servers: readonly McpServerConfig[]) {
 }
 
 /**
- * 该条目的 `server:<id>` 策略键。
+ * 该条目可能命中的策略键，按查找顺序：原文键优先，规范化键兜底。
  *
- * 跟随条目里那份 id 的**原文**，而不是常量：已有配置可能把 id 写成
- * `CUA-DRIVER`，运行时按原文查 `server:CUA-DRIVER`，这里若硬写
- * `server:cua-driver` 就会出现「页面显示的策略与实际执行的不是同一条」。
+ * 与运行时（`resolveToolPolicy`）共用 contracts 里的同一份实现与顺序。
+ * 这一页显示的档位必须就是运行时将要执行的那一条——两边各查各的键，
+ * 一份 `id: "CUA-DRIVER"` + `"server:cua-driver": "allow"` 的旧配置就会
+ * 出现「页面显示 ask、实际执行 allow」。
+ */
+export function cuaPolicyKeyCandidates(entry: McpServerConfig | undefined): string[] {
+  return serverPolicyKeyCandidates(entry?.id.trim() || CUA_DRIVER_SERVER_ID);
+}
+
+/**
+ * 写入时用的策略键：跟随条目里那份 id 的原文，而不是常量。已有配置可能把
+ * id 写成 `CUA-DRIVER`，运行时的候选列表以原文键优先，写到别处会被它盖过。
  */
 export function cuaServerPolicyKey(entry: McpServerConfig | undefined): string {
-  return `server:${entry?.id.trim() || CUA_DRIVER_SERVER_ID}`;
+  return cuaPolicyKeyCandidates(entry)[0];
 }
 
 /** 该条目在无显式配置时的生效策略。受管条目恒为 ask。 */
@@ -84,12 +94,16 @@ export function cuaDefaultPolicy(entry: McpServerConfig | undefined): ToolPolicy
   return effectiveServerPolicyDefault(entry ?? { id: CUA_DRIVER_SERVER_ID });
 }
 
-/** 当前生效的审批策略：显式配置优先，否则走缺省。 */
+/** 当前生效的审批策略：显式配置优先（按运行时的同一候选顺序），否则走缺省。 */
 export function readCuaPolicy(
   policies: Record<string, ToolPolicy> | undefined,
   entry: McpServerConfig | undefined,
 ): ToolPolicy {
-  return policies?.[cuaServerPolicyKey(entry)] ?? cuaDefaultPolicy(entry);
+  for (const key of cuaPolicyKeyCandidates(entry)) {
+    const policy = policies?.[key];
+    if (policy) return policy;
+  }
+  return cuaDefaultPolicy(entry);
 }
 
 /**
@@ -98,8 +112,8 @@ export function readCuaPolicy(
  * 两条规则：
  * - 只有回到缺省值才删 key。受管条目的缺省是 ask，所以「始终允许」必须显式
  *   落库，删掉反而会退回 ask；
- * - 顺手清掉规范化键那条重影。id 写成 `CUA-DRIVER` 时两个键会同时存在，留着
- *   会让 `resolveToolPolicy` 的回落读到上一次的值。
+ * - 写入前清掉**全部**候选键。id 写成 `CUA-DRIVER` 时原文键与规范化键会同时
+ *   存在，留着重影会让 `resolveToolPolicy` 的回落读到上一次的值。
  */
 export function applyCuaPolicy(
   policies: Record<string, ToolPolicy> | undefined,
@@ -107,10 +121,8 @@ export function applyCuaPolicy(
   next: ToolPolicy,
 ): Record<string, ToolPolicy> | undefined {
   const current = { ...(policies ?? {}) };
-  const key = cuaServerPolicyKey(entry);
-  delete current[`server:${CUA_DRIVER_SERVER_ID}`];
-  if (next === cuaDefaultPolicy(entry)) delete current[key];
-  else current[key] = next;
+  for (const key of cuaPolicyKeyCandidates(entry)) delete current[key];
+  if (next !== cuaDefaultPolicy(entry)) current[cuaServerPolicyKey(entry)] = next;
   return Object.keys(current).length > 0 ? current : undefined;
 }
 
