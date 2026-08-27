@@ -11,6 +11,7 @@
 
 use std::sync::Mutex as StdMutex;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_hdr_async;
@@ -22,6 +23,9 @@ use super::cdp::CdpConnection;
 
 /// 缺省监听端口；可用 LIVEAGENT_BROWSER_BRIDGE_PORT 覆盖（扩展侧需同步改）。
 const DEFAULT_BRIDGE_PORT: u16 = 19_222;
+
+/// 握手超时：TCP 连上后不发升级请求的连接在此时限后被丢弃。
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) fn bridge_port() -> u16 {
     std::env::var("LIVEAGENT_BROWSER_BRIDGE_PORT")
@@ -54,18 +58,31 @@ impl ExtensionBridge {
                 let Ok((stream, _)) = listener.accept().await else {
                     continue;
                 };
-                let ws = accept_hdr_async(stream, verify_extension_origin).await;
-                match ws {
-                    Ok(ws) => {
-                        let connection = CdpConnection::from_stream(ws);
-                        if let Ok(mut latest) = bridge.latest.lock() {
-                            *latest = Some(connection);
+                // 握手放独立 task 并限时：若在 accept 循环里串行 await，
+                // 任一连上后不发升级请求的本地连接会永久卡住循环，扩展
+                // 从此连不上桥接。
+                let bridge = Arc::clone(&bridge);
+                tauri::async_runtime::spawn(async move {
+                    let handshake = tokio::time::timeout(
+                        HANDSHAKE_TIMEOUT,
+                        accept_hdr_async(stream, verify_extension_origin),
+                    )
+                    .await;
+                    match handshake {
+                        Ok(Ok(ws)) => {
+                            let connection = CdpConnection::from_stream(ws);
+                            if let Ok(mut latest) = bridge.latest.lock() {
+                                *latest = Some(connection);
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            eprintln!("browser extension bridge: handshake rejected: {error}");
+                        }
+                        Err(_) => {
+                            eprintln!("browser extension bridge: handshake timed out");
                         }
                     }
-                    Err(error) => {
-                        eprintln!("browser extension bridge: handshake rejected: {error}");
-                    }
-                }
+                });
             }
         });
     }

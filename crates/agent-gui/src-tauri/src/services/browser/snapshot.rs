@@ -6,6 +6,11 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
+/// 递归深度上限。childIds 来自不可信页面：数万层嵌套且全被拍平时不产出
+/// 文本，字节预算兜不住，无上限会在 worker 栈上溢出（进程级崩溃）。
+/// 真实页面的 AX 树极少超过百层，256 足够宽裕。
+const MAX_RENDER_DEPTH: usize = 256;
+
 pub(crate) struct SnapshotOutcome {
     pub text: String,
     pub ref_to_backend_node: HashMap<String, i64>,
@@ -161,21 +166,24 @@ pub(crate) fn render_ax_tree(nodes: &[Value], max_bytes: usize) -> SnapshotOutco
     let mut ref_map = HashMap::new();
     let mut next_ref = 1usize;
     let mut truncated = false;
+    let mut depth_clipped = false;
     let mut visited = HashSet::new();
     if let Some(root_id) = root_id {
         render_node(
             &by_id,
             &root_id,
             0,
+            0,
             &mut text,
             &mut ref_map,
             &mut next_ref,
             max_bytes,
             &mut truncated,
+            &mut depth_clipped,
             &mut visited,
         );
     }
-    if truncated {
+    if truncated || depth_clipped {
         text.push_str("- (snapshot truncated)\n");
     }
     SnapshotOutcome {
@@ -189,15 +197,23 @@ fn render_node(
     by_id: &HashMap<String, AxNode>,
     node_id: &str,
     depth: usize,
+    recursion_depth: usize,
     out: &mut String,
     ref_map: &mut HashMap<String, i64>,
     next_ref: &mut usize,
     max_bytes: usize,
     truncated: &mut bool,
+    depth_clipped: &mut bool,
     visited: &mut HashSet<String>,
 ) {
     if *truncated || out.len() >= max_bytes {
         *truncated = true;
+        return;
+    }
+    // 缩进深度 depth 在拍平时不增长，防不了深递归，须单独计真实层数。
+    // 只剪当前分支（不置 truncated），兄弟分支照常渲染。
+    if recursion_depth >= MAX_RENDER_DEPTH {
+        *depth_clipped = true;
         return;
     }
     // childIds 是协议侧数据，防御环引用：环上全是被拍平的节点时字节预算
@@ -249,11 +265,13 @@ fn render_node(
             by_id,
             child_id,
             child_depth,
+            recursion_depth + 1,
             out,
             ref_map,
             next_ref,
             max_bytes,
             truncated,
+            depth_clipped,
             visited,
         );
     }
@@ -384,5 +402,32 @@ mod tests {
         ];
         let outcome = render_ax_tree(&nodes, 8_000);
         assert!(outcome.text.contains("RootWebArea \"Loop\""));
+    }
+
+    #[test]
+    fn survives_pathologically_deep_trees() {
+        // 无环但数万层深的链（如嵌套数万层 div 的恶意页面）：节点全被拍平、
+        // 不产出文本，visited 与字节预算都兜不住，靠深度上限剪枝而非爆栈。
+        let deep = 50_000usize;
+        let mut nodes = vec![json!({
+            "nodeId": "0", "ignored": false,
+            "role": {"value": "RootWebArea"}, "name": {"value": "Deep"},
+            "childIds": ["1"]
+        })];
+        for i in 1..=deep {
+            let child_ids: Vec<String> = if i == deep {
+                vec![]
+            } else {
+                vec![(i + 1).to_string()]
+            };
+            nodes.push(json!({
+                "nodeId": i.to_string(), "ignored": false,
+                "role": {"value": "generic"}, "name": {"value": ""},
+                "childIds": child_ids
+            }));
+        }
+        let outcome = render_ax_tree(&nodes, 64_000);
+        assert!(outcome.text.contains("RootWebArea \"Deep\""));
+        assert!(outcome.text.contains("snapshot truncated"));
     }
 }
