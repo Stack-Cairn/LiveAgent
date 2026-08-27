@@ -8,13 +8,12 @@
   }
 
   /*
-   * CUA-036: WebKit/Chromium pause CSS keyframe animations while the
-   * document is hidden, which leaves `.settings-section-enter` and
-   * `.settings-section-title-enter` stuck at their `from` state (opacity:0,
-   * translateY/scale). SettingsShell flips `data-anim-suspended` to "true"
-   * while `document.visibilityState === "hidden"` so the inner section body
-   * stays visible during background launch / minimized windows; removing the
-   * attribute when the tab becomes visible re-enables the animation.
+   * WebKit/Chromium pause CSS keyframe animations while the document is
+   * hidden, leaving these two stuck at their `from` state (opacity:0 plus a
+   * translate/scale) — the settings page then reads as blank after a
+   * background launch or from a minimized window. SettingsShell sets
+   * `data-anim-suspended` while the document is hidden and drops it once the
+   * window is visible again, which re-enables the animation.
    */
   .settings-section-enter[data-anim-suspended="true"],
   .settings-section-title-enter[data-anim-suspended="true"] {

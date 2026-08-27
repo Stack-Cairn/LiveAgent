@@ -1274,6 +1274,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.disable": "Disable CUA",
   "settings.cuaDriver.policyNote":
     "Every CUA action lands on this real machine — clicks, keystrokes, and quitting apps cannot be undone. It asks each time by default; switch to always-allow only when you trust the task at hand.",
+  "settings.cuaDriver.commandDriftTitle": "Configured driver path differs from the detected one",
+  "settings.cuaDriver.commandDriftDesc":
+    "The command stored in the configuration is what actually starts, not the detected path below. This can happen after reinstalling the driver or importing a configuration. Leave it as is if that is intended, or realign it to the detected result.",
+  "settings.cuaDriver.commandDriftConfigured": "Configured:",
+  "settings.cuaDriver.commandDriftProbed": "Detected:",
+  "settings.cuaDriver.commandDriftRealign": "Realign to detected",
   "settings.cuaDriver.groupAbout": "About",
   "settings.cuaDriver.statusActive": "Enabled",
   "settings.cuaDriver.statusIdle": "Disabled",

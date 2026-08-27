@@ -1,9 +1,4 @@
-import {
-  type McpServerConfig,
-  type ToolPolicy,
-  updateMcp,
-  updateSystem,
-} from "@liveagent/app/lib/settings";
+import { type ToolPolicy, updateMcp, updateSystem } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
@@ -26,16 +21,33 @@ import {
   ShieldOff,
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
-import {
-  CUA_DRIVER_SERVER_ID as CUA_SERVER_ID,
-  effectiveServerPolicyDefault,
-  isCuaDriverServerId,
-} from "@liveagent/ui/contracts/mcpServerDefaults";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
+import {
+  applyCuaPolicy,
+  buildCuaServerConfig,
+  CUA_DEFAULT_TIMEOUT_MS,
+  CUA_INSTALL_PROGRESS_EVENT,
+  CUA_MAX_LOG_LINES,
+  CUA_UPSTREAM_REPO_URL,
+  type CuaInstallPreview,
+  type CuaInstallProgress,
+  type CuaPermissions,
+  type CuaProbe,
+  clampCuaTimeoutMs,
+  cuaCommandDrift,
+  cuaDisplayCommand,
+  findCuaDriverServer,
+  findCuaDriverServerIndex,
+  patchCuaProbeCachePermissions,
+  readCuaPolicy,
+  readCuaProbeCache,
+  realignCuaServerConfig,
+  writeCuaProbeCache,
+} from "./cuaDriverForm";
 
 /** 与 RemoteSection 同款的卡片标题行，保持两节视觉一致。 */
 function SectionCardHeader({ icon: Icon, title }: { icon: IconComponent; title: string }) {
@@ -64,85 +76,16 @@ function SectionCardHeader({ icon: Icon, title }: { icon: IconComponent; title: 
  * 授权都依赖 Tauri 命令。
  */
 
-const DEFAULT_TIMEOUT_MS = 60_000;
-const INSTALL_PROGRESS_EVENT = "cua_driver_install_progress";
-const MAX_LOG_LINES = 200;
-const UPSTREAM_REPO_URL = "https://github.com/trycua/cua";
-
-type Probe = {
-  installed: boolean;
-  path?: string | null;
-  version?: string | null;
-  mcpCommand?: string | null;
-  mcpArgs?: string[];
-  /** 本平台是否有系统授权门槛。只有 macOS 为 true。 */
-  permissionsRequired?: boolean;
-  error?: string | null;
-};
-
-type Permissions = {
-  supported: boolean;
-  accessibility: boolean;
-  screenRecording: boolean;
-  attributedTo?: string | null;
-  daemonRunning: boolean;
-  error?: string | null;
-};
-
-type InstallPreview = {
-  program: string;
-  args: string[];
-  display: string;
-  sourceUrl: string;
-};
-
-type InstallProgress = { stream: string; line: string };
-
-/**
- * 探测结果的进程内缓存。
- *
- * 每次挂载都重新探测意味着每次切到 CUA 页都要 spawn 三个子进程
- * （`manifest` / `status` / `permissions status`）——在 Windows 上那是三次
- * 控制台闪窗，在 macOS 上则可能唤起 CuaDriver.app 的守护进程。这些事实在
- * 一分钟内不会变，来回切页时没有重查的理由。
- *
- * 「重新检测」按钮、安装完成、授权完成三处显式跳过缓存。
- */
-const PROBE_CACHE_TTL_MS = 60_000;
-
-let probeCache: { at: number; probe: Probe; permissions: Permissions | null } | null = null;
-
-function readProbeCache() {
-  if (!probeCache) return null;
-  return Date.now() - probeCache.at <= PROBE_CACHE_TTL_MS ? probeCache : null;
-}
-
-function serverConfigFrom(probe: Probe): McpServerConfig {
-  return {
-    id: CUA_SERVER_ID,
-    description: "trycua/cua — CUA 驱动（跨平台）",
-    docsUrl: UPSTREAM_REPO_URL,
-    enabled: true,
-    transport: "stdio",
-    // 绝对路径而非裸命令：MCP 子进程继承的是 GUI 进程那份窄 PATH，
-    // 通常不含 ~/.local/bin —— 官方安装脚本的默认落点。
-    command: probe.mcpCommand || probe.path || "cua-driver",
-    // 刻意不带 `--direct`：那会让 MCP 进程沿用 LiveAgent 的 TCC 归属，
-    // 等于要求 LiveAgent 自己去拿辅助功能与屏幕录制授权。默认模式经
-    // CuaDriver.app 的守护进程代理，授权归它。
-    args: probe.mcpArgs?.length ? probe.mcpArgs : ["mcp"],
-    url: "",
-    timeoutMs: DEFAULT_TIMEOUT_MS,
-  };
-}
+// 纯逻辑（受管条目查找、策略键、超时钳制、探测缓存、配置漂移）都在
+// `cuaDriverForm.ts` 里，有单测覆盖。这里只剩布局与副作用编排。
 
 export function CuaDriverSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
 
-  const [probe, setProbe] = useState<Probe | null>(null);
-  const [permissions, setPermissions] = useState<Permissions | null>(null);
-  const [preview, setPreview] = useState<InstallPreview | null>(null);
+  const [probe, setProbe] = useState<CuaProbe | null>(null);
+  const [permissions, setPermissions] = useState<CuaPermissions | null>(null);
+  const [preview, setPreview] = useState<CuaInstallPreview | null>(null);
   const [confirmingInstall, setConfirmingInstall] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [granting, setGranting] = useState(false);
@@ -153,21 +96,21 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   const mountedRef = useRef(true);
 
   // 总开关的真实状态就是这个 MCP server 的启用状态——没有第二份配置。
-  const serverEntry = settings.mcp.servers.find((server) => isCuaDriverServerId(server.id));
+  const serverEntry = findCuaDriverServer(settings.mcp.servers);
   const enabled = serverEntry?.enabled === true;
 
-  // 策略键跟随条目里那份 id 的原文，而不是常量：已有配置可能把 id 写成
-  // `CUA-DRIVER`，此时运行时按原文查 `server:CUA-DRIVER`，这里若硬写
-  // `server:cua-driver` 就会出现「页面显示的策略与实际执行的不是同一条」。
-  const policyKey = `server:${serverEntry?.id.trim() || CUA_SERVER_ID}`;
-  const policy: ToolPolicy =
-    settings.system.toolPolicies?.[policyKey] ?? effectiveServerPolicyDefault(CUA_SERVER_ID);
+  const policy: ToolPolicy = readCuaPolicy(settings.system.toolPolicies, serverEntry);
   const allowSelfTargeting = settings.system.cuaAllowSelfTargeting === true;
+  // 界面显示的必须是**将要执行的**命令，不是碰巧探测到的那个。
+  const displayCommand = cuaDisplayCommand(serverEntry, probe);
+  const commandDrift = cuaCommandDrift(serverEntry, probe);
 
   // 超时用受控草稿：边打字边写回会把 "6" 这种中间态存成 6ms。
-  const [timeoutDraft, setTimeoutDraft] = useState(() => String(serverEntry?.timeoutMs ?? 60_000));
+  const [timeoutDraft, setTimeoutDraft] = useState(() =>
+    String(serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS),
+  );
   useEffect(() => {
-    setTimeoutDraft(String(serverEntry?.timeoutMs ?? 60_000));
+    setTimeoutDraft(String(serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS));
   }, [serverEntry?.timeoutMs]);
 
   /**
@@ -182,7 +125,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
    * 直接归零会把刚拿到的授权显示成「未授权」。
    */
   const refresh = useCallback(async (options?: { force?: boolean }) => {
-    const cached = options?.force ? null : readProbeCache();
+    const cached = options?.force ? null : readCuaProbeCache();
     if (cached) {
       setProbe(cached.probe);
       if (cached.permissions) setPermissions(cached.permissions);
@@ -193,10 +136,12 @@ export function CuaDriverSection(props: SettingsSectionProps) {
 
     setChecking(true);
     setPermissionsLoading(true);
-    const probeTask = invoke<Probe>("cua_driver_probe");
-    const permissionsTask = invoke<Permissions>("cua_driver_permissions_status").catch(() => null);
+    const probeTask = invoke<CuaProbe>("cua_driver_probe");
+    const permissionsTask = invoke<CuaPermissions>("cua_driver_permissions_status").catch(
+      () => null,
+    );
 
-    let probed: Probe | null = null;
+    let probed: CuaProbe | null = null;
     try {
       probed = await probeTask;
       if (mountedRef.current) setProbe(probed);
@@ -211,7 +156,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
 
     const perms = await permissionsTask;
     // 缓存与组件是否还挂着无关：探测的是机器状态，下次挂载照样能用。
-    if (probed) probeCache = { at: Date.now(), probe: probed, permissions: perms };
+    if (probed) writeCuaProbeCache(probed, perms);
     if (!mountedRef.current) return;
     if (perms) setPermissions(perms);
     setPermissionsLoading(false);
@@ -247,7 +192,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   async function beginInstall() {
     setError(null);
     try {
-      setPreview(await invoke<InstallPreview>("cua_driver_install_command"));
+      setPreview(await invoke<CuaInstallPreview>("cua_driver_install_command"));
       setConfirmingInstall(true);
     } catch (err) {
       setError(String(err));
@@ -270,8 +215,8 @@ export function CuaDriverSection(props: SettingsSectionProps) {
 
     let unlisten: (() => void) | null = null;
     try {
-      unlisten = await listen<InstallProgress>(INSTALL_PROGRESS_EVENT, (event) => {
-        setLog((prev) => [...prev, event.payload.line].slice(-MAX_LOG_LINES));
+      unlisten = await listen<CuaInstallProgress>(CUA_INSTALL_PROGRESS_EVENT, (event) => {
+        setLog((prev) => [...prev, event.payload.line].slice(-CUA_MAX_LOG_LINES));
       });
       // 注册与卸载可能已经交错：卸载先发生时立刻摘掉，别把监听器漏在外面。
       if (!mountedRef.current) {
@@ -281,7 +226,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
       }
       installUnlistenRef.current = unlisten;
 
-      await invoke<Probe>("cua_driver_install");
+      await invoke<CuaProbe>("cua_driver_install");
       await refresh({ force: true });
     } catch (err) {
       if (mountedRef.current) setError(String(err));
@@ -296,9 +241,9 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setGranting(true);
     setError(null);
     try {
-      const next = await invoke<Permissions>("cua_driver_permissions_grant");
+      const next = await invoke<CuaPermissions>("cua_driver_permissions_grant");
       // 授权状态刚变过，缓存里那份已经过时。
-      if (probeCache) probeCache = { ...probeCache, permissions: next };
+      patchCuaProbeCachePermissions(next);
       if (mountedRef.current) setPermissions(next);
     } catch (err) {
       if (mountedRef.current) setError(String(err));
@@ -317,10 +262,10 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   function toggleEnabled(next: boolean) {
     if (next && !probe?.installed) return;
     setSettings((prev) => {
-      const index = prev.mcp.servers.findIndex((server) => isCuaDriverServerId(server.id));
+      const index = findCuaDriverServerIndex(prev.mcp.servers);
       if (index < 0) {
         if (!next || !probe) return prev;
-        return updateMcp(prev, { servers: [...prev.mcp.servers, serverConfigFrom(probe)] });
+        return updateMcp(prev, { servers: [...prev.mcp.servers, buildCuaServerConfig(probe)] });
       }
       return updateMcp(prev, {
         servers: prev.mcp.servers.map((server, idx) =>
@@ -331,19 +276,15 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   }
 
   function setPolicy(next: ToolPolicy) {
-    setSettings((prev) => {
-      const current = { ...(prev.system.toolPolicies ?? {}) };
-      // 规范化键一并清掉：id 写成 `CUA-DRIVER` 时两个键会同时存在，留着那条
-      // 会让 resolveToolPolicy 的回落读到上一次的值。
-      delete current[`server:${CUA_SERVER_ID}`];
-      // 与 McpServersForm 同一条规则：等于该 server 的缺省值才删 key。
-      // cua-driver 的缺省是 ask，所以「始终允许」必须显式落库。
-      if (next === effectiveServerPolicyDefault(CUA_SERVER_ID)) delete current[policyKey];
-      else current[policyKey] = next;
-      return updateSystem(prev, {
-        toolPolicies: Object.keys(current).length > 0 ? current : undefined,
-      });
-    });
+    setSettings((prev) =>
+      updateSystem(prev, {
+        toolPolicies: applyCuaPolicy(
+          prev.system.toolPolicies,
+          findCuaDriverServer(prev.mcp.servers),
+          next,
+        ),
+      }),
+    );
   }
 
   function setAllowSelfTargeting(next: boolean) {
@@ -351,20 +292,32 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   }
 
   function commitTimeout() {
-    const parsed = Number.parseInt(timeoutDraft.trim(), 10);
-    const next =
-      Number.isFinite(parsed) && parsed > 0
-        ? Math.min(parsed, 600_000)
-        : (serverEntry?.timeoutMs ?? 60_000);
+    const next = clampCuaTimeoutMs(timeoutDraft, serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS);
     setTimeoutDraft(String(next));
     if (!serverEntry || next === serverEntry.timeoutMs) return;
-    setSettings((prev) =>
-      updateMcp(prev, {
-        servers: prev.mcp.servers.map((server) =>
-          isCuaDriverServerId(server.id) ? { ...server, timeoutMs: next } : server,
+    setSettings((prev) => {
+      const index = findCuaDriverServerIndex(prev.mcp.servers);
+      if (index < 0) return prev;
+      return updateMcp(prev, {
+        servers: prev.mcp.servers.map((server, idx) =>
+          idx === index ? { ...server, timeoutMs: next } : server,
         ),
-      }),
-    );
+      });
+    });
+  }
+
+  /** 把条目的 command / args 对齐到最新探测结果。见 `cuaCommandDrift`。 */
+  function realignCommand() {
+    if (!probe) return;
+    setSettings((prev) => {
+      const index = findCuaDriverServerIndex(prev.mcp.servers);
+      if (index < 0) return prev;
+      return updateMcp(prev, {
+        servers: prev.mcp.servers.map((server, idx) =>
+          idx === index ? realignCuaServerConfig(server, probe) : server,
+        ),
+      });
+    });
   }
 
   const statusText = !installed
@@ -394,7 +347,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : "bg-muted/50 text-muted-foreground",
             )}
-            title={probe?.path ?? undefined}
+            title={displayCommand ?? undefined}
           >
             {enabled ? (
               <Hand className="h-3.5 w-3.5 shrink-0" />
@@ -442,8 +395,11 @@ export function CuaDriverSection(props: SettingsSectionProps) {
                   : t("settings.cuaDriver.detected")
                 : t("settings.cuaDriver.notInstalledTitle")}
             </div>
+            {/* 显示的是**将要执行的**命令：有条目就是条目里那份，没有才退回
+                探测路径。两者分叉时下面会单独警告——显示探测路径而实际启动
+                另一个二进制，等于让用户以为一切正常。 */}
             <p className="mt-0.5 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
-              {probe?.path ?? t("settings.cuaDriver.notInstalledDesc")}
+              {displayCommand ?? t("settings.cuaDriver.notInstalledDesc")}
             </p>
           </div>
           {installed ? null : (
@@ -462,6 +418,39 @@ export function CuaDriverSection(props: SettingsSectionProps) {
             </Button>
           )}
         </div>
+
+        {/* 配置漂移：条目里存的 command 与刚探测到的路径不是一回事。重装到
+            别的位置、或导入了一份 command 指向别处的同名条目都会走到这里。
+            默默按新路径改写是不对的——那可能正是用户自己指定的；所以只是把
+            两条路径都摆出来，由用户决定要不要对齐。 */}
+        {commandDrift ? (
+          <div className="rounded-lg border border-amber-500/50 bg-amber-500/[0.07] px-4 py-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              {t("settings.cuaDriver.commandDriftTitle")}
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {t("settings.cuaDriver.commandDriftDesc")}
+            </p>
+            <dl className="mt-2 space-y-1 font-mono text-[11px] leading-relaxed">
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted-foreground">
+                  {t("settings.cuaDriver.commandDriftConfigured")}
+                </dt>
+                <dd className="min-w-0 break-all">{commandDrift.configured}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted-foreground">
+                  {t("settings.cuaDriver.commandDriftProbed")}
+                </dt>
+                <dd className="min-w-0 break-all">{commandDrift.probed}</dd>
+              </div>
+            </dl>
+            <Button size="sm" className="mt-3 h-8" onClick={realignCommand}>
+              {t("settings.cuaDriver.commandDriftRealign")}
+            </Button>
+          </div>
+        ) : null}
 
         {/* 安装确认：把即将执行的命令原文摆出来。这条命令会从网络下载一段
             shell 脚本并直接执行，用户有权先看清楚再决定，也可以复制到自己
@@ -635,7 +624,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("settings.cuaDriver.description")}{" "}
           <a
-            href={UPSTREAM_REPO_URL}
+            href={CUA_UPSTREAM_REPO_URL}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"

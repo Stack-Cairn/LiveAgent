@@ -99,7 +99,7 @@ export function McpServersForm(props: McpServersFormProps) {
                 onEdit={() => onEditServer?.(server, idx)}
                 policy={
                   settings.system.toolPolicies?.[serverPolicyKey(server.id)] ??
-                  effectiveServerPolicyDefault(server.id)
+                  effectiveServerPolicyDefault(server)
                 }
                 onPolicyChange={(next) =>
                   setSettings((prev) => {
@@ -108,7 +108,7 @@ export function McpServersForm(props: McpServersFormProps) {
                     // 只有回到该 server 的缺省值才删 key——对普通 server 缺省是
                     // allow，对硬编码为 ask 的 server（cua-driver）则相反：显式
                     // 存下 "allow" 才能盖过缺省，删掉反而会退回 ask。
-                    if (next === effectiveServerPolicyDefault(server.id)) delete current[key];
+                    if (next === effectiveServerPolicyDefault(server)) delete current[key];
                     else current[key] = next;
                     return updateSystem(prev, {
                       toolPolicies: Object.keys(current).length > 0 ? current : undefined,

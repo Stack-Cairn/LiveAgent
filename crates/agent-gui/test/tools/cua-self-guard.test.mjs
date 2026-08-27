@@ -152,6 +152,38 @@ test("带摘要前缀的 MCP 文本也会被过滤，前后文原样保留", () 
   assert.ok(refuseSelfTargetedCall({ window_id: 1 }, SELF_PID));
 });
 
+test("一条文本里的多段 JSON 全部过滤，不只是第一段", () => {
+  const payload = [
+    "✅ Windows listed",
+    JSON.stringify({ windows: [{ window_id: 1, pid: SELF_PID, app_name: "LiveAgent" }] }),
+    "and apps:",
+    JSON.stringify({ apps: [{ pid: SELF_PID, name: "LiveAgent" }, { pid: OTHER_PID }] }),
+  ].join("\n");
+
+  const stripped = stripSelfFromJsonText(payload, SELF_PID);
+  assert.equal(stripped.includes("LiveAgent"), false);
+  assert.ok(stripped.includes("and apps:"));
+  assert.ok(stripped.includes(String(OTHER_PID)));
+});
+
+test("嵌套过深的入参被拒绝，而不是扫不完就放行", () => {
+  // 扫不完就放行等于给出一条现成的绕过方式：把目标埋到深处即可。
+  let deep = { pid: SELF_PID };
+  for (let i = 0; i < 20; i++) deep = { nested: deep };
+  assert.ok(refuseSelfTargetedCall(deep, SELF_PID));
+
+  // 深但没有可疑字段的也一样拒绝——扫不完就是没能确认。
+  let benign = { note: "x" };
+  for (let i = 0; i < 20; i++) benign = { nested: benign };
+  assert.ok(refuseSelfTargetedCall(benign, SELF_PID));
+
+  // 正常深度不受影响。
+  assert.equal(
+    refuseSelfTargetedCall({ target: { kind: "window", window_id: 42 } }, SELF_PID),
+    null,
+  );
+});
+
 test("JSON 片段的括号配对认字符串字面量", () => {
   const payload = `Result:\n${JSON.stringify({
     windows: [{ window_id: 3, pid: SELF_PID, title: 'a } b " c' }],

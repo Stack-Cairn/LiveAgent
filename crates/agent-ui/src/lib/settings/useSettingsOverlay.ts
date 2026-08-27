@@ -2,151 +2,100 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type SettingsOverlayState = "closed" | "entering" | "open" | "leaving";
 
-// CUA-033: Chromium / WKWebView suspends requestAnimationFrame callbacks while
-// the document is hidden (background launch, minimized window, etc.). Without
-// a fallback the overlay would stay stuck at opacity-0 forever in those
-// scenarios. 350 ms slightly exceeds the 300 ms CSS transition so the normal
-// rAF chain still wins when the tab is in the foreground.
-//
-// CUA-034: the same is true for the close path — WebKit suppresses
-// transitionend when document.hidden, so the panel would otherwise stay
-// mounted in 'leaving' forever. We use the symmetric LEAVE_FALLBACK_MS timer
-// (plus a visibilitychange handler) to guarantee unmount.
-const ENTER_FALLBACK_MS = 350;
-const LEAVE_FALLBACK_MS = 350;
+/**
+ * 进场 / 退场的兜底时长。
+ *
+ * 需要兜底是因为两条推进路径在文档隐藏时都不发生：`requestAnimationFrame`
+ * 的回调被挂起，`transitionend` 被 WebKit 抑制。后台启动或最小化时打开设置
+ * 页，进场会永远停在 opacity-0（整页看起来是空白），退场会永远停在 leaving
+ * （面板不卸载）。
+ *
+ * 350ms 略大于 300ms 的 CSS 过渡：前台时正常路径总是先到，兜底只在异常时生效。
+ */
+const OVERLAY_FALLBACK_MS = 350;
 
+/**
+ * 设置页浮层的开合状态机。
+ *
+ * 只有一个状态：`settingsOpen` 由 `overlay` 推导（非 closed 即为开）。曾经是
+ * 两个 useState 并行维护，于是需要一个 ref 去读最新的 overlay、还要小心
+ * StrictMode 下重复调用 setter——都是同一份事实存两遍带来的负担。
+ */
 export function useSettingsOverlay() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [overlay, setOverlay] = useState<SettingsOverlayState>("closed");
-  const enterFallbackTimerRef = useRef<number | null>(null);
-  const leaveFallbackTimerRef = useRef<number | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
 
-  // Promote "entering" -> "open" without disturbing other states. The
-  // functional updater makes it idempotent: concurrent callers (rAF chain,
-  // 350 ms safety net, visibilitychange handler) all converge on the same
-  // outcome.
-  const promoteEntering = useCallback(() => {
-    setOverlay((current) => (current === "entering" ? "open" : current));
-  }, []);
-
-  // CUA-034: Promote "leaving" -> "closed" (and unmount the panel). Symmetric
-  // to promoteEntering: reads the latest overlay via ref so the check is
-  // idempotent and side-effect free. We do NOT call setSettingsOpen inside
-  // the setOverlay functional updater — React 18 StrictMode double-invokes
-  // functional updaters in development, and setSettingsOpen(false) called
-  // twice (once from each StrictMode pass) would still be idempotent but is
-  // wasteful and would mask future regressions in that setter.
-  const overlayRef = useRef<SettingsOverlayState>("closed");
-  useEffect(() => {
-    overlayRef.current = overlay;
-  }, [overlay]);
-
-  const promoteLeaving = useCallback(() => {
-    if (overlayRef.current !== "leaving") return;
-    setSettingsOpen(false);
-    setOverlay("closed");
-  }, []);
-
-  const clearEnterFallback = useCallback(() => {
-    if (enterFallbackTimerRef.current !== null) {
-      window.clearTimeout(enterFallbackTimerRef.current);
-      enterFallbackTimerRef.current = null;
+  const clearFallback = useCallback(() => {
+    if (fallbackTimerRef.current !== null) {
+      window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
     }
   }, []);
 
-  const clearLeaveFallback = useCallback(() => {
-    if (leaveFallbackTimerRef.current !== null) {
-      window.clearTimeout(leaveFallbackTimerRef.current);
-      leaveFallbackTimerRef.current = null;
-    }
+  /**
+   * 把状态从 `from` 推进到 `to`。用函数式更新，因此谁先到都一样：rAF 链、
+   * 350ms 兜底、visibilitychange 三条路径彼此幂等。
+   */
+  const promote = useCallback((from: SettingsOverlayState, to: SettingsOverlayState) => {
+    setOverlay((current) => (current === from ? to : current));
   }, []);
+
+  const armFallback = useCallback(
+    (from: SettingsOverlayState, to: SettingsOverlayState) => {
+      clearFallback();
+      fallbackTimerRef.current = window.setTimeout(() => {
+        fallbackTimerRef.current = null;
+        promote(from, to);
+      }, OVERLAY_FALLBACK_MS);
+    },
+    [clearFallback, promote],
+  );
 
   const openSettingsOverlay = useCallback(() => {
-    clearLeaveFallback();
-    setSettingsOpen(true);
     setOverlay("entering");
-    clearEnterFallback();
-
-    // Hard fallback: if neither the rAF chain nor a visibility change
-    // promotes us, force 'open' so the overlay is never stuck invisible.
-    enterFallbackTimerRef.current = window.setTimeout(() => {
-      enterFallbackTimerRef.current = null;
-      promoteEntering();
-    }, ENTER_FALLBACK_MS);
+    armFallback("entering", "open");
 
     if (typeof document === "undefined" || document.visibilityState !== "visible") {
-      // Hidden tab / background launch: rAF will not fire. Promote now so
-      // the overlay is already in the visible state when the user brings
-      // the window forward.
-      promoteEntering();
+      // 隐藏状态下 rAF 不会回调。直接推进，等用户把窗口切到前台时浮层已经
+      // 处于可见状态，而不是停在 opacity-0。
+      promote("entering", "open");
       return;
     }
+    requestAnimationFrame(() => requestAnimationFrame(() => promote("entering", "open")));
+  }, [armFallback, promote]);
 
-    requestAnimationFrame(() => requestAnimationFrame(() => promoteEntering()));
-  }, [clearEnterFallback, clearLeaveFallback, promoteEntering]);
+  const closeSettingsOverlay = useCallback(() => {
+    setOverlay("leaving");
+    armFallback("leaving", "closed");
+  }, [armFallback]);
 
-  // CUA-033/CUA-034: if the document becomes visible while we're still in
-  // 'entering' or 'leaving', promote immediately so the overlay is not
-  // waiting on the 350 ms safety net or the next user interaction. For
-  // 'leaving' this matters because WebKit suppresses transitionend while
-  // hidden, so without this the panel would stay mounted in the leaving
-  // state forever.
+  const handleSettingsOverlayTransitionEnd = useCallback(() => {
+    promote("leaving", "closed");
+  }, [promote]);
+
+  const resetSettingsOverlay = useCallback(() => {
+    clearFallback();
+    setOverlay("closed");
+  }, [clearFallback]);
+
+  // 文档重新可见时立刻推进，不必再等兜底计时器——后台时计时器会被浏览器
+  // 降频，用户切回来可能正好卡在那一段。
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        promoteEntering();
-        promoteLeaving();
-      }
+      if (document.visibilityState !== "visible") return;
+      promote("entering", "open");
+      promote("leaving", "closed");
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [promoteEntering, promoteLeaving]);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [promote]);
 
-  // Drop any pending fallbacks on unmount so we never fire after teardown.
-  useEffect(
-    () => () => {
-      clearEnterFallback();
-      clearLeaveFallback();
-    },
-    [clearEnterFallback, clearLeaveFallback],
-  );
-
-  const closeSettingsOverlay = useCallback(() => {
-    clearEnterFallback();
-    clearLeaveFallback();
-    setOverlay("leaving");
-
-    // CUA-034: hard fallback for the close path. WebKit does not fire
-    // transitionend while document.hidden, so without this timer the panel
-    // stays mounted in 'leaving' forever. transitionend (when fired) will
-    // also call promoteLeaving, and the functional updater in setOverlay
-    // makes whichever path wins idempotent.
-    leaveFallbackTimerRef.current = window.setTimeout(() => {
-      leaveFallbackTimerRef.current = null;
-      promoteLeaving();
-    }, LEAVE_FALLBACK_MS);
-  }, [clearEnterFallback, clearLeaveFallback, promoteLeaving]);
-
-  const handleSettingsOverlayTransitionEnd = useCallback(() => {
-    // CUA-034: route through promoteLeaving so the leave fallback timer is
-    // observed (transitionend usually wins, but we still cancel the safety
-    // net so it doesn't run after teardown). Functional setOverlay keeps
-    // this idempotent if the timer already fired.
-    promoteLeaving();
-  }, [promoteLeaving]);
-
-  const resetSettingsOverlay = useCallback(() => {
-    clearEnterFallback();
-    clearLeaveFallback();
-    setSettingsOpen(false);
-    setOverlay("closed");
-  }, [clearEnterFallback, clearLeaveFallback]);
+  // 卸载后不该再有计时器落地。
+  useEffect(() => clearFallback, [clearFallback]);
 
   return {
-    settingsOpen,
+    settingsOpen: overlay !== "closed",
     overlay,
     openSettingsOverlay,
     closeSettingsOverlay,

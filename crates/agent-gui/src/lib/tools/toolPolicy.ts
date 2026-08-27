@@ -1,7 +1,4 @@
-import {
-  canonicalServerId,
-  hardcodedServerPolicyDefault,
-} from "@liveagent/ui/contracts/mcpServerDefaults";
+import { canonicalServerId } from "@liveagent/ui/contracts/mcpServerDefaults";
 
 import type { ToolPolicy } from "../settings";
 import type { BuiltinToolMetadata } from "./builtinTypes";
@@ -52,9 +49,11 @@ function serverPolicyKeyCandidates(serverId: string): string[] {
  * 判定顺序(由细到粗,任一命中即返回):
  * 1. 该工具名的显式覆盖(toolPolicies[toolName])—— 最细,最高优先级。
  * 2. MCP 按 server 的策略(server:<serverId>,仅对带 serverId 的 MCP 工具)。
- * 3. server 级硬编码缺省(`hardcodedServerPolicyDefault`):个别 server
+ * 3. server 级硬编码缺省(`metadata.serverPolicyDefault`):个别 server
  *    的工具面直接操作用户机器(如 cua-driver 的 kill_app / type_text),
  *    不能靠第 7 步的兜底 allow 隐式放行。用户在第 2 步显式表态即可盖过。
+ *    该值在建工具表时依据 server 配置(含 command)算好,不在这里按 id 现查
+ *    ——id 是用户可改的展示性标识,见 contracts/mcpServerDefaults.ts。
  * 4. 工具组级默认(group:<groupId>,如把"所有 MCP 工具"设为 ask/deny)。
  *    2、4 都是用户对更大范围的明确表态,应盖过下面的只读缺省。
  * 5. browser 组无显式配置时缺省 ask:浏览器可出网、可交互外部站点,
@@ -77,9 +76,8 @@ export function resolveToolPolicy(
       const serverPolicy = policies?.[key];
       if (serverPolicy) return serverPolicy;
     }
-    const hardcodedServer = hardcodedServerPolicyDefault(serverId);
-    if (hardcodedServer) return hardcodedServer;
   }
+  if (metadata?.serverPolicyDefault) return metadata.serverPolicyDefault;
   const groupId = metadata?.groupId;
   const groupPolicy = groupId ? policies?.[toolGroupPolicyKey(groupId)] : undefined;
   if (groupPolicy) return groupPolicy;

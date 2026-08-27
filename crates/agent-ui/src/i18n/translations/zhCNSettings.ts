@@ -1213,6 +1213,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.disable": "停用 CUA",
   "settings.cuaDriver.policyNote":
     "CUA 的每一次操作都会真实作用于这台电脑——点击、输入、关闭应用都不可撤销。默认逐次询问，请只在信任当前任务时改为始终允许。",
+  "settings.cuaDriver.commandDriftTitle": "配置里的驱动路径与探测到的不一致",
+  "settings.cuaDriver.commandDriftDesc":
+    "实际启动的是配置里那条命令，不是下方探测到的路径。重装驱动或导入过配置后可能出现这种情况。确认无误可保持现状，也可以一键对齐到探测结果。",
+  "settings.cuaDriver.commandDriftConfigured": "配置：",
+  "settings.cuaDriver.commandDriftProbed": "探测：",
+  "settings.cuaDriver.commandDriftRealign": "对齐到探测结果",
   "settings.cuaDriver.groupAbout": "关于",
   "settings.cuaDriver.statusActive": "已启用",
   "settings.cuaDriver.statusIdle": "未启用",

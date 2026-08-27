@@ -26,10 +26,16 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
+use wait_timeout::ChildExt;
 
 /// 单次外部命令的等待上限。`manifest` / `permissions status` 都在 1 秒
 /// 内返回；留足余量给冷启动的守护进程握手。
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// 安装脚本的等待上限。要下载解压，比探测慢得多，但也不该无限等——网络
+/// 挂住时裸 `wait()` 会让 UI 的「安装中」永远停在那里，除了重启应用没有
+/// 别的出路。
+const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// 安装脚本的进度事件名。前端 `CuaDriverSetupCard` 监听它滚动日志。
 pub const INSTALL_PROGRESS_EVENT: &str = "cua_driver_install_progress";
@@ -69,7 +75,6 @@ pub struct CuaDriverPermissions {
     /// 授权归属的 bundle id（正常是 `com.trycua.driver`）。守护进程没起
     /// 来时上游会报 unknown，此时两个布尔值不可信。
     pub attributed_to: Option<String>,
-    pub daemon_running: bool,
     pub error: Option<String>,
 }
 
@@ -95,6 +100,15 @@ pub struct InstallProgress {
 }
 
 // ───────── 探测 ─────────
+
+/// 本平台是否存在需要用户处理的系统授权门槛。只有 macOS 有 TCC。
+///
+/// 单独成函数而不是内联 `cfg!`，是为了让测试能在不 spawn 任何子进程的前提下
+/// 断言这一位——`probe()` 会真的去跑 `cua-driver manifest`，让它进单测就等于
+/// 让测试结果取决于跑测试那台机器装没装驱动。
+const fn platform_requires_permissions() -> bool {
+    cfg!(target_os = "macos")
+}
 
 /// 在 PATH 与平台候选目录里找 `cua-driver`。
 ///
@@ -228,7 +242,7 @@ fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {
 pub fn probe() -> CuaDriverProbe {
     let Some(path) = find_binary() else {
         return CuaDriverProbe {
-            permissions_required: cfg!(target_os = "macos"),
+            permissions_required: platform_requires_permissions(),
             ..Default::default()
         };
     };
@@ -236,7 +250,7 @@ pub fn probe() -> CuaDriverProbe {
     let mut probe = CuaDriverProbe {
         installed: true,
         path: Some(path.to_string_lossy().into_owned()),
-        permissions_required: cfg!(target_os = "macos"),
+        permissions_required: platform_requires_permissions(),
         ..Default::default()
     };
 
@@ -284,7 +298,6 @@ pub fn probe() -> CuaDriverProbe {
 #[serde(rename_all = "camelCase")]
 pub struct SelfIdentity {
     pub pid: u32,
-    pub bundle_id: Option<String>,
 }
 
 /// LiveAgent 自己的进程身份，供前端把 cua-driver 的视野裁掉宿主窗口。
@@ -296,7 +309,6 @@ pub struct SelfIdentity {
 pub fn self_identity() -> SelfIdentity {
     SelfIdentity {
         pid: std::process::id(),
-        bundle_id: option_env!("TAURI_BUNDLE_IDENTIFIER").map(str::to_owned),
     }
 }
 
@@ -357,18 +369,11 @@ pub fn permissions_status() -> CuaDriverPermissions {
         };
     };
 
-    // 守护进程状态单独问一次：`permissions status` 在守护进程没起来时
-    // 只会报 unknown，不区分「没装」和「没跑」，对用户不可读。
-    //
-    // 两次调用各要 spawn 一个进程、并可能等守护进程握手，串起来就是用户
-    // 盯着空白等两轮。彼此无依赖，并行跑。
-    let daemon_path = path.clone();
-    let daemon_probe =
-        std::thread::spawn(move || run_capture(&daemon_path, &["status"]).is_ok_and(|out| out.contains("is running")));
-    let status = run_capture(&path, &["permissions", "status", "--json"]);
-    let daemon_running = daemon_probe.join().unwrap_or(false);
-
-    match status {
+    // 只问 `permissions status`。曾经额外并行 spawn 一次 `cua-driver status`
+    // 去判断守护进程有没有起来，但那个结果前端从头到尾没有用过，而代价是每次
+    // 进设置页多一个子进程，且判定方式是拿英文散文做子串匹配（上游改一次措辞
+    // 就静默失真）。要用的时候再加，并且要用结构化输出。
+    match run_capture(&path, &["permissions", "status", "--json"]) {
         Ok(raw) => match serde_json::from_str::<Value>(&raw) {
             Ok(payload) => CuaDriverPermissions {
                 supported: true,
@@ -385,19 +390,16 @@ pub fn permissions_status() -> CuaDriverPermissions {
                     .and_then(|source| source.get("bundle_id"))
                     .and_then(Value::as_str)
                     .map(str::to_owned),
-                daemon_running,
                 error: None,
             },
             Err(error) => CuaDriverPermissions {
                 supported: true,
-                daemon_running,
                 error: Some(format!("failed to parse permissions payload: {error}")),
                 ..Default::default()
             },
         },
         Err(error) => CuaDriverPermissions {
             supported: true,
-            daemon_running,
             error: Some(error),
             ..Default::default()
         },
@@ -484,9 +486,28 @@ pub fn install(app: &AppHandle) -> Result<CuaDriverProbe, String> {
         "stderr",
     );
 
-    let status = child
-        .wait()
-        .map_err(|error| format!("installer wait failed: {error}"))?;
+    let status = match child
+        .wait_timeout(INSTALL_TIMEOUT)
+        .map_err(|error| format!("installer wait failed: {error}"))?
+    {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let message = format!(
+                "installer timed out after {} minutes",
+                INSTALL_TIMEOUT.as_secs() / 60
+            );
+            let _ = app.emit(
+                INSTALL_PROGRESS_EVENT,
+                InstallProgress {
+                    stream: "failed".into(),
+                    line: message.clone(),
+                },
+            );
+            return Err(message);
+        }
+    };
     if let Some(handle) = out_pump {
         let _ = handle.join();
     }
@@ -521,8 +542,6 @@ pub fn install(app: &AppHandle) -> Result<CuaDriverProbe, String> {
     Ok(probe)
 }
 
-use wait_timeout::ChildExt;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -540,7 +559,7 @@ mod tests {
     fn permissions_required_tracks_the_platform_tcc_gate() {
         // 前端靠这一位决定要不要渲染授权那一节；不能等 permissions_status
         // 那趟慢查询回来才知道平台，否则卡片会「先没有、后长出来」。
-        assert_eq!(probe().permissions_required, cfg!(target_os = "macos"));
+        assert_eq!(platform_requires_permissions(), cfg!(target_os = "macos"));
         assert_eq!(
             CuaDriverProbe::default().permissions_required,
             false,

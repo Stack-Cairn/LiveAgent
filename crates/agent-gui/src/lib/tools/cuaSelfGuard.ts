@@ -44,16 +44,30 @@ const SELF_REGION_REFUSAL =
   "同样可以点掉审批弹窗或改写权限设置。请改为操作其他应用的窗口。（如确需自动化 LiveAgent " +
   "本身，在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
 
-type SelfIdentity = { pid: number; bundleId?: string | null };
+type SelfIdentity = { pid: number };
 
 /** 宿主窗口在屏幕坐标系里的矩形，单位与 cua-driver 的桌面坐标一致。 */
 export type SelfWindowRect = { x: number; y: number; width: number; height: number };
 
-let selfIdentityPromise: Promise<SelfIdentity | null> | null = null;
+/**
+ * 宿主 pid 的缓存。
+ *
+ * **只缓存成功的结果。** 曾经是 `promise ??= invoke(...).catch(() => null)`
+ * ——那会把一次瞬时 IPC 失败缓存成永久的 null，此后每一轮对话的守卫都直接
+ * 返回 null（整道闸门关闭），用户看不到任何迹象。安全侧的缓存不该记住失败。
+ */
+let selfPidPromise: Promise<number | null> | null = null;
 
-function loadSelfIdentity(): Promise<SelfIdentity | null> {
-  selfIdentityPromise ??= invoke<SelfIdentity>("cua_driver_self_identity").catch(() => null);
-  return selfIdentityPromise;
+async function loadSelfPid(): Promise<number | null> {
+  if (selfPidPromise) {
+    const cached = await selfPidPromise;
+    if (cached !== null) return cached;
+  }
+  const attempt = invoke<SelfIdentity>("cua_driver_self_identity")
+    .then((identity) => readNumber(identity?.pid))
+    .catch(() => null);
+  selfPidPromise = attempt;
+  return attempt;
 }
 
 /**
@@ -82,8 +96,17 @@ const learnedSelfWindowIds = new Set<number>();
 /**
  * 递归深度上限。入参是 MCP 的 JSON 参数，正常形态最多两三层；给足余量之后
  * 仍然封顶，免得畸形（或刻意构造的）深层结构把扫描拖垮。
+ *
+ * 超出上限时**当作命中**处理（见 `refuseSelfTargetedCall`）。扫不完就放行
+ * 等于给出一条现成的绕过方式：把目标埋到第 13 层即可。宁可拒绝一个畸形到
+ * 不像真实调用的请求。
  */
 const MAX_SCAN_DEPTH = 12;
+
+/** 拒绝一个深到扫不完的入参时给模型的说明。 */
+const SELF_SCAN_DEPTH_REFUSAL =
+  "调用参数的嵌套层级超出了安全检查的上限，已被拒绝：无法确认它是否以 LiveAgent 自身为目标。" +
+  "请用扁平一些的参数重试。";
 
 /** 各家写法里表示进程 id 的字段名。 */
 const PID_KEYS = ["pid", "process_id", "processId", "owner_pid", "ownerPid"] as const;
@@ -110,27 +133,51 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** 深度遍历，对每个对象节点调用 `visit`；`visit` 返回 true 即提前结束。 */
-function walkRecords(
+type ScanResult = "hit" | "truncated" | "clear";
+
+/**
+ * 深度遍历，对每个对象节点调用 `visit`。
+ *
+ * 返回 `hit`（visit 命中）、`truncated`（没命中，但有分支深到扫不完）或
+ * `clear`（完整扫完且没命中）。三态而非布尔，是因为调用方要区分「确认安全」
+ * 和「没能确认」——安全判定里这两者不能都当放行。
+ */
+function scanRecords(
   node: unknown,
   visit: (record: Record<string, unknown>) => boolean,
   depth = 0,
-): boolean {
-  if (depth > MAX_SCAN_DEPTH) return false;
-  if (Array.isArray(node)) {
-    return node.some((entry) => walkRecords(entry, visit, depth + 1));
+): ScanResult {
+  if (depth > MAX_SCAN_DEPTH) return "truncated";
+
+  const children = Array.isArray(node) ? node : null;
+  if (!children) {
+    const record = asRecord(node);
+    if (!record) return "clear";
+    if (visit(record)) return "hit";
+    return scanChildren(Object.values(record), visit, depth);
   }
-  const record = asRecord(node);
-  if (!record) return false;
-  if (visit(record)) return true;
-  return Object.values(record).some((value) => walkRecords(value, visit, depth + 1));
+  return scanChildren(children, visit, depth);
+}
+
+function scanChildren(
+  values: unknown[],
+  visit: (record: Record<string, unknown>) => boolean,
+  depth: number,
+): ScanResult {
+  let truncated = false;
+  for (const value of values) {
+    const result = scanRecords(value, visit, depth + 1);
+    if (result === "hit") return "hit";
+    if (result === "truncated") truncated = true;
+  }
+  return truncated ? "truncated" : "clear";
 }
 
 /**
  * 入参检查：按 pid / window_id 寻址的自指调用。返回拒绝理由，或 null 放行。
  *
  * 整棵参数树都要扫，不只是顶层：上游把目标包在 `target` 对象里，只看顶层
- * `pid` / `window_id` 会让官方写法原样通过。
+ * `pid` / `window_id` 会让官方写法原样通过。扫不完（超出深度上限）同样拒绝。
  */
 export function refuseSelfTargetedCall(
   args: Record<string, unknown> | undefined,
@@ -138,7 +185,7 @@ export function refuseSelfTargetedCall(
 ): string | null {
   if (!args) return null;
 
-  const hit = walkRecords(args, (record) => {
+  const result = scanRecords(args, (record) => {
     if (selfPid !== null && PID_KEYS.some((key) => readNumber(record[key]) === selfPid)) {
       return true;
     }
@@ -148,7 +195,9 @@ export function refuseSelfTargetedCall(
     });
   });
 
-  return hit ? SELF_TARGET_REFUSAL : null;
+  if (result === "hit") return SELF_TARGET_REFUSAL;
+  if (result === "truncated") return SELF_SCAN_DEPTH_REFUSAL;
+  return null;
 }
 
 /**
@@ -163,7 +212,7 @@ export function usesDesktopScreenCoordinates(args: Record<string, unknown> | und
   if (!args) return false;
 
   let scoped = false;
-  walkRecords(args, (record) => {
+  scanRecords(args, (record) => {
     const kind = typeof record.kind === "string" ? record.kind.trim().toLowerCase() : null;
     if (kind && SCOPED_TARGET_KINDS.has(kind)) {
       scoped = true;
@@ -179,7 +228,7 @@ export function usesDesktopScreenCoordinates(args: Record<string, unknown> | und
 /** 收集参数里所有形如 `{x, y}` 的点。 */
 function collectScreenPoints(args: Record<string, unknown>): Array<{ x: number; y: number }> {
   const points: Array<{ x: number; y: number }> = [];
-  walkRecords(args, (record) => {
+  scanRecords(args, (record) => {
     const x = readNumber(record.x);
     const y = readNumber(record.y);
     if (x !== null && y !== null) points.push({ x, y });
@@ -214,14 +263,14 @@ export function refuseSelfRegionCall(
 }
 
 /**
- * 从文本里切出第一段结构完整的 JSON，返回它在原文中的区间。
+ * 从 `from` 起找出下一段结构完整的 JSON，返回它在原文中的区间。
  *
  * 官方 MCP 的文本块通常是「一行 `✅ Windows listed` 摘要 + 一段 JSON」，
  * 要求整段 trim 后以 `{` / `[` 开头会让这类结果整个漏过过滤。扫描时要认
  * 字符串字面量与转义，否则 payload 里带花括号的字符串会把配对算错。
  */
-function findJsonSpan(text: string): { start: number; end: number } | null {
-  for (let i = 0; i < text.length; i++) {
+function findJsonSpan(text: string, from = 0): { start: number; end: number } | null {
+  for (let i = from; i < text.length; i++) {
     const char = text[i];
     if (char !== "{" && char !== "[") continue;
 
@@ -248,7 +297,7 @@ function findJsonSpan(text: string): { start: number; end: number } | null {
         if (depth === 0) return { start: i, end: j + 1 };
       }
     }
-    // 从这个位置起始的括号没有配平；后面不可能再有更早的完整片段。
+    // 从这个位置起始的括号没有配平；再往后找也只会落进同一段未闭合文本。
     return null;
   }
   return null;
@@ -264,14 +313,35 @@ function findJsonSpan(text: string): { start: number; end: number } | null {
 export function stripSelfFromJsonText(text: string, selfPid: number | null): string {
   if (selfPid === null) return text;
 
-  const span = findJsonSpan(text);
-  if (!span) return text;
+  // 文本里可能不止一段 JSON（多次调用的合并结果、摘要 + 明细）。只处理第一段
+  // 会让后面那些原样进模型，所以逐段扫到底。
+  let out = "";
+  let cursor = 0;
+  let changedAny = false;
 
+  for (let span = findJsonSpan(text, cursor); span; span = findJsonSpan(text, cursor)) {
+    const raw = text.slice(span.start, span.end);
+    const stripped = stripSelfFromJsonValue(raw, selfPid);
+    out += text.slice(cursor, span.start) + (stripped ?? raw);
+    if (stripped !== null) changedAny = true;
+    cursor = span.end;
+  }
+
+  // 没有命中就返回原文，不重新拼接——避免无谓地改写模型看到的原文格式。
+  if (!changedAny) return text;
+  return out + text.slice(cursor);
+}
+
+/**
+ * 剔除一段 JSON 文本里的宿主记录。有改动返回新的序列化结果，没改动或解析
+ * 失败返回 null（调用方据此保留原文）。
+ */
+function stripSelfFromJsonValue(raw: string, selfPid: number): string | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text.slice(span.start, span.end));
+    parsed = JSON.parse(raw);
   } catch {
-    return text;
+    return null;
   }
 
   let changed = false;
@@ -299,13 +369,12 @@ export function stripSelfFromJsonText(text: string, selfPid: number | null): str
   };
 
   const result = visit(parsed);
-  if (!changed) return text;
-  return text.slice(0, span.start) + JSON.stringify(result) + text.slice(span.end);
+  return changed ? JSON.stringify(result) : null;
 }
 
 /** 供测试重置进程级缓存。 */
 export function resetCuaSelfGuardCaches() {
-  selfIdentityPromise = null;
+  selfPidPromise = null;
   selfRectsCache = null;
   learnedSelfWindowIds.clear();
 }
@@ -325,8 +394,7 @@ export async function resolveCuaSelfGuard(
   allowSelfTargeting: boolean,
 ): Promise<CuaSelfGuard | null> {
   if (allowSelfTargeting) return null;
-  const identity = await loadSelfIdentity();
-  const selfPid = identity ? readNumber(identity.pid) : null;
+  const selfPid = await loadSelfPid();
   if (selfPid === null) return null;
   return {
     refuse: async (args) => {
@@ -342,3 +410,4 @@ export async function resolveCuaSelfGuard(
 
 export const CUA_SELF_TARGET_REFUSAL = SELF_TARGET_REFUSAL;
 export const CUA_SELF_REGION_REFUSAL = SELF_REGION_REFUSAL;
+export const CUA_SELF_SCAN_DEPTH_REFUSAL = SELF_SCAN_DEPTH_REFUSAL;
