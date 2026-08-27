@@ -238,9 +238,7 @@ export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
  * presets in the settings UI; the runtime retries any error message that
  * contains the code as a standalone number.
  */
-export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [
-  520, 521, 522, 523, 525, 526, 527,
-] as const;
+export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [520, 521, 522, 523, 525, 526, 527] as const;
 
 /**
  * User-defined retry-error classification, layered on top of pi-ai's

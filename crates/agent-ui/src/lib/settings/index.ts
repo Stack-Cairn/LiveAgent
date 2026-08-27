@@ -35,7 +35,6 @@ import {
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
 import { normalizeModelFailoverSettings } from "./modelFailover";
-import { normalizeRetryErrorSettings } from "./retryError";
 import {
   normalizeChatTranscriptSettings,
   normalizeFontScaleSettings,
@@ -43,6 +42,7 @@ import {
   normalizePositiveInteger,
   normalizeStringArray,
 } from "./normalizers";
+import { normalizeRetryErrorSettings } from "./retryError";
 import {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockFileTreeExpandedPaths,
@@ -145,12 +145,12 @@ export {
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
 } from "./modelFailover";
-export { normalizeRetryErrorSettings } from "./retryError";
 export {
   normalizeChatTranscriptSettings,
   normalizeFontScale,
   normalizeFontScaleSettings,
 } from "./normalizers";
+export { normalizeRetryErrorSettings } from "./retryError";
 export {
   DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
   normalizeRightDockBackgroundTasksState,
