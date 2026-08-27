@@ -178,6 +178,29 @@ test("withStreamRetry passes the failing attempt's error message as onRetry's th
   ]);
 });
 
+test("withStreamRetry reports the exact backoff about to be slept as onRetry's fourth argument", async () => {
+  let calls = 0;
+  const plannedDelays = [];
+  const wrapped = withStreamRetry(
+    () => {
+      calls += 1;
+      if (calls < 3) return createErrorStream("503 service unavailable");
+      return createSuccessStream("final answer");
+    },
+    {
+      maxAttempts: 5,
+      onRetry: (_attempt, _maxAttempts, _errorMessage, plannedDelayMs) =>
+        plannedDelays.push(plannedDelayMs),
+    },
+  );
+
+  await collectEvents(wrapped);
+  assert.equal(plannedDelays.length, 2);
+  // codex-style backoff: base 200ms * 2^(n-1) * uniform(0.9, 1.1).
+  assert.ok(plannedDelays[0] >= 180 && plannedDelays[0] <= 220, `attempt 1: ${plannedDelays[0]}`);
+  assert.ok(plannedDelays[1] >= 360 && plannedDelays[1] <= 440, `attempt 2: ${plannedDelays[1]}`);
+});
+
 test("withStreamRetry never calls onRetryRecovered when no retry occurred", async () => {
   let recoveredCalls = 0;
   const wrapped = withStreamRetry(() => createSuccessStream("first try"), {

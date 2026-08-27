@@ -85,6 +85,7 @@ import type {
   ProviderFailoverSettings,
   ProviderId,
   ProviderModelConfig,
+  ProviderRetryPolicy,
   ReasoningLevel,
   RemoteSettings,
   RightDockFileTreeState,
@@ -118,6 +119,7 @@ import {
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
   PROMPT_CACHE_HINT_MODES,
+  PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_TOOL_KINDS,
   USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
@@ -1046,6 +1048,30 @@ function normalizeUsageQueryConfig(input: unknown): UsageQueryConfig {
   };
 }
 
+/**
+ * 供应商级重试策略归一化。default 态在持久层不落字段（返回 undefined），
+ * 保证旧配置零迁移；非法输入（未知 mode、custom 无有效次数）一律视为
+ * default。custom 的 maxRetries（不含首次请求的重试次数）钳位 1..10。
+ */
+export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolicy | undefined {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  if (obj.mode === "off") return { mode: "off" };
+  if (obj.mode === "custom") {
+    const raw = obj.maxRetries;
+    if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+    return {
+      mode: "custom",
+      maxRetries: clampInt(
+        raw,
+        PROVIDER_RETRY_MAX_RETRIES_LIMITS.min,
+        PROVIDER_RETRY_MAX_RETRIES_LIMITS.max,
+        PROVIDER_RETRY_MAX_RETRIES_LIMITS.min,
+      ),
+    };
+  }
+  return undefined;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
@@ -1105,6 +1131,10 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       : {}),
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
+    ...((): { retryPolicy?: ProviderRetryPolicy } => {
+      const retryPolicy = normalizeProviderRetryPolicy(obj.retryPolicy);
+      return retryPolicy ? { retryPolicy } : {};
+    })(),
     usageQuery: normalizeUsageQueryConfig(obj.usageQuery),
   };
 }

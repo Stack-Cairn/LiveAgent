@@ -52,3 +52,5 @@ export type {
   StreamOptionsEx,
   ToolChoice,
 } from "./runtime/types";
+export { llm, llmStream } from "./service/llmService";
+export type { LlmAdapter, LlmStreamRequest } from "./service/types";

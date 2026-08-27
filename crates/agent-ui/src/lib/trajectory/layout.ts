@@ -399,6 +399,8 @@ function buildAssistantRecord(
     ...(step.error === undefined ? {} : { error: step.error }),
     ...(step.headerId === undefined ? {} : { headerId: step.headerId }),
     ...(step.retries.length === 0 ? {} : { retries: step.retries }),
+    ...(step.failovers.length === 0 ? {} : { failovers: step.failovers }),
+    ...(step.transports.length === 0 ? {} : { transports: step.transports }),
     ...(joined?.text === undefined ? {} : { outputDetail: joined.text }),
     ...(joined?.thinking === undefined ? {} : { thinkingDetail: joined.thinking }),
     ...(joined?.blocks === undefined ? {} : { sourceBlocks: joined.blocks }),

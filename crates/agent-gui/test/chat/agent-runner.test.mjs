@@ -374,6 +374,13 @@ const llmMock = {
       },
     };
   },
+  // runner 经统一入口 llm.stream() 出站；mock 同构转发到上面的
+  // streamSimpleByApi，两个入口共享同一份请求记账。
+  llm: {
+    stream(request) {
+      return llmMock.streamSimpleByApi(request.model, request.context, request.options);
+    },
+  },
 };
 
 const loader = createTsModuleLoader({

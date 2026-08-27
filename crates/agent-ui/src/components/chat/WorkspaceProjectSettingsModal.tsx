@@ -454,14 +454,12 @@ export function WorkspaceProjectSettingsModal(props: {
             ) : null}
 
             {activePanel === "prompt" ? (
-              <div className="space-y-5 p-6">
-                <ProjectPromptSettingsPanel
-                  projectPrompt={projectPrompt}
-                  strategy={projectPromptStrategy}
-                  onProjectPromptChange={setProjectPrompt}
-                  onStrategyChange={setProjectPromptStrategy}
-                />
-              </div>
+              <ProjectPromptSettingsPanel
+                projectPrompt={projectPrompt}
+                strategy={projectPromptStrategy}
+                onProjectPromptChange={setProjectPrompt}
+                onStrategyChange={setProjectPromptStrategy}
+              />
             ) : null}
           </main>
         </DialogBody>
@@ -491,9 +489,10 @@ export function WorkspaceProjectSettingsModal(props: {
             <Button
               onClick={() => void handleSave()}
               disabled={saving || !dialogOpen || projectNameInvalid}
-              className="min-w-20 max-[520px]:flex-1"
+              className="max-[520px]:flex-1"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t("workspaceEditor.save")}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("workspaceEditor.save")}
             </Button>
           </DialogActions>
         </DialogFooter>

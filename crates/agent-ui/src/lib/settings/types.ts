@@ -564,8 +564,35 @@ export type CustomProvider = {
   promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled: boolean;
   useSystemProxy: boolean;
+  /** 流内重试策略；缺省 = 全局默认行为（等价于 mode:"default"）。 */
+  retryPolicy?: ProviderRetryPolicy;
   usageQuery: UsageQueryConfig;
 };
+
+/**
+ * 供应商级流内重试策略。
+ *
+ * - default：沿用全局默认（5 次重试，即 DEFAULT_STREAM_RETRY_MAX_ATTEMPTS-1）
+ *   ——与未配置等价，归一化时直接省略字段，保证旧配置零迁移；
+ * - off：禁用流内重试（不影响跨供应商 failover）；
+ * - custom：使用 maxRetries——首次失败后的重试次数，不含首次请求（钳位
+ *   1..10；0 次重试请直接选 off）。与重试状态提示"正在重试 (n/m)"的 m
+ *   同一口径。
+ */
+export type ProviderRetryPolicy = { mode: "off" } | { mode: "custom"; maxRetries: number };
+
+export const PROVIDER_RETRY_MAX_RETRIES_LIMITS = {
+  min: 1,
+  max: 10,
+} as const;
+
+/**
+ * 全局默认流内重试次数（不含首次请求）的 UI 展示镜像。运行时真源是
+ * agent-gui streamRetry.ts 的 DEFAULT_STREAM_RETRY_MAX_ATTEMPTS（总尝试
+ * 数 = 重试数 + 1；UI 边界禁止反向依赖）；两者一致性由
+ * provider-retry-policy 单测锁定。
+ */
+export const PROVIDER_RETRY_DEFAULT_MAX_RETRIES = 5;
 
 export type EffectiveTheme = "light" | "dark";
 

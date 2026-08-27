@@ -29,12 +29,12 @@ import {
   createStreamingTextReconciler,
   describeProviderCacheShape,
   finalizeProviderStreamOptions,
+  llm,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
   prepareProviderRequest,
   resolveProviderCacheRetention,
   type StreamOptionsEx,
-  streamSimpleByApi,
   type ToolChoice,
   toSimpleStreamReasoning,
 } from "../../providers/llm";
@@ -53,7 +53,12 @@ import {
   type ProviderFailoverCandidate,
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
+import { resolveStreamRetryConfig } from "../../providers/runtime/retryPolicy";
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
+import {
+  captureTransportSnapshot,
+  type TransportSnapshot,
+} from "../../providers/runtime/transportSnapshot";
 import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
@@ -463,6 +468,22 @@ export async function runAssistantWithTools(params: {
   } | null>;
   onToolStatus?: (status: string | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
+  /** 每次跨供应商切换（含跳过熔断打开的主选）。targetIndex 是稳定候选下标（0 = 主选）。 */
+  onFailoverAttempt?: (
+    round: number,
+    event: {
+      attempt: number;
+      fromLabel: string;
+      toLabel: string;
+      targetIndex: number;
+      errorMessage: string;
+    },
+  ) => void;
+  /** 每个实际尝试的候选各fire一次：脱敏后的传输装配快照（只含头名，不含值）。 */
+  onTransportAttempt?: (
+    round: number,
+    snapshot: TransportSnapshot & { providerLabel: string },
+  ) => void;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
@@ -1201,6 +1222,7 @@ export async function runAssistantWithTools(params: {
     ) => {
       const round = ++streamRound;
       const retryAttemptsForRound: RetryAttemptRecord[] = [];
+      let failoverAttemptsForRound = 0;
       params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
@@ -1325,11 +1347,18 @@ export async function runAssistantWithTools(params: {
           reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
           workdir: params.workdir,
           streamRetry: {
-            onRetry: (attempt, maxAttempts, errorMessage) => {
+            ...resolveStreamRetryConfig(target.runtime.retryPolicy),
+            onRetry: (attempt, maxAttempts, errorMessage, plannedDelayMs) => {
               params.onToolStatus?.(
                 `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
               );
-              retryAttemptsForRound.push({ attempt, maxAttempts, errorMessage });
+              retryAttemptsForRound.push({
+                attempt,
+                maxAttempts,
+                errorMessage,
+                ...(plannedDelayMs === undefined ? {} : { plannedDelayMs }),
+                providerLabel: target.label,
+              });
               params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
             },
             onRetryRecovered: () => {
@@ -1354,6 +1383,17 @@ export async function runAssistantWithTools(params: {
             sessionId: params.sessionId,
           },
         });
+
+        try {
+          // 逐候选独立采样：failover 各目标的装配头集互不泄漏是核心正确性
+          // 要求，快照按实际尝试的目标各记一份，观察失败不影响请求。
+          params.onTransportAttempt?.(round, {
+            ...captureTransportSnapshot(streamOptions.headers),
+            providerLabel: target.label,
+          });
+        } catch (error) {
+          console.warn("[agent-runner] transport observer threw; request is unaffected", error);
+        }
 
         // A discarded failover attempt for this round may have left a live
         // probe/aggregator behind; finish it quietly and drop its blocks so
@@ -1406,10 +1446,14 @@ export async function runAssistantWithTools(params: {
           }),
         );
 
-        return streamSimpleByApi(targetModel, effectiveContext, streamOptions);
+        return llm.stream({
+          model: targetModel,
+          context: effectiveContext,
+          options: streamOptions,
+        });
       };
 
-      const wrapWithGuard = (stream: ReturnType<typeof streamSimpleByApi>) =>
+      const wrapWithGuard = (stream: ReturnType<typeof llm.stream>) =>
         wrapStreamWithToolCallArgumentGuard(stream, (toolCall, reason) => {
           incompleteToolCallArguments.set(toolCall.id, reason);
         });
@@ -1454,8 +1498,18 @@ export async function runAssistantWithTools(params: {
       const failoverStream = withProviderFailover(candidates, {
         config: failoverParams.config,
         signal: options?.signal,
-        onFailover: ({ fromLabel, toLabel, errorMessage }) => {
+        onFailover: ({ fromLabel, toLabel, toIndex, errorMessage }) => {
           lastFailoverErrorMessage = errorMessage;
+          failoverAttemptsForRound += 1;
+          params.onFailoverAttempt?.(round, {
+            attempt: failoverAttemptsForRound,
+            fromLabel,
+            toLabel,
+            // toIndex 是本轮 candidates 数组下标；映射回稳定候选下标（0 = 主选），
+            // sticky 重排后账本里的目标身份才不随轮次漂移。
+            targetIndex: targetOrder[toIndex] ?? toIndex,
+            errorMessage,
+          });
           params.onToolStatus?.(`第 ${round} 轮：${fromLabel} 不可用，正在切换到 ${toLabel}...`);
         },
         onCommitted: (candidateIndex) => {

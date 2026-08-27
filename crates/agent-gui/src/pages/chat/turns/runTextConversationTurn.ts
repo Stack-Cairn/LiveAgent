@@ -386,11 +386,13 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
                 onSwitched: ({ target, errorMessage }) => {
                   failover.onSwitched?.({ target, round: textRound, errorMessage });
                 },
-                onFailover: ({ fromLabel, toLabel, errorMessage }) => {
+                onFailover: ({ fromLabel, toLabel, targetIndex, errorMessage }) => {
                   trajectoryFailoverAttempt += 1;
-                  trajectory.noteRetry(textRound, {
+                  trajectory.noteFailover(textRound, {
                     attempt: trajectoryFailoverAttempt,
-                    maxRetries: failover.fallbacks.length,
+                    fromLabel,
+                    toLabel,
+                    targetIndex,
                     ...(errorMessage === "" ? {} : { error: errorMessage }),
                   });
                   failoverStatusVisible = true;
@@ -404,6 +406,17 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           workdir: conversationCwd,
           sessionId,
           nativeWebSearch: nativeWebSearchEnabled,
+          onTransportAttempt: (snapshot) => {
+            trajectory.noteTransport(textRound, {
+              provider: snapshot.providerLabel,
+              ...(snapshot.upstreamOrigin === undefined
+                ? {}
+                : { upstreamOrigin: snapshot.upstreamOrigin }),
+              useSystemProxy: snapshot.useSystemProxy,
+              fullUrl: snapshot.fullUrl,
+              headerNames: snapshot.headerNames,
+            });
+          },
           onRequestStart: ({ context, systemSuffix }) => {
             recordTextRequestStart(context, systemSuffix);
           },
@@ -448,14 +461,25 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           },
           signal: scope.controller.signal,
           debugLogger: streamAttempt === 0 ? conversationDebugLogger : recoveryDebugLogger,
-          onRetryStatus: (attempt, maxAttempts, errorMessage) => {
+          onRetryStatus: (attempt, maxAttempts, errorMessage, plannedDelayMs, providerLabel) => {
             trajectory.noteRetry(textRound, {
               attempt,
-              maxRetries: Math.max(0, maxAttempts - 1),
+              // 回调的 maxAttempts 已是重试预算——withStreamRetry 传入前已减去
+              // 首次尝试（与状态提示 "(n/m)" 的 m 同口径），直接落账。
+              maxRetries: maxAttempts,
+              ...(plannedDelayMs === undefined ? {} : { delayMs: plannedDelayMs }),
               ...(errorMessage === "" ? {} : { error: errorMessage }),
+              // 与 agent 模式同口径:failover 下把重试归属到具体候选。
+              ...(providerLabel === undefined ? {} : { provider: providerLabel }),
             });
             updateGatewayBridgeToolStatus(`连接已断开，正在重试 (${attempt}/${maxAttempts})...`);
-            retryAttemptsForAttempt.push({ attempt, maxAttempts, errorMessage });
+            retryAttemptsForAttempt.push({
+              attempt,
+              maxAttempts,
+              errorMessage,
+              ...(plannedDelayMs === undefined ? {} : { plannedDelayMs }),
+              ...(providerLabel === undefined ? {} : { providerLabel }),
+            });
             updateRetryAttempts(retryAttemptsForAttempt.slice(), transcriptStore);
           },
           onRetryRecovered: () => {

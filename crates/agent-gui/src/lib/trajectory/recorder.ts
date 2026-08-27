@@ -20,6 +20,7 @@ import type {
   TrajectoryUsage,
 } from "@liveagent/ui/lib/trajectory/types";
 import { createTrajectoryPersistenceQueue } from "./persistenceQueue";
+import { scrubSecretsFromErrorText } from "./scrub";
 
 /** 工具参数在事件里的截断长度：实时通道要小，详情由正文索引另行提供。 */
 const TOOL_ARGS_PREVIEW_CHARS = 200;
@@ -72,7 +73,39 @@ export type TrajectoryRecorder = {
   stepEnd: (step: number, info: TrajectoryStepEndInfo) => void;
   noteRetry: (
     step: number,
-    info: { attempt: number; maxRetries?: number; delayMs?: number; error?: string },
+    info: {
+      attempt: number;
+      maxRetries?: number;
+      delayMs?: number;
+      error?: string;
+      /** 候选标签（"Provider · model"）；failover 下区分各候选自己的重试。 */
+      provider?: string;
+    },
+  ) => void;
+  /** 跨供应商切换。`attempt` 是本次请求内的切换序号（1 起）。 */
+  noteFailover: (
+    step: number,
+    info: {
+      attempt: number;
+      fromLabel?: string;
+      toLabel?: string;
+      targetIndex?: number;
+      error?: string;
+    },
+  ) => void;
+  /**
+   * 一次实际尝试的传输装配快照。调用方必须只传头名（不传值）——
+   * recorder 不做二次脱敏，线格式里根本没有放头值的字段。
+   */
+  noteTransport: (
+    step: number,
+    info: {
+      provider?: string;
+      upstreamOrigin?: string;
+      useSystemProxy?: boolean;
+      fullUrl?: boolean;
+      headerNames?: readonly string[];
+    },
   ) => void;
   toolStart: (step: number, toolCall: { id: string; name: string; arguments?: unknown }) => void;
   toolEnd: (
@@ -124,6 +157,8 @@ export const NOOP_TRAJECTORY_RECORDER: TrajectoryRecorder = {
   firstToken: () => {},
   stepEnd: () => {},
   noteRetry: () => {},
+  noteFailover: () => {},
+  noteTransport: () => {},
   toolStart: () => {},
   toolEnd: () => {},
   compactionStart: () => {},
@@ -163,6 +198,10 @@ export function createTrajectoryRecorder(params: {
     console.warn("[trajectory] recorder step failed; chat is unaffected", error);
   };
   const queue = createTrajectoryPersistenceQueue({ conversationId, ports, warn });
+
+  /** err 字段的统一入口：供应商报错可能回显带密钥的 URL/头，落盘前洗掉。 */
+  const scrubError = (error: string | undefined): string | undefined =>
+    error === undefined ? undefined : scrubSecretsFromErrorText(error);
 
   const scheduleFlush = () => {
     if (timer !== null || disposed) return;
@@ -209,6 +248,7 @@ export function createTrajectoryRecorder(params: {
 
   const emitStepEnd = (turn: number, step: number, info: TrajectoryStepEndInfo) => {
     openSteps.delete(stepKey(turn, step));
+    const error = scrubError(info.error);
     emit({
       k: "step_end",
       t: turn,
@@ -220,7 +260,7 @@ export function createTrajectoryRecorder(params: {
       ...(info.model === undefined ? {} : { m: info.model }),
       ...(info.api === undefined ? {} : { api: info.api }),
       ...(info.stopReason === undefined ? {} : { sr: info.stopReason }),
-      ...(info.error === undefined ? {} : { err: info.error }),
+      ...(error === undefined ? {} : { err: error }),
     });
   };
 
@@ -289,6 +329,7 @@ export function createTrajectoryRecorder(params: {
       emitStepEnd(currentTurn, step, info);
     },
     noteRetry: (step, info) => {
+      const error = scrubError(info.error);
       emit({
         k: "retry",
         t: currentTurn,
@@ -297,7 +338,37 @@ export function createTrajectoryRecorder(params: {
         n: info.attempt,
         ...(info.maxRetries === undefined ? {} : { max: info.maxRetries }),
         ...(info.delayMs === undefined ? {} : { delay: info.delayMs }),
-        ...(info.error === undefined ? {} : { err: info.error }),
+        ...(error === undefined ? {} : { err: error }),
+        ...(info.provider === undefined ? {} : { p: info.provider }),
+      });
+    },
+    noteFailover: (step, info) => {
+      const error = scrubError(info.error);
+      emit({
+        k: "failover",
+        t: currentTurn,
+        s: step,
+        at: Date.now(),
+        n: info.attempt,
+        ...(info.fromLabel === undefined ? {} : { from: info.fromLabel }),
+        ...(info.toLabel === undefined ? {} : { to: info.toLabel }),
+        ...(info.targetIndex === undefined ? {} : { ti: info.targetIndex }),
+        ...(error === undefined ? {} : { err: error }),
+      });
+    },
+    noteTransport: (step, info) => {
+      emit({
+        k: "transport",
+        t: currentTurn,
+        s: step,
+        at: Date.now(),
+        ...(info.provider === undefined ? {} : { p: info.provider }),
+        ...(info.upstreamOrigin === undefined ? {} : { o: info.upstreamOrigin }),
+        ...(info.useSystemProxy === undefined ? {} : { sp: info.useSystemProxy }),
+        ...(info.fullUrl === undefined ? {} : { fu: info.fullUrl }),
+        ...(info.headerNames === undefined || info.headerNames.length === 0
+          ? {}
+          : { hn: [...info.headerNames] }),
       });
     },
     toolStart: (step, toolCall) => {
@@ -336,6 +407,7 @@ export function createTrajectoryRecorder(params: {
       });
     },
     compactionEnd: (info) => {
+      const error = scrubError(info.error);
       emit({
         k: "compaction_end",
         t: info.standalone === true ? null : currentTurn,
@@ -343,12 +415,13 @@ export function createTrajectoryRecorder(params: {
         st: info.status,
         ...(info.tokensBefore === undefined ? {} : { before: info.tokensBefore }),
         ...(info.tokensAfter === undefined ? {} : { after: info.tokensAfter }),
-        ...(info.error === undefined ? {} : { err: info.error }),
+        ...(error === undefined ? {} : { err: error }),
       });
     },
     endTurn: (info) => {
       if (!turnOpen) return;
       turnOpen = false;
+      const error = scrubError(info.error);
       const unfinishedSteps = [...openSteps]
         .map((key) => {
           const [turnText, stepText] = key.split(" ");
@@ -373,7 +446,7 @@ export function createTrajectoryRecorder(params: {
         t: currentTurn,
         at: Date.now(),
         st: info.status,
-        ...(info.error === undefined ? {} : { err: info.error }),
+        ...(error === undefined ? {} : { err: error }),
       });
     },
     flush,

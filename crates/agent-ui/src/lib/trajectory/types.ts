@@ -111,7 +111,7 @@ export type TrajectoryEvent =
       sr?: string;
       err?: string;
     }
-  /** 失败后的重试记录。 */
+  /** 失败后的重试记录。`p` 是候选标签（"Provider · model"），failover 下区分各候选的重试。 */
   | {
       k: "retry";
       t: number;
@@ -121,6 +121,34 @@ export type TrajectoryEvent =
       max?: number;
       delay?: number;
       err?: string;
+      p?: string;
+    }
+  /** 跨供应商切换记录。`n` 是本次请求内的切换序号，`ti` 是目标在候选队列里的下标。 */
+  | {
+      k: "failover";
+      t: number;
+      s: number;
+      at: number;
+      n: number;
+      from?: string;
+      to?: string;
+      ti?: number;
+      err?: string;
+    }
+  /**
+   * 一次实际尝试的传输装配快照。脱敏不变量：只含头名（`hn`）与路由标记，
+   * 绝不含任何头值或密钥；`o` 是上游 origin（scheme+host）。
+   */
+  | {
+      k: "transport";
+      t: number;
+      s: number;
+      at: number;
+      p?: string;
+      o?: string;
+      sp?: boolean;
+      fu?: boolean;
+      hn?: readonly string[];
     }
   /** 工具开始执行。`a` 是截断后的参数文本。 */
   | { k: "tool_start"; t: number; s: number; at: number; id: string; n: string; a?: string }
@@ -163,6 +191,28 @@ export type LedgerRetry = {
   maxRetries?: number;
   delayMs?: number;
   error?: string;
+  /** 候选标签（"Provider · model"）；failover 下区分各候选自己的重试。 */
+  provider?: string;
+};
+
+export type LedgerFailover = {
+  attempt: number;
+  at: number;
+  fromLabel?: string;
+  toLabel?: string;
+  /** 目标在候选队列里的稳定下标（0 = 主选）。 */
+  targetIndex?: number;
+  error?: string;
+};
+
+/** 一次实际尝试的传输装配快照。只含头名与路由标记，永不含头值。 */
+export type LedgerTransport = {
+  at: number;
+  provider?: string;
+  upstreamOrigin?: string;
+  useSystemProxy?: boolean;
+  fullUrl?: boolean;
+  headerNames?: readonly string[];
 };
 
 export type LedgerToolCall = {
@@ -192,6 +242,8 @@ export type LedgerStep = {
   usage?: TrajectoryUsage;
   headerId?: string;
   retries: readonly LedgerRetry[];
+  failovers: readonly LedgerFailover[];
+  transports: readonly LedgerTransport[];
   tools: readonly LedgerToolCall[];
 };
 
@@ -338,6 +390,8 @@ export type TrajectoryRecord = {
   stopReason?: string;
   error?: string;
   retries?: readonly LedgerRetry[];
+  failovers?: readonly LedgerFailover[];
+  transports?: readonly LedgerTransport[];
   assistantMetrics?: TrajectoryAssistantMetrics;
   inputDetail?: string;
   outputDetail?: string;

@@ -15,6 +15,7 @@ import {
   withHostedSearchProbeHeader,
 } from "../hostedSearchEvents";
 import { providerSupportsNativeWebSearch } from "../nativeWebSearch";
+import { llm } from "../service/llmService";
 import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
 import { createStreamingTextReconciler, sanitizeAssistantMessage } from "./messageUtils";
@@ -32,8 +33,9 @@ import {
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
 } from "./requestOptions";
-import { streamSimpleByApi } from "./streamByApi";
+import { resolveStreamRetryConfig } from "./retryPolicy";
 import { buildTextModeToolResultsForAssistant } from "./textModeToolRecovery";
+import { captureTransportSnapshot, type TransportSnapshot } from "./transportSnapshot";
 import type { ProviderRuntimeConfig, StreamOptionsEx } from "./types";
 
 // 导出供 turn runner 估算 provider 边界追加段（用量环 fixed 校准），非请求路径。
@@ -76,7 +78,15 @@ function buildTextOnlyStreamOptions(params: {
   cacheRetention?: CacheRetention;
   nativeWebSearch?: boolean;
   debugLogger?: StreamDebugLogger;
-  onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
+  /** 本组 options 所属候选的展示标签（"Provider · model"），随 onRetryStatus 回传。 */
+  providerLabel?: string;
+  onRetryStatus?: (
+    attempt: number,
+    maxAttempts: number,
+    errorMessage: string,
+    plannedDelayMs?: number,
+    providerLabel?: string,
+  ) => void;
   onRetryRecovered?: () => void;
 }): StreamOptionsEx {
   const sessionId = normalizeSessionId(params.sessionId);
@@ -87,6 +97,7 @@ function buildTextOnlyStreamOptions(params: {
     }) && params.nativeWebSearch;
   const usesOpenAIChatNativeWebSearch =
     nativeWebSearch && params.providerId === "codex" && params.model.api === "openai-completions";
+  const onRetryStatus = params.onRetryStatus;
   const options: StreamOptionsEx = {
     apiKey: params.runtime.apiKey,
     headers: withHostedSearchProbeHeader(params.headers, params.hostedSearchProbeId),
@@ -116,7 +127,13 @@ function buildTextOnlyStreamOptions(params: {
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
     streamRetry: {
-      onRetry: params.onRetryStatus,
+      ...resolveStreamRetryConfig(params.runtime.retryPolicy),
+      // 绑定当前候选标签：failover 下备用供应商的流内重试才能在轨迹里归属
+      // 到具体候选，与 agent 模式 retryAttempts 携带 providerLabel 的口径一致。
+      onRetry: onRetryStatus
+        ? (attempt, maxAttempts, errorMessage, plannedDelayMs) =>
+            onRetryStatus(attempt, maxAttempts, errorMessage, plannedDelayMs, params.providerLabel)
+        : undefined,
       onRetryRecovered: params.onRetryRecovered,
     },
   };
@@ -154,7 +171,13 @@ export type TextStreamFailoverParams = {
   /** Fired when an attempt commits on a different target than the previous ones. */
   onSwitched?: (event: { target: TextStreamFailoverTarget | null; errorMessage: string }) => void;
   /** Fired before each switch, including a skip of an open-breaker primary. */
-  onFailover?: (event: { fromLabel: string; toLabel: string; errorMessage: string }) => void;
+  onFailover?: (event: {
+    fromLabel: string;
+    toLabel: string;
+    /** Stable candidate index of the switch target (0 = primary). */
+    targetIndex: number;
+    errorMessage: string;
+  }) => void;
 };
 
 export async function streamAssistantMessage(params: {
@@ -171,8 +194,17 @@ export async function streamAssistantMessage(params: {
   allowJsonOutput?: boolean;
   nativeWebSearch?: boolean;
   onHostedSearch?: (block: HostedSearchBlock) => void;
-  onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
+  /** `providerLabel` 是产生本次重试的候选标签；failover 下用于区分各候选。 */
+  onRetryStatus?: (
+    attempt: number,
+    maxAttempts: number,
+    errorMessage: string,
+    plannedDelayMs?: number,
+    providerLabel?: string,
+  ) => void;
   onRetryRecovered?: () => void;
+  /** 每个实际尝试的候选各 fire 一次：脱敏后的传输装配快照（只含头名，不含值）。 */
+  onTransportAttempt?: (snapshot: TransportSnapshot & { providerLabel: string }) => void;
   /** Exact text-only provider boundary after its mandatory system suffix is appended. */
   onRequestStart?: (info: { context: Context; systemSuffix: string }) => void;
   failover?: TextStreamFailoverParams;
@@ -215,6 +247,8 @@ export async function streamAssistantMessage(params: {
   const hostedSearchProbeId = shouldProbeHostedSearch
     ? createHostedSearchProbeId(params.providerId)
     : undefined;
+  const primaryFailoverLabel =
+    params.failover?.primary.label ?? `${params.providerId} · ${modelId}`;
   const options = buildTextOnlyStreamOptions({
     providerId: params.providerId,
     runtime: params.runtime,
@@ -228,6 +262,7 @@ export async function streamAssistantMessage(params: {
     cacheRetention: params.cacheRetention,
     nativeWebSearch: params.nativeWebSearch,
     debugLogger: params.debugLogger,
+    providerLabel: primaryFailoverLabel,
     onRetryStatus: params.onRetryStatus,
     onRetryRecovered: params.onRetryRecovered,
   });
@@ -253,7 +288,6 @@ export async function streamAssistantMessage(params: {
         failover.primary.selectedModel.model,
       )
     : failoverBreakerKey(params.providerId, modelId);
-  const primaryFailoverLabel = failover?.primary.label ?? `${params.providerId} · ${modelId}`;
 
   type PreparedTextFailoverTarget = {
     model: ReturnType<typeof createModelFromConfig>;
@@ -296,6 +330,7 @@ export async function streamAssistantMessage(params: {
           cacheRetention: params.cacheRetention,
           nativeWebSearch: params.nativeWebSearch,
           debugLogger: params.debugLogger,
+          providerLabel: fallback.label,
           onRetryStatus: params.onRetryStatus,
           onRetryRecovered: params.onRetryRecovered,
         }),
@@ -330,9 +365,25 @@ export async function streamAssistantMessage(params: {
   let activeFailoverTargetIndex = 0;
   let lastFailoverErrorMessage = "";
 
+  /** 逐候选独立采样；观察失败不影响请求。 */
+  const noteTransportAttempt = (
+    label: string,
+    attemptOptions: StreamOptionsEx | undefined,
+  ): void => {
+    try {
+      params.onTransportAttempt?.({
+        ...captureTransportSnapshot(attemptOptions?.headers),
+        providerLabel: label,
+      });
+    } catch (error) {
+      console.warn("text-only transport observer failed; continuing without diagnostics", error);
+    }
+  };
+
   const startAttemptStream = (activeContext: Context) => {
     if (!failover || failover.fallbacks.length === 0) {
-      return streamSimpleByApi(m, activeContext, options);
+      noteTransportAttempt(primaryFailoverLabel, options);
+      return llm.stream({ model: m, context: activeContext, options });
     }
     // Candidate order: sticky active target first, then the rest in
     // primary→queue order. Breaker-open targets are skipped inside
@@ -361,7 +412,8 @@ export async function streamAssistantMessage(params: {
             : fallbackTargetIdentity(targetIndex),
         start: async () => {
           if (targetIndex === 0 || !fallback) {
-            return streamSimpleByApi(m, activeContext, options);
+            noteTransportAttempt(primaryFailoverLabel, options);
+            return llm.stream({ model: m, context: activeContext, options });
           }
           const prepared = await prepareFallbackTarget(targetIndex);
           params.debugLogger?.logRequest(
@@ -371,7 +423,12 @@ export async function streamAssistantMessage(params: {
               options: prepared.options,
             }),
           );
-          return streamSimpleByApi(prepared.model, activeContext, prepared.options);
+          noteTransportAttempt(fallback.label, prepared.options);
+          return llm.stream({
+            model: prepared.model,
+            context: activeContext,
+            options: prepared.options,
+          });
         },
       } satisfies ProviderFailoverCandidate;
     });
@@ -383,6 +440,9 @@ export async function streamAssistantMessage(params: {
         failover.onFailover?.({
           fromLabel: event.fromLabel,
           toLabel: event.toLabel,
+          // Map the per-call candidates index back to the stable target index
+          // (0 = primary) so sticky reordering can't skew the audit trail.
+          targetIndex: targetOrder[event.toIndex] ?? event.toIndex,
           errorMessage: event.errorMessage,
         });
       },
@@ -576,7 +636,7 @@ export async function completeAssistantMessage(params: {
 
   return withPowerActivity("assistant-complete", `${params.providerId}:${modelId}`, async () => {
     try {
-      const s = streamSimpleByApi(m, callContext, options);
+      const s = llm.stream({ model: m, context: callContext, options });
       const final = await s.result();
 
       if (final.stopReason === "error" || final.stopReason === "aborted") {

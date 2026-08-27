@@ -49,7 +49,14 @@ export const STORE_CATEGORY_ICONS: Record<StoreCategoryValue, typeof Layers> = {
   other: Package,
 };
 
-const STORE_CATEGORY_OPTIONS: readonly StoreCategoryValue[] = ["all", ...CLAWHUB_CATEGORY_SLUGS];
+// 惰性计算而非模块顶层 spread：生产构建下这段代码与 CLAWHUB_CATEGORY_SLUGS
+// 分处不同的 rolldown chunk，顶层 spread 有时会在对方 chunk 初始化完成前
+// 执行，读到 undefined 并抛出 "not iterable"。推迟到调用时读取可以避开。
+let storeCategoryOptionsCache: readonly StoreCategoryValue[] | undefined;
+function getStoreCategoryOptions(): readonly StoreCategoryValue[] {
+  storeCategoryOptionsCache ??= ["all", ...CLAWHUB_CATEGORY_SLUGS];
+  return storeCategoryOptionsCache;
+}
 
 function storeCategoryLabelKey(value: StoreCategoryValue): string {
   return `settings.skillsStoreCategory${value.charAt(0).toUpperCase()}${value.slice(1)}`;
@@ -81,7 +88,7 @@ export function StoreCategoryChips(props: {
       <Tabs
         value={props.value}
         onValueChange={(value) => {
-          if (STORE_CATEGORY_OPTIONS.includes(value as StoreCategoryValue)) {
+          if (getStoreCategoryOptions().includes(value as StoreCategoryValue)) {
             props.onChange(value as StoreCategoryValue);
           }
         }}
@@ -91,7 +98,7 @@ export function StoreCategoryChips(props: {
           aria-label={t("settings.skillsStoreCategoryAll")}
           className="flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {STORE_CATEGORY_OPTIONS.map((value) => {
+          {getStoreCategoryOptions().map((value) => {
             const CategoryIcon = STORE_CATEGORY_ICONS[value];
             const count = props.counts.get(value) ?? 0;
             return (
