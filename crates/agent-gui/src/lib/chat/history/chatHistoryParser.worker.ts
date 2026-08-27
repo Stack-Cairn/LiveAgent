@@ -1,3 +1,5 @@
+import { migrateLegacyMessages } from "./legacyMessageMigrations";
+
 type ParseRequest = {
   requestId: number;
   segments: Array<{
@@ -23,7 +25,8 @@ self.onmessage = (event: MessageEvent<ParseRequest>) => {
     const parsed = segments.map((segment) => ({
       payload: segment.payload,
       summary: segment.summaryJson ? JSON.parse(segment.summaryJson) : undefined,
-      messages: JSON.parse(segment.messagesJson),
+      // 加载期迁移：修复旧版本写坏、已落库的消息（见 legacyMessageMigrations）。
+      messages: migrateLegacyMessages(JSON.parse(segment.messagesJson)),
     }));
     self.postMessage({ requestId, segments: parsed } satisfies ParseResponse);
   } catch (error) {
