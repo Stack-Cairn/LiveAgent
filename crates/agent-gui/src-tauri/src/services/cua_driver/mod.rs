@@ -467,6 +467,21 @@ pub fn permissions_grant() -> Result<CuaDriverPermissions, String> {
 
 // ───────── 安装 ─────────
 
+/// Unix 侧交给 `/bin/bash -c` 的安装脚本原文。
+///
+/// 必须是 `curl | bash` 的管道形式，**不能**写成 `$(curl …)`：终端里的
+/// `bash -c "$(curl …)"` 之所以成立，是因为外层交互 shell 先做命令替换、
+/// 脚本全文成为 `-c` 的参数。而从 Rust 直接 spawn 时没有外层 shell——
+/// 字面量 `$(curl …)` 成了 bash 自己的脚本，bash 对**替换结果**只做分词、
+/// 当一条简单命令执行，不会重新按脚本解析。于是下载内容的第一个词
+/// `#!/bin/bash` 被当作命令名去找，报 `No such file or directory` 退出 127。
+///
+/// `pipefail` 同样不能省：没有它，curl 拉取失败时 bash 收到空输入会以 0
+/// 退出，安装失败被静默当成成功。
+fn unix_install_script(script_url: &str) -> String {
+    format!("set -o pipefail; curl -fsSL {script_url} | /bin/bash")
+}
+
 /// 描述将要执行的安装命令。**不执行任何东西。**
 ///
 /// 存在的理由就是让 UI 能在动手之前把命令原文摆到用户面前：这条命令
@@ -481,7 +496,7 @@ pub fn install_command_preview() -> InstallCommandPreview {
             source_url: INSTALL_SCRIPT_URL_WINDOWS.into(),
         }
     } else {
-        let inner = format!("$(curl -fsSL {INSTALL_SCRIPT_URL_UNIX})");
+        let inner = unix_install_script(INSTALL_SCRIPT_URL_UNIX);
         InstallCommandPreview {
             program: "/bin/bash".into(),
             args: vec!["-c".into(), inner.clone()],
@@ -600,6 +615,47 @@ mod tests {
         // 就在于「看到的即将执行的」。
         assert!(preview.display.contains(&preview.source_url));
         assert!(preview.args.iter().any(|arg| arg.contains(&preview.source_url)));
+    }
+
+    /// 真跑一遍 bash（curl 支持 file://，不出网、不依赖装没装驱动），钉住
+    /// 两个语义：脚本全文被**按脚本解析**执行，以及 curl 失败必须传出去。
+    ///
+    /// 曾经的写法是把 `$(curl …)` 字面量交给 `bash -c`——bash 对替换结果只
+    /// 分词、当一条简单命令执行，脚本第一个词 `#!/bin/bash` 被当作命令名，
+    /// 安装必然以 127 失败。这个测试对那个写法会当场红掉。
+    #[cfg(unix)]
+    #[test]
+    fn unix_install_script_parses_the_payload_as_a_script_and_propagates_curl_failure() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!("cua-install-wrapper-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("install.sh");
+        std::fs::File::create(&script)
+            .and_then(|mut f| f.write_all(b"#!/bin/bash\nexit 42\n"))
+            .expect("write fake installer");
+
+        let run = |url: &str| {
+            hidden_command("/bin/bash")
+                .args(["-c", &unix_install_script(url)])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("spawn bash")
+        };
+
+        // 带 shebang 的脚本应被完整解析执行（shebang 行是注释），退出码是
+        // 脚本自己的 42，而不是「找不到命令 #!/bin/bash」的 127。
+        let ok = run(&format!("file://{}", script.display()));
+        assert_eq!(ok.code(), Some(42), "脚本应按脚本解析执行，而不是被当作一条命令");
+
+        // curl 拉不到时整条管道必须以非零退出——没有 pipefail 的话 bash 收到
+        // 空输入会以 0 退出，安装失败被静默当成成功。
+        let missing = run(&format!("file://{}", dir.join("missing.sh").display()));
+        assert_ne!(missing.code(), Some(0), "curl 失败不能被静默当成安装成功");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
