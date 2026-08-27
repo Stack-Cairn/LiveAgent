@@ -116,6 +116,7 @@
 
   .mention-popup-item {
     animation: mentionItemIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    text-align: left;
   }
 
   .mention-popup-item:nth-child(1) {
