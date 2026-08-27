@@ -838,7 +838,6 @@ export class CompactionController {
     }
     this.pressure = normalizeCompactionPressure(this.pressure, now);
     return decideCompaction({
-      providerId: binding.providerId,
       intent,
       totalTokens,
       modelConfig: binding.runtime.modelConfig,
@@ -1001,7 +1000,6 @@ export class CompactionController {
       shouldCompact: decision.shouldCompact,
       totalTokens: decision.totalTokens,
       threshold: decision.threshold,
-      thresholdMode: decision.thresholdMode,
       contextWindow: decision.contextWindow,
       maxOutputToken: decision.maxOutputToken,
       pressure: this.pressure,

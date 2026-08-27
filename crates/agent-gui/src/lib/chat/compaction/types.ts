@@ -41,7 +41,6 @@ export type CompactionDecision = {
   reason: CompactionDecisionReason;
   totalTokens: number;
   threshold: number;
-  thresholdMode: "buffered-reserve" | "context-window";
   contextWindow: number;
   maxOutputToken: number;
 };
