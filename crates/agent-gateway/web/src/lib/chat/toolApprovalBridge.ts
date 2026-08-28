@@ -8,6 +8,7 @@ export type ToolApprovalSubmitOutcome = { ok: boolean; message?: string };
 type ToolApprovalDecisionHandler = (
   toolCallId: string,
   decision: ToolApprovalDecision,
+  conversationId?: string,
 ) => Promise<ToolApprovalSubmitOutcome>;
 
 let handler: ToolApprovalDecisionHandler | null = null;
@@ -16,12 +17,17 @@ export function registerToolApprovalDecisionHandler(next: ToolApprovalDecisionHa
   handler = next;
 }
 
+/**
+ * conversationId 缺省时按"当前展示会话"路由(主视图);多看板的背景 Pane
+ * 必须显式传自己的会话 id,避免审批被误提交到焦点会话。
+ */
 export function submitToolApprovalDecision(
   toolCallId: string,
   decision: ToolApprovalDecision,
+  conversationId?: string,
 ): Promise<ToolApprovalSubmitOutcome> {
   if (!handler) {
     return Promise.resolve({ ok: false, message: "Gateway connection is not ready." });
   }
-  return handler(toolCallId, decision);
+  return handler(toolCallId, decision, conversationId);
 }

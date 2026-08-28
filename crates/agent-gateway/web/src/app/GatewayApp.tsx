@@ -87,6 +87,8 @@ import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useStableCallback } from "./hooks/useStableCallback";
 import type { SendChatFn } from "./types";
+import { sessionWorkbench } from "./workbench/sessionWorkbench";
+import { useGatewayWorkbench } from "./workbench/useGatewayWorkbench";
 
 function useGatewayAppController() {
   const historyShareToken = useMemo(() => parseHistoryShareToken(), []);
@@ -592,10 +594,11 @@ function useGatewayAppController() {
       registerToolApprovalDecisionHandler(null);
       return;
     }
-    registerToolApprovalDecisionHandler(async (toolCallId, decision) => {
-      const conversationIdValue = resolveVisibleConversationId(
-        selectedHistoryIdRef.current,
-        conversationIdRef.current,
+    registerToolApprovalDecisionHandler(async (toolCallId, decision, targetConversationId) => {
+      // 背景 Pane 显式携带自己的会话 id;主视图缺省仍按当前展示会话路由。
+      const conversationIdValue = (
+        targetConversationId?.trim() ||
+        resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current)
       ).trim();
       if (!conversationIdValue) {
         return { ok: false, message: "No active conversation." };
@@ -707,6 +710,11 @@ function useGatewayAppController() {
     return historyLoadSequenceRef.current;
   }, []);
 
+  // Session Workbench：草稿转正时把承载草稿的 Pane 原位重绑到真实会话 id，
+  // 与 setConversationId 同批提交——聚焦 Pane 不会闪现只读预览，DOM 不重挂载。
+  // workbenchController 在下方创建后回填本 ref。
+  const workbenchRenameConversationRef = useRef<(fromId: string, toId: string) => void>(() => {});
+
   // A draft conversation got its real id (authoritative `command_update
   // bound`): re-key every draft-scoped resource onto the real conversation.
   const bindDraftConversation = useCallback(
@@ -718,6 +726,7 @@ function useGatewayAppController() {
       }
 
       transcriptStoreRegistry.move(previousId, nextId);
+      workbenchRenameConversationRef.current(previousId, nextId);
 
       const windowState = historyWindowStatesRef.current.get(previousId);
       if (windowState !== undefined) {
@@ -1558,6 +1567,54 @@ function useGatewayAppController() {
     status,
     terminalClient,
   });
+
+  // --- Session Workbench（多看板分屏）----------------------------------------
+  // 布局与聚焦语义复用共享 reducer；聚焦 Pane 的会话 === 页面当前会话
+  // （与桌面端相同不变式）。每个会话 Pane 渲染同一套完整宿主，焦点切换
+  // 只换绑定不拆 DOM；侧栏选中走 syncCurrentConversation（已有 Pane 则
+  // 聚焦，否则重绑聚焦 Pane）。拖拽体系与桌面端共用。
+  const workbenchController = useGatewayWorkbench({
+    enabled: sessionWorkbench.enabled,
+    displayedConversationId,
+    sidebarStore,
+    workspaceProjects,
+    archivedProjectPathKeys: archivedWorkspaceProjectPathKeys,
+    missingProjectPathKeys: missingWorkspaceProjectPathKeys,
+    activateWorkspaceProject,
+    terminalClient,
+    terminalSessions,
+    terminalProjectPath,
+    newTerminalTitle: translate("projectTools.newTerminal", settings.locale),
+    selectConversation: handleSidebarSelectConversation,
+    startConversationForProject: (project) => {
+      void handleNewConversationForProject(project);
+    },
+    conversationWorkdirFor: (conversationId) =>
+      conversationWorkdirsRef.current.get(conversationId)?.trim() ||
+      sidebarStore.peek(conversationId)?.cwd?.trim() ||
+      null,
+    onNoSpaceForSplit: () =>
+      addNotify("error", translate("workbench.noSpaceForSplit", settings.locale)),
+  });
+  workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
+
+  // 会话从权威索引消失（批量删除等）：先收起对应 Pane，再走既有移除通路；
+  // displayed 被删时的选中迁移完成后，syncCurrentConversation 会把聚焦 Pane
+  // 重新绑定到新的当前会话。草稿 id 必须跳过——草稿转正会经 removeLocal 把
+  // 草稿 id 移出权威索引，此时 Pane 已由 rename 通路原位重绑，收 Pane 会误关
+  // 聚焦面板；与底层处理器跳过草稿的口径一致。用户手动删草稿走
+  // onLocalDraftDeleted 通路。
+  const handleSidebarConversationsRemovedWithWorkbench = (ids: readonly string[]) => {
+    workbenchController.closePanesForRemovedConversations(
+      ids.filter((id) => !isLocalDraftConversationId(id)),
+    );
+    handleSidebarConversationsRemoved(ids);
+  };
+  const handleSidebarLocalDraftDeletedWithWorkbench = (id: string) => {
+    workbenchController.closePanesForRemovedConversations([id]);
+    handleSidebarLocalDraftDeleted(id);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: layoutRef is a ref sampled at restore time; pane-count changes must not re-trigger the draft restore.
   useEffect(() => {
     if (activeView !== "chat") {
       return;
@@ -1569,6 +1626,13 @@ function useGatewayAppController() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
+      // 多 Pane 时每个宿主自己管草稿,页面级 restore 会把焦点 Pane
+      // 正在输入的内容清掉(owner 对不上新 composer)。
+      const paneCount = Object.keys(workbenchController.workbench.layoutRef.current.panes).length;
+      if (sessionWorkbench.enabled && paneCount > 1) {
+        composerDraftOwnerRef.current = targetConversationId;
+        return;
+      }
       const composer = composerRef.current;
       if (
         !composer ||
@@ -1731,6 +1795,23 @@ function useGatewayAppController() {
       </LocaleContext.Provider>
     );
   }
+  // --- 多看板背景 Pane 的按会话绑定能力(复刻桌面端 buildBackgroundPaneBinding
+  // 的数据面):工作区、草稿缓存、附件导入全部按显式 conversationId 路由。---
+  const workdirForConversation = (targetConversationId: string) =>
+    sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
+    conversationWorkdirsRef.current.get(targetConversationId)?.trim() ||
+    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+  const getCachedComposerDraft = (targetConversationId: string) =>
+    composerDraftCacheRef.current.get(targetConversationId);
+  const setCachedComposerDraft = (targetConversationId: string, draft: MentionComposerDraft) => {
+    composerDraftCacheRef.current.set(targetConversationId, draft);
+  };
+  const importFilesForConversation = (
+    targetConversationId: string,
+    workdir: string,
+    files: File[],
+  ) => handleImportReadableFiles(files, { conversationId: targetConversationId, workdir });
+
   const viewModel = {
     activeFloorKey,
     activeView,
@@ -1781,7 +1862,9 @@ function useGatewayAppController() {
     fileDropTitle,
     fileInputRef,
     gatewayConnectionLost,
+    getCachedComposerDraft,
     getDisplayedConversationId,
+    getPendingUploadsForConversation,
     gitClient,
     gitDisabledMessage,
     gitReviewFocusRequest,
@@ -1846,8 +1929,8 @@ function useGatewayAppController() {
     handleSetSharedHistoryRedactToolContent,
     handleSetWorkspaceProjectPinned,
     handleSettingsTransitionEnd,
-    handleSidebarConversationsRemoved,
-    handleSidebarLocalDraftDeleted,
+    handleSidebarConversationsRemoved: handleSidebarConversationsRemovedWithWorkbench,
+    handleSidebarLocalDraftDeleted: handleSidebarLocalDraftDeletedWithWorkbench,
     handleSidebarNewConversation,
     handleSidebarOpenMcpHub,
     handleSidebarOpenSkillsHub,
@@ -1866,8 +1949,10 @@ function useGatewayAppController() {
     hideWorkspaceSshTerminalOverlay,
     historyDetailLoadingTitle,
     historyShareToken,
+    importFilesForConversation,
     isAgentDevExecutionMode,
     isAgentMode,
+    isConversationBusy,
     isFileDropActive,
     isImportingPastedTextRef,
     isSuggestionTyping,
@@ -1902,8 +1987,10 @@ function useGatewayAppController() {
     runQueuedTurnNow,
     selectedHistoryHasMore,
     selectedValue,
+    selectionForConversation,
     sendChat,
     setActiveFloorKey,
+    setCachedComposerDraft,
     setPendingUploadsForConversation,
     setProjectPickerOpen,
     setProjectSettingsProject,
@@ -1960,6 +2047,7 @@ function useGatewayAppController() {
     transcriptNavRef,
     transcriptRows,
     transcriptStageRef,
+    transcriptStoreRegistry,
     transcriptToolStatus,
     transcriptToolStatusIsCompaction,
     transcriptViewport,
@@ -1969,6 +2057,8 @@ function useGatewayAppController() {
     userAvatarLabel,
     userMenuLabel,
     userMenuOpen,
+    workbenchController,
+    workdirForConversation,
     workspaceActivityClient,
     workspaceCloneTasks,
     workspaceCreateModalOpen,

@@ -177,7 +177,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   }, [displayedConversationId]);
 
   const handleImportReadableFiles = useCallback(
-    async (filesToImport: File[]) => {
+    async (
+      filesToImport: File[],
+      // 多看板的背景 Pane 显式指定目标会话与其工作区;缺省仍导入到当前展示会话。
+      target?: { conversationId: string; workdir: string },
+    ) => {
       if (filesToImport.length === 0) {
         return;
       }
@@ -189,12 +193,13 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.onlyInTools", locale));
         return;
       }
-      const workdir = displayedConversationWorkdirRef.current.trim();
+      const workdir = target?.workdir.trim() || displayedConversationWorkdirRef.current.trim();
       if (!workdir) {
         addNotify("warning", translate("chat.upload.requireWorkdir", locale));
         return;
       }
-      let targetConversationId = displayedConversationIdRef.current;
+      let targetConversationId =
+        target?.conversationId.trim() || displayedConversationIdRef.current;
       if (!targetConversationId && ensureUploadConversation) {
         targetConversationId = ensureUploadConversation().trim();
         if (targetConversationId) {
