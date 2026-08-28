@@ -10,12 +10,15 @@ import {
   FileText,
   HardDrive,
   Key,
+  Layers,
   Loader2,
   Lock,
   McpLogo,
   MessageSquare,
+  Mic,
   Plug,
   Save,
+  ScrollText,
   Server,
   Settings2,
   Shield,
@@ -49,7 +52,6 @@ import {
   testSyncConnection,
   uploadBackup,
 } from "../../lib/backup";
-import { normalizeSkillsSettings } from "../../lib/settings";
 import {
   applySyncStatusEvent,
   canTestSyncConnection,
@@ -91,7 +93,9 @@ function summarizeDomains(counts: BackupDomainCounts, t: (key: string) => string
     `${t("settings.backupDomainProviders")} ${counts.providers}`,
     `${t("settings.backupDomainMcp")} ${counts.mcp}`,
     `${t("settings.backupDomainSystem")} ${counts.system}`,
-    `${t("settings.backupDomainSkills")} ${counts.skills}`,
+    `${t("settings.backupDomainAgents")} ${counts.agents}`,
+    `${t("settings.backupDomainModelFailover")} ${counts.modelFailover}`,
+    `${t("settings.backupDomainStt")} ${counts.stt}`,
   ].join(" · ");
 }
 
@@ -258,7 +262,12 @@ function ActionTile({
   );
 }
 
-/** 备份范围条目：包含项常色，排除项弱化。 */
+/**
+ * 备份范围条目：包含项常色，排除项弱化。
+ *
+ * 紧凑 chip 形态，按内容宽度流式换行 —— 范围扩到 6+6 项后，两列大行的
+ * 网格会把右栏撑得比左栏表单还高，整页跟着出滚动条。
+ */
 function ScopeItem({
   icon,
   label,
@@ -269,27 +278,23 @@ function ScopeItem({
   excluded?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs ${
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none ${
         excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85"
       }`}
     >
       <span
-        className={`flex h-4 w-4 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
+        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
       >
         {icon}
       </span>
-      <span
-        className={`truncate font-medium ${excluded ? "line-through decoration-muted-foreground/40" : ""}`}
-      >
-        {label}
-      </span>
-    </div>
+      <span className={excluded ? "line-through decoration-muted-foreground/40" : ""}>{label}</span>
+    </span>
   );
 }
 
 export function BackupSyncSection(props: SettingsSectionProps) {
-  const { settings, setSettings, reloadSettings } = props;
+  const { reloadSettings } = props;
   const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
@@ -305,25 +310,14 @@ export function BackupSyncSection(props: SettingsSectionProps) {
   const syncLocked = syncBusy !== null;
 
   /**
-   * 还原（导入 / 下载）落库后同步前端状态。
-   *
-   * 顺序不能反：`reloadSettings` 从 SQLite 重载 providers/mcp/system，
-   * 但 skills 只存在于 localStorage，库里没有 —— 必须重载完再把快照里的
-   * skills 盖上去，否则会被重载出来的旧值顶掉。
+   * 还原（导入 / 下载）落库后从 SQLite 重载前端状态。
    *
    * 不重载的后果不是「显示旧值」这么轻：`persistSettings` 按域 diff，
    * 用户之后动任一域就会拿还原前的内存值写回库，把还原静默回滚掉。
    */
-  const syncStateAfterRestore = useCallback(
-    async (skillsPayload: unknown) => {
-      await reloadSettings?.();
-      if (skillsPayload) {
-        const skills = normalizeSkillsSettings(skillsPayload);
-        setSettings((prev) => ({ ...prev, skills }));
-      }
-    },
-    [reloadSettings, setSettings],
-  );
+  const syncStateAfterRestore = useCallback(async () => {
+    await reloadSettings?.();
+  }, [reloadSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -483,7 +477,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         });
         if (!confirmed) return;
       }
-      const syncedAt = await uploadBackup(settings.skills);
+      const syncedAt = await uploadBackup();
       // 后端在成功时清了 last_error，视图同步跟上，横幅立即消失。
       setSyncView((prev) => (prev ? { ...prev, lastSyncAt: syncedAt, lastError: null } : prev));
       setSyncStatus({ kind: "ok", text: t("settings.backupSyncUploadDone") });
@@ -495,7 +489,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } finally {
       setSyncBusy(null);
     }
-  }, [confirm, settings.skills, t]);
+  }, [confirm, t]);
 
   const handleDownload = useCallback(async () => {
     setSyncBusy("download");
@@ -517,7 +511,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       if (!confirmed) return;
 
       const outcome = await downloadBackup();
-      await syncStateAfterRestore(outcome.skills);
+      await syncStateAfterRestore();
       // 下载成功证明这条链路是通的，后端已清 last_error，视图同步跟上。
       setSyncView((prev) => (prev ? { ...prev, lastError: null } : prev));
       setSyncStatus({
@@ -538,8 +532,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     setBusy("export");
     setStatus(null);
     try {
-      // skills 启用态只存在于前端，必须由这里拼进 payload。
-      const path = await exportBackup(settings.skills);
+      const path = await exportBackup();
       // 用户在系统对话框里取消时返回 null，不算失败。
       if (path) {
         setStatus({ kind: "ok", text: `${t("settings.backupExportDone")}${path}` });
@@ -549,7 +542,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } finally {
       setBusy(null);
     }
-  }, [settings.skills, t]);
+  }, [t]);
 
   const handleImport = useCallback(async () => {
     setBusy("import");
@@ -571,7 +564,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       if (!confirmed) return;
 
       const outcome = await applyBackupImport(preview.path);
-      await syncStateAfterRestore(outcome.skills);
+      await syncStateAfterRestore();
       setStatus({
         kind: "ok",
         text: `${t("settings.backupImportDone")}${summarizeDomains(outcome.applied, t)}`,
@@ -849,7 +842,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeIncluded")}
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 <ScopeItem
                   icon={<Server className="h-3.5 w-3.5" />}
                   label={t("settings.backupDomainProviders")}
@@ -863,8 +856,16 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                   label={t("settings.backupDomainSystem")}
                 />
                 <ScopeItem
-                  icon={<SkillIcon className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainSkills")}
+                  icon={<ScrollText className="h-3.5 w-3.5" />}
+                  label={t("settings.backupDomainAgents")}
+                />
+                <ScopeItem
+                  icon={<Layers className="h-3.5 w-3.5" />}
+                  label={t("settings.backupDomainModelFailover")}
+                />
+                <ScopeItem
+                  icon={<Mic className="h-3.5 w-3.5" />}
+                  label={t("settings.backupDomainStt")}
                 />
               </div>
             </div>
@@ -873,7 +874,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeExcluded")}
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 <ScopeItem
                   excluded
                   icon={<MessageSquare className="h-3.5 w-3.5" />}
@@ -893,6 +894,16 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                   excluded
                   icon={<Key className="h-3.5 w-3.5" />}
                   label={t("settings.backupScopeSshKeys")}
+                />
+                <ScopeItem
+                  excluded
+                  icon={<SkillIcon className="h-3.5 w-3.5" />}
+                  label={t("settings.backupScopeSkills")}
+                />
+                <ScopeItem
+                  excluded
+                  icon={<HardDrive className="h-3.5 w-3.5" />}
+                  label={t("settings.backupScopeDeviceLocal")}
                 />
               </div>
             </div>

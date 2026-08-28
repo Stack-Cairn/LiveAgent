@@ -181,7 +181,6 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_backup_fetch_remote_info,
             commands::settings::settings_backup_upload,
             commands::settings::settings_backup_download,
-            commands::settings::settings_backup_mark_dirty,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,

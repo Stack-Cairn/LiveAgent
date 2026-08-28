@@ -91,5 +91,7 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
 
     tx.commit()
         .map_err(|e| format!("提交 {AGENT_PROMPT_TEMPLATES_TABLE} 事务失败：{e}"))?;
+    // 标脏放在 commit 之后：事务回滚时不该触发自动同步。
+    crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }
