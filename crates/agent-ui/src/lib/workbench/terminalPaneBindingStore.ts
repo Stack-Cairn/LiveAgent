@@ -3,7 +3,8 @@ export type TerminalPaneBindingListener = () => void;
 export type TerminalPaneBindingStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export type TerminalPaneBindingStoreOptions = {
-  storage?: TerminalPaneBindingStorage;
+  /** 显式传 null 时使用纯内存绑定；省略时使用 sessionStorage。 */
+  storage?: TerminalPaneBindingStorage | null;
   storageKey?: string;
 };
 
@@ -70,7 +71,8 @@ export function createTerminalPaneBindingStore(
   options?: TerminalPaneBindingStoreOptions,
 ): TerminalPaneBindingStore {
   const storageKey = options?.storageKey?.trim() || TERMINAL_PANE_BINDING_STORAGE_KEY;
-  const storage = options?.storage ?? resolveDefaultStorage();
+  const storage =
+    options && "storage" in options ? (options.storage ?? null) : resolveDefaultStorage();
   const bindings = readPersistedBindings(storage, storageKey);
   const listeners = new Set<TerminalPaneBindingListener>();
   let surfaceIdsSnapshot: readonly string[] = Array.from(bindings.keys());
