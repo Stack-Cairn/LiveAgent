@@ -23,6 +23,10 @@ import { asErrorMessage } from "../chatEventUtils";
 import { MAX_UPLOAD_FILES } from "../constants";
 import { dragEventHasFiles } from "../domUtils";
 import { formatTranslation } from "../historyUtils";
+import {
+  resolveFileUploadConversationId,
+  resolveFileUploadDropZone,
+} from "./fileUploadDropRouting";
 
 type UsePendingUploadsParams = {
   token: string;
@@ -48,6 +52,8 @@ type UsePendingUploadsParams = {
    * 首条消息发出后随现有的 moveConversationUploads 迁移到真实会话。
    */
   ensureUploadConversation?: () => string;
+  /** Resolve the workspace owned by an explicitly targeted workbench Pane. */
+  workdirForConversation: (conversationId: string) => string;
 };
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -67,6 +73,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     addNotify,
     onDropDirectories,
     ensureUploadConversation,
+    workdirForConversation,
   } = params;
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
@@ -297,6 +304,18 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     ],
   );
 
+  const resolveEventUploadTarget = useCallback(
+    (eventTarget: EventTarget | null) => {
+      const targetConversationId = resolveFileUploadConversationId(eventTarget);
+      if (!targetConversationId) return undefined;
+      return {
+        conversationId: targetConversationId,
+        workdir: workdirForConversation(targetConversationId),
+      };
+    },
+    [workdirForConversation],
+  );
+
   useEffect(() => {
     if (
       !token ||
@@ -310,11 +329,14 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
     const handleDocumentPaste = (event: globalThis.ClipboardEvent) => {
       if (event.defaultPrevented) return;
+      // Capture ownership synchronously. Clipboard fallback is asynchronous,
+      // and focus may move to another Pane before it resolves.
+      const uploadTarget = resolveEventUploadTarget(event.target);
       const clipboardFiles = extractClipboardFiles(event.clipboardData);
       if (clipboardFiles.length > 0) {
         event.preventDefault();
         event.stopPropagation();
-        void handleImportReadableFiles(clipboardFiles);
+        void handleImportReadableFiles(clipboardFiles, uploadTarget);
         return;
       }
       if (!clipboardHasFileSignal(event.clipboardData)) return;
@@ -327,7 +349,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             addNotify("warning", "无法读取剪贴板中的文件，请尝试拖拽或点击上传。");
             return;
           }
-          return handleImportReadableFiles(files);
+          return handleImportReadableFiles(files, uploadTarget);
         })
         .catch((error) => {
           addNotify("error", asErrorMessage(error, "读取剪贴板文件失败"));
@@ -343,6 +365,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     addNotify,
     handleImportReadableFiles,
     historyShareToken,
+    resolveEventUploadTarget,
     settingsOpen,
     settingsSyncReady,
     token,
@@ -351,10 +374,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   // 上传命中区与桌面端对齐：只有落在标记的输入框对话框内的拖放才算上传，
   // 对话正文、聊天头部等其他区域忽略。
   const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
-    return (
-      event.target instanceof Element &&
-      event.target.closest("[data-file-upload-drop-zone]") !== null
-    );
+    return resolveFileUploadDropZone(event.target) !== null;
   }, []);
 
   const handleFileDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -401,6 +421,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       setIsFileDropActive(false);
       if (!dropLandsInUploadZone(event)) return;
 
+      // DataTransferItem and the landing Pane are both event-scoped. Snapshot
+      // them before directory traversal or any other asynchronous operation.
+      const uploadTarget = resolveEventUploadTarget(event.target);
+
       // DataTransferItem 只在同步阶段有效，目录判定必须先于任何 await。
       const entries = snapshotDroppedEntries(event.dataTransfer);
       if (hasDirectoryEntry(entries)) {
@@ -414,7 +438,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
               addNotify("warning", options.disabledMessage);
               return;
             }
-            return handleImportReadableFiles(payload.files);
+            return handleImportReadableFiles(payload.files, uploadTarget);
           })
           .catch((error) => {
             addNotify(
@@ -431,9 +455,16 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", options.disabledMessage);
         return;
       }
-      void handleImportReadableFiles(files);
+      void handleImportReadableFiles(files, uploadTarget);
     },
-    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, locale, onDropDirectories],
+    [
+      addNotify,
+      dropLandsInUploadZone,
+      handleImportReadableFiles,
+      locale,
+      onDropDirectories,
+      resolveEventUploadTarget,
+    ],
   );
 
   return {

@@ -82,6 +82,7 @@ import {
 } from "../constants";
 import { isLocalDraftConversationId } from "../gatewayLocalDraft";
 import type { SendChatFn } from "../types";
+import { resolveWorkbenchComposerInputDisabled } from "./composerInputState";
 
 type ChatQueueSnapshotLike = Parameters<
   Parameters<GatewayWebSocketClient["subscribeChatQueue"]>[0]
@@ -805,11 +806,12 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             composerRef={composerRef}
             isSending={usePrimary ? (primary?.isSending ?? isRunning) : isRunning}
             isUploadingFiles={usePrimary ? (primary?.isUploadingFiles ?? false) : false}
-            isInputDisabled={
-              usePrimary
-                ? context.transportInputDisabled || transcript.toolStatusIsCompaction === true
-                : context.transportInputDisabled
-            }
+            isInputDisabled={resolveWorkbenchComposerInputDisabled({
+              isPrimary: usePrimary,
+              primaryInputDisabled: primary?.isInputDisabled ?? context.isInputDisabled,
+              transportInputDisabled: context.transportInputDisabled,
+              conversationIsCompacting: transcript.toolStatusIsCompaction === true,
+            })}
             sttSessionKey={conversationId}
             sttProvider={context.sttProvider}
             sttProviderConfigured={context.sttProviderConfigured}

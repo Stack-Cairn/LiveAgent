@@ -498,6 +498,13 @@ function useGatewayAppController() {
 
   // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
   const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
+  const workdirForConversation = useCallback(
+    (targetConversationId: string) =>
+      sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
+      conversationWorkdirsRef.current.get(targetConversationId)?.trim() ||
+      (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : ""),
+    [activeWorkspaceProjectPath, isAgentMode, settings.system.workdir, sidebarStore],
+  );
 
   const {
     pendingUploadedFiles,
@@ -531,6 +538,7 @@ function useGatewayAppController() {
     addNotify,
     onDropDirectories: mountDroppedDirectories,
     ensureUploadConversation,
+    workdirForConversation,
   });
 
   const applyChatQueueSnapshot = useCallback((snapshot: ChatQueueSnapshot | null | undefined) => {
@@ -1818,10 +1826,6 @@ function useGatewayAppController() {
   }
   // --- 多看板背景 Pane 的按会话绑定能力(复刻桌面端 buildBackgroundPaneBinding
   // 的数据面):工作区、草稿缓存、附件导入全部按显式 conversationId 路由。---
-  const workdirForConversation = (targetConversationId: string) =>
-    sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
-    conversationWorkdirsRef.current.get(targetConversationId)?.trim() ||
-    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
   const getCachedComposerDraft = (targetConversationId: string) =>
     composerDraftCacheRef.current.get(targetConversationId);
   const setCachedComposerDraft = (targetConversationId: string, draft: MentionComposerDraft) => {

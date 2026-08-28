@@ -480,13 +480,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     const sendConversationId = getDisplayedConversationId();
     if (primarySendInFlightConversationRef.current === sendConversationId) return;
     if (isUploadingFiles || isImportingPastedTextRef.current) return;
-    const transportLocked =
-      Boolean(chatProtocolIncompatibleMessage) ||
-      composerCompactionBlocked ||
-      gatewayConnectionLost;
-    if (workbenchHasMultiplePanes ? transportLocked : composerInputDisabled) {
-      return;
-    }
+    if (composerInputDisabled) return;
     if (queuedChatEditSessionRef.current) {
       primarySendInFlightConversationRef.current = sendConversationId;
       void (async () => {
@@ -558,15 +552,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     })();
   }, [
     addNotify,
-    chatProtocolIncompatibleMessage,
     chatRuntimeControlsForCurrentProvider,
     commitQueuedChatEdit,
-    composerCompactionBlocked,
     composerInputDisabled,
     composerRef,
     displayedConversationBusyRef,
     displayedConversationWorkdir,
-    gatewayConnectionLost,
     getDisplayedConversationId,
     isImportingPastedTextRef,
     isUploadingFiles,
@@ -578,7 +569,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     setPendingUploadsForConversation,
     submitCurrentComposerToGuiQueue,
     updatePendingUploadsForConversation,
-    workbenchHasMultiplePanes,
   ]);
 
   const handlePrimaryComposerStop = useCallback(() => {

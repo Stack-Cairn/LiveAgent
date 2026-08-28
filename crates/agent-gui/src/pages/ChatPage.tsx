@@ -3515,8 +3515,6 @@ export function ChatPage(props: ChatPageProps) {
                     : undefined
                 }
                 paneId={pane.paneId}
-                conversationId={conversationId}
-                project={surface.project}
                 title={sidebarConversationsById.get(conversationId)?.title}
                 deferHydration={!paneContext.isFocused}
               />
@@ -3551,12 +3549,7 @@ export function ChatPage(props: ChatPageProps) {
   ) : (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
       <Suspense fallback={<PaneLoadingSkeleton label={t("app.loading")} />}>
-        <ConversationPaneHost
-          ref={conversationPaneHostRef}
-          paneId="root-conversation-pane"
-          conversationId={currentConversationId}
-          project={conversationSurfaceProject}
-        />
+        <ConversationPaneHost ref={conversationPaneHostRef} paneId="root-conversation-pane" />
       </Suspense>
     </ConversationPaneHostEnvironmentProvider>
   );
