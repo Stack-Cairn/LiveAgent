@@ -606,8 +606,8 @@ File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 Pane
 - File Tree 展开、选择、滚动状态按 `projectPathKey` 分桶。
 - Right Dock 可调宽；Canvas 狭窄时 Overlay 打开，不永久压缩全部 Pane。
 - 同一项目只挂一个交互式 File Tree 视图；Surface 在 Workbench 时，Right Dock
-  保留标签并显示“前往文件树”占位，避免重复数据请求、workspace activity 订阅
-  和状态竞争。
+  隐藏对应标签、内容和新建入口，避免重复数据请求、workspace activity 订阅和
+  状态竞争；关闭 Pane 释放租约后，Dock 直接复用项目级状态恢复树。
 - `FileTreeSurface` 通过显式 project/state/client/action props 挂载，不依赖
   `RightDockContext`；Right Dock 与 Pane Host 只是不同适配层。
 - 文件树 Surface 关闭只关闭视图，不修改项目、会话或文件。

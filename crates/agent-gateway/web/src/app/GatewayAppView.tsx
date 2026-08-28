@@ -1649,13 +1649,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   `fileTree:${terminalProjectPathKey}`,
                 ),
               )}
-              onFocusFileTreePane={() => {
-                const paneId = findPaneIdBySurfaceKey(
-                  workbenchController.workbench.layoutRef.current,
-                  `fileTree:${terminalProjectPathKey}`,
-                );
-                if (paneId) workbenchController.handleFocusPane(paneId);
-              }}
               width={settings.customSettings.rightDock.width}
               theme={effectiveTheme}
               disabledMessage={projectToolsDisabledMessage}

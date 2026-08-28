@@ -654,8 +654,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "projectTools.workspacePathDrop.sshBlocked": "SSH 尚未配置路径映射",
   "projectTools.newFileTree": "新建文件树",
   "projectTools.fileTreeDescription": "浏览和管理项目文件",
-  "projectTools.fileTree.openInWorkbenchHint": "文件树已在工作台中打开。",
-  "projectTools.fileTree.focusWorkbench": "前往文件树",
   "projectTools.newGitReview": "新建审查",
   "projectTools.gitReviewDescription": "查看代码变更和提交历史",
   "projectTools.gitReview.addAiReview": "将 AI 代码审查添加到对话",

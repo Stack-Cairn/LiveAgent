@@ -69,7 +69,6 @@ type RightDockPanelProps = {
    */
   leasedSessionIds?: ReadonlySet<string>;
   fileTreeLeased?: boolean;
-  onFocusFileTreePane?: () => void;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -384,7 +383,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
     fileTreeLeased,
-    onFocusFileTreePane,
     width,
     theme,
     disabledMessage,
@@ -567,6 +565,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     tunnelInitialized,
   } = useRightDockProjectTabs({
     backgroundTasksVisible,
+    fileTreeLeased,
     localSessions,
     onProjectStateChange,
     projectPathKey,
@@ -658,6 +657,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
 
   const startToolTab = useCallback(
     (kind: RightDockSingletonTabKind) => {
+      if (kind === "fileTree" && fileTreeLeased) return;
       if (rightDockTabRequiresProject(kind)) {
         if (!projectReady) return;
       } else if (!tunnelClient) {
@@ -665,7 +665,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       }
       openSingletonTab(kind);
     },
-    [openSingletonTab, projectReady, tunnelClient],
+    [fileTreeLeased, openSingletonTab, projectReady, tunnelClient],
   );
 
   const setFileTreeInitialized = useCallback(
@@ -893,6 +893,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
                 </div>
                 <RightDockCreateMenu
+                  fileTreeLeased={fileTreeLeased}
                   open={createMenuOpen}
                   onOpenChange={setCreateMenuOpen}
                   shellOptions={shellOptions}
@@ -958,6 +959,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                 </div>
               ) : showRightDockChooser ? (
                 <RightDockChooser
+                  fileTreeLeased={fileTreeLeased}
                   terminalReady={terminalReady}
                   terminalDisabledMessage={terminalDisabledMessage}
                   disabledMessage={disabledMessage}
@@ -985,7 +987,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
                   fileTreeLeased={fileTreeLeased}
-                  onFocusFileTreePane={onFocusFileTreePane}
                 />
               )}
             </>

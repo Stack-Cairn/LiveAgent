@@ -702,8 +702,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "projectTools.workspacePathDrop.sshBlocked": "SSH path mapping is not configured",
   "projectTools.newFileTree": "New File Tree",
   "projectTools.fileTreeDescription": "Browse and manage project files",
-  "projectTools.fileTree.openInWorkbenchHint": "The File Tree is open in the Workbench.",
-  "projectTools.fileTree.focusWorkbench": "Focus File Tree",
   "projectTools.newGitReview": "New Review",
   "projectTools.gitReviewDescription": "Review code changes and commit history",
   "projectTools.gitReview.addAiReview": "Add AI code review to chat",

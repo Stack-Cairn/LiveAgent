@@ -3812,13 +3812,6 @@ export function ChatPage(props: ChatPageProps) {
         fileTreeLeased={Boolean(
           findPaneIdBySurfaceKey(workbench.layout, `fileTree:${terminalProjectPathKey}`),
         )}
-        onFocusFileTreePane={() => {
-          const paneId = findPaneIdBySurfaceKey(
-            workbench.layoutRef.current,
-            `fileTree:${terminalProjectPathKey}`,
-          );
-          if (paneId) handleWorkbenchFocusPane(paneId);
-        }}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
