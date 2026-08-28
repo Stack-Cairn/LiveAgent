@@ -83,6 +83,57 @@ test("desktop native drop bridges the active payload to the element at the relea
   assert.equal(workspacePathDrag.getActiveWorkspacePathDrag(), null);
 });
 
+test("desktop native hover follows the logical drop zone and clears the previous zone", () => {
+  const transfer = new DataTransferStub();
+  workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);
+  const events = [];
+  const createZone = (name) => ({
+    dispatchEvent(event) {
+      events.push(`${name}:${event.type}`);
+      if (event.type === workspacePathDrag.WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT) {
+        assert.deepEqual(workspacePathDrag.readNativeWorkspacePathDragOver(event), payload);
+        event.preventDefault();
+      }
+      return !event.defaultPrevented;
+    },
+  });
+  const firstZone = createZone("first");
+  const secondZone = createZone("second");
+  let target = { closest: () => firstZone };
+  const options = {
+    document: {
+      elementFromPoint() {
+        return target;
+      },
+    },
+    createEvent(type, detail) {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperty(event, "detail", { value: detail });
+      return event;
+    },
+  };
+
+  assert.equal(
+    workspacePathDrag.dispatchActiveWorkspacePathNativeHover({ x: 20, y: 30 }, options),
+    true,
+  );
+  assert.deepEqual(workspacePathDrag.getActiveWorkspacePathDrag(), payload);
+  target = { closest: () => secondZone };
+  assert.equal(
+    workspacePathDrag.dispatchActiveWorkspacePathNativeHover({ x: 40, y: 50 }, options),
+    true,
+  );
+  workspacePathDrag.clearActiveWorkspacePathNativeHover(options);
+
+  assert.deepEqual(events, [
+    `first:${workspacePathDrag.WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT}`,
+    `first:${workspacePathDrag.WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT}`,
+    `second:${workspacePathDrag.WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT}`,
+    `second:${workspacePathDrag.WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT}`,
+  ]);
+  workspacePathDrag.clearActiveWorkspacePathDrag();
+});
+
 test("dragend keeps the payload alive for Tauri's following native drop callback", () => {
   const transfer = new DataTransferStub();
   workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);
@@ -96,6 +147,8 @@ test("desktop native drop never forwards an in-app drag to the OS upload path", 
     new URL("../../src/pages/chat/hooks/useTauriFileDrop.ts", import.meta.url),
     "utf8",
   );
+  assert.match(source, /dispatchActiveWorkspacePathNativeHover/);
+  assert.match(source, /clearActiveWorkspacePathNativeHover/);
   assert.match(source, /if \(getActiveWorkspacePathDrag\(\)\)[\s\S]*dispatchActiveWorkspacePathDrop/);
   assert.match(source, /if \(event\.payload\.paths\.length === 0\) return;/);
 });
@@ -112,9 +165,13 @@ test("composer and terminal consume the bridged native workspace drop", () => {
     ),
     "utf8",
   );
+  assert.match(composer, /readNativeWorkspacePathDragOver\(event\)/);
+  assert.match(composer, /WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT/);
   assert.match(composer, /readNativeWorkspacePathDrop\(event\)/);
   assert.match(composer, /insertWorkspacePathMention\(payload\)/);
   assert.match(terminal, /readNativeWorkspacePathDrop\(event\)/);
+  assert.match(terminal, /readNativeWorkspacePathDragOver\(event\)/);
+  assert.match(terminal, /WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT/);
   assert.match(terminal, /insertWorkspacePathInTerminal\(payload\)/);
 });
 

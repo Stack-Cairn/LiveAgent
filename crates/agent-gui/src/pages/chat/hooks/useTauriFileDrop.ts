@@ -1,5 +1,7 @@
 import {
+  clearActiveWorkspacePathNativeHover,
   dispatchActiveWorkspacePathDrop,
+  dispatchActiveWorkspacePathNativeHover,
   getActiveWorkspacePathDrag,
 } from "@liveagent/ui/lib/chat/workspacePathDrag";
 import { isTauri } from "@tauri-apps/api/core";
@@ -61,8 +63,13 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             activeDropTargetRef.current = null;
             setActiveDropTarget(null);
             onDropPositionChangeRef.current?.(null);
+            dispatchActiveWorkspacePathNativeHover({
+              x: event.payload.position.x / (scaleFactor || 1),
+              y: event.payload.position.y / (scaleFactor || 1),
+            });
             return;
           }
+          clearActiveWorkspacePathNativeHover();
           const nextTarget = resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
           activeDropTargetRef.current = nextTarget;
           setActiveDropTarget(nextTarget);
@@ -88,6 +95,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             });
             return;
           }
+          clearActiveWorkspacePathNativeHover();
           const dropTarget = resolveFinalNativeFileDropTarget(
             activeDropTargetRef.current,
             event.payload.position,
@@ -112,6 +120,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
           return;
         }
 
+        clearActiveWorkspacePathNativeHover();
         setActiveDropTarget(null);
         activeDropTargetRef.current = null;
         onDropPositionChangeRef.current?.(null);
@@ -129,6 +138,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
 
     return () => {
       cancelled = true;
+      clearActiveWorkspacePathNativeHover();
       if (unlisten) {
         unlisten();
       }

@@ -1,6 +1,8 @@
 import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 
 export const WORKSPACE_PATH_DRAG_MIME = "application/x-liveagent-workspace-path+json";
+export const WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT = "liveagent:workspace-path-native-drag-over";
+export const WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT = "liveagent:workspace-path-native-drag-leave";
 export const WORKSPACE_PATH_NATIVE_DROP_EVENT = "liveagent:workspace-path-native-drop";
 
 export type WorkspacePathDragPayload = {
@@ -14,12 +16,98 @@ export type WorkspacePathDragPayload = {
 
 let activeWorkspacePathDrag: WorkspacePathDragPayload | null = null;
 let activeWorkspacePathDragClearTimer: ReturnType<typeof setTimeout> | null = null;
+let activeNativeWorkspacePathHoverTarget: EventTarget | null = null;
 
 type WorkspacePathDropDocument = {
   elementFromPoint: (x: number, y: number) => EventTarget | null;
 };
 
 type WorkspacePathDropEventFactory = (type: string, payload: WorkspacePathDragPayload) => Event;
+
+type WorkspacePathNativeHoverEventFactory = (
+  type: string,
+  payload: WorkspacePathDragPayload | null,
+) => Event;
+
+const WORKSPACE_PATH_DROP_ZONE_SELECTOR = "[data-workspace-path-drop-zone]";
+
+function createNativeWorkspacePathEvent(
+  type: string,
+  payload: WorkspacePathDragPayload | null,
+  createEvent?: WorkspacePathNativeHoverEventFactory,
+): Event {
+  if (createEvent) return createEvent(type, payload);
+  return new CustomEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    detail: payload,
+  });
+}
+
+function workspacePathDropZoneAt(
+  position: { x: number; y: number },
+  targetDocument: WorkspacePathDropDocument,
+): EventTarget | null {
+  const target = targetDocument.elementFromPoint(position.x, position.y);
+  if (!target) return null;
+  const closest = (
+    target as EventTarget & {
+      closest?: (selector: string) => EventTarget | null;
+    }
+  ).closest;
+  return typeof closest === "function"
+    ? closest.call(target, WORKSPACE_PATH_DROP_ZONE_SELECTOR)
+    : target;
+}
+
+/** Clear the Desktop-only native hover bridge without ending the drag payload. */
+export function clearActiveWorkspacePathNativeHover(options?: {
+  createEvent?: WorkspacePathNativeHoverEventFactory;
+}): void {
+  const previousTarget = activeNativeWorkspacePathHoverTarget;
+  activeNativeWorkspacePathHoverTarget = null;
+  if (!previousTarget) return;
+  previousTarget.dispatchEvent(
+    createNativeWorkspacePathEvent(
+      WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+      null,
+      options?.createEvent,
+    ),
+  );
+}
+
+/**
+ * WKWebView reports an in-app HTML drag through Tauri before React receives
+ * dragenter/dragover. Mirror the native pointer into the logical composer or
+ * terminal drop zone so Desktop renders the same local feedback as Web.
+ */
+export function dispatchActiveWorkspacePathNativeHover(
+  position: { x: number; y: number },
+  options?: {
+    document?: WorkspacePathDropDocument;
+    createEvent?: WorkspacePathNativeHoverEventFactory;
+  },
+): boolean {
+  const payload = activeWorkspacePathDrag;
+  if (!payload) {
+    clearActiveWorkspacePathNativeHover({ createEvent: options?.createEvent });
+    return false;
+  }
+  const targetDocument = options?.document ?? document;
+  const nextTarget = workspacePathDropZoneAt(position, targetDocument);
+  if (nextTarget !== activeNativeWorkspacePathHoverTarget) {
+    clearActiveWorkspacePathNativeHover({ createEvent: options?.createEvent });
+    activeNativeWorkspacePathHoverTarget = nextTarget;
+  }
+  if (!nextTarget) return false;
+  const event = createNativeWorkspacePathEvent(
+    WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+    payload,
+    options?.createEvent,
+  );
+  nextTarget.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 
 function hasControlCharacters(value: string): boolean {
   for (const character of value) {
@@ -92,6 +180,7 @@ export function clearActiveWorkspacePathDrag(): void {
     clearTimeout(activeWorkspacePathDragClearTimer);
     activeWorkspacePathDragClearTimer = null;
   }
+  clearActiveWorkspacePathNativeHover();
   activeWorkspacePathDrag = null;
 }
 
@@ -147,6 +236,13 @@ export function dispatchActiveWorkspacePathDrop(
 
 export function readNativeWorkspacePathDrop(event: Event): WorkspacePathDragPayload | null {
   if (event.type !== WORKSPACE_PATH_NATIVE_DROP_EVENT) return null;
+  return createWorkspacePathDragPayload(
+    (event as CustomEvent<unknown>).detail as Partial<WorkspacePathDragPayload>,
+  );
+}
+
+export function readNativeWorkspacePathDragOver(event: Event): WorkspacePathDragPayload | null {
+  if (event.type !== WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT) return null;
   return createWorkspacePathDragPayload(
     (event as CustomEvent<unknown>).detail as Partial<WorkspacePathDragPayload>,
   );

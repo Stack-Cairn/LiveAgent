@@ -18,8 +18,11 @@ import {
   getActiveWorkspacePathDrag,
   hasWorkspacePathDragPayload,
   quoteWorkspacePathForShell,
+  readNativeWorkspacePathDragOver,
   readNativeWorkspacePathDrop,
   readWorkspacePathDragPayload,
+  WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+  WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
   WORKSPACE_PATH_NATIVE_DROP_EVENT,
   type WorkspacePathDragPayload,
   workspacePathDragMatchesProject,
@@ -240,6 +243,17 @@ export function XTermViewport({
   useEffect(() => {
     const target = dropTargetRef.current;
     if (!target) return;
+    const handleNativeWorkspacePathDragOver = (event: Event) => {
+      const payload = readNativeWorkspacePathDragOver(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setWorkspacePathDropState(canAcceptWorkspacePath(payload) ? "accept" : "blocked");
+    };
+    const handleNativeWorkspacePathDragLeave = (event: Event) => {
+      if (event.type !== WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT) return;
+      setWorkspacePathDropState(null);
+    };
     const handleNativeWorkspacePathDrop = (event: Event) => {
       const payload = readNativeWorkspacePathDrop(event);
       if (!payload) return;
@@ -247,11 +261,27 @@ export function XTermViewport({
       event.stopPropagation();
       insertWorkspacePathInTerminal(payload);
     };
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+      handleNativeWorkspacePathDragOver,
+    );
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+      handleNativeWorkspacePathDragLeave,
+    );
     target.addEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
     return () => {
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+        handleNativeWorkspacePathDragOver,
+      );
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+        handleNativeWorkspacePathDragLeave,
+      );
       target.removeEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
     };
-  }, [insertWorkspacePathInTerminal]);
+  }, [canAcceptWorkspacePath, insertWorkspacePathInTerminal]);
 
   useEffect(() => {
     if (!termRef.current) return;
