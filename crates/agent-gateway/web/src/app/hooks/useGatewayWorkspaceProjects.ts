@@ -159,7 +159,7 @@ export function useGatewayWorkspaceProjects({
   const activateWorkspaceProject = useCallback(
     (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
       const pathKey = project.path.trim();
-      if (!pathKey) return;
+      if (!pathKey) return null;
       const normalizedPathKey = workspaceProjectPathKey(pathKey);
       const matchedProject = workspaceProjects.find(
         (item) =>
@@ -220,11 +220,12 @@ export function useGatewayWorkspaceProjects({
       });
       if (options?.startConversation) {
         setActiveView("chat");
-        startNewConversationRef.current({
+        return startNewConversationRef.current({
           workdir: targetProject.path,
           preserveCurrentComposerDraft: true,
         });
       }
+      return null;
     },
     [setActiveView, setSettings, startNewConversationRef, workspaceProjects],
   );
@@ -238,9 +239,9 @@ export function useGatewayWorkspaceProjects({
 
   const handleNewConversationForProject = useCallback(
     async (project: WorkspaceProject) => {
-      if (!(await checkWorkspaceProjectDirectory(project))) return;
+      if (!(await checkWorkspaceProjectDirectory(project))) return null;
       if (isMobileSidebarLayout()) setSidebarOpen(false);
-      activateWorkspaceProject(project, { startConversation: true });
+      return activateWorkspaceProject(project, { startConversation: true });
     },
     [activateWorkspaceProject, checkWorkspaceProjectDirectory, setSidebarOpen],
   );

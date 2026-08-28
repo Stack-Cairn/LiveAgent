@@ -1604,15 +1604,17 @@ function useGatewayAppController() {
     terminalProjectPath,
     newTerminalTitle: translate("projectTools.newTerminal", settings.locale),
     selectConversation: handleSidebarSelectConversation,
-    startConversationForProject: (project) => {
-      void handleNewConversationForProject(project);
-    },
+    startConversationForProject: handleNewConversationForProject,
     conversationWorkdirFor: (conversationId) =>
       conversationWorkdirsRef.current.get(conversationId)?.trim() ||
       sidebarStore.peek(conversationId)?.cwd?.trim() ||
       null,
     onNoSpaceForSplit: () =>
       addNotify("error", translate("workbench.noSpaceForSplit", settings.locale)),
+    onDropStateChanged: () =>
+      addNotify("error", translate("workbench.dropStateChanged", settings.locale)),
+    onConversationAlreadyOpen: () =>
+      addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
   });
   workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
   workbenchClearRef.current = workbenchController.clearWorkbench;

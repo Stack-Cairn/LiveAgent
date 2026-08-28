@@ -1383,6 +1383,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.openInSplit": "在分屏中打开",
   "workbench.openNewTerminalInSplit": "在分屏中新建终端",
   "workbench.noSpaceForSplit": "空间不足，无法再打开新面板",
+  "workbench.dropStateChanged": "分屏布局已变化，请重新拖放",
+  "workbench.conversationAlreadyOpen": "该会话已在当前分屏中，已为你聚焦",
   "workbench.projectArchived": "该工作空间已归档",
   "workbench.projectMissing": "该工作空间目录已缺失",
   "workbench.terminalConnecting": "正在启动终端…",

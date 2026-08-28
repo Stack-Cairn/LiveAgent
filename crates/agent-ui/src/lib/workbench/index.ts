@@ -5,6 +5,7 @@ export * from "./geometry";
 export * from "./hitTesting";
 export * from "./invariants";
 export * from "./layoutStorage";
+export * from "./workspaceDropCommit";
 export * from "./projectScope";
 export * from "./reducer";
 export * from "./types";

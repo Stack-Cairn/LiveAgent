@@ -55,11 +55,11 @@ import {
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
+  commitWorkspaceDropConversation,
   findAdjacentPaneId,
   findParentSplitId,
   hitTestWorkbenchDrop,
   type WorkbenchCommandError,
-  type WorkbenchDropTarget,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
 import {
@@ -219,6 +219,7 @@ import { useWindowWorkbench } from "./chat/workbench/useWindowWorkbench";
 import {
   canSplitRectAtEdge,
   useWorkbenchDragSession,
+  type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "./chat/workbench/useWorkbenchDragSession";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
@@ -289,8 +290,8 @@ export function ChatPage(props: ChatPageProps) {
   // workdirs, running set); ChatPage only issues imperative calls and keeps a
   // few narrow selector subscriptions.
   const sidebarStore = useMemo(() => createSidebarStore(createGuiSidebarBackend()), []);
-  const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
-    () => undefined,
+  const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => string>(
+    () => "",
   );
   const prepareComposerForConversationChangeActionRef = useRef<() => void>(() => undefined);
   const {
@@ -2334,12 +2335,12 @@ export function ChatPage(props: ChatPageProps) {
     [workspaceProjects],
   );
 
-  // Workspace drops create a draft conversation through the legacy pipeline;
-  // once the fresh conversation becomes current, the sync effect opens its
-  // pane at the remembered target instead of rebinding the focused pane.
-  const pendingWorkspaceOpenRef = useRef<{
-    target: Exclude<WorkbenchDropTarget, { kind: "pane-center" }>;
-    projectId: string;
+  // Workspace drops await the exact draft id returned by the legacy creation
+  // path. The sync effect only pauses for that identified draft, so it cannot
+  // consume the target on an unrelated current-conversation update.
+  const workspaceDropSequenceRef = useRef(0);
+  const pendingWorkspaceDropRef = useRef<{
+    operationId: number;
     projectPathKey: string;
   } | null>(null);
 
@@ -2347,7 +2348,10 @@ export function ChatPage(props: ChatPageProps) {
     (commit: WorkbenchDropCommit) => {
       // Stale layout revision (focus/structure changed mid-drag): cancel the
       // transaction instead of replaying stale geometry.
-      if (commit.revision !== workbench.layoutRef.current.revision) return;
+      if (commit.revision !== workbench.layoutRef.current.revision) {
+        addNotify("error", t("workbench.dropStateChanged"));
+        return;
+      }
       const { payload, target } = commit;
       if (payload.kind === "workspace") {
         if (target.kind === "pane-center") return;
@@ -2357,12 +2361,40 @@ export function ChatPage(props: ChatPageProps) {
           (entry) => workspaceProjectPathKey(entry.path) === pathKey,
         );
         if (!project) return;
-        pendingWorkspaceOpenRef.current = {
+        const operationId = workspaceDropSequenceRef.current + 1;
+        workspaceDropSequenceRef.current = operationId;
+        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        void commitWorkspaceDropConversation({
+          revision: commit.revision,
           target,
-          projectId: project.id,
-          projectPathKey: pathKey,
-        };
-        void handleNewConversationForProject(project);
+          project: { projectId: project.id, projectPathKey: pathKey },
+          startConversation: () => handleNewConversationForProject(project),
+          currentRevision: () => workbench.layoutRef.current.revision,
+          conversationMatchesProject: (conversationId) => {
+            const draftWorkdir =
+              conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+            return Boolean(draftWorkdir) && workspaceProjectPathKey(draftWorkdir) === pathKey;
+          },
+          paneIdForConversation: workbench.paneIdForConversation,
+          openConversation: workbench.openConversation,
+        }).then((result) => {
+          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+            pendingWorkspaceDropRef.current = null;
+          }
+          if (result.kind === "opened" || result.kind === "not-created") return;
+          if (result.kind === "already-open") {
+            const paneId = workbench.paneIdForConversation(result.conversationId);
+            if (paneId) handleWorkbenchFocusPane(paneId);
+            return;
+          }
+          workbench.syncCurrentConversation(result.conversationId, {
+            projectId: project.id,
+            projectPathKey: pathKey,
+          });
+          if (result.kind !== "rejected") {
+            addNotify("error", t("workbench.dropStateChanged"));
+          }
+        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -2372,6 +2404,7 @@ export function ChatPage(props: ChatPageProps) {
           // conversation's own pane, meaning "focus me".
           if (existingPaneId && target.paneId === existingPaneId) {
             handleWorkbenchFocusPane(existingPaneId);
+            addNotify("success", t("workbench.conversationAlreadyOpen"));
           }
           return;
         }
@@ -2427,9 +2460,11 @@ export function ChatPage(props: ChatPageProps) {
     },
     [
       archivedWorkspaceProjectPathKeys,
+      addNotify,
       handleNewConversationForProject,
       handleWorkbenchFocusPane,
       selectWorkbenchConversation,
+      t,
       workbench,
       workspaceProjects,
     ],
@@ -2440,6 +2475,16 @@ export function ChatPage(props: ChatPageProps) {
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
     onCommit: handleWorkbenchDropCommit,
+    onUnavailable: (reason: WorkbenchDragUnavailableReason) => {
+      addNotify(
+        "error",
+        t(
+          reason === "geometry-unavailable"
+            ? "workbench.dropStateChanged"
+            : "workbench.noSpaceForSplit",
+        ),
+      );
+    },
   });
 
   const handleConversationWorkbenchDragIntent = useCallback(
@@ -2787,28 +2832,15 @@ export function ChatPage(props: ChatPageProps) {
     // remembered drop target instead of rebinding the focused pane. The
     // pending intent is one-shot and verified against the draft's workdir so
     // a failed directory check can never misplace a later conversation.
-    const pendingWorkspaceOpen = pendingWorkspaceOpenRef.current;
-    if (pendingWorkspaceOpen && previousSynced !== currentConversationId) {
-      pendingWorkspaceOpenRef.current = null;
+    const pendingWorkspaceDrop = pendingWorkspaceDropRef.current;
+    if (pendingWorkspaceDrop && previousSynced !== currentConversationId) {
       const draftWorkdir =
         conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
-      const hasNoPane = !workbench.paneIdForConversation(currentConversationId);
       if (
-        hasNoPane &&
         draftWorkdir &&
-        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceOpen.projectPathKey
+        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceDrop.projectPathKey
       ) {
-        const opened = workbench.openConversation(
-          {
-            conversationId: currentConversationId,
-            project: {
-              projectId: pendingWorkspaceOpen.projectId,
-              projectPathKey: pendingWorkspaceOpen.projectPathKey,
-            },
-          },
-          pendingWorkspaceOpen.target,
-        );
-        if (opened) return;
+        return;
       }
     }
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);

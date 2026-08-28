@@ -38,7 +38,13 @@ export type UseWorkbenchDragSessionParams = {
   layoutRef: React.MutableRefObject<WorkbenchLayout>;
   geometryRef: React.MutableRefObject<WorkbenchGeometry | null>;
   onCommit: (commit: WorkbenchDropCommit) => void;
+  onUnavailable?: (reason: WorkbenchDragUnavailableReason) => void;
 };
+
+export type WorkbenchDragUnavailableReason =
+  | "geometry-unavailable"
+  | "canvas-too-narrow"
+  | "no-valid-target";
 
 /**
  * Pointer-driven drag session shared by sidebar conversation drags and pane
@@ -51,11 +57,13 @@ export type UseWorkbenchDragSessionParams = {
  * machine and the drop-target resolution live in ./workbenchDragMachine.
  */
 export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
-  const { enabled, layoutRef, geometryRef, onCommit } = params;
+  const { enabled, layoutRef, geometryRef, onCommit, onUnavailable } = params;
   const [dragState, setDragState] = useState<WorkbenchDragState | null>(null);
   const sessionRef = useRef<DragSessionState>(IDLE_DRAG_SESSION);
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
+  const onUnavailableRef = useRef(onUnavailable);
+  onUnavailableRef.current = onUnavailable;
   const pointerCaptureRef = useRef<{ element: Element; pointerId: number } | null>(null);
 
   const cleanupListenersRef = useRef<(() => void) | null>(null);
@@ -88,6 +96,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
     sessionRef.current = result.state;
     setDragState(dragStateFor(result.state));
     if (result.commit) onCommitRef.current(result.commit);
+    return result;
   }, []);
 
   const beginDrag = useCallback(
@@ -140,10 +149,12 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           const canvasElement = document.querySelector("[data-workbench-canvas]");
           const geometry = geometryRef.current;
           if (!canvasElement || !geometry) {
+            onUnavailableRef.current?.("geometry-unavailable");
             teardown();
             return;
           }
           if (!canvasAllowsPointerSplit(geometry)) {
+            onUnavailableRef.current?.("canvas-too-narrow");
             teardown();
             return;
           }
@@ -170,13 +181,24 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       const handleUp = (upEvent: PointerEvent) => {
         const session = sessionRef.current;
         if (session.phase === "idle" || upEvent.pointerId !== session.pointerId) return;
-        dispatch({
+        const result = dispatch({
           type: "pointer-up",
           pointerId: upEvent.pointerId,
           clientX: upEvent.clientX,
           clientY: upEvent.clientY,
           layout: layoutRef.current,
         });
+        if (session.phase === "dragging" && !result.commit) {
+          const localX = upEvent.clientX - session.canvasOrigin.left;
+          const localY = upEvent.clientY - session.canvasOrigin.top;
+          const canvas = session.geometry.canvas;
+          const insideCanvas =
+            localX >= canvas.left &&
+            localY >= canvas.top &&
+            localX <= canvas.left + canvas.width &&
+            localY <= canvas.top + canvas.height;
+          if (insideCanvas) onUnavailableRef.current?.("no-valid-target");
+        }
         teardown();
       };
 
