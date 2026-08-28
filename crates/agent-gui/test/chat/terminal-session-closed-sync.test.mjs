@@ -197,7 +197,7 @@ test("the exit flow marks the guard before invoking and resets it on failure", (
 // ---------------------------------------------------------------------------
 
 test("a session seen live that disappears parks in session-closed instead of recreating", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
   const guard = ensureEffect.indexOf("seenLiveSessionIdRef.current === boundSessionId");
   const parked = ensureEffect.indexOf('setErrorState({ kind: "session-closed" })');
   const staleDelete = ensureEffect.indexOf("bindings.delete(surface.surfaceId)");

@@ -171,21 +171,29 @@ test("host has no pane-local termination state", () => {
   assert.equal(hostSource.includes("killSession"), false);
 });
 
-test("the ensure effect only waits for session state prerequisites", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
-  assert.match(ensureEffect, /if \(!sessionsLoaded \|\| session \|\| errorState\) return;/);
+test("an unbound surface creates immediately without waiting for the global session list", () => {
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
+  assert.match(ensureEffect, /if \(session \|\| errorState\) return;/);
   assertOrder(
     ensureEffect,
-    ["if (!sessionsLoaded || session || errorState) return;", "ensureTerminalPaneSession(surface, {"],
-    "session-state early return",
+    [
+      "if (boundSessionId && !pendingEnsure) {",
+      "if (!sessionsLoaded) return;",
+      "ensureTerminalPaneSession(surface, {",
+    ],
+    "binding-only session-list gate",
   );
 });
 
 test("a bound-but-missing session drops the stale binding before auto-recreate", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
   assertOrder(
     ensureEffect,
-    ["if (boundSessionId) {", "bindings.delete(surface.surfaceId)", "setCreatedSession(null)"],
+    [
+      "if (boundSessionId && !pendingEnsure) {",
+      "bindings.delete(surface.surfaceId)",
+      "setCreatedSession(null)",
+    ],
     "stale-binding branch",
   );
   assert.match(
@@ -196,6 +204,24 @@ test("a bound-but-missing session drops the stale binding before auto-recreate",
   assert.ok(
     ensureEffect.indexOf("bindings.delete(surface.surfaceId)") <
       ensureEffect.indexOf("ensureTerminalPaneSession(surface, {"),
+  );
+});
+
+test("a fresh binding cannot be deleted while its create promise is settling", () => {
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
+  assertOrder(
+    ensureEffect,
+    [
+      "const pendingEnsure = ensureSessionPromiseRef.current;",
+      "if (boundSessionId && !pendingEnsure) {",
+      "bindings.delete(surface.surfaceId)",
+      "const ensurePromise =",
+      "pendingEnsure ??",
+      "ensureSessionPromiseRef.current = ensurePromise;",
+      "void ensurePromise",
+      "setCreatedSession(created)",
+    ],
+    "create binding/list race guard",
   );
 });
 

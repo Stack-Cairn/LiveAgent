@@ -77,6 +77,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const [errorState, setErrorState] = useState<TerminalPaneErrorState | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const [leasedSessionId, setLeasedSessionId] = useState<string | null>(null);
+  // create() 会先写 bindings 再结算 Promise。绑定通知触发的同步重渲染可能
+  // 发生在 terminal:event 进入 sessions 之前；保留这次创建 Promise，下一轮
+  // effect 能继续等待同一结果，而不会把刚写入的绑定误判为恢复期陈旧绑定。
+  const ensureSessionPromiseRef = useRef<Promise<TerminalSession> | null>(null);
 
   const liveSession = boundSessionId
     ? (sessions.find((entry) => entry.id === boundSessionId) ?? null)
@@ -98,8 +102,12 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   }, [createdSession, liveSession]);
 
   useEffect(() => {
-    if (!sessionsLoaded || session || errorState) return;
-    if (boundSessionId) {
+    if (session || errorState) return;
+    const pendingEnsure = ensureSessionPromiseRef.current;
+    if (boundSessionId && !pendingEnsure) {
+      // 只有“已有绑定但列表里暂时找不到会话”需要等待权威 list()：
+      // 在列表就绪前无法区分慢加载与陈旧绑定，不能误删后重建。
+      if (!sessionsLoaded) return;
       if (seenLiveSessionIdRef.current === boundSessionId) {
         // 会话生前在本次挂载中活过:这是 Right Dock 的显式关闭(或
         // close_project/close_all),不是恢复期残留。停在关闭态等用户
@@ -115,16 +123,30 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       setCreatedSession(null);
       return;
     }
+    // 全新的 surface 没有旧绑定需要对账，直接创建 PTY。create() 写入
+    // binding 后会触发本 effect 重跑；pendingEnsure 让重跑继续订阅同一
+    // Promise，直到 create 响应或 terminal:event 任一方提供可渲染会话。
+    const ensurePromise =
+      pendingEnsure ??
+      ensureTerminalPaneSession(surface, {
+        client,
+        bindings,
+      });
+    ensureSessionPromiseRef.current = ensurePromise;
     let cancelled = false;
-    void ensureTerminalPaneSession(surface, {
-      client,
-      bindings,
-    })
+    void ensurePromise
       .then((created) => {
-        if (!cancelled) setCreatedSession(created);
+        if (cancelled) return;
+        if (ensureSessionPromiseRef.current === ensurePromise) {
+          ensureSessionPromiseRef.current = null;
+        }
+        setCreatedSession(created);
       })
       .catch((error) => {
         if (cancelled) return;
+        if (ensureSessionPromiseRef.current === ensurePromise) {
+          ensureSessionPromiseRef.current = null;
+        }
         setErrorState(
           error instanceof TerminalPaneSshPromptError
             ? { kind: "ssh-prompt" }
