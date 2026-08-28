@@ -203,6 +203,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       clientRequestId,
       message,
       attachments: uploadedFiles,
+      referencedConversations: sendOptions?.referencedConversations,
       isEditResend: Boolean(sendOptions?.editMessageRef),
       baseMessageRef: sendOptions?.editMessageRef,
       optimistic: sendOptions?.optimisticEcho !== false,

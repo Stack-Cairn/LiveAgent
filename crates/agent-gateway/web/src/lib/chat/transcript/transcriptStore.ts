@@ -68,6 +68,7 @@ export type TranscriptStore = {
     clientRequestId: string;
     text: string;
     attachments?: UserChatEntry["attachments"];
+    referencedConversations?: UserChatEntry["referencedConversations"];
     // For edit-resend, truncate the visible transcript before inserting the
     // optimistic bubble so it appears at the edited turn immediately. The
     // later stream `rebased` event is an idempotent confirmation.
@@ -1288,7 +1289,13 @@ export function createTranscriptStore(options?: {
       applyOne(event);
     },
 
-    addOptimisticUserEntry: ({ clientRequestId, text, attachments, baseMessageRef }) => {
+    addOptimisticUserEntry: ({
+      clientRequestId,
+      text,
+      attachments,
+      referencedConversations,
+      baseMessageRef,
+    }) => {
       const preRebaseHistoryEntries = historyEntries;
       const preRebaseTurns = turns;
       const rebased = baseMessageRef ? rebaseFromMessageRef(baseMessageRef) : false;
@@ -1316,6 +1323,7 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments: attachments ?? [],
+            referencedConversations: referencedConversations ?? [],
             timestamp: Date.now(),
           },
         },

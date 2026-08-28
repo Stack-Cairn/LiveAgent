@@ -565,9 +565,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const textOverride =
       typeof overrides?.textOverride === "string" ? overrides.textOverride : null;
     const hasTextOverride = textOverride !== null;
-    const composerDraft = hasTextOverride
-      ? null
-      : (overrides?.composerDraftOverride ?? composerRef.current?.getDraft() ?? null);
+    const composerDraft =
+      overrides?.composerDraftOverride ??
+      (hasTextOverride ? null : (composerRef.current?.getDraft() ?? null));
     let text = normalizeLogicalLineEndings(
       hasTextOverride
         ? textOverride
@@ -622,7 +622,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    const userMessage = createUserMessageWithUploads(text, uploadedFiles, Date.now());
+    const referencedConversations = composerDraft?.conversationMentions ?? [];
+    const userMessage = createUserMessageWithUploads(
+      text,
+      uploadedFiles,
+      Date.now(),
+      referencedConversations,
+    );
     if (!userMessage) {
       if (gatewayBridgeRequest) {
         const message = "Message is required.";
@@ -1728,7 +1734,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             taskStateStore,
             conversationId,
-            referencedConversations: composerDraft?.conversationMentions ?? [],
+            referencedConversations,
             checkpointTurnId: pendingUserMessage.id,
             conversationCwd,
             fallbackTitle,

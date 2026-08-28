@@ -3,6 +3,7 @@ import {
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type {
   HistoryMessageRef,
@@ -19,6 +20,7 @@ export type AssistantRowFooterProps = {
     messageRef: HistoryMessageRef,
     text: string,
     attachments: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
 };
@@ -46,7 +48,12 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
       retryTitle={retryMessageRef ? t("chat.retry") : "旧历史缺少稳定消息标识，无法重试"}
       onRetry={() => {
         if (!retryTarget || !retryMessageRef) return;
-        onResendFromEdit(retryMessageRef, retryTarget.text, retryTarget.attachments);
+        onResendFromEdit(
+          retryMessageRef,
+          retryTarget.text,
+          retryTarget.attachments,
+          retryTarget.referencedConversations,
+        );
       }}
       branchDisabled={isSending || !retryMessageRef || !onBranchConversation || branchPending}
       branchTitle={retryMessageRef ? t("chat.branch") : t("chat.branchUnavailable")}

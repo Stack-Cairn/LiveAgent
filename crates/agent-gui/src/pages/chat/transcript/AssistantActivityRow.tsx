@@ -1,4 +1,5 @@
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { memo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
@@ -20,6 +21,7 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
     messageRef: HistoryMessageRef,
     text: string,
     attachments: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
 }) {
