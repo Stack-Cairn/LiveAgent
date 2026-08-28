@@ -189,6 +189,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   onMcpLoadError?: (message: string) => void;
   mcpLoadFailureMode?: "continue" | "throw";
+  /** 允许 CUA 工具把 LiveAgent 自己当作操作目标；默认 false，见 cuaSelfGuard.ts。 */
+  cuaAllowSelfTargeting?: boolean;
   memoryToolMode?: "rw" | "ro";
   remoteWebTunnelsEnabled?: boolean;
   tunnelProjectPathKey?: string;
@@ -309,6 +311,7 @@ async function buildBaseBuiltinToolBundles(
       servers: enabledServers,
       onLoadError: params.onMcpLoadError,
       loadFailureMode: params.mcpLoadFailureMode,
+      cuaAllowSelfTargeting: params.cuaAllowSelfTargeting,
     });
     baseBundles.push(mcpBusinessBundle);
   }

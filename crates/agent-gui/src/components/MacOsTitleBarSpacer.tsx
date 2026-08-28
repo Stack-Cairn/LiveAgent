@@ -1,4 +1,5 @@
 import { PanelLeft, PanelLeftClose, Settings } from "@liveagent/ui/components/IconSet";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
@@ -106,6 +107,7 @@ export function MacOsTitleBarToggle({
   onOpenSettings?: () => void;
   appUpdate?: AppUpdateController;
 }) {
+  const { t } = useLocale();
   const [show] = useState(isMacOsTauri);
   const trafficLightMetrics = useMacOsTrafficLightMetrics(show);
   if (!show) return null;
@@ -141,6 +143,11 @@ export function MacOsTitleBarToggle({
         <button
           type="button"
           onClick={onOpenSettings}
+          // 自动化脚本按 testid 定位；可读名走 i18n——屏幕阅读器念给用户
+          // 听的东西不该为了脚本方便固定成英文。
+          data-testid="open-settings"
+          aria-label={t("tooltip.settings")}
+          title={t("tooltip.settings")}
           className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
           style={{
             height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,

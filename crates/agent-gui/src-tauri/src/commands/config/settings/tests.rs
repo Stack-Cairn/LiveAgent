@@ -1185,7 +1185,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 13);
+        assert_eq!(row_count, 14);
         assert_eq!(
             keys,
             vec![
@@ -1193,6 +1193,7 @@ mod tests {
                 SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_BROWSER_AUTOMATION_MODE_KEY.to_string(),
                 SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
+                SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
@@ -1208,6 +1209,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1508,6 +1510,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1563,6 +1566,7 @@ mod tests {
             loaded,
             Some(json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1635,6 +1639,7 @@ mod tests {
             loaded,
             json!({
                 "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
+                "cuaAllowSelfTargeting": false,
                 "executionMode": "tools",
                 "hiddenWorkspaceProjectPaths": [],
                 "missingWorkspaceProjectPaths": [],
@@ -1937,28 +1942,57 @@ mod tests {
             providers: Some(json!([{ "id": "p-1", "name": "P1", "apiKey": "sk-plain" }])),
             mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
             system: Some(json!({ "executionMode": "tools" })),
-            skills: Some(json!({ "enabled": true, "selected": ["skill-a"] })),
+            agents: Some(json!([
+                { "id": "t-1", "name": "T1", "prompt": "prompt", "enabled": true }
+            ])),
+            model_failover: Some(json!({ "claude_code": { "queue": ["p-1"] } })),
+            stt: Some(json!({
+                "provider": "aliyun_dashscope",
+                "providers": { "aliyun_dashscope": { "id": "aliyun_dashscope", "apiKey": "sk" } }
+            })),
         };
         let manifest = build_backup_manifest(&snapshot);
         serialize_backup_document(&snapshot, &manifest).expect("serialize document")
     }
 
     #[test]
-    fn backup_document_round_trips_all_four_domains() {
+    fn backup_document_round_trips_all_domains() {
         let raw = sample_backup_document();
         let (snapshot, manifest) = parse_backup_document(&raw).expect("parse document");
 
         assert_eq!(manifest.protocol_version, BACKUP_PROTOCOL_VERSION);
         assert_eq!(manifest.schema_version, BACKUP_SCHEMA_VERSION);
         assert_eq!(manifest.encryption, "none");
-        // 计数用于 UI 摘要：mcp 数服务器条目，skills 数选中项。
+        // 计数用于 UI 摘要：mcp 数服务器条目，stt 数已配置的供应商。
         assert_eq!(manifest.domains.providers, 1);
         assert_eq!(manifest.domains.mcp, 1);
-        assert_eq!(manifest.domains.skills, 1);
+        assert_eq!(manifest.domains.agents, 1);
+        assert_eq!(manifest.domains.model_failover, 1);
+        assert_eq!(manifest.domains.stt, 1);
         assert_eq!(
-            snapshot.skills,
-            Some(json!({ "enabled": true, "selected": ["skill-a"] }))
+            snapshot.model_failover,
+            Some(json!({ "claude_code": { "queue": ["p-1"] } }))
         );
+        assert!(snapshot.agents.is_some());
+        assert!(snapshot.stt.is_some());
+    }
+
+    #[test]
+    fn parse_backup_document_ignores_v1_skills_and_survives_device_local_system() {
+        // v1 备份带 skills 域与 system 里的设备本地键；v2 解析时 skills 被
+        // serde 忽略，设备本地键在应用侧被白名单过滤（见 merge 测试）。
+        let mut document: Value =
+            serde_json::from_str(&sample_backup_document()).expect("parse json");
+        document["_manifest"]["schemaVersion"] = json!(1);
+        document["skills"] = json!({ "enabled": true, "selected": ["skill-a"] });
+        document["system"]["workdir"] = json!("/home/alice/code");
+
+        let (snapshot, manifest) =
+            parse_backup_document(&document.to_string()).expect("v1 document must parse");
+        assert_eq!(manifest.schema_version, 1);
+        // skills 不再是快照字段，序列化后不应再出现。
+        let reserialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        assert!(!reserialized.contains("skill-a"), "skills 域应被忽略");
     }
 
     #[test]
@@ -2031,7 +2065,7 @@ mod tests {
         save_providers(&mut conn, json!([{ "id": "p-1", "name": "P1" }])).expect("seed providers");
         save_mcp(&mut conn, json!({ "servers": [], "selected": [] })).expect("seed mcp");
 
-        let snapshot = collect_backup_snapshot(&conn, None).expect("collect snapshot");
+        let snapshot = collect_backup_snapshot(&conn).expect("collect snapshot");
         let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
         assert!(snapshot.providers.is_some(), "前提：快照非空");
 
@@ -2047,7 +2081,114 @@ mod tests {
                 "快照泄漏了设备级同步配置字段 {leaked}：{serialized}"
             );
         }
-        assert!(snapshot.skills.is_none(), "skills 只能由前端传入");
+    }
+
+    #[test]
+    fn collect_backup_snapshot_keeps_only_portable_system_keys() {
+        // system 域里 workdir / 工作区路径 / 系统代理是设备本地态：
+        // 绝对路径在另一台机器上不存在，代理密码明文外流也毫无意义。
+        let mut conn = open_memory_db();
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({
+                "executionMode": "tools",
+                "commandSafetyMode": "ask",
+                "toolPolicies": { "Bash": "ask" },
+                "workdir": "/home/alice/secret-project",
+                "systemProxy": {
+                    "enabled": true,
+                    "type": "http",
+                    "host": "127.0.0.1",
+                    "port": 7890,
+                    "username": "proxy-user",
+                    "password": "proxy-sentinel-password"
+                }
+            }),
+            "/home/alice/secret-project",
+        )
+        .expect("seed system");
+
+        let snapshot = collect_backup_snapshot(&conn).expect("collect snapshot");
+        let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        let system = snapshot.system.expect("system domain present");
+        let system = system.as_object().expect("system is object");
+
+        assert_eq!(system.get("executionMode"), Some(&json!("tools")));
+        assert_eq!(system.get("commandSafetyMode"), Some(&json!("ask")));
+        assert_eq!(system.get("toolPolicies"), Some(&json!({ "Bash": "ask" })));
+        for device_local in [
+            "workdir",
+            "systemProxy",
+            "workspaceProjects",
+            "workspaceProjectGroups",
+            "activeWorkspaceProjectId",
+            "hiddenWorkspaceProjectPaths",
+            "missingWorkspaceProjectPaths",
+            "archivedWorkspaceProjectPaths",
+            "workspaceResourceSettings",
+        ] {
+            assert!(
+                !system.contains_key(device_local),
+                "设备本地键 {device_local} 不应进快照"
+            );
+        }
+        assert!(
+            !serialized.contains("proxy-sentinel-password"),
+            "代理密码不得进快照"
+        );
+        assert!(
+            !serialized.contains("secret-project"),
+            "本机路径不得进快照"
+        );
+    }
+
+    #[test]
+    fn merge_portable_system_overlays_whitelist_and_preserves_device_local_values() {
+        // 应用快照时 system 走「可移植键叠加」：快照里的 executionMode 等
+        // 覆盖本机，workdir / 代理保持本机原值；v1 快照混入的设备本地键被丢弃。
+        let mut conn = open_memory_db();
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({
+                "executionMode": "tools",
+                "commandSafetyMode": "auto",
+                "workdir": "/local/workdir",
+                "systemProxy": {
+                    "enabled": true,
+                    "type": "http",
+                    "host": "127.0.0.1",
+                    "port": 7890,
+                    "username": "",
+                    "password": "local-proxy-password"
+                }
+            }),
+            "/local/workdir",
+        )
+        .expect("seed local system");
+
+        let snapshot_system = json!({
+            "executionMode": "chat",
+            "commandSafetyMode": "ask",
+            // v1 快照可能带设备本地键，必须被忽略而不是覆盖本机。
+            "workdir": "/remote/other-device",
+            "systemProxy": { "enabled": false }
+        });
+        let merged = merge_portable_system(&conn, &snapshot_system).expect("merge");
+        save_system_with_default_workdir(&mut conn, merged, "/local/workdir")
+            .expect("apply merged system");
+
+        let system = load_system(&conn)
+            .expect("load system")
+            .expect("system present");
+        assert_eq!(system["executionMode"], json!("chat"), "可移植键应被覆盖");
+        assert_eq!(system["commandSafetyMode"], json!("ask"));
+        assert_eq!(system["workdir"], json!("/local/workdir"), "workdir 保持本机原值");
+        assert_eq!(
+            system["systemProxy"]["password"],
+            json!("local-proxy-password"),
+            "本机代理配置不受快照影响"
+        );
+        assert_eq!(system["systemProxy"]["enabled"], json!(true));
     }
 
     #[test]
@@ -2077,22 +2218,74 @@ mod tests {
         let mut conn = open_memory_db();
         save_providers(&mut conn, json!([{ "id": "stale", "name": "Stale" }]))
             .expect("seed providers");
+        save_agents(
+            &mut conn,
+            json!([{ "id": "stale-t", "name": "Stale", "prompt": "old" }]),
+        )
+        .expect("seed agents");
 
         let snapshot = BackupSnapshot {
             providers: Some(json!([{ "id": "p-1", "name": "P1" }])),
             mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
             system: None,
-            skills: None,
+            agents: Some(json!([
+                { "id": "t-1", "name": "T1", "prompt": "prompt", "enabled": true }
+            ])),
+            model_failover: Some(json!({ "claude_code": { "queue": ["p-1"] } })),
+            stt: Some(json!({
+                "provider": "aliyun_dashscope",
+                "providers": {
+                    "aliyun_dashscope": {
+                        "id": "aliyun_dashscope",
+                        "websocketUrl": "wss://example.com/stt",
+                        "model": "m",
+                        "apiKey": "sk-stt"
+                    }
+                }
+            })),
         };
         apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
 
-        // 整域覆盖：导入侧原有的 stale provider 必须消失。
+        // 整域覆盖：导入侧原有的 stale provider / 模板必须消失。
         assert_eq!(
             load_providers(&conn).expect("load providers"),
             Some(json!([{ "id": "p-1", "name": "P1" }]))
         );
         let mcp = load_mcp(&conn).expect("load mcp").expect("mcp present");
         assert_eq!(mcp["selected"], json!(["s-1"]));
+        let agents = load_agents(&conn)
+            .expect("load agents")
+            .expect("agents present");
+        assert_eq!(agents[0]["id"], json!("t-1"), "旧模板应被整域覆盖");
+        assert_eq!(
+            load_model_failover(&conn).expect("load model failover"),
+            Some(json!({ "claude_code": { "queue": ["p-1"] } }))
+        );
+        let stt = load_stt_raw(&conn).expect("load stt").expect("stt present");
+        assert_eq!(
+            stt["providers"]["aliyun_dashscope"]["apiKey"],
+            json!("sk-stt"),
+            "STT 密钥应随快照落库"
+        );
+    }
+
+    #[test]
+    fn apply_backup_snapshot_accepts_intentionally_incomplete_stt() {
+        // 源设备清空过密钥的 STT 配置当初已被源侧 save_stt 接受，
+        // 应用侧不应再按表单提交的标准复验（allowIncomplete 注入）。
+        let mut conn = open_memory_db();
+        let snapshot = BackupSnapshot {
+            stt: Some(json!({
+                "provider": "tencent_cloud",
+                "providers": {
+                    "tencent_cloud": { "id": "tencent_cloud", "appId": "", "secretId": "" }
+                }
+            })),
+            ..Default::default()
+        };
+        apply_backup_snapshot_to_db(&mut conn, &snapshot)
+            .expect("incomplete stt from a valid source must apply");
+        assert!(load_stt_raw(&conn).expect("load stt").is_some());
     }
 
     #[test]
@@ -2107,6 +2300,168 @@ mod tests {
         assert_eq!(
             load_providers(&conn).expect("load providers"),
             Some(json!([{ "id": "keep", "name": "Keep" }]))
+        );
+    }
+
+    #[test]
+    fn apply_backup_snapshot_remaps_provider_ids_to_local_identity() {
+        // 两台设备各自「添加」过同一个服务商时 UUID 必不同。导入若原样落
+        // 源 id，本机会话 / 默认模型 / 记忆 / 定时任务里存的
+        // {customProviderId} 全部失配，规范化时被静默清空。
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([
+                {
+                    "id": "local-uuid-claude",
+                    "type": "claude_code",
+                    "baseUrl": "",
+                    "name": "Claude",
+                    "apiKey": "sk-local-old"
+                },
+                { "id": "builtin-codex", "type": "codex", "baseUrl": "", "name": "Codex" }
+            ]),
+        )
+        .expect("seed local providers");
+
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([
+                // 身份相同（type+baseUrl+name）、id 不同 → 改写为本机 id。
+                {
+                    "id": "source-uuid-claude",
+                    "type": "claude_code",
+                    "baseUrl": "",
+                    "name": "Claude",
+                    "apiKey": "sk-source-new"
+                },
+                // id 相同（内置槽位）→ 原样保留。
+                { "id": "builtin-codex", "type": "codex", "baseUrl": "", "name": "Codex" },
+                // 本机不存在的新 provider → 保留源 id。
+                {
+                    "id": "source-uuid-fresh",
+                    "type": "openai_compatible",
+                    "baseUrl": "https://fresh.example.com/v1",
+                    "name": "Fresh"
+                }
+            ])),
+            model_failover: Some(json!({
+                "claude_code": { "queue": ["source-uuid-claude", "source-uuid-fresh"] }
+            })),
+            ..Default::default()
+        };
+        apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
+
+        let providers = load_providers(&conn)
+            .expect("load providers")
+            .expect("providers present");
+        let ids: Vec<&str> = providers
+            .as_array()
+            .expect("providers array")
+            .iter()
+            .map(|provider| provider["id"].as_str().expect("provider id"))
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["local-uuid-claude", "builtin-codex", "source-uuid-fresh"],
+            "同身份 provider 应保留本机 id，其余保持不变"
+        );
+        // id 保留本机，内容以备份为准。
+        assert_eq!(providers[0]["apiKey"], json!("sk-source-new"));
+        // failover 队列随 providers 一起改写，域间引用保持一致。
+        assert_eq!(
+            load_model_failover(&conn).expect("load model failover"),
+            Some(json!({
+                "claude_code": { "queue": ["local-uuid-claude", "source-uuid-fresh"] }
+            }))
+        );
+    }
+
+    #[test]
+    fn provider_id_map_matches_by_endpoint_and_refuses_ambiguity() {
+        let as_array = |value: &Value| value.as_array().expect("array").clone();
+
+        // 第 3 级：仅改过显示名，type+baseUrl（尾斜杠归一）两侧唯一即可配对。
+        let incoming = json!([
+            {
+                "id": "source-a",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "改名后"
+            }
+        ]);
+        let local = json!([
+            {
+                "id": "local-a",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1/",
+                "name": "旧名"
+            }
+        ]);
+        let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&local));
+        assert_eq!(id_map.get("source-a"), Some(&"local-a".to_string()));
+
+        // 同端点出现两个本机候选（多账号）时无法分辨，宁可不配也不错配。
+        let ambiguous_local = json!([
+            {
+                "id": "local-1",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "账号一"
+            },
+            {
+                "id": "local-2",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "账号二"
+            }
+        ]);
+        let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&ambiguous_local));
+        assert!(id_map.is_empty(), "歧义候选不得配对：{id_map:?}");
+
+        // 缺 type 的条目不参与身份配对，避免把碰巧同名的配置错认成同一个。
+        let untyped_incoming = json!([{ "id": "source-x", "name": "同名" }]);
+        let untyped_local = json!([{ "id": "local-x", "name": "同名" }]);
+        let id_map =
+            build_provider_id_map(&as_array(&untyped_incoming), &as_array(&untyped_local));
+        assert!(id_map.is_empty(), "缺 type 不得配对：{id_map:?}");
+    }
+
+    #[test]
+    fn provider_id_rewrite_updates_legacy_failover_queue_entries() {
+        // 旧版 failover queue 存 { customProviderId, model } 对象，改写需兼容。
+        let mut snapshot = BackupSnapshot {
+            providers: Some(json!([
+                { "id": "source-a", "type": "claude_code", "baseUrl": "", "name": "Claude" }
+            ])),
+            model_failover: Some(json!({
+                "claude_code": {
+                    "queue": [
+                        { "customProviderId": "source-a", "model": "claude-4.6" },
+                        "unrelated-id"
+                    ]
+                }
+            })),
+            ..Default::default()
+        };
+        let id_map = HashMap::from([("source-a".to_string(), "local-a".to_string())]);
+        rewrite_snapshot_provider_ids(&mut snapshot, &id_map);
+
+        assert_eq!(
+            snapshot.providers,
+            Some(json!([
+                { "id": "local-a", "type": "claude_code", "baseUrl": "", "name": "Claude" }
+            ]))
+        );
+        assert_eq!(
+            snapshot.model_failover,
+            Some(json!({
+                "claude_code": {
+                    "queue": [
+                        { "customProviderId": "local-a", "model": "claude-4.6" },
+                        "unrelated-id"
+                    ]
+                }
+            }))
         );
     }
 
@@ -2136,10 +2491,24 @@ mod tests {
             ),
             (
                 BackupSnapshot {
-                    skills: Some(json!("nope")),
+                    agents: Some(json!({})),
                     ..Default::default()
                 },
-                "skills",
+                "agents",
+            ),
+            (
+                BackupSnapshot {
+                    model_failover: Some(json!([])),
+                    ..Default::default()
+                },
+                "modelFailover",
+            ),
+            (
+                BackupSnapshot {
+                    stt: Some(json!("nope")),
+                    ..Default::default()
+                },
+                "stt",
             ),
         ];
 
@@ -2419,8 +2788,13 @@ mod tests {
         )
         .expect("seed mcp on device A");
 
-        let snapshot = collect_backup_snapshot(&device_a, Some(json!({ "enabled": ["skill-x"] })))
-            .expect("collect snapshot");
+        save_agents(
+            &mut device_a,
+            json!([{ "id": "t-live", "name": "实机模板", "prompt": "live prompt" }]),
+        )
+        .expect("seed agents on device A");
+
+        let snapshot = collect_backup_snapshot(&device_a).expect("collect snapshot");
         let manifest = build_backup_manifest(&snapshot);
         let document = serialize_backup_document(&snapshot, &manifest).expect("serialize");
         let body = document.into_bytes();
@@ -2434,7 +2808,8 @@ mod tests {
             "appVersion": manifest.app_version,
             "encryption": "none",
             "domains": {
-                "providers": 1, "mcp": 1, "system": 0, "skills": 1,
+                "providers": 1, "mcp": 1, "system": 0,
+                "agents": 1, "modelFailover": 0, "stt": 0,
             },
             "size": body.len(),
             "sha256": backup_sha256_hex(&body),
@@ -2502,7 +2877,7 @@ mod tests {
             .expect_err("篡改后必须校验失败");
         assert!(err.contains("校验和不匹配"), "{err}");
 
-        // AC7：应用到设备 B，四域应与设备 A 一致。
+        // AC7：应用到设备 B，各域应与设备 A 一致。
         let text = String::from_utf8(config_bytes).expect("utf-8 config");
         let (parsed_snapshot, _) = parse_backup_document(&text).expect("parse document");
         let mut device_b = open_memory_db();
@@ -2520,11 +2895,10 @@ mod tests {
             load_mcp(&device_a).expect("load mcp on A"),
             "设备 B 的 mcp 应与设备 A 一致"
         );
-        // 技能启用态不落库，只随快照回传给前端。
         assert_eq!(
-            parsed_snapshot.skills,
-            Some(json!({ "enabled": ["skill-x"] })),
-            "skills 应原样往返"
+            load_agents(&device_b).expect("load agents on B"),
+            load_agents(&device_a).expect("load agents on A"),
+            "设备 B 的提示词模板应与设备 A 一致"
         );
         // 设备级凭据绝不能随快照流转（S2）。
         assert!(

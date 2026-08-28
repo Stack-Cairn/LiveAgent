@@ -1698,6 +1698,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
+            getCuaAllowSelfTargeting: () => settings.system.cuaAllowSelfTargeting === true,
             commandSafetyMode: effectiveCommandSafetyMode,
             planModeEnabled: effectivePlanModeEnabled,
             applyMcpOps: (ops) => {

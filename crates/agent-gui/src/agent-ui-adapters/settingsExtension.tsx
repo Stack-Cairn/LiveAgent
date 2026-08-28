@@ -1,5 +1,6 @@
-import { Archive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
+import { Archive, Info, Keyboard, SquareMousePointer } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
+import { CuaDriverSection } from "@liveagent/ui/pages/settings/CuaDriverSection";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
@@ -23,6 +24,19 @@ export function createSettingsExtension(props: SettingsPageProps): {
       mainLeading: <MacOsTitleBarSpacer />,
     },
     sections: [
+      // Computer Use（CUA）接入引导。桌面端专属：探测 / 安装 / 授权都要
+      // Tauri 后端命令，WebUI 下这些 invoke 会直接抛错，所以不在共享的
+      // SettingsPage 里注册，而是走桌面 extension。order 取 25 是为了插在
+      // 系统工具（20）与语音识别（30）之间。
+      {
+        id: "cua",
+        groupKey: "settings.groupIntelligence",
+        groupOrder: 20,
+        order: 25,
+        labelKey: "settings.navCua",
+        icon: <SquareMousePointer className="h-3.5 w-3.5" />,
+        render: () => <CuaDriverSection settings={settings} setSettings={setSettings} />,
+      },
       {
         id: "shortcuts",
         groupKey: "settings.groupOther",

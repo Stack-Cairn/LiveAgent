@@ -47,6 +47,19 @@ test("local chat model selection resolves only an enabled selected model", () =>
   });
 });
 
+test("missing local model selection points to the composer control", () => {
+  const app = appSettings([provider({ id: "openai-main", models: ["gpt-5"] })]);
+
+  assert.throws(
+    () => modelSelection.resolveEffectiveChatModelSelection({ settings: app }),
+    (error) => {
+      assert.match(error.message, /输入框左下角选择一个模型/);
+      assert.doesNotMatch(error.message, /左上角/);
+      return true;
+    },
+  );
+});
+
 test("remote chat model selection does not fall back to another provider with the same type", () => {
   const app = appSettings(
     [

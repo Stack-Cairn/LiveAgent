@@ -260,6 +260,8 @@ pub(crate) fn save_stt(conn: &mut Connection, payload: Value) -> Result<(), Stri
         params![STT_CONFIG_ID, payload_json, now_ms()],
     )
     .map_err(|error| format!("save STT settings failed: {error}"))?;
+    // 单条 UPSERT 本身原子，写入成功即可标脏触发自动同步。
+    crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }
 

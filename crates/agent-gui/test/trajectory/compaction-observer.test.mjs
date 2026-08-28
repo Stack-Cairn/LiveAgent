@@ -30,7 +30,6 @@ test("a cancelled running compaction closes its trajectory observer as aborted e
     shouldCompact: true,
     totalTokens: 900,
     threshold: 800,
-    thresholdMode: "absolute",
     contextWindow: 1_000,
     maxOutputToken: 100,
   });

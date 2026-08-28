@@ -10,7 +10,6 @@ const modelConfig = { contextWindow: 200_000, maxOutputToken: 32_000 };
 
 function decide(overrides = {}) {
   return policy.decideCompaction({
-    providerId: "anthropic",
     intent: "optimization",
     totalTokens: 0,
     modelConfig,
@@ -24,59 +23,56 @@ function decide(overrides = {}) {
   });
 }
 
-test("threshold: codex uses the full context window, others reserve output buffer", () => {
-  assert.deepEqual(
-    policy.resolveCompactionThreshold({
-      providerId: "codex",
-      intent: "protection",
-      contextWindow: 200_000,
-      maxOutputToken: 32_000,
-      pressureLevel: 0,
-    }),
-    { threshold: 200_000, thresholdMode: "context-window" },
-  );
-
+test("threshold: every provider reserves the output buffer from the total window", () => {
   assert.equal(
     policy.resolveCompactionThreshold({
-      providerId: "anthropic",
       intent: "optimization",
       contextWindow: 200_000,
       maxOutputToken: 32_000,
       pressureLevel: 0,
-    }).threshold,
+    }),
     200_000 - 32_000 * 1.5,
   );
 
   assert.equal(
     policy.resolveCompactionThreshold({
-      providerId: "anthropic",
       intent: "protection",
       contextWindow: 200_000,
       maxOutputToken: 32_000,
       pressureLevel: 0,
-    }).threshold,
+    }),
     200_000 - 32_000 * 1.2,
+  );
+
+  // Codex 目录模型（总窗口 = 272K 输入预算 + 128K 输出，生成期已换算）：
+  // 保护阈值恒不超过真实输入上限（400K − 1.2×128K = 246.4K < 272K）。
+  assert.equal(
+    policy.resolveCompactionThreshold({
+      intent: "protection",
+      contextWindow: 400_000,
+      maxOutputToken: 128_000,
+      pressureLevel: 0,
+    }),
+    400_000 - 128_000 * 1.2,
   );
 });
 
 test("threshold: sustained pressure pins the protection factor to 1.0", () => {
   const pinned = policy.resolveCompactionThreshold({
-    providerId: "anthropic",
     intent: "protection",
     contextWindow: 200_000,
     maxOutputToken: 32_000,
     pressureLevel: 2,
   });
-  assert.equal(pinned.threshold, 200_000 - 32_000);
+  assert.equal(pinned, 200_000 - 32_000);
 
   const optimizationUnchanged = policy.resolveCompactionThreshold({
-    providerId: "anthropic",
     intent: "optimization",
     contextWindow: 200_000,
     maxOutputToken: 32_000,
     pressureLevel: 2,
   });
-  assert.equal(optimizationUnchanged.threshold, 200_000 - 32_000 * 1.5);
+  assert.equal(optimizationUnchanged, 200_000 - 32_000 * 1.5);
 });
 
 test("decideCompaction covers every reason", () => {
