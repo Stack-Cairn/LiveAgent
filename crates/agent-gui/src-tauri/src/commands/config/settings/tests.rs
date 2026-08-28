@@ -2299,6 +2299,168 @@ mod tests {
     }
 
     #[test]
+    fn apply_backup_snapshot_remaps_provider_ids_to_local_identity() {
+        // 两台设备各自「添加」过同一个服务商时 UUID 必不同。导入若原样落
+        // 源 id，本机会话 / 默认模型 / 记忆 / 定时任务里存的
+        // {customProviderId} 全部失配，规范化时被静默清空。
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([
+                {
+                    "id": "local-uuid-claude",
+                    "type": "claude_code",
+                    "baseUrl": "",
+                    "name": "Claude",
+                    "apiKey": "sk-local-old"
+                },
+                { "id": "builtin-codex", "type": "codex", "baseUrl": "", "name": "Codex" }
+            ]),
+        )
+        .expect("seed local providers");
+
+        let snapshot = BackupSnapshot {
+            providers: Some(json!([
+                // 身份相同（type+baseUrl+name）、id 不同 → 改写为本机 id。
+                {
+                    "id": "source-uuid-claude",
+                    "type": "claude_code",
+                    "baseUrl": "",
+                    "name": "Claude",
+                    "apiKey": "sk-source-new"
+                },
+                // id 相同（内置槽位）→ 原样保留。
+                { "id": "builtin-codex", "type": "codex", "baseUrl": "", "name": "Codex" },
+                // 本机不存在的新 provider → 保留源 id。
+                {
+                    "id": "source-uuid-fresh",
+                    "type": "openai_compatible",
+                    "baseUrl": "https://fresh.example.com/v1",
+                    "name": "Fresh"
+                }
+            ])),
+            model_failover: Some(json!({
+                "claude_code": { "queue": ["source-uuid-claude", "source-uuid-fresh"] }
+            })),
+            ..Default::default()
+        };
+        apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
+
+        let providers = load_providers(&conn)
+            .expect("load providers")
+            .expect("providers present");
+        let ids: Vec<&str> = providers
+            .as_array()
+            .expect("providers array")
+            .iter()
+            .map(|provider| provider["id"].as_str().expect("provider id"))
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["local-uuid-claude", "builtin-codex", "source-uuid-fresh"],
+            "同身份 provider 应保留本机 id，其余保持不变"
+        );
+        // id 保留本机，内容以备份为准。
+        assert_eq!(providers[0]["apiKey"], json!("sk-source-new"));
+        // failover 队列随 providers 一起改写，域间引用保持一致。
+        assert_eq!(
+            load_model_failover(&conn).expect("load model failover"),
+            Some(json!({
+                "claude_code": { "queue": ["local-uuid-claude", "source-uuid-fresh"] }
+            }))
+        );
+    }
+
+    #[test]
+    fn provider_id_map_matches_by_endpoint_and_refuses_ambiguity() {
+        let as_array = |value: &Value| value.as_array().expect("array").clone();
+
+        // 第 3 级：仅改过显示名，type+baseUrl（尾斜杠归一）两侧唯一即可配对。
+        let incoming = json!([
+            {
+                "id": "source-a",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "改名后"
+            }
+        ]);
+        let local = json!([
+            {
+                "id": "local-a",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1/",
+                "name": "旧名"
+            }
+        ]);
+        let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&local));
+        assert_eq!(id_map.get("source-a"), Some(&"local-a".to_string()));
+
+        // 同端点出现两个本机候选（多账号）时无法分辨，宁可不配也不错配。
+        let ambiguous_local = json!([
+            {
+                "id": "local-1",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "账号一"
+            },
+            {
+                "id": "local-2",
+                "type": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "name": "账号二"
+            }
+        ]);
+        let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&ambiguous_local));
+        assert!(id_map.is_empty(), "歧义候选不得配对：{id_map:?}");
+
+        // 缺 type 的条目不参与身份配对，避免把碰巧同名的配置错认成同一个。
+        let untyped_incoming = json!([{ "id": "source-x", "name": "同名" }]);
+        let untyped_local = json!([{ "id": "local-x", "name": "同名" }]);
+        let id_map =
+            build_provider_id_map(&as_array(&untyped_incoming), &as_array(&untyped_local));
+        assert!(id_map.is_empty(), "缺 type 不得配对：{id_map:?}");
+    }
+
+    #[test]
+    fn provider_id_rewrite_updates_legacy_failover_queue_entries() {
+        // 旧版 failover queue 存 { customProviderId, model } 对象，改写需兼容。
+        let mut snapshot = BackupSnapshot {
+            providers: Some(json!([
+                { "id": "source-a", "type": "claude_code", "baseUrl": "", "name": "Claude" }
+            ])),
+            model_failover: Some(json!({
+                "claude_code": {
+                    "queue": [
+                        { "customProviderId": "source-a", "model": "claude-4.6" },
+                        "unrelated-id"
+                    ]
+                }
+            })),
+            ..Default::default()
+        };
+        let id_map = HashMap::from([("source-a".to_string(), "local-a".to_string())]);
+        rewrite_snapshot_provider_ids(&mut snapshot, &id_map);
+
+        assert_eq!(
+            snapshot.providers,
+            Some(json!([
+                { "id": "local-a", "type": "claude_code", "baseUrl": "", "name": "Claude" }
+            ]))
+        );
+        assert_eq!(
+            snapshot.model_failover,
+            Some(json!({
+                "claude_code": {
+                    "queue": [
+                        { "customProviderId": "local-a", "model": "claude-4.6" },
+                        "unrelated-id"
+                    ]
+                }
+            }))
+        );
+    }
+
+    #[test]
     fn validate_backup_snapshot_rejects_malformed_domains() {
         let cases = [
             (

@@ -6,6 +6,11 @@
 // model_failover / stt 六个域的 payload；system 域只带可移植偏好，
 // workdir、工作区路径、系统代理这类设备本地态不进快照（见
 // SYSTEM_PORTABLE_BACKUP_KEYS）。
+//
+// 导入侧的另一个坑是 provider id：它是各设备本地随机生成的 UUID，而聊天
+// 会话、默认模型、记忆、定时任务都以 {customProviderId, model} 引用它。
+// 整域覆盖前先按身份把备份 provider 映射回本机 id（见
+// build_provider_id_map），本机引用才不会在导入后整体失配。
 
 /// 载体格式版本。manifest 结构本身变更时递增。
 pub(crate) const BACKUP_PROTOCOL_VERSION: u32 = 1;
@@ -405,7 +410,248 @@ fn merge_portable_system(conn: &Connection, snapshot_system: &Value) -> Result<V
     Ok(Value::Object(merged))
 }
 
-/// 整域覆盖写入（纯写库，不做备份）。system 域为「可移植键叠加」而非整域覆盖。
+/// 读取 provider 对象的字符串字段（trim 后）；缺失或非字符串按空串处理。
+fn provider_string_field(provider: &Value, key: &str) -> String {
+    provider
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// baseUrl 归一化：去首尾空白与尾部斜杠。两台设备手填同一端点时最常见的
+/// 分歧就是结尾多一个 `/`；host 大小写等更激进的归一不做 —— 配对错了会把
+/// 本机引用续到另一个账号上，宁可少配也不错配。
+fn normalized_provider_base_url(provider: &Value) -> String {
+    provider_string_field(provider, "baseUrl")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// provider 身份指纹，用于跨设备识别「同一个服务商配置」。
+struct ProviderIdentity {
+    id: String,
+    vendor: String,
+    base_url: String,
+    name: String,
+}
+
+fn provider_identities(providers: &[Value]) -> Vec<ProviderIdentity> {
+    providers
+        .iter()
+        .filter_map(|provider| {
+            let id = provider_string_field(provider, "id");
+            if id.is_empty() {
+                return None;
+            }
+            Some(ProviderIdentity {
+                id,
+                vendor: provider_string_field(provider, "type"),
+                base_url: normalized_provider_base_url(provider),
+                name: provider_string_field(provider, "name"),
+            })
+        })
+        .collect()
+}
+
+/// 在未消耗的两侧候选中按 key 配对：某个 key 在两侧各恰好出现一次时才认定
+/// 为同一 provider。出现多个候选（同端点多账号）时无法分辨哪个对哪个，
+/// 跳过不配 —— 退回「保留源 id」的旧行为，引用失效但不会张冠李戴。
+fn match_unique_identity<K: std::hash::Hash + Eq>(
+    incoming: &[ProviderIdentity],
+    incoming_taken: &mut [bool],
+    local: &[ProviderIdentity],
+    local_taken: &mut [bool],
+    id_map: &mut HashMap<String, String>,
+    key_of: impl Fn(&ProviderIdentity) -> Option<K>,
+) {
+    let mut incoming_counts: HashMap<K, usize> = HashMap::new();
+    for (index, identity) in incoming.iter().enumerate() {
+        if incoming_taken[index] {
+            continue;
+        }
+        if let Some(key) = key_of(identity) {
+            *incoming_counts.entry(key).or_default() += 1;
+        }
+    }
+    // key → (未消耗候选数, 最后一个候选下标)；仅当数量为 1 时下标才有意义。
+    let mut local_slots: HashMap<K, (usize, usize)> = HashMap::new();
+    for (index, identity) in local.iter().enumerate() {
+        if local_taken[index] {
+            continue;
+        }
+        if let Some(key) = key_of(identity) {
+            let slot = local_slots.entry(key).or_insert((0, index));
+            slot.0 += 1;
+            slot.1 = index;
+        }
+    }
+    // 按 incoming 原始顺序应用配对，结果与 HashMap 迭代顺序无关。
+    for (index, identity) in incoming.iter().enumerate() {
+        if incoming_taken[index] {
+            continue;
+        }
+        let Some(key) = key_of(identity) else {
+            continue;
+        };
+        if incoming_counts.get(&key) != Some(&1) {
+            continue;
+        }
+        let Some(&(count, local_index)) = local_slots.get(&key) else {
+            continue;
+        };
+        if count != 1 || local_taken[local_index] {
+            continue;
+        }
+        incoming_taken[index] = true;
+        local_taken[local_index] = true;
+        if identity.id != local[local_index].id {
+            id_map.insert(identity.id.clone(), local[local_index].id.clone());
+        }
+    }
+}
+
+/// 备份里的 provider id 是源设备随机生成的 UUID；本机聊天会话、默认模型、
+/// 记忆整理、定时任务引用的是本机 UUID。整域覆盖时若原样写入源 id，这些
+/// 引用会整体失配（前端规范化时被静默清空，用户得逐处重选模型）。导入前
+/// 把「同一身份」的备份 provider 改写回本机 id，引用即可无感存续。
+///
+/// 三级配对，逐级放宽且互斥（配对成功即从两侧候选中剔除）：
+/// 1. id 相同 —— 内置槽位（builtin-*）、同源导入派生 id、以及已同步过一次
+///    的设备（上次导入后双方 id 已对齐）；
+/// 2. type + baseUrl + name 全同，两侧唯一；
+/// 3. type + baseUrl 相同，两侧唯一（覆盖仅改过显示名的场景）。
+///
+/// 2/3 级要求 type 非空且候选唯一，猜不准时宁可保留源 id。
+///
+/// 返回 源 id → 本机 id，仅含两者不同的条目。
+fn build_provider_id_map(incoming: &[Value], local: &[Value]) -> HashMap<String, String> {
+    let incoming = provider_identities(incoming);
+    let local = provider_identities(local);
+    let mut incoming_taken = vec![false; incoming.len()];
+    let mut local_taken = vec![false; local.len()];
+
+    // 第 1 级：id 直接相同，无需改写，只把两侧候选标记为已消耗。
+    let local_index_by_id: HashMap<&str, usize> = local
+        .iter()
+        .enumerate()
+        .map(|(index, identity)| (identity.id.as_str(), index))
+        .collect();
+    for (index, identity) in incoming.iter().enumerate() {
+        if let Some(&local_index) = local_index_by_id.get(identity.id.as_str()) {
+            if !local_taken[local_index] {
+                incoming_taken[index] = true;
+                local_taken[local_index] = true;
+            }
+        }
+    }
+
+    let mut id_map = HashMap::new();
+    match_unique_identity(
+        &incoming,
+        &mut incoming_taken,
+        &local,
+        &mut local_taken,
+        &mut id_map,
+        |identity| {
+            (!identity.vendor.is_empty()).then(|| {
+                (
+                    identity.vendor.clone(),
+                    identity.base_url.clone(),
+                    identity.name.clone(),
+                )
+            })
+        },
+    );
+    match_unique_identity(
+        &incoming,
+        &mut incoming_taken,
+        &local,
+        &mut local_taken,
+        &mut id_map,
+        |identity| {
+            (!identity.vendor.is_empty())
+                .then(|| (identity.vendor.clone(), identity.base_url.clone()))
+        },
+    );
+    id_map
+}
+
+/// 把 id 映射应用到快照：providers[].id 与 modelFailover.*.queue[] 必须一起
+/// 改写，否则 failover 队列指向不存在的 provider，规范化时会被静默丢弃。
+/// queue 兼容两种历史形状：字符串 id 与旧版 { customProviderId, model } 对象。
+fn rewrite_snapshot_provider_ids(snapshot: &mut BackupSnapshot, id_map: &HashMap<String, String>) {
+    if id_map.is_empty() {
+        return;
+    }
+    if let Some(Value::Array(providers)) = snapshot.providers.as_mut() {
+        for provider in providers.iter_mut() {
+            let Some(object) = provider.as_object_mut() else {
+                continue;
+            };
+            let Some(source_id) = object.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            if let Some(local_id) = id_map.get(source_id.trim()) {
+                object.insert("id".to_string(), Value::String(local_id.clone()));
+            }
+        }
+    }
+    if let Some(Value::Object(failover)) = snapshot.model_failover.as_mut() {
+        for settings in failover.values_mut() {
+            let Some(queue) = settings.get_mut("queue").and_then(Value::as_array_mut) else {
+                continue;
+            };
+            for entry in queue.iter_mut() {
+                match entry {
+                    Value::String(source_id) => {
+                        if let Some(local_id) = id_map.get(source_id.trim()) {
+                            *source_id = local_id.clone();
+                        }
+                    }
+                    Value::Object(object) => {
+                        let Some(source_id) =
+                            object.get("customProviderId").and_then(Value::as_str)
+                        else {
+                            continue;
+                        };
+                        if let Some(local_id) = id_map.get(source_id.trim()) {
+                            object.insert(
+                                "customProviderId".to_string(),
+                                Value::String(local_id.clone()),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// 导入前的 id 重映射入口。providers 域缺失时没有源侧身份可配，直接跳过；
+/// 本机没有任何 provider 时也没有引用需要保全，快照原样落库。
+fn remap_snapshot_provider_ids_to_local(
+    conn: &Connection,
+    snapshot: &mut BackupSnapshot,
+) -> Result<(), String> {
+    let id_map = {
+        let Some(Value::Array(incoming)) = snapshot.providers.as_ref() else {
+            return Ok(());
+        };
+        let local = match load_providers(conn)? {
+            Some(Value::Array(items)) => items,
+            _ => return Ok(()),
+        };
+        build_provider_id_map(incoming, &local)
+    };
+    rewrite_snapshot_provider_ids(snapshot, &id_map);
+    Ok(())
+}
+
+/// 整域覆盖写入（纯写库，不做备份）。system 域为「可移植键叠加」而非整域
+/// 覆盖；providers 域写入前先做 id 重映射（见 build_provider_id_map）。
 ///
 /// 各域复用既有的 `save_*`，它们各自开事务 —— 无法合并成一个跨域事务
 /// （`save_*` 都要求 `&mut Connection`，rusqlite 的 Transaction 无法嵌套）。
@@ -415,23 +661,25 @@ pub(crate) fn apply_backup_snapshot_to_db(
     conn: &mut Connection,
     snapshot: &BackupSnapshot,
 ) -> Result<(), String> {
-    if let Some(providers) = snapshot.providers.clone() {
+    let mut snapshot = snapshot.clone();
+    remap_snapshot_provider_ids_to_local(conn, &mut snapshot)?;
+    if let Some(providers) = snapshot.providers.take() {
         save_providers(conn, providers)?;
     }
-    if let Some(mcp) = snapshot.mcp.clone() {
+    if let Some(mcp) = snapshot.mcp.take() {
         save_mcp(conn, mcp)?;
     }
     if let Some(system) = &snapshot.system {
         let merged = merge_portable_system(conn, system)?;
         save_system(conn, merged)?;
     }
-    if let Some(agents) = snapshot.agents.clone() {
+    if let Some(agents) = snapshot.agents.take() {
         save_agents(conn, agents)?;
     }
-    if let Some(model_failover) = snapshot.model_failover.clone() {
+    if let Some(model_failover) = snapshot.model_failover.take() {
         save_model_failover(conn, model_failover)?;
     }
-    if let Some(stt) = snapshot.stt.clone() {
+    if let Some(stt) = snapshot.stt.take() {
         // 源设备可能处于「已清空密钥」等刻意不完整的状态，这份数据当初已被
         // 源侧 save_stt 接受过，应用侧不应再按「用户正在提交表单」的标准复验。
         let mut stt_payload = expect_object(stt, "备份内容 stt")?;
