@@ -21,6 +21,9 @@ const { findPaneIdByConversationId, isWorkbenchLayoutValid } = loader.loadModule
 const { WORKBENCH_LAYOUT_SCHEMA_VERSION } = loader.loadModule(
   "@liveagent/ui/lib/workbench/types.ts",
 );
+const { resolveConversationRuntimeControls } = loader.loadModule(
+  "src/app/gatewayChatCommandActions.ts",
+);
 
 // --- 流客户端测试支架（与 conversation-stream-client.test.mjs 同构）---------
 
@@ -212,4 +215,38 @@ test("rename refuses no-op and invariant-breaking inputs", () => {
     renameWorkbenchConversation(layout, "conversation-a", "conversation-b"),
     null,
   );
+});
+
+test("background pane runtime controls resolve from that conversation's provider", () => {
+  const runtimeControls = {
+    reasoning: "medium",
+    reasoningByProvider: {
+      claude_code: "high",
+      codex_openai_responses: "low",
+      codex_openai_completions: "medium",
+      gemini: "medium",
+      xai: "medium",
+      deepseek: "medium",
+    },
+    thinkingEnabled: true,
+    nativeWebSearchEnabled: true,
+    planModeEnabled: false,
+  };
+  const activeProviders = [
+    {
+      id: "provider-claude",
+      type: "claude_code",
+    },
+    {
+      id: "provider-codex",
+      type: "codex",
+      requestFormat: "openai-responses",
+    },
+  ];
+  const resolved = resolveConversationRuntimeControls({
+    activeProviders,
+    selectedModel: { customProviderId: "provider-codex", model: "gpt-5.6" },
+    runtimeControls,
+  });
+  assert.equal(resolved.reasoning, "low");
 });

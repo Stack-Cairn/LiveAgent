@@ -13,7 +13,10 @@ import {
 } from "@liveagent/ui/lib/sidebar/openController";
 import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
-import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
+import {
+  sortTerminalSessions,
+  terminalSessionBelongsToProject,
+} from "@liveagent/ui/lib/terminal/sessionStore";
 import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProjectRemoval";
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
@@ -714,6 +717,7 @@ function useGatewayAppController() {
   // 与 setConversationId 同批提交——聚焦 Pane 不会闪现只读预览，DOM 不重挂载。
   // workbenchController 在下方创建后回填本 ref。
   const workbenchRenameConversationRef = useRef<(fromId: string, toId: string) => void>(() => {});
+  const workbenchClearRef = useRef<() => void>(() => {});
 
   // A draft conversation got its real id (authoritative `command_update
   // bound`): re-key every draft-scoped resource onto the real conversation.
@@ -1232,6 +1236,7 @@ function useGatewayAppController() {
     setQueuedChatTurns([]);
     setChatQueueRevision(0);
     resetProjectToolsRuntimeRef.current();
+    workbenchClearRef.current();
     setSelectedHistoryId("");
     setSelectedHistory(null);
   }, [
@@ -1309,6 +1314,7 @@ function useGatewayAppController() {
       setRightDockOpen(false);
       setNotifyItems([]);
       resetProjectToolsRuntimeRef.current();
+      workbenchClearRef.current();
     },
     [
       activityStore,
@@ -1340,7 +1346,6 @@ function useGatewayAppController() {
     chatRuntimeReasoningOptions,
     chatRuntimeThinkingAlwaysOn,
     codeReviewSkill,
-    currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
     enabledComposerSkills,
@@ -1383,7 +1388,6 @@ function useGatewayAppController() {
     composerRef,
     conversationIdRef,
     conversationWorkdirsRef,
-    currentChatProvider,
     displayedConversationWorkdirRef,
     draftClientRequestsRef,
     getDisplayedConversationId,
@@ -1568,6 +1572,20 @@ function useGatewayAppController() {
     terminalClient,
   });
 
+  const verifyTerminalSessionAlive = useCallback(
+    async (_sessionId: string) => {
+      if (!terminalClient) return;
+      try {
+        const sessions = await terminalClient.list();
+        terminalSessionsVersionRef.current += 1;
+        setTerminalSessions(sortTerminalSessions(sessions));
+      } catch {
+        // 瞬时网关错误不应把仍存活的终端误判为幽灵会话。
+      }
+    },
+    [setTerminalSessions, terminalClient, terminalSessionsVersionRef],
+  );
+
   // --- Session Workbench（多看板分屏）----------------------------------------
   // 布局与聚焦语义复用共享 reducer；聚焦 Pane 的会话 === 页面当前会话
   // （与桌面端相同不变式）。每个会话 Pane 渲染同一套完整宿主，焦点切换
@@ -1586,17 +1604,20 @@ function useGatewayAppController() {
     terminalProjectPath,
     newTerminalTitle: translate("projectTools.newTerminal", settings.locale),
     selectConversation: handleSidebarSelectConversation,
-    startConversationForProject: (project) => {
-      void handleNewConversationForProject(project);
-    },
+    startConversationForProject: handleNewConversationForProject,
     conversationWorkdirFor: (conversationId) =>
       conversationWorkdirsRef.current.get(conversationId)?.trim() ||
       sidebarStore.peek(conversationId)?.cwd?.trim() ||
       null,
     onNoSpaceForSplit: () =>
       addNotify("error", translate("workbench.noSpaceForSplit", settings.locale)),
+    onDropStateChanged: () =>
+      addNotify("error", translate("workbench.dropStateChanged", settings.locale)),
+    onConversationAlreadyOpen: () =>
+      addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
   });
   workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
+  workbenchClearRef.current = workbenchController.clearWorkbench;
 
   // 会话从权威索引消失（批量删除等）：先收起对应 Pane，再走既有移除通路；
   // displayed 被删时的选中迁移完成后，syncCurrentConversation 会把聚焦 Pane
@@ -2054,6 +2075,7 @@ function useGatewayAppController() {
     tunnelDisabledMessage,
     tunnelEnabled,
     updatePendingUploadsForConversation,
+    verifyTerminalSessionAlive,
     userAvatarLabel,
     userMenuLabel,
     userMenuOpen,

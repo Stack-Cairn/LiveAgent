@@ -20,6 +20,9 @@ const workbenchCanvasSource = readSource(
   "../../../agent-ui/src/components/workbench/WorkbenchCanvas.tsx",
 );
 const chatPageSource = readSource("../../src/pages/ChatPage.tsx");
+const gatewayViewSource = readSource(
+  "../../../agent-gateway/web/src/app/GatewayAppView.tsx",
+);
 const localTerminalPaneSource = readSource(
   "../../../agent-ui/src/components/workbench/surfaces/LocalTerminalPaneSurface.tsx",
 );
@@ -88,13 +91,40 @@ test("workbench drops route through a revision-checked commit", () => {
 });
 
 test("workspace drops create the conversation before the pane, verified by workdir", () => {
-  // Directory check happens inside the legacy new-conversation pipeline; the
-  // pane opens only after the fresh draft's workdir matches the intent.
-  assert.match(chatPageSource, /pendingWorkspaceOpenRef/);
+  // Directory check remains in the legacy pipeline, which returns the exact
+  // draft id to the shared atomic drop coordinator.
+  assert.match(chatPageSource, /pendingWorkspaceDropRef/);
+  assert.match(chatPageSource, /commitWorkspaceDropConversation\(\{/);
   assert.match(chatPageSource, /handleNewConversationForProject\(project\)/);
   assert.match(
     chatPageSource,
-    /workspaceProjectPathKey\(draftWorkdir\) === pendingWorkspaceOpen\.projectPathKey/,
+    /workspaceProjectPathKey\(draftWorkdir\) === pendingWorkspaceDrop\.projectPathKey/,
+  );
+});
+
+test("desktop exposes the same unavailable-drop feedback path as Web", () => {
+  assert.match(chatPageSource, /onUnavailable:/);
+  assert.match(chatPageSource, /reason === "geometry-unavailable"/);
+  assert.match(chatPageSource, /workbench\.conversationAlreadyOpen/);
+});
+
+test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost styling", () => {
+  for (const source of [chatPageSource, gatewayViewSource]) {
+    assert.match(source, /<WorkbenchCanvas/);
+    assert.match(source, /<PaneChrome/);
+  }
+  const dragGhostClass =
+    /className="(layer-popover pointer-events-none fixed max-w-\[220px\][^"]+)"/;
+  assert.equal(chatPageSource.match(dragGhostClass)?.[1], gatewayViewSource.match(dragGhostClass)?.[1]);
+
+  const blockedBannerClass =
+    /className="(flex shrink-0 items-center gap-2 border-b border-amber-500\/30[^"]+)"/;
+  const gatewayPaneHostSource = readSource(
+    "../../../agent-gateway/web/src/app/workbench/GatewayConversationPaneHost.tsx",
+  );
+  assert.equal(
+    chatPageSource.match(blockedBannerClass)?.[1],
+    gatewayPaneHostSource.match(blockedBannerClass)?.[1],
   );
 });
 

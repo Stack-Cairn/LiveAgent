@@ -52,7 +52,6 @@ type GatewayChatCommandActionOptions = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   conversationIdRef: MutableRefObject<string>;
   conversationWorkdirsRef: MutableRefObject<Map<string, string>>;
-  currentChatProvider: AppSettings["customProviders"][number] | undefined;
   displayedConversationWorkdirRef: MutableRefObject<string>;
   draftClientRequestsRef: MutableRefObject<Map<string, string>>;
   getDisplayedConversationId: () => string;
@@ -86,6 +85,21 @@ type GatewayChatCommandActionOptions = {
   transcriptStoreRegistry: TranscriptStoreRegistry;
 };
 
+export function resolveConversationRuntimeControls(input: {
+  activeProviders: ModelProviderSource[];
+  selectedModel: SelectedModel | undefined;
+  runtimeControls: AppSettings["chatRuntimeControls"];
+}) {
+  const provider = input.activeProviders.find(
+    (entry) => entry.id === input.selectedModel?.customProviderId,
+  );
+  return normalizeChatRuntimeControlsForProvider(input.runtimeControls, {
+    providerId: provider?.type,
+    requestFormat: provider?.requestFormat,
+    modelId: input.selectedModel?.model,
+  });
+}
+
 export function createGatewayChatCommandActions(options: GatewayChatCommandActionOptions) {
   const {
     activeProviders,
@@ -101,7 +115,6 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     composerRef,
     conversationIdRef,
     conversationWorkdirsRef,
-    currentChatProvider,
     displayedConversationWorkdirRef,
     draftClientRequestsRef,
     getDisplayedConversationId,
@@ -189,14 +202,11 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       });
     }
 
-    const runtimeControls = normalizeChatRuntimeControlsForProvider(
-      sendOptions?.runtimeControls ?? settings.chatRuntimeControls,
-      {
-        providerId: currentChatProvider?.type,
-        requestFormat: currentChatProvider?.requestFormat,
-        modelId: turnSelectedModel?.model,
-      },
-    );
+    const runtimeControls = resolveConversationRuntimeControls({
+      activeProviders,
+      selectedModel: turnSelectedModel,
+      runtimeControls: sendOptions?.runtimeControls ?? settings.chatRuntimeControls,
+    });
     const outcome = await chatCommandPipeline.submit({
       conversationId: activeConversationId,
       clientRequestId,

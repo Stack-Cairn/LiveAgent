@@ -57,12 +57,12 @@ import {
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
+  commitWorkspaceDropConversation,
   findAdjacentPaneId,
   findPaneIdBySurfaceKey,
   findParentSplitId,
   hitTestWorkbenchDrop,
   type WorkbenchCommandError,
-  type WorkbenchDropTarget,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
 import {
@@ -112,9 +112,12 @@ import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import { toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
+  getChatRuntimeReasoningLevelsForProvider,
   getRightDockFileTreeState,
   isAgentDevMode,
   isAgentExecutionMode,
+  isThinkingAlwaysOnForModel,
+  normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
   resolveEffectivePromptSettings,
@@ -221,6 +224,7 @@ import { useWindowWorkbench } from "./chat/workbench/useWindowWorkbench";
 import {
   canSplitRectAtEdge,
   useWorkbenchDragSession,
+  type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "./chat/workbench/useWorkbenchDragSession";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
@@ -291,8 +295,8 @@ export function ChatPage(props: ChatPageProps) {
   // workdirs, running set); ChatPage only issues imperative calls and keeps a
   // few narrow selector subscriptions.
   const sidebarStore = useMemo(() => createSidebarStore(createGuiSidebarBackend()), []);
-  const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
-    () => undefined,
+  const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => string>(
+    () => "",
   );
   const prepareComposerForConversationChangeActionRef = useRef<() => void>(() => undefined);
   const {
@@ -2336,20 +2340,24 @@ export function ChatPage(props: ChatPageProps) {
     [workspaceProjects],
   );
 
-  // Workspace drops create a draft conversation through the legacy pipeline;
-  // once the fresh conversation becomes current, the sync effect opens its
-  // pane at the remembered target instead of rebinding the focused pane.
-  const pendingWorkspaceOpenRef = useRef<{
-    target: Exclude<WorkbenchDropTarget, { kind: "pane-center" }>;
-    projectId: string;
+  // Workspace drops await the exact draft id returned by the legacy creation
+  // path. The sync effect only pauses for that identified draft, so it cannot
+  // consume the target on an unrelated current-conversation update.
+  const workspaceDropSequenceRef = useRef(0);
+  const pendingWorkspaceDropRef = useRef<{
+    operationId: number;
     projectPathKey: string;
   } | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The mutable runtime cache ref intentionally supplies the latest draft workdir without changing the drag handler identity.
   const handleWorkbenchDropCommit = useCallback(
     (commit: WorkbenchDropCommit) => {
       // Stale layout revision (focus/structure changed mid-drag): cancel the
       // transaction instead of replaying stale geometry.
-      if (commit.revision !== workbench.layoutRef.current.revision) return;
+      if (commit.revision !== workbench.layoutRef.current.revision) {
+        addNotify("error", t("workbench.dropStateChanged"));
+        return;
+      }
       const { payload, target } = commit;
       if (payload.kind === "workspace") {
         if (target.kind === "pane-center") return;
@@ -2359,12 +2367,40 @@ export function ChatPage(props: ChatPageProps) {
           (entry) => workspaceProjectPathKey(entry.path) === pathKey,
         );
         if (!project) return;
-        pendingWorkspaceOpenRef.current = {
+        const operationId = workspaceDropSequenceRef.current + 1;
+        workspaceDropSequenceRef.current = operationId;
+        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        void commitWorkspaceDropConversation({
+          revision: commit.revision,
           target,
-          projectId: project.id,
-          projectPathKey: pathKey,
-        };
-        void handleNewConversationForProject(project);
+          project: { projectId: project.id, projectPathKey: pathKey },
+          startConversation: () => handleNewConversationForProject(project),
+          currentRevision: () => workbench.layoutRef.current.revision,
+          conversationMatchesProject: (conversationId) => {
+            const draftWorkdir =
+              conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+            return Boolean(draftWorkdir) && workspaceProjectPathKey(draftWorkdir) === pathKey;
+          },
+          paneIdForConversation: workbench.paneIdForConversation,
+          openConversation: workbench.openConversation,
+        }).then((result) => {
+          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+            pendingWorkspaceDropRef.current = null;
+          }
+          if (result.kind === "opened" || result.kind === "not-created") return;
+          if (result.kind === "already-open") {
+            const paneId = workbench.paneIdForConversation(result.conversationId);
+            if (paneId) handleWorkbenchFocusPane(paneId);
+            return;
+          }
+          workbench.syncCurrentConversation(result.conversationId, {
+            projectId: project.id,
+            projectPathKey: pathKey,
+          });
+          if (result.kind !== "rejected") {
+            addNotify("error", t("workbench.dropStateChanged"));
+          }
+        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -2374,6 +2410,7 @@ export function ChatPage(props: ChatPageProps) {
           // conversation's own pane, meaning "focus me".
           if (existingPaneId && target.paneId === existingPaneId) {
             handleWorkbenchFocusPane(existingPaneId);
+            addNotify("success", t("workbench.conversationAlreadyOpen"));
           }
           return;
         }
@@ -2445,9 +2482,11 @@ export function ChatPage(props: ChatPageProps) {
     },
     [
       archivedWorkspaceProjectPathKeys,
+      addNotify,
       handleNewConversationForProject,
       handleWorkbenchFocusPane,
       selectWorkbenchConversation,
+      t,
       workbench,
       workspaceProjects,
     ],
@@ -2458,6 +2497,16 @@ export function ChatPage(props: ChatPageProps) {
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
     onCommit: handleWorkbenchDropCommit,
+    onUnavailable: (reason: WorkbenchDragUnavailableReason) => {
+      addNotify(
+        "error",
+        t(
+          reason === "geometry-unavailable"
+            ? "workbench.dropStateChanged"
+            : "workbench.noSpaceForSplit",
+        ),
+      );
+    },
   });
 
   const handleConversationWorkbenchDragIntent = useCallback(
@@ -2754,6 +2803,55 @@ export function ChatPage(props: ChatPageProps) {
     workbench,
   ]);
 
+  const handleOpenNewTerminalInWorkbenchSplit = useCallback(() => {
+    const target = resolveWorkbenchAutoDockTarget();
+    if (!target) {
+      addNotify("error", t("workbench.noSpaceForSplit"));
+      return;
+    }
+    if (!terminalProjectPath) return;
+    const project = workspaceProjects.find(
+      (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
+    );
+    commitTerminalDrop(
+      {
+        kind: "newTerminal",
+        project: {
+          projectId: project?.id ?? `project:${terminalProjectPathKey}`,
+          projectPathKey: terminalProjectPathKey,
+        },
+        title: t("projectTools.newTerminal"),
+      },
+      target,
+      {
+        layout: workbench.layoutRef.current,
+        sessions: terminalSessionsRef.current,
+        lease: terminalPaneLease,
+        bindings: terminalPaneBindings,
+        resolveProjectPath: (ref) =>
+          workspaceProjects.find((entry) => entry.id === ref.projectId)?.path ??
+          workspaceProjects.find(
+            (entry) => workspaceProjectPathKey(entry.path) === ref.projectPathKey,
+          )?.path ??
+          null,
+        createSurfaceId: createTerminalSurfaceId,
+        authorizeAutoLaunch: terminalPaneAutoLaunch.authorize,
+        openTerminalSurface: workbench.openTerminalSurface,
+        movePane: workbench.movePane,
+        focusPane: handleWorkbenchFocusPane,
+      },
+    );
+  }, [
+    addNotify,
+    handleWorkbenchFocusPane,
+    resolveWorkbenchAutoDockTarget,
+    t,
+    terminalProjectPath,
+    terminalProjectPathKey,
+    workbench,
+    workspaceProjects,
+  ]);
+
   // Native file drag hover: focus the conversation pane under the cursor for
   // visual and keyboard continuity. Final attachment ownership is carried by
   // the composer's data-file-upload-conversation-id marker at drop time.
@@ -2805,28 +2903,15 @@ export function ChatPage(props: ChatPageProps) {
     // remembered drop target instead of rebinding the focused pane. The
     // pending intent is one-shot and verified against the draft's workdir so
     // a failed directory check can never misplace a later conversation.
-    const pendingWorkspaceOpen = pendingWorkspaceOpenRef.current;
-    if (pendingWorkspaceOpen && previousSynced !== currentConversationId) {
-      pendingWorkspaceOpenRef.current = null;
+    const pendingWorkspaceDrop = pendingWorkspaceDropRef.current;
+    if (pendingWorkspaceDrop && previousSynced !== currentConversationId) {
       const draftWorkdir =
         conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
-      const hasNoPane = !workbench.paneIdForConversation(currentConversationId);
       if (
-        hasNoPane &&
         draftWorkdir &&
-        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceOpen.projectPathKey
+        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceDrop.projectPathKey
       ) {
-        const opened = workbench.openConversation(
-          {
-            conversationId: currentConversationId,
-            project: {
-              projectId: pendingWorkspaceOpen.projectId,
-              projectPathKey: pendingWorkspaceOpen.projectPathKey,
-            },
-          },
-          pendingWorkspaceOpen.target,
-        );
-        if (opened) return;
+        return;
       }
     }
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
@@ -2973,6 +3058,26 @@ export function ChatPage(props: ChatPageProps) {
     const paneSelectedValue = paneSelectedModel
       ? toModelValue(paneSelectedModel.customProviderId, paneSelectedModel.model)
       : undefined;
+    const paneProvider = paneSelectedModel
+      ? settings.customProviders.find((entry) => entry.id === paneSelectedModel.customProviderId)
+      : undefined;
+    const paneRuntimeControls = normalizeChatRuntimeControlsForProvider(
+      settings.chatRuntimeControls,
+      {
+        providerId: paneProvider?.type,
+        requestFormat: paneProvider?.requestFormat,
+        modelId: paneSelectedModel?.model,
+      },
+    );
+    const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({
+      providerId: paneProvider?.type,
+      requestFormat: paneProvider?.requestFormat,
+      modelId: paneSelectedModel?.model,
+    });
+    const paneThinkingAlwaysOn = isThinkingAlwaysOnForModel(
+      paneProvider?.type ?? "claude_code",
+      paneSelectedModel?.model,
+    );
     const paneModelLabel = (() => {
       if (!paneSelectedModel) return t("chat.selectModel");
       const option = modelOptions.find((entry) => entry.value === paneSelectedValue);
@@ -3104,7 +3209,7 @@ export function ChatPage(props: ChatPageProps) {
         currentModelLabel: paneModelLabel,
         modelOptions,
         selectedValue: paneSelectedValue,
-        chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+        chatRuntimeControls: paneRuntimeControls,
         commandSafetyMode: settings.system.commandSafetyMode,
         onCommandSafetyModeChange: (mode) =>
           setSettings((prev) =>
@@ -3112,8 +3217,8 @@ export function ChatPage(props: ChatPageProps) {
               ? prev
               : updateSystem(prev, { commandSafetyMode: mode }),
           ),
-        reasoningOptions: chatRuntimeReasoningOptions,
-        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        reasoningOptions: paneReasoningOptions,
+        thinkingAlwaysOn: paneThinkingAlwaysOn,
         contextUsageTokensSource: paneContextUsageTokensSource,
         contextWindow: paneContextWindow,
         gitClient: tauriGitClient,
@@ -3750,6 +3855,9 @@ export function ChatPage(props: ChatPageProps) {
         }
         onOpenFileTreeInWorkbench={
           sessionWorkbench.enabled ? handleOpenFileTreeInWorkbenchSplit : undefined
+        }
+        onOpenNewTerminalInWorkbench={
+          sessionWorkbench.enabled ? handleOpenNewTerminalInWorkbenchSplit : undefined
         }
         onSessionGhost={verifyTerminalSessionAlive}
         onInsertFileMention={handleRightDockInsertFileMention}

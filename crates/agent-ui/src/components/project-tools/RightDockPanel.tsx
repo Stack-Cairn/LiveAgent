@@ -119,6 +119,8 @@ type RightDockPanelProps = {
   onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
   /** File Tree 菜单式“在分屏中打开”。 */
   onOpenFileTreeInWorkbench?: () => void;
+  /** 新建菜单「在分屏中新建终端」;与拖拽 newTerminal 走同一提交语义。 */
+  onOpenNewTerminalInWorkbench?: () => void;
   /**
    * dock 视口报错时上抛 sessionId,由宿主按后端权威列表校验:会话确认
    * 消失(幽灵记录)则整表刷新,坏 tab 自动退场;仍存活的瞬时错误不动列表。
@@ -412,6 +414,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onOpenTerminalInWorkbench,
     onFileTreeTabDragStart,
     onOpenFileTreeInWorkbench,
+    onOpenNewTerminalInWorkbench,
     onSessionGhost,
     onInsertFileMention,
     onOpenFile,
@@ -899,6 +902,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   tunnelAvailable={tunnelAvailable}
                   creating={creating}
                   onCreateTerminal={createTerminal}
+                  onOpenNewTerminalInWorkbench={onOpenNewTerminalInWorkbench}
                   onStartTool={startToolTab}
                   onOpenBackgroundTasks={openBackgroundTasks}
                 />

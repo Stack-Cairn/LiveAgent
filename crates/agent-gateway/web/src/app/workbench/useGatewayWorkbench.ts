@@ -9,12 +9,12 @@ import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
+  commitWorkspaceDropConversation,
   findAdjacentPaneId,
   findPaneIdBySurfaceKey,
   findParentSplitId,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
-  type WorkbenchDropTarget,
   type WorkbenchEdge,
   type WorkbenchGeometry,
   type WorkbenchOpenTarget,
@@ -38,6 +38,7 @@ import {
 import {
   useWorkbenchDragSession,
   type WorkbenchDragState,
+  type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "@liveagent/ui/lib/workbench/useWorkbenchDragSession";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
@@ -99,11 +100,15 @@ export type UseGatewayWorkbenchParams = {
   /** 把页面当前会话切换到指定会话（走既有的侧栏选择通路）。 */
   selectConversation: (conversationId: string) => void;
   /** workspace 拖拽落点：走既有「项目新建会话」通路（目录检查 + 新草稿）。 */
-  startConversationForProject: (project: WorkspaceProject) => void;
+  startConversationForProject: (project: WorkspaceProject) => Promise<string | null>;
   /** 草稿 workdir 权威查询：workspace 拖拽开 Pane 前校验落点身份。 */
   conversationWorkdirFor: (conversationId: string) => string | null;
   /** 自动停靠没有合法空间时的用户提示。 */
   onNoSpaceForSplit: () => void;
+  /** 拖拽期间布局/几何已变化，事务无法安全重放。 */
+  onDropStateChanged: () => void;
+  /** 已在 Pane 中的会话再次从侧栏拖入时，明确说明聚焦语义。 */
+  onConversationAlreadyOpen: () => void;
 };
 
 export type GatewayWorkbenchController = {
@@ -117,10 +122,14 @@ export type GatewayWorkbenchController = {
   /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
   handleOpenFileTreeInSplit: () => void;
+  /** Right Dock 新建菜单「在分屏中新建终端」。 */
+  handleOpenNewTerminalInSplit: () => void;
   /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
   focusTerminalPaneForSession: (sessionId: string) => void;
   /** 会话从权威索引消失（删除等）：关闭对应 Pane，不做选中迁移。 */
   closePanesForRemovedConversations: (ids: readonly string[]) => void;
+  /** 登录/Agent 作用域切换：清空布局和终端 surface 绑定。 */
+  clearWorkbench: () => void;
   projectRefForConversation: (item: { id: string; cwd?: string | null }) => ProjectRef;
   /** 拖拽 overlay 模型（幽灵 + 落点预览）；idle 时为 null。 */
   dragState: WorkbenchDragState | null;
@@ -199,6 +208,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     startConversationForProject,
     conversationWorkdirFor,
     onNoSpaceForSplit,
+    onDropStateChanged,
+    onConversationAlreadyOpen,
   } = params;
 
   const projectRefForConversation = useCallback(
@@ -273,12 +284,12 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
   const workspaceProjectsRef = useRef(workspaceProjects);
   workspaceProjectsRef.current = workspaceProjects;
 
-  // Workspace 拖拽落点：先经既有通路建草稿；草稿成为当前会话后，同步 effect
-  // 在被记住的落点开新 Pane，而不是重绑聚焦 Pane。意图一次性,并按草稿
-  // workdir 校验,目录检查失败不会错置后续会话。
-  const pendingWorkspaceOpenRef = useRef<{
-    target: Exclude<WorkbenchDropTarget, { kind: "pane-center" }>;
-    projectId: string;
+  // Workspace drop awaits the exact draft id. While directory validation and
+  // draft creation are in flight, the current-conversation sync must not
+  // rebind the focused pane underneath the explicit drop transaction.
+  const workspaceDropSequenceRef = useRef(0);
+  const pendingWorkspaceDropRef = useRef<{
+    operationId: number;
     projectPathKey: string;
   } | null>(null);
 
@@ -309,23 +320,11 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     const previousSynced = lastSyncedConversationRef.current;
     lastSyncedConversationRef.current = key;
 
-    const pendingOpen = pendingWorkspaceOpenRef.current;
-    if (pendingOpen && previousSynced !== key) {
-      pendingWorkspaceOpenRef.current = null;
+    const pendingDrop = pendingWorkspaceDropRef.current;
+    if (pendingDrop && previousSynced !== key) {
       const workdir = conversationWorkdirForRef.current(key)?.trim() || "";
-      const hasNoPane = !workbench.paneIdForConversation(key);
-      if (hasNoPane && workdir && workspaceProjectPathKey(workdir) === pendingOpen.projectPathKey) {
-        const opened = workbench.openConversation(
-          {
-            conversationId: key,
-            project: {
-              projectId: pendingOpen.projectId,
-              projectPathKey: pendingOpen.projectPathKey,
-            },
-          },
-          pendingOpen.target,
-        );
-        if (opened) return;
+      if (workdir && workspaceProjectPathKey(workdir) === pendingDrop.projectPathKey) {
+        return;
       }
     }
     workbench.syncCurrentConversation(key, sidebarProjectRef(key));
@@ -518,7 +517,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     (commit: WorkbenchDropCommit) => {
       // 布局修订号在拖拽期间变了(聚焦/结构变化):取消事务而不是按陈旧
       // 几何重放。
-      if (commit.revision !== workbench.layoutRef.current.revision) return;
+      if (commit.revision !== workbench.layoutRef.current.revision) {
+        onDropStateChanged();
+        return;
+      }
       const { payload, target } = commit;
       if (payload.kind === "workspace") {
         if (target.kind === "pane-center") return;
@@ -528,12 +530,37 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
           (entry) => workspaceProjectPathKey(entry.path) === pathKey,
         );
         if (!project) return;
-        pendingWorkspaceOpenRef.current = {
+        const operationId = workspaceDropSequenceRef.current + 1;
+        workspaceDropSequenceRef.current = operationId;
+        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        void commitWorkspaceDropConversation({
+          revision: commit.revision,
           target,
-          projectId: project.id,
-          projectPathKey: pathKey,
-        };
-        startConversationForProjectRef.current(project);
+          project: { projectId: project.id, projectPathKey: pathKey },
+          startConversation: () => startConversationForProjectRef.current(project),
+          currentRevision: () => workbench.layoutRef.current.revision,
+          conversationMatchesProject: (conversationId) => {
+            const workdir = conversationWorkdirForRef.current(conversationId)?.trim() || "";
+            return Boolean(workdir) && workspaceProjectPathKey(workdir) === pathKey;
+          },
+          paneIdForConversation: workbench.paneIdForConversation,
+          openConversation: workbench.openConversation,
+        }).then((result) => {
+          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+            pendingWorkspaceDropRef.current = null;
+          }
+          if (result.kind === "opened" || result.kind === "not-created") return;
+          if (result.kind === "already-open") {
+            const paneId = workbench.paneIdForConversation(result.conversationId);
+            if (paneId) handleFocusPane(paneId);
+            return;
+          }
+          workbench.syncCurrentConversation(result.conversationId, {
+            projectId: project.id,
+            projectPathKey: pathKey,
+          });
+          if (result.kind !== "rejected") onDropStateChanged();
+        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -542,6 +569,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
           // 拖拽会话已归一化:pane-center 只可能是会话自己的 Pane,语义是聚焦。
           if (existingPaneId && target.paneId === existingPaneId) {
             handleFocusPane(existingPaneId);
+            onConversationAlreadyOpen();
           }
           return;
         }
@@ -602,6 +630,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       archivedProjectPathKeys,
       displayedConversationId,
       handleFocusPane,
+      onConversationAlreadyOpen,
+      onDropStateChanged,
       selectWorkbenchConversation,
       terminalDropDeps,
       workbench,
@@ -613,6 +643,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     layoutRef: workbench.layoutRef,
     geometryRef,
     onCommit: handleDropCommit,
+    onUnavailable: (reason: WorkbenchDragUnavailableReason) => {
+      if (reason === "geometry-unavailable") onDropStateChanged();
+      else onNoSpaceForSplit();
+    },
   });
 
   const beginPaneDrag = useCallback(
@@ -821,6 +855,38 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
   }, [fileTreeProjectRef, handleFocusPane, onNoSpaceForSplit, resolveAutoDockTarget, workbench]);
 
+  const handleOpenNewTerminalInSplit = useCallback(() => {
+    const target = resolveAutoDockTarget();
+    if (!target) {
+      onNoSpaceForSplit();
+      return;
+    }
+    const path = terminalProjectPath.trim();
+    if (!path) return;
+    const projectPathKey = workspaceProjectPathKey(path);
+    const project = workspaceProjectsRef.current.find(
+      (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+    );
+    commitTerminalDrop(
+      {
+        kind: "newTerminal",
+        project: {
+          projectId: project?.id ?? `project:${projectPathKey}`,
+          projectPathKey,
+        },
+        title: newTerminalTitle,
+      },
+      target,
+      terminalDropDeps(),
+    );
+  }, [
+    newTerminalTitle,
+    onNoSpaceForSplit,
+    resolveAutoDockTarget,
+    terminalDropDeps,
+    terminalProjectPath,
+  ]);
+
   // 画板 Pane 持有租约的会话:overlay/占位的「前往 Pane」聚焦通路。
   const focusTerminalPaneForSession = useCallback(
     (sessionId: string) => {
@@ -851,6 +917,15 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [workbench],
   );
 
+  const clearWorkbench = useCallback(() => {
+    for (const pane of Object.values(workbench.layoutRef.current.panes)) {
+      if (pane.surface.kind === "localTerminal" || pane.surface.kind === "sshTerminal") {
+        gatewayTerminalPaneBindings.delete(pane.surface.surfaceId);
+      }
+    }
+    workbench.clear();
+  }, [workbench]);
+
   return useMemo(
     () => ({
       workbench,
@@ -861,8 +936,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
       handleOpenFileTreeInSplit,
+      handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
+      clearWorkbench,
       projectRefForConversation,
       dragState,
       beginPaneDrag,
@@ -881,8 +958,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
       handleOpenFileTreeInSplit,
+      handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
+      clearWorkbench,
       projectRefForConversation,
       dragState,
       beginPaneDrag,
