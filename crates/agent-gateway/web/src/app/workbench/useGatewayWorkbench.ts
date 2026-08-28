@@ -258,6 +258,9 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     initialProject: initialRef.current.project,
     geometryRef,
     dividerSize: WORKBENCH_CANVAS_DIVIDER_SIZE,
+    // Web 每次打开都从当前会话的单 Pane 首页开始。Desktop 仍使用共享
+    // Hook 的默认持久化，以保留其窗口布局恢复能力。
+    persistence: false,
     onCommandError: (error) => {
       if (error.code === "insufficient-space") onNoSpaceForSplit();
     },

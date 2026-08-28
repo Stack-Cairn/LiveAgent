@@ -83,6 +83,15 @@ test("web terminal pane runtime exposes the same binding contract as desktop", (
   // Node 环境无 window/sessionStorage 时共享 store 会安全降级为内存实现。
 });
 
+test("Web starts from a single-pane homepage and keeps terminal bindings in memory", () => {
+  assert.match(hookSource, /persistence:\s*false/);
+  const runtimeSource = readFileSync(
+    path.join(webRoot, "src/app/workbench/terminalPaneRuntime.ts"),
+    "utf8",
+  );
+  assert.match(runtimeSource, /createTerminalPaneBindingStore\(\{ storage: null \}\)/);
+});
+
 test("dropping an existing dock session binds first, then opens the pane", () => {
   const bindings = createTerminalPaneBindingStore({
     storage: { getItem: () => null, setItem() {}, removeItem() {} },
