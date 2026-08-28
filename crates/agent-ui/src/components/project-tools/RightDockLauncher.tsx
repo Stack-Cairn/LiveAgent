@@ -47,7 +47,12 @@ type RightDockChooserProps = RightDockLauncherActions & {
    * 存在时"新建终端"入口可拖出到工作台画板(拖到落点新建终端 Pane);
    * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
    */
-  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onNewTerminalDragStart?: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
 };
 
 export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
@@ -171,6 +176,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
                 pointerId: event.pointerId,
                 clientX: event.clientX,
                 clientY: event.clientY,
+                currentTarget: event.currentTarget,
               });
             }
           : undefined,

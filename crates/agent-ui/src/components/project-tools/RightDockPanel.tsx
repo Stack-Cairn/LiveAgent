@@ -97,10 +97,20 @@ type RightDockPanelProps = {
   /** 存在时终端 tab 可拖出 dock(工作台宿主);默认无行为。 */
   onTerminalTabDragStart?: (
     session: TerminalSession,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   /** 存在时空态"新建终端"入口可拖出到工作台画板;点击行为不变。 */
-  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onNewTerminalDragStart?: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
   /**

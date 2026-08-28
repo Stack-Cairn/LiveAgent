@@ -106,7 +106,12 @@ type HistoryRowProps = {
    */
   onWorkbenchDragIntent?: (
     item: SidebarConversation,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   /** Menu alternative to dragging: open the conversation in a split pane. */
   onOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
@@ -383,6 +388,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
           pointerId: event.pointerId,
           clientX: event.clientX,
           clientY: event.clientY,
+          currentTarget: event.currentTarget,
         });
       }
       if (isInteractionDisabled || isSelectionMode || !isMobileMenuLayout || isBusy) {
@@ -1015,7 +1021,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
    */
   onWorkbenchDragIntent?: (
     project: WorkspaceProject,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
 }) {
   const {
@@ -1269,6 +1280,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   pointerId: event.pointerId,
                   clientX: event.clientX,
                   clientY: event.clientY,
+                  currentTarget: event.currentTarget,
                 });
               }}
               onDoubleClick={(event) => {

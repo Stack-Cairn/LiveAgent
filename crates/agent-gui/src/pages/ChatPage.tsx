@@ -2440,7 +2440,15 @@ export function ChatPage(props: ChatPageProps) {
   });
 
   const handleConversationWorkbenchDragIntent = useCallback(
-    (item: SidebarConversation, event: { pointerId: number; clientX: number; clientY: number }) => {
+    (
+      item: SidebarConversation,
+      event: {
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        currentTarget?: EventTarget | null;
+      },
+    ) => {
       beginWorkbenchDrag(
         {
           kind: "conversation",
@@ -2457,7 +2465,15 @@ export function ChatPage(props: ChatPageProps) {
   // Right Dock 终端 tab 拖出:既有会话进入画板。dock 的 tab 只列本地会话;
   // SSH 会话从 workspace overlay 的 shell tab 拖出(handleSshTerminalTabDragIntent)。
   const handleTerminalTabWorkbenchDragIntent = useCallback(
-    (session: TerminalSession, event: { pointerId: number; clientX: number; clientY: number }) => {
+    (
+      session: TerminalSession,
+      event: {
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        currentTarget?: EventTarget | null;
+      },
+    ) => {
       const projectPathKey = session.projectPathKey || workspaceProjectPathKey(session.cwd);
       const project = workspaceProjects.find(
         (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
@@ -2485,7 +2501,12 @@ export function ChatPage(props: ChatPageProps) {
 
   // 空态"新建终端"按钮拖出:落点新建终端 Pane(几何先行,PTY 由宿主异步建)。
   const handleNewTerminalWorkbenchDragIntent = useCallback(
-    (event: { pointerId: number; clientX: number; clientY: number }) => {
+    (event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    }) => {
       if (!terminalProjectPath) return;
       const project = workspaceProjects.find(
         (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
@@ -2539,7 +2560,15 @@ export function ChatPage(props: ChatPageProps) {
   }, [handleWorkbenchClosePane, workbench]);
 
   const handleProjectWorkbenchDragIntent = useCallback(
-    (project: WorkspaceProject, event: { pointerId: number; clientX: number; clientY: number }) => {
+    (
+      project: WorkspaceProject,
+      event: {
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        currentTarget?: EventTarget | null;
+      },
+    ) => {
       beginWorkbenchDrag(
         {
           kind: "workspace",
@@ -3066,7 +3095,21 @@ export function ChatPage(props: ChatPageProps) {
             },
             binding:
               surface.conversationId === currentConversationId
-                ? primaryPaneBinding
+                ? {
+                    ...primaryPaneBinding,
+                    composer: {
+                      ...primaryPaneBinding.composer,
+                      // Multi-pane focus starts the page hydration pipeline;
+                      // that must not freeze a composer the user is already
+                      // typing in. Send still rejects hydrating conversations.
+                      isInputDisabled:
+                        isCompactionRunning ||
+                        isConversationHydrationFailed ||
+                        isImportingPastedText ||
+                        isUploadingFiles ||
+                        (isConversationHydrating && Object.keys(workbench.layout.panes).length < 2),
+                    },
+                  }
                 : buildBackgroundPaneBinding(surface),
           },
         ];
@@ -3167,7 +3210,12 @@ export function ChatPage(props: ChatPageProps) {
         onDragHandlePointerDown={(event) => {
           beginWorkbenchDrag(
             { kind: "pane", paneId: pane.paneId, surfaceKey: surfaceIdentityKey(surface), title },
-            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+            {
+              pointerId: event.pointerId,
+              clientX: event.clientX,
+              clientY: event.clientY,
+              currentTarget: event.currentTarget,
+            },
           );
         }}
       />
@@ -3224,7 +3272,19 @@ export function ChatPage(props: ChatPageProps) {
           const host = (
             <Suspense fallback={<PaneLoadingSkeleton label={t("app.loading")} />}>
               <RestorableConversationPaneHost
-                ref={isCurrent ? conversationPaneHostRef : undefined}
+                ref={
+                  isCurrent
+                    ? (handle) => {
+                        // Callback ref assigns on attach and ignores the null
+                        // detach. Swapping an object ref between two mounted
+                        // hosts is order-dependent: the outgoing pane's detach
+                        // can run after the incoming attach and leave
+                        // composerRef permanently null, so Enter in the newly
+                        // focused pane sends an empty draft.
+                        if (handle) conversationPaneHostRef.current = handle;
+                      }
+                    : undefined
+                }
                 paneId={pane.paneId}
                 conversationId={conversationId}
                 project={surface.project}
