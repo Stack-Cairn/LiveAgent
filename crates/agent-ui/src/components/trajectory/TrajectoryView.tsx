@@ -446,7 +446,7 @@ export function TrajectoryView(props: {
   }
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col">
+    <div className="@container flex h-full min-h-0 flex-1 flex-col">
       <TrajectoryToolbar
         actualDuration={actualDuration}
         hasTiming={hasTiming}
