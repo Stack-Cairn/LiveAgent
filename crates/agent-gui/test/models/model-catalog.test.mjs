@@ -67,6 +67,8 @@ test("generated catalog upholds the data invariants", () => {
 });
 
 test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {
+  // Codex models.json 的 context_window 是输入侧预算（272K），生成期换算成
+  // 与目录其余分区一致的总窗口语义：272K + 128K（models.dev 输出补充）= 400K。
   for (const modelId of [
     "gpt-5.2",
     "gpt-5.4",
@@ -78,8 +80,8 @@ test("openai catalog prefers Codex metadata and keeps models.dev supplements", (
   ]) {
     assert.equal(
       catalog.findCatalogModel("codex", modelId)?.contextWindow,
-      272_000,
-      `${modelId}: context window must come from openai/codex models.json`,
+      400_000,
+      `${modelId}: context window must come from openai/codex models.json (input budget + output)`,
     );
   }
 
@@ -191,13 +193,14 @@ test("resolveModelLimits returns repaired catalog limits and undefined on miss",
   assert.equal(catalog.resolveModelLimits("xai", "grok-unknown"), undefined);
 });
 
-test("provider fallback limits keep the historical defaults and return copies", () => {
+test("provider fallback limits use total-window semantics and return copies", () => {
   assert.deepEqual(catalog.getProviderFallbackLimits("claude_code"), {
     contextWindow: 200_000,
     maxOutputToken: 32_000,
   });
+  // codex/xai 兜底为总窗口语义：258K 输入预算 + 142K 输出 = 400K。
   assert.deepEqual(catalog.getProviderFallbackLimits("codex"), {
-    contextWindow: 258_000,
+    contextWindow: 400_000,
     maxOutputToken: 142_000,
   });
   assert.deepEqual(catalog.getProviderFallbackLimits("gemini"), {
@@ -205,7 +208,7 @@ test("provider fallback limits keep the historical defaults and return copies", 
     maxOutputToken: 65_536,
   });
   assert.deepEqual(catalog.getProviderFallbackLimits("xai"), {
-    contextWindow: 258_000,
+    contextWindow: 400_000,
     maxOutputToken: 142_000,
   });
   const first = catalog.getProviderFallbackLimits("xai");

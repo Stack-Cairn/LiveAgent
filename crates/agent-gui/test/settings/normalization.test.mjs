@@ -2729,8 +2729,8 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
 test("xai provider model defaults come from the generated model catalog", () => {
   assert.equal(settings.getProviderModelDefaults("xai", "grok-4.5").contextWindow, 500_000);
   // 上游（models.dev）已下架的旧模型与目录未收录的模型一样吃供应商兜底值。
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 258_000);
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 258_000);
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 400_000);
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 400_000);
 });
 
 test("gateway sync keeps all desktop font families local", () => {
@@ -2865,7 +2865,7 @@ test("legacy configs without limitsSource infer catalog/fallback/user by matchin
   assert.equal(catalogMatch.limitsSource, "catalog");
   // 推断规则 2：落库值等于当前供应商兜底常量、且目录/跨供应商都查不到 → fallback。
   const fallbackMatch = settings.normalizeProviderModelConfig(
-    { id: "relay-only-model", contextWindow: 258_000, maxOutputToken: 142_000 },
+    { id: "relay-only-model", contextWindow: 400_000, maxOutputToken: 142_000 },
     "xai",
   );
   assert.equal(fallbackMatch.limitsSource, "fallback");

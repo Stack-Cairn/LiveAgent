@@ -36,6 +36,15 @@ const MIN_CODEX_MODELS = 5;
 // remain as supplements, while newly listed Codex models receive conservative
 // defaults for fields models.json does not publish yet.
 //
+// Codex context_window semantics: models.json publishes the *input-side*
+// session budget (GPT-5 family: 272k documented max input), while every other
+// catalog source records the total window including output (GPT-5: 400k =
+// 272k input + 128k output). The merge converts Codex entries to total-window
+// semantics (context_window + resolved maxOutputToken) so the whole catalog —
+// and every consumer (usage ring, buffered-reserve compaction thresholds) —
+// shares one meaning of contextWindow. Cross-check: gpt-5.2 converts to
+// exactly the 400k total that models.dev/OpenAI document for it.
+//
 // The first four sections are the native catalogs behind the app's provider
 // types (claude_code→anthropic, gemini→google, codex→openai, xai); scoped
 // lookup (findCatalogModel) only ever reads these. The remaining sections are
@@ -74,7 +83,10 @@ const SECTIONS = [
 const SENTINELS = [
   { section: "anthropic", id: "claude-sonnet-4-6", level: "high", off: true },
   { section: "openai", id: "gpt-5", level: "minimal" },
-  { section: "openai", id: "gpt-5.6-sol", level: "max", contextWindow: 272_000 },
+  // 272k Codex input budget + 128k models.dev output = 400k total window.
+  // Fails when either upstream changes semantics or Codex lifts the default
+  // session budget — both require re-evaluating the merge conversion above.
+  { section: "openai", id: "gpt-5.6-sol", level: "max", contextWindow: 400_000 },
   { section: "deepseek", id: "deepseek-v4-flash", level: "low", off: true },
   { section: "deepseek", id: "deepseek-v4-pro", level: "high", off: true },
   { section: "zhipuai", id: "glm-4.6", off: true },
@@ -281,13 +293,17 @@ function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
     );
 
     if (supplemental) {
+      // Codex context_window is the input-side budget; add the resolved output
+      // cap to express the same total-window semantics as the rest of the
+      // catalog (see the section comment above SECTIONS).
+      const maxOutputToken = normalizeMaxOutputToken(
+        codexModel.contextWindow,
+        supplemental.maxOutputToken,
+      );
       mergedByLower.set(lower, {
         id: codexModel.id,
-        contextWindow: codexModel.contextWindow,
-        maxOutputToken: normalizeMaxOutputToken(
-          codexModel.contextWindow,
-          supplemental.maxOutputToken,
-        ),
+        contextWindow: codexModel.contextWindow + maxOutputToken,
+        maxOutputToken,
         ...(thinking ? { thinking } : {}),
       });
       continue;
@@ -306,10 +322,11 @@ function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
       continue;
     }
     claimedLower.set(lower, "openai");
+    const maxOutputToken = normalizeMaxOutputToken(codexModel.contextWindow, MAX_OUTPUT_TOKEN_CAP);
     mergedByLower.set(lower, {
       id: codexModel.id,
-      contextWindow: codexModel.contextWindow,
-      maxOutputToken: normalizeMaxOutputToken(codexModel.contextWindow, MAX_OUTPUT_TOKEN_CAP),
+      contextWindow: codexModel.contextWindow + maxOutputToken,
+      maxOutputToken,
       ...(thinking ? { thinking } : {}),
     });
   }

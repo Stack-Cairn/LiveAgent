@@ -28,6 +28,7 @@ pub use history_commands::history_db;
 pub use history_commands::subagent_store;
 
 pub use integration_commands::browser;
+pub use integration_commands::cua_driver;
 pub use integration_commands::gateway;
 pub use integration_commands::mcp;
 pub use integration_commands::mcp_oauth;

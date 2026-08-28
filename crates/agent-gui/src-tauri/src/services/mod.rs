@@ -1,6 +1,7 @@
 pub mod automation;
 pub mod browser;
 pub mod chat_run_ledger;
+pub mod cua_driver;
 pub mod gateway;
 pub mod gateway_bridge;
 pub mod mcp_oauth;

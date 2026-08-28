@@ -205,11 +205,25 @@ pub struct McpToolInfo {
     pub input_schema: Value,
 }
 
+/// 发给前端的工具结果内容块。
+///
+/// 注意 serde 的坑：enum 上的 `rename_all` 只重命名**变体名**（`Image` →
+/// `"image"`），**不作用于变体内部字段**——字段要靠变体上的 `rename_all`
+/// 单独声明。漏掉的话 `mime_type` 会原样以 snake_case 出去，而 TS 侧
+/// （pi-ai、UI 预览）读的是 `mimeType`，拿到 undefined 后拼出
+/// `data:undefined;base64,…`，下一轮请求带上这条工具结果时被 provider
+/// 整个拒掉。字段形状有 `mcp_content_image_serializes_camel_case` 钉住。
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum McpContent {
-    Text { text: String },
-    Image { data: String, mime_type: String },
+    Text {
+        text: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Image {
+        data: String,
+        mime_type: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -2012,6 +2026,29 @@ pub async fn mcp_restart_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mcp_content_image_serializes_camel_case() {
+        // TS 侧（pi-ai 的 data URL 拼接、UI 预览）读的是 `mimeType`。字段一旦
+        // 以 snake_case 出去，前端拿到 undefined，拼出 `data:undefined;base64,…`
+        // ——图片进不了模型上下文，还会让下一轮 provider 请求整个失败。
+        let image = McpContent::Image {
+            data: "aW1n".to_string(),
+            mime_type: "image/png".to_string(),
+        };
+        assert_eq!(
+            serde_json::to_value(&image).expect("serialize image block"),
+            serde_json::json!({ "type": "image", "data": "aW1n", "mimeType": "image/png" }),
+        );
+
+        let text = McpContent::Text {
+            text: "hi".to_string(),
+        };
+        assert_eq!(
+            serde_json::to_value(&text).expect("serialize text block"),
+            serde_json::json!({ "type": "text", "text": "hi" }),
+        );
+    }
 
     fn stdio_config(id: &str, command: &str) -> McpServerConfig {
         McpServerConfig {

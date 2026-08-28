@@ -7,13 +7,11 @@
 // system_prepare_preview_file_save_sync 那种一次性 save_token 机制。
 
 /// 导出：弹保存对话框并写入文件。用户取消返回 None。
-///
-/// skills 由前端从 localStorage 读出后传入 —— 该数据后端不可见。
 #[tauri::command]
-pub async fn settings_backup_export(skills: Option<Value>) -> Result<Option<String>, String> {
+pub async fn settings_backup_export() -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
-        let snapshot = collect_backup_snapshot(&conn, skills)?;
+        let snapshot = collect_backup_snapshot(&conn)?;
         let manifest = build_backup_manifest(&snapshot);
         let document = serialize_backup_document(&snapshot, &manifest)?;
 
@@ -68,11 +66,9 @@ pub async fn settings_backup_peek_import(
 
 /// 导入应用：真正写库。写入前自动备份当前配置。
 ///
-/// 返回的 skills 由前端写回 localStorage。
-///
-/// **与 WebDAV 共用全局锁。** 导入同样跨 providers/mcp/system 三域分别写库，
-/// 中间态不自洽；不加锁的话一次自动上传可以正好在写到一半时采集快照，把
-/// 半旧半新的配置推上远端，而它会带着自洽的 sha256 通过下载侧所有校验。
+/// **与 WebDAV 共用全局锁。** 导入跨多个配置域分别写库，中间态不自洽；
+/// 不加锁的话一次自动上传可以正好在写到一半时采集快照，把半旧半新的配置
+/// 推上远端，而它会带着自洽的 sha256 通过下载侧所有校验。
 /// 与 `upload_backup_snapshot` 里把锁提到采集之前所堵的是同一个窗口。
 ///
 /// 抑制守卫则**有意不加**：导入是用户明确要求把这份配置变成当前配置，

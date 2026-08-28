@@ -449,13 +449,13 @@ pub(crate) fn parse_backup_remote_manifest(body: &[u8]) -> Result<BackupRemoteMa
 /// 下载可以整个挤在采集与 PUT 之间完成，于是这次上传把下载前的旧快照盖回远端，
 /// 用户刚拉下来的远端配置被自己的机器悄悄覆盖。抑制守卫挡不住这种情况 ——
 /// 它只阻止下载期间新产生的标脏，管不了一个已经采完快照、正停在锁上的上传。
-async fn upload_backup_snapshot(skills: Option<Value>) -> Result<i64, String> {
+async fn upload_backup_snapshot() -> Result<i64, String> {
     let _guard = backup_sync_mutex().lock().await;
 
     let (config, document) = tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         let config = load_backup_sync_config(&conn)?;
-        let snapshot = collect_backup_snapshot(&conn, skills)?;
+        let snapshot = collect_backup_snapshot(&conn)?;
         let manifest = build_backup_manifest(&snapshot);
         let document = serialize_backup_document(&snapshot, &manifest)?;
         Ok::<_, String>((config, (document, manifest)))
@@ -497,18 +497,8 @@ async fn upload_backup_snapshot(skills: Option<Value>) -> Result<i64, String> {
 }
 
 #[tauri::command]
-pub async fn settings_backup_upload(skills: Option<Value>) -> Result<i64, String> {
-    upload_backup_snapshot(skills).await
-}
-
-/// 前端在写入设置后调用：缓存技能启用态并标脏。
-///
-/// 技能启用态存在 webview localStorage，后端侧的标脏（`save_providers` 等）
-/// 看不到它，只能由前端显式通知。
-#[tauri::command]
-pub fn settings_backup_mark_dirty(skills: Option<Value>) {
-    crate::services::webdav_auto_sync::cache_skills(skills);
-    crate::services::webdav_auto_sync::mark_dirty();
+pub async fn settings_backup_upload() -> Result<i64, String> {
+    upload_backup_snapshot().await
 }
 
 /// 自动同步的上传入口。
@@ -517,16 +507,14 @@ pub fn settings_backup_mark_dirty(skills: Option<Value>) {
 /// 1. 没开开关或凭据不全就静默跳过 —— 自动路径不该因为用户没配 WebDAV 就反复弹错误。
 /// 2. 失败会落库（`last_error`）。用户此刻多半不在设置页，只靠事件推送的话
 ///    页面一卸载错误就没了，配置早已停止同步而用户毫不知情。
-pub(crate) async fn auto_upload_backup_snapshot(
-    skills: Option<Value>,
-) -> Result<Option<i64>, String> {
+pub(crate) async fn auto_upload_backup_snapshot() -> Result<Option<i64>, String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
         .await
         .map_err(|e| format!("auto_upload_backup_snapshot join 失败：{e}"))??;
     if !config.auto_sync || backup_credentials(&config).is_err() {
         return Ok(None);
     }
-    match upload_backup_snapshot(skills).await {
+    match upload_backup_snapshot().await {
         Ok(timestamp) => Ok(Some(timestamp)),
         Err(error) => {
             let message = error.clone();
@@ -542,8 +530,8 @@ pub(crate) async fn auto_upload_backup_snapshot(
 
 /// 下载：拉 manifest → 拉 config → 校验 size+sha256 → 应用快照。
 ///
-/// **全程持有全局锁**，应用快照也在锁内。应用要跨 providers/mcp/system 三域
-/// 分别写库，中间态是不自洽的；若此时自动上传拿到锁开始采集快照，传上去的
+/// **全程持有全局锁**，应用快照也在锁内。应用要跨多个配置域分别写库，
+/// 中间态是不自洽的；若此时自动上传拿到锁开始采集快照，传上去的
 /// 就是半旧半新的配置。抑制守卫在锁内获取、随 blocking 任务一同释放，
 /// 顺序与 cc-switch 的 `run_with_webdav_lock` 一致。
 #[tauri::command]
@@ -583,7 +571,7 @@ pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
         String::from_utf8(body).map_err(|_| "远端配置不是合法的 UTF-8 文本".to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        // 应用快照会走 save_providers / save_mcp / save_system，它们都会标脏。
+        // 应用快照会走各域的 save_*，它们都会标脏。
         // 不抑制就会把刚拉下来的远端数据原样推回去。
         let _suppression = crate::services::webdav_auto_sync::suppress();
         let (snapshot, _) = parse_backup_document(&document)?;

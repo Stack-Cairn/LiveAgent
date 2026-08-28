@@ -2,7 +2,7 @@
 
 ## 总体模型
 
-把「服务商 / MCP / 系统设置 / 技能启用态」四域打包成一份 JSON 快照，支持导出到本地文件，或同步到用户自己的 WebDAV 网盘以在多台设备间共用。
+把「服务商 / MCP / 系统偏好 / 提示词模板 / 模型故障转移 / STT」六域打包成一份 JSON 快照，支持导出到本地文件，或同步到用户自己的 WebDAV 网盘以在多台设备间共用。
 
 这是**桌面独占能力**。快照的采集与应用都直接触碰 SQLite 与本地文件系统，符合「桌面是唯一执行工具、唯一持久化数据的地方」这一核心不变量。WebUI 侧没有这个分区，Gateway 不参与任何一步。
 
@@ -12,32 +12,48 @@
 | 本地导入导出 | `src-tauri/src/commands/config/settings/backup_io.rs` | rfd 文件对话框 + 解析校验 + 写入。 |
 | WebDAV 编排 | `src-tauri/src/commands/config/settings/webdav_sync.rs` | 同步配置存取、远端路径拼装、上传/下载、校验和验证。 |
 | WebDAV 传输 | `src-tauri/src/services/webdav.rs` | PROPFIND / MKCOL / PUT / GET，超时分级、响应体大小上限、日志脱敏、坚果云等服务商的定向错误文案。 |
-| 自动同步 | `src-tauri/src/services/webdav_auto_sync.rs` | 防抖上传任务、抑制守卫、skills 缓存。 |
-| 前端 IPC | `crates/agent-gui/src/lib/backup/index.ts` | 命令封装 + 标脏通知 + 状态事件类型。 |
+| 自动同步 | `src-tauri/src/services/webdav_auto_sync.rs` | 防抖上传任务、抑制守卫。 |
+| 前端 IPC | `crates/agent-gui/src/lib/backup/index.ts` | 命令封装 + 状态事件类型。 |
 | Settings UI | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx` | 本地备份组 + WebDAV 同步组。 |
 
-## 备份范围
+## 备份范围（schema v2）
 
-**在范围内**：服务商配置（含 API 密钥）、MCP 服务器、系统设置、技能启用态。
+**在范围内**：
 
-**不在范围内**：对话历史、记忆库、上传文件、SSH 私钥、WebDAV 凭据本身。
+- 服务商配置（含 API 密钥）
+- MCP 服务器
+- 系统偏好 —— 仅 `SYSTEM_PORTABLE_BACKUP_KEYS` 白名单：executionMode、toolPolicies、commandSafetyMode、browserAutomationMode
+- 提示词模板（`agent_prompt_templates`）
+- 模型故障转移（`model_failover_settings`）
+- STT 语音识别配置（`stt_settings`，含密钥）
 
-技能启用态存在 webview localStorage 而非 SQLite，后端读不到，因此导出时由前端拼进 payload，导入时由后端回传给前端写回。
+**不在范围内**：对话历史、记忆库、上传文件、SSH 私钥、技能、WebDAV 凭据本身，以及 system 域中的设备本地态（workdir、workspaceProjects 及其衍生键、systemProxy）。
+
+六域全部存于 SQLite，采集与应用完全在后端完成，前端不参与快照内容的拼装。
+
+### 为什么 system 域只带可移植偏好
+
+workdir 与 workspaceProjects 全是绝对路径，A 机器的路径在 B 机器上多半不存在，同步过去即污染；systemProxy 是每台机器 / 每个网络环境各自的配置，把 A 的代理密码推给 B 没有意义还多一处泄露面。应用侧按白名单**叠加**（而非整域覆盖）：快照里的可移植键覆盖本机，白名单之外的键保持本机原值 —— v1 旧备份里混入的设备本地键也因此被自然过滤。
+
+### 为什么去掉了 skills 域（v1 → v2）
+
+技能本体是磁盘上的目录（`~/.liveagent/skills/`），v1 只同步 `{enabled, selected}` 开关：在新设备上 selected 指向的技能根本不存在，同步过去的是一份指向空气的清单。v2 直接移除该域；v1 备份仍可导入，skills 字段被 serde 忽略。
 
 > **WebDAV 凭据必须排除在快照之外。** 若随快照流转，A 机器的凭据会覆盖 B 机器，形成同步循环。为此同步配置存在独立表 `backup_sync_settings` 而不是 `system_settings` —— 后者的 `save_system` 采用「DELETE 整表 → 按固定 key 白名单重新 INSERT」的写法，任何不在白名单里的 key 都会在下一次系统设置保存时被静默抹掉。
 
 ## 安全取舍
 
-**快照中的服务商 API 密钥是明文的**，与 cc-switch 的做法一致。
+**快照中的服务商 API 密钥与 STT 密钥是明文的**，与 cc-switch 的做法一致。
 
 这不违反「Gateway 从不持有真实密钥」的不变量 —— 那条不变量约束的是 Gateway↔WebUI 这条不可信链路，而 WebDAV 端点是用户自己持有、自己认证的。
 
-配套两项缓解：
+配套的缓解：
 
 1. WebDAV 账号密码本身**从不**进入任何快照。
-2. manifest 预留 `encryption` 字段（当前恒为 `"none"`），为后续加密留出无破坏性的升级路径。
+2. 系统代理密码随设备本地态一起被排除在快照之外。
+3. manifest 预留 `encryption` 字段（当前恒为 `"none"`），为后续加密留出无破坏性的升级路径。
 
-UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与上传的说明只陈述同步内容的范围（服务商配置、MCP、系统设置、技能），开启自动同步的确认框讲的是流量消耗。
+UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与上传的说明只陈述同步内容的范围，开启自动同步的确认框讲的是流量消耗。
 
 ## 远端布局
 
@@ -49,7 +65,7 @@ UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与�
 
 默认 `liveagent/v1/default/`。
 
-版本段 `v1` 夹在中间而非最外层，使用户在 WebDAV 客户端里看到的是一个干净的顶层目录。协议或 schema 不兼容演进时更换该段，让新旧客户端各读各的。
+版本段 `v1` 夹在中间而非最外层，使用户在 WebDAV 客户端里看到的是一个干净的顶层目录。协议不兼容演进时更换该段，让新旧客户端各读各的。schema 的兼容性演进（如本次 v1→v2）走 manifest 里的 `schemaVersion`：新客户端可读旧快照，旧客户端拒绝新快照并提示升级。
 
 `profile` 支持同一账号下隔离多套配置（如 work / personal）。
 
@@ -63,10 +79,7 @@ UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与�
 
 ### 触发与防抖
 
-| 触发源 | 位置 | 说明 |
-|---|---|---|
-| 后端 | `save_providers` / `save_mcp` / `save_system` | 在 `tx.commit()` 成功**之后**调用 `mark_dirty()`，回滚的事务不会误触发。这三个函数是 SQLite 侧唯一的写入咽喉，天然覆盖 Gateway 发起的写入。 |
-| 前端 | `persistSettings`（`src/lib/settings/storage.ts`） | 四域任一变更时调用 `settings_backup_mark_dirty`，同时把最新 skills 快照送给后端缓存。fire-and-forget，失败绝不冒泡成「保存失败」。 |
+标脏完全在后端完成：`save_providers` / `save_mcp` / `save_system` / `save_agents` / `save_model_failover` / `save_stt` 在 `tx.commit()`（或原子 UPSERT）成功**之后**调用 `mark_dirty()`，回滚的事务不会误触发。这些函数是各域在 SQLite 侧唯一的写入咽喉，天然覆盖 Gateway 发起的写入；快照六域全部落库后，前端不再需要（v1 时代为 localStorage 里的 skills 而设的）显式标脏通道。
 
 > 为什么不用 SQLite `update_hook`：`open_db()` 每次调用都新建一个 `Connection`（全仓 69 处调用），而 `update_hook` 是 per-connection 的；且当前只启用了 rusqlite 的 `bundled` feature。
 
@@ -74,13 +87,9 @@ UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与�
 
 ### 抑制
 
-下载并应用远端快照期间持有 `AutoSyncSuppressionGuard`（RAII 引用计数）。应用快照走的正是 `save_providers` / `save_mcp` / `save_system`，不抑制就会把刚从远端拉下来的数据原样推回去。
+下载并应用远端快照期间持有 `AutoSyncSuppressionGuard`（RAII 引用计数）。应用快照走的正是各域的 `save_*`，不抑制就会把刚从远端拉下来的数据原样推回去。
 
 本地导入路径（`settings_backup_apply_import`）**有意不抑制** —— 用户主动从文件导入的配置应当传播到远端。
-
-### skills 缓存
-
-自动上传没有前端参与，而 skills 存在 localStorage，因此后端缓存前端最近一次送来的启用态。缓存为空时上传会**省略** skills 域，而不是写入空值 —— 省略在下载侧表现为「不动本机技能设置」，写空值会把它们全部清掉。
 
 ### 状态反馈
 
@@ -95,6 +104,7 @@ UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与�
 | `settings_backup_test_sync_connection` | PROPFIND Depth=0 探活，不解析 XML。 |
 | `settings_backup_fetch_remote_info` | 只拉 manifest，供上传/下载前的确认对话框。远端无备份时返回 `null`。 |
 | `settings_backup_upload` / `settings_backup_download` | 手动同步。 |
-| `settings_backup_mark_dirty` | 前端标脏 + 缓存 skills。 |
 
 **密码回填**：前端未修改密码时传 `passwordTouched: false`，后端沿用库里的旧值。这是 cc-switch 记录过的真实 bug —— UI 给密码框填掩码占位符后原样提交，会把占位符当成新密码写库，用户下次同步就认证失败。
+
+**STT 应用细节**：应用快照时对 stt 域注入 `allowIncomplete: true` —— 源设备可能处于「已清空密钥」等刻意不完整的状态，这份数据当初已被源侧 `save_stt` 接受过，应用侧不按「用户正在提交表单」的标准复验。
