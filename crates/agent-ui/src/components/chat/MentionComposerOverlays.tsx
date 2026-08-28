@@ -124,7 +124,7 @@ export function Popup({
                 // visual 34px row keeps the 4px gap while clicks in the gap
                 // still land on a row instead of a dead strip. shrink-0 stops
                 // the max-h flex column from compressing rows before it scrolls.
-                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-xs leading-5 transition-colors",
+                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center justify-start gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
                 i === highlightIndex
                   ? "bg-foreground/[0.07] text-foreground"
                   : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",

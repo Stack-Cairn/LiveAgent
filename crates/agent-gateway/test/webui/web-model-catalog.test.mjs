@@ -14,7 +14,7 @@ test("web shared model catalog resolves limits and fallbacks", () => {
   });
   assert.equal(catalog.findCatalogModel("claude_code", "claude-sonnet-4-6[1m]")?.id, "claude-sonnet-4-6");
   assert.deepEqual(catalog.getProviderFallbackLimits("xai"), {
-    contextWindow: 258_000,
+    contextWindow: 400_000,
     maxOutputToken: 142_000,
   });
   assert.deepEqual(

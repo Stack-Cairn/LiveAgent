@@ -26,12 +26,18 @@ export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, Cata
   deepseek: "deepseek",
 };
 
-/** 目录未命中时的供应商兜底限额（xai 与 codex 同为 OpenAI 兼容生态，共用兜底值）。 */
+/**
+ * 目录未命中时的供应商兜底限额（xai 与 codex 同为 OpenAI 兼容生态，共用兜底值）。
+ * contextWindow 一律为含输出的总窗口语义（与目录一致）：codex/xai 的 400K =
+ * 258K 输入侧预算 + 142K 输出，与生成期对 Codex context_window 的换算同源。
+ * 旧值直接存 258K 输入预算，"窗口 − 输出预留"型的压缩阈值会被 142K 的大输出
+ * 挤到 45K，几乎每轮都触发压缩。
+ */
 export const PROVIDER_FALLBACK_LIMITS: Record<CatalogAppProviderId, ModelLimits> = {
   claude_code: { contextWindow: 200_000, maxOutputToken: 32_000 },
-  codex: { contextWindow: 258_000, maxOutputToken: 142_000 },
+  codex: { contextWindow: 400_000, maxOutputToken: 142_000 },
   gemini: { contextWindow: 1_048_576, maxOutputToken: 65_536 },
-  xai: { contextWindow: 258_000, maxOutputToken: 142_000 },
+  xai: { contextWindow: 400_000, maxOutputToken: 142_000 },
   deepseek: { contextWindow: 128_000, maxOutputToken: 32_000 },
 };
 

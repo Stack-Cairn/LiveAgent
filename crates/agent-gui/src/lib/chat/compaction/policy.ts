@@ -1,4 +1,4 @@
-import type { ProviderId, ProviderModelConfig } from "../../settings";
+import type { ProviderModelConfig } from "../../settings";
 import type { CompactionDecision, CompactionIntent } from "./types";
 
 export const OPTIMIZATION_THRESHOLD_FACTOR = 1.5;
@@ -92,32 +92,24 @@ export function resolvePruneOptions(pressure: CompactionPressure): PruneOptions 
   };
 }
 
+// contextWindow 是含输出的总窗口语义（目录/兜底统一口径；Codex 源的输入侧
+// 预算已在目录生成期换算），因此"窗口 − 输出预留"对所有供应商一致成立。
+// OpenAI 系"输入上限 = 总窗口 − 输出上限"（GPT-5：400K = 272K + 128K），
+// factor ≥ 1 保证阈值恒不超过真实输入上限。
 export function resolveCompactionThreshold(params: {
-  providerId: ProviderId;
   intent: CompactionIntent;
   contextWindow: number;
   maxOutputToken: number;
   pressureLevel: PressureLevel;
-}): { threshold: number; thresholdMode: CompactionDecision["thresholdMode"] } {
-  if (params.providerId === "codex") {
-    return { threshold: params.contextWindow, thresholdMode: "context-window" };
-  }
-
+}): number {
   const factor =
     params.intent === "optimization" ? OPTIMIZATION_THRESHOLD_FACTOR : PROTECTION_THRESHOLD_FACTOR;
   const effectiveFactor =
     params.intent === "protection" && params.pressureLevel >= MAX_PRESSURE_LEVEL ? 1.0 : factor;
-  return {
-    threshold: Math.max(
-      1024,
-      Math.floor(params.contextWindow - params.maxOutputToken * effectiveFactor),
-    ),
-    thresholdMode: "buffered-reserve",
-  };
+  return Math.max(1024, Math.floor(params.contextWindow - params.maxOutputToken * effectiveFactor));
 }
 
 export function decideCompaction(params: {
-  providerId: ProviderId;
   intent: CompactionIntent;
   totalTokens: number;
   modelConfig?: ProviderModelConfig;
@@ -148,12 +140,10 @@ export function decideCompaction(params: {
       shouldCompact: false,
       reason: "disabled",
       threshold: 0,
-      thresholdMode: "buffered-reserve",
     };
   }
 
-  const { threshold, thresholdMode } = resolveCompactionThreshold({
-    providerId: params.providerId,
+  const threshold = resolveCompactionThreshold({
     intent: params.intent,
     contextWindow,
     maxOutputToken,
@@ -166,16 +156,15 @@ export function decideCompaction(params: {
       shouldCompact: false,
       reason: "no-active-messages",
       threshold,
-      thresholdMode,
     };
   }
 
   if (params.inFlight) {
-    return { ...base, shouldCompact: false, reason: "in-flight", threshold, thresholdMode };
+    return { ...base, shouldCompact: false, reason: "in-flight", threshold };
   }
 
   if (!params.bypassThresholdAndCooldown && base.totalTokens < threshold) {
-    return { ...base, shouldCompact: false, reason: "below-threshold", threshold, thresholdMode };
+    return { ...base, shouldCompact: false, reason: "below-threshold", threshold };
   }
 
   // 冷却窗只拦"刚压缩完又立即越阈值"的超大单轮；正常自触发已被账本重置阻断。
@@ -185,8 +174,8 @@ export function decideCompaction(params: {
     params.now - params.lastCompactionAt < MIN_COMPACTION_INTERVAL_MS &&
     params.userMessageCount < MIN_COMPACTION_USER_MESSAGES
   ) {
-    return { ...base, shouldCompact: false, reason: "cooldown", threshold, thresholdMode };
+    return { ...base, shouldCompact: false, reason: "cooldown", threshold };
   }
 
-  return { ...base, shouldCompact: true, reason: "threshold-exceeded", threshold, thresholdMode };
+  return { ...base, shouldCompact: true, reason: "threshold-exceeded", threshold };
 }
