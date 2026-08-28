@@ -448,26 +448,29 @@ export const MentionComposer = memo(
         return next;
       }
 
+      // 文件与应用是弹层里的两个并列分组：文件在前、应用在后，各自独立
+      // 封顶——否则大仓库的文件结果会把整个配额吃光，应用分组永远不出现。
+      // 应用列表已由宿主门控（未挂 cua-driver 时恒为空），有查询词时两组
+      // 都按包含匹配过滤。键盘导航走拼接后的扁平数组，分组只是渲染形态。
       const next: MentionSuggestion[] = [];
-      // 应用候选与文件共用 @ 触发（对齐 codex 的交互）。应用列表本身很短
-      // 且已由宿主门控（未挂 cua-driver 时恒为空），排在文件前不会淹没文件
-      // 结果——有查询词时两边都按包含匹配过滤。
-      for (const app of mentionApps) {
-        const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
-        if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
-          continue;
-        }
-        next.push({ type: "app", app });
-        if (next.length >= MAX_SUGGESTIONS) {
-          return next;
-        }
-      }
       for (const item of mentionSessionSearchIndex) {
         if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
           continue;
         }
         next.push({ type: "file", entry: item.entry });
         if (next.length >= MAX_SUGGESTIONS) {
+          break;
+        }
+      }
+      let appCount = 0;
+      for (const app of mentionApps) {
+        const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
+        if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
+          continue;
+        }
+        next.push({ type: "app", app });
+        appCount += 1;
+        if (appCount >= MAX_SUGGESTIONS) {
           break;
         }
       }

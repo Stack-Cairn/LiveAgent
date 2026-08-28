@@ -10,6 +10,13 @@
 //! 按进程名/窗口寻址，没有等价的"已安装应用"稳定标识，前端对空列表
 //! 的行为就是不显示应用分组，无需平台分支。
 //!
+//! 图标走 `NSWorkspace.iconForFile` 而不是自己解 `.icns`：现代应用的
+//! 图标常在 Assets.car 里，Info.plist 的 CFBundleIconFile 根本不存在，
+//! 只有系统 API 能统一取到。取回后挑最接近 32px 的位图转 PNG data URL
+//! （弹层行渲染 16 逻辑像素，32 物理像素覆盖 retina），随列表一次性
+//! 返回——列表在会话内只取一次，几百 KB 的一次性载荷可接受，换来前端
+//! 零额外往返。
+//!
 //! 宿主自己（LiveAgent.app）被有意从结果中剔除：`cuaSelfGuard` 会拒绝
 //! 一切以宿主为目标的操作，把它留在候选里等于让用户选一个必然失败的项。
 
@@ -23,6 +30,10 @@ pub struct InstalledApp {
     /// 因为没有稳定身份的应用无法被 CUA 工具可靠寻址。
     pub bundle_id: String,
     pub path: String,
+    /// `data:image/png;base64,…` 形式的应用图标；取不到时省略，前端
+    /// 回退到通用应用占位图标。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_data_url: Option<String>,
 }
 
 /// 枚举已安装应用，按名称排序、按 bundle id 去重。
@@ -105,8 +116,49 @@ fn read_macos_app_bundle(path: &std::path::Path) -> Option<InstalledApp> {
     Some(InstalledApp {
         name,
         bundle_id,
+        icon_data_url: macos_app_icon_data_url(path),
         path: path.to_string_lossy().into_owned(),
     })
+}
+
+/// 应用图标 → 32px PNG data URL。见模块注释：必须走 NSWorkspace，
+/// Assets.car 时代自己解 .icns 会大面积取不到图标。
+///
+/// 提取路径是 `CGImageForProposedRect(32×32)` → `NSBitmapImageRep` →
+/// PNG：NSImage 会按 proposed rect 只解码最匹配的那一档分辨率。不要换回
+/// `TIFFRepresentation`——它把 16→1024 全部分辨率都物化（实测 15 个应用
+/// 1GB / 8 秒），而这条路径全程 <1 秒。
+///
+/// AppKit 的图像对象没有标注 Send/Sync，全程只在当前调用栈上使用、不跨
+/// 线程持有；iconForFile 与位图转换都是无 UI 的解码操作，允许后台线程
+/// 调用（NSImage 线程安全清单），配合调用方的 spawn_blocking 安全。
+#[cfg(target_os = "macos")]
+fn macos_app_icon_data_url(path: &std::path::Path) -> Option<String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+    use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
+
+    /// 弹层行渲染 16 逻辑像素；32 物理像素在 retina 下 1:1。
+    const TARGET_PIXELS: f64 = 32.0;
+
+    let icon = NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(path.to_str()?));
+    let mut proposed = NSRect {
+        origin: NSPoint { x: 0.0, y: 0.0 },
+        size: NSSize {
+            width: TARGET_PIXELS,
+            height: TARGET_PIXELS,
+        },
+    };
+    let cg_image = unsafe { icon.CGImageForProposedRect_context_hints(&mut proposed, None, None) }?;
+    let bitmap = NSBitmapImageRep::initWithCGImage(NSBitmapImageRep::alloc(), &cg_image);
+    let png = unsafe {
+        bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new())
+    }?;
+    Some(format!(
+        "data:image/png;base64,{}",
+        BASE64_STANDARD.encode(png.to_vec())
+    ))
 }
 
 #[cfg(test)]

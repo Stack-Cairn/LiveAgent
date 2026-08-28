@@ -41,9 +41,15 @@ export type MentionComposerApp = {
   /** macOS bundle id；其他平台可能缺失，此时以 path 兜底标识。 */
   bundleId?: string;
   path: string;
+  /**
+   * `data:image/png;base64,…` 应用图标，仅用于弹层行渲染；chip 与剪贴板
+   * 序列化有意不携带（几 KB 的 data URL 进 DOM 属性会把复制载荷撑爆）。
+   */
+  iconDataUrl?: string;
 };
 
-export type MentionComposerAppMention = MentionComposerApp;
+/** chip / 草稿 / 剪贴板携带的应用身份——不含图标，见 iconDataUrl 注释。 */
+export type MentionComposerAppMention = Omit<MentionComposerApp, "iconDataUrl">;
 
 export type MentionComposerCommitMention = {
   sha: string;

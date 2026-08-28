@@ -81,8 +81,29 @@ test("app suggestions ride the @ trigger and are host-gated by the mentionApps p
   assert.doesNotMatch(composer, /invoke\(["']cua_driver/);
   assert.match(composer, /next\.push\(\{ type: "app", app \}\)/);
   assert.match(composer, /insertAppMentionChip\(mentionCtx, suggestion\.app\)/);
-  // 弹层为应用行给出可辨识的徽标。
-  assert.match(overlays, /suggestion\.type === "app"/);
+});
+
+test("the popup renders files and apps as two labelled sections with real app icons", () => {
+  // 文件在前、应用在后，各自独立封顶——应用分组不能被大仓库的文件结果
+  // 挤掉。分组标题按第一条应用行的边界插入（仅当上方有文件行）。
+  const filesLoopFirst =
+    composer.indexOf("of mentionSessionSearchIndex") < composer.indexOf("of mentionApps");
+  assert.ok(filesLoopFirst, "file suggestions must precede app suggestions");
+  assert.match(composer, /appCount >= MAX_SUGGESTIONS/);
+  assert.match(overlays, /firstAppIndex/);
+  assert.match(overlays, /i === firstAppIndex && hasFileRows/);
+  // 应用行优先渲染宿主提供的真实图标（data URL），缺失时回退占位图标。
+  assert.match(overlays, /app\?\.iconDataUrl \?/);
+  assert.match(overlays, /img src=\{app\.iconDataUrl\}/);
+  assert.match(overlays, /<AppWindow className/);
+});
+
+test("the app icon stays a popup-only concern and never enters the chip DOM", () => {
+  // 图标是几 KB 的 data URL：写进 chip 属性会跟着进剪贴板 HTML 与草稿
+  // 序列化，把复制载荷撑爆。身份（name/bundleId/path）才是 chip 的内容。
+  assert.match(model, /MentionComposerAppMention = Omit<MentionComposerApp, "iconDataUrl">/);
+  assert.doesNotMatch(internals, /APP_MENTION_ICON_DATA/);
+  assert.doesNotMatch(internals, /iconDataUrl/);
 });
 
 test("the send path serializes appMention segments in both draft pipelines", () => {

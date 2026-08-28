@@ -3,7 +3,7 @@ import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { AppWindow, Blend } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   formatLargePasteCount,
@@ -36,6 +36,10 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
+  // 文件与应用两个分组在扁平 suggestions 数组里连续排布（文件在前）；
+  // 键盘导航按扁平索引走，分组标题只是渲染时按边界插入的静态行。
+  const firstAppIndex = suggestions.findIndex((suggestion) => suggestion.type === "app");
+  const hasFileRows = suggestions.some((suggestion) => suggestion.type === "file");
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
@@ -91,11 +95,7 @@ export function Popup({
       }}
     >
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
-        {trigger === "skill"
-          ? "Skills"
-          : suggestions.some((suggestion) => suggestion.type === "app")
-            ? "文件 / 应用"
-            : "文件"}
+        {trigger === "skill" ? "Skills" : hasFileRows || firstAppIndex < 0 ? "文件" : "应用"}
       </div>
       <div
         ref={listRef}
@@ -118,7 +118,15 @@ export function Popup({
           const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
           const title = app?.name ?? skill?.name ?? fileName;
           const subtitle = app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : "");
-          return (
+          // 应用分组标题插在第一条应用行之前，仅当上方有文件行时——只剩
+          // 应用时顶栏已直接写「应用」，再插一行就是重复标签。
+          const appSectionHeader =
+            isApp && i === firstAppIndex && hasFileRows ? (
+              <div className="mt-1.5 shrink-0 border-t border-border/50 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                应用
+              </div>
+            ) : null;
+          const row = (
             <button
               type="button"
               key={
@@ -155,7 +163,11 @@ export function Popup({
                 )}
               >
                 {isApp ? (
-                  <AppWindow className="h-4 w-4" />
+                  app?.iconDataUrl ? (
+                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-[3px]" />
+                  ) : (
+                    <AppWindow className="h-4 w-4" />
+                  )
                 ) : Icon ? (
                   <Icon width={16} height={16} />
                 ) : (
@@ -172,10 +184,6 @@ export function Popup({
                 <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                   skill
                 </span>
-              ) : isApp ? (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                  app
-                </span>
               ) : (
                 isDir && (
                   <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
@@ -184,6 +192,13 @@ export function Popup({
                 )
               )}
             </button>
+          );
+          if (!appSectionHeader) return row;
+          return (
+            <Fragment key={`app-section:${app?.bundleId || app?.path || app?.name}`}>
+              {appSectionHeader}
+              {row}
+            </Fragment>
           );
         })}
         {showEmpty && !isLoading && !error && suggestions.length === 0 && (

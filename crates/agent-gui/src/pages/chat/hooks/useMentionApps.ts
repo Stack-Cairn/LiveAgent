@@ -8,6 +8,7 @@ type InstalledApp = {
   name: string;
   bundleId: string;
   path: string;
+  iconDataUrl?: string;
 };
 
 const EMPTY_APPS: MentionComposerApp[] = [];
@@ -47,6 +48,7 @@ export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMo
             name: app.name,
             bundleId: app.bundleId || undefined,
             path: app.path,
+            iconDataUrl: app.iconDataUrl || undefined,
           })),
         );
       })
