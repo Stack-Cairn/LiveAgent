@@ -11,6 +11,7 @@ import {
   type WorkbenchDragState,
   type WorkbenchDropCommit,
 } from "./dragMachine";
+import { installWorkbenchDragWindowListeners } from "./dragWindowListeners";
 import type { WorkbenchGeometry } from "./index";
 import type { WorkbenchLayout } from "./types";
 
@@ -169,6 +170,9 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           armClickSuppressor();
           document.documentElement.style.setProperty("cursor", "grabbing");
         }
+        // Once activated this is a workbench gesture, not text selection,
+        // xterm input, or a menu interaction beneath the captured pointer.
+        moveEvent.preventDefault();
         dispatch({
           type: "pointer-move",
           pointerId: moveEvent.pointerId,
@@ -181,6 +185,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       const handleUp = (upEvent: PointerEvent) => {
         const session = sessionRef.current;
         if (session.phase === "idle" || upEvent.pointerId !== session.pointerId) return;
+        if (session.phase === "dragging") upEvent.preventDefault();
         const result = dispatch({
           type: "pointer-up",
           pointerId: upEvent.pointerId,
@@ -207,18 +212,13 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
         if (keyEvent.key === "Escape") teardown();
       };
 
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp);
-      window.addEventListener("pointercancel", handleCancel);
-      window.addEventListener("blur", handleCancel);
-      window.addEventListener("keydown", handleKeyDown, true);
-      cleanupListenersRef.current = () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-        window.removeEventListener("pointercancel", handleCancel);
-        window.removeEventListener("blur", handleCancel);
-        window.removeEventListener("keydown", handleKeyDown, true);
-      };
+      cleanupListenersRef.current = installWorkbenchDragWindowListeners(window, {
+        onPointerMove: handleMove,
+        onPointerUp: handleUp,
+        onPointerCancel: handleCancel,
+        onBlur: handleCancel,
+        onKeyDown: handleKeyDown,
+      });
     },
     [dispatch, enabled, geometryRef, layoutRef, teardown],
   );
