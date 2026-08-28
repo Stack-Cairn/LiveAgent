@@ -19,8 +19,13 @@ const { createTerminalPaneBindingStore } = loader.loadModule(
   "src/pages/chat/workbench/terminalPaneBindingStore.ts",
 );
 
+// 宿主实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现;
+// 桌面文件只是注入 Tauri client 与窗口级单例的薄包装。
 const hostSource = readFileSync(
-  new URL("../../src/pages/chat/surfaces/TerminalPaneHost.tsx", import.meta.url),
+  new URL(
+    "../../../agent-ui/src/components/workbench/TerminalPaneHost.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -180,20 +185,16 @@ test("a bound-but-missing session drops the stale binding before auto-recreate",
   const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
   assertOrder(
     ensureEffect,
-    [
-      "if (boundSessionId) {",
-      "terminalPaneBindings.delete(surface.surfaceId)",
-      "setCreatedSession(null)",
-    ],
+    ["if (boundSessionId) {", "bindings.delete(surface.surfaceId)", "setCreatedSession(null)"],
     "stale-binding branch",
   );
   assert.match(
     ensureEffect,
-    /terminalPaneBindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
+    /bindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
   );
   // 先触发 binding store 更新,下一轮 effect 才进入 ensure,避免同轮双建。
   assert.ok(
-    ensureEffect.indexOf("terminalPaneBindings.delete(surface.surfaceId)") <
+    ensureEffect.indexOf("bindings.delete(surface.surfaceId)") <
       ensureEffect.indexOf("ensureTerminalPaneSession(surface, {"),
   );
 });
@@ -203,9 +204,9 @@ test("restartFromLaunchSpec closes the stale session and drops the binding", () 
   assertOrder(
     restart,
     [
-      "terminalPaneBindings.get(surface.surfaceId)",
-      "tauriTerminalClient.close(staleSessionId)",
-      "terminalPaneBindings.delete(surface.surfaceId)",
+      "bindings.get(surface.surfaceId)",
+      "client.close(staleSessionId)",
+      "bindings.delete(surface.surfaceId)",
       "setErrorState(null)",
     ],
     "restartFromLaunchSpec",

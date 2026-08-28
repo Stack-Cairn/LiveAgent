@@ -206,3 +206,27 @@ test("background pane bindings route Send by conversationId, not through focusGu
   assert.match(builder, /importReadableFiles\(files,\s*\{/);
   assert.match(builder, /workdir:\s*workspaceRoot/);
 });
+
+test("focusing another pane does not swap an object composer ref across hosts", () => {
+  // Object refs swapped with `ref={isCurrent ? hostRef : undefined}` detach
+  // in tree order: the outgoing host can null hostRef after the incoming
+  // host attached, so Enter reads a null composer and sends nothing.
+  const chatPage = readSource("../../src/pages/ChatPage.tsx");
+  assert.doesNotMatch(chatPage, /ref=\{isCurrent \? conversationPaneHostRef : undefined\}/);
+  assert.match(chatPage, /if \(handle\) conversationPaneHostRef\.current = handle;/);
+});
+
+test("multi-pane focus does not freeze the composer during hydration", () => {
+  const chatPage = readSource("../../src/pages/ChatPage.tsx");
+  const registrations = chatPage.slice(chatPage.indexOf("const workbenchRegistrations"));
+  assert.match(
+    registrations,
+    /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)\.length < 2/,
+  );
+});
+
+test("pane draft restore is keyed by conversation identity, not controller object", () => {
+  const paneHost = readSource("../../src/pages/chat/surfaces/ConversationPaneHost.tsx");
+  assert.match(paneHost, /controllerRef\.current = controller;/);
+  assert.match(paneHost, /\}, \[conversationId\]\);/);
+});

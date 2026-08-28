@@ -21,8 +21,9 @@ function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
+// drop 事务实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现。
 const terminalDropCommitSource = readSource(
-  "../../src/pages/chat/workbench/terminalDropCommit.ts",
+  "../../../agent-ui/src/lib/workbench/terminalDropCommit.ts",
 );
 const chatPageSource = readSource("../../src/pages/ChatPage.tsx");
 

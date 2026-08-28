@@ -196,8 +196,8 @@ test("conversation transcript and composer share one stable workbench surface", 
   assert.match(conversationSurfaceSource, /useConversationSurfaceSnapshot\(controller\)/);
   assert.match(conversationPaneHostSource, /const composerRef = useRef/);
   assert.match(conversationPaneHostSource, /const scrollFollowRef = useRef/);
-  assert.match(conversationPaneHostSource, /controller\.getSnapshot\(\)\.draft/);
-  assert.match(conversationPaneHostSource, /controller\.setDraft\(nextDraft\)/);
+  assert.match(conversationPaneHostSource, /controllerRef\.current\.getSnapshot\(\)\.draft/);
+  assert.match(conversationPaneHostSource, /controllerRef\.current\.setDraft\(nextDraft\)/);
   assert.match(conversationPaneHostSource, /<ChatTranscript/);
   assert.match(conversationPaneHostSource, /<ChatComposerBar/);
   assert.match(conversationPaneHostSource, /pendingUploadedFiles=\{snapshot\.uploads\}/);

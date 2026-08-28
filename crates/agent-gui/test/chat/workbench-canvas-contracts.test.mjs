@@ -49,6 +49,23 @@ test("dividers use pointer capture and commit once per gesture", () => {
   assert.match(dividerLayerSource, /h-px w-full -translate-y-px/);
 });
 
+test("workbench drags capture the pointer so dock-to-canvas gestures survive xterm", () => {
+  const dragSessionSource = readSource(
+    "../../../agent-ui/src/lib/workbench/useWorkbenchDragSession.ts",
+  );
+  assert.match(dragSessionSource, /setPointerCapture\(event\.pointerId\)/);
+  assert.match(dragSessionSource, /releasePointerCapture\(capture\.pointerId\)/);
+  assert.match(dragSessionSource, /currentTarget/);
+});
+
+test("dock terminal grip extracts onto the canvas instead of only reordering tabs", () => {
+  const tabStripSource = readSource(
+    "../../../agent-ui/src/components/project-tools/RightDockTabStrip.tsx",
+  );
+  assert.match(tabStripSource, /tab\.dragProps\?\.onPointerDown\(event\)/);
+  assert.match(tabStripSource, /currentTarget: event\.currentTarget/);
+});
+
 test("workbench canvas separates preview geometry from committed geometry", () => {
   assert.match(workbenchCanvasSource, /committedGeometry/);
   assert.match(workbenchCanvasSource, /ResizeObserver/);
