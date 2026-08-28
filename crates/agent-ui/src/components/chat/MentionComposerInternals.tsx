@@ -6,6 +6,7 @@ import {
 } from "@liveagent/adapters/userMessageContent";
 import { getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { SKILL_ICON_SVG_MARKUP } from "@liveagent/ui/components/IconSet";
+import { getAppMentionIconDataUrl } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
@@ -977,6 +978,16 @@ export function parseSerializedComposerText(
       } else {
         pushTextSegment(segments, `/${segment.name}`);
       }
+    } else if (segment.type === "app") {
+      segments.push({
+        type: "appMention",
+        app: normalizeAppMention({
+          name: segment.app.name,
+          bundleId: segment.app.bundleId,
+          path: segment.app.path ?? "",
+        }),
+      });
+      matched = true;
     } else if (segment.type === "commit") {
       segments.push({
         type: "commitMention",
@@ -1074,8 +1085,27 @@ export function createSkillMentionIcon() {
   return createMentionIcon(SKILL_ICON_SVG_MARKUP);
 }
 
-export function createAppMentionIcon() {
-  return createMentionIcon(APP_MENTION_ICON_SVG);
+/**
+ * 应用 chip 的图标：优先从注册表取真实 logo（<img>），查不到回退通用
+ * 占位 SVG。图标只作为子元素存在——序列化读的是 chip 属性，data URL
+ * 因此不进草稿/剪贴板 JSON；chip 重建（setDraft、粘贴恢复）时按身份
+ * 重查注册表，图标自然复原。
+ */
+export function createAppMentionIcon(app?: MentionComposerAppMention) {
+  const iconDataUrl = app ? getAppMentionIconDataUrl(app) : undefined;
+  if (!iconDataUrl) {
+    return createMentionIcon(APP_MENTION_ICON_SVG);
+  }
+  const icon = document.createElement("img");
+  icon.src = iconDataUrl;
+  icon.alt = "";
+  icon.width = 12;
+  icon.height = 12;
+  icon.draggable = false;
+  icon.style.flexShrink = "0";
+  icon.style.alignSelf = "center";
+  icon.style.borderRadius = "2px";
+  return icon;
 }
 
 export function isComposerChipElement(node: Node | null): node is HTMLElement {
@@ -1476,7 +1506,7 @@ export function createAppMentionChip(appInput: MentionComposerAppMention) {
   chip.title = app.bundleId ? `${app.name}\n${app.bundleId}` : app.name;
   chip.setAttribute("aria-label", app.name);
 
-  chip.appendChild(createAppMentionIcon());
+  chip.appendChild(createAppMentionIcon(app));
   chip.appendChild(document.createTextNode(app.name));
   return chip;
 }

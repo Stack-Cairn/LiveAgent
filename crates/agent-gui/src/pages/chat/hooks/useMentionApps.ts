@@ -1,6 +1,7 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings";
 import type { MentionComposerApp } from "@liveagent/ui/components/chat/MentionComposer";
 import { isCuaDriverServer } from "@liveagent/ui/contracts/mcpServerDefaults";
+import { registerAppMentionIcons } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 
@@ -43,14 +44,16 @@ export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMo
       .then((installed) => {
         if (cancelled) return;
         setFetched(true);
-        setApps(
-          installed.map((app) => ({
-            name: app.name,
-            bundleId: app.bundleId || undefined,
-            path: app.path,
-            iconDataUrl: app.iconDataUrl || undefined,
-          })),
-        );
+        const mapped = installed.map((app) => ({
+          name: app.name,
+          bundleId: app.bundleId || undefined,
+          path: app.path,
+          iconDataUrl: app.iconDataUrl || undefined,
+        }));
+        // chip 与用户气泡按身份从注册表取 logo（data URL 不进序列化），
+        // 列表落地时登记一次即可覆盖三处展示面。
+        registerAppMentionIcons(mapped);
+        setApps(mapped);
       })
       .catch(() => {
         // 枚举失败按"没有应用候选"降级；下次门控变化再试。

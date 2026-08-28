@@ -1,8 +1,9 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
-import { SkillIcon } from "@liveagent/ui/components/IconSet";
+import { AppWindow, SkillIcon } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { useAppMentionIcon } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
@@ -74,6 +75,7 @@ export type UserMessageSegment =
   | { type: "text"; value: string }
   | { type: "mention"; reference: FileMentionReference }
   | { type: "skill"; name: string }
+  | { type: "app"; app: AppDisplayReference }
   | { type: "commit"; commit: CommitDisplayReference }
   | { type: "gitFile"; file: GitFileDisplayReference }
   | { type: "codeRef"; reference: CodeMentionReference }
@@ -115,6 +117,14 @@ export type GitFileDisplayReference = {
   remoteName?: string;
   remoteUrl?: string;
   githubUrl?: string;
+};
+
+/** 应用提及（computer use 目标）。身份按内容分类：带路径分隔符判 path，
+ *  否则判 bundle id——与 formatAppMentionToken 的序列化取向互逆。 */
+export type AppDisplayReference = {
+  name: string;
+  bundleId?: string;
+  path?: string;
 };
 
 export type CommitDetailsLoader = (
@@ -344,6 +354,27 @@ function inlineGitFileReferenceAt(text: string, index: number) {
   };
 }
 
+/** `app "Safari" (com.apple.Safari)`——formatAppMentionToken 的逆变换。
+ *  只认带括号身份的完整形态：裸 `app "Name"` 在自然语言里太常见，作为
+ *  token 识别会把普通句子错渲染成 chip。 */
+function inlineAppReferenceAt(text: string, index: number) {
+  if (!isTokenBoundary(text, index)) return null;
+  const match = /^app "([^"\r\n]{1,200})" \(([^()\r\n]{1,500})\)/.exec(text.slice(index));
+  if (!match) return null;
+  const name = (match[1] ?? "").trim();
+  const identity = (match[2] ?? "").trim();
+  if (!name || !identity) return null;
+  const isPath = identity.includes("/") || identity.includes("\\");
+  return {
+    end: index + (match[0]?.length ?? 0),
+    app: {
+      name,
+      bundleId: isPath ? undefined : identity,
+      path: isPath ? identity : undefined,
+    } satisfies AppDisplayReference,
+  };
+}
+
 function tokenizeInlineMentions(
   text: string,
   options: UserMessageTokenizeOptions,
@@ -371,6 +402,17 @@ function tokenizeInlineMentions(
       segments.push({ type: "commit", commit: commitMatch.commit });
       cursor = commitMatch.end;
       index = commitMatch.end - 1;
+      continue;
+    }
+
+    const appMatch = inlineAppReferenceAt(text, index);
+    if (appMatch) {
+      if (index > cursor) {
+        pushTextSegment(segments, text.slice(cursor, index));
+      }
+      segments.push({ type: "app", app: appMatch.app });
+      cursor = appMatch.end;
+      index = appMatch.end - 1;
       continue;
     }
 
@@ -759,6 +801,9 @@ function userMessageSegmentKey(part: UserMessageSegment, index: number) {
     return `mention:${index}:${part.reference.kind}:${part.reference.path}`;
   }
   if (part.type === "skill") return `skill:${index}:${part.name}`;
+  if (part.type === "app") {
+    return `app:${index}:${part.app.bundleId ?? part.app.path ?? part.app.name}`;
+  }
   if (part.type === "commit") return `commit:${index}:${part.commit.sha}:${part.commit.subject}`;
   if (part.type === "gitFile") {
     return `git-file:${index}:${part.file.commitSha}:${part.file.path}`;
@@ -807,6 +852,31 @@ function SkillMentionChip({ name }: { name: string }) {
     <span title={`Skill: ${name}`} className={mentionChipClassName("skill")}>
       <SkillIcon className="h-3 w-3 shrink-0 self-center" />
       {name}
+    </span>
+  );
+}
+
+function AppMentionChip({ app }: { app: AppDisplayReference }) {
+  // 图标来自进程级注册表（宿主拉到应用列表时登记）；订阅保证登记晚于
+  // 气泡挂载时也能补上真实 logo。查不到（WebUI、应用已卸载）回退占位。
+  const iconDataUrl = useAppMentionIcon(app);
+  const identity = app.bundleId ?? app.path ?? "";
+  return (
+    <span
+      title={identity ? `${app.name}\n${identity}` : app.name}
+      className={mentionChipClassName("app")}
+    >
+      {iconDataUrl ? (
+        <img
+          src={iconDataUrl}
+          alt=""
+          draggable={false}
+          className="h-3 w-3 shrink-0 self-center rounded-[2px]"
+        />
+      ) : (
+        <AppWindow className="h-3 w-3 shrink-0 self-center" />
+      )}
+      {app.name}
     </span>
   );
 }
@@ -952,6 +1022,7 @@ export const UserMessageContent = memo(function UserMessageContent({
     (part) =>
       part.type === "mention" ||
       part.type === "skill" ||
+      part.type === "app" ||
       part.type === "commit" ||
       part.type === "gitFile" ||
       part.type === "codeRef" ||
@@ -978,6 +1049,9 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         if (part.type === "skill") {
           return <SkillMentionChip key={key} name={part.name} />;
+        }
+        if (part.type === "app") {
+          return <AppMentionChip key={key} app={part.app} />;
         }
         if (part.type === "commit") {
           return (

@@ -98,12 +98,63 @@ test("the popup renders files and apps as two labelled sections with real app ic
   assert.match(overlays, /<AppWindow className/);
 });
 
-test("the app icon stays a popup-only concern and never enters the chip DOM", () => {
-  // 图标是几 KB 的 data URL：写进 chip 属性会跟着进剪贴板 HTML 与草稿
-  // 序列化，把复制载荷撑爆。身份（name/bundleId/path）才是 chip 的内容。
-  assert.match(model, /MentionComposerAppMention = Omit<MentionComposerApp, "iconDataUrl">/);
-  assert.doesNotMatch(internals, /APP_MENTION_ICON_DATA/);
-  assert.doesNotMatch(internals, /iconDataUrl/);
+test("the chip shows the real app logo via the icon registry, never via DOM attributes", () => {
+  // 图标是几 KB 的 data URL：进 chip 属性会跟着进剪贴板 JSON 与草稿序列
+  // 化。所以 chip 渲染时按身份（name/bundleId/path）从进程级注册表查图，
+  // 序列化载荷保持只有身份三元组；chip 重建（setDraft/粘贴）重查即复原。
+  assert.match(internals, /getAppMentionIconDataUrl\(app\)/);
+  assert.match(internals, /createAppMentionIcon\(app\)/);
+  // 属性面固定为身份三元组——不得新增 icon 属性。
+  const chipFactory = extractFunction(internals, "createAppMentionChip");
+  const setAttrs = [...chipFactory.matchAll(/setAttribute\((APP_MENTION_[A-Z_]+)/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(setAttrs, [
+    "APP_MENTION_NAME_ATTR",
+    "APP_MENTION_BUNDLE_ID_ATTR",
+    "APP_MENTION_PATH_ATTR",
+  ]);
+  // 注册表登记发生在 GUI 拉到列表时。
+  const hook = source(guiRoot, "pages/chat/hooks/useMentionApps.ts");
+  assert.match(hook, /registerAppMentionIcons\(mapped\)/);
+});
+
+test("user bubbles tokenize app mention tokens back into chips", () => {
+  const bubble = source(agentUiRoot, "lib/chat/userMessageContent.tsx");
+  assert.match(bubble, /\{ type: "app"; app: AppDisplayReference \}/);
+  assert.match(bubble, /<AppMentionChip key=\{key\} app=\{part\.app\} \/>/);
+  assert.match(bubble, /useAppMentionIcon\(app\)/);
+  // hasChip 少了 app 臂时，纯 app 提及的消息会整体走无 chip 快捷路径。
+  assert.match(bubble, /part\.type === "app" \|\|/);
+
+  // token 逆变换的语义：完整形态才识别，身份按 path 分隔符分类。
+  const stripTypes = (src) =>
+    src
+      .replace(/\(text: string, index: number\)/g, "(text, index)")
+      .replace(/ satisfies AppDisplayReference/g, "");
+  const helpers = [
+    stripTypes(extractFunction(bubble, "isTokenBoundary")),
+    stripTypes(extractFunction(bubble, "inlineAppReferenceAt")),
+  ].join("\n");
+  const inlineAppReferenceAt = new Function(`${helpers}; return inlineAppReferenceAt;`)();
+  assert.deepEqual(inlineAppReferenceAt('app "Safari" (com.apple.Safari)', 0)?.app, {
+    name: "Safari",
+    bundleId: "com.apple.Safari",
+    path: undefined,
+  });
+  assert.deepEqual(inlineAppReferenceAt('app "Tool" (/opt/tool)', 0)?.app, {
+    name: "Tool",
+    bundleId: undefined,
+    path: "/opt/tool",
+  });
+  // 裸 `app "Name"` 是自然语言常见形态，不作 token。
+  assert.equal(inlineAppReferenceAt('app "Safari" is great', 0), null);
+  // 非词边界不触发（避免把 "myapp \"x\" (y)" 切碎）。
+  assert.equal(inlineAppReferenceAt('myapp "Safari" (com.apple.Safari)', 2), null);
+
+  // 纯文本粘贴（剪贴板第三层）也经同一 token 还原成 chip。
+  assert.match(internals, /segment\.type === "app"/);
+  assert.match(internals, /type: "appMention",\s*app: normalizeAppMention\(/);
 });
 
 test("the send path serializes appMention segments in both draft pipelines", () => {
