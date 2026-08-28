@@ -86,11 +86,43 @@ test("identity helpers distinguish surface kinds", () => {
   );
   assert.equal(surfaceIdentityKey(localTerminalPane("p", " t1 ").surface), "terminal:t1");
   assert.equal(surfaceIdentityKey(sshTerminalPane("p", "t2").surface), "terminal:t2");
+  assert.equal(
+    surfaceIdentityKey({ kind: "fileTree", project: project() }),
+    "fileTree:/workspace/project-main",
+  );
   assert.deepEqual(surfaceProjectRef(localTerminalPane("p", "t1").surface), project());
   assert.equal(
     surfaceProjectRef({ kind: "unsupported", originalKind: "editor", raw: {} }),
     null,
   );
+});
+
+test("file tree is a project-scoped singleton surface", () => {
+  let layout = conversationRoot();
+  layout = mustApply(layout, {
+    type: "OPEN_PANE",
+    pane: {
+      paneId: "pane-file-tree",
+      surface: { kind: "fileTree", project: project() },
+      view: {},
+    },
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "left" },
+  });
+  assert.equal(
+    findPaneIdBySurfaceKey(layout, "fileTree:/workspace/project-main"),
+    "pane-file-tree",
+  );
+  const duplicate = apply(layout, {
+    type: "OPEN_PANE",
+    pane: {
+      paneId: "pane-file-tree-2",
+      surface: { kind: "fileTree", project: project() },
+      view: {},
+    },
+    target: { kind: "pane-edge", paneId: "pane-conversation", edge: "bottom" },
+  });
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.error.code, "duplicate-surface");
 });
 
 test("opens a local terminal pane beside a conversation pane", () => {

@@ -13,6 +13,7 @@ import {
   type WorkbenchOpenTarget,
 } from "./index";
 import {
+  type FileTreeWorkbenchSurface,
   type PaneRecord,
   type ProjectRef,
   surfaceIdentityKey,
@@ -132,6 +133,11 @@ export type WindowWorkbench = {
     surface: TerminalWorkbenchSurface,
     target: WorkbenchOpenTarget,
   ): { paneId: string } | null;
+  /** Open the project's singleton file tree surface. */
+  openFileTreeSurface(
+    surface: FileTreeWorkbenchSurface,
+    target: WorkbenchOpenTarget,
+  ): { paneId: string } | null;
   movePane(paneId: string, target: WorkbenchMoveTarget): boolean;
   /** Draft promotion: rebind the pane hosting `fromId` to `toId` in place. */
   renameConversation(fromConversationId: string, toConversationId: string): void;
@@ -246,6 +252,24 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
 
   const openTerminalSurface = useCallback(
     (surface: TerminalWorkbenchSurface, target: WorkbenchOpenTarget): { paneId: string } | null => {
+      const existingPaneId = findPaneIdBySurfaceKey(layoutRef.current, surfaceIdentityKey(surface));
+      if (existingPaneId) {
+        dispatchCurrent({ type: "FOCUS_PANE", paneId: existingPaneId });
+        return { paneId: existingPaneId };
+      }
+      const paneId = createPaneId();
+      const result = dispatchCurrent({
+        type: "OPEN_PANE",
+        pane: { paneId, surface, view: {} },
+        target,
+      });
+      return result.ok ? { paneId } : null;
+    },
+    [dispatchCurrent],
+  );
+
+  const openFileTreeSurface = useCallback(
+    (surface: FileTreeWorkbenchSurface, target: WorkbenchOpenTarget): { paneId: string } | null => {
       const existingPaneId = findPaneIdBySurfaceKey(layoutRef.current, surfaceIdentityKey(surface));
       if (existingPaneId) {
         dispatchCurrent({ type: "FOCUS_PANE", paneId: existingPaneId });
@@ -393,6 +417,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       focusPane,
       openConversation,
       openTerminalSurface,
+      openFileTreeSurface,
       movePane,
       renameConversation,
       closePane,
@@ -407,6 +432,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       focusPane,
       openConversation,
       openTerminalSurface,
+      openFileTreeSurface,
       movePane,
       renameConversation,
       closePane,

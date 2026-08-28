@@ -9,9 +9,9 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // (源码层断言),reducer 也只在显式 FOCUS/OPEN 上改焦点(模型层断言)。
 //
 // 被 Pane 租用的会话从 dock 的终端 tab 中整体隐藏(终端任一时刻只出现在一个
-// 宿主里),因此本地终端路径不再有任何 Pane 焦点入口。唯一保留的白名单是
-// SSH overlay 的 `onSshTerminalFocusLeasedSession`(overlay 的 shell tab 仍以
-// 占位互斥),它同样是页面注入的回调,dock/overlay 侧只调用不构造布局命令。
+// 宿主里),因此本地终端路径不再有任何 Pane 焦点入口。文件树保留一个收窄的
+// `onFocusFileTreePane` 占位跳转入口,与 SSH overlay 的白名单入口相同:它们都
+// 由页面注入回调,dock/overlay 侧只调用而不构造布局命令。
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -96,21 +96,20 @@ test("dock tab selection routes through dock-local state, never through pane foc
   assert.equal(sessions.includes("paneId"), false);
 });
 
-test("ChatPage wires no pane-focus handler into the dock", () => {
+test("ChatPage only wires the file-tree lease focus handler into the dock", () => {
   const dockProps = extractJsxProps(chatPageSource, "RightDockPanel");
-  // handleWorkbenchFocusPane 是 Canvas 的焦点通路;它不得出现在 dock 属性区。
-  assert.equal(
-    dockProps.includes("handleWorkbenchFocusPane"),
-    false,
-    "RightDockPanel receives the canvas focus handler",
-  );
-  // 本地终端的 leased 会话已从 dock 隐藏,不再存在任何 Pane 焦点 prop。
+  // 文件树保留单视图租约的显式跳转按钮;回调必须先按 surface key 找到
+  // 当前文件树 pane,不能把通用 pane-focus handler 直接暴露给 dock。
+  assert.match(dockProps, /onFocusFileTreePane=\{\(\) => \{/);
+  assert.match(dockProps, /`fileTree:\$\{terminalProjectPathKey\}`/);
+  assert.match(dockProps, /if \(paneId\) handleWorkbenchFocusPane\(paneId\)/);
+  // 本地终端的 leased 会话已从 dock 隐藏,所以文件树仍是唯一 Pane 焦点 prop。
   // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点
   // 无关,故按 "Pane" 过滤。)
   const paneFocusProps = [...dockProps.matchAll(/\bon[A-Za-z]*Focus[A-Za-z]*Pane[A-Za-z]*=/g)].map(
     (match) => match[0],
   );
-  assert.deepEqual(paneFocusProps, []);
+  assert.deepEqual(paneFocusProps, ["onFocusFileTreePane="]);
 });
 
 test("the explicit jump only focuses a pane that actually holds the session's lease", () => {

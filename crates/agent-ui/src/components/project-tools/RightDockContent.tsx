@@ -1,5 +1,5 @@
 import type { RightDockTabKind } from "@liveagent/app/lib/settings";
-import { Terminal } from "@liveagent/ui/components/IconSet";
+import { FolderOpen, Terminal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { RefObject } from "react";
 import { cn } from "../../lib/shared/utils";
@@ -22,6 +22,8 @@ type RightDockContentProps = {
   onTerminalError: (sessionId: string, message: string | null) => void;
   onInitialTerminalSnapshotConsumed: (sessionId: string) => void;
   onCreateTerminal: () => void;
+  fileTreeLeased?: boolean;
+  onFocusFileTreePane?: () => void;
 };
 
 export function RightDockContent(props: RightDockContentProps) {
@@ -37,6 +39,8 @@ export function RightDockContent(props: RightDockContentProps) {
     onTerminalError,
     onInitialTerminalSnapshotConsumed,
     onCreateTerminal,
+    fileTreeLeased,
+    onFocusFileTreePane,
   } = props;
   const { t } = useLocale();
   const context = useRightDockToolContext();
@@ -50,6 +54,29 @@ export function RightDockContent(props: RightDockContentProps) {
           return null;
         }
         const active = currentActiveTab === definition.kind;
+        if (definition.kind === "fileTree" && fileTreeLeased) {
+          return (
+            <div
+              key={definition.kind}
+              className={cn(
+                "min-h-0 flex-1",
+                active ? definition.containerActiveClassName : "hidden",
+              )}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <FolderOpen className="h-6 w-6 text-muted-foreground" />
+                <div className="text-xs text-muted-foreground">
+                  {t("projectTools.fileTree.openInWorkbenchHint")}
+                </div>
+                {onFocusFileTreePane ? (
+                  <Button size="sm" variant="outline" onClick={onFocusFileTreePane}>
+                    {t("projectTools.fileTree.focusWorkbench")}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          );
+        }
         return (
           <div
             key={definition.kind}

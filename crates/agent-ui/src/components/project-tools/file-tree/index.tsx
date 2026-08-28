@@ -4,7 +4,10 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
-import type { RightDockFileTreeStatePatch } from "@liveagent/app/lib/settings";
+import type {
+  RightDockFileTreeState,
+  RightDockFileTreeStatePatch,
+} from "@liveagent/app/lib/settings";
 import {
   Check,
   FolderOpen,
@@ -17,6 +20,7 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -24,7 +28,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  clearActiveWorkspacePathDrag,
+  writeWorkspacePathDragPayload,
+} from "../../../lib/chat/workspacePathDrag";
 import { cn } from "../../../lib/shared/utils";
+import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { Button } from "../../ui/button";
 import { useConfirmDialog } from "../../ui/confirm-dialog";
@@ -59,11 +68,49 @@ type ContextMenuState = {
 };
 
 export function FileTreePanel(props: { active: boolean }) {
-  const { active } = props;
   const context = useRightDockToolContext();
-  const { projectPathKey, cwd, fileTree } = context;
-  const syncState = fileTree.state;
-  const initialized = fileTree.initialized;
+  return (
+    <FileTreeSurface
+      active={props.active}
+      projectPathKey={context.projectPathKey}
+      cwd={context.cwd}
+      state={context.fileTree.state}
+      initialized={context.fileTree.initialized}
+      workspaceActivityClient={context.clients.workspaceActivity ?? null}
+      onInitializedChange={context.fileTree.onInitializedChange}
+      onStateChange={context.fileTree.onStateChange}
+      onInsertFileMention={context.fileTree.onInsertFileMention}
+      onOpenFile={context.fileTree.onOpenFile}
+    />
+  );
+}
+
+export type FileTreeSurfaceProps = {
+  active: boolean;
+  projectPathKey: string;
+  cwd: string;
+  state: RightDockFileTreeState;
+  initialized?: boolean;
+  workspaceActivityClient?: WorkspaceActivityClient | null;
+  onInitializedChange?: (initialized: boolean) => void;
+  onStateChange: (patch: RightDockFileTreeStatePatch) => void;
+  onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
+  onOpenFile?: (path: string, imagePaths?: string[]) => void;
+};
+
+export function FileTreeSurface(props: FileTreeSurfaceProps) {
+  const {
+    active,
+    projectPathKey,
+    cwd,
+    state: syncState,
+    initialized = true,
+    workspaceActivityClient,
+    onInitializedChange,
+    onStateChange,
+    onInsertFileMention,
+    onOpenFile,
+  } = props;
   const { t } = useLocale();
 
   const [query, setQuery] = useState(syncState.query);
@@ -93,7 +140,7 @@ export function FileTreePanel(props: { active: boolean }) {
     cwd,
     active,
     initialized,
-    workspaceActivityClient: context.clients.workspaceActivity ?? null,
+    workspaceActivityClient: workspaceActivityClient ?? null,
     expandedPaths: syncState.expandedPaths,
     query,
     showHidden: syncState.showHidden,
@@ -104,10 +151,10 @@ export function FileTreePanel(props: { active: boolean }) {
     nodesRef.current = nodes;
   }, [nodes]);
 
-  const onStateChangeRef = useRef(fileTree.onStateChange);
+  const onStateChangeRef = useRef(onStateChange);
   useEffect(() => {
-    onStateChangeRef.current = fileTree.onStateChange;
-  }, [fileTree.onStateChange]);
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
   const emitState = useCallback((patch: RightDockFileTreeStatePatch) => {
     onStateChangeRef.current(patch);
   }, []);
@@ -252,10 +299,10 @@ export function FileTreePanel(props: { active: boolean }) {
     return siblingPaths.includes(targetPath) ? siblingPaths : [targetPath];
   }, []);
 
-  const onOpenFileRef = useRef(fileTree.onOpenFile);
+  const onOpenFileRef = useRef(onOpenFile);
   useEffect(() => {
-    onOpenFileRef.current = fileTree.onOpenFile;
-  }, [fileTree.onOpenFile]);
+    onOpenFileRef.current = onOpenFile;
+  }, [onOpenFile]);
   const handleOpenFile = useCallback(
     (path: string) => {
       onOpenFileRef.current?.(path, getSiblingImagePaths(path));
@@ -263,15 +310,38 @@ export function FileTreePanel(props: { active: boolean }) {
     [getSiblingImagePaths],
   );
 
-  const onInsertFileMentionRef = useRef(fileTree.onInsertFileMention);
+  const onInsertFileMentionRef = useRef(onInsertFileMention);
   useEffect(() => {
-    onInsertFileMentionRef.current = fileTree.onInsertFileMention;
-  }, [fileTree.onInsertFileMention]);
+    onInsertFileMentionRef.current = onInsertFileMention;
+  }, [onInsertFileMention]);
   const handleInsertMention = useCallback((path: string) => {
     const node = nodesRef.current[path];
     if (!path || !node) return;
     onInsertFileMentionRef.current?.(path, node.kind);
   }, []);
+
+  const handleWorkspacePathDragStart = useCallback(
+    (event: ReactDragEvent, path: string, kind: FileTreeKind) => {
+      const node = nodesRef.current[path];
+      if (!node || !path) {
+        event.preventDefault();
+        return;
+      }
+      if (
+        !writeWorkspacePathDragPayload(event.dataTransfer, {
+          kind: "workspacePath",
+          projectPathKey,
+          cwd,
+          relativePath: path,
+          entryKind: kind,
+          label: node.name,
+        })
+      ) {
+        event.preventDefault();
+      }
+    },
+    [cwd, projectPathKey],
+  );
 
   const openContextMenu = useCallback(
     (event: ReactMouseEvent, path: string) => {
@@ -444,7 +514,7 @@ export function FileTreePanel(props: { active: boolean }) {
         <Button
           size="sm"
           onClick={() => {
-            fileTree.onInitializedChange(true);
+            onInitializedChange?.(true);
             void loadChildren(ROOT_PATH, { force: true });
           }}
         >
@@ -553,6 +623,7 @@ export function FileTreePanel(props: { active: boolean }) {
                 <button
                   key={`${entry.kind}:${entry.path}`}
                   type="button"
+                  draggable
                   className={cn(
                     "flex w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
                     entry.hidden && "opacity-60 hover:opacity-80",
@@ -560,6 +631,10 @@ export function FileTreePanel(props: { active: boolean }) {
                   style={{ minHeight: FILE_TREE_ROW_HEIGHT }}
                   title={entry.path}
                   onClick={() => void revealPath(entry.path, entry.kind)}
+                  onDragStart={(event) =>
+                    handleWorkspacePathDragStart(event, entry.path, entry.kind)
+                  }
+                  onDragEnd={clearActiveWorkspacePathDrag}
                 >
                   <TypeIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 truncate">{entry.path}</span>
@@ -622,6 +697,8 @@ export function FileTreePanel(props: { active: boolean }) {
                   onSelect={selectPath}
                   onOpen={handleOpenFile}
                   onContextMenu={openContextMenu}
+                  onDragStart={handleWorkspacePathDragStart}
+                  onDragEnd={clearActiveWorkspacePathDrag}
                 />
               </div>
             );
@@ -637,8 +714,8 @@ export function FileTreePanel(props: { active: boolean }) {
           path={contextNode.path}
           kind={contextNode.kind}
           canMutate={canMutate}
-          canOpenFile={Boolean(fileTree.onOpenFile)}
-          canInsertMention={Boolean(fileTree.onInsertFileMention)}
+          canOpenFile={Boolean(onOpenFile)}
+          canInsertMention={Boolean(onInsertFileMention)}
           showHidden={syncState.showHidden}
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}

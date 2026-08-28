@@ -3,6 +3,8 @@ import {
   hitTestWorkbenchDrop,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
+  MIN_FILE_TREE_PANE_HEIGHT,
+  MIN_FILE_TREE_PANE_WIDTH,
   MIN_TERMINAL_PANE_HEIGHT,
   MIN_TERMINAL_PANE_WIDTH,
   previewRectForDropTarget,
@@ -56,6 +58,9 @@ function payloadMinForEdge(
   if (payload.kind === "terminalSession" || payload.kind === "newTerminal") {
     return horizontal ? MIN_TERMINAL_PANE_WIDTH : MIN_TERMINAL_PANE_HEIGHT;
   }
+  if (payload.kind === "fileTree") {
+    return horizontal ? MIN_FILE_TREE_PANE_WIDTH : MIN_FILE_TREE_PANE_HEIGHT;
+  }
   if (payload.kind === "pane") {
     const pane = layout.panes[payload.paneId];
     if (pane) {
@@ -107,7 +112,9 @@ export type WorkbenchDragPayload =
   /** Dragging an existing terminal session (e.g. from the Right Dock) into a pane. */
   | { kind: "terminalSession"; sessionId: string; project: ProjectRef; title: string }
   /** Dragging a "new terminal" affordance creates a terminal at the drop spot. */
-  | { kind: "newTerminal"; project: ProjectRef; title: string };
+  | { kind: "newTerminal"; project: ProjectRef; title: string }
+  /** Dragging the singleton File Tree tool opens/moves its project surface. */
+  | { kind: "fileTree"; project: ProjectRef; title: string };
 
 export type WorkbenchDropCommit = {
   payload: WorkbenchDragPayload;
@@ -134,6 +141,11 @@ function ownPaneIdForPayload(
   layout: WorkbenchLayout,
 ): string | undefined {
   if (payload.kind === "pane") return payload.paneId;
+  if (payload.kind === "fileTree") {
+    return Object.values(layout.panes).find(
+      (pane) => surfaceIdentityKey(pane.surface) === `fileTree:${payload.project.projectPathKey}`,
+    )?.paneId;
+  }
   if (payload.kind !== "conversation") return undefined;
   return Object.values(layout.panes).find(
     (pane) => surfaceIdentityKey(pane.surface) === `conversation:${payload.conversationId}`,

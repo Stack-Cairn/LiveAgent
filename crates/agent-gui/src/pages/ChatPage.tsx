@@ -8,6 +8,7 @@ import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
+import { FileTreeSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -20,6 +21,7 @@ import {
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
@@ -56,6 +58,7 @@ import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConver
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
   findAdjacentPaneId,
+  findPaneIdBySurfaceKey,
   findParentSplitId,
   hitTestWorkbenchDrop,
   type WorkbenchCommandError,
@@ -109,6 +112,7 @@ import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import { toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
+  getRightDockFileTreeState,
   isAgentDevMode,
   isAgentExecutionMode,
   normalizeSelectedModelForProviders,
@@ -117,6 +121,7 @@ import {
   resolveEffectiveTheme,
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
+  updateRightDockFileTreeState,
   updateSystem,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
@@ -2408,6 +2413,22 @@ export function ChatPage(props: ChatPageProps) {
         });
         return;
       }
+      if (payload.kind === "fileTree") {
+        const surfaceKey = `fileTree:${payload.project.projectPathKey}`;
+        const existingPaneId = findPaneIdBySurfaceKey(workbench.layoutRef.current, surfaceKey);
+        if (target.kind === "pane-center") {
+          if (existingPaneId && target.paneId === existingPaneId) {
+            handleWorkbenchFocusPane(existingPaneId);
+          }
+          return;
+        }
+        if (existingPaneId) {
+          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
+          return;
+        }
+        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+        return;
+      }
       // Moving an existing pane by its chrome drag handle.
       if (target.kind === "canvas-empty") return;
       if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
@@ -2524,6 +2545,29 @@ export function ChatPage(props: ChatPageProps) {
       );
     },
     [beginWorkbenchDrag, t, terminalProjectPath, terminalProjectPathKey, workspaceProjects],
+  );
+
+  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+    if (!terminalProjectPathKey) return null;
+    const project = workspaceProjects.find(
+      (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
+    );
+    return {
+      projectId: project?.id ?? `project:${terminalProjectPathKey}`,
+      projectPathKey: terminalProjectPathKey,
+    };
+  }, [terminalProjectPathKey, workspaceProjects]);
+
+  const handleFileTreeTabWorkbenchDragIntent = useCallback(
+    (event: { pointerId: number; clientX: number; clientY: number }) => {
+      const project = fileTreeProjectRef();
+      if (!project) return;
+      beginWorkbenchDrag(
+        { kind: "fileTree", project, title: t("projectTools.fileTreeTitle") },
+        event,
+      );
+    },
+    [beginWorkbenchDrag, fileTreeProjectRef, t],
   );
 
   // 画板 Pane 持有租约的会话:overlay/占位的"前往 Pane"聚焦通路。
@@ -2683,6 +2727,32 @@ export function ChatPage(props: ChatPageProps) {
       workspaceProjects,
     ],
   );
+
+  const handleOpenFileTreeInWorkbenchSplit = useCallback(() => {
+    const project = fileTreeProjectRef();
+    if (!project) return;
+    const existingPaneId = findPaneIdBySurfaceKey(
+      workbench.layoutRef.current,
+      `fileTree:${project.projectPathKey}`,
+    );
+    if (existingPaneId) {
+      handleWorkbenchFocusPane(existingPaneId);
+      return;
+    }
+    const target = resolveWorkbenchAutoDockTarget();
+    if (!target) {
+      addNotify("error", t("workbench.noSpaceForSplit"));
+      return;
+    }
+    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
+  }, [
+    addNotify,
+    fileTreeProjectRef,
+    handleWorkbenchFocusPane,
+    resolveWorkbenchAutoDockTarget,
+    t,
+    workbench,
+  ]);
 
   // Native file drag hover: focus the conversation pane under the cursor for
   // visual and keyboard continuity. Final attachment ownership is carried by
@@ -3133,6 +3203,8 @@ export function ChatPage(props: ChatPageProps) {
     switch (surface.kind) {
       case "conversation":
         return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
+      case "fileTree":
+        return t("projectTools.fileTreeTitle");
       case "localTerminal":
         return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
       case "sshTerminal":
@@ -3151,6 +3223,9 @@ export function ChatPage(props: ChatPageProps) {
     const title = workbenchPaneTitle(surface);
     if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
       return t("workbench.paneRegionTerminal").replace("{title}", title);
+    }
+    if (surface.kind === "fileTree") {
+      return t("projectTools.fileTreeTitle");
     }
     if (!title) return t("workbench.paneRegion");
     const workspaceName = workspaceProjects
@@ -3243,6 +3318,51 @@ export function ChatPage(props: ChatPageProps) {
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
                 onSessionGhost={verifyTerminalSessionAlive}
+              />
+            );
+          }
+          if (surface.kind === "fileTree") {
+            const project = workspaceProjects.find(
+              (entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey,
+            );
+            if (!project) {
+              return (
+                <UnsupportedPaneSurface paneId={pane.paneId} originalKind="fileTree:missing" />
+              );
+            }
+            return (
+              <FileTreeSurface
+                active
+                projectPathKey={surface.project.projectPathKey}
+                cwd={project.path}
+                state={getRightDockFileTreeState(
+                  settings.customSettings,
+                  surface.project.projectPathKey,
+                )}
+                workspaceActivityClient={tauriWorkspaceActivityClient}
+                onStateChange={(patch) =>
+                  setSettings((current) =>
+                    updateRightDockFileTreeState(current, surface.project.projectPathKey, patch),
+                  )
+                }
+                onInsertFileMention={
+                  surface.project.projectPathKey === terminalProjectPathKey
+                    ? handleRightDockInsertFileMention
+                    : undefined
+                }
+                onOpenFile={(path, imagePaths) => {
+                  const request = {
+                    projectPathKey: surface.project.projectPathKey,
+                    workdir: project.path,
+                    path,
+                    imagePaths,
+                  };
+                  if (isWorkspacePreviewPath(path)) {
+                    openWorkspaceFilePreview(request);
+                  } else {
+                    openWorkspaceEditorFile(request);
+                  }
+                }}
               />
             );
           }
@@ -3584,6 +3704,16 @@ export function ChatPage(props: ChatPageProps) {
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
         leasedSessionIds={leasedDockSessionIds}
+        fileTreeLeased={Boolean(
+          findPaneIdBySurfaceKey(workbench.layout, `fileTree:${terminalProjectPathKey}`),
+        )}
+        onFocusFileTreePane={() => {
+          const paneId = findPaneIdBySurfaceKey(
+            workbench.layoutRef.current,
+            `fileTree:${terminalProjectPathKey}`,
+          );
+          if (paneId) handleWorkbenchFocusPane(paneId);
+        }}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
@@ -3614,6 +3744,12 @@ export function ChatPage(props: ChatPageProps) {
         }
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
+        }
+        onFileTreeTabDragStart={
+          sessionWorkbench.enabled ? handleFileTreeTabWorkbenchDragIntent : undefined
+        }
+        onOpenFileTreeInWorkbench={
+          sessionWorkbench.enabled ? handleOpenFileTreeInWorkbenchSplit : undefined
         }
         onSessionGhost={verifyTerminalSessionAlive}
         onInsertFileMention={handleRightDockInsertFileMention}

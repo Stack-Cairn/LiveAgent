@@ -3,7 +3,24 @@ import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { type CSSProperties, useEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useLocale } from "../../i18n/index";
+import {
+  absoluteWorkspacePath,
+  clearActiveWorkspacePathDrag,
+  getActiveWorkspacePathDrag,
+  hasWorkspacePathDragPayload,
+  quoteWorkspacePathForShell,
+  readWorkspacePathDragPayload,
+  workspacePathDragMatchesProject,
+} from "../../lib/chat/workspacePathDrag";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
 import type {
@@ -143,7 +160,11 @@ export function XTermViewport({
   onError,
   onInitialSnapshotConsumed,
 }: XTermViewportProps) {
+  const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [workspacePathDropState, setWorkspacePathDropState] = useState<"accept" | "blocked" | null>(
+    null,
+  );
   const resizeTimerRef = useRef<number | null>(null);
   const sessionRef = useRef(session);
   const themeRef = useRef(theme);
@@ -160,6 +181,49 @@ export function XTermViewport({
   const viewportStyle = {
     "--project-terminal-background": terminalTheme(theme).background,
   } as CSSProperties;
+
+  const canAcceptWorkspacePath = useCallback(
+    (payload = getActiveWorkspacePathDrag()) =>
+      Boolean(
+        payload &&
+          session.kind === "local" &&
+          workspacePathDragMatchesProject(payload, session.cwd) &&
+          !termRef.current?.options.disableStdin,
+      ),
+    [session.cwd, session.kind],
+  );
+
+  const handleWorkspacePathDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const state = canAcceptWorkspacePath() ? "accept" : "blocked";
+      event.dataTransfer.dropEffect = state === "accept" ? "copy" : "none";
+      setWorkspacePathDropState(state);
+    },
+    [canAcceptWorkspacePath],
+  );
+
+  const handleWorkspacePathDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const payload = readWorkspacePathDragPayload(event.dataTransfer);
+      setWorkspacePathDropState(null);
+      clearActiveWorkspacePathDrag();
+      if (!payload || !canAcceptWorkspacePath(payload)) return;
+      const absolutePath = absoluteWorkspacePath(payload);
+      const quotedPath = absolutePath
+        ? quoteWorkspacePathForShell(absolutePath, session.shell)
+        : null;
+      if (!quotedPath) return;
+      termRef.current?.paste(quotedPath);
+      termRef.current?.focus();
+    },
+    [canAcceptWorkspacePath, session.shell],
+  );
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -634,11 +698,41 @@ export function XTermViewport({
   }, [client, session.id, session.projectPathKey]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the xterm viewport is a pointer drop target; keyboard users paste or use the file-tree context menu.
     <div
-      ref={containerRef}
       style={viewportStyle}
-      className={cn("project-terminal-viewport h-full min-h-0 w-full overflow-hidden", className)}
-    />
+      className={cn(
+        "project-terminal-viewport relative h-full min-h-0 w-full overflow-hidden",
+        className,
+      )}
+      data-workspace-path-drop-zone={workspacePathDropState ?? "idle"}
+      onDragEnter={handleWorkspacePathDragOver}
+      onDragOver={handleWorkspacePathDragOver}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setWorkspacePathDropState(null);
+      }}
+      onDrop={handleWorkspacePathDrop}
+    >
+      <div ref={containerRef} className="h-full min-h-0 w-full" />
+      {workspacePathDropState ? (
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed bg-background/90 text-xs font-medium backdrop-blur-sm",
+            workspacePathDropState === "accept"
+              ? "border-emerald-500/70 text-emerald-600 dark:text-emerald-300"
+              : "border-destructive/60 text-destructive",
+          )}
+        >
+          {workspacePathDropState === "accept"
+            ? t("projectTools.workspacePathDrop.insert")
+            : session.kind === "ssh"
+              ? t("projectTools.workspacePathDrop.sshBlocked")
+              : t("projectTools.workspacePathDrop.crossProject")}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

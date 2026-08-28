@@ -10,6 +10,7 @@ import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
   findAdjacentPaneId,
+  findPaneIdBySurfaceKey,
   findParentSplitId,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
@@ -115,6 +116,7 @@ export type GatewayWorkbenchController = {
   handleOpenConversationInSplit: (item: SidebarConversation) => boolean;
   /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
+  handleOpenFileTreeInSplit: () => void;
   /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
   focusTerminalPaneForSession: (sessionId: string) => void;
   /** 会话从权威索引消失（删除等）：关闭对应 Pane，不做选中迁移。 */
@@ -165,6 +167,12 @@ export type GatewayWorkbenchController = {
   ) => void;
   /** Right Dock「新建终端」按钮拖拽发起（落点新建终端 Pane）。 */
   handleNewTerminalDragIntent: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
+  handleFileTreeTabDragIntent: (event: {
     pointerId: number;
     clientX: number;
     clientY: number;
@@ -560,6 +568,22 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         commitTerminalDrop(payload, target, terminalDropDeps());
         return;
       }
+      if (payload.kind === "fileTree") {
+        const existingPaneId = findPaneIdBySurfaceKey(
+          workbench.layoutRef.current,
+          `fileTree:${payload.project.projectPathKey}`,
+        );
+        if (target.kind === "pane-center") {
+          if (existingPaneId && target.paneId === existingPaneId) handleFocusPane(existingPaneId);
+          return;
+        }
+        if (existingPaneId) {
+          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
+          return;
+        }
+        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+        return;
+      }
       // Pane 头部拖动重排。
       if (target.kind === "canvas-empty") return;
       if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
@@ -721,6 +745,33 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag, newTerminalTitle, terminalProjectPath],
   );
 
+  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+    const path = terminalProjectPath.trim();
+    if (!path) return null;
+    const projectPathKey = workspaceProjectPathKey(path);
+    const project = workspaceProjectsRef.current.find(
+      (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+    );
+    return {
+      projectId: project?.id ?? `project:${projectPathKey}`,
+      projectPathKey,
+    };
+  }, [terminalProjectPath]);
+
+  const handleFileTreeTabDragIntent = useCallback(
+    (event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    }) => {
+      const project = fileTreeProjectRef();
+      if (!project) return;
+      beginDrag({ kind: "fileTree", project, title: "File Tree" }, event);
+    },
+    [beginDrag, fileTreeProjectRef],
+  );
+
   // 同一提交通路的菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
   // 由 commitTerminalDrop 自己走「移动既有 Pane」,不会二次开 Pane。
   const handleOpenTerminalInSplit = useCallback(
@@ -750,6 +801,25 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     },
     [onNoSpaceForSplit, resolveAutoDockTarget, terminalDropDeps],
   );
+
+  const handleOpenFileTreeInSplit = useCallback(() => {
+    const project = fileTreeProjectRef();
+    if (!project) return;
+    const existingPaneId = findPaneIdBySurfaceKey(
+      workbench.layoutRef.current,
+      `fileTree:${project.projectPathKey}`,
+    );
+    if (existingPaneId) {
+      handleFocusPane(existingPaneId);
+      return;
+    }
+    const target = resolveAutoDockTarget();
+    if (!target) {
+      onNoSpaceForSplit();
+      return;
+    }
+    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
+  }, [fileTreeProjectRef, handleFocusPane, onNoSpaceForSplit, resolveAutoDockTarget, workbench]);
 
   // 画板 Pane 持有租约的会话:overlay/占位的「前往 Pane」聚焦通路。
   const focusTerminalPaneForSession = useCallback(
@@ -790,6 +860,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenFileTreeInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
       projectRefForConversation,
@@ -799,6 +870,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
+      handleFileTreeTabDragIntent,
       leasedDockSessionIds,
     }),
     [
@@ -808,6 +880,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenFileTreeInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
       projectRefForConversation,
@@ -817,6 +890,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
+      handleFileTreeTabDragIntent,
       leasedDockSessionIds,
     ],
   );

@@ -68,6 +68,8 @@ type RightDockPanelProps = {
    * 视口互斥(绝不同时挂两个 XTermViewport)是这里唯一的硬不变量。
    */
   leasedSessionIds?: ReadonlySet<string>;
+  fileTreeLeased?: boolean;
+  onFocusFileTreePane?: () => void;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -113,6 +115,10 @@ type RightDockPanelProps = {
   }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  /** File Tree 单例 tab 拖出到 Workbench。 */
+  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  /** File Tree 菜单式“在分屏中打开”。 */
+  onOpenFileTreeInWorkbench?: () => void;
   /**
    * dock 视口报错时上抛 sessionId,由宿主按后端权威列表校验:会话确认
    * 消失(幽灵记录)则整表刷新,坏 tab 自动退场;仍存活的瞬时错误不动列表。
@@ -375,6 +381,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
+    fileTreeLeased,
+    onFocusFileTreePane,
     width,
     theme,
     disabledMessage,
@@ -402,6 +410,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onTerminalTabDragStart,
     onNewTerminalDragStart,
     onOpenTerminalInWorkbench,
+    onFileTreeTabDragStart,
+    onOpenFileTreeInWorkbench,
     onSessionGhost,
     onInsertFileMention,
     onOpenFile,
@@ -873,6 +883,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onCloseTerminalRequest={handleCloseRequest}
                       onTerminalTabDragStart={onTerminalTabDragStart}
                       onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
+                      onFileTreeTabDragStart={onFileTreeTabDragStart}
+                      onOpenFileTreeInWorkbench={onOpenFileTreeInWorkbench}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
@@ -968,6 +980,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
+                  fileTreeLeased={fileTreeLeased}
+                  onFocusFileTreePane={onFocusFileTreePane}
                 />
               )}
             </>

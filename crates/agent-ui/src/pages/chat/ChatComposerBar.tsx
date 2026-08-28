@@ -46,6 +46,13 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  clearActiveWorkspacePathDrag,
+  getActiveWorkspacePathDrag,
+  hasWorkspacePathDragPayload,
+  readWorkspacePathDragPayload,
+  workspacePathDragMatchesProject,
+} from "@liveagent/ui/lib/chat/workspacePathDrag";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -54,6 +61,7 @@ import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activi
 import {
   type MutableRefObject,
   memo,
+  type DragEvent as ReactDragEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -401,6 +409,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } | null>(null);
   const queueHadTurnsRef = useRef(false);
   const [queueCollapsed, setQueueCollapsed] = useState(false);
+  const [workspacePathDropState, setWorkspacePathDropState] = useState<"accept" | "blocked" | null>(
+    null,
+  );
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
@@ -434,6 +445,40 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
     : t("chat.composer.expand");
+
+  const resolveWorkspacePathDropState = useCallback((): "accept" | "blocked" => {
+    const payload = getActiveWorkspacePathDrag();
+    return payload && !isInputDisabled && workspacePathDragMatchesProject(payload, workdir)
+      ? "accept"
+      : "blocked";
+  }, [isInputDisabled, workdir]);
+
+  const handleWorkspacePathDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const state = resolveWorkspacePathDropState();
+      event.dataTransfer.dropEffect = state === "accept" ? "copy" : "none";
+      setWorkspacePathDropState(state);
+    },
+    [resolveWorkspacePathDropState],
+  );
+
+  const handleWorkspacePathDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const payload = readWorkspacePathDragPayload(event.dataTransfer);
+      setWorkspacePathDropState(null);
+      clearActiveWorkspacePathDrag();
+      if (!payload || isInputDisabled || !workspacePathDragMatchesProject(payload, workdir)) return;
+      composerRef.current?.insertFileMention(payload.relativePath, payload.entryKind);
+      composerRef.current?.focus();
+    },
+    [composerRef, isInputDisabled, workdir],
+  );
 
   const toggleQueueCollapsed = useCallback(() => {
     setQueueCollapsed((current) => !current);
@@ -885,6 +930,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           ref={glassCardRef}
           data-file-upload-drop-zone=""
           data-file-upload-conversation-id={conversationId}
+          data-workspace-path-drop-zone={workspacePathDropState ?? "idle"}
+          onDragEnter={handleWorkspacePathDragOver}
+          onDragOver={handleWorkspacePathDragOver}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setWorkspacePathDropState(null);
+          }}
+          onDrop={handleWorkspacePathDrop}
           onKeyDown={
             isComposerExpanded
               ? (event) => {
@@ -905,6 +958,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             isComposerExpanded && "min-h-0 flex-1",
           )}
         >
+          {workspacePathDropState ? (
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-3xl border-2 border-dashed bg-background/90 text-sm font-medium backdrop-blur-sm",
+                workspacePathDropState === "accept"
+                  ? "border-sky-500/70 text-sky-600 dark:text-sky-300"
+                  : "border-destructive/60 text-destructive",
+              )}
+            >
+              {workspacePathDropState === "accept"
+                ? t("chat.workspacePathDrop.reference")
+                : t("chat.workspacePathDrop.crossProject")}
+            </div>
+          ) : null}
           {/* macOS material rim-light */}
           <div
             aria-hidden
