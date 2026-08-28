@@ -187,12 +187,12 @@ test("right dock width moves the center-column chrome with the panel", () => {
 test("conversation transcript and composer share one stable workbench surface", () => {
   assert.match(chatPageSource, /<ConversationPaneHost/);
   assert.match(chatPageSource, /<ConversationPaneHostEnvironmentProvider/);
-  assert.match(chatPageSource, /conversationId=\{currentConversationId\}/);
-  assert.match(chatPageSource, /project=\{conversationSurfaceProject\}/);
+  assert.doesNotMatch(chatPageSource, /<ConversationPaneHost[\s\S]{0,180}conversationId=/);
   assert.doesNotMatch(chatPageSource, /<ChatTranscript|<ChatComposerBar/);
   assert.doesNotMatch(conversationPaneHostSource, /controller:\s*ConversationSurfaceController/);
-  assert.match(conversationPaneHostSource, /useConversationPaneBinding/);
-  assert.match(conversationPaneEnvironmentSource, /resolvePane\(identity: ConversationPaneIdentity\)/);
+  assert.match(conversationPaneHostSource, /useConversationPaneRegistration/);
+  assert.match(conversationPaneEnvironmentSource, /resolvePane\(paneId: string\)/);
+  assert.match(conversationPaneEnvironmentSource, /registrationsByPaneId\.get\(paneId\.trim\(\)\)/);
   assert.match(conversationSurfaceSource, /useConversationSurfaceSnapshot\(controller\)/);
   assert.match(conversationPaneHostSource, /const composerRef = useRef/);
   assert.match(conversationPaneHostSource, /const scrollFollowRef = useRef/);
