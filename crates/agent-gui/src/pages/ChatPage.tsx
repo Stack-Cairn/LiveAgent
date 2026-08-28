@@ -169,6 +169,7 @@ import {
 } from "./chat/hooks/useContextUsageTokensSource";
 import { useEditResend } from "./chat/hooks/useEditResend";
 import { useLiveTranscriptController } from "./chat/hooks/useLiveTranscriptController";
+import { useMentionApps } from "./chat/hooks/useMentionApps";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
@@ -651,6 +652,7 @@ export function ChatPage(props: ChatPageProps) {
     selectedSkillNames,
     skillsEnabled,
   );
+  const mentionApps = useMentionApps(activeWorkspaceResources.mcpServers, isAgentMode);
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
@@ -2154,6 +2156,7 @@ export function ChatPage(props: ChatPageProps) {
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
+      mentionApps,
       executionMode: settings.system.executionMode,
       hasModels,
       currentModelLabel,
@@ -3000,6 +3003,7 @@ export function ChatPage(props: ChatPageProps) {
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,
+        mentionApps,
         executionMode: settings.system.executionMode,
         hasModels,
         currentModelLabel: paneModelLabel,

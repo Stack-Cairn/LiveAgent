@@ -44,6 +44,7 @@ import {
   clampComposerContextMenuPosition,
   commitMentionFromElement,
   countLargePasteLines,
+  createAppMentionChip,
   createCodeMentionChip,
   createCommitMentionChip,
   createFileMentionChip,
@@ -61,12 +62,14 @@ import {
   ejectCaretFromChip,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
+  formatAppMentionToken,
   formatCommitMentionToken,
   formatGitFileMentionToken,
   formatSkillMentionToken,
   hasLegacyImeKeyboardSignal,
   IME_COMPOSITION_END_ENTER_TAIL_MS,
   IME_ENTER_SUPPRESS_WINDOW_MS,
+  insertAppMentionChip,
   insertComposerSegmentsAtSelection,
   insertMentionChip,
   insertNodeAtCursor,
@@ -79,6 +82,7 @@ import {
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
   MENTION_REFETCH_DEBOUNCE_MS,
+  type MentionComposerAppMention,
   type MentionComposerCommitMention,
   type MentionComposerDraft,
   type MentionComposerGitFileMention,
@@ -118,6 +122,8 @@ import {
 } from "./MentionComposerInternals";
 
 export type {
+  MentionComposerApp,
+  MentionComposerAppMention,
   MentionComposerCommitMention,
   MentionComposerDraft,
   MentionComposerDraftSegment,
@@ -155,6 +161,7 @@ export const MentionComposer = memo(
       placeholder = "",
       workdir,
       enabledSkills = [],
+      mentionApps = [],
       className,
     }: MentionComposerProps,
     ref,
@@ -442,6 +449,19 @@ export const MentionComposer = memo(
       }
 
       const next: MentionSuggestion[] = [];
+      // 应用候选与文件共用 @ 触发（对齐 codex 的交互）。应用列表本身很短
+      // 且已由宿主门控（未挂 cua-driver 时恒为空），排在文件前不会淹没文件
+      // 结果——有查询词时两边都按包含匹配过滤。
+      for (const app of mentionApps) {
+        const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
+        if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
+          continue;
+        }
+        next.push({ type: "app", app });
+        if (next.length >= MAX_SUGGESTIONS) {
+          return next;
+        }
+      }
       for (const item of mentionSessionSearchIndex) {
         if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
           continue;
@@ -452,7 +472,7 @@ export const MentionComposer = memo(
         }
       }
       return next;
-    }, [enabledSkills, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
+    }, [enabledSkills, mentionApps, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
 
     useEffect(() => {
       setHighlightIdx((current) => {
@@ -583,6 +603,7 @@ export const MentionComposer = memo(
           textWithoutLargePastes: "",
           largePastes: [],
           skillMentions: [],
+          appMentions: [],
           commitMentions: [],
           gitFileMentions: [],
           codeMentions: [],
@@ -593,6 +614,7 @@ export const MentionComposer = memo(
       const segments = serializeChildrenToSegments(el, largePastesRef.current);
       const largePastes: MentionComposerLargePaste[] = [];
       const skillMentions: MentionComposerSkillMention[] = [];
+      const appMentions: MentionComposerAppMention[] = [];
       const commitMentions: MentionComposerCommitMention[] = [];
       const gitFileMentions: MentionComposerGitFileMention[] = [];
       const codeMentions: CodeMentionReference[] = [];
@@ -612,6 +634,11 @@ export const MentionComposer = memo(
         } else if (segment.type === "skillMention") {
           skillMentions.push(segment.skill);
           const token = formatSkillMentionToken(segment.skill);
+          textParts.push(token);
+          textWithoutLargePastesParts.push(token);
+        } else if (segment.type === "appMention") {
+          appMentions.push(segment.app);
+          const token = formatAppMentionToken(segment.app);
           textParts.push(token);
           textWithoutLargePastesParts.push(token);
         } else if (segment.type === "commitMention") {
@@ -640,6 +667,7 @@ export const MentionComposer = memo(
         textWithoutLargePastes,
         largePastes,
         skillMentions,
+        appMentions,
         commitMentions,
         gitFileMentions,
         codeMentions,
@@ -777,6 +805,8 @@ export const MentionComposer = memo(
               if (chip) el.appendChild(chip);
             } else if (segment.type === "skillMention") {
               el.appendChild(createSkillMentionChip(segment.skill));
+            } else if (segment.type === "appMention") {
+              el.appendChild(createAppMentionChip(segment.app));
             } else if (segment.type === "commitMention") {
               el.appendChild(createCommitMentionChip(segment.commit));
             } else if (segment.type === "gitFileMention") {
@@ -818,6 +848,16 @@ export const MentionComposer = memo(
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createSkillMentionChip(skill));
+          closeMentionSession();
+          refreshEmptyState();
+        },
+        insertAppMention: (app: MentionComposerAppMention) => {
+          const el = editorRef.current;
+          if (!el) return;
+          finishTypewriter();
+          resetPromptHistoryRecall();
+          focusEditorAtSavedSelection();
+          insertNodeAtCursor(el, createAppMentionChip(app));
           closeMentionSession();
           refreshEmptyState();
         },
@@ -1043,6 +1083,8 @@ export const MentionComposer = memo(
         }
         if (suggestion.type === "skill") {
           insertSkillMentionChip(mentionCtx, suggestion.skill);
+        } else if (suggestion.type === "app") {
+          insertAppMentionChip(mentionCtx, suggestion.app);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
         }

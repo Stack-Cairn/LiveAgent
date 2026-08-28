@@ -85,6 +85,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 block2 = "0.6"
+# 读 .app bundle 的 Info.plist（输入框 @ 应用提及的枚举）。
+plist = "1.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

@@ -24,7 +24,8 @@ test("the shared composer restores the last editor selection before external men
     assert.match(composer, /document\.addEventListener\("selectionchange", rememberEditorSelection\)/);
     assert.equal(
       (composer.match(/focusEditorAtSavedSelection\(\);/g) ?? []).length,
-      6,
+      // file/skill/app/commit/gitFile/code 六种外部插入 + beginTransientText。
+      7,
     );
   }
 });

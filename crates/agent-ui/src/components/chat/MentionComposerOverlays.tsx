@@ -1,6 +1,6 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
-import { Blend } from "@liveagent/ui/components/IconSet";
+import { AppWindow, Blend } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -91,7 +91,11 @@ export function Popup({
       }}
     >
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? "Skills" : "文件"}
+        {trigger === "skill"
+          ? "Skills"
+          : suggestions.some((suggestion) => suggestion.type === "app")
+            ? "文件 / 应用"
+            : "文件"}
       </div>
       <div
         ref={listRef}
@@ -103,20 +107,26 @@ export function Popup({
         {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
         {suggestions.map((suggestion, i) => {
           const isSkill = suggestion.type === "skill";
+          const isApp = suggestion.type === "app";
           const entry = suggestion.type === "file" ? suggestion.entry : null;
           const skill = suggestion.type === "skill" ? suggestion.skill : null;
+          const app = suggestion.type === "app" ? suggestion.app : null;
           const isDir = entry?.kind === "dir";
           const parts = entry ? entry.path.split("/") : [];
           const fileName = parts.pop() || "";
           const dirPath = parts.join("/");
           const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
-          const title = skill?.name ?? fileName;
-          const subtitle = skill?.description ?? (dirPath ? `${dirPath}/` : "");
+          const title = app?.name ?? skill?.name ?? fileName;
+          const subtitle = app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : "");
           return (
             <button
               type="button"
               key={
-                entry ? `${entry.kind}:${entry.path}` : `skill:${skill?.skillFile ?? skill?.name}`
+                entry
+                  ? `${entry.kind}:${entry.path}`
+                  : app
+                    ? `app:${app.bundleId || app.path || app.name}`
+                    : `skill:${skill?.skillFile ?? skill?.name}`
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
@@ -137,14 +147,20 @@ export function Popup({
               <span
                 className={cn(
                   "flex h-4 w-4 shrink-0 items-center justify-center",
-                  isSkill
+                  isSkill || isApp
                     ? "text-foreground/85"
                     : isDir
                       ? "text-amber-600 dark:text-amber-300"
                       : "text-muted-foreground",
                 )}
               >
-                {Icon ? <Icon width={16} height={16} /> : <Blend className="h-4 w-4" />}
+                {isApp ? (
+                  <AppWindow className="h-4 w-4" />
+                ) : Icon ? (
+                  <Icon width={16} height={16} />
+                ) : (
+                  <Blend className="h-4 w-4" />
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate">
                 <span className="font-normal text-foreground/95">{title}</span>
@@ -155,6 +171,10 @@ export function Popup({
               {isSkill ? (
                 <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                   skill
+                </span>
+              ) : isApp ? (
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                  app
                 </span>
               ) : (
                 isDir && (

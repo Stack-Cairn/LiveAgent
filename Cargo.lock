@@ -3434,6 +3434,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-av-foundation",
  "percent-encoding",
+ "plist",
  "portable-pty",
  "prost",
  "prost-build",

@@ -15,6 +15,7 @@ import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   MentionComposer,
+  type MentionComposerApp,
   type MentionComposerHandle,
   type MentionComposerSkill,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -247,6 +248,8 @@ export type ChatComposerBarProps = {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
+  /** @ 弹层的应用候选（computer use 目标）；由宿主门控，缺省不显示。 */
+  mentionApps?: MentionComposerApp[];
   executionMode: ExecutionMode;
   hasModels: boolean;
   currentModelLabel: string;
@@ -324,6 +327,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     inputPlaceholder,
     workdir,
     enabledSkills,
+    mentionApps,
     executionMode,
     hasModels,
     currentModelLabel,
@@ -992,6 +996,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               disabled={isInputDisabled || stt.active}
               workdir={workdir}
               enabledSkills={enabledSkills}
+              mentionApps={mentionApps}
               className={cn(
                 // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                 // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
