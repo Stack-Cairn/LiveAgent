@@ -4,28 +4,31 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
 import {
+  Accessibility,
+  AlertCircle,
   AlertTriangle,
   Check,
-  Circle,
+  CheckCircle2,
   Clock3,
+  Copy,
   Download,
   ExternalLink,
-  Hand,
   type IconComponent,
   Loader2,
-  Package,
-  Plug,
   RefreshCw,
-  Settings2,
+  Replace,
   Shield,
   ShieldOff,
+  Sparkles,
+  SquareMousePointer,
+  Terminal,
+  Video,
 } from "@liveagent/ui/components/IconSet";
-import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
+import { Switch } from "../../components/ui/switch";
 import {
   applyCuaPolicy,
   buildCuaServerConfig,
@@ -37,7 +40,6 @@ import {
   type CuaInstallProgress,
   type CuaPermissions,
   type CuaProbe,
-  clampCuaTimeoutMs,
   cuaCommandDrift,
   cuaDisplayCommand,
   findCuaDriverServer,
@@ -49,35 +51,267 @@ import {
   writeCuaProbeCache,
 } from "./cuaDriverForm";
 
-/** 与 RemoteSection 同款的卡片标题行，保持两节视觉一致。 */
-function SectionCardHeader({ icon: Icon, title }: { icon: IconComponent; title: string }) {
+/** 引导步骤单步状态：完成 / 待办 / 未就绪 / 进行中 */
+type StepState = "done" | "current" | "todo" | "busy";
+
+/** 时间轴节点的视觉档位 */
+type NodeTone = "done" | "active" | "warn" | "neutral";
+
+const NODE_TONE_CLASS: Record<NodeTone, string> = {
+  done: "border-transparent bg-emerald-500 text-white shadow-sm shadow-emerald-500/30",
+  active: "border-transparent bg-sky-500 text-white shadow-sm shadow-sky-500/30",
+  warn: "border-transparent bg-amber-500 text-white shadow-sm shadow-amber-500/30",
+  neutral: "border-border/75 bg-card text-muted-foreground",
+};
+
+/**
+ * 竖向时间轴条目：左侧状态节点 + 连接线，右侧标题行与整宽卡片。
+ * 每个配置独占一行，安装 → 授权 → 配置的推进顺序由节点颜色直接表达。
+ */
+function TimelineItem(props: {
+  node: ReactNode;
+  tone: NodeTone;
+  /** 连接线到下一个节点的颜色；最后一项传 "none" 不画线 */
+  connector: "done" | "default" | "none";
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const { node, tone, connector, title, action, children } = props;
   return (
-    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-      <Icon className="h-4 w-4 text-muted-foreground" />
-      {title}
+    <div className="relative flex gap-4 pb-7 last:pb-0">
+      <div className="relative flex w-9 shrink-0 justify-center">
+        {connector !== "none" ? (
+          <span
+            className={cn(
+              "absolute top-11 bottom-0 w-px transition-colors duration-500",
+              connector === "done" ? "bg-emerald-500/40" : "bg-border/70",
+            )}
+          />
+        ) : null}
+        <span
+          className={cn(
+            "z-10 mt-0.5 flex h-9 w-9 items-center justify-center rounded-full border transition-colors duration-300",
+            NODE_TONE_CLASS[tone],
+          )}
+        >
+          {node}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-h-9 items-center justify-between gap-3 pr-1">
+          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
+          {action}
+        </div>
+        <div className="mt-2 overflow-hidden rounded-2xl border border-border/75 bg-card shadow-[0_1px_2px_hsl(var(--foreground)/0.02)]">
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
 
-/**
- * CUA（Computer Use Agent）的接入引导，驱动用 trycua/cua 的 cua-driver。
- *
- * 能力本身没有任何专属代码路径——`cua-driver mcp` 就是一个普通 stdio MCP
- * server，接进来之后约 60 个工具由 `tools/list` 自动发现，调用、审批、
- * 截图渲染全部复用既有 MCP 链路。
- *
- * 但它的 MCP 条目**不在 MCP Hub 里露面**（见
- * `contracts/mcpServerDefaults.ts` 的 `isHubHiddenServerId`）：那条目是
- * 这里总开关的实现细节，command 由 `cua-driver manifest` 决定、args 不该
- * 随意改。两个入口都能写同一份配置只会让人搞不清哪边说了算——所以启停、
- * 审批策略、超时、自指闸门全部收在这一节。
- *
- * 仅桌面端注册（见 agent-gui 的 `settingsExtension`）：探测 / 安装 /
- * 授权都依赖 Tauri 命令。
- */
+/** 卡片内部区块 */
+function CardBlock(props: { className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "relative px-5 after:pointer-events-none after:absolute after:right-5 after:bottom-0 after:left-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
+        props.className,
+      )}
+    >
+      {props.children}
+    </div>
+  );
+}
 
-// 纯逻辑（受管条目查找、策略键、超时钳制、探测缓存、配置漂移）都在
-// `cuaDriverForm.ts` 里，有单测覆盖。这里只剩布局与副作用编排。
+function CopyButton({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    if (!value) return;
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={value}
+      className={cn(
+        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+        className,
+      )}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-emerald-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
+/** 顶栏 Hero 状态卡片：发光图标、状态 Badge 与主开关；推进进度由下方时间轴表达 */
+function HeroCard(props: {
+  probing: boolean;
+  installed: boolean;
+  installing: boolean;
+  grant: StepState | "skip";
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useLocale();
+  const { probing, installed, installing, grant, enabled, onToggle } = props;
+  const running = enabled;
+  const checking = probing || grant === "busy";
+
+  const statusTitle = !installed
+    ? probing
+      ? t("settings.cuaDriver.heroChecking")
+      : t("settings.cuaDriver.statusNotInstalled")
+    : grant === "busy"
+      ? t("settings.cuaDriver.heroChecking")
+      : grant === "current"
+        ? t("settings.cuaDriver.heroNeedsGrant")
+        : enabled
+          ? t("settings.cuaDriver.statusActive")
+          : t("settings.cuaDriver.heroReady");
+
+  const dotClass = checking
+    ? "bg-muted-foreground/40"
+    : !installed || grant === "current"
+      ? "bg-amber-500"
+      : enabled
+        ? "bg-emerald-500"
+        : "bg-sky-500";
+
+  return (
+    <section
+      className={cn(
+        "relative overflow-hidden rounded-2xl border bg-card transition-all duration-500",
+        running ? "border-emerald-500/30" : "border-border/75",
+      )}
+    >
+      {/* 动态光晕 */}
+      <div
+        className={cn(
+          "pointer-events-none absolute -top-24 -right-16 h-64 w-64 rounded-full blur-3xl transition-colors duration-700",
+          running ? "bg-emerald-500/15" : "bg-sky-500/10",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent transition-colors duration-700",
+          running ? "from-emerald-500/[0.07]" : "from-sky-500/[0.08]",
+        )}
+      />
+
+      <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <div
+            className={cn(
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition-all duration-500",
+              running
+                ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25"
+                : "bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-500/25",
+            )}
+          >
+            <SquareMousePointer className="h-6 w-6" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h3 className="text-[16px] font-semibold text-foreground">Computer Use</h3>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                  running
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted/70 text-muted-foreground",
+                )}
+              >
+                <span className="relative flex h-1.5 w-1.5 shrink-0">
+                  {running ? (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  ) : null}
+                  <span className={cn("relative inline-flex h-1.5 w-1.5 rounded-full", dotClass)} />
+                </span>
+                {statusTitle}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{t("settings.cuaDriver.heroDesc")}</p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3 self-end sm:self-center">
+          <Switch
+            tone="success"
+            checked={enabled}
+            disabled={!installed || installing}
+            title={enabled ? t("settings.cuaDriver.disable") : t("settings.cuaDriver.enable")}
+            aria-label={enabled ? t("settings.cuaDriver.disable") : t("settings.cuaDriver.enable")}
+            onCheckedChange={onToggle}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** 权限状态行 */
+function PermissionRow(props: {
+  icon: IconComponent;
+  name: string;
+  status: "loading" | "granted" | "pending" | "unknown";
+}) {
+  const { t } = useLocale();
+  const { icon: Icon, name, status } = props;
+  return (
+    <CardBlock className="flex items-center justify-between gap-4 py-3.5">
+      <div className="flex items-center gap-2.5">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium text-foreground">{name}</span>
+      </div>
+      {status === "loading" ? (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {t("settings.cuaDriver.permissionsChecking")}
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+            status === "granted" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+            status === "pending" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+            status === "unknown" && "bg-muted/60 text-muted-foreground",
+          )}
+        >
+          {status === "granted" ? (
+            <Check className="h-3 w-3" />
+          ) : status === "pending" ? (
+            <AlertTriangle className="h-3 w-3" />
+          ) : status === "unknown" ? (
+            <AlertCircle className="h-3 w-3" />
+          ) : null}
+          {status === "granted"
+            ? t("settings.cuaDriver.statusGranted")
+            : status === "pending"
+              ? t("settings.cuaDriver.permNotGranted")
+              : t("settings.cuaDriver.permissionsUnknown")}
+        </span>
+      )}
+    </CardBlock>
+  );
+}
+
+const TIMEOUT_PRESETS = [
+  { label: "30s", value: 30_000 },
+  { label: "60s", value: 60_000 },
+  { label: "120s", value: 120_000 },
+  { label: "300s", value: 300_000 },
+];
 
 export function CuaDriverSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -95,35 +329,15 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  // 总开关的真实状态就是这个 MCP server 的启用状态——没有第二份配置。
+  // 总开关的真实状态就是这个 MCP server 的启用状态
   const serverEntry = findCuaDriverServer(settings.mcp.servers);
   const enabled = serverEntry?.enabled === true;
 
   const policy: ToolPolicy = readCuaPolicy(settings.system.toolPolicies, serverEntry);
   const allowSelfTargeting = settings.system.cuaAllowSelfTargeting === true;
-  // 界面显示的必须是**将要执行的**命令，不是碰巧探测到的那个。
   const displayCommand = cuaDisplayCommand(serverEntry, probe);
   const commandDrift = cuaCommandDrift(serverEntry, probe);
 
-  // 超时用受控草稿：边打字边写回会把 "6" 这种中间态存成 6ms。
-  const [timeoutDraft, setTimeoutDraft] = useState(() =>
-    String(serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS),
-  );
-  useEffect(() => {
-    setTimeoutDraft(String(serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS));
-  }, [serverEntry?.timeoutMs]);
-
-  /**
-   * 两个探测并行发。
-   *
-   * 权限查询要 spawn 子进程、还可能等 CuaDriver.app 的守护进程握手，比
-   * probe 慢得多；串行的话用户会先看到驱动信息、隔一会儿授权那节才「长
-   * 出来」，整页跳一下。并行之后授权节的骨架随第一帧就位，只有里面的
-   * 状态文字在等。
-   *
-   * 授权查询失败不清空已有结果：`permissions grant` 之后重查若临时失败，
-   * 直接归零会把刚拿到的授权显示成「未授权」。
-   */
   const refresh = useCallback(async (options?: { force?: boolean }) => {
     const cached = options?.force ? null : readCuaProbeCache();
     if (cached) {
@@ -155,7 +369,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     }
 
     const perms = await permissionsTask;
-    // 缓存与组件是否还挂着无关：探测的是机器状态，下次挂载照样能用。
     if (probed) writeCuaProbeCache(probed, perms);
     if (!mountedRef.current) return;
     if (perms) setPermissions(perms);
@@ -170,8 +383,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     };
   }, [refresh]);
 
-  // 卸载时兜底摘掉安装进度监听：`confirmInstall` 正常路径自己会摘，但组件
-  // 在安装途中被卸载时那段 finally 还没跑到。
   const installUnlistenRef = useRef<(() => void) | null>(null);
   useEffect(
     () => () => {
@@ -182,12 +393,32 @@ export function CuaDriverSection(props: SettingsSectionProps) {
   );
 
   const installed = probe?.installed === true;
-  // 是否渲染授权那一节只看平台与安装状态——两者都在 probe 里，不必等权限
-  // 查询回来。Windows / Linux 没有 TCC 门槛，整节不存在。
   const showPermissions = installed && probe?.permissionsRequired === true;
   const permissionsKnown = permissions?.supported === true;
   const permissionsPending =
     permissionsKnown && (!permissions.accessibility || !permissions.screenRecording);
+
+  const grantState: StepState | "skip" =
+    probe?.permissionsRequired !== true
+      ? "skip"
+      : !installed
+        ? "todo"
+        : !permissionsKnown
+          ? permissionsLoading
+            ? "busy"
+            : "todo"
+          : permissionsPending
+            ? "current"
+            : "done";
+
+  const permissionRowStatus = (granted: boolean) =>
+    permissionsKnown
+      ? granted
+        ? "granted"
+        : "pending"
+      : permissionsLoading
+        ? "loading"
+        : "unknown";
 
   async function beginInstall() {
     setError(null);
@@ -199,14 +430,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     }
   }
 
-  /**
-   * 监听必须在 `cua_driver_install` 发出**之前**注册完成。
-   *
-   * 之前是靠 `installing` 触发的 effect 去注册，而 effect 要等下一轮渲染、
-   * `listen()` 本身还是异步的——这两段时间里安装脚本已经在往外打日志了，
-   * 开头那几行直接丢掉。这里改成 `await listen(...)` 之后再发调用，并在
-   * finally 里摘掉；组件若在这中间被卸载，由上面的 ref 兜底。
-   */
   async function confirmInstall() {
     setConfirmingInstall(false);
     setInstalling(true);
@@ -218,7 +441,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
       unlisten = await listen<CuaInstallProgress>(CUA_INSTALL_PROGRESS_EVENT, (event) => {
         setLog((prev) => [...prev, event.payload.line].slice(-CUA_MAX_LOG_LINES));
       });
-      // 注册与卸载可能已经交错：卸载先发生时立刻摘掉，别把监听器漏在外面。
       if (!mountedRef.current) {
         unlisten();
         unlisten = null;
@@ -242,7 +464,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setError(null);
     try {
       const next = await invoke<CuaPermissions>("cua_driver_permissions_grant");
-      // 授权状态刚变过，缓存里那份已经过时。
       patchCuaProbeCachePermissions(next);
       if (mountedRef.current) setPermissions(next);
     } catch (err) {
@@ -252,13 +473,6 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     }
   }
 
-  /**
-   * 总开关 = 「cua-driver 这个 MCP server 是否启用」。
-   *
-   * 关闭时只把 `enabled` 置 false 而不删除条目：用户可能在 MCP Hub 里
-   * 改过 args、超时或权限策略，删掉再加回来会静默丢掉这些自定义。
-   * 打开时若条目还不存在才新建。
-   */
   function toggleEnabled(next: boolean) {
     if (next && !probe?.installed) return;
     setSettings((prev) => {
@@ -291,22 +505,19 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     setSettings((prev) => updateSystem(prev, { cuaAllowSelfTargeting: next }));
   }
 
-  function commitTimeout() {
-    const next = clampCuaTimeoutMs(timeoutDraft, serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS);
-    setTimeoutDraft(String(next));
-    if (!serverEntry || next === serverEntry.timeoutMs) return;
+  function applyTimeout(timeoutMs: number) {
+    if (!serverEntry || timeoutMs === serverEntry.timeoutMs) return;
     setSettings((prev) => {
       const index = findCuaDriverServerIndex(prev.mcp.servers);
       if (index < 0) return prev;
       return updateMcp(prev, {
         servers: prev.mcp.servers.map((server, idx) =>
-          idx === index ? { ...server, timeoutMs: next } : server,
+          idx === index ? { ...server, timeoutMs } : server,
         ),
       });
     });
   }
 
-  /** 把条目的 command / args 对齐到最新探测结果。见 `cuaCommandDrift`。 */
   function realignCommand() {
     if (!probe) return;
     setSettings((prev) => {
@@ -320,322 +531,426 @@ export function CuaDriverSection(props: SettingsSectionProps) {
     });
   }
 
-  const statusText = !installed
-    ? t("settings.cuaDriver.statusNotInstalled")
-    : enabled
-      ? t("settings.cuaDriver.statusActive")
-      : t("settings.cuaDriver.statusIdle");
+  const currentTimeout = serverEntry?.timeoutMs ?? CUA_DEFAULT_TIMEOUT_MS;
+
+  const capabilities = [
+    { key: "capWindows", label: t("settings.cuaDriver.capWindows") },
+    { key: "capScreenshot", label: t("settings.cuaDriver.capScreenshot") },
+    { key: "capMouse", label: t("settings.cuaDriver.capMouse") },
+    { key: "capKeyboard", label: t("settings.cuaDriver.capKeyboard") },
+    { key: "capMenu", label: t("settings.cuaDriver.capMenu") },
+    { key: "capBrowser", label: t("settings.cuaDriver.capBrowser") },
+  ];
+
+  const probingInitial = checking && probe === null;
+
+  // 驱动节点：已装 → 完成；安装/首查中 → 进行中；未装 → 当前待办
+  const driverTone: NodeTone = installed
+    ? "done"
+    : probingInitial || installing
+      ? "neutral"
+      : "active";
+  const driverNode =
+    probingInitial || installing ? (
+      <Loader2 className="h-4 w-4 animate-spin" />
+    ) : installed ? (
+      <Check className="h-4 w-4" />
+    ) : (
+      <Download className="h-4 w-4" />
+    );
+
+  // 授权节点：已授权 → 完成；查询中 → 进行中；缺权限 → 警示；其余 → 中性
+  const grantTone: NodeTone =
+    grantState === "done" ? "done" : grantState === "current" ? "warn" : "neutral";
+  const grantNode =
+    grantState === "busy" ? (
+      <Loader2 className="h-4 w-4 animate-spin" />
+    ) : grantState === "done" ? (
+      <Check className="h-4 w-4" />
+    ) : (
+      <Shield className="h-4 w-4" />
+    );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10">
-            <Hand className="h-[18px] w-[18px] text-sky-500" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold">{t("settings.cuaDriver.title")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.cuaDriver.subtitle")}</p>
-          </div>
-        </div>
+    <div className="w-full space-y-6">
+      {/* 顶部全宽 Hero 仪表卡片 */}
+      <HeroCard
+        probing={probingInitial}
+        installed={installed}
+        installing={installing}
+        grant={grantState}
+        enabled={enabled}
+        onToggle={() => toggleEnabled(!enabled)}
+      />
 
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex max-w-[260px] items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium",
-              enabled
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-muted/50 text-muted-foreground",
-            )}
-            title={displayCommand ?? undefined}
-          >
-            {enabled ? (
-              <Hand className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <Circle className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span className="truncate">{statusText}</span>
-          </div>
-
-          <AgentActivationSwitch
-            checked={enabled}
-            disabled={!installed || installing}
-            title={enabled ? t("settings.cuaDriver.disable") : t("settings.cuaDriver.enable")}
-            onToggle={() => toggleEnabled(!enabled)}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
-        <div className="flex items-center justify-between gap-3">
-          <SectionCardHeader icon={Package} title={t("settings.cuaDriver.groupDriver")} />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 shrink-0 gap-1.5 text-xs"
-            disabled={checking || installing}
-            onClick={() => void refresh({ force: true })}
-          >
-            <RefreshCw className={checking ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
-            {t("settings.cuaDriver.recheck")}
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-sm font-medium">
-              {installed ? (
-                <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-              ) : (
-                <Download className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              )}
-              {installed
-                ? probe?.version
-                  ? t("settings.cuaDriver.detectedWithVersion").replace("{version}", probe.version)
-                  : t("settings.cuaDriver.detected")
-                : t("settings.cuaDriver.notInstalledTitle")}
-            </div>
-            {/* 显示的是**将要执行的**命令：有条目就是条目里那份，没有才退回
-                探测路径。两者分叉时下面会单独警告——显示探测路径而实际启动
-                另一个二进制，等于让用户以为一切正常。 */}
-            <p className="mt-0.5 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
-              {displayCommand ?? t("settings.cuaDriver.notInstalledDesc")}
-            </p>
-          </div>
-          {installed ? null : (
-            <Button
-              size="sm"
-              className="h-8 shrink-0 gap-1.5"
-              disabled={installing || confirmingInstall || checking}
-              onClick={() => void beginInstall()}
+      {/* 竖向时间轴：每个配置独占一行，节点颜色即推进状态 */}
+      <div>
+        <TimelineItem
+          tone={driverTone}
+          node={driverNode}
+          connector={installed ? "done" : "default"}
+          title={t("settings.cuaDriver.groupDriver")}
+          action={
+            <button
+              type="button"
+              disabled={checking || installing}
+              onClick={() => void refresh({ force: true })}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
             >
-              {installing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              {installing ? t("settings.cuaDriver.installing") : t("settings.cuaDriver.install")}
-            </Button>
-          )}
-        </div>
-
-        {/* 配置漂移：条目里存的 command 与刚探测到的路径不是一回事。重装到
-            别的位置、或导入了一份 command 指向别处的同名条目都会走到这里。
-            默默按新路径改写是不对的——那可能正是用户自己指定的；所以只是把
-            两条路径都摆出来，由用户决定要不要对齐。 */}
-        {commandDrift ? (
-          <div className="rounded-lg border border-amber-500/50 bg-amber-500/[0.07] px-4 py-3">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
-              {t("settings.cuaDriver.commandDriftTitle")}
-            </p>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {t("settings.cuaDriver.commandDriftDesc")}
-            </p>
-            <dl className="mt-2 space-y-1 font-mono text-[11px] leading-relaxed">
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-muted-foreground">
-                  {t("settings.cuaDriver.commandDriftConfigured")}
-                </dt>
-                <dd className="min-w-0 break-all">{commandDrift.configured}</dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-muted-foreground">
-                  {t("settings.cuaDriver.commandDriftProbed")}
-                </dt>
-                <dd className="min-w-0 break-all">{commandDrift.probed}</dd>
-              </div>
-            </dl>
-            <Button size="sm" className="mt-3 h-8" onClick={realignCommand}>
-              {t("settings.cuaDriver.commandDriftRealign")}
-            </Button>
-          </div>
-        ) : null}
-
-        {/* 安装确认：把即将执行的命令原文摆出来。这条命令会从网络下载一段
-            shell 脚本并直接执行，用户有权先看清楚再决定，也可以复制到自己
-            的终端里跑。绝不自动安装。 */}
-        {confirmingInstall && preview ? (
-          <div className="rounded-lg border border-amber-500/50 bg-amber-500/[0.07] px-4 py-3">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
-              {t("settings.cuaDriver.confirmTitle")}
-            </p>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {t("settings.cuaDriver.confirmDesc").replace("{url}", preview.sourceUrl)}
-            </p>
-            <pre className="mt-2.5 overflow-x-auto rounded-lg bg-foreground/[0.06] px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground">
-              {preview.display}
-            </pre>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="h-8" onClick={() => void confirmInstall()}>
-                {t("settings.cuaDriver.confirmRun")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8"
-                onClick={() => setConfirmingInstall(false)}
-              >
-                {t("settings.cuaDriver.confirmCancel")}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {log.length > 0 ? (
-          <pre className="max-h-56 overflow-auto rounded-lg bg-muted/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {log.join("\n")}
-          </pre>
-        ) : null}
-
-        {error ? (
-          <p className="flex items-start gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 break-words">{error}</span>
-          </p>
-        ) : null}
-      </div>
-
-      {/* macOS TCC。授权归 CuaDriver.app 而非 LiveAgent —— 这是刻意选择的
-          代理模式，宿主不需要任何辅助功能 / 屏幕录制权限。
-
-          渲染条件只看 probe 里的平台位：Windows / Linux 没有这道门槛，整
-          节不存在；macOS 上则整节随第一帧就位，只有里面的状态在等查询，
-          不会出现「卡片过一会儿才长出来」的跳动。 */}
-      {showPermissions ? (
-        <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
-          <SectionCardHeader icon={Shield} title={t("settings.cuaDriver.permissionsTitle")} />
-          <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-sm font-medium">
-                {!permissionsKnown ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-                ) : permissionsPending ? (
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                ) : (
-                  <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+              <RefreshCw className={checking ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+              {t("settings.cuaDriver.recheck")}
+            </button>
+          }
+        >
+          <CardBlock className="flex items-center justify-between gap-4 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  installed
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : "bg-muted/60 text-muted-foreground",
                 )}
-                {!permissionsKnown
-                  ? permissionsLoading
-                    ? t("settings.cuaDriver.permissionsChecking")
-                    : t("settings.cuaDriver.permissionsUnknown")
-                  : permissionsPending
-                    ? t("settings.cuaDriver.permissionsPending")
-                    : t("settings.cuaDriver.statusGranted")}
+              >
+                {checking && !probe ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : installed ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {installed
+                    ? probe?.version
+                      ? t("settings.cuaDriver.detectedWithVersion").replace(
+                          "{version}",
+                          probe.version,
+                        )
+                      : t("settings.cuaDriver.detected")
+                    : t("settings.cuaDriver.notInstalledTitle")}
+                </div>
+                {displayCommand ? (
+                  <p
+                    className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
+                    title={displayCommand}
+                  >
+                    {displayCommand}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t("settings.cuaDriver.notInstalledDesc")}
+                  </p>
+                )}
               </div>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {!permissionsKnown || permissionsPending
-                  ? t("settings.cuaDriver.permissionsDesc")
-                  : t("settings.cuaDriver.permissionsGranted").replace(
-                      "{bundleId}",
-                      permissions?.attributedTo ?? "com.trycua.driver",
-                    )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {displayCommand ? <CopyButton value={displayCommand} /> : null}
+              {installed ? null : (
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-lg text-xs"
+                  disabled={installing || confirmingInstall || checking}
+                  onClick={() => void beginInstall()}
+                >
+                  {installing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {installing
+                    ? t("settings.cuaDriver.installing")
+                    : t("settings.cuaDriver.install")}
+                </Button>
+              )}
+            </div>
+          </CardBlock>
+
+          {/* 配置漂移 / 安装确认 / 日志 / 错误 */}
+          {commandDrift || (confirmingInstall && preview) || log.length > 0 || error ? (
+            <div className="space-y-3 border-t border-border/60 px-5 py-4">
+              {commandDrift ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3.5">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {t("settings.cuaDriver.commandDriftTitle")}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    {t("settings.cuaDriver.commandDriftDesc")}
+                  </p>
+                  <div className="mt-2.5 space-y-1 font-mono text-[11px]">
+                    <div className="flex items-center gap-2 rounded bg-background/80 px-2.5 py-1.5">
+                      <span className="shrink-0 text-muted-foreground">
+                        {t("settings.cuaDriver.commandDriftConfigured")}
+                      </span>
+                      <span className="min-w-0 truncate">{commandDrift.configured}</span>
+                    </div>
+                    <div className="flex items-center gap-2 rounded bg-background/80 px-2.5 py-1.5">
+                      <span className="shrink-0 text-muted-foreground">
+                        {t("settings.cuaDriver.commandDriftProbed")}
+                      </span>
+                      <span className="min-w-0 truncate">{commandDrift.probed}</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 h-7 gap-1.5 rounded-lg text-xs"
+                    onClick={realignCommand}
+                  >
+                    <Replace className="h-3 w-3" />
+                    {t("settings.cuaDriver.commandDriftRealign")}
+                  </Button>
+                </div>
+              ) : null}
+
+              {confirmingInstall && preview ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3.5">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {t("settings.cuaDriver.confirmTitle")}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {t("settings.cuaDriver.confirmDesc").replace("{url}", preview.sourceUrl)}
+                  </p>
+                  <div className="relative mt-2.5">
+                    <pre className="overflow-x-auto rounded-lg bg-foreground/[0.05] px-3 py-2 pr-9 font-mono text-[11px] leading-relaxed text-foreground">
+                      {preview.display}
+                    </pre>
+                    <CopyButton
+                      value={preview.display}
+                      className="absolute top-1 right-1 bg-background/60"
+                    />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      className="h-7.5 rounded-lg text-xs"
+                      onClick={() => void confirmInstall()}
+                    >
+                      {t("settings.cuaDriver.confirmRun")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7.5 rounded-lg text-xs"
+                      onClick={() => setConfirmingInstall(false)}
+                    >
+                      {t("settings.cuaDriver.confirmCancel")}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {log.length > 0 ? (
+                <div className="overflow-hidden rounded-xl bg-zinc-950">
+                  <div className="flex items-center gap-2 border-b border-white/10 px-3 py-1.5">
+                    <Terminal className="h-3 w-3 text-zinc-400" />
+                    <span className="text-[10px] text-zinc-400">
+                      {t("settings.cuaDriver.installLog")}
+                    </span>
+                    {installing ? (
+                      <Loader2 className="ml-auto h-3 w-3 animate-spin text-zinc-400" />
+                    ) : null}
+                  </div>
+                  <pre className="max-h-48 overflow-auto px-3 py-2 font-mono text-[10.5px] leading-relaxed text-zinc-300">
+                    {log.join("\n")}
+                  </pre>
+                </div>
+              ) : null}
+
+              {error ? (
+                <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/[0.05] px-3.5 py-2.5">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+                  <p className="min-w-0 break-words text-xs text-destructive">{error}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </TimelineItem>
+
+        {/* macOS 权限授权：仅 macOS 平台展示 */}
+        {showPermissions ? (
+          <TimelineItem
+            tone={grantTone}
+            node={grantNode}
+            connector={grantState === "done" ? "done" : "default"}
+            title={t("settings.cuaDriver.permissionsTitle")}
+            action={
+              permissionsKnown && !permissionsPending ? undefined : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-lg text-xs"
+                  disabled={granting}
+                  onClick={() => void grantPermissions()}
+                >
+                  {granting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Shield className="h-3.5 w-3.5" />
+                  )}
+                  {t("settings.cuaDriver.grantPermissions")}
+                </Button>
+              )
+            }
+          >
+            <CardBlock className="py-3">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("settings.cuaDriver.permissionsDesc")}
+              </p>
+            </CardBlock>
+            <PermissionRow
+              icon={Accessibility}
+              name={t("settings.cuaDriver.permAccessibility")}
+              status={permissionRowStatus(permissions?.accessibility === true)}
+            />
+            <PermissionRow
+              icon={Video}
+              name={t("settings.cuaDriver.permScreenRecording")}
+              status={permissionRowStatus(permissions?.screenRecording === true)}
+            />
+            {permissionsKnown && !permissionsPending ? (
+              <CardBlock className="py-2.5">
+                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                  {t("settings.cuaDriver.permissionsGranted").replace(
+                    "{bundleId}",
+                    permissions?.attributedTo ?? "com.trycua.driver",
+                  )}
+                </p>
+              </CardBlock>
+            ) : null}
+          </TimelineItem>
+        ) : null}
+
+        {/* 安全与审批 */}
+        <TimelineItem
+          tone="neutral"
+          node={<Shield className="h-4 w-4" />}
+          connector="default"
+          title={t("settings.cuaDriver.groupSecurity")}
+        >
+          <CardBlock className="flex items-center justify-between gap-3 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground">
+                {t("settings.cuaDriver.policyTitle")}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.cuaDriver.policyDesc")}
               </p>
             </div>
-            {permissionsKnown && !permissionsPending ? null : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 gap-1.5"
-                // 读不到状态时也要能点：授权引导本身是修复手段，把它锁住
-                // 只会让用户卡在「无法读取」这一步。
-                disabled={granting}
-                onClick={() => void grantPermissions()}
-              >
-                {granting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Shield className="h-3.5 w-3.5" />
-                )}
-                {t("settings.cuaDriver.grantPermissions")}
-              </Button>
-            )}
-          </div>
-        </div>
-      ) : null}
+            <ToolPolicyToggle
+              value={policy}
+              ariaLabel={t("settings.cuaDriver.policyTitle")}
+              size="sm"
+              onChange={setPolicy}
+            />
+          </CardBlock>
 
-      {/* 参数全在这里改，MCP Hub 不再列出 cua-driver 这一条——两个入口都能
-          写同一份配置只会让人搞不清哪边说了算。 */}
-      <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
-        <SectionCardHeader icon={Settings2} title={t("settings.cuaDriver.groupBehavior")} />
-
-        <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">{t("settings.cuaDriver.policyTitle")}</div>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              {t("settings.cuaDriver.policyDesc")}
-            </p>
-          </div>
-          <ToolPolicyToggle
-            value={policy}
-            ariaLabel={t("settings.cuaDriver.policyTitle")}
-            size="sm"
-            onChange={setPolicy}
-          />
-        </div>
-
-        {/* 自指闸门。默认关闭：模型操作宿主界面能点掉自己的审批弹窗、改写
-            这份设置、甚至关掉应用。 */}
-        <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/30 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-sm font-medium">
-              <ShieldOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {t("settings.cuaDriver.allowSelfTitle")}
+          <CardBlock className="flex items-center justify-between gap-3 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <ShieldOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                {t("settings.cuaDriver.allowSelfTitle")}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.cuaDriver.allowSelfDesc")}
+              </p>
             </div>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              {t("settings.cuaDriver.allowSelfDesc")}
-            </p>
-          </div>
-          <AgentActivationSwitch
-            checked={allowSelfTargeting}
-            title={t("settings.cuaDriver.allowSelfTitle")}
-            onToggle={() => setAllowSelfTargeting(!allowSelfTargeting)}
-          />
-        </div>
+            <Switch
+              checked={allowSelfTargeting}
+              title={t("settings.cuaDriver.allowSelfTitle")}
+              aria-label={t("settings.cuaDriver.allowSelfTitle")}
+              onCheckedChange={() => setAllowSelfTargeting(!allowSelfTargeting)}
+            />
+          </CardBlock>
+        </TimelineItem>
 
-        <div className="space-y-1.5">
-          <label
-            htmlFor="cua-driver-timeout"
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-          >
-            <Clock3 className="h-3 w-3" />
-            {t("settings.cuaDriver.timeoutLabel")}
-          </label>
-          <Input
-            id="cua-driver-timeout"
-            type="text"
-            inputMode="numeric"
-            value={timeoutDraft}
-            disabled={!serverEntry}
-            onChange={(event) => setTimeoutDraft(event.target.value)}
-            onBlur={commitTimeout}
-            placeholder="60000"
-            className="w-40 font-mono text-[13px]"
-          />
-          <p className="text-[11px] leading-relaxed text-muted-foreground/70">
-            {t("settings.cuaDriver.timeoutHint")}
-          </p>
-        </div>
-      </div>
+        {/* 运行时参数 */}
+        <TimelineItem
+          tone="neutral"
+          node={<Clock3 className="h-4 w-4" />}
+          connector="default"
+          title={t("settings.cuaDriver.groupRuntime")}
+        >
+          <CardBlock className="flex flex-wrap items-center justify-between gap-3 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground">
+                {t("settings.cuaDriver.timeoutLabel")}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.cuaDriver.timeoutHint")}
+              </p>
+            </div>
+            <fieldset
+              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: 同 ToolPolicyToggle——互斥单选语义需要向读屏表达。
+              role="radiogroup"
+              aria-label={t("settings.cuaDriver.timeoutLabel")}
+              className="inline-flex shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+            >
+              {TIMEOUT_PRESETS.map((preset) => {
+                const active = currentTimeout === preset.value;
+                return (
+                  // biome-ignore lint/a11y/useSemanticElements: 同 ToolPolicyToggle——分段控件保留 button 样式。
+                  <button
+                    key={preset.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={!serverEntry}
+                    onClick={() => applyTimeout(preset.value)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-[11px] font-medium leading-none transition-colors disabled:opacity-50",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </fieldset>
+          </CardBlock>
+        </TimelineItem>
 
-      <div className="space-y-3 rounded-xl border border-border/60 bg-card p-5">
-        <SectionCardHeader icon={Plug} title={t("settings.cuaDriver.groupAbout")} />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("settings.cuaDriver.description")}{" "}
-          <a
-            href={CUA_UPSTREAM_REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-          >
-            trycua/cua
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </p>
-        <p className="rounded-lg bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          {t("settings.cuaDriver.policyNote")}
-        </p>
+        {/* 能力概览与参考 */}
+        <TimelineItem
+          tone="neutral"
+          node={<Sparkles className="h-4 w-4" />}
+          connector="none"
+          title={t("settings.cuaDriver.groupCapabilities")}
+        >
+          <CardBlock className="py-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              {capabilities.map((cap) => (
+                <div
+                  key={cap.key}
+                  className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs text-foreground/80"
+                >
+                  <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500/70" />
+                  <span className="truncate">{cap.label}</span>
+                </div>
+              ))}
+            </div>
+          </CardBlock>
+          <CardBlock className="py-3">
+            <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+              <span className="min-w-0 truncate">{t("settings.cuaDriver.policyNote")}</span>
+              <a
+                href={CUA_UPSTREAM_REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground/80 hover:text-foreground hover:underline"
+              >
+                trycua/cua
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </CardBlock>
+        </TimelineItem>
       </div>
     </div>
   );
