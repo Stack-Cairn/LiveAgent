@@ -3,6 +3,7 @@ import type {
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -214,6 +215,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           selectedModel: buildGatewaySelectedModel(turnSelectedModel, activeProviders),
           systemSettings: buildGatewaySystemSettings(settings, effectiveWorkdir),
           uploadedFiles,
+          referencedConversations: sendOptions?.referencedConversations,
           clientRequestId,
           runtimeControls,
           baseMessageRef: sendOptions?.editMessageRef,
@@ -292,7 +294,11 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
         setUploadingFiles(false);
       }
     }
-    return { text, uploadedFiles };
+    return {
+      text,
+      uploadedFiles,
+      referencedConversations: normalizeConversationMentionReferences(draft.conversationMentions),
+    };
   };
 
   const clearCurrentComposerDraftForQueuedTurn = (conversationId: string) => {
@@ -332,6 +338,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           ),
           systemSettings: buildGatewaySystemSettings(settings, workdir),
           uploadedFiles: materialized.uploadedFiles,
+          referencedConversations: materialized.referencedConversations,
           clientRequestId: createUuid(),
           runtimeControls: chatRuntimeControlsForCurrentProvider,
           queuePolicy,
@@ -342,6 +349,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       const outcome = await sendChat(materialized.text, {
         conversationId,
         uploadedFiles: materialized.uploadedFiles,
+        referencedConversations: materialized.referencedConversations,
         runtimeControls: chatRuntimeControlsForCurrentProvider,
         workdir,
         queuePolicy,

@@ -27,6 +27,7 @@ import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerPlanDecision } from "../../../lib/tools/planModeTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import { createTextComposerDraft } from "../composer/composerDraftText";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   type ConversationQueueStore,
   createConversationQueueStore,
@@ -826,7 +827,13 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const queuedTurn = createQueuedChatTurn({
       id: `gateway-${requestId}`,
       conversationId: targetConversationId,
-      draft: createTextComposerDraft(message),
+      draft: createTextComposerDraft(
+        message,
+        normalizeConversationMentionReferences(
+          payload.referencedConversations,
+          targetConversationId,
+        ),
+      ),
       uploadedFiles,
       executionMode,
       workdir: isAgentExecutionMode(executionMode) ? workdir : "",

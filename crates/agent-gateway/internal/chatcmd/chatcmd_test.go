@@ -8,8 +8,43 @@ import (
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/handler"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
+
+func TestConversationReferencesSurviveGatewayCommandRoundTrip(t *testing.T) {
+	request := &gatewayv2.ChatRequest{
+		ConversationId:  "conversation-current",
+		ClientRequestId: "client-reference-roundtrip",
+		Message:         "compare prior conversations",
+		ReferencedConversations: []*gatewayv2.ChatConversationReference{
+			{Id: "conversation-current", Title: "Current"},
+			{Id: "conversation-a", Title: "  Earlier   investigation  ", Cwd: " /source "},
+			{Id: "conversation-a", Title: "Duplicate"},
+			{Id: "conversation-b", Title: "Second"},
+			{Id: "conversation-c", Title: "Third"},
+			{Id: "conversation-d", Title: "Fourth"},
+		},
+	}
+	body := RequestBodyFromProto(request)
+	if err := NormalizeRequestBody(&body); err != nil {
+		t.Fatalf("NormalizeRequestBody() error = %v", err)
+	}
+
+	envelope := buildCommandEnvelope("run-reference-roundtrip", "chat.submit", body, nil)
+	forwarded := envelope.GetChatCommand().GetRequest().GetReferencedConversations()
+	if len(forwarded) != 3 {
+		t.Fatalf("forwarded references = %#v, want 3 normalized entries", forwarded)
+	}
+	if forwarded[0].GetId() != "conversation-a" ||
+		forwarded[0].GetTitle() != "Earlier investigation" ||
+		forwarded[0].GetCwd() != "/source" {
+		t.Fatalf("first forwarded reference = %#v", forwarded[0])
+	}
+	if forwarded[1].GetId() != "conversation-b" || forwarded[2].GetId() != "conversation-c" {
+		t.Fatalf("forwarded reference ids = %q, %q", forwarded[1].GetId(), forwarded[2].GetId())
+	}
+}
 
 func newCommandTestManager(t *testing.T) (*session.Manager, *session.AgentSession) {
 	t.Helper()

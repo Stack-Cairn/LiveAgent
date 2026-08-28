@@ -25,6 +25,8 @@ pub(crate) const GATEWAY_WS_SUBPROTOCOL: &str = "liveagent.v2.pb";
 pub(crate) const GATEWAY_WS_PROTOCOL_VERSION: u32 = 2;
 /// 可靠聊天镜像协议的能力标识。
 pub(crate) const CHAT_INGRESS_V1_CAPABILITY: &str = "CHAT_INGRESS_V1";
+/// 当前消息可授权按需读取所引用历史会话的能力标识。
+pub(crate) const CONVERSATION_REFERENCES_V1_CAPABILITY: &str = "CONVERSATION_REFERENCES_V1";
 /// 桌面端主链路路径。
 pub(crate) const GATEWAY_WS_AGENT_PATH: &str = "/ws/v2/agent";
 /// 终端数据面路径。
@@ -80,7 +82,10 @@ pub(crate) fn build_client_hello(
         agent_version: agent_version.clone(),
         client_name: "desktop".to_string(),
         client_version: agent_version,
-        capabilities: vec![CHAT_INGRESS_V1_CAPABILITY.to_string()],
+        capabilities: vec![
+            CHAT_INGRESS_V1_CAPABILITY.to_string(),
+            CONVERSATION_REFERENCES_V1_CAPABILITY.to_string(),
+        ],
     }
 }
 
@@ -420,7 +425,13 @@ mod tests {
             assert_eq!(hello.role, v2::ClientRole::Agent as i32);
             assert_eq!(hello.token, "test-token");
             assert_eq!(hello.client_name, "desktop");
-            assert_eq!(hello.capabilities, [CHAT_INGRESS_V1_CAPABILITY]);
+            assert_eq!(
+                hello.capabilities,
+                [
+                    CHAT_INGRESS_V1_CAPABILITY,
+                    CONVERSATION_REFERENCES_V1_CAPABILITY,
+                ]
+            );
 
             ws.send(encode_ws_frame(&v2::AgentServerFrame {
                 payload: Some(v2::agent_server_frame::Payload::Hello(v2::ServerHello {
