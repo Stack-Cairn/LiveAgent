@@ -1,3 +1,4 @@
+import { isCuaDriverServerId } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { isTaskToolName } from "@liveagent/ui/contracts/task";
 import type {
   HostedSearchBlock,
@@ -23,6 +24,7 @@ import {
   FilePenLine,
   FileText,
   FolderTree,
+  Hand,
   type IconComponent,
   ImageIcon,
   Link2,
@@ -42,6 +44,14 @@ export function getToolMeta(name: string): {
 } {
   if (isTaskToolName(name)) {
     return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
+  }
+  // 动态 MCP 工具此前全落进 default 分支（扳手 / other），与内置工具混在
+  // 一起看不出来源。给它们一个专属图标；cua-driver 再单独区分——它的工具
+  // 是在真实点击、输入、关闭应用，值得比「又一个 MCP 工具」更醒目。
+  if (isDynamicMcpToolName(name)) {
+    return isCuaDriverToolName(name)
+      ? { Icon: Hand, accent: "var(--tool-bash-accent)", category: "cua" }
+      : { Icon: Plug, accent: "var(--tool-list-accent)", category: "mcp" };
   }
   switch (name) {
     case "Bash":
@@ -209,8 +219,42 @@ export function isAgentToolName(name: string) {
   return name === "Agent";
 }
 
+/**
+ * 拆开动态 MCP 工具名。命名规则见 `mcpTools.ts`：
+ * `mcp_<sanitizedServerId>_<sanitizedToolName>`。
+ *
+ * 两段本身都可能含下划线，所以按第一个 `_` 切分是启发式而非精确解析。
+ * 实践中 server id 是 kebab-case（sanitize 保留 `-`），切分正确；即便切
+ * 错也只影响标题渲染，不参与任何判定或 key。
+ */
+export function parseDynamicMcpToolName(name: string): { serverId: string; tool: string } | null {
+  const trimmed = name.trim();
+  if (!isDynamicMcpToolName(trimmed)) return null;
+  const rest = trimmed.slice("mcp_".length);
+  const separator = rest.indexOf("_");
+  if (separator <= 0 || separator === rest.length - 1) return null;
+  return { serverId: rest.slice(0, separator), tool: rest.slice(separator + 1) };
+}
+
+/**
+ * cua-driver 的工具会真实操作用户的机器，值得在气泡里一眼可辨。
+ *
+ * 走 `isCuaDriverServerId` 而不是直接比字符串：工具名里的 server id 段是
+ * 从配置原文 sanitize 出来的，大小写照抄。这里只影响图标，但同一个判断在
+ * 别处关系到审批缺省，口径不该有两套。
+ */
+export function isCuaDriverToolName(name: string) {
+  const parsed = parseDynamicMcpToolName(name);
+  return parsed ? isCuaDriverServerId(parsed.serverId) : false;
+}
+
 export function getToolDisplayName(name: string) {
   if (name === "SshManager") return "SSHManager";
+  // `mcp_cua-driver_get_desktop_state` 这样的原始名在气泡标题里又长又
+  // 难读。拆成 `cua-driver · get_desktop_state`：server 仍然可见（同时
+  // 挂多个 MCP 时需要区分），但工具本身成为视觉重心。
+  const parsed = parseDynamicMcpToolName(name);
+  if (parsed) return `${parsed.serverId} · ${parsed.tool}`;
   return name;
 }
 

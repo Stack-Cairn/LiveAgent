@@ -302,6 +302,8 @@ export type RunAgentConversationTurnParams = {
   getMcpSettings: () => AppSettings["mcp"];
   /** 工具审批策略的实时读取(权威 settingsRef,非 turn 级快照),缺省视为空表。 */
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
+  /** 允许 CUA 工具操作 LiveAgent 自身；默认 false，见 lib/tools/cuaSelfGuard.ts。 */
+  getCuaAllowSelfTargeting?: () => boolean;
   /** 命令执行方式(turn 级快照):ask 全量审批 / auto 按策略 / sandbox(±断网)。 */
   commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];
   /** Plan mode(turn 级快照):真时本轮只注入只读工具 + ExitPlanMode 提交闸门。 */
@@ -393,6 +395,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     agentTemplates,
     getMcpSettings,
     getToolPolicies,
+    getCuaAllowSelfTargeting,
     commandSafetyMode,
     planModeEnabled,
     applyMcpOps,
@@ -645,6 +648,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
     onTunnelsChanged,
+    cuaAllowSelfTargeting: getCuaAllowSelfTargeting?.() === true,
     onMcpLoadError: (message) => {
       const warning = `MCP 工具加载失败，已跳过并继续对话：${message || "未知错误"}`;
       console.warn(warning);

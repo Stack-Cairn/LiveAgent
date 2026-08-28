@@ -5,11 +5,12 @@ import { Badge } from "@liveagent/ui/components/ui/badge";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { McpRegistryBrowser } from "@liveagent/ui/pages/mcp-hub/McpRegistryBrowser";
 import { McpServerEditModal, McpServersForm } from "@liveagent/ui/pages/mcp-hub/McpServersForm";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { HubHeader } from "../../components/hub/HubChrome";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Tabs, TabsContent } from "../../components/ui/tabs";
+import { isHubHiddenServerId } from "../../contracts/mcpServerDefaults";
 import { McpImportView } from "./McpImportView";
 
 type McpHubPageProps = {
@@ -39,8 +40,14 @@ export function McpHubPage(props: McpHubPageProps) {
     import: "",
   });
 
-  const serverCount = settings.mcp.servers.length;
-  const enabledCount = settings.mcp.servers.filter((server) => server.enabled).length;
+  // 与 McpServersForm 的列表口径一致：由专属设置页托管的 server 不计入
+  // Hub 的徽章，否则会出现「0 个 server 却显示 1/1 已启用」。
+  const visibleServers = useMemo(
+    () => settings.mcp.servers.filter((server) => !isHubHiddenServerId(server.id)),
+    [settings.mcp.servers],
+  );
+  const serverCount = visibleServers.length;
+  const enabledCount = visibleServers.filter((server) => server.enabled).length;
   const activeSearchQuery = searchQueries[view];
   const searchPlaceholder =
     view === "store"

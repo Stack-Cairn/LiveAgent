@@ -5,11 +5,10 @@
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
-    Mutex, OnceLock,
+    OnceLock,
 };
 
 use serde::Serialize;
-use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::{sync::mpsc, time::Duration};
 
@@ -25,7 +24,6 @@ const STATUS_EVENT: &str = "backup-sync-status-updated";
 
 static DIRTY_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 static SUPPRESSION: AtomicUsize = AtomicUsize::new(0);
-static CACHED_SKILLS: OnceLock<Mutex<Option<Value>>> = OnceLock::new();
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,10 +31,6 @@ struct AutoSyncStatus {
     /// 毫秒时间戳，仅成功时有值。
     last_sync_at: Option<i64>,
     last_error: Option<String>,
-}
-
-fn skills_cache() -> &'static Mutex<Option<Value>> {
-    CACHED_SKILLS.get_or_init(|| Mutex::new(None))
 }
 
 /// 抑制期计数器的 RAII 句柄。
@@ -50,7 +44,7 @@ impl Drop for AutoSyncSuppressionGuard {
 
 /// 下载并应用远端快照期间必须持有。
 ///
-/// 应用快照走的是 `save_providers` / `save_mcp` / `save_system`，它们会标脏；
+/// 应用快照走的是各配置域的 `save_*`，它们会标脏；
 /// 不抑制就会把刚从远端拉下来的数据原样推回去。
 pub fn suppress() -> AutoSyncSuppressionGuard {
     SUPPRESSION.fetch_add(1, Ordering::SeqCst);
@@ -70,21 +64,6 @@ pub fn mark_dirty() {
 
 fn suppressed() -> bool {
     SUPPRESSION.load(Ordering::SeqCst) > 0
-}
-
-/// 记录前端最近一次的技能启用态。
-///
-/// 技能启用态存在 webview localStorage，后端读不到；自动上传没有前端参与，
-/// 只能用这份缓存。缓存为空时上传会省略 skills 域，而不是写入空值 ——
-/// 省略在下载侧表现为「不动本机技能设置」，写空值会把它们全部清掉。
-pub fn cache_skills(skills: Option<Value>) {
-    if let Ok(mut slot) = skills_cache().lock() {
-        *slot = skills;
-    }
-}
-
-fn cached_skills() -> Option<Value> {
-    skills_cache().lock().ok().and_then(|slot| slot.clone())
 }
 
 pub fn start(app: AppHandle) {
@@ -139,7 +118,7 @@ async fn sync_once(app: &AppHandle) {
         return;
     }
 
-    match crate::commands::settings::auto_upload_backup_snapshot(cached_skills()).await {
+    match crate::commands::settings::auto_upload_backup_snapshot().await {
         // 未开启自动同步或凭据不全，静默跳过，不打扰用户。
         Ok(None) => {}
         Ok(Some(last_sync_at)) => emit_status(
@@ -201,17 +180,5 @@ mod tests {
         }
         assert!(rx.try_recv().is_ok());
         assert!(rx.try_recv().is_err(), "5 次变更只应留下 1 个待处理信号");
-    }
-
-    /// 清空缓存必须回到 None（上传时省略 skills 域），不能退化成写入空值。
-    #[test]
-    fn skills_cache_round_trips_and_clears_to_none() {
-        cache_skills(Some(serde_json::json!({ "enabled": ["a"] })));
-        assert_eq!(
-            cached_skills(),
-            Some(serde_json::json!({ "enabled": ["a"] }))
-        );
-        cache_skills(None);
-        assert!(cached_skills().is_none());
     }
 }

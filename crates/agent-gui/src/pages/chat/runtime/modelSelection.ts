@@ -34,7 +34,7 @@ export function resolveEffectiveChatModelSelection(params: {
   const resolveLocalSelection = (): EffectiveChatModelSelection => {
     const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
     if (!activeSelectedModel) {
-      throw new Error("请先在左上角选择一个模型（或先去设置添加模型）。");
+      throw new Error("请先在输入框左下角选择一个模型（或先去设置添加模型）。");
     }
 
     const { customProviderId, model } = activeSelectedModel;

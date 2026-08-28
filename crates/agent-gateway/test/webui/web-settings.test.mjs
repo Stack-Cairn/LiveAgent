@@ -1865,8 +1865,8 @@ test("xai model limits use the generated catalog without changing thinking detec
   // 上游"输出=窗口"的退化条目在生成期统一钳到 32K。
   assert.equal(grok45.maxOutputToken, 32_000);
   // 上游（models.dev）已下架的旧模型与未收录模型一样吃供应商兜底值。
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 258_000);
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 258_000);
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 400_000);
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 400_000);
   // 思考档位与限额同吃生成目录（见下一个用例）。
   assert.ok(settings.getKnownModelThinkingLevels("xai", "grok-4.5").includes("high"));
 });
