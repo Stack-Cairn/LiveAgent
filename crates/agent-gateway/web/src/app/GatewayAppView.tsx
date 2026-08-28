@@ -1016,11 +1016,15 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchController.dragState ? (
       <div
+        ref={workbenchController.dragGhostRef}
         data-workbench-drag-ghost=""
         className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
-          left: workbenchController.dragState.pointer.x + 14,
-          top: workbenchController.dragState.pointer.y + 10,
+          left: 0,
+          top: 0,
+          transform:
+            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+          willChange: "transform",
         }}
       >
         {workbenchController.dragState.payload.title ||

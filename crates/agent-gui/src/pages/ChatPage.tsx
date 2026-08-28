@@ -2492,7 +2492,11 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  const { dragState: workbenchDragState, beginDrag: beginWorkbenchDrag } = useWorkbenchDragSession({
+  const {
+    dragState: workbenchDragState,
+    beginDrag: beginWorkbenchDrag,
+    dragGhostRef: workbenchDragGhostRef,
+  } = useWorkbenchDragSession({
     enabled: sessionWorkbench.enabled,
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
@@ -3560,11 +3564,15 @@ export function ChatPage(props: ChatPageProps) {
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchDragState ? (
       <div
+        ref={workbenchDragGhostRef}
         data-workbench-drag-ghost=""
         className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
-          left: workbenchDragState.pointer.x + 14,
-          top: workbenchDragState.pointer.y + 10,
+          left: 0,
+          top: 0,
+          transform:
+            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+          willChange: "transform",
         }}
       >
         {workbenchDragState.payload.title || t("chat.pendingTitle")}

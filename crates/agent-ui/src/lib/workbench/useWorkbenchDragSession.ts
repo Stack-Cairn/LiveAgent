@@ -59,17 +59,46 @@ export type WorkbenchDragUnavailableReason =
 export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
   const { enabled, layoutRef, geometryRef, onCommit, onUnavailable } = params;
   const [dragState, setDragState] = useState<WorkbenchDragState | null>(null);
+  const publishedDragStateRef = useRef<WorkbenchDragState | null>(null);
   const sessionRef = useRef<DragSessionState>(IDLE_DRAG_SESSION);
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
   const onUnavailableRef = useRef(onUnavailable);
   onUnavailableRef.current = onUnavailable;
   const pointerCaptureRef = useRef<{ element: Element; pointerId: number } | null>(null);
+  const pendingMoveRef = useRef<{
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const moveFrameRef = useRef<number | null>(null);
+  const dragGhostElementRef = useRef<HTMLDivElement | null>(null);
 
   const cleanupListenersRef = useRef<(() => void) | null>(null);
 
+  const positionDragGhost = useCallback((clientX: number, clientY: number) => {
+    const element = dragGhostElementRef.current;
+    if (!element) return;
+    element.style.setProperty("--workbench-drag-ghost-x", `${clientX + 14}px`);
+    element.style.setProperty("--workbench-drag-ghost-y", `${clientY + 10}px`);
+  }, []);
+
+  const dragGhostRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      dragGhostElementRef.current = element;
+      const current = dragStateFor(sessionRef.current);
+      if (element && current) positionDragGhost(current.pointer.x, current.pointer.y);
+    },
+    [positionDragGhost],
+  );
+
   const teardown = useCallback(() => {
     sessionRef.current = IDLE_DRAG_SESSION;
+    pendingMoveRef.current = null;
+    if (moveFrameRef.current !== null) {
+      window.cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = null;
+    }
     cleanupListenersRef.current?.();
     cleanupListenersRef.current = null;
     const capture = pointerCaptureRef.current;
@@ -85,7 +114,10 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       }
     }
     document.documentElement.style.removeProperty("cursor");
-    setDragState(null);
+    if (publishedDragStateRef.current !== null) {
+      publishedDragStateRef.current = null;
+      setDragState(null);
+    }
   }, []);
 
   useEffect(() => teardown, [teardown]);
@@ -94,7 +126,11 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
   const dispatch = useCallback((event: DragSessionEvent) => {
     const result = dragSessionReducer(sessionRef.current, event);
     sessionRef.current = result.state;
-    setDragState(dragStateFor(result.state));
+    const nextDragState = dragStateFor(result.state);
+    if (!dragRenderStateEqual(publishedDragStateRef.current, nextDragState)) {
+      publishedDragStateRef.current = nextDragState;
+      setDragState(nextDragState);
+    }
     if (result.commit) onCommitRef.current(result.commit);
     return result;
   }, []);
@@ -138,7 +174,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       };
 
       const handleMove = (moveEvent: PointerEvent) => {
-        const session = sessionRef.current;
+        let session = sessionRef.current;
         if (session.phase === "idle" || moveEvent.pointerId !== session.pointerId) return;
         if (session.phase === "armed") {
           if (
@@ -168,19 +204,44 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           });
           armClickSuppressor();
           document.documentElement.style.setProperty("cursor", "grabbing");
+          session = sessionRef.current;
         }
-        dispatch({
-          type: "pointer-move",
+        if (session.phase !== "dragging") return;
+        pendingMoveRef.current = {
           pointerId: moveEvent.pointerId,
           clientX: moveEvent.clientX,
           clientY: moveEvent.clientY,
-          layout: layoutRef.current,
+        };
+        if (moveFrameRef.current !== null) return;
+        moveFrameRef.current = window.requestAnimationFrame(() => {
+          moveFrameRef.current = null;
+          const pending = pendingMoveRef.current;
+          pendingMoveRef.current = null;
+          const activeSession = sessionRef.current;
+          if (
+            !pending ||
+            activeSession.phase !== "dragging" ||
+            pending.pointerId !== activeSession.pointerId
+          ) {
+            return;
+          }
+          dispatch({
+            type: "pointer-move",
+            ...pending,
+            layout: layoutRef.current,
+          });
+          positionDragGhost(pending.clientX, pending.clientY);
         });
       };
 
       const handleUp = (upEvent: PointerEvent) => {
         const session = sessionRef.current;
         if (session.phase === "idle" || upEvent.pointerId !== session.pointerId) return;
+        pendingMoveRef.current = null;
+        if (moveFrameRef.current !== null) {
+          window.cancelAnimationFrame(moveFrameRef.current);
+          moveFrameRef.current = null;
+        }
         const result = dispatch({
           type: "pointer-up",
           pointerId: upEvent.pointerId,
@@ -207,7 +268,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
         if (keyEvent.key === "Escape") teardown();
       };
 
-      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointermove", handleMove, { passive: true });
       window.addEventListener("pointerup", handleUp);
       window.addEventListener("pointercancel", handleCancel);
       window.addEventListener("blur", handleCancel);
@@ -220,8 +281,65 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
         window.removeEventListener("keydown", handleKeyDown, true);
       };
     },
-    [dispatch, enabled, geometryRef, layoutRef, teardown],
+    [dispatch, enabled, geometryRef, layoutRef, positionDragGhost, teardown],
   );
 
-  return { dragState, beginDrag };
+  return { dragState, beginDrag, dragGhostRef };
+}
+
+function dragRenderStateEqual(
+  current: WorkbenchDragState | null,
+  next: WorkbenchDragState | null,
+): boolean {
+  if (current === next) return true;
+  if (!current || !next || current.payload !== next.payload) return false;
+  const currentTarget = current.target;
+  const nextTarget = next.target;
+  if (currentTarget?.kind !== nextTarget?.kind) return false;
+  if (currentTarget && nextTarget) {
+    switch (currentTarget.kind) {
+      case "canvas-empty":
+        break;
+      case "canvas-edge":
+        if (nextTarget.kind !== "canvas-edge" || currentTarget.edge !== nextTarget.edge)
+          return false;
+        break;
+      case "divider":
+        if (
+          nextTarget.kind !== "divider" ||
+          currentTarget.splitId !== nextTarget.splitId ||
+          currentTarget.edge !== nextTarget.edge
+        ) {
+          return false;
+        }
+        break;
+      case "pane-edge":
+        if (
+          nextTarget.kind !== "pane-edge" ||
+          currentTarget.paneId !== nextTarget.paneId ||
+          currentTarget.edge !== nextTarget.edge
+        ) {
+          return false;
+        }
+        break;
+      case "pane-center":
+        if (nextTarget.kind !== "pane-center" || currentTarget.paneId !== nextTarget.paneId) {
+          return false;
+        }
+        break;
+    }
+  }
+  const currentRect = current.previewRect;
+  const nextRect = next.previewRect;
+  return (
+    currentRect === nextRect ||
+    Boolean(
+      currentRect &&
+        nextRect &&
+        currentRect.left === nextRect.left &&
+        currentRect.top === nextRect.top &&
+        currentRect.width === nextRect.width &&
+        currentRect.height === nextRect.height,
+    )
+  );
 }
