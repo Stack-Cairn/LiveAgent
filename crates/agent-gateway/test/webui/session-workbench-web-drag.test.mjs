@@ -3,7 +3,7 @@
 //    窗口级单例(可恢复绑定表 + 内存租约)与共享事务的组合语义:既有会话拖入先写
 //    绑定再开 Pane、重复拖入只移动/聚焦、关 Pane(Detach)后绑定可回收。
 // 2) 源码断言——useGatewayWorkbench 按桌面同一口径接线:提交前 CAS 校验布局
-//    修订号、workspace 拖拽经"草稿转正后在记住的落点开新 Pane"、终端 Pane
+//    修订号、workspace 拖拽以创建结果返回的草稿 id 原子开新 Pane、终端 Pane
 //    关闭回收绑定、`closed` 事件联动关 Pane;视图层装上 dropPreview、拖拽
 //    幽灵、Pane 拖动把手与侧栏/Right Dock 拖拽入口。
 import assert from "node:assert/strict";
@@ -206,13 +206,11 @@ function assertOrder(block, steps, label) {
 
 test("drop commits are CAS-checked against the layout revision", () => {
   const commit = blockFrom(hookSource, "const handleDropCommit = useCallback(");
-  assert.match(
-    commit,
-    /if \(commit\.revision !== workbench\.layoutRef\.current\.revision\) return;/,
-  );
+  assert.match(commit, /commit\.revision !== workbench\.layoutRef\.current\.revision/);
+  assert.match(commit, /onDropStateChanged\(\)/);
 });
 
-test("workspace drops remember the target before starting the draft conversation", () => {
+test("workspace drops await the exact draft id before opening the frozen target", () => {
   const commit = blockFrom(hookSource, "const handleDropCommit = useCallback(");
   assertOrder(
     commit,
@@ -220,26 +218,32 @@ test("workspace drops remember the target before starting the draft conversation
       'if (payload.kind === "workspace") {',
       'if (target.kind === "pane-center") return;',
       "if (archivedProjectPathKeys.has(pathKey)) return;",
-      "pendingWorkspaceOpenRef.current = {",
-      "startConversationForProjectRef.current(project);",
+      "pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };",
+      "commitWorkspaceDropConversation({",
+      "startConversation: () => startConversationForProjectRef.current(project),",
+      "conversationMatchesProject:",
+      "openConversation: workbench.openConversation,",
     ],
     "workspace drop",
   );
 });
 
-test("the sync effect opens the pending workspace pane only after verifying the draft", () => {
-  const sync = blockFrom(hookSource, "const pendingOpen = pendingWorkspaceOpenRef.current;");
+test("the sync effect pauses only for the identified workspace draft", () => {
+  const sync = blockFrom(hookSource, "const pendingDrop = pendingWorkspaceDropRef.current;");
   assertOrder(
     sync,
     [
-      "pendingWorkspaceOpenRef.current = null;",
-      "const hasNoPane = !workbench.paneIdForConversation(key);",
-      "workspaceProjectPathKey(workdir) === pendingOpen.projectPathKey",
-      "workbench.openConversation(",
+      "workspaceProjectPathKey(workdir) === pendingDrop.projectPathKey",
+      "return;",
       "workbench.syncCurrentConversation(key, sidebarProjectRef(key));",
     ],
-    "pending workspace open",
+    "pending workspace drop guard",
   );
+});
+
+test("Web exposes the shared unavailable-drop feedback path", () => {
+  assert.match(hookSource, /onUnavailable:/);
+  assert.match(hookSource, /reason === "geometry-unavailable"/);
 });
 
 test("closing a terminal pane recycles its runtime binding (detach-first)", () => {

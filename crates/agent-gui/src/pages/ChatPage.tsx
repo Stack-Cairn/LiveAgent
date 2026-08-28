@@ -2344,6 +2344,7 @@ export function ChatPage(props: ChatPageProps) {
     projectPathKey: string;
   } | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The mutable runtime cache ref intentionally supplies the latest draft workdir without changing the drag handler identity.
   const handleWorkbenchDropCommit = useCallback(
     (commit: WorkbenchDropCommit) => {
       // Stale layout revision (focus/structure changed mid-drag): cancel the

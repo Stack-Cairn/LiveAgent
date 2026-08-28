@@ -36,8 +36,8 @@ import {
 } from "@liveagent/ui/lib/workbench/useWindowWorkbench";
 import {
   useWorkbenchDragSession,
-  type WorkbenchDragUnavailableReason,
   type WorkbenchDragState,
+  type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "@liveagent/ui/lib/workbench/useWorkbenchDragSession";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
