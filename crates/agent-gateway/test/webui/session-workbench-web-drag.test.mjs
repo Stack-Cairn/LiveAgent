@@ -1,6 +1,6 @@
 // Web 端 Session Workbench 拖拽合同测试：
 // 1) 模型层——Web 与桌面共用同一拖拽状态机/终端 drop 事务；这里验证 Web 的
-//    窗口级单例(内存绑定表 + 租约)与共享事务的组合语义:既有会话拖入先写
+//    窗口级单例(可恢复绑定表 + 内存租约)与共享事务的组合语义:既有会话拖入先写
 //    绑定再开 Pane、重复拖入只移动/聚焦、关 Pane(Detach)后绑定可回收。
 // 2) 源码断言——useGatewayWorkbench 按桌面同一口径接线:提交前 CAS 校验布局
 //    修订号、workspace 拖拽经"草稿转正后在记住的落点开新 Pane"、终端 Pane
@@ -74,13 +74,13 @@ function singlePaneLayout(paneId = "pane-a") {
 // 模型层:Web 单例 + 共享 drop 事务
 // ---------------------------------------------------------------------------
 
-test("web terminal pane runtime keeps bindings in memory without touching sessionStorage", () => {
+test("web terminal pane runtime exposes the same binding contract as desktop", () => {
   const { gatewayTerminalPaneBindings } = webTerminalRuntime;
   gatewayTerminalPaneBindings.set("surface-mem", "session-mem");
   assert.equal(gatewayTerminalPaneBindings.get("surface-mem"), "session-mem");
   gatewayTerminalPaneBindings.delete("surface-mem");
   assert.equal(gatewayTerminalPaneBindings.get("surface-mem"), null);
-  // node 环境无 window/sessionStorage:能走到这里本身即说明存储层是内存实现。
+  // Node 环境无 window/sessionStorage 时共享 store 会安全降级为内存实现。
 });
 
 test("dropping an existing dock session binds first, then opens the pane", () => {
@@ -284,6 +284,7 @@ test("pane chrome, sidebar and right dock all expose drag entry points", () => {
   assert.ok(viewSource.includes("onTerminalTabDragStart={"));
   assert.ok(viewSource.includes("onNewTerminalDragStart={"));
   assert.ok(viewSource.includes("onOpenTerminalInWorkbench={"));
+  assert.ok(viewSource.includes("onOpenNewTerminalInWorkbench={"));
   assert.ok(viewSource.includes("leasedSessionIds={workbenchLeasedDockSessionIds}"));
 });
 

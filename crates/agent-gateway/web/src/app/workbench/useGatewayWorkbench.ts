@@ -115,10 +115,14 @@ export type GatewayWorkbenchController = {
   handleOpenConversationInSplit: (item: SidebarConversation) => boolean;
   /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
+  /** Right Dock 新建菜单「在分屏中新建终端」。 */
+  handleOpenNewTerminalInSplit: () => void;
   /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
   focusTerminalPaneForSession: (sessionId: string) => void;
   /** 会话从权威索引消失（删除等）：关闭对应 Pane，不做选中迁移。 */
   closePanesForRemovedConversations: (ids: readonly string[]) => void;
+  /** 登录/Agent 作用域切换：清空布局和终端 surface 绑定。 */
+  clearWorkbench: () => void;
   projectRefForConversation: (item: { id: string; cwd?: string | null }) => ProjectRef;
   /** 拖拽 overlay 模型（幽灵 + 落点预览）；idle 时为 null。 */
   dragState: WorkbenchDragState | null;
@@ -751,6 +755,38 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [onNoSpaceForSplit, resolveAutoDockTarget, terminalDropDeps],
   );
 
+  const handleOpenNewTerminalInSplit = useCallback(() => {
+    const target = resolveAutoDockTarget();
+    if (!target) {
+      onNoSpaceForSplit();
+      return;
+    }
+    const path = terminalProjectPath.trim();
+    if (!path) return;
+    const projectPathKey = workspaceProjectPathKey(path);
+    const project = workspaceProjectsRef.current.find(
+      (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+    );
+    commitTerminalDrop(
+      {
+        kind: "newTerminal",
+        project: {
+          projectId: project?.id ?? `project:${projectPathKey}`,
+          projectPathKey,
+        },
+        title: newTerminalTitle,
+      },
+      target,
+      terminalDropDeps(),
+    );
+  }, [
+    newTerminalTitle,
+    onNoSpaceForSplit,
+    resolveAutoDockTarget,
+    terminalDropDeps,
+    terminalProjectPath,
+  ]);
+
   // 画板 Pane 持有租约的会话:overlay/占位的「前往 Pane」聚焦通路。
   const focusTerminalPaneForSession = useCallback(
     (sessionId: string) => {
@@ -781,6 +817,15 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [workbench],
   );
 
+  const clearWorkbench = useCallback(() => {
+    for (const pane of Object.values(workbench.layoutRef.current.panes)) {
+      if (pane.surface.kind === "localTerminal" || pane.surface.kind === "sshTerminal") {
+        gatewayTerminalPaneBindings.delete(pane.surface.surfaceId);
+      }
+    }
+    workbench.clear();
+  }, [workbench]);
+
   return useMemo(
     () => ({
       workbench,
@@ -790,8 +835,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
+      clearWorkbench,
       projectRefForConversation,
       dragState,
       beginPaneDrag,
@@ -808,8 +855,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
+      clearWorkbench,
       projectRefForConversation,
       dragState,
       beginPaneDrag,

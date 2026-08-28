@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyWorkbenchCommand,
   findPaneIdByConversationId,
@@ -13,6 +13,14 @@ import {
   type WorkbenchOpenTarget,
 } from "./index";
 import {
+  readStoredWorkbenchLayout,
+  resolveWorkbenchLayoutStorage,
+  WORKBENCH_LAYOUT_STORAGE_KEY,
+  type WorkbenchLayoutStorage,
+  writeStoredWorkbenchLayout,
+} from "./layoutStorage";
+import {
+  createEmptyWorkbenchLayout,
   type PaneRecord,
   type ProjectRef,
   surfaceIdentityKey,
@@ -109,6 +117,12 @@ export type UseWindowWorkbenchParams = {
   dividerSize?: number;
   /** Called for every rejected command, so the page can surface a reason. */
   onCommandError?: (error: WorkbenchCommandError) => void;
+  /**
+   * Window layout recovery. Enabled by default for Desktop and Web so reloads
+   * and app/browser restarts preserve topology and terminal launch specs without persisting
+   * terminal session ids, output, drafts, prompts, approvals, or secrets.
+   */
+  persistence?: false | { storage?: WorkbenchLayoutStorage | null; storageKey?: string };
 };
 
 export type WorkbenchOpenConversationInput = {
@@ -135,6 +149,8 @@ export type WindowWorkbench = {
   movePane(paneId: string, target: WorkbenchMoveTarget): boolean;
   /** Draft promotion: rebind the pane hosting `fromId` to `toId` in place. */
   renameConversation(fromConversationId: string, toConversationId: string): void;
+  /** Clear every pane (logout/scope reset); the next current conversation recreates the root. */
+  clear(): void;
   closePane(paneId: string): { closedFocused: boolean; nextConversationId: string | null };
   resizeSplit(splitId: string, ratio: number): void;
   equalizeSplit(splitId: string): void;
@@ -149,12 +165,33 @@ export type WindowWorkbench = {
  * selecting a conversation whenever focus moves to another pane.
  */
 export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWorkbench {
-  const { initialConversationId, initialProject, geometryRef, dividerSize, onCommandError } =
-    params;
+  const {
+    initialConversationId,
+    initialProject,
+    geometryRef,
+    dividerSize,
+    onCommandError,
+    persistence,
+  } = params;
 
-  const [layout, setLayout] = useState<WorkbenchLayout>(() =>
-    singlePaneLayout(initialConversationId, initialProject),
-  );
+  const persistenceRef = useRef<{
+    storage: WorkbenchLayoutStorage | null;
+    storageKey: string;
+  } | null>(null);
+  if (persistenceRef.current === null && persistence !== false) {
+    persistenceRef.current = {
+      storage: persistence?.storage ?? resolveWorkbenchLayoutStorage(),
+      storageKey: persistence?.storageKey?.trim() || WORKBENCH_LAYOUT_STORAGE_KEY,
+    };
+  }
+
+  const [layout, setLayout] = useState<WorkbenchLayout>(() => {
+    const persisted = persistenceRef.current;
+    return (
+      (persisted ? readStoredWorkbenchLayout(persisted.storage, persisted.storageKey) : null) ??
+      singlePaneLayout(initialConversationId, initialProject)
+    );
+  });
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const geometrySourceRef = useRef(geometryRef);
@@ -163,6 +200,13 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   dividerSizeRef.current = dividerSize;
   const commandErrorRef = useRef(onCommandError);
   commandErrorRef.current = onCommandError;
+
+  useEffect(() => {
+    const persisted = persistenceRef.current;
+    if (persisted) {
+      writeStoredWorkbenchLayout(layout, persisted.storage, persisted.storageKey);
+    }
+  }, [layout]);
 
   /**
    * Pixel context for the reducer's feasibility checks, read fresh per command
@@ -281,6 +325,15 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     setLayout(next);
   }, []);
 
+  const clear = useCallback(() => {
+    const current = layoutRef.current;
+    if (current.root === null) return;
+    const next = createEmptyWorkbenchLayout();
+    next.revision = current.revision + 1;
+    layoutRef.current = next;
+    setLayout(next);
+  }, []);
+
   const closePane = useCallback(
     (paneId: string): { closedFocused: boolean; nextConversationId: string | null } => {
       const closedFocused = layoutRef.current.focusedPaneId === paneId;
@@ -395,6 +448,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       openTerminalSurface,
       movePane,
       renameConversation,
+      clear,
       closePane,
       resizeSplit,
       equalizeSplit,
@@ -409,6 +463,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       openTerminalSurface,
       movePane,
       renameConversation,
+      clear,
       closePane,
       resizeSplit,
       equalizeSplit,

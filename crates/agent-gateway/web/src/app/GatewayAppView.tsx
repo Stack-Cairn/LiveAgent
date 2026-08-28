@@ -332,6 +332,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     tunnelDisabledMessage,
     tunnelEnabled,
     updatePendingUploadsForConversation,
+    verifyTerminalSessionAlive,
     userAvatarLabel,
     userMenuLabel,
     userMenuOpen,
@@ -602,9 +603,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     inputPlaceholder: composerPlaceholder,
     modelOptions,
     enabledSkills: enabledComposerSkills,
-    chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
-    reasoningOptions: chatRuntimeReasoningOptions,
-    thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
     commandSafetyMode: settings.system.commandSafetyMode,
     onCommandSafetyModeChange: (mode) =>
       setSettings((prev) =>
@@ -857,6 +855,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 client={terminalClient}
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
+                onSessionGhost={verifyTerminalSessionAlive}
               />
             );
           }
@@ -1629,6 +1628,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onOpenTerminalInWorkbench={
                 sessionWorkbench.enabled ? workbenchController.handleOpenTerminalInSplit : undefined
               }
+              onOpenNewTerminalInWorkbench={
+                sessionWorkbench.enabled
+                  ? workbenchController.handleOpenNewTerminalInSplit
+                  : undefined
+              }
+              onSessionGhost={verifyTerminalSessionAlive}
               onInsertFileMention={handleRightDockInsertFileMention}
               onOpenFile={handleOpenWorkspaceFile}
               gitReviewFocusRequest={gitReviewFocusRequest}

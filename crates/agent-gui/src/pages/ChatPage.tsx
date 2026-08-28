@@ -109,8 +109,11 @@ import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import { toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
+  getChatRuntimeReasoningLevelsForProvider,
   isAgentDevMode,
   isAgentExecutionMode,
+  isThinkingAlwaysOnForModel,
+  normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
   resolveEffectivePromptSettings,
@@ -2684,6 +2687,55 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
+  const handleOpenNewTerminalInWorkbenchSplit = useCallback(() => {
+    const target = resolveWorkbenchAutoDockTarget();
+    if (!target) {
+      addNotify("error", t("workbench.noSpaceForSplit"));
+      return;
+    }
+    if (!terminalProjectPath) return;
+    const project = workspaceProjects.find(
+      (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
+    );
+    commitTerminalDrop(
+      {
+        kind: "newTerminal",
+        project: {
+          projectId: project?.id ?? `project:${terminalProjectPathKey}`,
+          projectPathKey: terminalProjectPathKey,
+        },
+        title: t("projectTools.newTerminal"),
+      },
+      target,
+      {
+        layout: workbench.layoutRef.current,
+        sessions: terminalSessionsRef.current,
+        lease: terminalPaneLease,
+        bindings: terminalPaneBindings,
+        resolveProjectPath: (ref) =>
+          workspaceProjects.find((entry) => entry.id === ref.projectId)?.path ??
+          workspaceProjects.find(
+            (entry) => workspaceProjectPathKey(entry.path) === ref.projectPathKey,
+          )?.path ??
+          null,
+        createSurfaceId: createTerminalSurfaceId,
+        authorizeAutoLaunch: terminalPaneAutoLaunch.authorize,
+        openTerminalSurface: workbench.openTerminalSurface,
+        movePane: workbench.movePane,
+        focusPane: handleWorkbenchFocusPane,
+      },
+    );
+  }, [
+    addNotify,
+    handleWorkbenchFocusPane,
+    resolveWorkbenchAutoDockTarget,
+    t,
+    terminalProjectPath,
+    terminalProjectPathKey,
+    workbench,
+    workspaceProjects,
+  ]);
+
   // Native file drag hover: focus the conversation pane under the cursor for
   // visual and keyboard continuity. Final attachment ownership is carried by
   // the composer's data-file-upload-conversation-id marker at drop time.
@@ -2903,6 +2955,26 @@ export function ChatPage(props: ChatPageProps) {
     const paneSelectedValue = paneSelectedModel
       ? toModelValue(paneSelectedModel.customProviderId, paneSelectedModel.model)
       : undefined;
+    const paneProvider = paneSelectedModel
+      ? settings.customProviders.find((entry) => entry.id === paneSelectedModel.customProviderId)
+      : undefined;
+    const paneRuntimeControls = normalizeChatRuntimeControlsForProvider(
+      settings.chatRuntimeControls,
+      {
+        providerId: paneProvider?.type,
+        requestFormat: paneProvider?.requestFormat,
+        modelId: paneSelectedModel?.model,
+      },
+    );
+    const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({
+      providerId: paneProvider?.type,
+      requestFormat: paneProvider?.requestFormat,
+      modelId: paneSelectedModel?.model,
+    });
+    const paneThinkingAlwaysOn = isThinkingAlwaysOnForModel(
+      paneProvider?.type ?? "claude_code",
+      paneSelectedModel?.model,
+    );
     const paneModelLabel = (() => {
       if (!paneSelectedModel) return t("chat.selectModel");
       const option = modelOptions.find((entry) => entry.value === paneSelectedValue);
@@ -3034,7 +3106,7 @@ export function ChatPage(props: ChatPageProps) {
         currentModelLabel: paneModelLabel,
         modelOptions,
         selectedValue: paneSelectedValue,
-        chatRuntimeControls: chatRuntimeControlsForCurrentProvider,
+        chatRuntimeControls: paneRuntimeControls,
         commandSafetyMode: settings.system.commandSafetyMode,
         onCommandSafetyModeChange: (mode) =>
           setSettings((prev) =>
@@ -3042,8 +3114,8 @@ export function ChatPage(props: ChatPageProps) {
               ? prev
               : updateSystem(prev, { commandSafetyMode: mode }),
           ),
-        reasoningOptions: chatRuntimeReasoningOptions,
-        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        reasoningOptions: paneReasoningOptions,
+        thinkingAlwaysOn: paneThinkingAlwaysOn,
         contextUsageTokensSource: paneContextUsageTokensSource,
         contextWindow: paneContextWindow,
         gitClient: tauriGitClient,
@@ -3614,6 +3686,9 @@ export function ChatPage(props: ChatPageProps) {
         }
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
+        }
+        onOpenNewTerminalInWorkbench={
+          sessionWorkbench.enabled ? handleOpenNewTerminalInWorkbenchSplit : undefined
         }
         onSessionGhost={verifyTerminalSessionAlive}
         onInsertFileMention={handleRightDockInsertFileMention}

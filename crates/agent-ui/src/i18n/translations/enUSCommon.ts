@@ -1451,6 +1451,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.showConversation": "Switch to conversation view",
   "workbench.loadConversation": "Load conversation",
   "workbench.openInSplit": "Open in split pane",
+  "workbench.openNewTerminalInSplit": "New terminal in split pane",
   "workbench.noSpaceForSplit": "Not enough space for another pane",
   "workbench.projectArchived": "This workspace is archived",
   "workbench.projectMissing": "This workspace folder is missing",

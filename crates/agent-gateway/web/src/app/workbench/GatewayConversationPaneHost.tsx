@@ -62,7 +62,14 @@ import { submitToolApprovalDecision } from "@/lib/chat/toolApprovalBridge";
 import type { GatewayWebSocketClient } from "@/lib/gatewaySocket";
 import { parseHistoryMessagesJsonAsync } from "@/lib/historyParser";
 import { toModelValue } from "@/lib/providers/llm";
-import { type AppSettings, findProviderModelConfig, type SelectedModel } from "@/lib/settings";
+import {
+  type AppSettings,
+  findProviderModelConfig,
+  getChatRuntimeReasoningLevelsForProvider,
+  isThinkingAlwaysOnForModel,
+  normalizeChatRuntimeControlsForProvider,
+  type SelectedModel,
+} from "@/lib/settings";
 import {
   liveTrajectoryAuthoritativeRevision,
   liveTrajectoryEvents,
@@ -97,9 +104,6 @@ export type GatewayConversationPaneHostContext = {
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
   enabledSkills: ChatComposerBarProps["enabledSkills"];
-  chatRuntimeControls: ChatComposerBarProps["chatRuntimeControls"];
-  reasoningOptions: ChatComposerBarProps["reasoningOptions"];
-  thinkingAlwaysOn: boolean;
   commandSafetyMode: ChatComposerBarProps["commandSafetyMode"];
   onCommandSafetyModeChange: ChatComposerBarProps["onCommandSafetyModeChange"];
   sttProvider: ChatComposerBarProps["sttProvider"];
@@ -406,6 +410,37 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const workdir = context.workdirForConversation(conversationId);
   const workdirRef = useRef(workdir);
   workdirRef.current = workdir;
+  const selection = context.selectionForConversation(conversationId);
+  const selectedProvider = selection
+    ? context.settings.customProviders.find((item) => item.id === selection.customProviderId)
+    : undefined;
+  const paneRuntimeControls = useMemo(
+    () =>
+      normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
+        providerId: selectedProvider?.type,
+        requestFormat: selectedProvider?.requestFormat,
+        modelId: selection?.model,
+      }),
+    [
+      context.settings.chatRuntimeControls,
+      selectedProvider?.requestFormat,
+      selectedProvider?.type,
+      selection?.model,
+    ],
+  );
+  const paneReasoningOptions = useMemo(
+    () =>
+      getChatRuntimeReasoningLevelsForProvider({
+        providerId: selectedProvider?.type,
+        requestFormat: selectedProvider?.requestFormat,
+        modelId: selection?.model,
+      }),
+    [selectedProvider?.requestFormat, selectedProvider?.type, selection?.model],
+  );
+  const paneThinkingAlwaysOn = useMemo(
+    () => isThinkingAlwaysOnForModel(selectedProvider?.type ?? "claude_code", selection?.model),
+    [selectedProvider?.type, selection?.model],
+  );
 
   const isRunning = transcript.activeRun !== null || context.isConversationBusy(conversationId);
   const isRunningRef = useRef(isRunning);
@@ -452,7 +487,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           const outcome = await context.sendChat(text, {
             conversationId,
             uploadedFiles,
-            runtimeControls: context.chatRuntimeControls,
+            runtimeControls: paneRuntimeControls,
             ...(busy ? { queuePolicy: "append" as const, optimisticEcho: false } : {}),
           });
           if (outcome?.kind === "failed") restore();
@@ -463,7 +498,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         sendInFlightRef.current = false;
       }
     })();
-  }, [context, conversationId, syncPendingUploads]);
+  }, [context, conversationId, paneRuntimeControls, syncPendingUploads]);
 
   const handleStop = useCallback(() => {
     // 与桌面端/聚焦舞台一致:有排队回合先"停当前、跑下一条",否则纯停止。
@@ -539,17 +574,13 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const isViewportFollowing = useCallback(() => followingRef.current, []);
 
   // ---- 每会话模型/用量/进度/审批 -------------------------------------------
-  const selection = context.selectionForConversation(conversationId);
   const selectedValue = selection
     ? toModelValue(selection.customProviderId, selection.model)
     : undefined;
   const modelLabel = useMemo(() => {
     if (!selection) return t("chat.selectModel");
-    const provider = context.settings.customProviders.find(
-      (item) => item.id === selection.customProviderId,
-    );
-    return provider ? `${provider.name} / ${selection.model}` : selection.model;
-  }, [context.settings.customProviders, selection, t]);
+    return selectedProvider ? `${selectedProvider.name} / ${selection.model}` : selection.model;
+  }, [selectedProvider, selection, t]);
   const contextWindow = useMemo(() => {
     if (!selection) return undefined;
     const provider = context.settings.customProviders.find(
@@ -792,11 +823,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             currentModelLabel={modelLabel}
             modelOptions={context.modelOptions}
             selectedValue={selectedValue}
-            chatRuntimeControls={context.chatRuntimeControls}
+            chatRuntimeControls={paneRuntimeControls}
             commandSafetyMode={context.commandSafetyMode}
             onCommandSafetyModeChange={context.onCommandSafetyModeChange}
-            reasoningOptions={context.reasoningOptions}
-            thinkingAlwaysOn={context.thinkingAlwaysOn}
+            reasoningOptions={paneReasoningOptions}
+            thinkingAlwaysOn={paneThinkingAlwaysOn}
             contextUsageTokensSource={contextUsageTokensSource}
             contextWindow={contextWindow}
             onManualCompactConfirm={
