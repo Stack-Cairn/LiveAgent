@@ -341,6 +341,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.memory_manager.desc": "读写长期记忆，跨会话保留信息",
   "settings.builtinTool.memory_manager.detail":
     "维护跨会话的长期记忆：保存偏好、项目约定与关键结论，并在后续对话中检索使用。记忆内容可在设置的记忆面板中查看与整理。",
+  "settings.builtinTool.read_conversation.name": "读取历史会话",
+  "settings.builtinTool.read_conversation.desc": "按需读取本轮通过 @ 引用的历史会话",
+  "settings.builtinTool.read_conversation.detail":
+    "仅在当前消息通过 @ 菜单明确引用历史会话后注册。模型可分页读取该会话持久化的摘要与对话内容；工具结果会过滤历史工具输出，并将历史文本作为不可信上下文处理。只读操作，仅在对话场景注册。",
   "settings.builtinTool.agent.name": "子代理",
   "settings.builtinTool.agent.desc": "派生子代理并行处理复杂任务",
   "settings.builtinTool.agent.detail":

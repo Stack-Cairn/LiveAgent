@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   composeTrajectorySystemPrompt,
   serializeToolCatalog,
@@ -318,6 +319,8 @@ export type RunAgentConversationTurnParams = {
   /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
   taskStateStore: TaskStateStore;
   conversationId: string;
+  /** Structured conversation references explicitly selected in the current composer draft. */
+  referencedConversations?: readonly ConversationMentionReference[];
   checkpointTurnId?: string;
   conversationCwd?: string;
   fallbackTitle: string;
@@ -406,6 +409,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sessionId,
     taskStateStore,
     conversationId,
+    referencedConversations,
     checkpointTurnId,
     conversationCwd,
     fallbackTitle,
@@ -625,6 +629,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     askUserQuestionConversationId: conversationId,
     planMode: planModeEnabled ? { conversationId } : undefined,
     toolSearch: { conversationId },
+    currentConversationId: conversationId,
+    referencedConversations,
     checkpoint: {
       conversationId,
       turnId: checkpointTurnId?.trim() || crypto.randomUUID(),

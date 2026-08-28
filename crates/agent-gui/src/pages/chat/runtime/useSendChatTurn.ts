@@ -1727,6 +1727,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             taskStateStore,
             conversationId,
+            referencedConversations: composerDraft?.conversationMentions ?? [],
             checkpointTurnId: pendingUserMessage.id,
             conversationCwd,
             fallbackTitle,

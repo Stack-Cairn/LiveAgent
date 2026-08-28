@@ -1,4 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { homeDir } from "@tauri-apps/api/path";
 import type { RuntimePlatform } from "../runtimePlatform";
@@ -23,6 +24,7 @@ import type {
   BuiltinToolExecutionContext,
   BuiltinToolMetadata,
 } from "./builtinTypes";
+import { createConversationTools } from "./conversationTools";
 import { createCronTools } from "./cronTools";
 import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
@@ -330,6 +332,9 @@ export async function buildBuiltinToolRegistry(
     toolSearch?: {
       conversationId: string;
     };
+    /** Earlier conversations explicitly selected through structured @ mentions this turn. */
+    referencedConversations?: readonly ConversationMentionReference[];
+    currentConversationId?: string;
   },
 ) {
   const planModeActive = Boolean(params.planMode);
@@ -373,10 +378,22 @@ export async function buildBuiltinToolRegistry(
           }),
         ]
       : [];
+  const conversationBundles =
+    params.runtimeScope === "chat" &&
+    params.currentConversationId &&
+    params.referencedConversations?.length
+      ? [
+          createConversationTools({
+            references: params.referencedConversations,
+            currentConversationId: params.currentConversationId,
+          }),
+        ]
+      : [];
   const chatBundles = [
     ...taskBundles,
     ...askUserQuestionBundles,
     ...planModeBundles,
+    ...conversationBundles,
     ...toolSearchBundles,
   ];
 

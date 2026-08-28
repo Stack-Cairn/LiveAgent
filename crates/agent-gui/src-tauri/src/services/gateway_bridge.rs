@@ -1410,6 +1410,7 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "McpManager"
             | "MemoryManager"
             | "Read"
+            | "ReadConversation"
             | "ReadTerminal"
             | "SendMessage"
             | "SkillsManager"
