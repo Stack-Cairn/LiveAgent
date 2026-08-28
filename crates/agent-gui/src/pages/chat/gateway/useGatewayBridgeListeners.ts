@@ -1,5 +1,5 @@
-import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";

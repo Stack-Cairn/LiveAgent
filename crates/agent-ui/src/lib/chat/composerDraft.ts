@@ -7,12 +7,12 @@ import type {
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type ConversationMentionReference,
-  MARKDOWN_REFERENCE_PATTERN,
   escapeMarkdownReferenceLabel,
   formatCodeMentionToken,
   formatConversationMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
+  MARKDOWN_REFERENCE_PATTERN,
   normalizeConversationMentionReferences,
   parseMarkdownConversationMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";

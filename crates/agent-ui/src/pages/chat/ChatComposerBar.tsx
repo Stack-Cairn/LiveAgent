@@ -1063,7 +1063,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           )}
         >
           {conversationDropReference ? (
-            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-[20px] border border-dashed border-primary/45 bg-background/88 px-6 text-center shadow-inner backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-3xl border border-dashed border-primary/45 bg-background/88 px-6 text-center shadow-inner backdrop-blur-sm">
               <span className="max-w-full truncate rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
                 {t("chat.conversationReference.drop").replace(
                   "{title}",
@@ -1072,7 +1072,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </span>
             </div>
           ) : conversationDropNoticeText ? (
-            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-[20px] border border-dashed border-amber-500/45 bg-background/90 px-6 text-center shadow-inner backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-3xl border border-dashed border-amber-500/45 bg-background/90 px-6 text-center shadow-inner backdrop-blur-sm">
               <span className="max-w-full rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                 {conversationDropNoticeText}
               </span>

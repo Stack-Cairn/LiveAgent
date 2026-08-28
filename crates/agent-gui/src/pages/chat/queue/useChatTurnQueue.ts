@@ -2,6 +2,7 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { invoke } from "@tauri-apps/api/core";
@@ -27,7 +28,6 @@ import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerPlanDecision } from "../../../lib/tools/planModeTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import { createTextComposerDraft } from "../composer/composerDraftText";
-import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   type ConversationQueueStore,
   createConversationQueueStore,
