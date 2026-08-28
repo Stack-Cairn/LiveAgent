@@ -18,7 +18,10 @@ import {
   getActiveWorkspacePathDrag,
   hasWorkspacePathDragPayload,
   quoteWorkspacePathForShell,
+  readNativeWorkspacePathDrop,
   readWorkspacePathDragPayload,
+  WORKSPACE_PATH_NATIVE_DROP_EVENT,
+  type WorkspacePathDragPayload,
   workspacePathDragMatchesProject,
 } from "../../lib/chat/workspacePathDrag";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
@@ -162,6 +165,7 @@ export function XTermViewport({
 }: XTermViewportProps) {
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropTargetRef = useRef<HTMLDivElement>(null);
   const [workspacePathDropState, setWorkspacePathDropState] = useState<"accept" | "blocked" | null>(
     null,
   );
@@ -205,25 +209,49 @@ export function XTermViewport({
     [canAcceptWorkspacePath],
   );
 
+  const insertWorkspacePathInTerminal = useCallback(
+    (payload: WorkspacePathDragPayload) => {
+      setWorkspacePathDropState(null);
+      if (!canAcceptWorkspacePath(payload)) return false;
+      const absolutePath = absoluteWorkspacePath(payload);
+      const quotedPath = absolutePath
+        ? quoteWorkspacePathForShell(absolutePath, session.shell)
+        : null;
+      if (!quotedPath) return false;
+      termRef.current?.paste(quotedPath);
+      termRef.current?.focus();
+      return true;
+    },
+    [canAcceptWorkspacePath, session.shell],
+  );
+
   const handleWorkspacePathDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
       const payload = readWorkspacePathDragPayload(event.dataTransfer);
-      setWorkspacePathDropState(null);
       clearActiveWorkspacePathDrag();
-      if (!payload || !canAcceptWorkspacePath(payload)) return;
-      const absolutePath = absoluteWorkspacePath(payload);
-      const quotedPath = absolutePath
-        ? quoteWorkspacePathForShell(absolutePath, session.shell)
-        : null;
-      if (!quotedPath) return;
-      termRef.current?.paste(quotedPath);
-      termRef.current?.focus();
+      if (payload) insertWorkspacePathInTerminal(payload);
     },
-    [canAcceptWorkspacePath, session.shell],
+    [insertWorkspacePathInTerminal],
   );
+
+  useEffect(() => {
+    const target = dropTargetRef.current;
+    if (!target) return;
+    const handleNativeWorkspacePathDrop = (event: Event) => {
+      const payload = readNativeWorkspacePathDrop(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      insertWorkspacePathInTerminal(payload);
+    };
+    target.addEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    return () => {
+      target.removeEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    };
+  }, [insertWorkspacePathInTerminal]);
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -700,6 +728,7 @@ export function XTermViewport({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the xterm viewport is a pointer drop target; keyboard users paste or use the file-tree context menu.
     <div
+      ref={dropTargetRef}
       style={viewportStyle}
       className={cn(
         "project-terminal-viewport relative h-full min-h-0 w-full overflow-hidden",

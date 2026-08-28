@@ -1,3 +1,7 @@
+import {
+  dispatchActiveWorkspacePathDrop,
+  getActiveWorkspacePathDrag,
+} from "@liveagent/ui/lib/chat/workspacePathDrag";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
@@ -50,6 +54,15 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             window.navigator.userAgent,
             window.devicePixelRatio,
           );
+          // WKWebView forwards an in-app HTML drag through this native API as
+          // well. It is not an OS file upload and must keep its own target
+          // semantics (composer mention / terminal path insertion).
+          if (getActiveWorkspacePathDrag()) {
+            activeDropTargetRef.current = null;
+            setActiveDropTarget(null);
+            onDropPositionChangeRef.current?.(null);
+            return;
+          }
           const nextTarget = resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
           activeDropTargetRef.current = nextTarget;
           setActiveDropTarget(nextTarget);
@@ -65,6 +78,16 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             window.navigator.userAgent,
             window.devicePixelRatio,
           );
+          if (getActiveWorkspacePathDrag()) {
+            setActiveDropTarget(null);
+            activeDropTargetRef.current = null;
+            onDropPositionChangeRef.current?.(null);
+            dispatchActiveWorkspacePathDrop({
+              x: event.payload.position.x / (scaleFactor || 1),
+              y: event.payload.position.y / (scaleFactor || 1),
+            });
+            return;
+          }
           const dropTarget = resolveFinalNativeFileDropTarget(
             activeDropTargetRef.current,
             event.payload.position,
@@ -78,6 +101,9 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             return;
           }
           if (dropTarget !== "upload") return;
+          // An empty native payload is never an upload. In particular, this
+          // prevents non-file drags from reaching Rust's path classifier.
+          if (event.payload.paths.length === 0) return;
           const targetConversationId = resolveNativeUploadConversationId(event.payload.position, {
             scaleFactor,
           });

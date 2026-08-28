@@ -50,7 +50,10 @@ import {
   clearActiveWorkspacePathDrag,
   getActiveWorkspacePathDrag,
   hasWorkspacePathDragPayload,
+  readNativeWorkspacePathDrop,
   readWorkspacePathDragPayload,
+  WORKSPACE_PATH_NATIVE_DROP_EVENT,
+  type WorkspacePathDragPayload,
   workspacePathDragMatchesProject,
 } from "@liveagent/ui/lib/chat/workspacePathDrag";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
@@ -453,6 +456,17 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       : "blocked";
   }, [isInputDisabled, workdir]);
 
+  const insertWorkspacePathMention = useCallback(
+    (payload: WorkspacePathDragPayload) => {
+      setWorkspacePathDropState(null);
+      if (isInputDisabled || !workspacePathDragMatchesProject(payload, workdir)) return false;
+      composerRef.current?.insertFileMention(payload.relativePath, payload.entryKind);
+      composerRef.current?.focus();
+      return true;
+    },
+    [composerRef, isInputDisabled, workdir],
+  );
+
   const handleWorkspacePathDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
@@ -471,14 +485,27 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       event.preventDefault();
       event.stopPropagation();
       const payload = readWorkspacePathDragPayload(event.dataTransfer);
-      setWorkspacePathDropState(null);
       clearActiveWorkspacePathDrag();
-      if (!payload || isInputDisabled || !workspacePathDragMatchesProject(payload, workdir)) return;
-      composerRef.current?.insertFileMention(payload.relativePath, payload.entryKind);
-      composerRef.current?.focus();
+      if (payload) insertWorkspacePathMention(payload);
     },
-    [composerRef, isInputDisabled, workdir],
+    [insertWorkspacePathMention],
   );
+
+  useEffect(() => {
+    const target = glassCardRef.current;
+    if (!target) return;
+    const handleNativeWorkspacePathDrop = (event: Event) => {
+      const payload = readNativeWorkspacePathDrop(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      insertWorkspacePathMention(payload);
+    };
+    target.addEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    return () => {
+      target.removeEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    };
+  }, [insertWorkspacePathMention]);
 
   const toggleQueueCollapsed = useCallback(() => {
     setQueueCollapsed((current) => !current);

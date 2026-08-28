@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -43,6 +44,78 @@ test("workspace path drag payload round-trips without becoming an upload", () =>
   assert.deepEqual(workspacePathDrag.readWorkspacePathDragPayload(transfer), payload);
   assert.equal(transfer.getData("text/plain"), payload.relativePath);
   workspacePathDrag.clearActiveWorkspacePathDrag();
+});
+
+test("desktop native drop bridges the active payload to the element at the release point", () => {
+  const transfer = new DataTransferStub();
+  workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);
+  let received = null;
+  let hitPoint = null;
+  const target = {
+    dispatchEvent(event) {
+      received = workspacePathDrag.readNativeWorkspacePathDrop(event);
+      event.preventDefault();
+      return false;
+    },
+  };
+
+  assert.equal(
+    workspacePathDrag.dispatchActiveWorkspacePathDrop(
+      { x: 320, y: 240 },
+      {
+        document: {
+          elementFromPoint(x, y) {
+            hitPoint = { x, y };
+            return target;
+          },
+        },
+        createEvent(type, detail) {
+          const event = new Event(type, { cancelable: true });
+          Object.defineProperty(event, "detail", { value: detail });
+          return event;
+        },
+      },
+    ),
+    true,
+  );
+  assert.deepEqual(hitPoint, { x: 320, y: 240 });
+  assert.deepEqual(received, payload);
+  assert.equal(workspacePathDrag.getActiveWorkspacePathDrag(), null);
+});
+
+test("dragend keeps the payload alive for Tauri's following native drop callback", () => {
+  const transfer = new DataTransferStub();
+  workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);
+  workspacePathDrag.finishWorkspacePathDrag();
+  assert.deepEqual(workspacePathDrag.getActiveWorkspacePathDrag(), payload);
+  workspacePathDrag.clearActiveWorkspacePathDrag();
+});
+
+test("desktop native drop never forwards an in-app drag to the OS upload path", () => {
+  const source = readFileSync(
+    new URL("../../src/pages/chat/hooks/useTauriFileDrop.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /if \(getActiveWorkspacePathDrag\(\)\)[\s\S]*dispatchActiveWorkspacePathDrop/);
+  assert.match(source, /if \(event\.payload\.paths\.length === 0\) return;/);
+});
+
+test("composer and terminal consume the bridged native workspace drop", () => {
+  const composer = readFileSync(
+    new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+    "utf8",
+  );
+  const terminal = readFileSync(
+    new URL(
+      "../../../agent-ui/src/components/project-tools/XTermViewport.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(composer, /readNativeWorkspacePathDrop\(event\)/);
+  assert.match(composer, /insertWorkspacePathMention\(payload\)/);
+  assert.match(terminal, /readNativeWorkspacePathDrop\(event\)/);
+  assert.match(terminal, /insertWorkspacePathInTerminal\(payload\)/);
 });
 
 test("workspace path payload rejects traversal, absolute paths, and controls", () => {

@@ -1,6 +1,7 @@
 import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 
 export const WORKSPACE_PATH_DRAG_MIME = "application/x-liveagent-workspace-path+json";
+export const WORKSPACE_PATH_NATIVE_DROP_EVENT = "liveagent:workspace-path-native-drop";
 
 export type WorkspacePathDragPayload = {
   kind: "workspacePath";
@@ -12,6 +13,13 @@ export type WorkspacePathDragPayload = {
 };
 
 let activeWorkspacePathDrag: WorkspacePathDragPayload | null = null;
+let activeWorkspacePathDragClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+type WorkspacePathDropDocument = {
+  elementFromPoint: (x: number, y: number) => EventTarget | null;
+};
+
+type WorkspacePathDropEventFactory = (type: string, payload: WorkspacePathDragPayload) => Event;
 
 function hasControlCharacters(value: string): boolean {
   for (const character of value) {
@@ -68,6 +76,10 @@ export function writeWorkspacePathDragPayload(
 ): boolean {
   const payload = createWorkspacePathDragPayload(input);
   if (!payload) return false;
+  if (activeWorkspacePathDragClearTimer !== null) {
+    clearTimeout(activeWorkspacePathDragClearTimer);
+    activeWorkspacePathDragClearTimer = null;
+  }
   activeWorkspacePathDrag = payload;
   dataTransfer.effectAllowed = "copy";
   dataTransfer.setData(WORKSPACE_PATH_DRAG_MIME, JSON.stringify(payload));
@@ -76,11 +88,68 @@ export function writeWorkspacePathDragPayload(
 }
 
 export function clearActiveWorkspacePathDrag(): void {
+  if (activeWorkspacePathDragClearTimer !== null) {
+    clearTimeout(activeWorkspacePathDragClearTimer);
+    activeWorkspacePathDragClearTimer = null;
+  }
   activeWorkspacePathDrag = null;
+}
+
+/**
+ * WKWebView can deliver the DOM dragend just before Tauri's native drop
+ * callback. Keep the in-app payload alive for that short handoff window;
+ * successful DOM/native drops still clear it synchronously.
+ */
+export function finishWorkspacePathDrag(): void {
+  if (!activeWorkspacePathDrag) return;
+  if (activeWorkspacePathDragClearTimer !== null) {
+    clearTimeout(activeWorkspacePathDragClearTimer);
+  }
+  activeWorkspacePathDragClearTimer = setTimeout(clearActiveWorkspacePathDrag, 1_000);
 }
 
 export function getActiveWorkspacePathDrag(): WorkspacePathDragPayload | null {
   return activeWorkspacePathDrag;
+}
+
+/**
+ * Tauri's native webview drag bridge also reports in-app HTML drags, but with
+ * an empty `paths` array and without a DOM `drop`. Re-dispatch the active,
+ * already-validated payload at the native release point so the real composer
+ * or terminal drop target can commit it synchronously.
+ */
+export function dispatchActiveWorkspacePathDrop(
+  position: { x: number; y: number },
+  options?: {
+    document?: WorkspacePathDropDocument;
+    createEvent?: WorkspacePathDropEventFactory;
+  },
+): boolean {
+  const payload = activeWorkspacePathDrag;
+  if (!payload) return false;
+  const targetDocument = options?.document ?? document;
+  const target = targetDocument.elementFromPoint(position.x, position.y);
+  try {
+    if (!target) return false;
+    const event = options?.createEvent
+      ? options.createEvent(WORKSPACE_PATH_NATIVE_DROP_EVENT, payload)
+      : new CustomEvent(WORKSPACE_PATH_NATIVE_DROP_EVENT, {
+          bubbles: true,
+          cancelable: true,
+          detail: payload,
+        });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  } finally {
+    clearActiveWorkspacePathDrag();
+  }
+}
+
+export function readNativeWorkspacePathDrop(event: Event): WorkspacePathDragPayload | null {
+  if (event.type !== WORKSPACE_PATH_NATIVE_DROP_EVENT) return null;
+  return createWorkspacePathDragPayload(
+    (event as CustomEvent<unknown>).detail as Partial<WorkspacePathDragPayload>,
+  );
 }
 
 export function hasWorkspacePathDragPayload(dataTransfer: DataTransfer): boolean {

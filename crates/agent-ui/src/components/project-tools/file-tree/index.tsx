@@ -29,7 +29,7 @@ import {
   useState,
 } from "react";
 import {
-  clearActiveWorkspacePathDrag,
+  finishWorkspacePathDrag,
   writeWorkspacePathDragPayload,
 } from "../../../lib/chat/workspacePathDrag";
 import { cn } from "../../../lib/shared/utils";
@@ -634,7 +634,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   onDragStart={(event) =>
                     handleWorkspacePathDragStart(event, entry.path, entry.kind)
                   }
-                  onDragEnd={clearActiveWorkspacePathDrag}
+                  onDragEnd={finishWorkspacePathDrag}
                 >
                   <TypeIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 truncate">{entry.path}</span>
@@ -698,7 +698,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   onOpen={handleOpenFile}
                   onContextMenu={openContextMenu}
                   onDragStart={handleWorkspacePathDragStart}
-                  onDragEnd={clearActiveWorkspacePathDrag}
+                  onDragEnd={finishWorkspacePathDrag}
                 />
               </div>
             );
