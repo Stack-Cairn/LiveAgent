@@ -22,7 +22,7 @@
 
 - 服务商配置（含 API 密钥）
 - MCP 服务器
-- 系统偏好 —— 仅 `SYSTEM_PORTABLE_BACKUP_KEYS` 白名单：executionMode、toolPolicies、commandSafetyMode、browserAutomationMode、cuaAllowSelfTargeting
+- 系统偏好 —— 仅 `SYSTEM_PORTABLE_BACKUP_KEYS` 白名单：executionMode、toolPolicies、commandSafetyMode、browserAutomationMode
 - 提示词模板（`agent_prompt_templates`）
 - 模型故障转移（`model_failover_settings`）
 - STT 语音识别配置（`stt_settings`，含密钥）
