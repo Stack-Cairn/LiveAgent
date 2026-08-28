@@ -127,6 +127,37 @@ test("conversation mention references preserve the selected id and render as a c
   assert.doesNotMatch(html, /conversation%2Fprevious-42/);
 });
 
+test("conversation reference normalization truncates Unicode scalars without splitting emoji", () => {
+  const boundaryTitle = `${"a".repeat(239)}😀`;
+  const boundary = mentionReferences.createConversationMentionReference({
+    id: "conversation-boundary",
+    title: boundaryTitle,
+  });
+  assert.equal(boundary.title, boundaryTitle);
+  assert.equal([...boundary.title].length, 240);
+  assert.equal(boundary.title.endsWith("😀"), true);
+
+  const overLimit = mentionReferences.createConversationMentionReference({
+    id: "conversation-long",
+    title: "😀".repeat(241),
+  });
+  assert.equal([...overLimit.title].length, 240);
+  assert.equal(overLimit.title, "😀".repeat(240));
+
+  const unicodeWhitespace = mentionReferences.createConversationMentionReference({
+    id: "conversation-whitespace",
+    title: " Earlier\u0085investigation ",
+  });
+  assert.equal(unicodeWhitespace.title, "Earlier investigation");
+  assert.equal(
+    mentionReferences.createConversationMentionReference({
+      id: "conversation\u0085invalid",
+      title: "Invalid id",
+    }),
+    null,
+  );
+});
+
 test("conversation-looking links without the canonical label stay plain text", () => {
   const text = "[not a conversation](conversation:previous-42)";
   assert.deepEqual(compactSegments(userMessageContent.tokenizeUserMessage(text, [])), [
@@ -134,7 +165,7 @@ test("conversation-looking links without the canonical label stay plain text", (
   ]);
 });
 
-test("remote conversation mentions require matching structured references", () => {
+test("remote conversation mentions require a matching structured id", () => {
   const reference = {
     id: "conversation-source",
     title: "Earlier investigation",
@@ -150,10 +181,19 @@ test("remote conversation mentions require matching structured references", () =
   assert.deepEqual(textOnly.conversationMentions, []);
   assert.deepEqual(textOnly.segments, [{ type: "text", text: `compare ${token}` }]);
 
-  const mismatched = createTextComposerDraft(`compare ${token}`, [
+  const normalizedTitle = createTextComposerDraft(`compare ${token}`, [
     { ...reference, title: "Different title" },
   ]);
-  assert.deepEqual(mismatched.conversationMentions, []);
+  assert.deepEqual(normalizedTitle.conversationMentions, [
+    { ...reference, title: "Different title" },
+  ]);
+  assert.equal(normalizedTitle.segments[1].type, "conversationMention");
+
+  const forgedId = createTextComposerDraft(
+    "compare [conversation: Forged](conversation:conversation-forged)",
+    [reference],
+  );
+  assert.deepEqual(forgedId.conversationMentions, []);
 });
 
 test("directory mention markdown references preserve trailing slash display semantics", () => {

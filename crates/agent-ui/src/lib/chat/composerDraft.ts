@@ -121,7 +121,11 @@ export function createTextComposerDraft(
       const start = match.index ?? cursor;
       const parsed = parseMarkdownConversationMentionReference(match[1] ?? "", match[2] ?? "");
       const reference = parsed ? allowed.get(parsed.id) : undefined;
-      if (!reference || reference.title !== parsed?.title) continue;
+      // The structured reference is the authorization source. The markdown
+      // token only proves that the same conversation id is still present in
+      // the edited text; its display title may have been normalized by another
+      // transport implementation and must not revoke that authorization.
+      if (!reference) continue;
       if (start > cursor)
         segments.push({ type: "text", text: normalizedText.slice(cursor, start) });
       segments.push({ type: "conversationMention", conversation: reference });

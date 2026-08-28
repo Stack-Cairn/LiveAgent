@@ -86,6 +86,31 @@ test("queueUserMessage carries the new message's own message_ref on every send",
   assert.equal(events[0].reason, undefined);
 });
 
+test("queueUserMessage carries normalized conversation references for remote viewers", () => {
+  const { events, controller } = collectEvents();
+  controller.queueUserMessage("compare prior work", [], {
+    referencedConversations: [
+      { id: "conv-1", title: "Self" },
+      {
+        id: " conversation-source ",
+        title: " Earlier\u0085investigation ",
+        cwd: " /workspace/source ",
+        updatedAt: 1772000000000,
+      },
+      { id: "conversation-source", title: "Duplicate" },
+    ],
+  });
+
+  assert.deepEqual(events[0].referenced_conversations, [
+    {
+      id: "conversation-source",
+      title: "Earlier investigation",
+      cwd: "/workspace/source",
+      updated_at: 1772000000000,
+    },
+  ]);
+});
+
 test("queueUserMessage keeps base_message_ref and message_ref separate for edit-resend", () => {
   const { events, controller } = collectEvents();
   const baseRef = { ...sampleRef, messageId: "user-old", contentHash: "fnv1a32:deadbeef" };

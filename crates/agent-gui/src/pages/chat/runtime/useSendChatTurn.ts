@@ -1220,6 +1220,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
       messageId: pendingUserMessage.id,
       baseMessageRef: overrides?.editResendBaseMessageRef,
+      referencedConversations,
       // The new message's own stable identity: lets remote transcripts bind
       // their user bubble's messageRef immediately, so a follow-up edit of
       // this message can anchor its rebase without a history round-trip.

@@ -150,4 +150,8 @@ test("send preflight keeps an explicit structured draft with a text override", (
     /overrides\?\.composerDraftOverride\s*\?\?\s*\(hasTextOverride\s*\?\s*null/,
   );
   assert.match(sendSource, /createUserMessageWithUploads\([\s\S]*referencedConversations/);
+  assert.match(
+    sendSource,
+    /queueUserMessage\(text, uploadedFiles, \{[\s\S]{0,240}referencedConversations/,
+  );
 });

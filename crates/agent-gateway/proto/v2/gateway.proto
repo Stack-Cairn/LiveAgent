@@ -686,8 +686,8 @@ message ChatRequest {
   // 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
   string command_safety_mode = 11;
   // Structured conversation references selected through the WebUI @ menu.
-  // The desktop runtime binds ReadConversation authorization to this list and
-  // verifies that each reference is also present in the serialized message.
+  // The desktop runtime binds ReadConversation authorization to this list;
+  // a markdown conversation token is display-only and cannot grant access.
   repeated ChatConversationReference referenced_conversations = 12;
 }
 

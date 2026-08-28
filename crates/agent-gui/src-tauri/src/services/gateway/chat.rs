@@ -210,6 +210,8 @@ impl GatewayController {
                 if id.is_empty()
                     || title.is_empty()
                     || id == current_conversation_id
+                    || id.chars().count() > 256
+                    || id.chars().any(char::is_control)
                     || !seen_conversation_references.insert(id.clone())
                 {
                     return None;

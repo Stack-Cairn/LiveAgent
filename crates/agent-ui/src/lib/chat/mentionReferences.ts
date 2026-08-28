@@ -16,6 +16,18 @@ export const MAX_CONVERSATION_MENTION_REFERENCES = 3;
 
 export const MARKDOWN_REFERENCE_PATTERN = /\[((?:\\.|[^\]\\\r\n])+)]\((<[^>\r\n]+>|[^)\r\n]+)\)/g;
 
+function trimUnicodeWhitespace(value: string) {
+  return value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+}
+
+function collapseUnicodeWhitespace(value: string) {
+  return trimUnicodeWhitespace(value).replace(/\p{White_Space}+/gu, " ");
+}
+
+function truncateUnicodeScalars(value: string, maxLength: number) {
+  return [...value].slice(0, maxLength).join("");
+}
+
 export function escapeMarkdownReferenceLabel(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/]/g, "\\]");
 }
@@ -82,11 +94,12 @@ export function formatFileMentionToken(reference: Pick<FileMentionReference, "pa
 }
 
 function normalizeConversationMentionId(value: string) {
-  const id = value.trim();
-  if (!id || id.length > 256) return "";
+  const id = trimUnicodeWhitespace(value);
+  const characters = [...id];
+  if (!id || characters.length > 256) return "";
   for (const character of id) {
-    const code = character.charCodeAt(0);
-    if (code <= 0x1f || code === 0x7f) return "";
+    const code = character.codePointAt(0) ?? 0;
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return "";
   }
   return id;
 }
@@ -95,9 +108,9 @@ export function createConversationMentionReference(
   input: ConversationMentionReference,
 ): ConversationMentionReference | null {
   const id = normalizeConversationMentionId(input.id);
-  const title = input.title.trim().replace(/\s+/g, " ").slice(0, 240);
+  const title = truncateUnicodeScalars(collapseUnicodeWhitespace(input.title), 240);
   if (!id || !title) return null;
-  const cwd = input.cwd?.trim() || undefined;
+  const cwd = input.cwd ? trimUnicodeWhitespace(input.cwd) || undefined : undefined;
   const updatedAt =
     typeof input.updatedAt === "number" && Number.isFinite(input.updatedAt)
       ? input.updatedAt
@@ -116,7 +129,9 @@ export function normalizeConversationMentionReferences(
 ) {
   const normalized: ConversationMentionReference[] = [];
   const seen = new Set<string>();
-  const currentId = currentConversationId?.trim() ?? "";
+  const currentId = currentConversationId
+    ? normalizeConversationMentionId(currentConversationId)
+    : "";
   for (const reference of references ?? []) {
     const next = createConversationMentionReference(reference);
     if (!next || next.id === currentId || seen.has(next.id)) continue;

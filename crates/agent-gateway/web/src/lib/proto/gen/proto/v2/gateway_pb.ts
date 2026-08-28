@@ -3093,8 +3093,8 @@ export type ChatRequest = Message<"liveagent.gateway.v2.ChatRequest"> & {
 
   /**
    * Structured conversation references selected through the WebUI @ menu.
-   * The desktop runtime binds ReadConversation authorization to this list and
-   * verifies that each reference is also present in the serialized message.
+   * The desktop runtime binds ReadConversation authorization to this list;
+   * a markdown conversation token is display-only and cannot grant access.
    *
    * @generated from field: repeated liveagent.gateway.v2.ChatConversationReference referenced_conversations = 12;
    */

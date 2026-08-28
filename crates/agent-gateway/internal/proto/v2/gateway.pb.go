@@ -6684,8 +6684,8 @@ type ChatRequest struct {
 	// 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
 	CommandSafetyMode string `protobuf:"bytes,11,opt,name=command_safety_mode,json=commandSafetyMode,proto3" json:"command_safety_mode,omitempty"`
 	// Structured conversation references selected through the WebUI @ menu.
-	// The desktop runtime binds ReadConversation authorization to this list and
-	// verifies that each reference is also present in the serialized message.
+	// The desktop runtime binds ReadConversation authorization to this list;
+	// a markdown conversation token is display-only and cannot grant access.
 	ReferencedConversations []*ChatConversationReference `protobuf:"bytes,12,rep,name=referenced_conversations,json=referencedConversations,proto3" json:"referenced_conversations,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache

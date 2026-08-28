@@ -1,3 +1,7 @@
+import {
+  type ConversationMentionReference,
+  normalizeConversationMentionReferences,
+} from "@liveagent/ui/lib/chat/mentionReferences";
 import { resolveStreamingRenderDelay } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
@@ -92,6 +96,27 @@ export type TranscriptStore = {
 };
 
 const EMPTY_RETRY_ATTEMPTS: readonly RetryAttemptRecord[] = [];
+
+function normalizeLiveConversationReferences(
+  raw: unknown,
+  currentConversationId: string,
+): ConversationMentionReference[] {
+  if (!Array.isArray(raw)) return [];
+  const references: ConversationMentionReference[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const reference: ConversationMentionReference = {
+      id: typeof record.id === "string" ? record.id : "",
+      title: typeof record.title === "string" ? record.title : "",
+      ...(typeof record.cwd === "string" ? { cwd: record.cwd } : {}),
+    };
+    const updatedAt = record.updated_at ?? record.updatedAt;
+    if (typeof updatedAt === "number") reference.updatedAt = updatedAt;
+    references.push(reference);
+  }
+  return normalizeConversationMentionReferences(references, currentConversationId);
+}
 
 const EMPTY_SNAPSHOT: TranscriptSnapshot = {
   rows: [],
@@ -534,6 +559,8 @@ export function createTranscriptStore(options?: {
       message_id?: unknown;
       messageId?: unknown;
       uploaded_files?: unknown;
+      referenced_conversations?: unknown;
+      referencedConversations?: unknown;
       message_ref?: unknown;
     };
     const clientRequestId = readEventClientRequestId(event);
@@ -541,6 +568,10 @@ export function createTranscriptStore(options?: {
     const messageIdRaw = payload.message_id ?? payload.messageId;
     const messageId = typeof messageIdRaw === "string" ? messageIdRaw.trim() : "";
     const attachments = normalizeLiveUploadedFiles(payload.uploaded_files);
+    const referencedConversations = normalizeLiveConversationReferences(
+      payload.referenced_conversations ?? payload.referencedConversations,
+      event.conversation_id ?? "",
+    );
     if (!text.trim() && attachments.length === 0) {
       return;
     }
@@ -556,6 +587,9 @@ export function createTranscriptStore(options?: {
       }
       if (messageRef && next.messageRef?.messageId !== messageRef.messageId) {
         next = { ...next, messageRef };
+      }
+      if ((next.referencedConversations?.length ?? 0) === 0 && referencedConversations.length > 0) {
+        next = { ...next, referencedConversations };
       }
       return next;
     };
@@ -587,6 +621,7 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            referencedConversations,
             messageId: messageId || undefined,
             messageRef,
             timestamp: Date.now(),
@@ -616,6 +651,7 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            referencedConversations,
             messageId: messageId || undefined,
             messageRef,
             timestamp: Date.now(),
@@ -648,6 +684,7 @@ export function createTranscriptStore(options?: {
           kind: "user",
           text,
           attachments,
+          referencedConversations,
           messageId: messageId || undefined,
           messageRef,
           timestamp: Date.now(),
