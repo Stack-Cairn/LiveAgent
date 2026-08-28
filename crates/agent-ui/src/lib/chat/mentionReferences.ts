@@ -5,6 +5,15 @@ export type FileMentionReference = {
   kind: FileMentionKind;
 };
 
+export type ConversationMentionReference = {
+  id: string;
+  title: string;
+  cwd?: string;
+  updatedAt?: number;
+};
+
+export const MAX_CONVERSATION_MENTION_REFERENCES = 3;
+
 export const MARKDOWN_REFERENCE_PATTERN = /\[((?:\\.|[^\]\\\r\n])+)]\((<[^>\r\n]+>|[^)\r\n]+)\)/g;
 
 export function escapeMarkdownReferenceLabel(value: string) {
@@ -70,6 +79,78 @@ export function formatFileMentionToken(reference: Pick<FileMentionReference, "pa
   if (!normalized) return reference.path;
   const target = normalized.kind === "dir" ? `${normalized.path}/` : normalized.path;
   return `[${escapeMarkdownReferenceLabel(fileMentionDisplayName(normalized))}](${formatMarkdownReferenceDestination(target)})`;
+}
+
+function normalizeConversationMentionId(value: string) {
+  const id = value.trim();
+  if (!id || id.length > 256) return "";
+  for (const character of id) {
+    const code = character.charCodeAt(0);
+    if (code <= 0x1f || code === 0x7f) return "";
+  }
+  return id;
+}
+
+export function createConversationMentionReference(
+  input: ConversationMentionReference,
+): ConversationMentionReference | null {
+  const id = normalizeConversationMentionId(input.id);
+  const title = input.title.trim().replace(/\s+/g, " ").slice(0, 240);
+  if (!id || !title) return null;
+  const cwd = input.cwd?.trim() || undefined;
+  const updatedAt =
+    typeof input.updatedAt === "number" && Number.isFinite(input.updatedAt)
+      ? input.updatedAt
+      : undefined;
+  return {
+    id,
+    title,
+    ...(cwd ? { cwd } : {}),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
+}
+
+export function normalizeConversationMentionReferences(
+  references: readonly ConversationMentionReference[] | null | undefined,
+  currentConversationId?: string,
+) {
+  const normalized: ConversationMentionReference[] = [];
+  const seen = new Set<string>();
+  const currentId = currentConversationId?.trim() ?? "";
+  for (const reference of references ?? []) {
+    const next = createConversationMentionReference(reference);
+    if (!next || next.id === currentId || seen.has(next.id)) continue;
+    seen.add(next.id);
+    normalized.push(next);
+    if (normalized.length >= MAX_CONVERSATION_MENTION_REFERENCES) break;
+  }
+  return normalized;
+}
+
+export function formatConversationMentionToken(reference: ConversationMentionReference) {
+  const normalized = createConversationMentionReference(reference);
+  if (!normalized) return reference.title || reference.id;
+  const label = `conversation: ${normalized.title}`;
+  const destination = `conversation:${encodeURIComponent(normalized.id)}`;
+  return `[${escapeMarkdownReferenceLabel(label)}](${destination})`;
+}
+
+export function parseMarkdownConversationMentionReference(
+  label: string,
+  rawDestination: string,
+): ConversationMentionReference | null {
+  const destination = normalizeMarkdownReferenceDestination(rawDestination);
+  if (!destination.toLowerCase().startsWith("conversation:")) return null;
+  let id = "";
+  try {
+    id = decodeURIComponent(destination.slice("conversation:".length));
+  } catch {
+    return null;
+  }
+  const normalizedLabel = unescapeMarkdownReferenceLabel(label.trim());
+  const titleMatch = /^conversation:\s*(.+)$/i.exec(normalizedLabel);
+  if (!titleMatch?.[1]) return null;
+  return createConversationMentionReference({ id, title: titleMatch[1] });
 }
 
 export function parseMarkdownFileMentionReference(

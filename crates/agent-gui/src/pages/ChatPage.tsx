@@ -23,6 +23,7 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
+import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -361,6 +362,19 @@ export function ChatPage(props: ChatPageProps) {
   // The only page-level subscription to the sidebar list: ChatPage's own
   // render needs (draft detection, pending-item effect, workspace root).
   const historyItems = useSidebarSelector(sidebarStore, selectConversations);
+  const mentionableConversations = useMemo(
+    () =>
+      historyItems
+        .filter((item) => !item.isPending)
+        .map(({ id, title, cwd, updatedAt, messageCount }) => ({
+          id,
+          title,
+          cwd,
+          updatedAt,
+          messageCount,
+        })),
+    [historyItems],
+  );
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
   const {
     canShareHistory,
@@ -637,6 +651,15 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || workdir : "");
+  const searchMentionableConversations = useCallback(
+    (query: string) =>
+      searchMentionConversations({
+        query,
+        currentConversationId,
+        currentWorkdir: displayedConversationWorkdir,
+      }),
+    [currentConversationId, displayedConversationWorkdir],
+  );
   const activeWorkspaceResources = useMemo(
     () => resolveWorkspaceResources(settings, displayedConversationWorkdir),
     [displayedConversationWorkdir, settings],
@@ -2154,6 +2177,8 @@ export function ChatPage(props: ChatPageProps) {
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
+      mentionableConversations,
+      searchMentionableConversations,
       executionMode: settings.system.executionMode,
       hasModels,
       currentModelLabel,
@@ -2447,6 +2472,8 @@ export function ChatPage(props: ChatPageProps) {
           conversationId: item.id,
           project: workbenchProjectForConversation(item),
           title: item.title,
+          cwd: item.cwd,
+          updatedAt: item.updatedAt,
         },
         event,
       );
@@ -3000,6 +3027,13 @@ export function ChatPage(props: ChatPageProps) {
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,
+        mentionableConversations,
+        searchMentionableConversations: (query) =>
+          searchMentionConversations({
+            query,
+            currentConversationId: conversationId,
+            currentWorkdir: workspaceRoot ?? "",
+          }),
         executionMode: settings.system.executionMode,
         hasModels,
         currentModelLabel: paneModelLabel,

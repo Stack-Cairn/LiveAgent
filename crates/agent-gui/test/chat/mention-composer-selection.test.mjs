@@ -24,8 +24,13 @@ test("the shared composer restores the last editor selection before external men
     assert.match(composer, /document\.addEventListener\("selectionchange", rememberEditorSelection\)/);
     assert.equal(
       (composer.match(/focusEditorAtSavedSelection\(\);/g) ?? []).length,
-      6,
+      7,
     );
+    const conversationInsertion = composer.slice(
+      composer.indexOf("insertConversationMention:"),
+      composer.indexOf("insertCodeMention:"),
+    );
+    assert.match(conversationInsertion, /focusEditorAtSavedSelection\(\);/);
   }
 });
 

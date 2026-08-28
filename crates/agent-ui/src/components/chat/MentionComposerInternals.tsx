@@ -12,12 +12,14 @@ import {
   codeMentionDisplayName,
   codeMentionLineLabel,
   createCodeMentionReference,
+  createConversationMentionReference,
   createFileMentionReference,
   escapeMarkdownReferenceLabel,
   type FileMentionKind,
   fileMentionDisplayName,
   fileMentionTitle,
   formatCodeMentionToken,
+  formatConversationMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -56,6 +58,10 @@ import {
   COMPOSER_CONTEXT_MENU_HEIGHT,
   COMPOSER_CONTEXT_MENU_MARGIN,
   COMPOSER_CONTEXT_MENU_WIDTH,
+  CONVERSATION_MENTION_CWD_ATTR,
+  CONVERSATION_MENTION_ID_ATTR,
+  CONVERSATION_MENTION_TITLE_ATTR,
+  CONVERSATION_MENTION_UPDATED_AT_ATTR,
   type ComposerClipboardSnapshot,
   formatLargePasteCount,
   GIT_FILE_MENTION_COMMIT_SHA_ATTR,
@@ -75,6 +81,7 @@ import {
   MENTION_KIND_ATTR,
   MENTION_TAG_ATTR,
   type MentionComposerCommitMention,
+  type MentionComposerConversationMention,
   type MentionComposerDraftSegment,
   type MentionComposerGitFileMention,
   type MentionComposerLargePaste,
@@ -125,6 +132,8 @@ export function formatGitFileMentionToken(
   }
   return `${label} (${file.commitSha})`;
 }
+
+export { formatConversationMentionToken };
 
 export function removeCaretAnchors(value: string) {
   return value.split(CARET_ANCHOR_TEXT).join("");
@@ -209,6 +218,12 @@ export function collectDraftSegments(
         const reference = createFileMentionReference(mentionPath, kind);
         if (reference) {
           childParts.push({ type: "fileMention", reference });
+          childIsLogical = true;
+        }
+      } else if (el.hasAttribute(CONVERSATION_MENTION_ID_ATTR)) {
+        const conversation = conversationMentionFromElement(el);
+        if (conversation) {
+          childParts.push({ type: "conversationMention", conversation });
           childIsLogical = true;
         }
       } else if (el.hasAttribute(GIT_FILE_MENTION_PATH_ATTR)) {
@@ -304,6 +319,9 @@ export function serializeDraftSegments(segments: MentionComposerDraftSegment[]) 
       if (segment.type === "skillMention") return formatSkillMentionToken(segment.skill);
       if (segment.type === "commitMention") return formatCommitMentionToken(segment.commit);
       if (segment.type === "gitFileMention") return formatGitFileMentionToken(segment.file);
+      if (segment.type === "conversationMention") {
+        return formatConversationMentionToken(segment.conversation);
+      }
       if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
       return segment.text;
     })
@@ -696,6 +714,17 @@ export function gitFileMentionFromElement(el: HTMLElement): MentionComposerGitFi
   });
 }
 
+export function conversationMentionFromElement(
+  el: HTMLElement,
+): MentionComposerConversationMention | null {
+  return createConversationMentionReference({
+    id: el.getAttribute(CONVERSATION_MENTION_ID_ATTR) ?? "",
+    title: el.getAttribute(CONVERSATION_MENTION_TITLE_ATTR) ?? "",
+    cwd: el.getAttribute(CONVERSATION_MENTION_CWD_ATTR)?.trim() || undefined,
+    updatedAt: Number(el.getAttribute(CONVERSATION_MENTION_UPDATED_AT_ATTR) ?? "") || undefined,
+  });
+}
+
 export function codeMentionFromElement(el: HTMLElement): CodeMentionReference | null {
   const path = el.getAttribute(CODE_MENTION_PATH_ATTR)?.trim() ?? "";
   if (!path) return null;
@@ -845,6 +874,17 @@ export function normalizeComposerClipboardSegment(
     const file = rawFile ? normalizeClipboardGitFile(rawFile) : null;
     return file ? { type, file } : null;
   }
+  if (type === "conversationMention") {
+    const rawConversation = clipboardRecord(segment.conversation);
+    if (!rawConversation) return null;
+    const conversation = createConversationMentionReference({
+      id: clipboardString(rawConversation, "id"),
+      title: clipboardString(rawConversation, "title"),
+      cwd: clipboardString(rawConversation, "cwd") || undefined,
+      updatedAt: clipboardNumber(rawConversation, "updatedAt") || undefined,
+    });
+    return conversation ? { type, conversation } : null;
+  }
   if (type === "codeMention") {
     const rawReference = clipboardRecord(segment.reference);
     if (!rawReference) return null;
@@ -949,6 +989,9 @@ export function parseSerializedComposerText(
         }),
       });
       matched = true;
+    } else if (segment.type === "conversation") {
+      segments.push({ type: "conversationMention", conversation: segment.reference });
+      matched = true;
     } else if (segment.type === "codeRef") {
       segments.push({ type: "codeMention", reference: segment.reference });
       matched = true;
@@ -1016,12 +1059,20 @@ export function createSkillMentionIcon() {
   return createMentionIcon(SKILL_ICON_SVG_MARKUP);
 }
 
+const CONVERSATION_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 8h8M8 12h5"/></svg>';
+
+export function createConversationMentionIcon() {
+  return createMentionIcon(CONVERSATION_ICON_SVG);
+}
+
 export function isComposerChipElement(node: Node | null): node is HTMLElement {
   return (
     node instanceof HTMLElement &&
     (node.hasAttribute(MENTION_TAG_ATTR) ||
       node.hasAttribute(SKILL_MENTION_NAME_ATTR) ||
       node.hasAttribute(COMMIT_MENTION_SHA_ATTR) ||
+      node.hasAttribute(CONVERSATION_MENTION_ID_ATTR) ||
       node.hasAttribute(GIT_FILE_MENTION_PATH_ATTR) ||
       node.hasAttribute(CODE_MENTION_PATH_ATTR) ||
       node.hasAttribute(LARGE_PASTE_TAG_ATTR))
@@ -1400,6 +1451,34 @@ export function insertSkillMentionChip(ctx: MentionContext, skill: MentionCompos
   insertMentionChipElement(ctx, chip);
 }
 
+export function createConversationMentionChip(
+  input: MentionComposerConversationMention,
+): HTMLElement | null {
+  const conversation = createConversationMentionReference(input);
+  if (!conversation) return null;
+  const chip = document.createElement("span");
+  chip.setAttribute(CONVERSATION_MENTION_ID_ATTR, conversation.id);
+  chip.setAttribute(CONVERSATION_MENTION_TITLE_ATTR, conversation.title);
+  if (conversation.cwd) chip.setAttribute(CONVERSATION_MENTION_CWD_ATTR, conversation.cwd);
+  if (conversation.updatedAt !== undefined) {
+    chip.setAttribute(CONVERSATION_MENTION_UPDATED_AT_ATTR, String(conversation.updatedAt));
+  }
+  chip.contentEditable = "false";
+  chip.className = mentionChipClassName("conversation", { selectable: false });
+  chip.title = conversation.cwd ? `${conversation.title}\n${conversation.cwd}` : conversation.title;
+  chip.appendChild(createConversationMentionIcon());
+  chip.appendChild(document.createTextNode(conversation.title));
+  return chip;
+}
+
+export function insertConversationMentionChip(
+  ctx: MentionContext,
+  conversation: MentionComposerConversationMention,
+) {
+  const chip = createConversationMentionChip(conversation);
+  if (chip) insertMentionChipElement(ctx, chip);
+}
+
 export function createCommitMentionChip(commitInput: MentionComposerCommitMention) {
   const commit = normalizeCommitMention(commitInput);
   const chip = document.createElement("span");
@@ -1528,6 +1607,9 @@ export function createComposerSegmentNode(
   }
   if (segment.type === "gitFileMention") {
     return createGitFileMentionChip(segment.file);
+  }
+  if (segment.type === "conversationMention") {
+    return createConversationMentionChip(segment.conversation);
   }
   return createCodeMentionChip(segment.reference);
 }

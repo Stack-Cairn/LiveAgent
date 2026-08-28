@@ -38,9 +38,14 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  clearActiveConversationReferenceDrag,
+  writeConversationReferenceDragPayload,
+} from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   memo,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -495,6 +500,42 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     [isMobileMenuLayout],
   );
 
+  const handleNativeConversationDragStart = useCallback(
+    (event: ReactDragEvent<HTMLButtonElement>) => {
+      if (
+        onWorkbenchDragIntent ||
+        isInteractionDisabled ||
+        isSelectionMode ||
+        isRenaming ||
+        isPendingDelete ||
+        menuOpen ||
+        item.isPending
+      ) {
+        event.preventDefault();
+        return;
+      }
+      if (
+        !writeConversationReferenceDragPayload(event.dataTransfer, {
+          id: item.id,
+          title: item.title,
+          cwd: item.cwd,
+          updatedAt: item.updatedAt,
+        })
+      ) {
+        event.preventDefault();
+      }
+    },
+    [
+      isInteractionDisabled,
+      isPendingDelete,
+      isRenaming,
+      isSelectionMode,
+      item,
+      menuOpen,
+      onWorkbenchDragIntent,
+    ],
+  );
+
   const shouldShowMobilePressFeedback = isMobileMenuLayout && (isLongPressActive || menuOpen);
 
   useEffect(() => {
@@ -615,6 +656,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
               <button
                 type="button"
+                draggable={!onWorkbenchDragIntent && !item.isPending}
+                onDragStart={handleNativeConversationDragStart}
+                onDragEnd={clearActiveConversationReferenceDrag}
                 onClick={handleTitleClick}
                 onMouseDown={(event) => {
                   if (event.shiftKey) event.preventDefault();

@@ -15,6 +15,7 @@ import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   MentionComposer,
+  type MentionComposerConversation,
   type MentionComposerHandle,
   type MentionComposerSkill,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -46,6 +47,14 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  type ConversationReferenceInsertResult,
+  getActiveConversationReferenceDrag,
+  hasConversationReferenceDragPayload,
+  readConversationReferenceDragPayload,
+  registerConversationReferenceDropZone,
+} from "@liveagent/ui/lib/chat/conversationReferenceDrag";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -54,6 +63,7 @@ import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activi
 import {
   type MutableRefObject,
   memo,
+  type DragEvent as ReactDragEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -183,6 +193,7 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
 
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
+const CONVERSATION_DROP_NOTICE_MS = 800;
 
 /** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
 export type ContextUsageTokensSource = {
@@ -247,6 +258,10 @@ export type ChatComposerBarProps = {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
+  /** Earlier conversations available to the structured @ reference picker. */
+  mentionableConversations?: MentionComposerConversation[];
+  /** Searches all persisted conversations beyond the sidebar's loaded page. */
+  searchMentionableConversations?: (query: string) => Promise<MentionComposerConversation[]>;
   executionMode: ExecutionMode;
   hasModels: boolean;
   currentModelLabel: string;
@@ -324,6 +339,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     inputPlaceholder,
     workdir,
     enabledSkills,
+    mentionableConversations = [],
+    searchMentionableConversations,
     executionMode,
     hasModels,
     currentModelLabel,
@@ -384,6 +401,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const isComposerExpandedRef = useRef(false);
   const glassCardRef = useRef<HTMLDivElement | null>(null);
+  const conversationDragDepthRef = useRef(0);
+  const [conversationDropReference, setConversationDropReference] =
+    useState<ConversationMentionReference | null>(null);
+  const conversationDropNoticeCounterRef = useRef(0);
+  const [conversationDropNotice, setConversationDropNotice] = useState<{
+    result: Exclude<ConversationReferenceInsertResult, "inserted">;
+    key: number;
+  } | null>(null);
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
   /** 切换瞬间记录的卡片旧高度，供 FLIP 动画用；消费后立即置空。 */
@@ -408,6 +433,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const uploadDisabled =
     isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled || stt.active;
+  const canDropConversationReference = isAgentMode && !controlsDisabled && !hidden;
   // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
   // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
   const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
@@ -434,6 +460,129 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
     : t("chat.composer.expand");
+
+  const showConversationDropNotice = useCallback((result: ConversationReferenceInsertResult) => {
+    if (result === "inserted") {
+      setConversationDropNotice(null);
+      return;
+    }
+    conversationDropNoticeCounterRef.current += 1;
+    setConversationDropNotice({ result, key: conversationDropNoticeCounterRef.current });
+  }, []);
+
+  const insertConversationReference = useCallback(
+    (reference: ConversationMentionReference) => {
+      const result: ConversationReferenceInsertResult = !canDropConversationReference
+        ? "disabled"
+        : reference.id.trim() === conversationId.trim()
+          ? "self"
+          : (composerRef.current?.insertConversationMention(reference) ?? "disabled");
+      showConversationDropNotice(result);
+      return result;
+    },
+    [canDropConversationReference, composerRef, conversationId, showConversationDropNotice],
+  );
+
+  const clearConversationDropState = useCallback(() => {
+    conversationDragDepthRef.current = 0;
+    setConversationDropReference(null);
+  }, []);
+
+  useEffect(() => {
+    const card = glassCardRef.current;
+    if (!card) return;
+    return registerConversationReferenceDropZone(card, {
+      conversationId,
+      enabled: canDropConversationReference,
+      onHover(reference, active) {
+        if (active) setConversationDropNotice(null);
+        setConversationDropReference(
+          active && canDropConversationReference && reference.id !== conversationId
+            ? reference
+            : null,
+        );
+      },
+      onDrop(reference) {
+        const result = insertConversationReference(reference);
+        clearConversationDropState();
+        return result;
+      },
+    });
+  }, [
+    canDropConversationReference,
+    clearConversationDropState,
+    conversationId,
+    insertConversationReference,
+  ]);
+
+  useEffect(() => {
+    if (!conversationDropNotice) return;
+    const timeout = window.setTimeout(
+      () => setConversationDropNotice(null),
+      CONVERSATION_DROP_NOTICE_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [conversationDropNotice]);
+
+  const conversationDropNoticeText = conversationDropNotice
+    ? conversationDropNotice.result === "self"
+      ? t("chat.conversationReference.self")
+      : conversationDropNotice.result === "duplicate"
+        ? t("chat.conversationReference.duplicate")
+        : conversationDropNotice.result === "limit"
+          ? t("chat.conversationReference.limit")
+          : conversationDropNotice.result === "invalid"
+            ? t("chat.conversationReference.invalid")
+            : t("chat.conversationReference.disabled")
+    : null;
+
+  const handleConversationDragEnter = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasConversationReferenceDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      conversationDragDepthRef.current += 1;
+      const reference =
+        readConversationReferenceDragPayload(event.dataTransfer) ??
+        getActiveConversationReferenceDrag();
+      if (canDropConversationReference && reference?.id !== conversationId) {
+        setConversationDropReference(reference);
+      }
+    },
+    [canDropConversationReference, conversationId],
+  );
+
+  const handleConversationDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasConversationReferenceDragPayload(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleConversationDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasConversationReferenceDragPayload(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    conversationDragDepthRef.current = Math.max(0, conversationDragDepthRef.current - 1);
+    if (conversationDragDepthRef.current === 0) setConversationDropReference(null);
+  }, []);
+
+  const handleConversationDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasConversationReferenceDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const reference = readConversationReferenceDragPayload(event.dataTransfer);
+      if (reference) {
+        insertConversationReference(reference);
+      } else {
+        showConversationDropNotice("invalid");
+      }
+      clearConversationDropState();
+    },
+    [clearConversationDropState, insertConversationReference, showConversationDropNotice],
+  );
 
   const toggleQueueCollapsed = useCallback(() => {
     setQueueCollapsed((current) => !current);
@@ -885,6 +1034,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           ref={glassCardRef}
           data-file-upload-drop-zone=""
           data-file-upload-conversation-id={conversationId}
+          data-conversation-reference-drop-zone={
+            canDropConversationReference ? "enabled" : "disabled"
+          }
+          data-conversation-reference-drop-conversation-id={conversationId}
+          onDragEnter={handleConversationDragEnter}
+          onDragOver={handleConversationDragOver}
+          onDragLeave={handleConversationDragLeave}
+          onDrop={handleConversationDrop}
           onKeyDown={
             isComposerExpanded
               ? (event) => {
@@ -905,6 +1062,22 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             isComposerExpanded && "min-h-0 flex-1",
           )}
         >
+          {conversationDropReference ? (
+            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-[20px] border border-dashed border-primary/45 bg-background/88 px-6 text-center shadow-inner backdrop-blur-sm">
+              <span className="max-w-full truncate rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                {t("chat.conversationReference.drop").replace(
+                  "{title}",
+                  conversationDropReference.title,
+                )}
+              </span>
+            </div>
+          ) : conversationDropNoticeText ? (
+            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-[20px] border border-dashed border-amber-500/45 bg-background/90 px-6 text-center shadow-inner backdrop-blur-sm">
+              <span className="max-w-full rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                {conversationDropNoticeText}
+              </span>
+            </div>
+          ) : null}
           {/* macOS material rim-light */}
           <div
             aria-hidden
@@ -992,6 +1165,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               disabled={isInputDisabled || stt.active}
               workdir={workdir}
               enabledSkills={enabledSkills}
+              conversationMentionsEnabled={isAgentExecutionMode(executionMode)}
+              conversations={
+                isAgentExecutionMode(executionMode)
+                  ? mentionableConversations.filter((item) => item.id !== conversationId)
+                  : []
+              }
+              searchConversations={
+                isAgentExecutionMode(executionMode) ? searchMentionableConversations : undefined
+              }
               className={cn(
                 // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                 // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。

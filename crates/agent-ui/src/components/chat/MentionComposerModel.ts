@@ -1,8 +1,11 @@
+import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type {
   CodeMentionReference,
+  ConversationMentionReference,
   FileMentionKind,
   FileMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import { MAX_CONVERSATION_MENTION_REFERENCES } from "@liveagent/ui/lib/chat/mentionReferences";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -31,6 +34,14 @@ export type MentionComposerSkill = {
 };
 
 export type MentionComposerSkillMention = MentionComposerSkill;
+
+export type MentionComposerConversation = ConversationMentionReference & {
+  messageCount?: number;
+  /** Matching history excerpt returned by the server-side conversation search. */
+  searchPreview?: string;
+};
+
+export type MentionComposerConversationMention = ConversationMentionReference;
 
 export type MentionComposerCommitMention = {
   sha: string;
@@ -64,7 +75,11 @@ export type MentionComposerGitFileMention = {
 
 export type MentionSuggestion =
   | { type: "file"; entry: MentionFileEntry }
-  | { type: "skill"; skill: MentionComposerSkill };
+  | { type: "skill"; skill: MentionComposerSkill }
+  | { type: "conversation"; conversation: MentionComposerConversation }
+  | { type: "category"; category: "files" | "conversations" };
+
+export type MentionMenuMode = "root" | "files" | "conversations";
 
 export type ComposerContextMenuState = {
   x: number;
@@ -91,6 +106,9 @@ export interface MentionComposerHandle {
   insertSkillMention: (skill: MentionComposerSkillMention) => void;
   insertCommitMention: (commit: MentionComposerCommitMention) => void;
   insertGitFileMention: (file: MentionComposerGitFileMention) => void;
+  insertConversationMention: (
+    conversation: MentionComposerConversationMention,
+  ) => ConversationReferenceInsertResult;
   insertCodeMention: (reference: CodeMentionReference) => void;
   clear: () => void;
   focus: () => void;
@@ -122,6 +140,7 @@ export type MentionComposerDraftSegment =
   | { type: "skillMention"; skill: MentionComposerSkillMention }
   | { type: "commitMention"; commit: MentionComposerCommitMention }
   | { type: "gitFileMention"; file: MentionComposerGitFileMention }
+  | { type: "conversationMention"; conversation: MentionComposerConversationMention }
   | { type: "codeMention"; reference: CodeMentionReference };
 
 export type MentionComposerDraft = {
@@ -132,6 +151,8 @@ export type MentionComposerDraft = {
   skillMentions: MentionComposerSkillMention[];
   commitMentions: MentionComposerCommitMention[];
   gitFileMentions: MentionComposerGitFileMention[];
+  /** Optional for backward compatibility with drafts persisted before conversation mentions. */
+  conversationMentions?: MentionComposerConversationMention[];
   codeMentions: CodeMentionReference[];
   isEmpty: boolean;
 };
@@ -159,6 +180,11 @@ export interface MentionComposerProps {
   placeholder?: string;
   workdir: string;
   enabledSkills?: MentionComposerSkill[];
+  conversations?: MentionComposerConversation[];
+  /** Searches the complete persisted history when the conversation query is non-empty. */
+  searchConversations?: (query: string) => Promise<MentionComposerConversation[]>;
+  /** Conversation references need the agent runtime's read-only history tool. */
+  conversationMentionsEnabled?: boolean;
   className?: string;
 }
 
@@ -167,6 +193,7 @@ export interface MentionComposerProps {
 /* ------------------------------------------------------------------ */
 
 export const MAX_SUGGESTIONS = 30;
+export const MAX_CONVERSATION_MENTIONS = MAX_CONVERSATION_MENTION_REFERENCES;
 export const MENTION_INDEX_MAX_RESULTS = 5000;
 export const MENTION_REFETCH_DEBOUNCE_MS = 150;
 export const MENTION_TAG_ATTR = "data-mention-path";
@@ -199,6 +226,10 @@ export const GIT_FILE_MENTION_REF_NAME_ATTR = "data-git-file-ref-name";
 export const GIT_FILE_MENTION_REMOTE_NAME_ATTR = "data-git-file-remote-name";
 export const GIT_FILE_MENTION_REMOTE_URL_ATTR = "data-git-file-remote-url";
 export const GIT_FILE_MENTION_GITHUB_URL_ATTR = "data-git-file-github-url";
+export const CONVERSATION_MENTION_ID_ATTR = "data-conversation-mention-id";
+export const CONVERSATION_MENTION_TITLE_ATTR = "data-conversation-mention-title";
+export const CONVERSATION_MENTION_CWD_ATTR = "data-conversation-mention-cwd";
+export const CONVERSATION_MENTION_UPDATED_AT_ATTR = "data-conversation-mention-updated-at";
 export const CODE_MENTION_PATH_ATTR = "data-code-mention-path";
 export const CODE_MENTION_START_ATTR = "data-code-mention-start";
 export const CODE_MENTION_END_ATTR = "data-code-mention-end";
