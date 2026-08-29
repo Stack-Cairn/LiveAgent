@@ -33,6 +33,7 @@ export function Popup({
   emptyLabel: string;
   onSelect: (suggestion: MentionSuggestion) => void;
 }) {
+  const { t } = useLocale();
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
@@ -95,7 +96,11 @@ export function Popup({
       }}
     >
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? "Skills" : hasAppRows ? "应用" : "文件"}
+        {trigger === "skill"
+          ? "Skills"
+          : hasAppRows
+            ? t("chat.composer.mentionGroupApps")
+            : t("chat.composer.mentionGroupFiles")}
       </div>
       <div
         ref={listRef}
@@ -123,7 +128,7 @@ export function Popup({
           const fileSectionHeader =
             entry && i === firstFileIndex && hasAppRows ? (
               <div className="mt-1.5 shrink-0 border-t border-border/50 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                文件
+                {t("chat.composer.mentionGroupFiles")}
               </div>
             ) : null;
           const row = (
@@ -164,7 +169,7 @@ export function Popup({
               >
                 {isApp ? (
                   app?.iconDataUrl ? (
-                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-[3px]" />
+                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-sm" />
                   ) : (
                     <AppWindow className="h-4 w-4" />
                   )

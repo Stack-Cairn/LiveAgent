@@ -12,7 +12,9 @@ const guiRoot = new URL("../../src/", import.meta.url);
 const tauriRoot = new URL("../../src-tauri/src/", import.meta.url);
 
 function source(root, relativePath) {
-  return readFileSync(new URL(relativePath, root), "utf8");
+  // Windows（autocrlf=true）检出下源码行尾是 CRLF，统一成 LF，保证
+  // extractFunction 的 indexOf("\n}\n") 等基于 LF 的切片在任何平台可复现。
+  return readFileSync(new URL(relativePath, root), "utf8").replace(/\r\n/g, "\n");
 }
 
 function extractFunction(src, name) {
@@ -57,8 +59,15 @@ test("app chips round-trip through DOM serialization and the clipboard payload",
 });
 
 test("the app token carries a stable identity the model can hand to CUA tools", () => {
-  const body = extractFunction(internals, "formatAppMentionToken").replace(
-    /\(\s*app:[\s\S]*?,\s*\)/,
+  // token 序列化只有 lib/chat/mentionReferences 一份实现，组件内序列化与
+  // 发送路径（composerDraft）都从这里导入——不允许再出现第二份拷贝。
+  const references = source(agentUiRoot, "lib/chat/mentionReferences.ts");
+  assert.doesNotMatch(internals, /function formatAppMentionToken/);
+  assert.match(internals, /formatAppMentionToken,/);
+  const composerDraftSrc = source(agentUiRoot, "lib/chat/composerDraft.ts");
+  assert.doesNotMatch(composerDraftSrc, /function formatComposerAppMention/);
+  const body = extractFunction(references, "formatAppMentionToken").replace(
+    /\(app: AppMentionReference\)/,
     "(app)",
   );
   const formatAppMentionToken = new Function(`${body}; return formatAppMentionToken;`)();
@@ -104,16 +113,37 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
   // 选中即落榜单（localStorage 版本化键），下次 @ 会话开启时重读并把
   // 最近使用的应用排到分组最前；未上榜的保持宿主的字母序。
   assert.match(composer, /recordAppMentionUse\(suggestion\.app\)/);
-  assert.match(composer, /readAppMentionRecents\(\)/);
-  assert.match(composer, /appMentionRecencyKey\(app\)/);
+  assert.match(composer, /sortAppsByMentionRecency\(mentionApps, readAppMentionRecents\(\)\)/);
   const recency = source(agentUiRoot, "lib/chat/appMentionRecency.ts");
   assert.match(recency, /"liveagent\.app-mention-recents\.v1"/);
-  // 身份键与图标注册表同一套优先级：bundle id > path > name。
+  // 身份键必须复用图标注册表的同一份裁决（bundle id > path > name），
+  // 不允许在 recency 里再维护一份优先级。
+  assert.match(recency, /identityKeys\(identity\)\[0\] \?\? ""/);
+
+  // 执行式覆盖：身份键优先级 + 最近使用排序（上榜按榜单序在前，未上榜
+  // 保持入参原序）。类型注解在求值前剥掉。
+  const icons = source(agentUiRoot, "lib/chat/appMentionIcons.ts");
+  const identityKeysFn = extractFunction(icons, "identityKeys")
+    .replace(/\(identity: AppMentionIconIdentity\): string\[\]/, "(identity)")
+    .replace(/const keys: string\[\] = \[\];/, "const keys = [];");
   const keyFn = extractFunction(recency, "appMentionRecencyKey").replace(
     /\(identity: AppMentionRecencyIdentity\): string/,
     "(identity)",
   );
-  const appMentionRecencyKey = new Function(`${keyFn}; return appMentionRecencyKey;`)();
+  const sortStart = recency.indexOf("function sortAppsByMentionRecency");
+  assert.notEqual(sortStart, -1, "missing function sortAppsByMentionRecency");
+  const sortEnd = recency.indexOf("\n}\n", sortStart);
+  const sortFn = recency
+    .slice(sortStart, sortEnd + 3)
+    .replace(
+      /function sortAppsByMentionRecency[\s\S]*?\{/,
+      "function sortAppsByMentionRecency(apps, recentKeys) {",
+    )
+    .replace(/\(app: T\)/, "(app)");
+  const { appMentionRecencyKey, sortAppsByMentionRecency } = new Function(
+    `${identityKeysFn}\n${keyFn}\n${sortFn}\nreturn { appMentionRecencyKey, sortAppsByMentionRecency };`,
+  )();
+
   assert.equal(
     appMentionRecencyKey({
       name: "Safari",
@@ -125,6 +155,23 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
   assert.equal(appMentionRecencyKey({ name: "Tool", path: "/opt/tool" }), "path:/opt/tool");
   assert.equal(appMentionRecencyKey({ name: "Tool" }), "name:tool");
   assert.equal(appMentionRecencyKey({}), "");
+
+  const apps = [
+    { name: "Arc" },
+    { name: "Mail" },
+    { name: "Safari", bundleId: "com.apple.Safari" },
+    { name: "Terminal" },
+  ];
+  const sorted = sortAppsByMentionRecency(apps, ["bundle:com.apple.safari", "name:mail"]);
+  assert.deepEqual(
+    sorted.map((app) => app.name),
+    ["Safari", "Mail", "Arc", "Terminal"],
+  );
+  // 入参不被就地修改。
+  assert.deepEqual(
+    apps.map((app) => app.name),
+    ["Arc", "Mail", "Safari", "Terminal"],
+  );
 });
 
 test("the chip shows the real app logo via the icon registry, never via DOM attributes", () => {
@@ -193,7 +240,7 @@ test("the send path serializes appMention segments in both draft pipelines", () 
   const composerDraft = source(agentUiRoot, "lib/chat/composerDraft.ts");
   assert.match(
     composerDraft,
-    /if \(segment\.type === "appMention"\) return formatComposerAppMention\(segment\.app\);/,
+    /if \(segment\.type === "appMention"\) return formatAppMentionToken\(segment\.app\);/,
   );
   assert.match(composerDraft, /appMentions: \[\],/);
   const paneSend = source(guiRoot, "pages/chat/surfaces/paneComposerSend.ts");

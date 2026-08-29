@@ -18,6 +18,7 @@ import {
   type FileMentionKind,
   fileMentionDisplayName,
   fileMentionTitle,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
@@ -105,17 +106,6 @@ export { usesCustomComposerContextMenu };
 
 export function formatSkillMentionToken(skill: Pick<MentionComposerSkillMention, "name">) {
   return `/${skill.name}`;
-}
-
-/** Serialize an app mention so the model can address the app via the CUA
- *  toolset: the visible name plus the stable identity (bundle id, or the
- *  install path when the platform has no bundle ids). */
-export function formatAppMentionToken(
-  app: Pick<MentionComposerAppMention, "name" | "bundleId" | "path">,
-) {
-  const identity = app.bundleId?.trim() || app.path.trim();
-  if (!identity || identity === app.name) return `app "${app.name}"`;
-  return `app "${app.name}" (${identity})`;
 }
 
 export function formatCommitMentionToken(
@@ -1104,7 +1094,8 @@ export function createAppMentionIcon(app?: MentionComposerAppMention) {
   icon.draggable = false;
   icon.style.flexShrink = "0";
   icon.style.alignSelf = "center";
-  icon.style.borderRadius = "2px";
+  // 圆角走标准 token（Shared UI Boundaries 禁用任意值圆角，内联样式同理）。
+  icon.classList.add("rounded-xs");
   return icon;
 }
 

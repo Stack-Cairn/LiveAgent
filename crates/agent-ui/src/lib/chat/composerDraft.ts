@@ -1,5 +1,4 @@
 import type {
-  MentionComposerAppMention,
   MentionComposerCommitMention,
   MentionComposerDraft,
   MentionComposerGitFileMention,
@@ -8,6 +7,7 @@ import type {
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   escapeMarkdownReferenceLabel,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
@@ -45,14 +45,6 @@ function formatComposerGitFileMention(file: MentionComposerGitFileMention) {
   return `${label} (${file.commitSha})`;
 }
 
-/** 与 MentionComposerInternals.formatAppMentionToken 同构：可见名 + 稳定
- *  身份（bundle id 或安装路径），模型据此用 CUA 工具寻址应用。 */
-function formatComposerAppMention(app: MentionComposerAppMention) {
-  const identity = app.bundleId?.trim() || app.path.trim();
-  if (!identity || identity === app.name) return `app "${app.name}"`;
-  return `app "${app.name}" (${identity})`;
-}
-
 export function buildTextFromComposerDraft(
   draft: MentionComposerDraft,
   pastedFileById?: Map<string, PendingUploadedFile>,
@@ -63,7 +55,7 @@ export function buildTextFromComposerDraft(
         if (segment.type === "text") return segment.text;
         if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
         if (segment.type === "skillMention") return `/${segment.skill.name}`;
-        if (segment.type === "appMention") return formatComposerAppMention(segment.app);
+        if (segment.type === "appMention") return formatAppMentionToken(segment.app);
         if (segment.type === "commitMention") return formatComposerCommitMention(segment.commit);
         if (segment.type === "gitFileMention") return formatComposerGitFileMention(segment.file);
         if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);

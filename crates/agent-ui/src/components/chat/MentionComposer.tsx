@@ -11,9 +11,9 @@ import {
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
-  appMentionRecencyKey,
   readAppMentionRecents,
   recordAppMentionUse,
+  sortAppsByMentionRecency,
 } from "@liveagent/ui/lib/chat/appMentionRecency";
 import {
   insertPlainTextWithUndo,
@@ -21,6 +21,7 @@ import {
 } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatFileMentionToken,
 } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -67,7 +68,6 @@ import {
   ejectCaretFromChip,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
-  formatAppMentionToken,
   formatCommitMentionToken,
   formatGitFileMentionToken,
   formatSkillMentionToken,
@@ -462,11 +462,7 @@ export const MentionComposer = memo(
       // 时恒为空），有查询词时两组都按包含匹配过滤。键盘导航走拼接后的
       // 扁平数组，分组只是渲染形态。
       const next: MentionSuggestion[] = [];
-      const recents = readAppMentionRecents();
-      const recencyRank = new Map(recents.map((key, index) => [key, index]));
-      const rankOf = (app: (typeof mentionApps)[number]) =>
-        recencyRank.get(appMentionRecencyKey(app)) ?? Number.MAX_SAFE_INTEGER;
-      const orderedApps = [...mentionApps].sort((a, b) => rankOf(a) - rankOf(b));
+      const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
       let appCount = 0;
       for (const app of orderedApps) {
         const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
@@ -505,7 +501,9 @@ export const MentionComposer = memo(
     const popupEmptyLabel =
       mentionCtx?.trigger === "skill"
         ? t("chat.composer.noMatchingEnabledSkills")
-        : t("chat.composer.noMatchingFiles");
+        : mentionApps.length > 0
+          ? t("chat.composer.noMatchingFilesOrApps")
+          : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
@@ -867,16 +865,6 @@ export const MentionComposer = memo(
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createSkillMentionChip(skill));
-          closeMentionSession();
-          refreshEmptyState();
-        },
-        insertAppMention: (app: MentionComposerAppMention) => {
-          const el = editorRef.current;
-          if (!el) return;
-          finishTypewriter();
-          resetPromptHistoryRecall();
-          focusEditorAtSavedSelection();
-          insertNodeAtCursor(el, createAppMentionChip(app));
           closeMentionSession();
           refreshEmptyState();
         },

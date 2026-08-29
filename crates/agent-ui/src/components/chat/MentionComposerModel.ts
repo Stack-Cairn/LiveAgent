@@ -109,7 +109,6 @@ export interface MentionComposerHandle {
   setDraft: (draft: MentionComposerDraft) => void;
   insertFileMention: (path: string, kind: "file" | "dir") => void;
   insertSkillMention: (skill: MentionComposerSkillMention) => void;
-  insertAppMention: (app: MentionComposerAppMention) => void;
   insertCommitMention: (commit: MentionComposerCommitMention) => void;
   insertGitFileMention: (file: MentionComposerGitFileMention) => void;
   insertCodeMention: (reference: CodeMentionReference) => void;

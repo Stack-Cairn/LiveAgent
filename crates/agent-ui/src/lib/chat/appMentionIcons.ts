@@ -25,7 +25,12 @@ const iconsByKey = new Map<string, string>();
 const listeners = new Set<() => void>();
 let version = 0;
 
-function identityKeys(identity: AppMentionIconIdentity): string[] {
+/**
+ * 应用身份键，按稳定性降序：bundle id > 安装路径 > 显示名。图标注册表按
+ * 全部键登记/查询；最近使用榜单（appMentionRecency）取首个作规范键——
+ * 两处共用这一份优先级裁决。
+ */
+export function identityKeys(identity: AppMentionIconIdentity): string[] {
   const keys: string[] = [];
   const bundleId = identity.bundleId?.trim().toLowerCase();
   const path = identity.path?.trim();

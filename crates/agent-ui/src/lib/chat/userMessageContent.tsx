@@ -871,7 +871,7 @@ function AppMentionChip({ app }: { app: AppDisplayReference }) {
           src={iconDataUrl}
           alt=""
           draggable={false}
-          className="h-3 w-3 shrink-0 self-center rounded-[2px]"
+          className="h-3 w-3 shrink-0 self-center rounded-xs"
         />
       ) : (
         <AppWindow className="h-3 w-3 shrink-0 self-center" />

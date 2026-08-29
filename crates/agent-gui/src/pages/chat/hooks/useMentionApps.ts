@@ -28,6 +28,10 @@ const EMPTY_APPS: MentionComposerApp[] = [];
  *
  * GUI 专属：应用列表来自桌面宿主本机，WebUI 有意不接（远端浏览器上的
  * "已安装应用"没有意义，网关也不该中继宿主的应用清单）。
+ *
+ * 平台收窄：枚举目前仅实现 macOS（services/cua_driver/installed_apps.rs，
+ * 其他平台没有同样稳定的"已安装应用 + 唯一标识"语义），Windows/Linux 即使
+ * 挂了 cua-driver 也返回空列表，@ 弹层不会出现应用分组。
  */
 export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMode: boolean) {
   const cuaEnabled = useMemo(
@@ -56,7 +60,8 @@ export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMo
         setApps(mapped);
       })
       .catch(() => {
-        // 枚举失败按"没有应用候选"降级；下次门控变化再试。
+        // 枚举失败按"没有应用候选"降级；置 fetched 后本挂载周期内不再
+        // 重试（组件重挂载才会再扫），避免门控反复翻转时重复扫磁盘。
         if (!cancelled) setFetched(true);
       });
     return () => {
