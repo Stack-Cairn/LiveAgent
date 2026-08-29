@@ -558,8 +558,10 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.askUser.timeoutHint": "后自动选择推荐项",
   "chat.planMode.cardTitle": "实施计划",
   "chat.planMode.submitted": "计划已提交，等待你的回复",
-  "chat.planMode.replyHint": "输入\u201c同意\u201d即批准；输入其他内容即修改意见",
+  "chat.planMode.awaiting": "等待批准",
+  "chat.planMode.inactive": "已失效",
   "chat.planMode.approve": "批准并开始执行",
+  "chat.planMode.approving": "提交中…",
   "chat.planMode.approved": "已批准",
   "chat.planMode.submitFailed": "提交失败，请重试",
   "chat.planMode.executePrompt":

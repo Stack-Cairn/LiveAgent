@@ -601,8 +601,10 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.askUser.timeoutHint": "until the recommended options are auto-selected",
   "chat.planMode.cardTitle": "Implementation plan",
   "chat.planMode.submitted": "Plan submitted — waiting for your reply",
-  "chat.planMode.replyHint": "Type \u201cyes\u201d to approve; anything else is feedback",
+  "chat.planMode.awaiting": "Awaiting approval",
+  "chat.planMode.inactive": "No longer active",
   "chat.planMode.approve": "Approve & start",
+  "chat.planMode.approving": "Approving\u2026",
   "chat.planMode.approved": "Approved",
   "chat.planMode.submitFailed": "Failed to submit, please retry",
   "chat.planMode.executePrompt":

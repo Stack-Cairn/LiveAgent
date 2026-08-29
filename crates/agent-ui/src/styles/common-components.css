@@ -297,6 +297,60 @@
     @apply my-7 border-border/60;
   }
 
+  /* Plan markdown — 计划卡片正文按"规格文档"排版而非聊天正文:更紧的行距与
+     压平的标题层级,让整份计划尽量在一屏内读完再决定是否批准。 */
+  .chat-markdown.plan-markdown {
+    @apply text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
+  }
+  .chat-markdown.plan-markdown p {
+    @apply my-1.5 text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
+  }
+  /* 计划里的标题就是阶段分节,层级本身不携带额外信息:统一收成一档字号,
+     靠字重与分节线区分,不再有 text-xl/text-lg 的落差。 */
+  .chat-markdown.plan-markdown [data-streamdown^="heading-"] {
+    @apply mb-1.5 mt-4 text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[1.6] tracking-[0.01em] text-foreground;
+  }
+  .chat-markdown.plan-markdown [data-streamdown="heading-1"],
+  .chat-markdown.plan-markdown [data-streamdown="heading-2"] {
+    @apply text-[calc(13.5px*var(--zone-font-scale,1))];
+  }
+  /* 非首个分节标题上方补一条发丝线,把"进入下一阶段"这件事画出来。 */
+  .chat-markdown.plan-markdown > [data-streamdown="heading-1"]:not(:first-child),
+  .chat-markdown.plan-markdown > [data-streamdown="heading-2"]:not(:first-child) {
+    @apply border-t border-border/30 pt-3.5 dark:border-white/[0.06];
+  }
+  .chat-markdown.plan-markdown [data-streamdown="unordered-list"],
+  .chat-markdown.plan-markdown [data-streamdown="ordered-list"] {
+    @apply my-1.5 ml-0 space-y-1 pl-[1.15rem];
+  }
+  .chat-markdown.plan-markdown [data-streamdown="list-item"] {
+    @apply pl-0.5 text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
+  }
+  /* 项目符号压到 muted:状态色只在左侧脊出现一处,正文不参与表达状态。 */
+  .chat-markdown.plan-markdown [data-streamdown="list-item"]::marker {
+    @apply text-muted-foreground/55;
+  }
+  .chat-markdown.plan-markdown
+    [data-streamdown="ordered-list"]
+    > [data-streamdown="list-item"]::marker {
+    @apply font-medium tabular-nums text-muted-foreground;
+  }
+  .chat-markdown.plan-markdown [data-streamdown="inline-code"] {
+    @apply px-1 py-px text-[calc(12.5px*var(--zone-font-scale,1))];
+  }
+  .chat-markdown.plan-markdown [data-streamdown="code-block"] {
+    @apply my-2.5;
+  }
+  .chat-markdown.plan-markdown [data-streamdown="code-block-body"] {
+    @apply rounded-lg p-3 text-[calc(12px*var(--zone-font-scale,1))];
+  }
+  .chat-markdown.plan-markdown [data-streamdown="blockquote"] {
+    @apply my-2 border-l-2 border-border/50 pl-3 not-italic text-muted-foreground dark:border-white/[0.12];
+  }
+  .chat-markdown.plan-markdown [data-streamdown="horizontal-rule"] {
+    @apply my-3.5 border-border/35;
+  }
+
   /* First/last child margin reset */
   .chat-markdown > *:first-child,
   .chat-markdown > *:first-child > *:first-child {
