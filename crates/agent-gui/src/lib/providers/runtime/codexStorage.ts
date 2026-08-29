@@ -25,7 +25,11 @@ export function attachCodexResponsesStorage(
         }
       }
 
-      if (model.api === "openai-responses" && isRecord(nextPayload)) {
+      if (
+        model.api === "openai-responses" &&
+        options.transport !== "auto" &&
+        isRecord(nextPayload)
+      ) {
         return {
           ...nextPayload,
           store: true,

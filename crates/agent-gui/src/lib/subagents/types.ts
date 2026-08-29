@@ -1,4 +1,11 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type {
+  SubagentRuntimeFinishInput,
+  SubagentRuntimePatch,
+  SubagentRuntimeStartInput,
+} from "@liveagent/ui/lib/subagents/runtime";
+import type { ProviderRuntimeConfig } from "../providers/runtime/types";
+import type { ProviderId, ReasoningLevel } from "../settings";
 
 export const AGENT_TOOL_NAME = "Agent";
 export const SEND_MESSAGE_TOOL_NAME = "SendMessage";
@@ -37,6 +44,59 @@ export type SubagentSpec = {
   allowedOutputPaths: string[];
   resume: boolean;
   retainWorktree: boolean;
+  /** 覆盖父会话模型；undefined = 继承父会话。始终是同一个 provider。 */
+  model?: string;
+  /** 覆盖思考档位；undefined = 沿用该模型的默认档位。 */
+  reasoning?: ReasoningLevel;
+};
+
+/**
+ * Agent 工具可覆盖的模型/思考档位空间，由聊天层按当前 provider 装配。
+ * 缺省即不允许覆盖——子代理完全继承父会话，与本特性上线前行为一致。
+ *
+ * 之所以传能力对象而不是让校验层自己去查目录：模型清单与档位表都住在 settings
+ * 层，domain 层直接依赖它会把整个 settings 模块图拖进子代理的单元测试。
+ */
+/**
+ * 用户在设置里钉死的子代理模型。存在时 Agent 工具的 model/thinking 一律拒绝
+ * ——用户的选择是硬约束而非建议，否则「把机械活交给便宜模型」这个诉求就落不了地。
+ * providerId 可以与父会话不同（跨供应商钉选）。
+ */
+export type SubagentPinnedModel = {
+  providerId: ProviderId;
+  model: string;
+  reasoning?: ReasoningLevel;
+  runtime: ProviderRuntimeConfig;
+  /** 拒绝覆盖时回给模型的可读标签，例如 "gpt-5-mini · high"。 */
+  label: string;
+};
+
+export type SubagentModelOptions = {
+  /** 存在即钉死；此时下面三个字段不参与（模型不能自选）。 */
+  pinned?: SubagentPinnedModel;
+  /** 允许指定的模型 id（当前 provider 的启用模型）；空数组等同于不允许覆盖。 */
+  models: string[];
+  /**
+   * 某模型的合法思考档位全集，含 "off"（若该模型允许关闭思考）。
+   * 空数组表示该模型不支持调档。
+   */
+  thinkingLevelsFor: (model: string) => readonly ReasoningLevel[];
+  /**
+   * 按模型 + 档位派生 runtime。reasoning 为 undefined 时沿用该模型默认档位。
+   * 必须走 createProviderRuntimeConfig，否则 modelConfig 会停留在父模型的配置上。
+   */
+  createRuntime: (model: string, reasoning: ReasoningLevel | undefined) => ProviderRuntimeConfig;
+};
+
+/**
+ * 运行态上报出口。契约就是 @liveagent/ui 那份实时镜像的写入 API——刻意不在这里
+ * 另立一套形状，否则每加一个字段都要在两处对齐。domain 层只调这三个方法，不 import
+ * 镜像实现，因此无头场景（测试、gateway）传 undefined 即可完全旁路。
+ */
+export type SubagentActivitySink = {
+  start: (input: SubagentRuntimeStartInput) => void;
+  update: (runId: string, patch: SubagentRuntimePatch) => void;
+  finish: (runId: string, outcome: SubagentRuntimeFinishInput) => void;
 };
 
 export type SubagentTemplate = {

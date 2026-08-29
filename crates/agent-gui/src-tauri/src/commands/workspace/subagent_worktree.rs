@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use crate::runtime::process::configure_child_process_group;
@@ -12,6 +12,18 @@ use crate::runtime::process::configure_child_process_group;
 fn git_command(cwd: &Path) -> Command {
     let mut command = Command::new("git");
     command.current_dir(cwd);
+    // worktree 的全部操作（add / remove / status / diff / apply）都是纯本地的，既
+    // 不需要网络也不需要凭据。但 git 默认会在需要认证时弹终端提示或调起 Credential
+    // Manager 的 GUI，而这些调用跑在 spawn_blocking 里：没有 tty、无人应答，那次
+    // 调用就永久挂住 —— 前端 Promise 永不 settle，用户按 Stop 也救不回来（invoke
+    // 不接 AbortSignal）。全部显式禁掉，让这类情况立刻失败而不是悬停。
+    // GIT_OPTIONAL_LOCKS=0 同理：拿不到 index.lock 时直接跳过而不是等锁。
+    command
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_ASKPASS", "echo")
+        .env("SSH_ASKPASS", "echo")
+        .env("GCM_INTERACTIVE", "never")
+        .env("GIT_OPTIONAL_LOCKS", "0");
     configure_child_process_group(&mut command);
     command
 }
@@ -19,6 +31,23 @@ fn git_command(cwd: &Path) -> Command {
 const DEFAULT_MAX_DIFF_CHARS: usize = 20_000;
 const MAX_DIFF_CHARS: usize = 80_000;
 const CREATE_WORKTREE_MAX_ATTEMPTS: usize = 8;
+
+/// worktree 目录名的两段预算。sanitize_path_component 通用上限是 80 字符，对
+/// worktree 太长：目录名之外还要展开整个仓库的文件，Windows 未开长路径时
+/// `MAX_PATH` 只有 260。这里单独收紧，唯一性靠毫秒时间戳 + 随机后缀 + 8 次重试。
+const MAX_WORKTREE_LABEL_LEN: usize = 40;
+/// `unique_worktree_suffix()` 的长度上界：毫秒时间戳（现 13 位，留到 14）+ 分隔符
+/// + 8 位随机 hex。
+const WORKTREE_SUFFIX_MAX_LEN: usize = 23;
+/// worktree 根目录自身的字符上限，给仓库内相对路径留出余量。超限时 git 只会报
+/// 模糊的 "Filename too long"，所以前置拦下并给出可操作提示。
+#[cfg(windows)]
+const MAX_WORKTREE_ROOT_LEN: usize = 180;
+
+/// 单次 git 调用的硬上限。取值要容得下大仓库的 `worktree add`（检出整个工作树）
+/// 与全量 diff，同时短到用户不会以为应用死了。
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
+const GIT_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,11 +157,75 @@ pub struct SubagentWorktreeCleanupBatchResponse {
     pub items: Vec<SubagentWorktreeCleanupItem>,
 }
 
-fn run_git(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = git_command(cwd)
-        .args(args)
-        .output()
+/// 带硬超时的 `Command::output()` 替代。
+///
+/// 禁掉交互（见 `git_command`）已经消掉了绝大多数悬停，但 git 仍可能因为文件锁、
+/// 网络文件系统或防病毒扫描长时间不返回。调用方在 `spawn_blocking` 里，既不可取消
+/// 也没有上层超时，所以这里是唯一能兜住的地方：超时即杀进程组并返回可读错误。
+///
+/// 管道必须在等待期间持续读空：git 的 diff 输出可能远超管道缓冲，只 `try_wait()`
+/// 不读会让子进程写阻塞、双方僵死 —— 那正是我们要消除的情况。
+fn output_with_timeout(mut command: Command, label: &str) -> Result<Output, String> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|err| format!("failed to run git: {err}"))?;
+
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let stdout_reader = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(pipe) = stdout_pipe.as_mut() {
+            let _ = std::io::Read::read_to_end(pipe, &mut buffer);
+        }
+        buffer
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(pipe) = stderr_pipe.as_mut() {
+            let _ = std::io::Read::read_to_end(pipe, &mut buffer);
+        }
+        buffer
+    });
+
+    let deadline = Instant::now() + GIT_COMMAND_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "git {label} timed out after {}s and was terminated",
+                        GIT_COMMAND_TIMEOUT.as_secs()
+                    ));
+                }
+                std::thread::sleep(GIT_COMMAND_POLL_INTERVAL);
+            }
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("failed to wait for git: {err}"));
+            }
+        }
+    };
+
+    let stdout = stdout_reader.join().unwrap_or_default();
+    let stderr = stderr_reader.join().unwrap_or_default();
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn run_git(cwd: &Path, args: &[&str]) -> Result<String, String> {
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout(command, &args.join(" "))?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
@@ -149,10 +242,9 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 fn run_git_raw(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = git_command(cwd)
-        .args(args)
-        .output()
-        .map_err(|err| format!("failed to run git: {err}"))?;
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout(command, &args.join(" "))?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).to_string());
@@ -168,24 +260,86 @@ fn run_git_raw(cwd: &Path, args: &[&str]) -> Result<String, String> {
     })
 }
 
-fn run_git_with_input(cwd: &Path, args: &[&str], input: &str) -> Result<String, String> {
-    let mut child = git_command(cwd)
-        .args(args)
+/// `output_with_timeout` 的 stdin 版本：`git apply` 靠标准输入收补丁。
+///
+/// stdin 也必须在后台线程里写：补丁可能远超管道缓冲，而 git 只有在读完输入后才会
+/// 产出输出——主线程同步 `write_all` 会与子进程的写阻塞互锁。写完即关闭 stdin，
+/// 否则 git 等 EOF 永远不退出。
+fn output_with_timeout_stdin(
+    mut command: Command,
+    label: &str,
+    input: &str,
+) -> Result<Output, String> {
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("failed to run git: {err}"))?;
 
-    if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(input.as_bytes())
-            .map_err(|err| format!("failed to write git stdin: {err}"))?;
-    }
+    let mut stdin_pipe = child.stdin.take();
+    let payload = input.to_string();
+    let stdin_writer = std::thread::spawn(move || {
+        if let Some(mut pipe) = stdin_pipe.take() {
+            let _ = pipe.write_all(payload.as_bytes());
+            // drop 关闭管道 => git 收到 EOF。
+        }
+    });
 
-    let output = child
-        .wait_with_output()
-        .map_err(|err| format!("failed to wait for git: {err}"))?;
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let stdout_reader = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(pipe) = stdout_pipe.as_mut() {
+            let _ = std::io::Read::read_to_end(pipe, &mut buffer);
+        }
+        buffer
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(pipe) = stderr_pipe.as_mut() {
+            let _ = std::io::Read::read_to_end(pipe, &mut buffer);
+        }
+        buffer
+    });
+
+    let deadline = Instant::now() + GIT_COMMAND_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "git {label} timed out after {}s and was terminated",
+                        GIT_COMMAND_TIMEOUT.as_secs()
+                    ));
+                }
+                std::thread::sleep(GIT_COMMAND_POLL_INTERVAL);
+            }
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("failed to wait for git: {err}"));
+            }
+        }
+    };
+
+    let _ = stdin_writer.join();
+    let stdout = stdout_reader.join().unwrap_or_default();
+    let stderr = stderr_reader.join().unwrap_or_default();
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn run_git_with_input(cwd: &Path, args: &[&str], input: &str) -> Result<String, String> {
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout_stdin(command, &args.join(" "), input)?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
@@ -202,23 +356,9 @@ fn run_git_with_input(cwd: &Path, args: &[&str], input: &str) -> Result<String, 
 }
 
 fn run_git_with_input_output(cwd: &Path, args: &[&str], input: &str) -> Result<String, String> {
-    let mut child = git_command(cwd)
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| format!("failed to run git: {err}"))?;
-
-    if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(input.as_bytes())
-            .map_err(|err| format!("failed to write git stdin: {err}"))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|err| format!("failed to wait for git: {err}"))?;
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout_stdin(command, &args.join(" "), input)?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let combined = match (stdout.is_empty(), stderr.is_empty()) {
@@ -238,10 +378,10 @@ fn run_git_with_input_output(cwd: &Path, args: &[&str], input: &str) -> Result<S
 }
 
 fn run_git_owned_bytes(cwd: &Path, args: Vec<String>) -> Result<Vec<u8>, String> {
-    let output = git_command(cwd)
-        .args(args)
-        .output()
-        .map_err(|err| format!("failed to run git: {err}"))?;
+    let label = args.join(" ");
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout(command, &label)?;
 
     if output.status.success() {
         return Ok(output.stdout);
@@ -258,10 +398,10 @@ fn run_git_owned_bytes(cwd: &Path, args: Vec<String>) -> Result<Vec<u8>, String>
 }
 
 fn run_git_owned(cwd: &Path, args: Vec<String>) -> Result<String, String> {
-    let output = git_command(cwd)
-        .args(args)
-        .output()
-        .map_err(|err| format!("failed to run git: {err}"))?;
+    let label = args.join(" ");
+    let mut command = git_command(cwd);
+    command.args(args);
+    let output = output_with_timeout(command, &label)?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
@@ -284,7 +424,7 @@ fn canonicalize_git_path(cwd: &Path, raw: &str, label: &str) -> Result<PathBuf, 
     } else {
         cwd.join(path)
     };
-    fs::canonicalize(&absolute).map_err(|_| {
+    canonicalize_stripped(&absolute).map_err(|_| {
         format!(
             "{label} must resolve to an existing path: {}",
             display_path(&absolute)
@@ -301,7 +441,7 @@ fn canonicalize_existing_dir(input: &str, label: &str) -> Result<PathBuf, String
     if !path.is_absolute() {
         return Err(format!("{label} must be an absolute path: {raw}"));
     }
-    let canonical = fs::canonicalize(&path)
+    let canonical = canonicalize_stripped(&path)
         .map_err(|_| format!("{label} must be an existing directory: {raw}"))?;
     let metadata = fs::metadata(&canonical)
         .map_err(|_| format!("{label} must be an existing directory: {raw}"))?;
@@ -372,7 +512,10 @@ fn unix_millis() -> u128 {
 }
 
 fn unique_worktree_suffix() -> String {
-    format!("{}-{}", unix_millis(), Uuid::new_v4().simple())
+    // 只取 uuid 前 8 位 hex：完整 32 位会让目录名多占 24 个字符，而唯一性已由
+    // 毫秒时间戳 + 4G 随机空间 + 调用方 8 次碰撞重试三重保证。
+    let uuid = Uuid::new_v4().simple().to_string();
+    format!("{}-{}", unix_millis(), &uuid[..8])
 }
 
 fn is_worktree_name_collision(message: &str) -> bool {
@@ -381,6 +524,34 @@ fn is_worktree_name_collision(message: &str) -> bool {
         || lower.contains("already exists")
         || lower.contains("already checked out")
         || lower.contains("is a missing but already registered worktree")
+}
+
+/// Windows 的 `fs::canonicalize` 返回 verbatim 形式（`\\?\C:\…`）。Git for Windows
+/// 经 msys2 做路径转换，处理不了这个前缀——既不能作为 `worktree add` 的目标参数，
+/// 也不能作为 git 子进程的 cwd。所以必须在拿到 canonical 路径后立刻剥掉，让下游
+/// （git 参数、cwd、回传前端的 repoRoot/worktreeRoot/workdir）全是普通形式。
+///
+/// 同款剥前缀逻辑在 `services/skills/paths.rs::skill_root_display` 已有先例。
+fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let stripped: Option<String> = path.to_str().and_then(|raw| {
+            raw.strip_prefix(r"\\?\UNC\")
+                .map(|rest| format!(r"\\{rest}"))
+                .or_else(|| raw.strip_prefix(r"\\?\").map(str::to_string))
+        });
+        if let Some(stripped) = stripped {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
+/// 全模块唯一的 canonicalize 入口。必须统一走这里：worktree 路径既要作为 git 参数，
+/// 又要参与路径相等比较（cleanup 时用它排除自身），一旦有的剥了前缀有的没剥，
+/// 比较就会永远不相等。
+fn canonicalize_stripped(path: &Path) -> std::io::Result<PathBuf> {
+    fs::canonicalize(path).map(strip_verbatim_prefix)
 }
 
 fn display_path(path: &Path) -> String {
@@ -964,7 +1135,7 @@ fn cleanup_worktree_target_blocking(
         return item;
     }
 
-    let worktree_root = match fs::canonicalize(&raw_path) {
+    let worktree_root = match canonicalize_stripped(&raw_path) {
         Ok(path) => path,
         Err(err) => {
             item.error = Some(format!("failed to canonicalize worktreeRoot: {err}"));
@@ -987,7 +1158,10 @@ fn cleanup_worktree_target_blocking(
         .ok()
         .and_then(|paths| {
             paths.into_iter().find(|candidate| {
-                fs::canonicalize(candidate)
+                // 与 worktree_root 同一套形式才能比较：worktree_root 已剥 verbatim
+                // 前缀，这里若用裸 fs::canonicalize 就会因 `\\?\` 差异永远判不等，
+                // 把自身也当成「别的 worktree」选进去当 cwd。
+                canonicalize_stripped(candidate)
                     .map(|canonical| canonical != worktree_root)
                     .unwrap_or(false)
             })
@@ -1109,12 +1283,33 @@ pub async fn subagent_worktree_create(
             .and_then(|name| name.to_str())
             .map(|name| sanitize_path_component(name, "repo"))
             .unwrap_or_else(|| "repo".to_string());
-        let label = sanitize_path_component(label.as_deref().unwrap_or("agent"), "agent");
+        let label: String = sanitize_path_component(label.as_deref().unwrap_or("agent"), "agent")
+            .chars()
+            .take(MAX_WORKTREE_LABEL_LEN)
+            .collect();
         let target_parent = repo_root
             .parent()
             .unwrap_or(repo_root.as_path())
             .join(".liveagent-subagents")
             .join(&repo_name);
+
+        // 前置长度检查：只校验 worktree 根目录本身，仓库内的相对路径另有余量。
+        // 放在 create_dir_all 之前，避免为一个注定失败的路径建出空目录。
+        #[cfg(windows)]
+        {
+            let projected_len = display_path(&target_parent).chars().count()
+                + 1
+                + label.chars().count()
+                + 1
+                + WORKTREE_SUFFIX_MAX_LEN;
+            if projected_len > MAX_WORKTREE_ROOT_LEN {
+                return Err(format!(
+                    "delegated worktree path would be too long ({projected_len} chars, limit {MAX_WORKTREE_ROOT_LEN}): {}. Move the repository closer to the drive root, or enable long paths with `git config --global core.longpaths true`.",
+                    display_path(&target_parent)
+                ));
+            }
+        }
+
         fs::create_dir_all(&target_parent)
             .map_err(|err| format!("failed to create worktree parent: {err}"))?;
 
@@ -1154,7 +1349,7 @@ pub async fn subagent_worktree_create(
             })?
         };
 
-        let worktree_root = fs::canonicalize(&target)
+        let worktree_root = canonicalize_stripped(&target)
             .map_err(|err| format!("failed to canonicalize worktree: {err}"))?;
         let child_workdir = worktree_root.join(relative_workdir);
         let child_metadata = fs::metadata(&child_workdir).map_err(|_| {

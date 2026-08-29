@@ -1,3 +1,4 @@
+import type { ReasoningLevel } from "../settings";
 import { issue, type SubagentIssue } from "./errors";
 import {
   DEFAULT_CONCURRENCY,
@@ -8,10 +9,22 @@ import {
   type SubagentApplyPolicy,
   type SubagentIdentity,
   type SubagentMode,
+  type SubagentModelOptions,
   type SubagentSpec,
   type SubagentTemplate,
 } from "./types";
 import { asObject, clampInteger, optionalString } from "./utils";
+
+/** 校验只需要可选空间，不需要 runtime 派生能力。 */
+export type SubagentModelValidationOptions = Pick<
+  SubagentModelOptions,
+  "models" | "thinkingLevelsFor"
+> & {
+  /** 父会话模型；未指定 model 时思考档位按它校验。 */
+  parentModel: string;
+  /** 用户已在设置里钉死子代理模型时的可读标签；置位则一切覆盖都被拒绝。 */
+  pinnedLabel?: string;
+};
 
 export type ResolvedSubagentSpec = {
   spec: SubagentSpec;
@@ -53,6 +66,8 @@ const KNOWN_AGENT_KEYS = new Set([
   "allowed_output_paths",
   "resume",
   "retain_worktree",
+  "model",
+  "thinking",
 ]);
 
 const MODES = new Set<SubagentMode>(["readonly", "worktree"]);
@@ -104,6 +119,94 @@ function parsePathList(
   return paths;
 }
 
+function describeAllowed(values: readonly string[]) {
+  return values.length > 0 ? values.join(", ") : "(none)";
+}
+
+/**
+ * 解析 model / thinking 覆盖。两者都是可选的；任一被指定但当前运行时没有可选
+ * 空间（modelOptions 缺省）时报错而非静默忽略——静默忽略会让模型以为自己成功
+ * 指定了一个更强的模型，然后拿着错误的预期去分派任务。
+ */
+function parseModelOverrides(params: {
+  entry: Record<string, unknown>;
+  agentRef: string;
+  modelOptions?: SubagentModelValidationOptions;
+  issues: SubagentIssue[];
+}): { model?: string; reasoning?: ReasoningLevel } {
+  const { entry, agentRef, modelOptions, issues } = params;
+  const rawModel = optionalString(entry.model);
+  const rawThinking = optionalString(entry.thinking);
+  if (!rawModel && !rawThinking) return {};
+
+  if (modelOptions?.pinnedLabel) {
+    // 告诉模型「谁定的」，它才不会换个写法再试一次。
+    issues.push(
+      issue(
+        "invalid_arguments",
+        `The user pinned every subagent to ${modelOptions.pinnedLabel} in settings; model/thinking cannot be overridden. Retry with both fields omitted.`,
+        agentRef,
+      ),
+    );
+    return {};
+  }
+
+  if (!modelOptions || modelOptions.models.length === 0) {
+    issues.push(
+      issue(
+        "invalid_arguments",
+        "model/thinking overrides are not available in this runtime; omit both fields so the subagent inherits the parent conversation's model.",
+        agentRef,
+      ),
+    );
+    return {};
+  }
+
+  let model: string | undefined;
+  if (rawModel) {
+    if (!modelOptions.models.includes(rawModel)) {
+      issues.push(
+        issue(
+          "invalid_arguments",
+          `Unknown model "${rawModel}". Subagents run on the parent conversation's provider; allowed models: ${describeAllowed(modelOptions.models)}.`,
+          agentRef,
+        ),
+      );
+    } else {
+      model = rawModel;
+    }
+  }
+
+  let reasoning: ReasoningLevel | undefined;
+  if (rawThinking) {
+    // 档位合法性按**生效模型**判定：指定了 model 就按新模型查，否则按父模型查。
+    // 用父模型的档位表去校验另一个模型的请求会一路放过再在请求期被 clamp。
+    const effectiveModel = model ?? rawModel ?? modelOptions.parentModel;
+    const levels = modelOptions.thinkingLevelsFor(effectiveModel);
+    if (levels.length === 0) {
+      issues.push(
+        issue(
+          "invalid_arguments",
+          `Model "${effectiveModel}" does not expose thinking levels; omit thinking.`,
+          agentRef,
+        ),
+      );
+    } else if (!levels.includes(rawThinking as ReasoningLevel)) {
+      issues.push(
+        issue(
+          "invalid_arguments",
+          `thinking must be one of ${describeAllowed(levels)} for model "${effectiveModel}"; got "${rawThinking}".`,
+          agentRef,
+        ),
+      );
+    } else {
+      reasoning = rawThinking as ReasoningLevel;
+    }
+  }
+
+  return { ...(model ? { model } : {}), ...(reasoning ? { reasoning } : {}) };
+}
+
 function conflictFields(params: {
   identity: SubagentIdentity;
   name?: string;
@@ -139,6 +242,8 @@ export function parseSubagentBatch(
     templates: SubagentTemplate[];
     /** Plan mode:强制一切子代理 readonly(worktree 请求成为错误而非静默降级)。 */
     forceReadonly?: boolean;
+    /** 缺省表示不允许 model/thinking 覆盖。 */
+    modelOptions?: SubagentModelValidationOptions;
   },
 ): ParseBatchResult {
   const issues: SubagentIssue[] = [];
@@ -350,6 +455,12 @@ export function parseSubagentBatch(
     const resume = parseOptionalBoolean(entry.resume, "resume", agentRef, issues) ?? true;
     const retainWorktree =
       parseOptionalBoolean(entry.retain_worktree, "retain_worktree", agentRef, issues) ?? false;
+    const overrides = parseModelOverrides({
+      entry,
+      agentRef,
+      modelOptions: options.modelOptions,
+      issues,
+    });
 
     resolved.push({
       spec: {
@@ -364,6 +475,7 @@ export function parseSubagentBatch(
         allowedOutputPaths,
         resume,
         retainWorktree,
+        ...overrides,
       },
       existingIdentity,
       template,

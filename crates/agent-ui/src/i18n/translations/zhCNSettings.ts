@@ -229,6 +229,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerUseSystemProxy": "使用应用代理",
   "settings.providerUseSystemProxyDesc":
     "该供应商的模型请求经应用代理出网；应用代理未启用时保持直连。",
+  "settings.providerWebSocket": "启用 WebSocket",
+  "settings.providerWebSocketDesc":
+    "仅对 Responses 请求格式生效。开启后优先用 WebSocket 建流，首个内容产生前失败时自动回退 SSE 并说明原因。若经 CPA 等中转，还需在中转侧为该凭证开启 WebSocket，否则中转到上游仍是 SSE。",
   "settings.providerStreamRetry": "流式重试",
   "settings.providerStreamRetryDesc": "连接中断且尚未输出内容时自动重连的次数。",
   "settings.providerStreamRetryDefault": "默认",
@@ -476,6 +479,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.reasoning.high": "高",
   "settings.reasoning.xhigh": "极高",
   "settings.reasoning.max": "最高",
+  "settings.subagentModelGroup": "子代理",
+  "settings.subagentModel": "子代理模型",
+  "settings.subagentModelDesc":
+    "指定所有子代理使用的模型，可以选别家供应商。选定后子代理不能再自行换模型；保持「跟随主会话」则由主模型按任务自行挑选。",
+  "settings.subagentModelFollowParent": "跟随主会话",
+  "settings.subagentReasoningDesc": "固定所有子代理的思考强度。",
+  "settings.subagentReasoningModelDefault": "模型默认",
   "settings.promptCaching": "Prompt 缓存",
   "settings.promptCachingDescClaude": "在请求上标注 ephemeral 缓存断点，长会话可显著降低输入费用。",
   "settings.promptCachingDescCodex":

@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Bot,
   Check,
   Copy,
   FileText,
@@ -27,6 +28,12 @@ import {
 } from "../../lib/managed-process/store";
 import type { ManagedProcessLog, ManagedProcessRecord } from "../../lib/managed-process/types";
 import { cn } from "../../lib/shared/utils";
+import {
+  clearFinishedSubagentRuntimeRuns,
+  type SubagentRuntimeRun,
+  stopSubagentRuntimeRun,
+  useSubagentRuntimeRuns,
+} from "../../lib/subagents/runtime";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -314,6 +321,141 @@ function BackgroundTaskLogDialog(props: {
   );
 }
 
+const SUBAGENT_PHASE_KEYS: Record<SubagentRuntimeRun["phase"], string> = {
+  queued: "projectTools.subagentPhaseQueued",
+  provisioning: "projectTools.subagentPhaseProvisioning",
+  running: "projectTools.subagentPhaseRunning",
+  settling: "projectTools.subagentPhaseSettling",
+  finished: "projectTools.subagentPhaseFinished",
+};
+
+const SUBAGENT_STATUS_KEYS = {
+  completed: "projectTools.subagentStatusCompleted",
+  failed: "projectTools.subagentStatusFailed",
+  cancelled: "projectTools.subagentStatusCancelled",
+} as const;
+
+function subagentDotClass(run: SubagentRuntimeRun) {
+  if (run.phase !== "finished") {
+    // 停止请求已发出但还没收敛：用琥珀色把这个中间态显式画出来，否则用户会以为
+    // 按钮没生效而反复点。
+    return run.stopRequested ? "bg-amber-500" : "bg-emerald-500";
+  }
+  if (run.status === "completed") return "bg-emerald-600/60";
+  if (run.status === "failed") return "bg-destructive";
+  return "bg-muted-foreground/50";
+}
+
+function SubagentTaskRow(props: { run: SubagentRuntimeRun; now: number }) {
+  const { run, now } = props;
+  const { t } = useLocale();
+  const [pendingStop, setPendingStop] = useState(false);
+  const active = run.phase !== "finished";
+
+  useEffect(() => {
+    if (!pendingStop) return;
+    const timer = window.setTimeout(() => setPendingStop(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [pendingStop]);
+
+  const handleStop = useCallback(() => {
+    if (!pendingStop) {
+      setPendingStop(true);
+      return;
+    }
+    setPendingStop(false);
+    stopSubagentRuntimeRun(run.runId);
+  }, [pendingStop, run.runId]);
+
+  const phaseLabel = active
+    ? t(SUBAGENT_PHASE_KEYS[run.phase])
+    : t(SUBAGENT_STATUS_KEYS[run.status ?? "cancelled"]);
+  const elapsed = formatUptime(run.startedAt, active ? now : (run.endedAt ?? run.startedAt));
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={cn("h-1.5 w-1.5 shrink-0 rounded-full", subagentDotClass(run))}
+        />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+          {run.name || run.agentId}
+        </span>
+        <span className="shrink-0 rounded bg-muted px-1 py-px text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground">
+          {run.mode === "worktree"
+            ? t("projectTools.subagentModeWorktree")
+            : t("projectTools.subagentModeReadonly")}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+        <span className="shrink-0">{phaseLabel}</span>
+        <span className="shrink-0 tabular-nums">{elapsed}</span>
+        <span className="shrink-0 tabular-nums">
+          {t("projectTools.subagentProgress")
+            .replace("{rounds}", String(run.rounds))
+            .replace("{tools}", String(run.toolCalls))}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70">
+        <span className="min-w-0 truncate" title={run.model}>
+          {run.model}
+        </span>
+        {run.reasoning ? (
+          <span className="shrink-0">
+            {run.reasoning === "off"
+              ? t("projectTools.subagentThinkingOff")
+              : t("projectTools.subagentThinking").replace("{level}", run.reasoning)}
+          </span>
+        ) : null}
+      </div>
+      {/* 活动行是「没卡死」的核心证据（「第 N 轮：模型生成中...」/「正在执行：…」）,
+          所以给它整行宽度而不是挤在元信息里。 */}
+      {active && run.statusText ? (
+        <div
+          className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] text-foreground/80"
+          title={run.statusText}
+        >
+          {run.statusText}
+        </div>
+      ) : null}
+      {run.error ? (
+        <div className="min-w-0 break-words text-[calc(11px*var(--zone-font-scale,1))] text-destructive">
+          {run.error}
+        </div>
+      ) : null}
+      {active && run.stoppable ? (
+        <div className="flex flex-wrap items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={run.stopRequested}
+            className={cn(
+              ROW_ACTION_CLASS,
+              pendingStop && "bg-destructive/10 text-destructive hover:text-destructive",
+            )}
+            onClick={handleStop}
+          >
+            {run.stopRequested ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : pendingStop ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Square className="h-3 w-3" />
+            )}
+            {run.stopRequested
+              ? t("projectTools.subagentStopping")
+              : pendingStop
+                ? t("projectTools.bgTaskStopConfirm")
+                : t("projectTools.bgTaskStop")}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function BackgroundTaskRow(props: {
   process: ManagedProcessRecord;
   now: number;
@@ -484,10 +626,13 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
   const { active = true } = props;
   const { t } = useLocale();
   const state = useManagedProcesses();
+  const subagentRuns = useSubagentRuntimeRuns();
   const [now, setNow] = useState(() => Date.now());
   const [logProcess, setLogProcess] = useState<ManagedProcessRecord | null>(null);
-  const hasRunning = state.processes.some((process) => process.running);
+  const subagentsActive = subagentRuns.some((run) => run.phase !== "finished");
+  const hasRunning = state.processes.some((process) => process.running) || subagentsActive;
   const hasFinished = state.processes.some((process) => !process.running);
+  const hasFinishedSubagents = subagentRuns.some((run) => run.phase === "finished");
   const actionsDisabled = !state.agentOnline;
 
   useEffect(() => {
@@ -558,7 +703,39 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
         </Button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-1">
-        {state.processes.length === 0 ? (
+        {/* 子代理区块置顶：它是短寿命的、需要盯着的东西；托管进程往往常驻，
+            后看无妨。两个区块的空态合并判断，避免只有子代理在跑时还显示「无任务」。 */}
+        {subagentRuns.length > 0 ? (
+          <>
+            <div className="flex items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+              <Bot className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{t("projectTools.subagentsTitle")}</span>
+              {hasFinishedSubagents ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={ROW_ACTION_CLASS}
+                  onClick={clearFinishedSubagentRuntimeRuns}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {t("projectTools.bgTaskClearFinished")}
+                </Button>
+              ) : null}
+            </div>
+            {subagentRuns.map((run) => (
+              <SubagentTaskRow key={run.runId} run={run} now={now} />
+            ))}
+            {state.processes.length > 0 ? (
+              <div className="mt-1 flex items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">
+                  {t("projectTools.backgroundProcessesTitle")}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        {state.processes.length === 0 && subagentRuns.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             {t("projectTools.bgTaskEmpty")}
           </div>

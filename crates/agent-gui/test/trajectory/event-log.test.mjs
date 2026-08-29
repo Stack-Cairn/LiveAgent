@@ -423,6 +423,27 @@ test("without liveIdentities the legacy behavior is unchanged", () => {
   assert.equal(ledger.standaloneCompactions[0].status, "running");
 });
 
+test("explicit error and aborted terminal statuses survive empty live convergence", () => {
+  const ledger = buildTrajectoryLedger(
+    [
+      { k: "user", t: 1, at: BASE },
+      { k: "step_start", t: 1, s: 1, at: BASE + 1 },
+      { k: "step_end", t: 1, s: 1, at: BASE + 2, st: "error", err: "provider failed" },
+      { k: "turn_end", t: 1, at: BASE + 3, st: "error", err: "provider failed" },
+      { k: "user", t: 2, at: BASE + 10 },
+      { k: "step_start", t: 2, s: 1, at: BASE + 11 },
+      { k: "step_end", t: 2, s: 1, at: BASE + 12, st: "aborted" },
+      { k: "turn_end", t: 2, at: BASE + 13, st: "aborted" },
+    ],
+    { liveIdentities: trajectoryLiveEventIdentities([]) },
+  );
+
+  assert.equal(ledger.turns.find((turn) => turn.turn === 1).status, "error");
+  assert.equal(ledger.turns.find((turn) => turn.turn === 1).steps[0].status, "error");
+  assert.equal(ledger.turns.find((turn) => turn.turn === 2).status, "aborted");
+  assert.equal(ledger.turns.find((turn) => turn.turn === 2).steps[0].status, "aborted");
+});
+
 test("mergeTrajectoryEventWindows dedups by convergence identity and keeps enriched copies", () => {
   const enriched = { k: "user", t: 1, at: BASE, mi: 0, id: "u-1", tx: "hi" };
   const legacy = { k: "user", t: 1, at: BASE, mi: 0, tx: "hi" };

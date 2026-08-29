@@ -8,6 +8,11 @@ import type {
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import {
+  finishSubagentRuntimeRun,
+  startSubagentRuntimeRun,
+  updateSubagentRuntimeRun,
+} from "@liveagent/ui/lib/subagents/runtime";
+import {
   composeTrajectorySystemPrompt,
   serializeToolCatalog,
 } from "@liveagent/ui/lib/trajectory/sections";
@@ -80,6 +85,7 @@ import {
   renderMessageBusSnapshot,
   SUBAGENT_PARENT_ID,
   type SubagentConversationStore,
+  type SubagentModelOptions,
   type SubagentTemplate,
 } from "../../../lib/subagents";
 import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
@@ -330,6 +336,11 @@ export type RunAgentConversationTurnParams = {
   hookLifecycle: ConversationHookLifecycle;
   conversationDebugLogger: StreamDebugLogger;
   subagentStore?: SubagentConversationStore;
+  /**
+   * Agent 工具的 model/thinking 可选空间。只有聊天层能看见 CustomProvider，
+   * 所以这份能力从发送链路装配后透传下来；缺省即子代理完全继承父会话模型。
+   */
+  subagentModelOptions?: SubagentModelOptions;
   getNextConversationState: () => ConversationViewState;
   applyConversationState: (state: ConversationViewState) => void;
   buildPreparedContext: (
@@ -419,6 +430,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     hookLifecycle,
     conversationDebugLogger,
     subagentStore,
+    subagentModelOptions,
     getNextConversationState,
     applyConversationState,
     buildPreparedContext,
@@ -663,6 +675,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           templates: enabledSubagentTemplates(agentTemplates),
           store: subagentStore,
           scheduler: subagentScheduler,
+          modelOptions: subagentModelOptions,
+          // 实时镜像的写入 API 就是 sink 契约本身，无需适配层。
+          activity: {
+            start: startSubagentRuntimeRun,
+            update: updateSubagentRuntimeRun,
+            finish: finishSubagentRuntimeRun,
+          },
         }
       : undefined,
   });

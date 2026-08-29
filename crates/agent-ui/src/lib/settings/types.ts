@@ -159,6 +159,20 @@ export type CustomSettings = {
   // the current conversation model"; a stored selection whose provider/model
   // is no longer active normalizes back to unset, restoring that fallback.
   commitMessageModel?: SelectedModel;
+  /**
+   * Model every delegated subagent runs on. Unset means "follow the parent
+   * conversation", which is also the only mode where the Agent tool may pick a
+   * per-agent model itself. A stored selection here is a hard pin, not a hint:
+   * delegating cheap mechanical work to a cheap model is the whole point, and a
+   * model that could override the pin would defeat it.
+   *
+   * May point at a different provider than the conversation — running the main
+   * thread on an expensive model while subagents burn a cheap one is a first
+   * class use case.
+   */
+  subagentModel?: SelectedModel;
+  /** Reasoning effort for the pinned subagent model; unset = that model's default. */
+  subagentReasoning?: ReasoningLevel;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -565,6 +579,8 @@ export type CustomProvider = {
   modelOrder?: string[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
+  /** 仅 Codex Responses：优先通过 WebSocket 请求，连接失败时回退到 SSE。 */
+  enableWebSocket?: boolean;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
   /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */

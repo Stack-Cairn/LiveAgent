@@ -10,7 +10,10 @@ import {
 import {
   type ExecutionMode,
   type FontScaleSettings,
+  getChatRuntimeReasoningLevelsForProvider,
+  isThinkingAlwaysOnForModel,
   isValidSystemProxyHost,
+  type ReasoningLevel,
   type SystemProxyConfig,
   type SystemProxyType,
   THEME_OPTIONS,
@@ -40,7 +43,10 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { type Locale, SUPPORTED_LOCALES, useLocale } from "@liveagent/ui/i18n/index";
+import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
 import {
   AgentActivationSwitch,
   SettingsChoiceRow,
@@ -133,6 +139,119 @@ function ProxySettingsRow({
         {switchControl}
       </div>
     </div>
+  );
+}
+
+/** Select 不接受空串作为值，用一个哨兵表示「用模型默认档位」。 */
+const MODEL_DEFAULT_REASONING_VALUE = "__model_default__";
+
+/**
+ * 子代理模型钉选。选中一个模型后，该模型对**所有**子代理生效，Agent 工具不再
+ * 被允许自行指定 per-agent 模型——「把机械活交给便宜模型」需要的是硬约束，能被
+ * 模型覆盖的设置等于没设。留在「跟随主会话」时，模型可以按任务自行挑选。
+ *
+ * 允许钉到另一家供应商：主会话贵模型 + 子代理便宜模型是常见组合。
+ */
+function SubagentModelGroup(props: SettingsSectionProps) {
+  const { settings, setSettings } = props;
+  const { t } = useLocale();
+  const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  const pinned = settings.customSettings.subagentModel;
+  const pinnedValue = pinned ? toModelValue(pinned.customProviderId, pinned.model) : "";
+  // 存量选择已不在 activeModels 里时补一条兜底项，仍显示为已选（与
+  // CustomSettingsModelField 同策略），否则用户会以为设置被悄悄清空了。
+  const options =
+    pinned && !modelOptions.some((option) => option.value === pinnedValue)
+      ? [
+          ...modelOptions,
+          { value: pinnedValue, label: pinned.model, providerName: pinned.customProviderId },
+        ]
+      : modelOptions;
+
+  const pinnedProvider = pinned
+    ? settings.customProviders.find((item) => item.id === pinned.customProviderId)
+    : undefined;
+  const thinkingLevels = pinnedProvider
+    ? getChatRuntimeReasoningLevelsForProvider({
+        providerId: pinnedProvider.type,
+        requestFormat: pinnedProvider.requestFormat,
+        modelId: pinned?.model,
+      })
+    : [];
+  const thinkingAlwaysOn =
+    pinnedProvider && pinned
+      ? isThinkingAlwaysOnForModel(pinnedProvider.type, pinned.model)
+      : false;
+  const reasoning = settings.customSettings.subagentReasoning;
+
+  return (
+    <SettingsGroup title={t("settings.subagentModelGroup")}>
+      <div>
+        <SettingsRow
+          title={t("settings.subagentModel")}
+          description={t("settings.subagentModelDesc")}
+          control={
+            <ModelPicker
+              options={options}
+              value={pinnedValue}
+              onChange={(value) =>
+                setSettings((prev) =>
+                  updateCustomSettings(prev, {
+                    subagentModel: parseModelValue(value) ?? undefined,
+                    // 换模型（或清空）时丢掉旧档位：档位表是按模型算的，
+                    // 留着会把上一个模型的档位套到新模型头上。
+                    subagentReasoning: undefined,
+                  }),
+                )
+              }
+              placeholder={t("settings.subagentModelFollowParent")}
+              noneLabel={t("settings.subagentModelFollowParent")}
+              ariaLabel={t("settings.subagentModel")}
+              triggerClassName="h-8 w-fit max-w-[260px] rounded-lg border-border/65 bg-background text-[13px]"
+            />
+          }
+        />
+        {pinned && thinkingLevels.length > 0 ? (
+          <SettingsRow
+            title={t("settings.reasoning")}
+            description={t("settings.subagentReasoningDesc")}
+            control={
+              <Select
+                value={reasoning ?? MODEL_DEFAULT_REASONING_VALUE}
+                onValueChange={(next) =>
+                  setSettings((prev) =>
+                    updateCustomSettings(prev, {
+                      subagentReasoning:
+                        next === MODEL_DEFAULT_REASONING_VALUE
+                          ? undefined
+                          : (next as ReasoningLevel),
+                    }),
+                  )
+                }
+              >
+                <SettingsSelectTrigger>
+                  <SelectValue />
+                </SettingsSelectTrigger>
+                <SettingsSelectContent>
+                  <SelectItem value={MODEL_DEFAULT_REASONING_VALUE}>
+                    {t("settings.subagentReasoningModelDefault")}
+                  </SelectItem>
+                  {/* 「思考恒开」的模型（如 xAI）不给关闭项：wire 上表达不出 off。 */}
+                  {thinkingAlwaysOn ? null : (
+                    <SelectItem value="off">{t("settings.reasoning.off")}</SelectItem>
+                  )}
+                  {thinkingLevels.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {t(`settings.reasoning.${level}`)}
+                    </SelectItem>
+                  ))}
+                </SettingsSelectContent>
+              </Select>
+            }
+          />
+        ) : null}
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -436,6 +555,8 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           />
         </div>
       </SettingsGroup>
+
+      <SubagentModelGroup settings={settings} setSettings={setSettings} />
 
       <SettingsGroup title={t("settings.systemProxy")}>
         <div>

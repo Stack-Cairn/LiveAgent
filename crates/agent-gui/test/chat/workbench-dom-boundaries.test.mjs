@@ -45,6 +45,10 @@ const conversationPaneHostSource = readFileSync(
   new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
   "utf8",
 );
+const trajectoryViewSource = readFileSync(
+  new URL("../../../agent-ui/src/components/trajectory/TrajectoryView.tsx", import.meta.url),
+  "utf8",
+);
 const conversationPaneEnvironmentSource = readFileSync(
   new URL(
     "../../src/pages/chat/surfaces/ConversationPaneHostEnvironment.tsx",
@@ -155,6 +159,12 @@ test("multi-pane conversation panes reveal trajectory and close controls togethe
   assert.match(chatPageSource, /viewForConversation\(conversationId\) === "trajectory"/);
   assert.match(chatPageSource, /active: paneTrajectoryActive/);
   assert.match(chatPageSource, /<ConversationTrajectorySurface/);
+  assert.match(chatPageSource, /liveRunActive=\{isSending \|\| isConversationRunning\(currentConversationId\)\}/);
+  assert.match(chatPageSource, /liveRunActive=\{paneIsRunning\}/);
+  assert.match(
+    trajectoryViewSource,
+    /props\.liveOwnership === "authoritative" && props\.liveRunActive === false/,
+  );
   assert.match(conversationPaneHostSource, /trajectory\?\.renderContent\(snapshot\)/);
 });
 

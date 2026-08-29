@@ -46,6 +46,7 @@ import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
+import { dropSubagentRuntimeRunsForConversation } from "@liveagent/ui/lib/subagents/runtime";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
@@ -1070,6 +1071,7 @@ export function ChatPage(props: ChatPageProps) {
         onPruneConversation: (conversationId) => {
           deleteConversationLocalCaches(conversationId);
           subagentStoresRef.current.dispose(conversationId);
+          dropSubagentRuntimeRunsForConversation(conversationId);
           cancelConversationTransientInteractions(conversationId);
         },
       });
@@ -1141,6 +1143,9 @@ export function ChatPage(props: ChatPageProps) {
     deleteConversationArtifacts: deleteConversationLocalCaches,
     disposeSubagentsForConversation: (conversationId) => {
       subagentStoresRef.current.dispose(conversationId);
+      // 会话的产物正在消失，运行态镜像里属于它的行随之失去意义。切换会话不走这里
+      // ——那时运行可能还在跑，抹掉就等于把用户正在观察的进度藏起来。
+      dropSubagentRuntimeRunsForConversation(conversationId);
     },
     cancelConversationTransientInteractions,
     cancelPlanDecisionsForConversation: (conversationId) => {
@@ -2110,6 +2115,7 @@ export function ChatPage(props: ChatPageProps) {
           workdir={displayedConversationWorkdir}
           hasMoreMessages={conversationState.transcript.hasMoreBefore}
           loadEarlierMessages={handleLoadEarlierHistory}
+          liveRunActive={isSending || isConversationRunning(currentConversationId)}
         />
       ),
     },
@@ -2959,6 +2965,7 @@ export function ChatPage(props: ChatPageProps) {
             workdir={workspaceRoot}
             hasMoreMessages={snapshot.runtime?.state.transcript.hasMoreBefore ?? false}
             loadEarlierMessages={() => loadEarlierHistoryActionRef.current(conversationId)}
+            liveRunActive={paneIsRunning}
           />
         ),
       },

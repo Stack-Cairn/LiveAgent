@@ -80,6 +80,29 @@ export type SubagentRunRequest = {
   index: number;
   total: number;
   signal?: AbortSignal;
+  /**
+   * 由调用方预生成的 run id。buildSubagentRunId 带随机后缀，让本函数自己生成会
+   * 使调用方在失败路径上报告一个从未存在过的 id，也无法把运行态镜像/停止句柄
+   * 对上号。缺省时退回自生成，保持既有调用方可用。
+   */
+  runId?: string;
+  /**
+   * 覆盖后的供应商/模型/runtime；缺省沿用 env 的父会话取值。providerId 会变是
+   * 因为用户可以把子代理钉到另一家供应商上。
+   */
+  providerId?: ProviderId;
+  model?: string;
+  runtime?: ProviderRuntimeConfig;
+  /** 运行态推进回调（每个子代理各自一份，无需再传 runId）。 */
+  onProgress?: (patch: SubagentRunProgressPatch) => void;
+};
+
+/** run.ts 向外吐的运行态增量；字段与实时镜像的 patch 同形。 */
+export type SubagentRunProgressPatch = {
+  phase?: "queued" | "provisioning" | "running" | "settling" | "finished";
+  statusText?: string | null;
+  rounds?: number;
+  toolCalls?: number;
 };
 
 export function buildSubagentRunId(parentToolCallId: string, agentId: string, index: number) {
@@ -120,6 +143,18 @@ export async function executeSubagentRun(
   const { spec, template, signal } = request;
   const startedAt = Date.now();
   const persistenceEnabled = Boolean(env.store.conversationId);
+  // 生效的模型/runtime：spec 覆盖优先，否则继承父会话。落盘的 run summary 记录
+  // 的是生效值，这样恢复该 agent 时不会莫名换回父模型。
+  const runProviderId = request.providerId ?? env.providerId;
+  const runModel = request.model ?? env.model;
+  const runRuntime = request.runtime ?? env.runtime;
+  const progress = request.onProgress;
+  // 状态行有两个消费者：整轮共享的工具状态行（env.onStatus）和这个子代理自己的
+  // 运行态镜像。并行批次里前者会被兄弟代理互相覆盖，后者才是 per-agent 的真相。
+  const setStatus = (status: string | null) => {
+    env.onStatus?.(status);
+    progress?.({ statusText: status });
+  };
 
   // ---- provision: identity ------------------------------------------------
   let identity =
@@ -136,7 +171,8 @@ export async function executeSubagentRun(
     identity = { ...identity, lastMode: spec.mode };
   }
 
-  const runId = buildSubagentRunId(request.parentToolCallId, spec.id, request.index);
+  const runId =
+    request.runId?.trim() || buildSubagentRunId(request.parentToolCallId, spec.id, request.index);
   const existingRunSummary = spec.resume ? env.store.getLatestRun(spec.id) : undefined;
   const subagentSessionId = env.sessionId
     ? (existingRunSummary?.sessionId ??
@@ -194,8 +230,8 @@ export async function executeSubagentRun(
       prompt: spec.prompt,
       mode: spec.mode,
       status,
-      providerId: env.providerId,
-      model: env.model,
+      providerId: runProviderId,
+      model: runModel,
       sessionId: subagentSessionId,
       workdir: childWorkdir,
       worktreeRoot: worktree?.worktreeRoot,
@@ -314,9 +350,17 @@ export async function executeSubagentRun(
   };
 
   const settleWorktree = async (terminal: "completed" | "failed" | "cancelled") => {
-    if (!worktree) return;
+    if (!worktree) {
+      // worktree 从未建成（含 create 本身失败）：provision 阶段设过状态行，而本
+      // 函数末尾的清理在这条 early return 之后，够不到。不在这里摘掉的话，UI 会
+      // 一直停在「Creating isolated worktree…」直到整轮结束由 clearToolStatus
+      // 兜底——子代理其实早已失败返回，看起来却像挂死。
+      setStatus(null);
+      return;
+    }
+    progress?.({ phase: "settling" });
     const worktreeRoot = worktree.worktreeRoot;
-    env.onStatus?.(`Inspecting worktree changes for ${identity.name}…`);
+    setStatus(`Inspecting worktree changes for ${identity.name}…`);
     await fetchWorktreeStatus();
 
     const agentSucceeded = terminal === "completed";
@@ -329,7 +373,7 @@ export async function executeSubagentRun(
         candidateArtifacts = applyDecision.candidateArtifacts;
       }
       if (worktreeStatus?.changed && applyDecision?.shouldApply) {
-        env.onStatus?.(`Applying worktree changes from ${identity.name}…`);
+        setStatus(`Applying worktree changes from ${identity.name}…`);
         try {
           const applyResult = await env.enqueueWorktreeApply(() =>
             env.worktree.apply({
@@ -378,7 +422,7 @@ export async function executeSubagentRun(
       : { shouldCleanup: false, reason: applySkippedReason ?? "agent_failed" };
     worktreeCleanupReason = cleanupDecision.reason;
     if (cleanupDecision.shouldCleanup) {
-      env.onStatus?.(`Cleaning up worktree for ${identity.name}…`);
+      setStatus(`Cleaning up worktree for ${identity.name}…`);
       try {
         const cleanupResult = await env.worktree.cleanup({
           worktreeRoot: worktree.worktreeRoot,
@@ -401,7 +445,7 @@ export async function executeSubagentRun(
     } else {
       worktreeCleanupStatus = "retained";
     }
-    env.onStatus?.(null);
+    setStatus(null);
   };
 
   // ---- provision: persist identity ----------------------------------------
@@ -422,6 +466,7 @@ export async function executeSubagentRun(
 
   try {
     // ---- provision: tools / worktree ---------------------------------------
+    progress?.({ phase: "provisioning" });
     let childTools: Tool[];
     let childExecute: ChildToolExecutor;
     if (spec.mode === "worktree") {
@@ -430,17 +475,22 @@ export async function executeSubagentRun(
           "worktree_unavailable: Agent mode=worktree is not available in this runtime.",
         );
       }
-      env.onStatus?.(`Creating isolated worktree for ${identity.name}…`);
-      worktree = await env.worktree.create({
-        workdir: env.workdir,
-        label: buildWorktreeLabel({
-          sessionId: env.sessionId,
-          parentToolCallId: request.parentToolCallId,
-          agentId: spec.id,
-          index: request.index,
-        }),
-      });
-      env.onStatus?.(null);
+      setStatus(`Creating isolated worktree for ${identity.name}…`);
+      // 就近收口：不依赖调用方在失败路径上一定会走到 settleWorktree。状态行是
+      // 用户判断「还在跑 / 已经挂了」的唯一线索，任何出口都必须摘掉。
+      try {
+        worktree = await env.worktree.create({
+          workdir: env.workdir,
+          label: buildWorktreeLabel({
+            sessionId: env.sessionId,
+            parentToolCallId: request.parentToolCallId,
+            agentId: spec.id,
+            index: request.index,
+          }),
+        });
+      } finally {
+        setStatus(null);
+      }
       const childRegistry = await env.createChildToolRegistry(worktree.workdir);
       childTools = selectWorktreeTools({
         tools: childRegistry.tools,
@@ -483,9 +533,9 @@ export async function executeSubagentRun(
       composeAppliedState: (state: ConversationViewState) => ConversationViewState;
     }) => {
       compaction.bindTurn({
-        providerId: env.providerId,
-        model: env.model,
-        runtime: env.runtime,
+        providerId: runProviderId,
+        model: runModel,
+        runtime: runRuntime,
         cancellation: compactionCancellation,
         sinks: {
           applyState: (state) => {
@@ -567,16 +617,17 @@ export async function executeSubagentRun(
     schedulePersist("running", baseState);
 
     // ---- execute ------------------------------------------------------------
+    progress?.({ phase: "running", statusText: null });
     const result = await runAssistantWithTools({
-      providerId: env.providerId,
-      model: env.model,
-      runtime: env.runtime,
+      providerId: runProviderId,
+      model: runModel,
+      runtime: runRuntime,
       runtimePlatform: env.runtimePlatform,
       context: buildRequestContext(baseState),
       workdir: childWorkdir,
       additionalRoots: env.additionalRoots,
       sessionId: subagentSessionId,
-      nativeWebSearch: env.runtime.nativeWebSearchEnabled !== false,
+      nativeWebSearch: runRuntime.nativeWebSearchEnabled !== false,
       tools: childTools,
       subagentScheduler: env.scheduler,
       executeToolCall: (childToolCall, childSignal) => {
@@ -592,10 +643,18 @@ export async function executeSubagentRun(
       },
       onTurnStart: (round) => {
         rounds = Math.max(rounds, round);
+        progress?.({ rounds });
       },
       onTextDelta: () => {},
       onToolExecutionStart: () => {
         toolCalls += 1;
+        progress?.({ toolCalls });
+      },
+      // runner 已经在生成「第 N 轮：模型生成中...」「正在执行：<摘要>」这类活动行；
+      // 父回合的状态行不订阅它（并行子代理会互相盖掉），但 per-agent 镜像正需要
+      // 它来证明「还在动」。刻意不转发给 env.onStatus。
+      onToolStatus: (status) => {
+        progress?.({ statusText: status });
       },
       onBeforeNextTurn: async ({ emittedMessages }) => {
         const view = appendMessagesToConversation(baseState, emittedMessages);

@@ -217,7 +217,8 @@ export function providerSupportsNativeWebSearch(
   }
 
   return (
-    (providerId === "codex" && api === "openai-responses") ||
+    (providerId === "codex" &&
+      (api === "openai-responses" || api === "openai-codex-responses")) ||
     (providerId === "xai" && api === "openai-responses") ||
     (providerId === "deepseek" && api === "deepseek-responses") ||
     (providerId === "claude_code" && api === "anthropic-messages") ||

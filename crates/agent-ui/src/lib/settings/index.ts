@@ -279,6 +279,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       models: [],
       activeModels: [],
       requestFormat: "openai-responses",
+      enableWebSocket: false,
       reasoning: "off",
       promptCachingEnabled: true,
       promptCacheHintMode: "auto",
@@ -1116,6 +1117,10 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       validModelIds.has(modelId),
     ),
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
+    enableWebSocket:
+      type === "codex" && codexRouting?.requestFormat === "openai-responses"
+        ? obj.enableWebSocket === true
+        : false,
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
     // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。
@@ -1566,6 +1571,35 @@ export function normalizeMemorySettings(
   };
 }
 
+/**
+ * 子代理模型钉选的归一化。两个字段联动：模型失效（供应商被删/模型被停用）时
+ * 档位一并丢弃——留着一个孤立的档位会在用户下次钉模型时悄悄套用到新模型上。
+ * 档位还要钳进该模型真实支持的档位表，并尊重「思考不可关」的模型。
+ */
+function normalizeSubagentModelSettings(
+  obj: Record<string, unknown>,
+  customProviders: CustomProvider[],
+): Pick<CustomSettings, "subagentModel" | "subagentReasoning"> {
+  const subagentModel = normalizeSelectedModelForProviders(
+    normalizeSelectedModel(obj.subagentModel),
+    customProviders,
+  );
+  if (!subagentModel) return {};
+  const provider = customProviders.find((item) => item.id === subagentModel.customProviderId);
+  if (!provider) return {};
+  const levels = getKnownModelThinkingLevels(provider.type, subagentModel.model);
+  const requested = typeof obj.subagentReasoning === "string" ? obj.subagentReasoning : undefined;
+  if (!requested || levels.length === 0) return { subagentModel };
+  if (requested === "off") {
+    return isThinkingAlwaysOnForModel(provider.type, subagentModel.model)
+      ? { subagentModel }
+      : { subagentModel, subagentReasoning: "off" };
+  }
+  return levels.includes(requested as ReasoningLevel)
+    ? { subagentModel, subagentReasoning: requested as ReasoningLevel }
+    : { subagentModel };
+}
+
 export function normalizeCustomSettings(
   input: unknown,
   customProviders: CustomProvider[],
@@ -1583,6 +1617,7 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.commitMessageModel),
       customProviders,
     ),
+    ...normalizeSubagentModelSettings(obj, customProviders),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,

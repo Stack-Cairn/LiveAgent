@@ -150,7 +150,7 @@ function normalizeMimeType(value: unknown) {
 }
 
 function isOpenAIResponsesModel(model: Model<Api>) {
-  return model.api === "openai-responses";
+  return model.api === "openai-responses" || model.api === "openai-codex-responses";
 }
 
 function isOpenAICompletionsModel(model: Model<Api>) {

@@ -462,6 +462,8 @@ export async function createSubagentHarness(options = {}) {
     ],
     store,
     scheduler,
+    modelOptions: options.modelOptions,
+    activity: options.activity,
     baseTools,
     executeToolCall: async (toolCall) => {
       executedBaseToolCalls.push(toolCall);
@@ -521,6 +523,53 @@ export async function createSubagentHarness(options = {}) {
     executedBaseToolCalls,
     executedChildToolCalls,
     getMaxActiveRuns: () => maxActiveRuns,
+  };
+}
+
+/**
+ * Recording SubagentActivitySink plus a model/thinking option space over two
+ * models, so tests can assert both the override plumbing and the run mirror.
+ */
+export function createRecordingActivity() {
+  const started = [];
+  const patches = [];
+  const finished = [];
+  return {
+    started,
+    patches,
+    finished,
+    sink: {
+      start: (input) => started.push({ ...input }),
+      update: (runId, patch) => patches.push({ runId, patch }),
+      finish: (runId, outcome) => finished.push({ runId, outcome }),
+    },
+  };
+}
+
+export function createModelOptions(overrides = {}) {
+  const models = overrides.models ?? ["gpt-5", "gpt-5-mini"];
+  const levelsByModel = overrides.levelsByModel ?? {
+    "gpt-5": ["off", "low", "medium", "high"],
+    "gpt-5-mini": ["off", "low"],
+  };
+  const createdRuntimes = [];
+  return {
+    createdRuntimes,
+    options: {
+      ...(overrides.pinned ? { pinned: overrides.pinned } : {}),
+      models,
+      thinkingLevelsFor: (model) => levelsByModel[model] ?? [],
+      createRuntime: (model, reasoning) => {
+        const runtime = {
+          baseUrl: "https://api.example.test/v1",
+          apiKey: "test-key",
+          modelConfig: { id: model },
+          ...(reasoning === undefined ? { reasoning: "medium" } : { reasoning }),
+        };
+        createdRuntimes.push({ model, reasoning, runtime });
+        return runtime;
+      },
+    },
   };
 }
 

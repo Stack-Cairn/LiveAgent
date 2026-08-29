@@ -118,6 +118,11 @@ function readLocalUiSettings(): {
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
       commitMessageModel: normalizeSelectedModel(obj.commitMessageModel),
+      subagentModel: normalizeSelectedModel(obj.subagentModel),
+      // 档位的合法性依赖模型（每个模型的档位表不同），而此刻 providers 还没加载。
+      // 与本函数对 modelFailover / retryErrorSettings 的处理同策略：原样带过，
+      // 紧随其后的 normalizeSettings 拿到 providers 后再校验并钳位。
+      subagentReasoning: obj.subagentReasoning as AppSettings["customSettings"]["subagentReasoning"],
       chatSidebar: {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,

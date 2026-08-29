@@ -240,6 +240,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerUseSystemProxy": "Use app proxy",
   "settings.providerUseSystemProxyDesc":
     "Route this provider's model requests through the app proxy. Falls back to a direct connection while the app proxy is disabled.",
+  "settings.providerWebSocket": "Enable WebSocket",
+  "settings.providerWebSocketDesc":
+    "Applies to the Responses request format only. Prefers WebSocket for streaming and falls back to SSE with a reason if it fails before any content arrives. When routing through a proxy such as CPA, also enable WebSocket for that credential on the proxy side, or the proxy still uses SSE upstream.",
   "settings.providerStreamRetry": "Stream retry",
   "settings.providerStreamRetryDesc":
     "How many times to reconnect automatically when the connection drops before any content arrives.",
@@ -496,6 +499,13 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.reasoning.high": "High",
   "settings.reasoning.xhigh": "Extra high",
   "settings.reasoning.max": "Max",
+  "settings.subagentModelGroup": "Subagents",
+  "settings.subagentModel": "Subagent model",
+  "settings.subagentModelDesc":
+    "Model every subagent runs on; another provider is allowed. Pinning one stops subagents from picking their own; leave it on \u201cFollow parent conversation\u201d to let the main model choose per task.",
+  "settings.subagentModelFollowParent": "Follow parent conversation",
+  "settings.subagentReasoningDesc": "Fix the reasoning effort for every subagent.",
+  "settings.subagentReasoningModelDefault": "Model default",
   "settings.promptCaching": "Prompt Caching",
   "settings.promptCachingDescClaude":
     "Mark ephemeral cache breakpoints on requests; long sessions get much cheaper input.",

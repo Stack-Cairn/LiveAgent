@@ -6,17 +6,27 @@ use std::{
 
 use axum::{
     body::{to_bytes, Body},
-    extract::{OriginalUri, Path, Query, State},
+    extract::{
+        ws::{
+            CloseFrame as AxumCloseFrame, Message as AxumWsMessage, WebSocket, WebSocketUpgrade,
+        },
+        OriginalUri, Path, Query, State,
+    },
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::Response,
     routing::{any, get},
     Router,
 };
 use base64::Engine as _;
+use futures_util::{SinkExt, StreamExt};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::net::TcpListener as TokioTcpListener;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame as UpstreamCloseFrame;
+use tokio_tungstenite::tungstenite::Message as UpstreamWsMessage;
+use tokio_tungstenite::connect_async;
 use uuid::Uuid;
 
 const ACCESS_CONTROL_REQUEST_HEADERS: &str = "access-control-request-headers";
@@ -45,6 +55,8 @@ const UPSTREAM_HEADERS_MAX_BYTES: usize = 8 * 1024;
 const USE_SYSTEM_PROXY_HEADER: &str = "x-liveagent-use-system-proxy";
 const DEFAULT_ALLOW_HEADERS: &str = "authorization,content-type,x-api-key,x-goog-api-key,anthropic-version,x-liveagent-upstream-origin,x-liveagent-upstream-url,x-liveagent-upstream-headers,x-liveagent-proxy-token,x-liveagent-use-system-proxy";
 const ALLOW_METHODS_VALUE: &str = "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD";
+const WEBSOCKET_PROXY_HANDSHAKE_TYPE: &str = "liveagent.proxy.websocket.handshake";
+const WEBSOCKET_PROXY_HANDSHAKE_TIMEOUT_SECS: u64 = 10;
 const VARY_VALUE: &str = "Origin, Access-Control-Request-Method, Access-Control-Request-Headers";
 const IMAGE_PROXY_MAX_BYTES: usize = 25 * 1024 * 1024;
 const IMAGE_PROXY_TIMEOUT_SECS: u64 = 20;
@@ -69,6 +81,13 @@ struct ProxyRoutePath {
     provider: String,
     #[serde(rename = "rest")]
     _rest: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProxyWebSocketHandshake {
+    #[serde(rename = "type")]
+    kind: String,
+    headers: std::collections::HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -104,6 +123,8 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
 
     let app = Router::new()
         .route("/image-proxy", get(handle_image_proxy))
+        .route("/proxy-ws/{provider}", any(handle_proxy_websocket))
+        .route("/proxy-ws/{provider}/{*rest}", any(handle_proxy_websocket))
         .route("/proxy/{provider}", any(handle_proxy))
         .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .with_state(state.clone());
@@ -320,6 +341,204 @@ fn resolve_image_proxy_mime(
         return Ok(mime);
     }
     Err("Image proxy upstream response is not a supported image".to_string())
+}
+
+async fn handle_proxy_websocket(
+    State(state): State<Arc<ProxyServerState>>,
+    Path(ProxyRoutePath { provider, .. }): Path<ProxyRoutePath>,
+    OriginalUri(original_uri): OriginalUri,
+    websocket: WebSocketUpgrade,
+) -> Response {
+    websocket.on_upgrade(move |socket| {
+        handle_proxy_websocket_session(socket, state, provider, original_uri)
+    })
+}
+
+async fn handle_proxy_websocket_session(
+    mut socket: WebSocket,
+    state: Arc<ProxyServerState>,
+    provider: String,
+    original_uri: axum::http::Uri,
+) {
+    let handshake = tokio::time::timeout(
+        Duration::from_secs(WEBSOCKET_PROXY_HANDSHAKE_TIMEOUT_SECS),
+        socket.recv(),
+    )
+    .await
+    .ok()
+    .flatten();
+    let Some(Ok(AxumWsMessage::Text(handshake))) = handshake else {
+        let _ = socket.send(AxumWsMessage::Close(None)).await;
+        return;
+    };
+    let handshake_text = handshake.to_string();
+    let handshake: ProxyWebSocketHandshake = match serde_json::from_str::<ProxyWebSocketHandshake>(&handshake_text) {
+        Ok(handshake) if handshake.kind == WEBSOCKET_PROXY_HANDSHAKE_TYPE => handshake,
+        _ => {
+            let _ = socket.send(AxumWsMessage::Close(None)).await;
+            return;
+        }
+    };
+
+    let mut request_headers = HeaderMap::new();
+    for (name, value) in handshake.headers {
+        let header_name = match HeaderName::from_bytes(name.as_bytes()) {
+            Ok(header_name) => header_name,
+            Err(_) => {
+                let _ = socket.send(AxumWsMessage::Close(None)).await;
+                return;
+            }
+        };
+        let header_value = match HeaderValue::from_str(&value) {
+            Ok(header_value) => header_value,
+            Err(_) => {
+                let _ = socket.send(AxumWsMessage::Close(None)).await;
+                return;
+            }
+        };
+        request_headers.insert(header_name, header_value);
+    }
+
+    let token_ok = request_headers
+        .get(PROXY_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == state.info.token);
+    let Some(upstream_origin) = request_headers
+        .get(UPSTREAM_ORIGIN_HEADER)
+        .and_then(|value| value.to_str().ok())
+    else {
+        let _ = socket.send(AxumWsMessage::Close(None)).await;
+        return;
+    };
+    if !token_ok {
+        let _ = socket.send(AxumWsMessage::Close(None)).await;
+        return;
+    }
+
+    // A WebSocket connection cannot reuse reqwest's configured client. Reject
+    // this branch when the app proxy is explicitly requested so pi-ai's own
+    // transport policy can fall back to SSE through the normal HTTP proxy.
+    if request_headers
+        .get(USE_SYSTEM_PROXY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == "1")
+    {
+        let _ = socket.send(AxumWsMessage::Close(None)).await;
+        return;
+    }
+
+    let original_path_and_query = original_uri
+        .path_and_query()
+        .map(axum::http::uri::PathAndQuery::as_str)
+        .unwrap_or("/")
+        .replacen("/proxy-ws/", "/proxy/", 1);
+    let upstream_url = request_headers
+        .get(UPSTREAM_URL_HEADER)
+        .and_then(|value| value.to_str().ok());
+    let target_result = match upstream_url {
+        Some(upstream_url) => build_full_target_url(upstream_url, upstream_origin, original_uri.query()),
+        None => build_target_url(&provider, &original_path_and_query, upstream_origin),
+    };
+    let target_url = match target_result.and_then(to_websocket_url) {
+        Ok(target_url) => target_url,
+        Err(_) => {
+            let _ = socket.send(AxumWsMessage::Close(None)).await;
+            return;
+        }
+    };
+    let upstream_headers = match build_upstream_request_headers(&request_headers) {
+        Ok(headers) => headers,
+        Err(_) => {
+            let _ = socket.send(AxumWsMessage::Close(None)).await;
+            return;
+        }
+    };
+    let mut upstream_request = match target_url.as_str().into_client_request() {
+        Ok(request) => request,
+        Err(_) => {
+            let _ = socket.send(AxumWsMessage::Close(None)).await;
+            return;
+        }
+    };
+    for (name, value) in &upstream_headers {
+        upstream_request.headers_mut().insert(name.clone(), value.clone());
+    }
+    let (upstream_socket, _) = match connect_async(upstream_request).await {
+        Ok(result) => result,
+        Err(_) => {
+            // Do not send a text error: pi-ai interprets the close as a
+            // transport failure and can safely retry the same request over SSE.
+            let _ = socket.send(AxumWsMessage::Close(None)).await;
+            return;
+        }
+    };
+
+    let (mut local_sink, mut local_stream) = socket.split();
+    let (mut upstream_sink, mut upstream_stream) = upstream_socket.split();
+    loop {
+        tokio::select! {
+            local = local_stream.next() => {
+                let Some(Ok(message)) = local else { break; };
+                let forwarded = match message {
+                    AxumWsMessage::Text(text) => Some(UpstreamWsMessage::Text(text.to_string().into())),
+                    AxumWsMessage::Binary(data) => Some(UpstreamWsMessage::Binary(data.to_vec().into())),
+                    AxumWsMessage::Ping(data) => Some(UpstreamWsMessage::Ping(data.to_vec().into())),
+                    AxumWsMessage::Pong(data) => Some(UpstreamWsMessage::Pong(data.to_vec().into())),
+                    AxumWsMessage::Close(frame) => {
+                        Some(UpstreamWsMessage::Close(to_upstream_close_frame(frame)))
+                    }
+                };
+                let Some(forwarded) = forwarded else { continue; };
+                if upstream_sink.send(forwarded).await.is_err() { break; }
+            }
+            upstream = upstream_stream.next() => {
+                let Some(Ok(message)) = upstream else { break; };
+                let forwarded = match message {
+                    UpstreamWsMessage::Text(text) => Some(AxumWsMessage::Text(text.to_string().into())),
+                    UpstreamWsMessage::Binary(data) => Some(AxumWsMessage::Binary(data.to_vec().into())),
+                    UpstreamWsMessage::Ping(data) => Some(AxumWsMessage::Ping(data.to_vec().into())),
+                    UpstreamWsMessage::Pong(data) => Some(AxumWsMessage::Pong(data.to_vec().into())),
+                    UpstreamWsMessage::Close(frame) => {
+                        Some(AxumWsMessage::Close(to_local_close_frame(frame)))
+                    }
+                    UpstreamWsMessage::Frame(_) => None,
+                };
+                let Some(forwarded) = forwarded else { continue; };
+                if local_sink.send(forwarded).await.is_err() { break; }
+            }
+        }
+    }
+}
+
+/// 关闭帧必须带着 code/reason 过桥：上游（CPA / OpenAI）用 1009 表示单帧超限、
+/// 1012 表示需改走 HTTP 重放，客户端正是靠这两个码决定回退 SSE 还是重放。若在中继
+/// 里抹平成 Close(None)，浏览器侧只能看到 1005/1006，无法区分。
+fn to_upstream_close_frame(frame: Option<AxumCloseFrame>) -> Option<UpstreamCloseFrame> {
+    frame.map(|frame| UpstreamCloseFrame {
+        code: frame.code.into(),
+        reason: frame.reason.to_string().into(),
+    })
+}
+
+fn to_local_close_frame(frame: Option<UpstreamCloseFrame>) -> Option<AxumCloseFrame> {
+    frame.map(|frame| AxumCloseFrame {
+        code: u16::from(frame.code),
+        reason: frame.reason.to_string().into(),
+    })
+}
+
+fn to_websocket_url(mut url: Url) -> Result<Url, String> {
+    match url.scheme() {
+        "https" => url
+            .set_scheme("wss")
+            .map_err(|_| "failed to set websocket URL scheme".to_string())?,
+        "http" => url
+            .set_scheme("ws")
+            .map_err(|_| "failed to set websocket URL scheme".to_string())?,
+        "wss" | "ws" => {}
+        _ => return Err("upstream URL must use http(s)".to_string()),
+    }
+    Ok(url)
 }
 
 async fn handle_proxy(

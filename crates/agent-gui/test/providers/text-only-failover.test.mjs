@@ -36,6 +36,7 @@ const loader = createTsModuleLoader({
       }),
       buildProviderRequestMetadata: () => undefined,
       resolveProviderCacheRetention: () => undefined,
+      resolveProviderTransport: () => undefined,
       toSimpleStreamReasoning: () => undefined,
     },
     [abs("src/lib/providers/runtime/modelFactory.ts")]: {

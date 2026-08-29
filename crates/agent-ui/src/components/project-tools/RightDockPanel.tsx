@@ -31,6 +31,7 @@ import {
 import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
 import { ensureManagedProcessInit, useManagedProcesses } from "../../lib/managed-process/store";
 import { cn } from "../../lib/shared/utils";
+import { useSubagentRuntimeRuns } from "../../lib/subagents/runtime";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { Button } from "../ui/button";
@@ -518,14 +519,20 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     dismissedIds: [],
   });
   const backgroundTasksState = projectPathKey ? projectState.backgroundTasks : localBackgroundTasks;
+  // 子代理运行态同样把这个 tab 派生出来：子代理跑起来时用户没有别的地方能看见
+  // 它的进度或把它停掉，所以 tab 必须自己冒出来，而不是等用户先想到去打开它。
+  // dismissedIds 只对托管进程生效（那是可长期驻留的记录）；子代理条目寿命短，
+  // 关闭 tab 后新一批运行会重新派生它，与托管进程的语义一致。
+  const subagentRuns = useSubagentRuntimeRuns();
   const backgroundTasksVisible =
     backgroundTasksState.opened ||
     managedProcessState.processes.some(
       (process) => !backgroundTasksState.dismissedIds.includes(process.id),
-    );
-  const backgroundTasksRunning = managedProcessState.processes.filter(
-    (process) => process.running,
-  ).length;
+    ) ||
+    subagentRuns.length > 0;
+  const backgroundTasksRunning =
+    managedProcessState.processes.filter((process) => process.running).length +
+    subagentRuns.filter((run) => run.phase !== "finished").length;
 
   const tunnelAvailable = Boolean(tunnelClient);
   const {

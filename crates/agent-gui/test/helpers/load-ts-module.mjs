@@ -129,6 +129,31 @@ function createDefaultMocks() {
         throw new Error("stream (openai-responses) mock was not expected to be called");
       },
     },
+    "@earendil-works/pi-ai/api/openai-codex-responses": {
+      stream() {
+        throw new Error("stream (openai-codex-responses) mock was not expected to be called");
+      },
+    },
+    // pi-ai 是纯 ESM 包（type: module，exports 只声明 import 条件），这个 loader
+    // 走 CJS require，所以每个被源码静态 import 的子路径都必须在这里有桩，否则
+    // 解析阶段就 ERR_PACKAGE_PATH_NOT_EXPORTED。下面两个由 CPA Responses
+    // WebSocket transport 引入，需要真实行为的测试各自覆盖。
+    "@earendil-works/pi-ai/api/constrained-sampling": {
+      createGrammarToolInputProperties() {
+        return new Map();
+      },
+    },
+    "@earendil-works/pi-ai/api/openai-responses-shared": {
+      convertResponsesMessages() {
+        throw new Error("convertResponsesMessages mock was not expected to be called");
+      },
+      convertResponsesTools() {
+        throw new Error("convertResponsesTools mock was not expected to be called");
+      },
+      processResponsesStream() {
+        throw new Error("processResponsesStream mock was not expected to be called");
+      },
+    },
     "@earendil-works/pi-ai/api/google-generative-ai": {
       stream() {
         throw new Error("stream (google-generative-ai) mock was not expected to be called");

@@ -48,6 +48,35 @@ export function resolveConversationTitleModelSelection(
   };
 }
 
+/**
+ * 用户在设置里钉死的子代理模型。返回 null 表示未钉（或钉的供应商/模型已失效），
+ * 此时子代理跟随主会话，且 Agent 工具可以自行指定 per-agent 模型。
+ *
+ * 允许与主会话不同的供应商：主线程跑贵模型、子代理跑别家便宜模型是一等用例。
+ */
+export function resolveSubagentModelSelection(
+  settings: AppSettings,
+): EffectiveChatModelSelection | null {
+  const subagentModel = settings.customSettings.subagentModel;
+  if (!subagentModel) {
+    return null;
+  }
+
+  const provider = settings.customProviders.find(
+    (item) => item.id === subagentModel.customProviderId,
+  );
+  if (!provider?.activeModels.includes(subagentModel.model)) {
+    return null;
+  }
+
+  return {
+    selectedModel: subagentModel,
+    provider,
+    providerId: provider.type,
+    model: subagentModel.model,
+  };
+}
+
 // Commit-message generation model for the Git review dock. Returns null when
 // the setting is unset or points at a provider/model that is no longer active,
 // so the caller falls back to the current conversation model.

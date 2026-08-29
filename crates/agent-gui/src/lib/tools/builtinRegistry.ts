@@ -443,6 +443,8 @@ export async function buildBuiltinToolRegistry(
         templates: subagentRuntime.templates,
         store: subagentRuntime.store,
         scheduler: subagentRuntime.scheduler,
+        modelOptions: subagentRuntime.modelOptions,
+        activity: subagentRuntime.activity,
         baseTools: baseRegistry.tools,
         executeToolCall: baseRegistry.executeToolCall,
         metadataByName: baseRegistry.metadataByName,

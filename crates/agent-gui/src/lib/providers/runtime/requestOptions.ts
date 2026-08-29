@@ -107,6 +107,17 @@ export async function prepareProviderRequest(
   );
 }
 
+export function resolveProviderTransport(
+  providerId: ProviderId,
+  runtime: ProviderRuntimeConfig,
+): SimpleStreamOptions["transport"] | undefined {
+  return providerId === "codex" &&
+    runtime.requestFormat === "openai-responses" &&
+    runtime.enableWebSocket === true
+    ? "auto"
+    : undefined;
+}
+
 export function toSimpleStreamReasoning(
   reasoning: ReasoningLevel | undefined,
 ): SimpleStreamOptions["reasoning"] | undefined {

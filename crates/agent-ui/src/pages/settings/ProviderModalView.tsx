@@ -18,6 +18,7 @@ import {
   List,
   Pencil,
   Plus,
+  Radio,
   RefreshCw,
   Search,
   Settings,
@@ -140,6 +141,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     renderModelDragHandle,
     requestClose,
     requestFormat,
+    enableWebSocket,
     saveInlineModelSettings,
     selectVisibleModels,
     setActivePanel,
@@ -163,6 +165,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setPromptCacheRetention,
     setPromptCachingEnabled,
     setRequestFormat,
+    setEnableWebSocket,
     setShowApiKey,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,
@@ -392,7 +395,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     <Label>{t("settings.requestFormat")}</Label>
                     <Select
                       value={requestFormat}
-                      onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
+                      onValueChange={(value) => {
+                        const nextRequestFormat = value as CodexRequestFormat;
+                        setRequestFormat(nextRequestFormat);
+                        if (nextRequestFormat !== "openai-responses") setEnableWebSocket(false);
+                      }}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
@@ -834,6 +841,35 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ariaLabel={t("settings.providerUseSystemProxy")}
                   />
                 </div>
+
+                {providerType === "codex" && requestFormat === "openai-responses" ? (
+                  <div
+                    className={cn(
+                      "mt-3 flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors",
+                      enableWebSocket && "border-primary/35 bg-primary/[0.04]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                        enableWebSocket && "bg-primary/15 text-primary",
+                      )}
+                    >
+                      <Radio className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{t("settings.providerWebSocket")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("settings.providerWebSocketDesc")}
+                      </div>
+                    </div>
+                    <DialogSwitch
+                      checked={enableWebSocket}
+                      onCheckedChange={setEnableWebSocket}
+                      ariaLabel={t("settings.providerWebSocket")}
+                    />
+                  </div>
+                ) : null}
 
                 <div
                   className={cn(

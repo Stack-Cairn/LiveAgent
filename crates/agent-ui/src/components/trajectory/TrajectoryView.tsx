@@ -69,12 +69,14 @@ export function TrajectoryView(props: {
   liveEvents?: readonly TrajectoryEvent[];
   /**
    * live 事件为空时的中断收敛语义。
-   * - `authoritative`（桌面）：空集同样是权威证据 —— 本进程重启后不持有任何实时
-   *   尾巴，持久化里仍 running 的条目一律收敛为 aborted。
+   * - `authoritative`（桌面）：只有明确的 `liveRunActive={false}` 才是「本进程已不
+   *   再持有实时尾巴」的权威证据；未提供运行态时保持未知，避免加载竞态误判。
    * - `observed`（WebUI，默认）：仅在已观察到实时事件时才收敛未被覆盖的运行条目，
    *   避免页面刚重载、尚未收到实时流时误判仍在运行的回合。
    */
   liveOwnership?: "authoritative" | "observed";
+  /** 当前会话仍在运行时，空 live 尾巴只是加载竞态，不能收敛为 aborted。 */
+  liveRunActive?: boolean;
   /** edit-resend 等本地权威变更后的递增版本；变化时替换读取尾部窗口。 */
   authoritativeRevision?: number;
 }) {
@@ -246,10 +248,12 @@ export function TrajectoryView(props: {
   const ledger = useMemo(() => {
     const events = liveEvents.length === 0 ? persisted : [...persisted, ...liveEvents];
     if (events.length > 0) {
-      // 中断收敛：崩溃/强退后遗留的 running 条目按 aborted 收敛。authoritative 模式下
-      // 空集也参与判定（本进程重启即证明不持有实时尾巴）；observed 模式保留旧行为。
+      // 中断收敛：崩溃/强退后遗留的 running 条目按 aborted 收敛。当前回合仍在
+      // 运行时，空 live 尾巴可能只是视图加载竞态，不能据此判定进程已失去所有权。
+      const convergeMissingLive =
+        props.liveOwnership === "authoritative" && props.liveRunActive === false;
       const liveIdentities =
-        props.liveOwnership === "authoritative" || liveEvents.length > 0
+        convergeMissingLive || liveEvents.length > 0
           ? trajectoryLiveEventIdentities(liveEvents)
           : undefined;
       return mergeTrajectoryLedgerWithMessages(
@@ -259,7 +263,7 @@ export function TrajectoryView(props: {
     }
     // 轨迹功能上线前的会话没有事件；降级路径给出结构，但绝不伪造耗时。
     return deriveLedgerFromMessages(props.messages);
-  }, [persisted, liveEvents, props.liveOwnership, props.messages]);
+  }, [persisted, liveEvents, props.liveOwnership, props.liveRunActive, props.messages]);
 
   const referencedSubagentRunIds = useMemo(() => {
     const ids = new Set<string>();

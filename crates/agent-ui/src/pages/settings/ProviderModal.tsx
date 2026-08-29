@@ -156,6 +156,11 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [requestFormat, setRequestFormat] = useState<CodexRequestFormat>(
     initialData?.requestFormat ?? "openai-responses",
   );
+  const [enableWebSocket, setEnableWebSocket] = useState(
+    providerType === "codex" &&
+      (initialData?.requestFormat ?? "openai-responses") === "openai-responses" &&
+      initialData?.enableWebSocket === true,
+  );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
   const [streamRetryMode, setStreamRetryMode] = useState<"default" | "off" | "custom">(
     initialData?.retryPolicy?.mode ?? "default",
@@ -728,6 +733,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
             ? false
             : promptCachingEnabled,
       promptCacheHintMode: providerType === "codex" ? promptCacheHintMode : undefined,
+      enableWebSocket:
+        providerType === "codex" && requestFormat === "openai-responses"
+          ? enableWebSocket
+          : false,
       promptCacheRetention:
         providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
           ? "long"
@@ -966,6 +975,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     renderModelDragHandle,
     requestClose,
     requestFormat,
+    enableWebSocket,
     saveInlineModelSettings,
     selectVisibleModels,
     setActivePanel,
@@ -989,6 +999,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setPromptCacheRetention,
     setPromptCachingEnabled,
     setRequestFormat,
+    setEnableWebSocket,
     setShowApiKey,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,

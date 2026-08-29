@@ -28,12 +28,14 @@ import {
   createModelFromConfig,
   createStreamingTextReconciler,
   describeProviderCacheShape,
+  describeTransportFallback,
   finalizeProviderStreamOptions,
   llm,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
   prepareProviderRequest,
   resolveProviderCacheRetention,
+  resolveProviderTransport,
   type StreamOptionsEx,
   type ToolChoice,
   toSimpleStreamReasoning,
@@ -1331,6 +1333,12 @@ export async function runAssistantWithTools(params: {
           ),
           signal: options?.signal,
           sessionId: options?.sessionId ?? params.sessionId,
+          transport:
+            options?.transport ?? resolveProviderTransport(target.providerId, target.runtime),
+          onTransportFallback: (info) => {
+            options?.onTransportFallback?.(info);
+            params.onToolStatus?.(`第 ${round} 轮：${describeTransportFallback(info)}`);
+          },
           cacheRetention:
             options?.cacheRetention ??
             resolveProviderCacheRetention(

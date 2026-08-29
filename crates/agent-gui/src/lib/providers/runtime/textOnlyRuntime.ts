@@ -31,6 +31,7 @@ import {
   buildProviderRequestMetadata,
   prepareProviderRequest,
   resolveProviderCacheRetention,
+  resolveProviderTransport,
   toSimpleStreamReasoning,
 } from "./requestOptions";
 import { resolveStreamRetryConfig } from "./retryPolicy";
@@ -88,6 +89,7 @@ function buildTextOnlyStreamOptions(params: {
     providerLabel?: string,
   ) => void;
   onRetryRecovered?: () => void;
+  onTransportFallback?: StreamOptionsEx["onTransportFallback"];
 }): StreamOptionsEx {
   const sessionId = normalizeSessionId(params.sessionId);
   const nativeWebSearch =
@@ -110,6 +112,7 @@ function buildTextOnlyStreamOptions(params: {
       params.runtime.promptCacheRetention,
     ),
     metadata: buildProviderRequestMetadata(params.providerId, sessionId),
+    transport: resolveProviderTransport(params.providerId, params.runtime),
     reasoning:
       ((params.providerId === "codex" || params.providerId === "xai") &&
         (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
@@ -126,6 +129,7 @@ function buildTextOnlyStreamOptions(params: {
     // Text-only mode cannot execute local tools. Provider-native web search is
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
+    onTransportFallback: params.onTransportFallback,
     streamRetry: {
       ...resolveStreamRetryConfig(params.runtime.retryPolicy),
       // 绑定当前候选标签：failover 下备用供应商的流内重试才能在轨迹里归属
@@ -203,6 +207,7 @@ export async function streamAssistantMessage(params: {
     providerLabel?: string,
   ) => void;
   onRetryRecovered?: () => void;
+  onTransportFallback?: StreamOptionsEx["onTransportFallback"];
   /** 每个实际尝试的候选各 fire 一次：脱敏后的传输装配快照（只含头名，不含值）。 */
   onTransportAttempt?: (snapshot: TransportSnapshot & { providerLabel: string }) => void;
   /** Exact text-only provider boundary after its mandatory system suffix is appended. */
@@ -265,6 +270,7 @@ export async function streamAssistantMessage(params: {
     providerLabel: primaryFailoverLabel,
     onRetryStatus: params.onRetryStatus,
     onRetryRecovered: params.onRetryRecovered,
+    onTransportFallback: params.onTransportFallback,
   });
 
   params.debugLogger?.logRequest(
@@ -333,6 +339,7 @@ export async function streamAssistantMessage(params: {
           providerLabel: fallback.label,
           onRetryStatus: params.onRetryStatus,
           onRetryRecovered: params.onRetryRecovered,
+          onTransportFallback: params.onTransportFallback,
         }),
       } satisfies PreparedTextFailoverTarget;
     })();

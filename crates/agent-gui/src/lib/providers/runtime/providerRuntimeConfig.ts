@@ -29,6 +29,10 @@ export function createProviderRuntimeConfig(
     apiKey: provider.apiKey,
     customHeaders: provider.customHeaders,
     requestFormat: provider.requestFormat,
+    enableWebSocket:
+      provider.type === "codex" && provider.requestFormat === "openai-responses"
+        ? provider.enableWebSocket === true
+        : false,
     reasoning: reasoningSupported
       ? controls.thinkingEnabled
         ? controls.reasoning

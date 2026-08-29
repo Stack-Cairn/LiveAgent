@@ -61,9 +61,11 @@ import {
   type CommandSafetyMode,
   type ExecutionMode,
   filterMcpSettingsForWorkspace,
+  getKnownModelThinkingLevels,
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  isThinkingAlwaysOnForModel,
   removeWorkspaceResourceReferences,
   resolveEffectivePromptSettings,
   resolveWorkspaceResources,
@@ -77,6 +79,7 @@ import {
 import {
   collectRetainedSubagentParentToolCallIds,
   pruneSubagentRunsForConversation,
+  type SubagentModelOptions,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
 import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
@@ -137,6 +140,7 @@ import {
   buildModelFailoverPlan,
   resolveConversationTitleModelSelection,
   resolveMemorySummaryModelSelection,
+  resolveSubagentModelSelection,
   selectedModelsMatch,
 } from "./providerRuntimeConfig";
 
@@ -498,6 +502,53 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.runtimeControlsOverride ??
       settings.chatRuntimeControls;
     const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
+    // Agent 工具的 model/thinking 可选空间。只有这里能同时看见 CustomProvider 与
+    // 本轮的 runtimeControls，所以能力在此装配后透传，domain 层不碰 settings。
+    // 范围刻意限制在同一个 provider：跨 provider 会牵出鉴权、限额、失败切换等一整
+    // 套语义，且子代理 runtime 是从父 runtime 派生的。
+    // 用户在设置里钉死的子代理模型（可跨供应商）。钉了就是硬约束，模型不得覆盖。
+    const pinnedSubagent = resolveSubagentModelSelection(settings);
+    const pinnedSubagentReasoning = settings.customSettings.subagentReasoning;
+    const subagentModelOptions: SubagentModelOptions = {
+      ...(pinnedSubagent
+        ? {
+            pinned: {
+              providerId: pinnedSubagent.providerId,
+              model: pinnedSubagent.model,
+              reasoning: pinnedSubagentReasoning,
+              // 钉选模型往往来自另一家供应商，必须用它自己的 provider 构造
+              // runtime——父 runtime 的 baseUrl/apiKey/modelConfig 全都不适用。
+              runtime: (() => {
+                const base = createProviderRuntimeConfig(
+                  pinnedSubagent.provider,
+                  pinnedSubagent.model,
+                  runtimeControls,
+                );
+                return pinnedSubagentReasoning === undefined
+                  ? base
+                  : { ...base, reasoning: pinnedSubagentReasoning };
+              })(),
+              // 给模型看的技术标签，不走 i18n。
+              label: pinnedSubagentReasoning
+                ? `${pinnedSubagent.model} · ${pinnedSubagentReasoning}`
+                : pinnedSubagent.model,
+            },
+          }
+        : {}),
+      models: provider.activeModels,
+      thinkingLevelsFor: (candidate) => {
+        const levels = getKnownModelThinkingLevels(providerId, candidate);
+        if (levels.length === 0) return levels;
+        // levels 只含真实档位；"off" 的可用性单独由 alwaysOn 决定（xAI 恒不可关）。
+        return isThinkingAlwaysOnForModel(providerId, candidate) ? levels : ["off", ...levels];
+      },
+      createRuntime: (candidate, reasoning) => {
+        const base = createProviderRuntimeConfig(provider, candidate, runtimeControls);
+        // 展开派生是 ProviderRuntimeConfig 认可的改档方式（品牌随展开保留）；
+        // 走 createProviderRuntimeConfig 拿 base 是为了让 modelConfig 跟上新模型。
+        return reasoning === undefined ? base : { ...base, reasoning };
+      },
+    };
     // cc-switch style auto-failover plan for this turn (shared by the agent
     // and text runtimes). The switch callback makes the winning fallback the
     // conversation's selection so follow-up turns start on the healthy
@@ -1738,6 +1789,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             hookLifecycle,
             conversationDebugLogger,
             subagentStore: subagentStoresRef.current.get(conversationId),
+            subagentModelOptions,
             getNextConversationState: () => nextConversationState,
             applyConversationState,
             buildPreparedContext,

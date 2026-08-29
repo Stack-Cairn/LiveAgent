@@ -39,6 +39,8 @@ import type { SubagentConversationStore } from "./store";
 import {
   AGENT_TOOL_NAME,
   MAX_AGENTS,
+  type SubagentActivitySink,
+  type SubagentModelOptions,
   type SubagentTemplate,
   type SubagentToolRegistry,
 } from "./types";
@@ -108,6 +110,29 @@ const AGENT_PARAMETERS = Type.Object(
               description:
                 "Keep the worktree after a successful run even when it could be cleaned up safely.",
             }),
+          ),
+          model: Type.Optional(
+            Type.String({
+              description:
+                "Run this agent on a different model of the SAME provider. Omit to inherit the parent conversation's model. Invalid or unavailable ids are rejected with the allowed list.",
+            }),
+          ),
+          thinking: Type.Optional(
+            Type.Union(
+              [
+                Type.Literal("off"),
+                Type.Literal("minimal"),
+                Type.Literal("low"),
+                Type.Literal("medium"),
+                Type.Literal("high"),
+                Type.Literal("xhigh"),
+                Type.Literal("max"),
+              ],
+              {
+                description:
+                  "Reasoning effort for this agent. Omit to use the effective model's default. Which levels exist depends on the model; an unsupported level is rejected with the allowed list.",
+              },
+            ),
           ),
         },
         { additionalProperties: false },
@@ -188,6 +213,10 @@ export type SubagentRuntimeConfig = {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  /** 缺省表示 Agent 工具不接受 model/thinking 覆盖。 */
+  modelOptions?: SubagentModelOptions;
+  /** 缺省表示不上报运行态（无头/测试场景）。 */
+  activity?: SubagentActivitySink;
 };
 
 export function createSubagentTools(params: {
@@ -201,6 +230,10 @@ export function createSubagentTools(params: {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  /** 缺省表示 Agent 工具不接受 model/thinking 覆盖。 */
+  modelOptions?: SubagentModelOptions;
+  /** 缺省表示不上报运行态（无头/测试场景）。 */
+  activity?: SubagentActivitySink;
   baseTools: Tool[];
   executeToolCall: (toolCall: ToolCall, signal?: AbortSignal) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
@@ -255,6 +288,15 @@ export function createSubagentTools(params: {
       "mode=readonly (default for new agents) gives inspect-only tools — use it for research, review, and discussion. mode=worktree gives file+shell tools inside an isolated git worktree — use it only when file changes are expected or explicitly requested. A resumed agent keeps its previous mode unless you set mode.",
       "apply_policy controls merge-back from a worktree: none (default) never applies, auto applies the patch automatically, explicit applies only when every changed file matches allowed_output_paths.",
       "retain_worktree=true keeps a safely-cleanable worktree for review. Worktrees with unapplied changes or failed agents are always retained.",
+      ...(params.modelOptions?.pinned
+        ? [
+            `The user pinned every subagent to ${params.modelOptions.pinned.label} in settings: do not send model or thinking, they are rejected.`,
+          ]
+        : params.modelOptions && params.modelOptions.models.length > 0
+          ? [
+              `model and thinking are per-agent overrides on the parent conversation's provider — omit both to inherit the parent's setup. Spend a cheaper/faster model on mechanical jobs and a stronger one on hard reasoning. Available models: ${params.modelOptions.models.join(", ")}.`,
+            ]
+          : []),
       "Subagents cannot call Agent recursively. Worktree mode must not modify global LiveAgent settings, MCP server configuration, cron tasks, or user-level skills.",
       "Subagents communicate through SendMessage (to=parent is parent-private; to=* is a shared broadcast); do not use workspace files as a message channel.",
       "Include the new user request and any parent-conversation context each subagent needs in that agent's prompt. The parent conversation is not copied automatically.",
@@ -305,6 +347,14 @@ export function createSubagentTools(params: {
       identities,
       templates,
       forceReadonly: params.forceReadonly,
+      modelOptions: params.modelOptions
+        ? {
+            models: params.modelOptions.models,
+            thinkingLevelsFor: params.modelOptions.thinkingLevelsFor,
+            parentModel: params.model,
+            pinnedLabel: params.modelOptions.pinned?.label,
+          }
+        : undefined,
     });
     if (!parsed.ok) {
       return rejectBatch(parsed.issues);
@@ -388,7 +438,54 @@ export function createSubagentTools(params: {
         });
         context?.emitToolCall?.(cardToolCall);
         context?.emitToolExecutionStart?.(cardToolCall);
+
+        // runId 在这里生成一次并贯穿全程：executeSubagentRun、失败路径的报告、
+        // 运行态镜像、停止句柄必须指向同一个 id。
+        const runId = buildSubagentRunId(toolCall.id, resolved.spec.id, index);
+        // 三级优先：用户钉选 > 模型自选（仅未钉选时可用）> 继承父会话。
+        const pinned = params.modelOptions?.pinned;
+        const agentProviderId = pinned?.providerId ?? params.providerId;
+        const agentModel = pinned?.model ?? resolved.spec.model ?? params.model;
+        // 只在真有覆盖时重建 runtime——createProviderRuntimeConfig 会重算
+        // modelConfig，无覆盖时直接复用父 runtime 可以少一次目录查找。
+        const agentRuntime = pinned
+          ? pinned.runtime
+          : params.modelOptions && (resolved.spec.model || resolved.spec.reasoning)
+            ? params.modelOptions.createRuntime(agentModel, resolved.spec.reasoning)
+            : params.runtime;
+        // per-agent 取消：级联父回合的 signal，同时给「只停这一个」留出句柄。
+        const agentAbort = new AbortController();
+        const abortAgent = () => {
+          agentAbort.abort();
+        };
+        if (signal) {
+          if (signal.aborted) abortAgent();
+          else signal.addEventListener("abort", abortAgent, { once: true });
+        }
+        const agentSignal = agentAbort.signal;
+        const activity = params.activity;
+        const agentStartedAt = Date.now();
+        activity?.start({
+          runId,
+          conversationId: store.conversationId,
+          agentId: resolved.spec.id,
+          name: identityPreview.name,
+          role: identityPreview.role,
+          prompt: resolved.spec.prompt,
+          mode: resolved.spec.mode,
+          providerId: agentProviderId,
+          model: agentModel,
+          reasoning: agentRuntime.reasoning,
+          startedAt: agentStartedAt,
+          stop: abortAgent,
+        });
+
         const finish = (report: SubagentReportDetails) => {
+          activity?.finish(runId, {
+            status: report.status,
+            error: report.error,
+            endedAt: Date.now(),
+          });
           context?.emitToolResult?.(
             cardToolCall,
             buildSubagentCardResult({
@@ -414,9 +511,16 @@ export function createSubagentTools(params: {
                   parentToolCallId: toolCall.id,
                   index,
                   total: agents.length,
-                  signal,
+                  signal: agentSignal,
+                  runId,
+                  providerId: agentProviderId,
+                  model: agentModel,
+                  runtime: agentRuntime,
+                  onProgress: activity
+                    ? (patch) => activity.update(runId, patch)
+                    : undefined,
                 }),
-              signal,
+              agentSignal,
             ),
           );
           return finish(report);
@@ -424,10 +528,10 @@ export function createSubagentTools(params: {
           // Scheduler-level rejection (aborted while queued) or an unexpected
           // escape from the run state machine.
           const cancelled =
-            signal?.aborted || (error instanceof Error && error.message === "Cancelled");
+            agentSignal.aborted || (error instanceof Error && error.message === "Cancelled");
           return finish({
             id: resolved.spec.id,
-            runId: buildSubagentRunId(toolCall.id, resolved.spec.id, index),
+            runId,
             name: identityPreview.name,
             role: identityPreview.role,
             prompt: resolved.spec.prompt,
@@ -435,13 +539,15 @@ export function createSubagentTools(params: {
             mode: resolved.spec.mode,
             status: cancelled ? "cancelled" : "failed",
             summary: "",
-            durationMs: Date.now() - startedAt,
+            durationMs: Date.now() - agentStartedAt,
             rounds: 0,
             toolCalls: 0,
             error: cancelled
               ? "Cancelled"
               : normalizeErrorMessage(error, "Delegated subagent failed"),
           });
+        } finally {
+          signal?.removeEventListener("abort", abortAgent);
         }
       },
     );

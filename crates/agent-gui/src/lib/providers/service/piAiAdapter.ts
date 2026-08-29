@@ -1,9 +1,19 @@
-import type { Api, Context, Model } from "@earendil-works/pi-ai";
+import {
+  type Api,
+  type AssistantMessageEventStream,
+  type Context,
+  createAssistantMessageEventStream,
+  type Model,
+} from "@earendil-works/pi-ai";
 import { stream as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
 import {
   type GoogleOptions,
   stream as streamGoogle,
 } from "@earendil-works/pi-ai/api/google-generative-ai";
+import {
+  type OpenAICodexResponsesOptions,
+  stream as streamOpenAICodexResponses,
+} from "@earendil-works/pi-ai/api/openai-codex-responses";
 import {
   type OpenAICompletionsOptions,
   stream as streamOpenAICompletions,
@@ -12,7 +22,9 @@ import {
   type OpenAIResponsesOptions,
   stream as streamOpenAIResponses,
 } from "@earendil-works/pi-ai/api/openai-responses";
+import { installCodexWebSocketProxy } from "../runtime/codexWebSocketProxy";
 import { resolveMaxTokens } from "../runtime/common";
+import { streamCpaResponsesWithFallback } from "../runtime/cpaResponsesWebSocket";
 import { rejectEmptyOpenAICompletionsResponse } from "../runtime/openAICompletionsStream";
 import { withStreamRetry } from "../runtime/streamRetry";
 import {
@@ -20,7 +32,11 @@ import {
   resolveAnthropicThinkingRuntime,
   resolveGeminiThinkingRuntime,
 } from "../runtime/thinkingLevels";
-import type { StreamOptionsEx, ToolChoice } from "../runtime/types";
+import type {
+  StreamOptionsEx,
+  StreamTransportFallbackInfo,
+  ToolChoice,
+} from "../runtime/types";
 import type { LlmAdapter } from "./types";
 
 // ============================================================================
@@ -67,7 +83,65 @@ function buildOpenAIBaseOptions(model: Model<Api>, options: StreamOptionsEx) {
     onPayload: options.onPayload,
     maxRetryDelayMs: options.maxRetryDelayMs,
     metadata: options.metadata,
+    transport: options.transport,
+    websocketConnectTimeoutMs: options.websocketConnectTimeoutMs,
   };
+}
+
+function findCodexWebSocketFallback(
+  message: { diagnostics?: Array<{ type?: string; error?: { message?: string }; details?: Record<string, unknown> }> },
+): StreamTransportFallbackInfo | undefined {
+  const diagnostic = message.diagnostics?.find(
+    (entry) =>
+      entry.type === "provider_transport_failure" && entry.details?.fallbackTransport === "sse",
+  );
+  if (!diagnostic) return undefined;
+  return {
+    from: "websocket",
+    to: "sse",
+    // pi-ai 只在诊断里标记「已回退」，不区分握手失败与帧超限，故统一归为建连失败。
+    reason: "handshake-failed",
+    // Keep provider error bodies and credentials out of UI/trajectory diagnostics.
+    errorMessage: "Codex WebSocket connection failed before content; SSE fallback is active",
+  };
+}
+
+function withCodexFallbackNotification(
+  source: AssistantMessageEventStream,
+  callback: StreamOptionsEx["onTransportFallback"],
+): AssistantMessageEventStream {
+  if (!callback) return source;
+  const output = createAssistantMessageEventStream();
+  let notified = false;
+  void (async () => {
+    for await (const event of source) {
+      if (!notified) {
+        const message =
+          event.type === "start"
+            ? event.partial
+            : event.type === "done"
+              ? event.message
+              : event.type === "error"
+                ? event.error
+                : undefined;
+        const fallback = message ? findCodexWebSocketFallback(message) : undefined;
+        if (fallback) {
+          notified = true;
+          try {
+            callback(fallback);
+          } catch (error) {
+            console.warn("Codex WebSocket fallback observer failed; continuing with SSE", error);
+          }
+        }
+      }
+      output.push(event);
+    }
+    output.end(await source.result());
+  })().catch((error) => {
+    console.warn("Codex WebSocket fallback observer stream failed", error);
+    void source.result().then((message) => output.end(message));
+  });
+  return output;
 }
 
 function streamAnthropicMessages(model: Model<Api>, context: Context, options: StreamOptionsEx) {
@@ -128,17 +202,101 @@ function streamOpenAICompletionsApi(model: Model<Api>, context: Context, options
   );
 }
 
+function hasChatGptCodexCredential(apiKey: string | undefined): boolean {
+  const parts = apiKey?.trim().split(".") ?? [];
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(atob(parts[1])) as Record<string, unknown>;
+    const auth = payload["https://api.openai.com/auth"];
+    return Boolean(auth && typeof auth === "object" && "chatgpt_account_id" in auth);
+  } catch {
+    return false;
+  }
+}
+
+function isChatGptCodexEndpoint(model: Model<Api>, options: StreamOptionsEx): boolean {
+  const configuredOrigin = Object.entries(options.headers ?? {}).find(
+    ([key]) => key.toLowerCase() === "x-liveagent-upstream-origin",
+  )?.[1];
+  try {
+    const hostname = new URL(configuredOrigin || model.baseUrl).hostname.toLowerCase();
+    return hostname === "chatgpt.com" || hostname.endsWith(".chatgpt.com");
+  } catch {
+    return false;
+  }
+}
+
+function toCodexTransportModel(model: Model<Api>): Model<"openai-codex-responses"> {
+  const baseUrl = model.baseUrl.replace(/\/v1\/?$/i, "");
+  return {
+    ...model,
+    api: "openai-codex-responses",
+    baseUrl,
+  } as Model<"openai-codex-responses">;
+}
+
+/**
+ * WebSocket 通路选择。开关只表达「愿意用 WS」，走哪条通路由端点与凭证形态决定：
+ *
+ * - `chatgpt-codex`：官方 chatgpt.com + 带 chatgpt_account_id 的 JWT，走 pi-ai 的
+ *   Codex transport（拼 /codex/responses、注入 chatgpt-account-id）。
+ * - `cpa-responses`：其余 Responses 端点（CPA / 自建 / OpenAI 兼容），普通 Bearer
+ *   Key，走本仓库的 CPA transport（同路径 GET 升级到 /v1/responses）。
+ *
+ * 关键：这两个判据是**分支依据**而不是准入依据。此前把它们当准入用，导致所有非
+ * chatgpt.com 端点在资格检查阶段就被排除，压根没发起过连接。
+ */
+type ResponsesWebSocketRoute = "chatgpt-codex" | "cpa-responses";
+
+function resolveResponsesWebSocketRoute(
+  model: Model<Api>,
+  options: StreamOptionsEx,
+): ResponsesWebSocketRoute {
+  return isChatGptCodexEndpoint(model, options) && hasChatGptCodexCredential(options.apiKey)
+    ? "chatgpt-codex"
+    : "cpa-responses";
+}
+
 function streamOpenAIResponsesApi(model: Model<Api>, context: Context, options: StreamOptionsEx) {
   const openAIOptions: OpenAIResponsesOptions = {
     ...buildOpenAIBaseOptions(model, options),
     reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
   };
+  const codexOptions: OpenAICodexResponsesOptions = {
+    ...buildOpenAIBaseOptions(model, options),
+    reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
+  };
+  const streamSse = () =>
+    streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions);
+  const websocketRequested = model.provider === "openai" && options.transport === "auto";
+  if (!websocketRequested) {
+    return withStreamRetry(streamSse, { signal: options.signal, ...options.streamRetry });
+  }
+
+  const route = resolveResponsesWebSocketRoute(model, options);
+  if (route === "chatgpt-codex") {
+    installCodexWebSocketProxy();
+    return withStreamRetry(
+      () =>
+        withCodexFallbackNotification(
+          streamOpenAICodexResponses(toCodexTransportModel(model), context, codexOptions),
+          options.onTransportFallback,
+        ),
+      { signal: options.signal, ...options.streamRetry },
+    );
+  }
+
+  // CPA / 自建 Responses 端点：WS 升级打在与 SSE 相同的路径上（GET vs POST），
+  // 凭证是普通 Bearer Key。首个内容产生前失败时由该 transport 自己回退 SSE。
   return withStreamRetry(
-    () => streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions),
-    {
-      signal: options.signal,
-      ...options.streamRetry,
-    },
+    () =>
+      streamCpaResponsesWithFallback(
+        model,
+        context,
+        { ...openAIOptions, onTransportFallback: options.onTransportFallback },
+        streamSse,
+      ),
+    { signal: options.signal, ...options.streamRetry },
   );
 }
 

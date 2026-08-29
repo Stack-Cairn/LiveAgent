@@ -21,6 +21,7 @@ export function ConversationTrajectorySurface(props: {
   workdir?: string;
   hasMoreMessages: boolean;
   loadEarlierMessages: () => void | Promise<void>;
+  liveRunActive?: boolean;
 }) {
   const persistedMessages = useMemo(
     () => toTrajectoryMessages(props.transcriptItems),
@@ -62,6 +63,7 @@ export function ConversationTrajectorySurface(props: {
       loadEarlierMessages={props.loadEarlierMessages}
       liveEvents={liveEvents}
       liveOwnership="authoritative"
+      liveRunActive={props.liveRunActive}
       authoritativeRevision={authoritativeRevision}
     />
   );

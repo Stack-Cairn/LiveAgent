@@ -43,7 +43,11 @@ import {
   resolveProviderNativeWebSearchStatus,
 } from "../../../lib/chat/search/providerNativeSearchStatus";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
-import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
+import {
+  assistantMessageToText,
+  describeTransportFallback,
+  streamAssistantMessage,
+} from "../../../lib/providers/llm";
 import { buildTextOnlySystemSuffix } from "../../../lib/providers/runtime/textOnlyRuntime";
 import type { ProviderId } from "../../../lib/settings";
 import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
@@ -484,6 +488,9 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           },
           onRetryRecovered: () => {
             updateGatewayBridgeToolStatus(null);
+          },
+          onTransportFallback: (info) => {
+            updateGatewayBridgeToolStatus(describeTransportFallback(info));
           },
         });
         trajectory.firstToken(textRound);

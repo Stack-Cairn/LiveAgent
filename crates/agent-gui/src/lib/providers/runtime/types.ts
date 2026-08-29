@@ -31,6 +31,8 @@ export type ProviderRuntimeConfig = {
   apiKey: string;
   customHeaders?: CustomProvider["customHeaders"];
   requestFormat?: CodexRequestFormat;
+  /** 仅 Responses 格式：优先尝试 WebSocket，首个内容产生前失败时回退 SSE。 */
+  enableWebSocket?: boolean;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;
   promptCacheHintMode?: PromptCacheHintMode;
@@ -51,7 +53,32 @@ export type ToolChoice =
       name: string;
     };
 
+/**
+ * 回退到 SSE 的判别原因。UI 必须能区分「压根没尝试连接」与「连上后被上游关闭」——
+ * 前者是配置问题（用户改设置就能解决），后者是运行时问题（改设置没用）。
+ */
+export type StreamTransportFallbackReason =
+  /** 端点/凭证不满足任何 WebSocket 通路，从未发起连接。 */
+  | "not-eligible"
+  /** 建连阶段失败：握手被拒、超时或上游不可达。 */
+  | "handshake-failed"
+  /** 上游以 1009 关闭：单帧超出上游体积上限。 */
+  | "message-too-big"
+  /** 上游以 1012 关闭并声明需要 HTTP 重放。 */
+  | "upstream-replay-required"
+  /** 已建连但在首个内容产生前异常结束。 */
+  | "stream-incomplete";
+
+export type StreamTransportFallbackInfo = {
+  from: "websocket";
+  to: "sse";
+  reason: StreamTransportFallbackReason;
+  errorMessage: string;
+};
+
 export type StreamOptionsEx = SimpleStreamOptions & {
+  /** Invoked when a Responses WebSocket transport falls back to SSE before content starts. */
+  onTransportFallback?: (info: StreamTransportFallbackInfo) => void;
   /**
    * 注意：pi-ai 的 streamSimpleAnthropic() 在内部会通过 buildBaseOptions() 丢弃 toolChoice，
    * 所以这里我们自己调用 streamAnthropic() 并把 toolChoice 显式传下去。

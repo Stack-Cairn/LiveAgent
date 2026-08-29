@@ -42,14 +42,18 @@ export {
   isValidCustomHeaderKey,
   prepareProviderRequest,
   resolveProviderCacheRetention,
+  resolveProviderTransport,
   toSimpleStreamReasoning,
 } from "./runtime/requestOptions";
 export { streamSimpleByApi } from "./runtime/streamByApi";
 export { completeAssistantMessage, streamAssistantMessage } from "./runtime/textOnlyRuntime";
+export { describeTransportFallback } from "./runtime/transportFallbackMessage";
 export type {
   ModelOption,
   ProviderRuntimeConfig,
   StreamOptionsEx,
+  StreamTransportFallbackInfo,
+  StreamTransportFallbackReason,
   ToolChoice,
 } from "./runtime/types";
 export { llm, llmStream } from "./service/llmService";
