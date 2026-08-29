@@ -219,6 +219,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     manualCompactPending,
     manualCompactTransientConversations,
     materializeComposerDraftForSend,
+    mentionApps,
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
@@ -776,6 +777,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           inputPlaceholder={composerPlaceholder}
                           workdir={displayedConversationWorkdir}
                           enabledSkills={enabledComposerSkills}
+                          mentionApps={mentionApps}
                           executionMode={settings.system.executionMode}
                           hasModels={modelOptions.length > 0}
                           currentModelLabel={currentModelLabel}

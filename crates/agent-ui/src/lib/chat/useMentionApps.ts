@@ -1,8 +1,8 @@
-import type { McpServerConfig } from "@liveagent/app/lib/settings";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { MentionComposerApp } from "@liveagent/ui/components/chat/MentionComposer";
 import { isCuaDriverServer } from "@liveagent/ui/contracts/mcpServerDefaults";
 import { registerAppMentionIcons } from "@liveagent/ui/lib/chat/appMentionIcons";
-import { invoke } from "@tauri-apps/api/core";
+import type { McpServerConfig } from "@liveagent/ui/lib/settings/types";
 import { useEffect, useMemo, useState } from "react";
 
 type InstalledApp = {
@@ -23,15 +23,20 @@ const EMPTY_APPS: MentionComposerApp[] = [];
  * 数组，@ 弹层的行为与从前完全一致。
  *
  * 列表在门控首次满足时取一次并缓存整个会话周期——安装应用集合的变化
- * 频率远低于会话生命周期，实时性不值得每次开弹层都扫一遍磁盘。宿主自身
- * 已在 Rust 侧剔除（cuaSelfGuard 会拒绝以宿主为目标的操作）。
+ * 频率远低于会话生命周期，实时性不值得每次开弹层都扫一遍磁盘。枚举
+ * 失败置 fetched 后本挂载周期内不再重试（组件重挂载才会再扫），避免
+ * 门控反复翻转时重复扫磁盘。宿主自身已在 Rust 侧剔除（cuaSelfGuard
+ * 会拒绝以宿主为目标的操作）。
  *
- * GUI 专属：应用列表来自桌面宿主本机，WebUI 有意不接（远端浏览器上的
- * "已安装应用"没有意义，网关也不该中继宿主的应用清单）。
+ * 双端共用：`invoke` 经 `@liveagent/app/shims/tauriCore` 按宿主解析——
+ * GUI 直连 Tauri 命令 `cua_driver_list_installed_apps`；WebUI 的 shim 把
+ * 同名命令经 Gateway 直通中继到已连接的桌面 Agent（installed_apps_list
+ * 臂），列出的是**桌面宿主本机**的已安装应用，与远程会话跑在桌面、
+ * cua-driver 操作桌面屏幕的模型一致。
  *
- * 平台收窄：枚举目前仅实现 macOS（services/cua_driver/installed_apps.rs，
- * 其他平台没有同样稳定的"已安装应用 + 唯一标识"语义），Windows/Linux 即使
- * 挂了 cua-driver 也返回空列表，@ 弹层不会出现应用分组。
+ * 平台收窄：枚举实现见 services/cua_driver/installed_apps.rs——macOS 扫
+ * 应用目录、Windows 扫开始菜单快捷方式，其他平台（Linux 等）返回空
+ * 列表，@ 弹层不出现应用分组。
  */
 export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMode: boolean) {
   const cuaEnabled = useMemo(
@@ -60,8 +65,7 @@ export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMo
         setApps(mapped);
       })
       .catch(() => {
-        // 枚举失败按"没有应用候选"降级；置 fetched 后本挂载周期内不再
-        // 重试（组件重挂载才会再扫），避免门控反复翻转时重复扫磁盘。
+        // 枚举失败按"没有应用候选"降级，见模块注释的重试语义。
         if (!cancelled) setFetched(true);
       });
     return () => {

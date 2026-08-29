@@ -6,6 +6,7 @@ import type {
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import {
   type ConversationOpenState,
@@ -1341,6 +1342,7 @@ function useGatewayAppController() {
     modelOptions,
     selectedValue,
     skillsRootDir,
+    workspaceResources,
   } = useGatewayChatConfiguration({
     activeSelectedModel,
     displayedConversationId,
@@ -1350,6 +1352,9 @@ function useGatewayAppController() {
     setSettings,
     settings,
   });
+  // @ 弹层的应用候选：门控与 GUI 完全同源（agent 模式 + 工作区挂
+  // cua-driver），列表经 Gateway 直通中继自桌面宿主本机。
+  const mentionApps = useMentionApps(workspaceResources.mcpServers, isAgentMode);
   const {
     cancelChat,
     commitQueuedChatEdit,
@@ -1878,6 +1883,7 @@ function useGatewayAppController() {
     manualCompactPending,
     manualCompactTransientConversations,
     materializeComposerDraftForSend,
+    mentionApps,
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,

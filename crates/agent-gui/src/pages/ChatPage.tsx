@@ -169,7 +169,7 @@ import {
 } from "./chat/hooks/useContextUsageTokensSource";
 import { useEditResend } from "./chat/hooks/useEditResend";
 import { useLiveTranscriptController } from "./chat/hooks/useLiveTranscriptController";
-import { useMentionApps } from "./chat/hooks/useMentionApps";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";

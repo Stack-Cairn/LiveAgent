@@ -190,8 +190,8 @@ test("the chip shows the real app logo via the icon registry, never via DOM attr
     "APP_MENTION_BUNDLE_ID_ATTR",
     "APP_MENTION_PATH_ATTR",
   ]);
-  // 注册表登记发生在 GUI 拉到列表时。
-  const hook = source(guiRoot, "pages/chat/hooks/useMentionApps.ts");
+  // 注册表登记发生在宿主拉到列表时（GUI 与 WebUI 共用同一个 hook）。
+  const hook = source(agentUiRoot, "lib/chat/useMentionApps.ts");
   assert.match(hook, /registerAppMentionIcons\(mapped\)/);
 });
 
@@ -247,26 +247,71 @@ test("the send path serializes appMention segments in both draft pipelines", () 
   assert.match(paneSend, /appMentions: \[\],/);
 });
 
-test("GUI gating reuses the cua-driver identity ruling and stays desktop-only", () => {
-  const hook = source(guiRoot, "pages/chat/hooks/useMentionApps.ts");
+test("both hosts gate apps by the cua-driver identity ruling via the shared hook", () => {
+  const hook = source(agentUiRoot, "lib/chat/useMentionApps.ts");
   // 门控必须走 contracts 的同一份判定（按 id 或 command），不得自己
   // 比较字符串——否则会与审批缺省/自指闸门的裁决错位。
   assert.match(hook, /isCuaDriverServer\(server\)/);
   assert.match(hook, /from "@liveagent\/ui\/contracts\/mcpServerDefaults"/);
   assert.match(hook, /cua_driver_list_installed_apps/);
+  // invoke 必须经 @liveagent/app shim 解析：GUI 直连 Tauri 命令，WebUI
+  // 由 shim 把同名命令经 Gateway 直通中继到桌面宿主。hook 自身不得
+  // import @tauri-apps——那会把共享包焊死在桌面端。
+  assert.match(hook, /from "@liveagent\/app\/shims\/tauriCore"/);
+  assert.doesNotMatch(hook, /@tauri-apps/);
   const chatPage = source(guiRoot, "pages/ChatPage.tsx");
   assert.match(chatPage, /useMentionApps\(activeWorkspaceResources\.mcpServers, isAgentMode\)/);
-  // WebUI 有意不接：网关前端不得出现应用枚举通道。
+  // WebUI 接线：门控入参同源（agent 模式 + 工作区 mcpServers），列表
+  // 传入 composer；列出的是已连接桌面宿主的应用（cua 工具操作桌面）。
+  const gatewayApp = readFileSync(
+    new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(gatewayApp, /useMentionApps\(workspaceResources\.mcpServers, isAgentMode\)/);
   const gatewayView = readFileSync(
     new URL("../../../agent-gateway/web/src/app/GatewayAppView.tsx", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(gatewayView, /mentionApps/);
+  assert.match(gatewayView, /mentionApps=\{mentionApps\}/);
 });
 
-test("the Rust command excludes the host bundle and is registered", () => {
+test("the gateway relays installed apps as a vetted pass-through frame", () => {
+  // 直通链路：proto 臂（编号只增不改）→ Go 白名单 → 桌面分发与 bridge
+  // → WebUI shim 复用 GUI 的同名 invoke 命令。少一环 WebUI 的应用分组
+  // 就静默消失，所以每一环都铺点。
+  const proto = readFileSync(
+    new URL("../../../agent-gateway/proto/v2/gateway.proto", import.meta.url),
+    "utf8",
+  );
+  assert.match(proto, /InstalledAppsListRequest installed_apps_list = 100;/);
+  assert.match(proto, /InstalledAppsListResponse installed_apps_list_resp = 105;/);
+  const guard = readFileSync(
+    new URL("../../../agent-gateway/internal/protocol/pbws/guard.go", import.meta.url),
+    "utf8",
+  );
+  assert.match(guard, /GatewayEnvelope_InstalledAppsList/);
+  const envelope = source(tauriRoot, "services/gateway/envelope_handler.rs");
+  assert.match(envelope, /Payload::InstalledAppsList/);
+  assert.match(envelope, /InstalledAppsListResp/);
+  const bridge = source(tauriRoot, "services/gateway_bridge.rs");
+  assert.match(bridge, /handle_installed_apps_list/);
+  const shim = readFileSync(
+    new URL("../../../agent-gateway/web/src/shims/tauriCore.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(shim, /case "cua_driver_list_installed_apps":/);
+  assert.match(shim, /listInstalledApps\(\)/);
+});
+
+test("the Rust command excludes the host on every platform and is registered", () => {
   const service = source(tauriRoot, "services/cua_driver/installed_apps.rs");
+  // macOS 按宿主 bundle id 剔除；Windows 没有 bundle id，按当前进程的
+  // exe 路径剔除——两条路都必须在，缺一条宿主就会出现在自己的候选里。
   assert.match(service, /eq_ignore_ascii_case\(exclude_bundle_id\)/);
+  assert.match(service, /std::env::current_exe\(\)/);
+  assert.match(service, /list_windows_apps/);
+  // Windows 身份由 path 承担：bundle_id 留空，经前端映射为 undefined。
+  assert.match(service, /bundle_id: String::new\(\)/);
   const command = source(tauriRoot, "commands/integration/cua_driver.rs");
   assert.match(command, /app\.config\(\)\.identifier\.clone\(\)/);
   const lib = source(tauriRoot, "lib.rs");
