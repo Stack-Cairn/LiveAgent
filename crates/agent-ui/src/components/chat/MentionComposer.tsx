@@ -11,6 +11,11 @@ import {
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  appMentionRecencyKey,
+  readAppMentionRecents,
+  recordAppMentionUse,
+} from "@liveagent/ui/lib/chat/appMentionRecency";
+import {
   insertPlainTextWithUndo,
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
@@ -79,6 +84,7 @@ import {
   isImeKeyboardEvent,
   isLargePasteText,
   LARGE_PASTE_TAG_ATTR,
+  MAX_APP_SUGGESTIONS,
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
   MENTION_REFETCH_DEBOUNCE_MS,
@@ -448,29 +454,39 @@ export const MentionComposer = memo(
         return next;
       }
 
-      // 文件与应用是弹层里的两个并列分组：文件在前、应用在后，各自独立
-      // 封顶——否则大仓库的文件结果会把整个配额吃光，应用分组永远不出现。
-      // 应用列表已由宿主门控（未挂 cua-driver 时恒为空），有查询词时两组
-      // 都按包含匹配过滤。键盘导航走拼接后的扁平数组，分组只是渲染形态。
+      // 文件与应用是弹层里的两个并列分组：应用在前、文件在后，各自独立
+      // 封顶——应用只留一小撮（MAX_APP_SUGGESTIONS）避免把文件结果推出
+      // 视野，文件配额也不会被应用吃掉。应用按「最近使用在前，其余保持
+      // 宿主的字母序」排列（榜单随 @ 选中落 localStorage，会话开启时重读，
+      // 见 appMentionRecency.ts）。应用列表已由宿主门控（未挂 cua-driver
+      // 时恒为空），有查询词时两组都按包含匹配过滤。键盘导航走拼接后的
+      // 扁平数组，分组只是渲染形态。
       const next: MentionSuggestion[] = [];
-      for (const item of mentionSessionSearchIndex) {
-        if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
-          continue;
-        }
-        next.push({ type: "file", entry: item.entry });
-        if (next.length >= MAX_SUGGESTIONS) {
-          break;
-        }
-      }
+      const recents = readAppMentionRecents();
+      const recencyRank = new Map(recents.map((key, index) => [key, index]));
+      const rankOf = (app: (typeof mentionApps)[number]) =>
+        recencyRank.get(appMentionRecencyKey(app)) ?? Number.MAX_SAFE_INTEGER;
+      const orderedApps = [...mentionApps].sort((a, b) => rankOf(a) - rankOf(b));
       let appCount = 0;
-      for (const app of mentionApps) {
+      for (const app of orderedApps) {
         const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
         if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
           continue;
         }
         next.push({ type: "app", app });
         appCount += 1;
-        if (appCount >= MAX_SUGGESTIONS) {
+        if (appCount >= MAX_APP_SUGGESTIONS) {
+          break;
+        }
+      }
+      let fileCount = 0;
+      for (const item of mentionSessionSearchIndex) {
+        if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
+          continue;
+        }
+        next.push({ type: "file", entry: item.entry });
+        fileCount += 1;
+        if (fileCount >= MAX_SUGGESTIONS) {
           break;
         }
       }
@@ -1088,6 +1104,8 @@ export const MentionComposer = memo(
           insertSkillMentionChip(mentionCtx, suggestion.skill);
         } else if (suggestion.type === "app") {
           insertAppMentionChip(mentionCtx, suggestion.app);
+          // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
+          recordAppMentionUse(suggestion.app);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
         }

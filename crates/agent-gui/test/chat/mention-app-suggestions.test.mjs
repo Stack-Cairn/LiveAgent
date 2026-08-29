@@ -83,19 +83,48 @@ test("app suggestions ride the @ trigger and are host-gated by the mentionApps p
   assert.match(composer, /insertAppMentionChip\(mentionCtx, suggestion\.app\)/);
 });
 
-test("the popup renders files and apps as two labelled sections with real app icons", () => {
-  // 文件在前、应用在后，各自独立封顶——应用分组不能被大仓库的文件结果
-  // 挤掉。分组标题按第一条应用行的边界插入（仅当上方有文件行）。
-  const filesLoopFirst =
-    composer.indexOf("of mentionSessionSearchIndex") < composer.indexOf("of mentionApps");
-  assert.ok(filesLoopFirst, "file suggestions must precede app suggestions");
-  assert.match(composer, /appCount >= MAX_SUGGESTIONS/);
-  assert.match(overlays, /firstAppIndex/);
-  assert.match(overlays, /i === firstAppIndex && hasFileRows/);
+test("the popup renders apps and files as two labelled sections with real app icons", () => {
+  // 应用在前、文件在后，各自独立封顶——应用分组只留一小撮（3 条），
+  // 既保证 @ 首先看到应用，又不把文件结果推出视野。分组标题按第一条
+  // 文件行的边界插入（仅当上方有应用行）。
+  const appsLoopFirst =
+    composer.indexOf("of orderedApps") < composer.indexOf("of mentionSessionSearchIndex");
+  assert.ok(appsLoopFirst, "app suggestions must precede file suggestions");
+  assert.match(model, /MAX_APP_SUGGESTIONS = 3/);
+  assert.match(composer, /appCount >= MAX_APP_SUGGESTIONS/);
+  assert.match(overlays, /firstFileIndex/);
+  assert.match(overlays, /i === firstFileIndex && hasAppRows/);
   // 应用行优先渲染宿主提供的真实图标（data URL），缺失时回退占位图标。
   assert.match(overlays, /app\?\.iconDataUrl \?/);
   assert.match(overlays, /img src=\{app\.iconDataUrl\}/);
   assert.match(overlays, /<AppWindow className/);
+});
+
+test("selecting an app records it and the next @ popup ranks recents first", () => {
+  // 选中即落榜单（localStorage 版本化键），下次 @ 会话开启时重读并把
+  // 最近使用的应用排到分组最前；未上榜的保持宿主的字母序。
+  assert.match(composer, /recordAppMentionUse\(suggestion\.app\)/);
+  assert.match(composer, /readAppMentionRecents\(\)/);
+  assert.match(composer, /appMentionRecencyKey\(app\)/);
+  const recency = source(agentUiRoot, "lib/chat/appMentionRecency.ts");
+  assert.match(recency, /"liveagent\.app-mention-recents\.v1"/);
+  // 身份键与图标注册表同一套优先级：bundle id > path > name。
+  const keyFn = extractFunction(recency, "appMentionRecencyKey").replace(
+    /\(identity: AppMentionRecencyIdentity\): string/,
+    "(identity)",
+  );
+  const appMentionRecencyKey = new Function(`${keyFn}; return appMentionRecencyKey;`)();
+  assert.equal(
+    appMentionRecencyKey({
+      name: "Safari",
+      bundleId: "com.apple.Safari",
+      path: "/Applications/Safari.app",
+    }),
+    "bundle:com.apple.safari",
+  );
+  assert.equal(appMentionRecencyKey({ name: "Tool", path: "/opt/tool" }), "path:/opt/tool");
+  assert.equal(appMentionRecencyKey({ name: "Tool" }), "name:tool");
+  assert.equal(appMentionRecencyKey({}), "");
 });
 
 test("the chip shows the real app logo via the icon registry, never via DOM attributes", () => {

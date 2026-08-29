@@ -36,10 +36,10 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
-  // 文件与应用两个分组在扁平 suggestions 数组里连续排布（文件在前）；
+  // 文件与应用两个分组在扁平 suggestions 数组里连续排布（应用在前）；
   // 键盘导航按扁平索引走，分组标题只是渲染时按边界插入的静态行。
-  const firstAppIndex = suggestions.findIndex((suggestion) => suggestion.type === "app");
-  const hasFileRows = suggestions.some((suggestion) => suggestion.type === "file");
+  const firstFileIndex = suggestions.findIndex((suggestion) => suggestion.type === "file");
+  const hasAppRows = suggestions.some((suggestion) => suggestion.type === "app");
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
@@ -95,7 +95,7 @@ export function Popup({
       }}
     >
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? "Skills" : hasFileRows || firstAppIndex < 0 ? "文件" : "应用"}
+        {trigger === "skill" ? "Skills" : hasAppRows ? "应用" : "文件"}
       </div>
       <div
         ref={listRef}
@@ -118,12 +118,12 @@ export function Popup({
           const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
           const title = app?.name ?? skill?.name ?? fileName;
           const subtitle = app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : "");
-          // 应用分组标题插在第一条应用行之前，仅当上方有文件行时——只剩
-          // 应用时顶栏已直接写「应用」，再插一行就是重复标签。
-          const appSectionHeader =
-            isApp && i === firstAppIndex && hasFileRows ? (
+          // 文件分组标题插在第一条文件行之前，仅当上方有应用行时——只剩
+          // 文件时顶栏已直接写「文件」，再插一行就是重复标签。
+          const fileSectionHeader =
+            entry && i === firstFileIndex && hasAppRows ? (
               <div className="mt-1.5 shrink-0 border-t border-border/50 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                应用
+                文件
               </div>
             ) : null;
           const row = (
@@ -193,10 +193,10 @@ export function Popup({
               )}
             </button>
           );
-          if (!appSectionHeader) return row;
+          if (!fileSectionHeader) return row;
           return (
-            <Fragment key={`app-section:${app?.bundleId || app?.path || app?.name}`}>
-              {appSectionHeader}
+            <Fragment key={`file-section:${entry?.kind}:${entry?.path}`}>
+              {fileSectionHeader}
               {row}
             </Fragment>
           );
