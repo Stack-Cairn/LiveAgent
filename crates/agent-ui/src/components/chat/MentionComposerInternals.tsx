@@ -84,6 +84,7 @@ import {
   LARGE_PASTE_LINE_THRESHOLD,
   LARGE_PASTE_PREVIEW_CHARS,
   LARGE_PASTE_TAG_ATTR,
+  MAX_CONVERSATION_MENTIONS,
   MENTION_KIND_ATTR,
   MENTION_TAG_ATTR,
   type MentionComposerApp,
@@ -1722,6 +1723,36 @@ export function createComposerSegmentNode(
     return createConversationMentionChip(segment.conversation);
   }
   return createCodeMentionChip(segment.reference);
+}
+
+/** 粘贴路径与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限、自引用）。
+ *  违反约束的会话段不能静默丢弃——降级为序列化 token 文本，粘贴内容一字
+ *  不丢，同时该文本不再具备结构化引用身份（发送侧只授权结构化 chip）。 */
+export function sanitizeConversationMentionSegments(
+  root: HTMLElement,
+  segments: MentionComposerDraftSegment[],
+  currentConversationId?: string,
+): MentionComposerDraftSegment[] {
+  const selectedIds = new Set(
+    [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]
+      .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+      .filter((id): id is string => Boolean(id)),
+  );
+  const currentId = currentConversationId?.trim() ?? "";
+  return segments.map((segment) => {
+    if (segment.type !== "conversationMention") return segment;
+    const id = segment.conversation.id.trim();
+    const rejected =
+      !id ||
+      (currentId !== "" && id === currentId) ||
+      selectedIds.has(id) ||
+      selectedIds.size >= MAX_CONVERSATION_MENTIONS;
+    if (!rejected) {
+      selectedIds.add(id);
+      return segment;
+    }
+    return { type: "text", text: formatConversationMentionToken(segment.conversation) };
+  });
 }
 
 export function insertComposerSegmentsAtSelection(

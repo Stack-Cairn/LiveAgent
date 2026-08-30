@@ -1203,6 +1203,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               searchConversations={
                 isAgentExecutionMode(executionMode) ? searchMentionableConversations : undefined
               }
+              currentConversationId={conversationId}
               mentionApps={mentionApps}
               className={cn(
                 // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——

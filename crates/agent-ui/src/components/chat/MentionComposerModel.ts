@@ -208,6 +208,11 @@ export interface MentionComposerProps {
   /** Conversation references need the agent runtime's read-only history tool. */
   conversationMentionsEnabled?: boolean;
   /**
+   * 当前会话 ID：粘贴路径需要它执行与 @ 菜单/拖拽一致的自引用过滤；
+   * 缺省时粘贴仅做去重与数量上限校验。
+   */
+  currentConversationId?: string;
+  /**
    * @ 弹层里的「应用」候选（computer use 目标）。由宿主门控：仅当会话挂着
    * cua-driver 时非空；缺省/空数组时 @ 行为与从前完全一致。
    */

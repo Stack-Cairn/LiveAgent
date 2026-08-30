@@ -5,6 +5,7 @@ import type {
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { getAutomationState } from "@liveagent/ui/lib/automation/index";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   createUserMessageWithUploads,
   mergePendingUploadedFiles,
@@ -622,7 +623,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    const referencedConversations = composerDraft?.conversationMentions ?? [];
+    // 粘贴等路径可能让草稿携带超限/重复/自引用的会话引用；发送边界统一
+    // 归一化（带当前会话 ID 过滤自引用），与 gateway 队列路径语义一致。
+    const referencedConversations = normalizeConversationMentionReferences(
+      composerDraft?.conversationMentions ?? [],
+      conversationId,
+    );
     const userMessage = createUserMessageWithUploads(
       text,
       uploadedFiles,
