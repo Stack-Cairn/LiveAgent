@@ -3,7 +3,30 @@ import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { type CSSProperties, useEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useLocale } from "../../i18n/index";
+import {
+  absoluteWorkspacePath,
+  clearActiveWorkspacePathDrag,
+  getActiveWorkspacePathDrag,
+  hasWorkspacePathDragPayload,
+  quoteWorkspacePathForShell,
+  readNativeWorkspacePathDragOver,
+  readNativeWorkspacePathDrop,
+  readWorkspacePathDragPayload,
+  WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+  WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+  WORKSPACE_PATH_NATIVE_DROP_EVENT,
+  type WorkspacePathDragPayload,
+  workspacePathDragMatchesProject,
+} from "../../lib/chat/workspacePathDrag";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
 import type {
@@ -143,7 +166,12 @@ export function XTermViewport({
   onError,
   onInitialSnapshotConsumed,
 }: XTermViewportProps) {
+  const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropTargetRef = useRef<HTMLDivElement>(null);
+  const [workspacePathDropState, setWorkspacePathDropState] = useState<"accept" | "blocked" | null>(
+    null,
+  );
   const resizeTimerRef = useRef<number | null>(null);
   const sessionRef = useRef(session);
   const themeRef = useRef(theme);
@@ -160,6 +188,100 @@ export function XTermViewport({
   const viewportStyle = {
     "--project-terminal-background": terminalTheme(theme).background,
   } as CSSProperties;
+
+  const canAcceptWorkspacePath = useCallback(
+    (payload = getActiveWorkspacePathDrag()) =>
+      Boolean(
+        payload &&
+          session.kind === "local" &&
+          workspacePathDragMatchesProject(payload, session.cwd) &&
+          !termRef.current?.options.disableStdin,
+      ),
+    [session.cwd, session.kind],
+  );
+
+  const handleWorkspacePathDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const state = canAcceptWorkspacePath() ? "accept" : "blocked";
+      event.dataTransfer.dropEffect = state === "accept" ? "copy" : "none";
+      setWorkspacePathDropState(state);
+    },
+    [canAcceptWorkspacePath],
+  );
+
+  const insertWorkspacePathInTerminal = useCallback(
+    (payload: WorkspacePathDragPayload) => {
+      setWorkspacePathDropState(null);
+      if (!canAcceptWorkspacePath(payload)) return false;
+      const absolutePath = absoluteWorkspacePath(payload);
+      const quotedPath = absolutePath
+        ? quoteWorkspacePathForShell(absolutePath, session.shell)
+        : null;
+      if (!quotedPath) return false;
+      termRef.current?.paste(quotedPath);
+      termRef.current?.focus();
+      return true;
+    },
+    [canAcceptWorkspacePath, session.shell],
+  );
+
+  const handleWorkspacePathDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const payload = readWorkspacePathDragPayload(event.dataTransfer);
+      clearActiveWorkspacePathDrag();
+      if (payload) insertWorkspacePathInTerminal(payload);
+    },
+    [insertWorkspacePathInTerminal],
+  );
+
+  useEffect(() => {
+    const target = dropTargetRef.current;
+    if (!target) return;
+    const handleNativeWorkspacePathDragOver = (event: Event) => {
+      const payload = readNativeWorkspacePathDragOver(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setWorkspacePathDropState(canAcceptWorkspacePath(payload) ? "accept" : "blocked");
+    };
+    const handleNativeWorkspacePathDragLeave = (event: Event) => {
+      if (event.type !== WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT) return;
+      setWorkspacePathDropState(null);
+    };
+    const handleNativeWorkspacePathDrop = (event: Event) => {
+      const payload = readNativeWorkspacePathDrop(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      insertWorkspacePathInTerminal(payload);
+    };
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+      handleNativeWorkspacePathDragOver,
+    );
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+      handleNativeWorkspacePathDragLeave,
+    );
+    target.addEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    return () => {
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+        handleNativeWorkspacePathDragOver,
+      );
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+        handleNativeWorkspacePathDragLeave,
+      );
+      target.removeEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    };
+  }, [canAcceptWorkspacePath, insertWorkspacePathInTerminal]);
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -634,11 +756,42 @@ export function XTermViewport({
   }, [client, session.id, session.projectPathKey]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the xterm viewport is a pointer drop target; keyboard users paste or use the file-tree context menu.
     <div
-      ref={containerRef}
+      ref={dropTargetRef}
       style={viewportStyle}
-      className={cn("project-terminal-viewport h-full min-h-0 w-full overflow-hidden", className)}
-    />
+      className={cn(
+        "project-terminal-viewport relative h-full min-h-0 w-full overflow-hidden",
+        className,
+      )}
+      data-workspace-path-drop-zone={workspacePathDropState ?? "idle"}
+      onDragEnter={handleWorkspacePathDragOver}
+      onDragOver={handleWorkspacePathDragOver}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setWorkspacePathDropState(null);
+      }}
+      onDrop={handleWorkspacePathDrop}
+    >
+      <div ref={containerRef} className="h-full min-h-0 w-full" />
+      {workspacePathDropState ? (
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed bg-background/90 text-xs font-medium backdrop-blur-sm",
+            workspacePathDropState === "accept"
+              ? "border-emerald-500/70 text-emerald-600 dark:text-emerald-300"
+              : "border-destructive/60 text-destructive",
+          )}
+        >
+          {workspacePathDropState === "accept"
+            ? t("projectTools.workspacePathDrop.insert")
+            : session.kind === "ssh"
+              ? t("projectTools.workspacePathDrop.sshBlocked")
+              : t("projectTools.workspacePathDrop.crossProject")}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

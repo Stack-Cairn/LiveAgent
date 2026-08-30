@@ -11,6 +11,7 @@ import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal
 import {
   commitWorkspaceDropConversation,
   findAdjacentPaneId,
+  findPaneIdBySurfaceKey,
   findParentSplitId,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
@@ -39,7 +40,7 @@ import {
 } from "@liveagent/ui/lib/workbench/useWindowWorkbench";
 import {
   useWorkbenchDragSession,
-  type WorkbenchDragState,
+  type WorkbenchDragRenderState,
   type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "@liveagent/ui/lib/workbench/useWorkbenchDragSession";
@@ -125,6 +126,7 @@ export type GatewayWorkbenchController = {
   handleOpenConversationInSplit: (item: SidebarConversation) => boolean;
   /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
+  handleOpenFileTreeInSplit: () => void;
   /** Right Dock 新建菜单「在分屏中新建终端」。 */
   handleOpenNewTerminalInSplit: () => void;
   /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
@@ -135,7 +137,9 @@ export type GatewayWorkbenchController = {
   clearWorkbench: () => void;
   projectRefForConversation: (item: { id: string; cwd?: string | null }) => ProjectRef;
   /** 拖拽 overlay 模型（幽灵 + 落点预览）；idle 时为 null。 */
-  dragState: WorkbenchDragState | null;
+  dragState: WorkbenchDragRenderState | null;
+  /** Imperative compositor-only pointer tracking for the drag ghost. */
+  dragGhostRef: (element: HTMLDivElement | null) => void;
   /** Pane 头部拖动把手（pointer-down 发起）。 */
   beginPaneDrag: (
     pane: PaneRecord,
@@ -179,6 +183,12 @@ export type GatewayWorkbenchController = {
   ) => void;
   /** Right Dock「新建终端」按钮拖拽发起（落点新建终端 Pane）。 */
   handleNewTerminalDragIntent: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
+  handleFileTreeTabDragIntent: (event: {
     pointerId: number;
     clientX: number;
     clientY: number;
@@ -620,6 +630,22 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         commitTerminalDrop(payload, target, terminalDropDeps());
         return;
       }
+      if (payload.kind === "fileTree") {
+        const existingPaneId = findPaneIdBySurfaceKey(
+          workbench.layoutRef.current,
+          `fileTree:${payload.project.projectPathKey}`,
+        );
+        if (target.kind === "pane-center") {
+          if (existingPaneId && target.paneId === existingPaneId) handleFocusPane(existingPaneId);
+          return;
+        }
+        if (existingPaneId) {
+          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
+          return;
+        }
+        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+        return;
+      }
       // Pane 头部拖动重排。
       if (target.kind === "canvas-empty") return;
       if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
@@ -648,7 +674,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     ],
   );
 
-  const { dragState, beginDrag } = useWorkbenchDragSession({
+  const { dragState, beginDrag, dragGhostRef } = useWorkbenchDragSession({
     enabled,
     layoutRef: workbench.layoutRef,
     geometryRef,
@@ -791,6 +817,33 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag, newTerminalTitle, terminalProjectPath],
   );
 
+  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+    const path = terminalProjectPath.trim();
+    if (!path) return null;
+    const projectPathKey = workspaceProjectPathKey(path);
+    const project = workspaceProjectsRef.current.find(
+      (entry) => workspaceProjectPathKey(entry.path) === projectPathKey,
+    );
+    return {
+      projectId: project?.id ?? `project:${projectPathKey}`,
+      projectPathKey,
+    };
+  }, [terminalProjectPath]);
+
+  const handleFileTreeTabDragIntent = useCallback(
+    (event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    }) => {
+      const project = fileTreeProjectRef();
+      if (!project) return;
+      beginDrag({ kind: "fileTree", project, title: "File Tree" }, event);
+    },
+    [beginDrag, fileTreeProjectRef],
+  );
+
   // 同一提交通路的菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
   // 由 commitTerminalDrop 自己走「移动既有 Pane」,不会二次开 Pane。
   const handleOpenTerminalInSplit = useCallback(
@@ -820,6 +873,25 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     },
     [onNoSpaceForSplit, resolveAutoDockTarget, terminalDropDeps],
   );
+
+  const handleOpenFileTreeInSplit = useCallback(() => {
+    const project = fileTreeProjectRef();
+    if (!project) return;
+    const existingPaneId = findPaneIdBySurfaceKey(
+      workbench.layoutRef.current,
+      `fileTree:${project.projectPathKey}`,
+    );
+    if (existingPaneId) {
+      handleFocusPane(existingPaneId);
+      return;
+    }
+    const target = resolveAutoDockTarget();
+    if (!target) {
+      onNoSpaceForSplit();
+      return;
+    }
+    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
+  }, [fileTreeProjectRef, handleFocusPane, onNoSpaceForSplit, resolveAutoDockTarget, workbench]);
 
   const handleOpenNewTerminalInSplit = useCallback(() => {
     const target = resolveAutoDockTarget();
@@ -908,17 +980,20 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenFileTreeInSplit,
       handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
       clearWorkbench,
       projectRefForConversation,
       dragState,
+      dragGhostRef,
       beginPaneDrag,
       handleConversationDragIntent,
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
+      handleFileTreeTabDragIntent,
       leasedDockSessionIds,
     }),
     [
@@ -928,17 +1003,20 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleClosePane,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
+      handleOpenFileTreeInSplit,
       handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
       clearWorkbench,
       projectRefForConversation,
       dragState,
+      dragGhostRef,
       beginPaneDrag,
       handleConversationDragIntent,
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
+      handleFileTreeTabDragIntent,
       leasedDockSessionIds,
     ],
   );

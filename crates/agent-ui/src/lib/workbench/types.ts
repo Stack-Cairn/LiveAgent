@@ -14,6 +14,11 @@ export type ConversationWorkbenchSurface = {
   project: ProjectRef;
 };
 
+export type FileTreeWorkbenchSurface = {
+  kind: "fileTree";
+  project: ProjectRef;
+};
+
 export type LocalTerminalLaunchSpec = {
   cwd: string;
   shell?: string;
@@ -56,6 +61,7 @@ export type TerminalWorkbenchSurface = LocalTerminalWorkbenchSurface | SshTermin
 
 export type WorkbenchSurfaceSpec =
   | ConversationWorkbenchSurface
+  | FileTreeWorkbenchSurface
   | TerminalWorkbenchSurface
   | UnsupportedWorkbenchSurface;
 
@@ -68,6 +74,8 @@ export function surfaceIdentityKey(surface: WorkbenchSurfaceSpec): string {
   switch (surface.kind) {
     case "conversation":
       return `conversation:${surface.conversationId.trim()}`;
+    case "fileTree":
+      return `fileTree:${surface.project.projectPathKey.trim()}`;
     case "localTerminal":
     case "sshTerminal":
       return `terminal:${surface.surfaceId.trim()}`;

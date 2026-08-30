@@ -22,6 +22,7 @@ type RightDockContentProps = {
   onTerminalError: (sessionId: string, message: string | null) => void;
   onInitialTerminalSnapshotConsumed: (sessionId: string) => void;
   onCreateTerminal: () => void;
+  fileTreeLeased?: boolean;
 };
 
 export function RightDockContent(props: RightDockContentProps) {
@@ -37,6 +38,7 @@ export function RightDockContent(props: RightDockContentProps) {
     onTerminalError,
     onInitialTerminalSnapshotConsumed,
     onCreateTerminal,
+    fileTreeLeased,
   } = props;
   const { t } = useLocale();
   const context = useRightDockToolContext();
@@ -49,6 +51,11 @@ export function RightDockContent(props: RightDockContentProps) {
         if (!initializedTools[definition.kind] || !definition.isAvailable(context)) {
           return null;
         }
+        // File Tree follows terminal's single-host lease semantics: while its
+        // Surface lives in Workbench, Dock mounts neither a tab nor a hidden
+        // duplicate tree. Closing the Pane releases the lease and this
+        // persisted tool becomes visible here again.
+        if (definition.kind === "fileTree" && fileTreeLeased) return null;
         const active = currentActiveTab === definition.kind;
         return (
           <div

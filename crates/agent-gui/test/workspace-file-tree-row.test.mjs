@@ -106,3 +106,19 @@ test("workspace file tree expands directories with one click", () => {
   assert.equal(propagationStopped, true);
   assert.deepEqual(calls, [["toggle", "assets", false]]);
 });
+
+test("workspace file tree rows expose a copy drag without replacing click behavior", () => {
+  const dragCalls = [];
+  const { tree } = renderRow({
+    onDragStart: (...args) => dragCalls.push(args),
+    onDragEnd: () => dragCalls.push(["end"]),
+  });
+  const event = { dataTransfer: {} };
+  assert.equal(tree.props.draggable, true);
+  tree.props.onDragStart(event);
+  tree.props.onDragEnd();
+  assert.deepEqual(dragCalls, [
+    [event, "assets/preview.png", "file"],
+    ["end"],
+  ]);
+});
