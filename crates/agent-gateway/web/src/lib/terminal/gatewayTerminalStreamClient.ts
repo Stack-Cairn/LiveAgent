@@ -84,70 +84,90 @@ function isRetryableAttachError(message: string) {
   );
 }
 
-class GatewayTerminalStreamHandle extends TerminalStreamBuffer {
-  constructor(
-    private readonly owner: BrowserGatewayTerminalStreamClient,
-    readonly streamId: string,
-    readonly maxBytes: number | undefined,
-    snapshot: TerminalStreamSnapshot,
-  ) {
-    super(snapshot, {
-      initialTransportReady: false,
-      offlineInputRetryMs: INPUT_RETRY_MS,
-      offlineResizeRetryMs: 50,
-      sendInput: (bytes, buffer) =>
-        owner.send(
-          {
-            kind: "input",
+// TerminalStreamBuffer 来自 @liveagent/ui（跨包导入），生产构建下 rolldown 可能把这里和它的
+// 定义拆进不同 chunk。class 顶层的 extends 子句在模块求值时立即读取该导入绑定，若此时目标 chunk
+// 还没跑完初始化就会读到 undefined，报 "Class extends value undefined is not a constructor"。
+// 包一层工厂函数，把 extends 求值推迟到首次实际 attach（此时全部 chunk 必已加载完毕）。
+function createGatewayTerminalStreamHandleClass() {
+  return class GatewayTerminalStreamHandle extends TerminalStreamBuffer {
+    constructor(
+      private readonly owner: BrowserGatewayTerminalStreamClient,
+      readonly streamId: string,
+      readonly maxBytes: number | undefined,
+      snapshot: TerminalStreamSnapshot,
+    ) {
+      super(snapshot, {
+        initialTransportReady: false,
+        offlineInputRetryMs: INPUT_RETRY_MS,
+        offlineResizeRetryMs: 50,
+        sendInput: (bytes, buffer) =>
+          owner.send(
+            {
+              kind: "input",
+              streamId,
+              sessionId: buffer.snapshot.session.id,
+              projectPathKey: buffer.snapshot.session.projectPathKey,
+            },
+            bytes,
+          ),
+        sendResize: (resize, buffer) =>
+          owner.send({
+            kind: "resize",
             streamId,
             sessionId: buffer.snapshot.session.id,
             projectPathKey: buffer.snapshot.session.projectPathKey,
-          },
-          bytes,
-        ),
-      sendResize: (resize, buffer) =>
-        owner.send({
-          kind: "resize",
-          streamId,
-          sessionId: buffer.snapshot.session.id,
-          projectPathKey: buffer.snapshot.session.projectPathKey,
-          ...resize,
-        }),
-      onInputSendError: (_error, bytes, buffer) => {
-        buffer.markTransportDown();
-        buffer.restoreInput(bytes);
-        owner.scheduleReconnect();
-      },
-      onResizeSendError: (_error, resize, buffer) => {
-        buffer.markTransportDown();
-        buffer.retryResize(resize);
-        owner.scheduleReconnect();
-      },
-    });
-  }
-
-  override dispose() {
-    if (this.streamDisposed) return;
-    super.dispose();
-    this.owner.detach(this.streamId, this.snapshot.session, this);
-  }
-
-  replaySnapshot(snapshot: TerminalStreamSnapshot) {
-    if (this.streamDisposed) return;
-    const previousSessionId = this.snapshot.session.id;
-    this.snapshot = snapshot;
-    this.owner.reindexHandle(this, previousSessionId, snapshot.session.id);
-    this.markTransportReady();
-    if (snapshot.bytes.byteLength > 0) {
-      this.accept({
-        sessionId: snapshot.session.id,
-        projectPathKey: snapshot.session.projectPathKey,
-        bytes: snapshot.bytes,
-        startOffset: snapshot.outputStartOffset,
-        endOffset: snapshot.outputEndOffset,
+            ...resize,
+          }),
+        onInputSendError: (_error, bytes, buffer) => {
+          buffer.markTransportDown();
+          buffer.restoreInput(bytes);
+          owner.scheduleReconnect();
+        },
+        onResizeSendError: (_error, resize, buffer) => {
+          buffer.markTransportDown();
+          buffer.retryResize(resize);
+          owner.scheduleReconnect();
+        },
       });
     }
+
+    override dispose() {
+      if (this.streamDisposed) return;
+      super.dispose();
+      this.owner.detach(this.streamId, this.snapshot.session, this);
+    }
+
+    replaySnapshot(snapshot: TerminalStreamSnapshot) {
+      if (this.streamDisposed) return;
+      const previousSessionId = this.snapshot.session.id;
+      this.snapshot = snapshot;
+      this.owner.reindexHandle(this, previousSessionId, snapshot.session.id);
+      this.markTransportReady();
+      if (snapshot.bytes.byteLength > 0) {
+        this.accept({
+          sessionId: snapshot.session.id,
+          projectPathKey: snapshot.session.projectPathKey,
+          bytes: snapshot.bytes,
+          startOffset: snapshot.outputStartOffset,
+          endOffset: snapshot.outputEndOffset,
+        });
+      }
+    }
+  };
+}
+
+type GatewayTerminalStreamHandle = InstanceType<
+  ReturnType<typeof createGatewayTerminalStreamHandleClass>
+>;
+
+let gatewayTerminalStreamHandleCtor:
+  | ReturnType<typeof createGatewayTerminalStreamHandleClass>
+  | undefined;
+function getGatewayTerminalStreamHandleCtor() {
+  if (gatewayTerminalStreamHandleCtor === undefined) {
+    gatewayTerminalStreamHandleCtor = createGatewayTerminalStreamHandleClass();
   }
+  return gatewayTerminalStreamHandleCtor;
 }
 
 export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient {
@@ -170,7 +190,8 @@ export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient 
     options?: { maxBytes?: number },
   ): Promise<TerminalStreamHandle> {
     const streamId = nextStreamId();
-    const streamHandle = new GatewayTerminalStreamHandle(this, streamId, options?.maxBytes, {
+    const HandleCtor = getGatewayTerminalStreamHandleCtor();
+    const streamHandle = new HandleCtor(this, streamId, options?.maxBytes, {
       session,
       bytes: new Uint8Array(),
       truncated: false,

@@ -8,6 +8,7 @@ import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText
 import {
   type ConversationMentionReference,
   escapeMarkdownReferenceLabel,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatConversationMentionToken,
   formatFileMentionToken,
@@ -59,6 +60,7 @@ export function buildTextFromComposerDraft(
         if (segment.type === "text") return segment.text;
         if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
         if (segment.type === "skillMention") return `/${segment.skill.name}`;
+        if (segment.type === "appMention") return formatAppMentionToken(segment.app);
         if (segment.type === "commitMention") return formatComposerCommitMention(segment.commit);
         if (segment.type === "gitFileMention") return formatComposerGitFileMention(segment.file);
         if (segment.type === "conversationMention") {
@@ -142,6 +144,7 @@ export function createTextComposerDraft(
     textWithoutLargePastes: normalizedText,
     largePastes: [],
     skillMentions: [],
+    appMentions: [],
     commitMentions: [],
     gitFileMentions: [],
     conversationMentions,

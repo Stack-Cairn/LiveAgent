@@ -67,6 +67,7 @@ import {
   HistoryShareGetRequestSchema,
   HistoryShareSetRequestSchema,
   HistoryWorkdirsRequestSchema,
+  InstalledAppsListRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
   ProviderListRequestSchema,
@@ -671,6 +672,8 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           showHidden: optBool(body.show_hidden),
         }),
       };
+    case "apps.installed.list":
+      return { case: "installedAppsList", value: create(InstalledAppsListRequestSchema, {}) };
     case "files.preview":
       return {
         case: "uploadedImagePreview",
@@ -1220,6 +1223,15 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           hidden: entry.hidden,
         })),
         truncated: payload.value.truncated,
+      };
+    case "installedAppsListResp":
+      return {
+        apps: payload.value.apps.map((app) => ({
+          name: app.name,
+          bundleId: app.bundleId,
+          path: app.path,
+          iconDataUrl: app.iconDataUrl,
+        })),
       };
     case "uploadedImagePreviewResp":
       return { mimeType: payload.value.mimeType, data: payload.value.data };

@@ -11,12 +11,18 @@ import {
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  readAppMentionRecents,
+  recordAppMentionUse,
+  sortAppsByMentionRecency,
+} from "@liveagent/ui/lib/chat/appMentionRecency";
+import {
   insertPlainTextWithUndo,
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
 import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import {
   type CodeMentionReference,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatConversationMentionToken,
   formatFileMentionToken,
@@ -47,6 +53,7 @@ import {
   clampComposerContextMenuPosition,
   commitMentionFromElement,
   countLargePasteLines,
+  createAppMentionChip,
   createCodeMentionChip,
   createCommitMentionChip,
   createConversationMentionChip,
@@ -71,6 +78,7 @@ import {
   hasLegacyImeKeyboardSignal,
   IME_COMPOSITION_END_ENTER_TAIL_MS,
   IME_ENTER_SUPPRESS_WINDOW_MS,
+  insertAppMentionChip,
   insertComposerSegmentsAtSelection,
   insertConversationMentionChip,
   insertMentionChip,
@@ -81,10 +89,12 @@ import {
   isImeKeyboardEvent,
   isLargePasteText,
   LARGE_PASTE_TAG_ATTR,
+  MAX_APP_SUGGESTIONS,
   MAX_CONVERSATION_MENTIONS,
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
   MENTION_REFETCH_DEBOUNCE_MS,
+  type MentionComposerAppMention,
   type MentionComposerCommitMention,
   type MentionComposerConversation,
   type MentionComposerConversationMention,
@@ -127,6 +137,8 @@ import {
 } from "./MentionComposerInternals";
 
 export type {
+  MentionComposerApp,
+  MentionComposerAppMention,
   MentionComposerCommitMention,
   MentionComposerConversation,
   MentionComposerConversationMention,
@@ -169,6 +181,7 @@ export const MentionComposer = memo(
       conversations = [],
       searchConversations,
       conversationMentionsEnabled = true,
+      mentionApps = [],
       className,
     }: MentionComposerProps,
     ref,
@@ -524,21 +537,35 @@ export const MentionComposer = memo(
       }
 
       if (mentionMenuMode === "root") {
+        // 根级菜单同时保留 main 的应用快捷项与会话引用分支的两层入口。
+        // 应用仍然位于最前，文件索引只在用户进入 files 子菜单后启动。
+        const next: MentionSuggestion[] = [];
+        const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
+        let appCount = 0;
+        for (const app of orderedApps) {
+          const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
+          if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) continue;
+          next.push({ type: "app", app });
+          appCount += 1;
+          if (appCount >= MAX_APP_SUGGESTIONS) break;
+        }
         const categories: MentionSuggestion[] = [
           { type: "category", category: "files" },
           ...(conversationMentionsEnabled
             ? ([{ type: "category", category: "conversations" }] satisfies MentionSuggestion[])
             : []),
         ];
-        if (!normalizedMentionQuery) return categories;
-        return categories.filter((suggestion) => {
-          if (suggestion.type !== "category") return false;
+        for (const suggestion of categories) {
+          if (suggestion.type !== "category") continue;
           const haystack =
             suggestion.category === "files"
               ? `${t("chat.composer.filesAndFolders")} ${t("chat.composer.filesAndFoldersHint")}`
               : `${t("chat.composer.conversations")} ${t("chat.composer.conversationsHint")}`;
-          return haystack.toLowerCase().includes(normalizedMentionQuery);
-        });
+          if (!normalizedMentionQuery || haystack.toLowerCase().includes(normalizedMentionQuery)) {
+            next.push(suggestion);
+          }
+        }
+        return next;
       }
 
       if (mentionMenuMode === "conversations") {
@@ -568,13 +595,18 @@ export const MentionComposer = memo(
         return next;
       }
 
+      // files 子菜单只承载工作区文件与文件夹；应用已经位于根级菜单前部。
       const next: MentionSuggestion[] = [];
+      let fileCount = 0;
       for (const item of mentionSessionSearchIndex) {
         if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
           continue;
         }
         next.push({ type: "file", entry: item.entry });
-        if (next.length >= MAX_SUGGESTIONS) break;
+        fileCount += 1;
+        if (fileCount >= MAX_SUGGESTIONS) {
+          break;
+        }
       }
       return next;
     }, [
@@ -583,6 +615,7 @@ export const MentionComposer = memo(
       conversationMentionsEnabled,
       conversationSearchResults,
       enabledSkills,
+      mentionApps,
       mentionCtx,
       mentionMenuMode,
       mentionSessionSearchIndex,
@@ -735,6 +768,7 @@ export const MentionComposer = memo(
           textWithoutLargePastes: "",
           largePastes: [],
           skillMentions: [],
+          appMentions: [],
           commitMentions: [],
           gitFileMentions: [],
           conversationMentions: [],
@@ -746,6 +780,7 @@ export const MentionComposer = memo(
       const segments = serializeChildrenToSegments(el, largePastesRef.current);
       const largePastes: MentionComposerLargePaste[] = [];
       const skillMentions: MentionComposerSkillMention[] = [];
+      const appMentions: MentionComposerAppMention[] = [];
       const commitMentions: MentionComposerCommitMention[] = [];
       const gitFileMentions: MentionComposerGitFileMention[] = [];
       const conversationMentions: MentionComposerConversationMention[] = [];
@@ -766,6 +801,11 @@ export const MentionComposer = memo(
         } else if (segment.type === "skillMention") {
           skillMentions.push(segment.skill);
           const token = formatSkillMentionToken(segment.skill);
+          textParts.push(token);
+          textWithoutLargePastesParts.push(token);
+        } else if (segment.type === "appMention") {
+          appMentions.push(segment.app);
+          const token = formatAppMentionToken(segment.app);
           textParts.push(token);
           textWithoutLargePastesParts.push(token);
         } else if (segment.type === "commitMention") {
@@ -799,6 +839,7 @@ export const MentionComposer = memo(
         textWithoutLargePastes,
         largePastes,
         skillMentions,
+        appMentions,
         commitMentions,
         gitFileMentions,
         conversationMentions,
@@ -937,6 +978,8 @@ export const MentionComposer = memo(
               if (chip) el.appendChild(chip);
             } else if (segment.type === "skillMention") {
               el.appendChild(createSkillMentionChip(segment.skill));
+            } else if (segment.type === "appMention") {
+              el.appendChild(createAppMentionChip(segment.app));
             } else if (segment.type === "commitMention") {
               el.appendChild(createCommitMentionChip(segment.commit));
             } else if (segment.type === "gitFileMention") {
@@ -1269,6 +1312,10 @@ export const MentionComposer = memo(
             return;
           }
           insertConversationMentionChip(mentionCtx, suggestion.conversation);
+        } else if (suggestion.type === "app") {
+          insertAppMentionChip(mentionCtx, suggestion.app);
+          // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
+          recordAppMentionUse(suggestion.app);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
         }

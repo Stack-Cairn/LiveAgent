@@ -25,6 +25,8 @@ test("the shared composer restores the last editor selection before external men
     assert.equal(
       (composer.match(/focusEditorAtSavedSelection\(\);/g) ?? []).length,
       7,
+      // file/skill/commit/gitFile/conversation/code 六种外部插入 + beginTransientText。
+      // app 提及只从 @ 弹层进入（selectSuggestion），没有外部插入通道。
     );
     const conversationInsertion = composer.slice(
       composer.indexOf("insertConversationMention:"),

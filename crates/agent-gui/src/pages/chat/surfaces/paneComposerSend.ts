@@ -10,6 +10,7 @@ export const EMPTY_PANE_COMPOSER_DRAFT: MentionComposerDraft = {
   textWithoutLargePastes: "",
   largePastes: [],
   skillMentions: [],
+  appMentions: [],
   commitMentions: [],
   gitFileMentions: [],
   conversationMentions: [],

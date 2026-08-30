@@ -80,16 +80,26 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
 
   // Conversation identity (sessionId / createdAt) and model selection are
   // registry-owned: the cache entry is their single source of truth, and the
-  // visible values derive from it (useConversationRuntimeEntrySnapshot). Only
-  // the still-mirrored transient fields come from the visible React state.
+  // visible values derive from it (useConversationRuntimeEntrySnapshot).
+  // compactionStatus/isSending/errorMessage/hookWarning are ALSO
+  // registry-owned in practice: background sends/compactions update the
+  // cache entry for a conversation regardless of whether it's visible
+  // (updateConversationRuntimeEntry), while the mirrored React state for
+  // those same fields only catches up on the next render. If this function
+  // runs (e.g. leaving the conversation to switch elsewhere) after the
+  // registry was updated but before that render happened, reading React
+  // state here would re-stamp the cache entry with a stale value — observed
+  // as isSending staying stuck true and the context-usage ring never
+  // hiding after the conversation is reopened. Prefer the cache entry;
+  // React state is only the fallback for when no entry exists yet.
   const buildRuntimeEntryFromVisibleState = useCallback((): ConversationRuntimeEntry => {
     const cached = conversationRuntimeCacheRef.current.get(currentConversationIdRef.current);
     return createConversationRuntimeEntry({
       state: conversationState,
-      compactionStatus,
-      isSending,
-      errorMessage,
-      hookWarning,
+      compactionStatus: cached?.compactionStatus ?? compactionStatus,
+      isSending: cached?.isSending ?? isSending,
+      errorMessage: cached?.errorMessage ?? errorMessage,
+      hookWarning: cached?.hookWarning ?? hookWarning,
       sessionId: cached?.sessionId ?? currentConversationIdRef.current,
       createdAt: cached?.createdAt ?? Date.now(),
       workdir: cached?.workdir,

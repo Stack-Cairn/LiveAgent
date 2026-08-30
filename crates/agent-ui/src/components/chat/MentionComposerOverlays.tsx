@@ -1,6 +1,7 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
+  AppWindow,
   ArrowLeft,
   Blend,
   ChevronRight,
@@ -9,7 +10,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   formatLargePasteCount,
@@ -65,6 +66,10 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
+  // 文件与应用两个分组在扁平 suggestions 数组里连续排布（应用在前）；
+  // 键盘导航按扁平索引走，分组标题只是渲染时按边界插入的静态行。
+  const firstFileIndex = suggestions.findIndex((suggestion) => suggestion.type === "file");
+  const hasAppRows = suggestions.some((suggestion) => suggestion.type === "app");
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
@@ -166,8 +171,10 @@ export function Popup({
           const isCategory = suggestion.type === "category";
           const isSkill = suggestion.type === "skill";
           const conversation = suggestion.type === "conversation" ? suggestion.conversation : null;
+          const isApp = suggestion.type === "app";
           const entry = suggestion.type === "file" ? suggestion.entry : null;
           const skill = suggestion.type === "skill" ? suggestion.skill : null;
+          const app = suggestion.type === "app" ? suggestion.app : null;
           const isDir = entry?.kind === "dir";
           const parts = entry ? entry.path.split("/") : [];
           const fileName = parts.pop() || "";
@@ -175,11 +182,12 @@ export function Popup({
           const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
           const category = suggestion.type === "category" ? suggestion.category : null;
           const title =
-            category === "files"
+            app?.name ??
+            (category === "files"
               ? t("chat.composer.filesAndFolders")
               : category === "conversations"
                 ? t("chat.composer.conversations")
-                : (conversation?.title ?? skill?.name ?? fileName);
+                : (conversation?.title ?? skill?.name ?? fileName));
           const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
           const conversationMeta = [conversation?.cwd, updatedAtLabel].filter(Boolean).join(" · ");
           const subtitle =
@@ -189,26 +197,42 @@ export function Popup({
                 ? t("chat.composer.conversationsHint")
                 : conversation
                   ? conversation.searchPreview || conversationMeta
-                  : (skill?.description ?? (dirPath ? `${dirPath}/` : ""));
+                  : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
           const RowIcon =
             category === "files"
               ? Paperclip
               : category === "conversations" || conversation
                 ? MessageSquareText
                 : Icon;
-          return (
+          // 文件分组标题插在第一条文件行之前，仅当上方有应用行时——只剩
+          // 文件时顶栏已直接写「文件」，再插一行就是重复标签。
+          const fileSectionHeader =
+            entry && i === firstFileIndex && hasAppRows ? (
+              <div className="mt-1.5 shrink-0 border-t border-border/50 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                {t("chat.composer.mentionGroupFiles")}
+              </div>
+            ) : null;
+          const appSectionHeader =
+            isApp && i === 0 ? (
+              <div className="shrink-0 px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                {t("chat.composer.mentionGroupApps")}
+              </div>
+            ) : null;
+          const row = (
             <button
               type="button"
               role="option"
               aria-selected={i === highlightIndex}
               key={
-                suggestion.type === "file"
-                  ? `${suggestion.entry.kind}:${suggestion.entry.path}`
-                  : suggestion.type === "skill"
-                    ? `skill:${suggestion.skill.skillFile || suggestion.skill.name}`
-                    : suggestion.type === "conversation"
-                      ? `conversation:${suggestion.conversation.id}`
-                      : `category:${suggestion.category}`
+                entry
+                  ? `${entry.kind}:${entry.path}`
+                  : app
+                    ? `app:${app.bundleId || app.path || app.name}`
+                    : conversation
+                      ? `conversation:${conversation.id}`
+                      : category
+                        ? `category:${category}`
+                        : `skill:${skill?.skillFile ?? skill?.name}`
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
@@ -227,14 +251,24 @@ export function Popup({
                   "flex h-4 w-4 shrink-0 items-center justify-center",
                   isCategory || conversation
                     ? "text-muted-foreground"
-                    : isSkill
+                    : isSkill || isApp
                       ? "text-foreground/85"
                       : isDir
                         ? "text-amber-600 dark:text-amber-300"
                         : "text-muted-foreground",
                 )}
               >
-                {RowIcon ? <RowIcon width={16} height={16} /> : <Blend className="h-4 w-4" />}
+                {isApp ? (
+                  app?.iconDataUrl ? (
+                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-sm" />
+                  ) : (
+                    <AppWindow className="h-4 w-4" />
+                  )
+                ) : RowIcon ? (
+                  <RowIcon width={16} height={16} />
+                ) : (
+                  <Blend className="h-4 w-4" />
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate text-left">
                 <span className="font-normal text-foreground/95">{title}</span>
@@ -256,6 +290,20 @@ export function Popup({
                 )
               )}
             </button>
+          );
+          if (!fileSectionHeader && !appSectionHeader) return row;
+          return (
+            <Fragment
+              key={
+                app
+                  ? `app-section:${app.bundleId || app.path || app.name}`
+                  : `file-section:${entry?.kind}:${entry?.path}`
+              }
+            >
+              {appSectionHeader}
+              {fileSectionHeader}
+              {row}
+            </Fragment>
           );
         })}
         {showEmpty && !isLoading && !error && suggestions.length === 0 && (

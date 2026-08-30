@@ -31,6 +31,7 @@ import type {
 } from "../../../lib/chat/memory/extractionEngine";
 import {
   appendTextDeltaToRound,
+  appendThinkingDeltaToRound,
   collapseThinking,
   type LiveRound,
   updateLiveRound,
@@ -449,6 +450,37 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
             if (!compaction.shouldProtectMidStream(streamedAssistantTokenUnits)) return;
             compactionRequested = true;
             scope.controller.abort();
+          },
+          onThinkingDelta: (delta) => {
+            if (failoverStatusVisible) {
+              failoverStatusVisible = false;
+              updateGatewayBridgeToolStatus(null);
+            }
+            nativeWebSearchStatusController.noteVisibleActivity();
+            gatewayBridgeEvents.queueEvent({
+              type: "thinking",
+              text: delta,
+              round: textRound,
+              conversation_id: conversationId,
+            });
+            // 思考只能挂在 live round 上，草稿通道没有思考块；切过去前先把已有草稿
+            // 正文喂进这一轮，否则渲染层改用 live round 后那段文字会消失。
+            const shouldSeedExistingText =
+              !textModeUsesLiveRounds && streamedAssistantText.length > 0;
+            ensureTextLiveRound(textRound);
+            batchLiveRoundsUpdate(
+              (prev) =>
+                updateLiveRound(prev, textRound, (target) => ({
+                  ...appendThinkingDeltaToRound(
+                    shouldSeedExistingText
+                      ? appendTextDeltaToRound(target, streamedAssistantText)
+                      : target,
+                    delta,
+                  ),
+                  thinkingOpen: true,
+                })),
+              transcriptStore,
+            );
           },
           onHostedSearch: (hostedSearch) => {
             trajectory.firstToken(textRound);

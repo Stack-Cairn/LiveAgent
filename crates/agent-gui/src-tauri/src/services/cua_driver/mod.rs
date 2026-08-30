@@ -28,6 +28,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use wait_timeout::ChildExt;
 
+pub mod installed_apps;
+
 /// 单次外部命令的等待上限。`manifest` / `permissions status` 都在 1 秒
 /// 内返回；留足余量给冷启动的守护进程握手。
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);

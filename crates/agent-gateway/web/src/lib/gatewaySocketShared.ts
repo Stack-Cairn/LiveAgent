@@ -104,6 +104,12 @@ export type MentionListResponse = {
   truncated: boolean;
 };
 
+/** 桌面宿主的已安装应用（@ 应用提及）；字段对齐桌面 InstalledApp 的
+ *  camelCase 序列化，空串表示缺失（无 bundle id / 取不到图标）。 */
+export type InstalledAppsListResponse = {
+  apps: Array<{ name: string; bundleId: string; path: string; iconDataUrl: string }>;
+};
+
 export type FsRoot = {
   id: string;
   path: string;

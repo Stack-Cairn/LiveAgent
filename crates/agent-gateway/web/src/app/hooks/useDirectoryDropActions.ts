@@ -29,6 +29,7 @@ type UseDirectoryDropActionsParams = {
   workspaceProjectRootClient: WorkspaceProjectRootClient | undefined;
   /** 上传完成后的工作空间激活（与目录选择器选中同一条路径的行为一致）。 */
   onWorkspaceCreated: (rootPath: string) => void;
+  onWorkspaceDirectoriesMounted?: () => void;
 };
 
 function directoryErrorMessage(error: unknown, locale: AppSettings["locale"], fallback: string) {
@@ -61,6 +62,7 @@ export function useDirectoryDropActions(params: UseDirectoryDropActionsParams) {
     activeWorkspaceProject,
     workspaceProjectRootClient,
     onWorkspaceCreated,
+    onWorkspaceDirectoriesMounted,
   } = params;
 
   const [workspaceFolderDropActive, setWorkspaceFolderDropActive] = useState(false);
@@ -204,6 +206,7 @@ export function useDirectoryDropActions(params: UseDirectoryDropActionsParams) {
         });
         if (drafts.addedPaths.length === 0) return;
         await workspaceProjectRootClient.save(project, drafts.drafts);
+        onWorkspaceDirectoriesMounted?.();
         addNotify(
           "success",
           formatTranslation(translate("chat.workspaceMountDropSuccess", locale), {
@@ -217,7 +220,15 @@ export function useDirectoryDropActions(params: UseDirectoryDropActionsParams) {
         );
       });
     },
-    [activeWorkspaceProject, addNotify, locale, resolveAgentID, token, workspaceProjectRootClient],
+    [
+      activeWorkspaceProject,
+      addNotify,
+      locale,
+      onWorkspaceDirectoriesMounted,
+      resolveAgentID,
+      token,
+      workspaceProjectRootClient,
+    ],
   );
 
   return {

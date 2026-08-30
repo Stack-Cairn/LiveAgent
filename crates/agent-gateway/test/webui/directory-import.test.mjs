@@ -18,6 +18,12 @@ function createNamedBlob(name, content) {
   return blob;
 }
 
+function createDirectoryFile(path, content) {
+  const file = createNamedBlob(path.split("/").at(-1), content);
+  Object.defineProperty(file, "webkitRelativePath", { value: path, configurable: true });
+  return file;
+}
+
 test("directory collection excludes generated trees but preserves project dot paths", () => {
   assert.equal(directoryDrop.isExcludedDirectoryName(".git"), true);
   assert.equal(directoryDrop.isExcludedDirectoryName("node_modules"), true);
@@ -25,6 +31,38 @@ test("directory collection excludes generated trees but preserves project dot pa
   assert.equal(directoryDrop.isExcludedFileName(".DS_Store"), true);
   assert.equal(directoryDrop.isExcludedFileName(".env"), false);
   assert.equal(directoryDrop.isExcludedFileName(".gitignore"), false);
+});
+
+test("folder picker recreates selected directory trees with the drop import rules", () => {
+  const directories = directoryDrop.collectSelectedDirectoryFiles([
+    createDirectoryFile("demo/.env", "TOKEN=secret"),
+    createDirectoryFile("demo/.github/workflows/ci.yml", "name: CI"),
+    createDirectoryFile("demo/node_modules/ignored.js", "ignored"),
+    createDirectoryFile("demo/.DS_Store", "ignored"),
+    createDirectoryFile("second/README.md", "# Second"),
+  ]);
+
+  assert.deepEqual(
+    directories.map((directory) => ({
+      name: directory.name,
+      paths: directory.files.map((file) => file.relativePath),
+    })),
+    [
+      { name: "demo", paths: [".env", ".github/workflows/ci.yml"] },
+      { name: "second", paths: ["README.md"] },
+    ],
+  );
+});
+
+test("folder picker applies the same per-directory file limit before upload", () => {
+  const files = Array.from({ length: directoryDrop.MAX_DIRECTORY_UPLOAD_FILES + 1 }, (_, index) =>
+    createDirectoryFile(`demo/${index}.txt`, "x"),
+  );
+
+  assert.throws(
+    () => directoryDrop.collectSelectedDirectoryFiles(files),
+    /TOO_MANY_FILES/,
+  );
 });
 
 test("directory upload preserves dot paths in the multipart manifest", async () => {

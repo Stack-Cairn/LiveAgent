@@ -2568,6 +2568,7 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
   // 第 1 轮请求不含被延迟的 mcp 工具;ToolSearch 风格的激活发生在第 1 轮的
   // 工具执行里;第 2 轮请求(同一 run 内)必须包含它,且执行层始终找得到。
   const activation = new Set();
+  const requestObserverContexts = [];
   const deferredTool = {
     name: "mcp_docs_search",
     description: "Search docs",
@@ -2590,6 +2591,9 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
       deferredTool,
     ],
     requestToolFilter: (toolName) => toolName !== "mcp_docs_search" || activation.has(toolName),
+    onRequestStart({ context }) {
+      requestObserverContexts.push(context);
+    },
     async executeToolCall(toolCall) {
       executedToolCalls.push(toolCall);
       if (toolCall.name === "ToolSearch") {
@@ -2611,9 +2615,15 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
   const round1Names = observedStreamContexts[0].tools.map((tool) => tool.name);
   assert.ok(round1Names.includes("ToolSearch"));
   assert.ok(!round1Names.includes("mcp_docs_search"));
+  assert.deepEqual(
+    requestObserverContexts[0].tools.map((tool) => tool.name),
+    round1Names,
+    "request observers must receive the exact filtered provider context",
+  );
   // 第 2 轮(激活后,同一 run):延迟工具进入请求。
   const round2Names = observedStreamContexts[1].tools.map((tool) => tool.name);
   assert.ok(round2Names.includes("mcp_docs_search"));
+  assert.deepEqual(requestObserverContexts[1].tools.map((tool) => tool.name), round2Names);
   // 执行层全程找得到:两次调用都真实执行。
   assert.deepEqual(
     executedToolCalls.map((call) => call.name),

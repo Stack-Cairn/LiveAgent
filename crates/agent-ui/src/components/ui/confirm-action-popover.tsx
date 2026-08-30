@@ -11,8 +11,9 @@ export function ConfirmActionPopover(props: {
   confirmLabel: string;
   onConfirm: () => void;
   // Popover edge to align with the trigger; "end" suits right-aligned action
-  // rows (settings lists), "start" left-aligned ones (assistant reply row).
-  align?: "start" | "end";
+  // rows (settings lists), "start" left-aligned ones (assistant reply row),
+  // "center" wide self-centered triggers (e.g. the full-width stats bar row).
+  align?: "start" | "center" | "end";
   // Preferred trigger side to open from; the positioner flips on collision.
   side?: "top" | "bottom";
   // Visual intent: "destructive" (default) for irreversible actions,
