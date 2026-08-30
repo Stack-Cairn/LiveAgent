@@ -30,6 +30,7 @@ import {
   resolveFileUploadConversationId,
   resolveFileUploadDropZone,
 } from "./fileUploadDropRouting";
+import { createPendingUploadsRegistry } from "./pendingUploadsRegistry";
 
 type UsePendingUploadsParams = {
   token: string;
@@ -85,7 +86,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadedFilesRef = useRef(pendingUploadedFiles);
-  const pendingUploadsByConversationRef = useRef<Map<string, PendingUploadedFile[]>>(new Map());
+  const pendingUploadsRegistryRef = useRef(createPendingUploadsRegistry());
   const isUploadingFilesRef = useRef(isUploadingFiles);
   const uploadDragDepthRef = useRef(0);
   const displayedConversationIdRef = useRef("");
@@ -141,27 +142,22 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     return conversationIdValue !== "" && displayedConversationIdRef.current === conversationIdValue;
   }, []);
 
-  const getPendingUploadsForConversation = useCallback(
-    (targetConversationId: string) => {
-      const conversationIdValue = targetConversationId.trim();
-      if (!conversationIdValue || isDisplayedConversation(conversationIdValue)) {
-        return pendingUploadedFilesRef.current;
-      }
-      return pendingUploadsByConversationRef.current.get(conversationIdValue) ?? [];
-    },
-    [isDisplayedConversation],
-  );
+  const subscribePendingUploads = useCallback((listener: () => void) => {
+    return pendingUploadsRegistryRef.current.subscribe(listener);
+  }, []);
+
+  const getPendingUploadsForConversation = useCallback((targetConversationId: string) => {
+    const conversationIdValue = targetConversationId.trim();
+    if (!conversationIdValue) return pendingUploadedFilesRef.current;
+    return pendingUploadsRegistryRef.current.get(conversationIdValue);
+  }, []);
 
   const setPendingUploadsForConversation = useCallback(
     (targetConversationId: string, nextFiles: PendingUploadedFile[]) => {
       const conversationIdValue = targetConversationId.trim();
       const normalizedFiles = nextFiles.slice();
       if (conversationIdValue) {
-        if (normalizedFiles.length > 0) {
-          pendingUploadsByConversationRef.current.set(conversationIdValue, normalizedFiles);
-        } else {
-          pendingUploadsByConversationRef.current.delete(conversationIdValue);
-        }
+        pendingUploadsRegistryRef.current.set(conversationIdValue, normalizedFiles);
       }
       if (!conversationIdValue || isDisplayedConversation(conversationIdValue)) {
         pendingUploadedFilesRef.current = normalizedFiles;
@@ -194,17 +190,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     if (!previous || !next || previous === next) {
       return;
     }
-    const files = pendingUploadsByConversationRef.current.get(previous);
-    if (files === undefined) {
-      return;
-    }
-    pendingUploadsByConversationRef.current.delete(previous);
-    pendingUploadsByConversationRef.current.set(next, files);
+    pendingUploadsRegistryRef.current.move(previous, next);
   }, []);
 
   const clearPendingUploads = useCallback(() => {
     pendingUploadedFilesRef.current = [];
-    pendingUploadsByConversationRef.current.clear();
+    pendingUploadsRegistryRef.current.clear();
     isUploadingFilesRef.current = false;
     uploadDragDepthRef.current = 0;
     setPendingUploadedFiles([]);
@@ -214,7 +205,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
   useEffect(() => {
     const nextFiles = displayedConversationId
-      ? (pendingUploadsByConversationRef.current.get(displayedConversationId) ?? [])
+      ? pendingUploadsRegistryRef.current.get(displayedConversationId)
       : [];
     pendingUploadedFilesRef.current = nextFiles;
     setPendingUploadedFiles(nextFiles);
@@ -512,6 +503,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     setPendingUploadsForConversation,
     updatePendingUploadsForConversation,
     moveConversationUploads,

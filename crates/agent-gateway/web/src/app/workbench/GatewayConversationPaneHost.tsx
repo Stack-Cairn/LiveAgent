@@ -135,6 +135,7 @@ export type GatewayConversationPaneHostContext = {
     workdir: string,
   ) => Promise<{ text: string; uploadedFiles: PendingUploadedFile[] }>;
   getPendingUploads: (conversationId: string) => PendingUploadedFile[];
+  subscribePendingUploads: (listener: () => void) => () => void;
   updatePendingUploads: (
     conversationId: string,
     updater: (current: PendingUploadedFile[]) => PendingUploadedFile[],
@@ -258,6 +259,13 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const [hydrated, setHydrated] = useState(isDraft);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const loadedMaxMessagesRef = useRef(HISTORY_DETAIL_INITIAL_MAX_MESSAGES);
+  const historyConversationIdRef = useRef(conversationId);
+  historyConversationIdRef.current = conversationId;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity is the reset trigger; the effect intentionally does not read it.
+  useEffect(() => {
+    loadedMaxMessagesRef.current = HISTORY_DETAIL_INITIAL_MAX_MESSAGES;
+    setHasMoreHistory(false);
+  }, [conversationId]);
   useEffect(() => {
     if (isDraft || isPrimary) {
       setHydrated(true);
@@ -296,13 +304,16 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const loadingEarlierRef = useRef(false);
   const handleLoadEarlierHistory = useCallback(() => {
     if (isDraft || loadingEarlierRef.current) return;
+    const requestedConversationId = conversationId;
     loadingEarlierRef.current = true;
     setLoadingEarlier(true);
     const nextMax = loadedMaxMessagesRef.current + HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES;
     void (async () => {
       try {
-        const detail = await api.getHistory(conversationId, { maxMessages: nextMax });
+        const detail = await api.getHistory(requestedConversationId, { maxMessages: nextMax });
+        if (historyConversationIdRef.current !== requestedConversationId) return;
         const parsed = await parseHistoryMessagesJsonAsync(detail.messages_json);
+        if (historyConversationIdRef.current !== requestedConversationId) return;
         const entries = detail.has_more === true ? trimLeadingHeadlessEntries(parsed) : parsed;
         store.applyHistorySnapshot(entries, { mode: "enrich" });
         loadedMaxMessagesRef.current = nextMax;
@@ -310,11 +321,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       } catch {
         // 拉取失败保持现状,按钮可重试。
       } finally {
-        loadingEarlierRef.current = false;
-        setLoadingEarlier(false);
+        if (historyConversationIdRef.current === requestedConversationId) {
+          loadingEarlierRef.current = false;
+          setLoadingEarlier(false);
+        }
       }
     })();
   }, [api, conversationId, isDraft, store]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity cancels the previous pane's loading indicator; the effect intentionally does not read it.
+  useEffect(() => {
+    loadingEarlierRef.current = false;
+    setLoadingEarlier(false);
+  }, [conversationId]);
 
   const subscribeTranscript = useCallback(
     (listener: () => void) => store.subscribe(listener),
@@ -402,13 +421,14 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [api, applyQueueSnapshot, conversationId],
   );
 
-  // ---- 每会话待发附件:写通页面级 per-conversation 存储,本地镜像驱动渲染 --
-  const [pendingUploads, setPendingUploads] = useState<PendingUploadedFile[]>(() =>
-    context.getPendingUploads(conversationId).slice(),
+  // ---- 每会话待发附件:直接订阅页面级 per-conversation 存储 ----------------
+  // 文档级 paste/drop 可以写入背景会话；订阅保证 chip 与发送读取同一份
+  // 权威快照，不再依赖 Pane 自己动作后的手动镜像刷新。
+  const pendingUploads = useSyncExternalStore(
+    context.subscribePendingUploads,
+    () => context.getPendingUploads(conversationId),
+    () => context.getPendingUploads(conversationId),
   );
-  const syncPendingUploads = useCallback(() => {
-    setPendingUploads(context.getPendingUploads(conversationId).slice());
-  }, [context, conversationId]);
 
   // ---- 发送/停止:严格按本 Pane 的 conversationId 路由(桌面端口径) --------
   const composerRef = useRef<MentionComposerHandle | null>(null);
@@ -475,7 +495,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         if (!text && uploadedFiles.length === 0) return;
         composerRef.current?.clear();
         context.updatePendingUploads(conversationId, () => []);
-        syncPendingUploads();
         // 忙时入队(与桌面端背景 Pane enqueue 一致):队列面板持有提示词,
         // 不做转录乐观回显;闲时直发。
         const busy = isRunningRef.current || queuedTurnsRef.current.length > 0;
@@ -483,7 +502,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           context.updatePendingUploads(conversationId, (current) =>
             mergePendingUploadedFiles(current, uploadedFiles),
           );
-          syncPendingUploads();
           const currentComposer = composerRef.current;
           if (draft && currentComposer && !currentComposer.hasContent()) {
             currentComposer.setDraft(draft);
@@ -504,7 +522,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         sendInFlightRef.current = false;
       }
     })();
-  }, [context, conversationId, paneRuntimeControls, syncPendingUploads]);
+  }, [context, conversationId, paneRuntimeControls]);
 
   const handleStop = useCallback(() => {
     // 与桌面端/聚焦舞台一致:有排队回合先"停当前、跑下一条",否则纯停止。
@@ -877,9 +895,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               usePrimary && primary
                 ? primary.onPasteFiles
                 : (files) => {
-                    void context
-                      .importFilesForConversation(conversationId, workdirRef.current, files)
-                      .then(syncPendingUploads);
+                    void context.importFilesForConversation(
+                      conversationId,
+                      workdirRef.current,
+                      files,
+                    );
                   }
             }
             onLoadUploadedImagePreview={context.onLoadUploadedImagePreview}
@@ -894,7 +914,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                     context.updatePendingUploads(conversationId, (current) =>
                       current.filter((file) => file.relativePath !== relativePath),
                     );
-                    syncPendingUploads();
                   }
             }
             queuedTurns={usePrimary && primary ? primary.queuedTurns : queuedTurns}

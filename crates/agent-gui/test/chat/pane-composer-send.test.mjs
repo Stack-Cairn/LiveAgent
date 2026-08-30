@@ -12,6 +12,9 @@ const loader = createTsModuleLoader();
 const { createPaneComposerSendHandler } = loader.loadModule(
   "src/pages/chat/surfaces/paneComposerSend.ts",
 );
+const { beginPaneComposerDraftSession } = loader.loadModule(
+  "src/pages/chat/surfaces/paneComposerDraftSession.ts",
+);
 
 function textDraft(text) {
   return { text, isEmpty: !text.trim(), segments: [], largePastes: [] };
@@ -225,8 +228,27 @@ test("multi-pane focus does not freeze the composer during hydration", () => {
   );
 });
 
-test("pane draft restore is keyed by conversation identity, not controller object", () => {
-  const paneHost = readSource("../../src/pages/chat/surfaces/ConversationPaneHost.tsx");
-  assert.match(paneHost, /controllerRef\.current = controller;/);
-  assert.match(paneHost, /\}, \[conversationId\]\);/);
+test("switch cleanup saves the outgoing pane draft to its original conversation", () => {
+  const composer = fakeComposer(textDraft("draft from conversation A"));
+  const drafts = new Map();
+  const controllerA = {
+    getDraft: () => null,
+    setDraft: (draft) => drafts.set("conversation-a", draft),
+  };
+  const controllerB = {
+    getDraft: () => textDraft("cached B"),
+    setDraft: (draft) => drafts.set("conversation-b", draft),
+  };
+
+  let currentController = controllerA;
+  const cleanupA = beginPaneComposerDraftSession(composer, currentController);
+  composer.setDraft(textDraft("unsent A"));
+  // React renders the next identity before it invokes the previous layout
+  // effect cleanup. The cleanup must remain bound to controller A.
+  currentController = controllerB;
+  assert.equal(currentController.getDraft().text, "cached B");
+  cleanupA();
+
+  assert.equal(drafts.get("conversation-a").text, "unsent A");
+  assert.equal(drafts.has("conversation-b"), false);
 });

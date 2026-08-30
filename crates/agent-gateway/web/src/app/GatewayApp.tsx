@@ -91,6 +91,7 @@ import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useStableCallback } from "./hooks/useStableCallback";
 import type { SendChatFn } from "./types";
+import { shouldRestorePageComposerDraft } from "./workbench/pageComposerDraftRestore";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
 import { useGatewayWorkbench } from "./workbench/useGatewayWorkbench";
 
@@ -520,6 +521,7 @@ function useGatewayAppController() {
     folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     setPendingUploadsForConversation,
     updatePendingUploadsForConversation,
     moveConversationUploads,
@@ -1655,7 +1657,6 @@ function useGatewayAppController() {
     workbenchController.closePanesForRemovedConversations([id]);
     handleSidebarLocalDraftDeleted(id);
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: layoutRef is a ref sampled at restore time; pane-count changes must not re-trigger the draft restore.
   useEffect(() => {
     if (activeView !== "chat") {
       return;
@@ -1667,20 +1668,24 @@ function useGatewayAppController() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      // 多 Pane 时每个宿主自己管草稿,页面级 restore 会把焦点 Pane
-      // 正在输入的内容清掉(owner 对不上新 composer)。
-      const paneCount = Object.keys(workbenchController.workbench.layoutRef.current.panes).length;
-      if (sessionWorkbench.enabled && paneCount > 1) {
+      // Workbench 开启后草稿始终由稳定 Pane 宿主管理，包括布局从多 Pane
+      // 收敛回单 Pane 的一帧；页面级 restore 只能服务关闭 Workbench 的
+      // legacy composer，否则会用旧缓存覆盖宿主里尚未写回的输入。
+      if (sessionWorkbench.enabled) {
         composerDraftOwnerRef.current = targetConversationId;
         return;
       }
       const composer = composerRef.current;
+      if (!composer) return;
       if (
-        !composer ||
-        (composerDraftOwnerRef.current === targetConversationId && composer.hasContent())
-      ) {
+        !shouldRestorePageComposerDraft({
+          workbenchEnabled: false,
+          targetConversationId,
+          ownerConversationId: composerDraftOwnerRef.current,
+          composerHasContent: composer.hasContent(),
+        })
+      )
         return;
-      }
       restoreCachedComposerDraft(targetConversationId);
     });
 
@@ -1903,6 +1908,7 @@ function useGatewayAppController() {
     getCachedComposerDraft,
     getDisplayedConversationId,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     gitClient,
     gitDisabledMessage,
     gitReviewFocusRequest,

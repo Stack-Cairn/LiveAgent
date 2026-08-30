@@ -28,6 +28,7 @@ import {
   useConversationPaneRegistration,
 } from "./ConversationPaneHostEnvironment";
 import { ConversationSurface } from "./ConversationSurface";
+import { beginPaneComposerDraftSession } from "./paneComposerDraftSession";
 import { createPaneComposerSendHandler } from "./paneComposerSend";
 
 export type ConversationPaneHostProps = {
@@ -157,8 +158,6 @@ const RegisteredConversationPaneHost = forwardRef<
   } = binding;
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
-  const controllerRef = useRef(controller);
-  controllerRef.current = controller;
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
   // Background panes send through their own conversation-scoped pipeline; the
   // handler owns clear-on-send/restore-on-failure for this pane's composer.
@@ -188,27 +187,10 @@ const RegisteredConversationPaneHost = forwardRef<
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on conversationId so primary↔background controller swaps for the same conversation never clear a composer mid-typing.
   useLayoutEffect(() => {
     const composer = composerRef.current;
-    const draft = controllerRef.current.getSnapshot().draft;
-    if (draft) {
-      composer?.setDraft(draft);
-    } else {
-      composer?.clear();
-    }
-
-    return () => {
-      // Save only non-empty drafts. The page pipeline may already have
-      // cleared this composer mid-switch (legacy reset semantics), so an
-      // empty composer must not delete the draft cached in the registry —
-      // deliberate clears propagate through the page-level draft cache.
-      // Depend on conversationId, not controller: primary↔background binding
-      // swaps the controller object for the same conversation and must not
-      // clear a composer the user is mid-typing in.
-      const nextDraft = composer?.getDraft();
-      if (!nextDraft || nextDraft.isEmpty || !nextDraft.text.trim()) {
-        return;
-      }
-      controllerRef.current.setDraft(nextDraft);
-    };
+    return beginPaneComposerDraftSession(composer, {
+      getDraft: () => controller.getSnapshot().draft,
+      setDraft: (draft) => controller.setDraft(draft),
+    });
   }, [conversationId]);
 
   return (
