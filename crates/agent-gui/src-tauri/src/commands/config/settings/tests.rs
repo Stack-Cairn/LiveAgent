@@ -1862,6 +1862,7 @@ mod tests {
             "deepseek",
             "DeepSeek Official",
             &config,
+            &json!({}),
         )
         .expect("deepseek provider should import");
 
@@ -1884,10 +1885,10 @@ mod tests {
         });
 
         let official_item =
-            ccs_provider_from_value("official", "codex", "Official", &official)
+            ccs_provider_from_value("official", "codex", "Official", &official, &json!({}))
                 .expect("official config should import");
         let aggregate_item =
-            ccs_provider_from_value("aggregate", "codex", "Aggregate", &aggregate)
+            ccs_provider_from_value("aggregate", "codex", "Aggregate", &aggregate, &json!({}))
                 .expect("aggregate config should import");
 
         assert_eq!(official_item.provider_type, "deepseek");
@@ -1908,6 +1909,7 @@ mod tests {
             "grokbuild",
             "PackyCode",
             &config,
+            &json!({}),
         )
         .expect("grokbuild provider should import");
 
@@ -1927,12 +1929,256 @@ mod tests {
             "grokbuild",
             "Grok Official",
             &config,
+            &json!({}),
         )
         .expect("official grok seed should still map");
         assert_eq!(item.provider_type, "xai");
         assert_eq!(item.base_url, "");
         assert_eq!(item.api_key, "");
         assert_eq!(item.request_format, "openai-responses");
+    }
+
+    #[test]
+    fn ccs_maps_claude_desktop_app_type_to_claude_code() {
+        assert_eq!(
+            ccs_provider_type_from_app_type("claude-desktop"),
+            Some("claude_code")
+        );
+        assert_eq!(
+            ccs_provider_type_from_app_type("claude_desktop"),
+            Some("claude_code")
+        );
+        assert_eq!(
+            ccs_provider_type_from_app_type("claudeDesktop"),
+            Some("claude_code")
+        );
+    }
+
+    #[test]
+    fn ccs_imports_claude_desktop_direct_mode_provider() {
+        // 与 cc-switch Claude Desktop 直连模式写库形状对齐：
+        // env 存 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN，模型在 meta 的路由表里。
+        let config = json!({
+            "env": {
+                "ANTHROPIC_BASE_URL": "https://relay.example.test/",
+                "ANTHROPIC_AUTH_TOKEN": "sk-desktop"
+            }
+        });
+        let meta = json!({
+            "claudeDesktopMode": "direct",
+            "apiFormat": "anthropic",
+            "claudeDesktopModelRoutes": {
+                "claude-sonnet-4-5": { "model": "claude-sonnet-4-5" },
+                "claude-opus-4-5": { "model": "claude-opus-4-5" }
+            }
+        });
+        let item = ccs_provider_from_value(
+            "desktop-1",
+            "claude-desktop",
+            "Desktop Relay",
+            &config,
+            &meta,
+        )
+        .expect("claude desktop direct provider should import");
+
+        assert_eq!(item.provider_type, "claude_code");
+        assert_eq!(item.app_type, "claude-desktop");
+        assert_eq!(item.base_url, "https://relay.example.test");
+        assert_eq!(item.api_key, "sk-desktop");
+        assert_eq!(
+            item.models,
+            vec!["claude-opus-4-5", "claude-sonnet-4-5"]
+        );
+    }
+
+    #[test]
+    fn ccs_imports_claude_desktop_proxy_mode_anthropic_upstream() {
+        // 映射模式 + Anthropic 上游：模型取 route.model（真实上游模型）。
+        let config = json!({
+            "env": {
+                "ANTHROPIC_BASE_URL": "https://gateway.example.test",
+                "ANTHROPIC_API_KEY": "sk-proxy"
+            }
+        });
+        let meta = json!({
+            "claudeDesktopMode": "proxy",
+            "apiFormat": "anthropic",
+            "claudeDesktopModelRoutes": {
+                "claude-sonnet-4-5": { "model": "kimi-k2", "labelOverride": "Kimi" }
+            }
+        });
+        let item = ccs_provider_from_value(
+            "desktop-2",
+            "claude-desktop",
+            "Desktop Proxy",
+            &config,
+            &meta,
+        )
+        .expect("anthropic-format proxy provider should import");
+
+        assert_eq!(item.provider_type, "claude_code");
+        assert_eq!(item.api_key, "sk-proxy");
+        assert_eq!(item.models, vec!["kimi-k2"]);
+    }
+
+    #[test]
+    fn ccs_skips_claude_desktop_non_anthropic_upstreams() {
+        // 映射模式声明 openai_chat / openai_responses / gemini_native 上游时，
+        // 依赖 cc-switch 内置网关转协议，不能直接当 Anthropic 供应商导入。
+        let config = json!({
+            "env": {
+                "ANTHROPIC_BASE_URL": "https://api.openai.example.test/v1",
+                "ANTHROPIC_AUTH_TOKEN": "sk-openai"
+            }
+        });
+        for format in ["openai_chat", "openai_responses", "gemini_native"] {
+            let meta = json!({
+                "claudeDesktopMode": "proxy",
+                "apiFormat": format,
+                "claudeDesktopModelRoutes": {
+                    "claude-sonnet-4-5": { "model": "gpt-5.2" }
+                }
+            });
+            assert!(
+                ccs_provider_from_value("desktop-3", "claude-desktop", "GPT", &config, &meta)
+                    .is_none(),
+                "{format} upstream should be skipped"
+            );
+        }
+    }
+
+    #[test]
+    fn ccs_imports_claude_desktop_official_seed_without_meta_format() {
+        // 官方种子 settings_config 为 {"env":{}}，meta 无 apiFormat：
+        // 应按 Anthropic 处理并保留（前端以空 base_url/api_key 置灰）。
+        let config = json!({ "env": {} });
+        let item = ccs_provider_from_value(
+            "claude-desktop-official",
+            "claude-desktop",
+            "Claude Desktop 官方",
+            &config,
+            &json!({}),
+        )
+        .expect("official claude desktop seed should map");
+        assert_eq!(item.provider_type, "claude_code");
+        assert_eq!(item.base_url, "");
+        assert_eq!(item.api_key, "");
+        assert!(item.models.is_empty());
+    }
+
+    #[test]
+    fn ccs_db_query_returns_claude_desktop_rows_with_meta() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("cc-switch.db");
+        {
+            let conn = Connection::open(&db_path).expect("create ccswitch db");
+            conn.execute_batch(
+                "CREATE TABLE providers (
+                   id TEXT NOT NULL,
+                   app_type TEXT NOT NULL,
+                   name TEXT NOT NULL,
+                   settings_config TEXT NOT NULL,
+                   category TEXT,
+                   created_at INTEGER,
+                   sort_index INTEGER,
+                   meta TEXT NOT NULL DEFAULT '{}',
+                   is_current BOOLEAN NOT NULL DEFAULT 0,
+                   PRIMARY KEY (id, app_type)
+                 );",
+            )
+            .expect("create providers table");
+            let insert = |id: &str, app_type: &str, name: &str, config: &str, meta: &str| {
+                conn.execute(
+                    "INSERT INTO providers (id, app_type, name, settings_config, meta, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 1)",
+                    rusqlite::params![id, app_type, name, config, meta],
+                )
+                .expect("insert provider row");
+            };
+            insert(
+                "cli-1",
+                "claude",
+                "CLI Relay",
+                r#"{"env":{"ANTHROPIC_BASE_URL":"https://cli.example.test","ANTHROPIC_AUTH_TOKEN":"sk-cli"}}"#,
+                "{}",
+            );
+            insert(
+                "desktop-direct",
+                "claude-desktop",
+                "Desktop Relay",
+                r#"{"env":{"ANTHROPIC_BASE_URL":"https://desktop.example.test","ANTHROPIC_AUTH_TOKEN":"sk-desktop"}}"#,
+                r#"{"claudeDesktopMode":"direct","apiFormat":"anthropic","claudeDesktopModelRoutes":{"claude-sonnet-4-5":{"model":"claude-sonnet-4-5"}}}"#,
+            );
+            insert(
+                "desktop-openai",
+                "claude-desktop",
+                "Desktop OpenAI Proxy",
+                r#"{"env":{"ANTHROPIC_BASE_URL":"https://openai.example.test/v1","ANTHROPIC_AUTH_TOKEN":"sk-openai"}}"#,
+                r#"{"claudeDesktopMode":"proxy","apiFormat":"openai_chat","claudeDesktopModelRoutes":{"claude-sonnet-4-5":{"model":"gpt-5.2"}}}"#,
+            );
+        }
+
+        let providers =
+            list_ccswitch_liveagent_providers_from_db(&db_path).expect("query providers");
+        let ids: Vec<&str> = providers
+            .iter()
+            .map(|item| item.source_id.as_str())
+            .collect();
+        assert!(ids.contains(&"cli-1"), "claude CLI row should import");
+        assert!(
+            ids.contains(&"desktop-direct"),
+            "claude desktop direct row should import"
+        );
+        assert!(
+            !ids.contains(&"desktop-openai"),
+            "non-anthropic desktop upstream should be skipped"
+        );
+
+        let desktop = providers
+            .iter()
+            .find(|item| item.source_id == "desktop-direct")
+            .expect("desktop provider present");
+        assert_eq!(desktop.provider_type, "claude_code");
+        assert_eq!(desktop.base_url, "https://desktop.example.test");
+        assert_eq!(desktop.api_key, "sk-desktop");
+        assert_eq!(desktop.models, vec!["claude-sonnet-4-5"]);
+    }
+
+    #[test]
+    fn ccs_db_query_tolerates_missing_meta_column() {
+        // ccswitch v0 老库没有 meta 列；LiveAgent 只读打开、不做迁移，
+        // 查询需退化为空 meta 而不是整体失败。
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("cc-switch.db");
+        {
+            let conn = Connection::open(&db_path).expect("create ccswitch db");
+            conn.execute_batch(
+                "CREATE TABLE providers (
+                   id TEXT NOT NULL,
+                   app_type TEXT NOT NULL,
+                   name TEXT NOT NULL,
+                   settings_config TEXT NOT NULL,
+                   sort_index INTEGER,
+                   created_at INTEGER,
+                   PRIMARY KEY (id, app_type)
+                 );",
+            )
+            .expect("create legacy providers table");
+            conn.execute(
+                "INSERT INTO providers (id, app_type, name, settings_config, created_at)
+                 VALUES ('cli-legacy', 'claude', 'Legacy CLI',
+                         '{\"env\":{\"ANTHROPIC_BASE_URL\":\"https://legacy.example.test\",\"ANTHROPIC_AUTH_TOKEN\":\"sk-legacy\"}}', 1)",
+                [],
+            )
+            .expect("insert legacy provider row");
+        }
+
+        let providers =
+            list_ccswitch_liveagent_providers_from_db(&db_path).expect("query legacy providers");
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].source_id, "cli-legacy");
+        assert_eq!(providers[0].provider_type, "claude_code");
+        assert_eq!(providers[0].base_url, "https://legacy.example.test");
     }
 
     // ===== 配置备份：采集 / 校验 / 应用 =====
