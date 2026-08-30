@@ -27,6 +27,15 @@ const { createTerminalPaneBindingStore } = loader.loadModule(
 const { createTerminalPaneLeaseStore } = loader.loadModule(
   "@liveagent/ui/lib/workbench/terminalPaneLeaseStore.ts",
 );
+const { applyWorkbenchCommand, isWorkbenchLayoutValid } = loader.loadModule(
+  "@liveagent/ui/lib/workbench/index.ts",
+);
+const { createInitialWorkbenchLayout } = loader.loadModule(
+  "@liveagent/ui/lib/workbench/useWindowWorkbench.ts",
+);
+const { createGatewayHomeConversationState, isLocalDraftConversationId } = loader.loadModule(
+  "src/app/gatewayLocalDraft.ts",
+);
 const webTerminalRuntime = loader.loadModule("src/app/workbench/terminalPaneRuntime.ts");
 
 const webRoot = fileURLToPath(new URL("../../web", import.meta.url));
@@ -35,6 +44,7 @@ const hookSource = readFileSync(
   "utf8",
 );
 const viewSource = readFileSync(path.join(webRoot, "src/app/GatewayAppView.tsx"), "utf8");
+const appSource = readFileSync(path.join(webRoot, "src/app/GatewayApp.tsx"), "utf8");
 const workspaceDropCommitSource = readFileSync(
   path.join(webRoot, "../../agent-ui/src/lib/workbench/workspaceDropCommit.ts"),
   "utf8",
@@ -93,11 +103,63 @@ test("web terminal pane runtime exposes the same binding contract as desktop", (
 
 test("Web starts from a single-pane homepage and keeps terminal bindings in memory", () => {
   assert.match(hookSource, /persistence:\s*false/);
+  assert.match(appSource, /useState\(createGatewayHomeConversationState\)/);
+  assert.match(appSource, /resetToFreshHomeConversation\(\)/);
   const runtimeSource = readFileSync(
     path.join(webRoot, "src/app/workbench/terminalPaneRuntime.ts"),
     "utf8",
   );
   assert.match(runtimeSource, /createTerminalPaneBindingStore\(\{ storage: null \}\)/);
+});
+
+test("the Web homepage is a valid local-draft root that accepts conversation and terminal splits", () => {
+  const home = createGatewayHomeConversationState();
+  assert.equal(home.selectedHistoryId, home.conversationId);
+  assert.equal(isLocalDraftConversationId(home.conversationId), true);
+
+  const layout = createInitialWorkbenchLayout(home.conversationId, PROJECT);
+  assert.equal(isWorkbenchLayoutValid(layout), true);
+  assert.equal(layout.root?.type, "leaf");
+  assert.equal(layout.panes[layout.focusedPaneId].surface.conversationId, home.conversationId);
+
+  const conversationResult = applyWorkbenchCommand(layout, {
+    type: "OPEN_PANE",
+    pane: {
+      paneId: "pane-conversation",
+      surface: { kind: "conversation", conversationId: "conv-2", project: PROJECT },
+      view: {},
+    },
+    target: { kind: "pane-edge", paneId: layout.focusedPaneId, edge: "right" },
+    expectedRevision: layout.revision,
+  });
+  assert.equal(conversationResult.ok, true);
+  assert.equal(Object.keys(conversationResult.layout.panes).length, 2);
+
+  const terminalResult = applyWorkbenchCommand(layout, {
+    type: "OPEN_PANE",
+    pane: {
+      paneId: "pane-terminal",
+      surface: {
+        kind: "localTerminal",
+        surfaceId: "surface-terminal",
+        project: PROJECT,
+        launchSpec: { cwd: "/repo" },
+      },
+      view: {},
+    },
+    target: { kind: "pane-edge", paneId: layout.focusedPaneId, edge: "right" },
+    expectedRevision: layout.revision,
+  });
+  assert.equal(terminalResult.ok, true);
+  assert.equal(Object.keys(terminalResult.layout.panes).length, 2);
+});
+
+test("a blank boot identity degrades to a valid empty layout instead of an invalid pane", () => {
+  const layout = createInitialWorkbenchLayout("", PROJECT);
+  assert.equal(isWorkbenchLayoutValid(layout), true);
+  assert.equal(layout.root, null);
+  assert.deepEqual(layout.panes, {});
+  assert.equal(layout.focusedPaneId, null);
 });
 
 test("dropping an existing dock session binds first, then opens the pane", () => {

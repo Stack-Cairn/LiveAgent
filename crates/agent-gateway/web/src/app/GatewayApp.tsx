@@ -69,7 +69,11 @@ import {
   createOpenConversationInitial,
   createRefreshDisplayedConversationHistorySnapshot,
 } from "./gatewayHistoryWindowActions";
-import { createLocalDraftConversationId, isLocalDraftConversationId } from "./gatewayLocalDraft";
+import {
+  createGatewayHomeConversationState,
+  createLocalDraftConversationId,
+  isLocalDraftConversationId,
+} from "./gatewayLocalDraft";
 import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
 import { resolveConversationUploadWorkdir } from "./hooks/uploadWorkdirRouting";
 import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
@@ -121,7 +125,11 @@ function useGatewayAppController() {
   // A cached Agent status is usable only after it has been observed on the
   // currently authenticated browser-socket epoch.
   const [sidebarAgentStatusFresh, setSidebarAgentStatusFresh] = useState(false);
-  const [conversationId, setConversationId] = useState("");
+  // The homepage is a real unsaved conversation. A stable local-draft id keeps
+  // the initial Workbench root valid and lets the first sidebar/dock drop form
+  // an actual split without changing the visible homepage experience.
+  const [initialHomeConversation] = useState(createGatewayHomeConversationState);
+  const [conversationId, setConversationId] = useState(initialHomeConversation.conversationId);
   // 本地未持久化的会话模型切换（按会话 id 键）；发消息随 selected_model
   // 落库后由 history-sync 回声在清理 effect 中收敛删除。
   const [conversationModelOverrides, setConversationModelOverrides] = useState<
@@ -172,7 +180,9 @@ function useGatewayAppController() {
   const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
   const [, setChatQueueRevision] = useState(0);
-  const [selectedHistoryId, setSelectedHistoryId] = useState("");
+  const [selectedHistoryId, setSelectedHistoryId] = useState(
+    initialHomeConversation.selectedHistoryId,
+  );
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   // Two-phase conversation open (openController): "opening" gates the
   // composer/transcript loading affordances; showOverlay drives the switch
@@ -274,7 +284,7 @@ function useGatewayAppController() {
   const visibleConversationRevisionRef = useRef(0);
   const previousDisplayedConversationIdRef = useRef("");
   const pendingDisplayedConversationAutoBottomRef = useRef<string | null>(null);
-  const protectedConversationRef = useRef("");
+  const protectedConversationRef = useRef(PROTECTED_DRAFT_CONVERSATION);
   const chatRuntimePreparePromiseRef = useRef<Promise<AgentStatus> | null>(null);
   const submitInFlightRef = useRef(false);
   // clientRequestId → draft conversation id, until the command binds.
@@ -282,6 +292,17 @@ function useGatewayAppController() {
   const sendChatRef = useRef<SendChatFn | null>(null);
   const isImportingPastedTextRef = useRef(false);
   const resetProjectToolsRuntimeRef = useRef<() => void>(() => undefined);
+
+  const resetToFreshHomeConversation = useCallback(() => {
+    const next = createGatewayHomeConversationState();
+    conversationIdRef.current = next.conversationId;
+    selectedHistoryIdRef.current = next.selectedHistoryId;
+    selectedHistoryRef.current = null;
+    protectedConversationRef.current = PROTECTED_DRAFT_CONVERSATION;
+    setConversationId(next.conversationId);
+    setSelectedHistoryId(next.selectedHistoryId);
+    setSelectedHistory(null);
+  }, []);
 
   // --- Chat streaming infrastructure (Phase 4) -----------------------------
   // Transcript stores (one per conversation), the global activity map, and
@@ -1259,19 +1280,14 @@ function useGatewayAppController() {
     composerDraftCacheRef.current.clear();
     composerDraftOwnerRef.current = "";
     composerRef.current?.clear();
-    conversationIdRef.current = "";
-    selectedHistoryIdRef.current = "";
-    selectedHistoryRef.current = null;
     resetSharedHistory();
     clearPendingUploads();
-    protectedConversationRef.current = "";
     submitInFlightRef.current = false;
     setUserMenuOpen(false);
     setProjectSettingsProject(null);
     resetSettingsOverlay();
     setStatus(null);
     setStatusError(null);
-    setConversationId("");
     setChatError(null);
     setSidebarActionError(null);
     setFullHistoryLoading(false);
@@ -1283,8 +1299,7 @@ function useGatewayAppController() {
     setChatQueueRevision(0);
     resetProjectToolsRuntimeRef.current();
     workbenchClearRef.current();
-    setSelectedHistoryId("");
-    setSelectedHistory(null);
+    resetToFreshHomeConversation();
   }, [
     activityStore,
     chatCommandPipeline,
@@ -1294,6 +1309,7 @@ function useGatewayAppController() {
     markVisibleConversationRevision,
     openController,
     resetSharedHistory,
+    resetToFreshHomeConversation,
     transcriptStoreRegistry,
     resetSettingsOverlay,
     setProjectSettingsProject,
@@ -1329,11 +1345,7 @@ function useGatewayAppController() {
       composerRef.current?.clear();
       clearPendingUploads();
       pendingUploadContextRef.current = null;
-      protectedConversationRef.current = "";
       submitInFlightRef.current = false;
-      conversationIdRef.current = "";
-      selectedHistoryIdRef.current = "";
-      selectedHistoryRef.current = null;
       previousDisplayedConversationIdRef.current = "";
       pendingDisplayedConversationAutoBottomRef.current = null;
       displayedConversationWorkdirRef.current = "";
@@ -1346,9 +1358,6 @@ function useGatewayAppController() {
       setStatus(null);
       setSidebarAgentStatusFresh(false);
       setGatewayConnectionLost(false);
-      setConversationId("");
-      setSelectedHistoryId("");
-      setSelectedHistory(null);
       setConversationModelOverrides(new Map());
       setFullHistoryLoading(false);
       setQueuedChatTurns([]);
@@ -1361,6 +1370,7 @@ function useGatewayAppController() {
       setNotifyItems([]);
       resetProjectToolsRuntimeRef.current();
       workbenchClearRef.current();
+      resetToFreshHomeConversation();
     },
     [
       activityStore,
@@ -1370,6 +1380,7 @@ function useGatewayAppController() {
       markVisibleConversationRevision,
       openController,
       resetSharedHistory,
+      resetToFreshHomeConversation,
       transcriptStoreRegistry,
       setRightDockOpen,
       setActiveView,

@@ -66,6 +66,15 @@ function singlePaneLayout(conversationId: string, project: ProjectRef): Workbenc
   };
 }
 
+/** Never let a homepage/boot race manufacture an invalid blank conversation pane. */
+export function createInitialWorkbenchLayout(
+  conversationId: string,
+  project: ProjectRef,
+): WorkbenchLayout {
+  const key = conversationId.trim();
+  return key ? singlePaneLayout(key, project) : createEmptyWorkbenchLayout();
+}
+
 /**
  * Draft promotion: rebind the pane hosting `fromConversationId` to
  * `toConversationId` in place. Topology, focus and view state are preserved so
@@ -190,7 +199,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     const persisted = persistenceRef.current;
     return (
       (persisted ? readStoredWorkbenchLayout(persisted.storage, persisted.storageKey) : null) ??
-      singlePaneLayout(initialConversationId, initialProject)
+      createInitialWorkbenchLayout(initialConversationId, initialProject)
     );
   });
   const layoutRef = useRef(layout);
