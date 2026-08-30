@@ -14,6 +14,8 @@ import {
   findParentSplitId,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
+  type PendingWorkspaceDropOperation,
+  shouldDeferWorkspaceDropConversationSync,
   type WorkbenchEdge,
   type WorkbenchGeometry,
   type WorkbenchOpenTarget,
@@ -106,6 +108,8 @@ export type UseGatewayWorkbenchParams = {
   onNoSpaceForSplit: () => void;
   /** 拖拽期间布局/几何已变化，事务无法安全重放。 */
   onDropStateChanged: () => void;
+  /** workspace 草稿创建事务抛错。 */
+  onWorkspaceDropFailed: (error: unknown) => void;
   /** 已在 Pane 中的会话再次从侧栏拖入时，明确说明聚焦语义。 */
   onConversationAlreadyOpen: () => void;
 };
@@ -201,6 +205,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     conversationWorkdirFor,
     onNoSpaceForSplit,
     onDropStateChanged,
+    onWorkspaceDropFailed,
     onConversationAlreadyOpen,
   } = params;
 
@@ -283,10 +288,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
   // draft creation are in flight, the current-conversation sync must not
   // rebind the focused pane underneath the explicit drop transaction.
   const workspaceDropSequenceRef = useRef(0);
-  const pendingWorkspaceDropRef = useRef<{
-    operationId: number;
-    projectPathKey: string;
-  } | null>(null);
+  const pendingWorkspaceDropRef = useRef<PendingWorkspaceDropOperation | null>(null);
 
   const activatePaneProject = useCallback(
     (projectPathKey?: string) => {
@@ -312,16 +314,14 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       return;
     }
     pendingSelectRef.current = null;
-    const previousSynced = lastSyncedConversationRef.current;
-    lastSyncedConversationRef.current = key;
-
     const pendingDrop = pendingWorkspaceDropRef.current;
-    if (pendingDrop && previousSynced !== key) {
-      const workdir = conversationWorkdirForRef.current(key)?.trim() || "";
-      if (workdir && workspaceProjectPathKey(workdir) === pendingDrop.projectPathKey) {
-        return;
-      }
+    const workdir = conversationWorkdirForRef.current(key)?.trim() || "";
+    if (
+      shouldDeferWorkspaceDropConversationSync(pendingDrop, key, workspaceProjectPathKey(workdir))
+    ) {
+      return;
     }
+    lastSyncedConversationRef.current = key;
     workbench.syncCurrentConversation(key, sidebarProjectRef(key));
   }, [enabled, displayedConversationId, sidebarProjectRef, workbench]);
 
@@ -527,12 +527,22 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         if (!project) return;
         const operationId = workspaceDropSequenceRef.current + 1;
         workspaceDropSequenceRef.current = operationId;
-        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        pendingWorkspaceDropRef.current = {
+          operationId,
+          projectPathKey: pathKey,
+          conversationId: null,
+        };
         void commitWorkspaceDropConversation({
           revision: commit.revision,
           target,
           project: { projectId: project.id, projectPathKey: pathKey },
           startConversation: () => startConversationForProjectRef.current(project),
+          onConversationCreated: (conversationId) => {
+            const pending = pendingWorkspaceDropRef.current;
+            if (pending?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = { ...pending, conversationId };
+            }
+          },
           currentRevision: () => workbench.layoutRef.current.revision,
           conversationMatchesProject: (conversationId) => {
             const workdir = conversationWorkdirForRef.current(conversationId)?.trim() || "";
@@ -540,22 +550,33 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
           },
           paneIdForConversation: workbench.paneIdForConversation,
           openConversation: workbench.openConversation,
-        }).then((result) => {
-          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
-            pendingWorkspaceDropRef.current = null;
-          }
-          if (result.kind === "opened" || result.kind === "not-created") return;
-          if (result.kind === "already-open") {
-            const paneId = workbench.paneIdForConversation(result.conversationId);
-            if (paneId) handleFocusPane(paneId);
-            return;
-          }
-          workbench.syncCurrentConversation(result.conversationId, {
-            projectId: project.id,
-            projectPathKey: pathKey,
+        })
+          .then((result) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            if (result.kind === "opened" || result.kind === "not-created") return;
+            if (result.kind === "already-open") {
+              const paneId = workbench.paneIdForConversation(result.conversationId);
+              if (paneId) handleFocusPane(paneId);
+              return;
+            }
+            workbench.syncCurrentConversation(result.conversationId, {
+              projectId: project.id,
+              projectPathKey: pathKey,
+            });
+            if (result.kind !== "rejected") onDropStateChanged();
+          })
+          .catch((error) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            const currentId = displayedConversationId.trim();
+            if (currentId) {
+              workbench.syncCurrentConversation(currentId, sidebarProjectRef(currentId));
+            }
+            onWorkspaceDropFailed(error);
           });
-          if (result.kind !== "rejected") onDropStateChanged();
-        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -611,6 +632,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleFocusPane,
       onConversationAlreadyOpen,
       onDropStateChanged,
+      onWorkspaceDropFailed,
+      sidebarProjectRef,
       selectWorkbenchConversation,
       terminalDropDeps,
       workbench,

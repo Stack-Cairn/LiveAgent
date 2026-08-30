@@ -690,6 +690,13 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     [handleFileDragLeave],
   );
+  const handleChatFileDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      lastFileDropHoverPaneRef.current = null;
+      handleFileDrop(event);
+    },
+    [handleFileDrop],
+  );
 
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
@@ -1213,7 +1220,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragEnter: handleChatFileDragEnter,
                     onDragOver: handleChatFileDragOver,
                     onDragLeave: handleChatFileDragLeave,
-                    onDrop: handleFileDrop,
+                    onDrop: handleChatFileDrop,
                   },
                   content: (
                     <>

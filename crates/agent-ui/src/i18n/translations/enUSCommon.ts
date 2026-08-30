@@ -1474,6 +1474,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.openNewTerminalInSplit": "New terminal in split pane",
   "workbench.noSpaceForSplit": "Not enough space for another pane",
   "workbench.dropStateChanged": "The pane layout changed. Drag the item again",
+  "workbench.workspaceDropFailed": "Failed to create the workspace conversation. Please retry.",
   "workbench.conversationAlreadyOpen": "This conversation is already open and is now focused",
   "workbench.projectArchived": "This workspace is archived",
   "workbench.projectMissing": "This workspace folder is missing",

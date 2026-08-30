@@ -3,9 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { commitWorkspaceDropConversation } = loader.loadModule(
-  "@liveagent/ui/lib/workbench/workspaceDropCommit.ts",
-);
+const { commitWorkspaceDropConversation, shouldDeferWorkspaceDropConversationSync } =
+  loader.loadModule("@liveagent/ui/lib/workbench/workspaceDropCommit.ts");
 
 const PROJECT = { projectId: "project-main", projectPathKey: "/workspace/main" };
 const TARGET = { kind: "pane-edge", paneId: "pane-a", edge: "right" };
@@ -30,7 +29,10 @@ function createDeps(overrides = {}) {
 }
 
 test("workspace drop opens the exact draft at the frozen target", async () => {
-  const { deps, opened } = createDeps();
+  const created = [];
+  const { deps, opened } = createDeps({
+    onConversationCreated: (conversationId) => created.push(conversationId),
+  });
   assert.deepEqual(await commitWorkspaceDropConversation(deps), {
     kind: "opened",
     conversationId: "draft-new",
@@ -41,6 +43,24 @@ test("workspace drop opens the exact draft at the frozen target", async () => {
       target: TARGET,
     },
   ]);
+  assert.deepEqual(created, ["draft-new"]);
+});
+
+test("pending drop defers sync until its exact draft id is known", () => {
+  const pending = { operationId: 4, projectPathKey: "/workspace/main", conversationId: null };
+  assert.equal(
+    shouldDeferWorkspaceDropConversationSync(pending, "draft-new", "/workspace/main"),
+    true,
+  );
+  pending.conversationId = "draft-new";
+  assert.equal(
+    shouldDeferWorkspaceDropConversationSync(pending, "draft-new", "/workspace/other"),
+    true,
+  );
+  assert.equal(
+    shouldDeferWorkspaceDropConversationSync(pending, "unrelated", "/workspace/main"),
+    false,
+  );
 });
 
 test("directory rejection creates no pane", async () => {

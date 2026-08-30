@@ -60,6 +60,8 @@ import {
   findAdjacentPaneId,
   findParentSplitId,
   hitTestWorkbenchDrop,
+  type PendingWorkspaceDropOperation,
+  shouldDeferWorkspaceDropConversationSync,
   type WorkbenchCommandError,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
@@ -2367,10 +2369,7 @@ export function ChatPage(props: ChatPageProps) {
   // path. The sync effect only pauses for that identified draft, so it cannot
   // consume the target on an unrelated current-conversation update.
   const workspaceDropSequenceRef = useRef(0);
-  const pendingWorkspaceDropRef = useRef<{
-    operationId: number;
-    projectPathKey: string;
-  } | null>(null);
+  const pendingWorkspaceDropRef = useRef<PendingWorkspaceDropOperation | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: The mutable runtime cache ref intentionally supplies the latest draft workdir without changing the drag handler identity.
   const handleWorkbenchDropCommit = useCallback(
@@ -2392,12 +2391,22 @@ export function ChatPage(props: ChatPageProps) {
         if (!project) return;
         const operationId = workspaceDropSequenceRef.current + 1;
         workspaceDropSequenceRef.current = operationId;
-        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        pendingWorkspaceDropRef.current = {
+          operationId,
+          projectPathKey: pathKey,
+          conversationId: null,
+        };
         void commitWorkspaceDropConversation({
           revision: commit.revision,
           target,
           project: { projectId: project.id, projectPathKey: pathKey },
           startConversation: () => handleNewConversationForProject(project),
+          onConversationCreated: (conversationId) => {
+            const pending = pendingWorkspaceDropRef.current;
+            if (pending?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = { ...pending, conversationId };
+            }
+          },
           currentRevision: () => workbench.layoutRef.current.revision,
           conversationMatchesProject: (conversationId) => {
             const draftWorkdir =
@@ -2406,24 +2415,35 @@ export function ChatPage(props: ChatPageProps) {
           },
           paneIdForConversation: workbench.paneIdForConversation,
           openConversation: workbench.openConversation,
-        }).then((result) => {
-          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
-            pendingWorkspaceDropRef.current = null;
-          }
-          if (result.kind === "opened" || result.kind === "not-created") return;
-          if (result.kind === "already-open") {
-            const paneId = workbench.paneIdForConversation(result.conversationId);
-            if (paneId) handleWorkbenchFocusPane(paneId);
-            return;
-          }
-          workbench.syncCurrentConversation(result.conversationId, {
-            projectId: project.id,
-            projectPathKey: pathKey,
+        })
+          .then((result) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            if (result.kind === "opened" || result.kind === "not-created") return;
+            if (result.kind === "already-open") {
+              const paneId = workbench.paneIdForConversation(result.conversationId);
+              if (paneId) handleWorkbenchFocusPane(paneId);
+              return;
+            }
+            workbench.syncCurrentConversation(result.conversationId, {
+              projectId: project.id,
+              projectPathKey: pathKey,
+            });
+            if (result.kind !== "rejected") {
+              addNotify("error", t("workbench.dropStateChanged"));
+            }
+          })
+          .catch((error) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            workbench.syncCurrentConversation(
+              currentConversationIdRef.current,
+              conversationSurfaceProject,
+            );
+            addNotify("error", asErrorMessage(error, t("workbench.workspaceDropFailed")));
           });
-          if (result.kind !== "rejected") {
-            addNotify("error", t("workbench.dropStateChanged"));
-          }
-        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -2490,6 +2510,7 @@ export function ChatPage(props: ChatPageProps) {
     [
       archivedWorkspaceProjectPathKeys,
       addNotify,
+      conversationSurfaceProject,
       handleNewConversationForProject,
       handleWorkbenchFocusPane,
       selectWorkbenchConversation,
@@ -2854,24 +2875,22 @@ export function ChatPage(props: ChatPageProps) {
       return;
     }
     workbenchPendingSelectRef.current = null;
-    const previousSynced = lastWorkbenchSyncedConversationRef.current;
-    lastWorkbenchSyncedConversationRef.current = currentConversationId;
-
-    // Workspace drop: the fresh draft conversation opens a NEW pane at the
-    // remembered drop target instead of rebinding the focused pane. The
-    // pending intent is one-shot and verified against the draft's workdir so
-    // a failed directory check can never misplace a later conversation.
+    // Workspace drop: keep normal sync paused for the whole operation, not
+    // merely its first render. Once startConversation resolves, the exact
+    // draft id replaces the temporary project-key match.
     const pendingWorkspaceDrop = pendingWorkspaceDropRef.current;
-    if (pendingWorkspaceDrop && previousSynced !== currentConversationId) {
-      const draftWorkdir =
-        conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
-      if (
-        draftWorkdir &&
-        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceDrop.projectPathKey
-      ) {
-        return;
-      }
+    const draftWorkdir =
+      conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
+    if (
+      shouldDeferWorkspaceDropConversationSync(
+        pendingWorkspaceDrop,
+        currentConversationId,
+        workspaceProjectPathKey(draftWorkdir),
+      )
+    ) {
+      return;
     }
+    lastWorkbenchSyncedConversationRef.current = currentConversationId;
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
   }, [currentConversationId, conversationSurfaceProject, conversationRuntimeCacheRef, workbench]);
 
@@ -3237,15 +3256,15 @@ export function ChatPage(props: ChatPageProps) {
                     ...primaryPaneBinding,
                     composer: {
                       ...primaryPaneBinding.composer,
-                      // Multi-pane focus starts the page hydration pipeline;
-                      // that must not freeze a composer the user is already
-                      // typing in. Send still rejects hydrating conversations.
+                      // Keep Desktop aligned with Web: history hydration is a
+                      // real disabled state even when the workbench has more
+                      // than one pane, so typing cannot race stale history.
                       isInputDisabled:
                         isCompactionRunning ||
                         isConversationHydrationFailed ||
                         isImportingPastedText ||
                         isUploadingFiles ||
-                        (isConversationHydrating && Object.keys(workbench.layout.panes).length < 2),
+                        isConversationHydrating,
                     },
                   }
                 : buildBackgroundPaneBinding(surface),

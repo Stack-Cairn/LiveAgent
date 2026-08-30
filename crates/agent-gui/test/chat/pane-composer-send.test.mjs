@@ -219,13 +219,11 @@ test("focusing another pane does not swap an object composer ref across hosts", 
   assert.match(chatPage, /if \(handle\) conversationPaneHostRef\.current = handle;/);
 });
 
-test("multi-pane focus does not freeze the composer during hydration", () => {
+test("the primary pane stays disabled during hydration in multi-pane layouts", () => {
   const chatPage = readSource("../../src/pages/ChatPage.tsx");
   const registrations = chatPage.slice(chatPage.indexOf("const workbenchRegistrations"));
-  assert.match(
-    registrations,
-    /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)\.length < 2/,
-  );
+  assert.match(registrations, /isUploadingFiles \|\|\s*isConversationHydrating/);
+  assert.doesNotMatch(registrations, /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)/);
 });
 
 test("switch cleanup saves the outgoing pane draft to its original conversation", () => {

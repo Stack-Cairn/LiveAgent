@@ -70,6 +70,7 @@ import {
 } from "./gatewayHistoryWindowActions";
 import { createLocalDraftConversationId, isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
+import { resolveConversationUploadWorkdir } from "./hooks/uploadWorkdirRouting";
 import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
 import { useGatewayChatConfiguration } from "./hooks/useGatewayChatConfiguration";
 import { useGatewayChatPresentation } from "./hooks/useGatewayChatPresentation";
@@ -506,10 +507,22 @@ function useGatewayAppController() {
   // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
   const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
   const workdirForConversation = useCallback(
-    (targetConversationId: string) =>
-      sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
-      conversationWorkdirsRef.current.get(targetConversationId)?.trim() ||
-      (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : ""),
+    (targetConversationId: string) => {
+      const targetId = targetConversationId.trim();
+      const displayedId = resolveVisibleConversationId(
+        selectedHistoryIdRef.current,
+        conversationIdRef.current,
+      );
+      return resolveConversationUploadWorkdir({
+        targetConversationId: targetId,
+        displayedConversationId: displayedId,
+        persistedWorkdir: sidebarStore.peek(targetId)?.cwd,
+        runtimeWorkdir: conversationWorkdirsRef.current.get(targetId),
+        isAgentMode,
+        activeWorkspacePath: activeWorkspaceProjectPath,
+        defaultWorkdir: settings.system.workdir,
+      });
+    },
     [activeWorkspaceProjectPath, isAgentMode, settings.system.workdir, sidebarStore],
   );
 
@@ -1635,6 +1648,11 @@ function useGatewayAppController() {
       addNotify("error", translate("workbench.noSpaceForSplit", settings.locale)),
     onDropStateChanged: () =>
       addNotify("error", translate("workbench.dropStateChanged", settings.locale)),
+    onWorkspaceDropFailed: (error) =>
+      addNotify(
+        "error",
+        asErrorMessage(error, translate("workbench.workspaceDropFailed", settings.locale)),
+      ),
     onConversationAlreadyOpen: () =>
       addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
   });
