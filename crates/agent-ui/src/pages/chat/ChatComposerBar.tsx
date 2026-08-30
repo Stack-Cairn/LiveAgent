@@ -12,6 +12,12 @@ import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/Command
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
 import { ComposerModelControls } from "@liveagent/ui/components/chat/ComposerModelControls";
 import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
+import { ClarifyPanel } from "@liveagent/ui/components/chat/clarify/ClarifyPanel";
+import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
+import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClarifySession";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   MentionComposer,
@@ -36,6 +42,7 @@ import {
   Square,
   SquarePen,
   Trash2,
+  WandSparkles,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
@@ -185,6 +192,11 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
 
+// 宿主未注入澄清执行器时的占位：clarifyEnabled=false 已把入口全部藏起，
+// 该函数永远不会被真正调用；仅用于满足 useClarifySession 的非空签名。
+const unavailableClarifyTurn: RunClarifyTurn = () =>
+  Promise.reject(new Error("runClarifyTurn is not provided"));
+
 /** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
 export type ContextUsageTokensSource = {
   subscribe: (listener: () => void) => () => void;
@@ -301,6 +313,10 @@ export type ChatComposerBarProps = {
   onMoveQueuedTurnUp: (id: string) => void;
   onEditQueuedTurn: (id: string) => void;
   onRemoveQueuedTurn: (id: string) => void;
+  /** 提示词澄清执行器：注入后在工具行渲染「澄清」按钮（GUI 已接；Web 见计划 2）。 */
+  runClarifyTurn?: RunClarifyTurn;
+  /** 澄清系统提示词附带的轻量工作区信息。 */
+  clarifyContext?: ClarifyContext;
   onHeightChange?: (height: number) => void;
   /** 当前会话任务进度（存在时渲染在审批栏和队列面板之上）。 */
   taskProgressBar?: ReactNode;
@@ -368,6 +384,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onMoveQueuedTurnUp,
     onEditQueuedTurn,
     onRemoveQueuedTurn,
+    runClarifyTurn,
+    clarifyContext,
     onHeightChange,
     taskProgressBar,
     approvalBar,
@@ -503,11 +521,60 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     composerRef.current?.focus();
   }, [composerRef, setComposerExpanded]);
 
+  // 澄清会话：面板即开即用，关闭即丢弃（设计文档：不持久化）。
+  const [clarifyOpen, setClarifyOpen] = useState(false);
+  const applyClarifyFinal = useCallback(
+    (finalText: string) => {
+      const composer = composerRef.current;
+      if (!composer) return;
+      // 只替换文本段：附件/提及 chips 原样保留（设计文档「终稿落框」）。
+      // setDraft 按 segments 重建 DOM，stale 派生字段会被忽略。
+      const draft = composer.getDraft();
+      const preserved = draft.segments.filter((segment) => segment.type !== "text");
+      composer.setDraft({
+        ...draft,
+        segments: [{ type: "text", text: finalText }, ...preserved],
+      });
+      setClarifyOpen(false);
+      composer.focus();
+    },
+    [composerRef],
+  );
+  const clarifySession = useClarifySession(
+    runClarifyTurn ?? unavailableClarifyTurn,
+    clarifyContext,
+    { onFinal: applyClarifyFinal },
+  );
+  const clarifyEnabled = Boolean(runClarifyTurn) && hasModels;
+  const clarifyButtonDisabled = !clarifyEnabled || composerIsEmpty;
+  const handleClarifyToggle = useCallback(() => {
+    if (!clarifyEnabled) return;
+    if (clarifyOpen) {
+      clarifySession.close();
+      setClarifyOpen(false);
+      return;
+    }
+    const composer = composerRef.current;
+    const draftText = composer?.getDraft().textWithoutLargePastes.trim() || "";
+    if (!draftText) return;
+    setClarifyOpen(true);
+    clarifySession.start(draftText);
+  }, [clarifyEnabled, clarifyOpen, composerRef, clarifySession.start, clarifySession.close]);
+
+  // 切会话时丢弃进行中的澄清（组件按 conversationId 重挂载，保险起见也显式关）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies(conversationId): conversationId 是触发信号：effect 体不读它，但会话切换正是靠它重跑以丢弃进行中的澄清。
+  useEffect(() => {
+    clarifySession.close();
+    setClarifyOpen(false);
+  }, [conversationId, clarifySession.close]);
+
   /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
   const handleComposerSend = useCallback(() => {
+    // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
+    if (clarifyOpen) return;
     setComposerExpanded(false);
     onSend();
-  }, [onSend, setComposerExpanded]);
+  }, [clarifyOpen, onSend, setComposerExpanded]);
 
   const shouldShowQueueScrollbar = !queueCollapsed && queuedTurns.length > 2;
 
@@ -967,6 +1034,23 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             />
           </div>
 
+          {clarifyOpen && runClarifyTurn ? (
+            <ClarifyPanel
+              state={clarifySession.state}
+              busy={
+                clarifySession.state.status === "asking" ||
+                clarifySession.state.status === "synthesizing"
+              }
+              onSubmitAnswer={clarifySession.submitAnswer}
+              onForceFinal={clarifySession.forceFinal}
+              onRetry={clarifySession.retry}
+              onClose={() => {
+                clarifySession.close();
+                setClarifyOpen(false);
+              }}
+            />
+          ) : null}
+
           {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
               全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
               (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。
@@ -1122,6 +1206,26 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   <Lightbulb className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{t("chat.runtime.planMode")}</span>
                 </button>
+              ) : null}
+
+              {clarifyEnabled ? (
+                <RuntimeControlTooltip label={t("chat.clarify.buttonTitle")}>
+                  <button
+                    type="button"
+                    disabled={clarifyButtonDisabled}
+                    onClick={handleClarifyToggle}
+                    aria-label={t("chat.clarify.buttonTitle")}
+                    aria-pressed={clarifyOpen}
+                    title={clarifyButtonDisabled ? t("chat.clarify.buttonDisabled") : undefined}
+                    className={cn(
+                      "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                      clarifyOpen && "bg-muted/60 text-foreground",
+                    )}
+                  >
+                    <WandSparkles className="h-4 w-4" />
+                  </button>
+                </RuntimeControlTooltip>
               ) : null}
 
               {stt.available ? (
