@@ -126,8 +126,9 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
         return;
       }
       // 完整应用重启后后端注册表为空,但部分环境仍可能留下持久化绑定。
-      // 清掉陈旧 sessionId,下一次 effect 自动按 launchSpec 重建,
-      // 不要求用户手动介入。
+      // 清掉陈旧 sessionId,把 surface 交回下方的启动闸门:本窗口显式创建
+      // 过的(launchAuthorized)自动按 launchSpec 重建;布局恢复出的无授权
+      // surface 停在休眠占位,等用户显式重启,绝不静默拉起进程。
       bindings.delete(surface.surfaceId);
       setCreatedSession(null);
       return;
