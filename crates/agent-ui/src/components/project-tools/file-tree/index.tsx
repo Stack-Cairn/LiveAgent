@@ -7,6 +7,7 @@
 import type {
   RightDockFileTreeState,
   RightDockFileTreeStatePatch,
+  WorkspaceProject,
 } from "@liveagent/app/lib/settings";
 import {
   Check,
@@ -17,6 +18,7 @@ import {
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
+import type { WorkspaceProjectRootClient } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -58,6 +60,7 @@ import {
 } from "./model";
 import { FileTreeErrorRow, FileTreeRow } from "./Row";
 import { useFileTreeData } from "./useFileTreeData";
+import { useFileTreeExternalRoots } from "./useFileTreeExternalRoots";
 
 const FILE_TREE_QUERY_SYNC_DEBOUNCE_MS = 180;
 const NO_EXTERNAL_FILE_TREE_ROOTS: readonly FileTreeExternalRoot[] = [];
@@ -104,6 +107,38 @@ export type FileTreeSurfaceProps = {
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
 };
+
+export type FileTreePaneSurfaceProps = Omit<
+  FileTreeSurfaceProps,
+  "externalRoots" | "onRefreshExternalRoots"
+> & {
+  workspaceProject?: WorkspaceProject;
+  workspaceProjectRootClient?: WorkspaceProjectRootClient;
+  workspaceRootRevision?: number;
+};
+
+/**
+ * Workbench pane host for the file tree. The Right Dock fetches external
+ * (multi-root) grants itself and injects them through context; a pane has no
+ * dock context, so this wrapper owns the same fetch and keeps both hosts
+ * rendering identical roots.
+ */
+export function FileTreePaneSurface(props: FileTreePaneSurfaceProps) {
+  const { workspaceProject, workspaceProjectRootClient, workspaceRootRevision, ...surfaceProps } =
+    props;
+  const { externalRoots, refreshExternalRoots } = useFileTreeExternalRoots({
+    workspaceProject,
+    workspaceProjectRootClient,
+    workspaceRootRevision,
+  });
+  return (
+    <FileTreeSurface
+      {...surfaceProps}
+      externalRoots={externalRoots}
+      onRefreshExternalRoots={refreshExternalRoots}
+    />
+  );
+}
 
 export function FileTreeSurface(props: FileTreeSurfaceProps) {
   const {
@@ -346,7 +381,10 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
   const handleWorkspacePathDragStart = useCallback(
     (event: ReactDragEvent, path: string, kind: FileTreeKind) => {
       const node = nodesRef.current[path];
-      if (!node || !path) {
+      // External roots live outside the project cwd, so they have no
+      // project-relative payload; the payload validator would reject their
+      // sentinel prefix anyway, but refuse the drag explicitly.
+      if (!node || !path || isExternalPath(path)) {
         event.preventDefault();
         return;
       }
@@ -363,7 +401,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         event.preventDefault();
       }
     },
-    [cwd, projectPathKey],
+    [cwd, isExternalPath, projectPathKey],
   );
 
   const openContextMenu = useCallback(

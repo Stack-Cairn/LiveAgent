@@ -53,6 +53,14 @@ export type WorkbenchDragUnavailableReason =
   | "no-valid-target";
 
 /**
+ * The React-published overlay model. The machine's `pointer` is deliberately
+ * omitted: ghost positioning is compositor-only (`dragGhostRef` + CSS vars),
+ * and same-target moves skip re-publishing, so a pointer field here would go
+ * stale after the first render of each target.
+ */
+export type WorkbenchDragRenderState = Omit<WorkbenchDragState, "pointer">;
+
+/**
  * Pointer-driven drag session shared by sidebar conversation drags and pane
  * chrome drags. Arms on pointer-down, activates after a 6px threshold with a
  * frozen geometry + revision snapshot, previews the drop target on move, and
@@ -64,8 +72,8 @@ export type WorkbenchDragUnavailableReason =
  */
 export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
   const { enabled, layoutRef, geometryRef, onCommit, onUnavailable } = params;
-  const [dragState, setDragState] = useState<WorkbenchDragState | null>(null);
-  const publishedDragStateRef = useRef<WorkbenchDragState | null>(null);
+  const [dragState, setDragState] = useState<WorkbenchDragRenderState | null>(null);
+  const publishedDragStateRef = useRef<WorkbenchDragRenderState | null>(null);
   const sessionRef = useRef<DragSessionState>(IDLE_DRAG_SESSION);
   const referenceDragActiveRef = useRef(false);
   const conversationDropZoneRef = useRef<ConversationReferenceDropZoneHit | null>(null);
@@ -143,7 +151,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
 
   useEffect(() => teardown, [teardown]);
 
-  const publishDragState = useCallback((nextDragState: WorkbenchDragState | null) => {
+  const publishDragState = useCallback((nextDragState: WorkbenchDragRenderState | null) => {
     if (dragRenderStateEqual(publishedDragStateRef.current, nextDragState)) return;
     publishedDragStateRef.current = nextDragState;
     setDragState(nextDragState);
@@ -154,7 +162,16 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
     (event: DragSessionEvent) => {
       const result = dragSessionReducer(sessionRef.current, event);
       sessionRef.current = result.state;
-      publishDragState(dragStateFor(result.state));
+      const machineState = dragStateFor(result.state);
+      publishDragState(
+        machineState
+          ? {
+              payload: machineState.payload,
+              target: machineState.target,
+              previewRect: machineState.previewRect,
+            }
+          : null,
+      );
       if (result.commit) onCommitRef.current(result.commit);
       return result;
     },
@@ -234,7 +251,6 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           } else if (reference) {
             publishDragState({
               payload: session.payload,
-              pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
               target: null,
               previewRect: null,
             });
@@ -261,7 +277,6 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
             positionDragGhost(moveEvent.clientX, moveEvent.clientY);
             publishDragState({
               payload: session.payload,
-              pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
               target: null,
               previewRect: null,
             });
@@ -272,7 +287,6 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           positionDragGhost(moveEvent.clientX, moveEvent.clientY);
           publishDragState({
             payload: session.payload,
-            pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
             target: null,
             previewRect: null,
           });
@@ -372,8 +386,8 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
 }
 
 function dragRenderStateEqual(
-  current: WorkbenchDragState | null,
-  next: WorkbenchDragState | null,
+  current: WorkbenchDragRenderState | null,
+  next: WorkbenchDragRenderState | null,
 ): boolean {
   if (current === next) return true;
   if (!current || !next || current.payload !== next.payload) return false;

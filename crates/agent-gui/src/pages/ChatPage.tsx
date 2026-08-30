@@ -8,7 +8,7 @@ import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
-import { FileTreeSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
+import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -3538,7 +3538,7 @@ export function ChatPage(props: ChatPageProps) {
               );
             }
             return (
-              <FileTreeSurface
+              <FileTreePaneSurface
                 active
                 projectPathKey={surface.project.projectPathKey}
                 cwd={project.path}
@@ -3546,6 +3546,9 @@ export function ChatPage(props: ChatPageProps) {
                   settings.customSettings,
                   surface.project.projectPathKey,
                 )}
+                workspaceProject={project}
+                workspaceProjectRootClient={desktopWorkspaceProjectRootClient}
+                workspaceRootRevision={workspaceRootRevision}
                 workspaceActivityClient={tauriWorkspaceActivityClient}
                 onStateChange={(patch) =>
                   setSettings((current) =>

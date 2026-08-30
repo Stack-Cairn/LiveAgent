@@ -46,6 +46,20 @@ test("workspace path drag payload round-trips without becoming an upload", () =>
   workspacePathDrag.clearActiveWorkspacePathDrag();
 });
 
+test("an OS file drag is never claimed by a lingering workspace path payload", () => {
+  const transfer = new DataTransferStub();
+  workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);
+  // dragend keeps the payload alive for the native-drop handoff window; an
+  // OS upload drag that starts inside that window must not be reclassified.
+  workspacePathDrag.finishWorkspacePathDrag();
+  const osTransfer = new DataTransferStub();
+  osTransfer.setData("Files", "");
+  assert.equal(workspacePathDrag.hasWorkspacePathDragPayload(osTransfer), false);
+  const bareTransfer = new DataTransferStub();
+  assert.equal(workspacePathDrag.hasWorkspacePathDragPayload(bareTransfer), true);
+  workspacePathDrag.clearActiveWorkspacePathDrag();
+});
+
 test("desktop native drop bridges the active payload to the element at the release point", () => {
   const transfer = new DataTransferStub();
   workspacePathDrag.writeWorkspacePathDragPayload(transfer, payload);

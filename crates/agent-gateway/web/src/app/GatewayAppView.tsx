@@ -12,7 +12,7 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceCloneTaskOverlay } from "@liveagent/ui/components/chat/WorkspaceCloneTaskOverlay";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
-import { FileTreeSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
+import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
@@ -913,7 +913,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               );
             }
             return (
-              <FileTreeSurface
+              <FileTreePaneSurface
                 active
                 projectPathKey={surface.project.projectPathKey}
                 cwd={project.path}
@@ -921,6 +921,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   settings.customSettings,
                   surface.project.projectPathKey,
                 )}
+                workspaceProject={project}
+                workspaceProjectRootClient={workspaceProjectRootClient}
+                workspaceRootRevision={workspaceRootRevision}
                 workspaceActivityClient={workspaceActivityClient}
                 onStateChange={(patch) =>
                   setSettings((current) =>

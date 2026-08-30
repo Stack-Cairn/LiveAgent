@@ -40,7 +40,7 @@ import {
 } from "@liveagent/ui/lib/workbench/useWindowWorkbench";
 import {
   useWorkbenchDragSession,
-  type WorkbenchDragState,
+  type WorkbenchDragRenderState,
   type WorkbenchDragUnavailableReason,
   type WorkbenchDropCommit,
 } from "@liveagent/ui/lib/workbench/useWorkbenchDragSession";
@@ -137,7 +137,7 @@ export type GatewayWorkbenchController = {
   clearWorkbench: () => void;
   projectRefForConversation: (item: { id: string; cwd?: string | null }) => ProjectRef;
   /** 拖拽 overlay 模型（幽灵 + 落点预览）；idle 时为 null。 */
-  dragState: WorkbenchDragState | null;
+  dragState: WorkbenchDragRenderState | null;
   /** Imperative compositor-only pointer tracking for the drag ghost. */
   dragGhostRef: (element: HTMLDivElement | null) => void;
   /** Pane 头部拖动把手（pointer-down 发起）。 */

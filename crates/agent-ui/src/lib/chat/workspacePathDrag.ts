@@ -249,10 +249,14 @@ export function readNativeWorkspacePathDragOver(event: Event): WorkspacePathDrag
 }
 
 export function hasWorkspacePathDragPayload(dataTransfer: DataTransfer): boolean {
-  return (
-    activeWorkspacePathDrag !== null ||
-    Array.from(dataTransfer.types).includes(WORKSPACE_PATH_DRAG_MIME)
-  );
+  const types = Array.from(dataTransfer.types);
+  if (types.includes(WORKSPACE_PATH_DRAG_MIME)) return true;
+  // An OS file drag (Finder/Explorer/browser) advertises "Files" and never
+  // carries our MIME. Without this check, a payload kept alive through the
+  // dragend → native-drop handoff window would claim an unrelated upload drag
+  // that starts inside that window.
+  if (types.includes("Files")) return false;
+  return activeWorkspacePathDrag !== null;
 }
 
 export function readWorkspacePathDragPayload(
