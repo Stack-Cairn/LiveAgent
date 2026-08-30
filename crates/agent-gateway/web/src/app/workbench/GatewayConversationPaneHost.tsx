@@ -91,8 +91,10 @@ type ChatQueueSnapshotLike = Parameters<
 >[0];
 
 /**
- * 页面级共享上下文:所有背景会话 Pane 共用一份(在 GatewayAppView 里 useMemo
- * 组装)。函数字段一律按 conversationId 显式路由,不依赖"当前展示会话"。
+ * 页面级共享上下文:所有背景会话 Pane 共用一份,在 GatewayAppView 渲染体内
+ * 逐帧重建(未 memo 化——宿主经 contextRef 读取最新值,不依赖引用稳定;
+ * 真正的稳定化需要先把上游 handler 链整体 useCallback 化,留待性能收敛)。
+ * 函数字段一律按 conversationId 显式路由,不依赖"当前展示会话"。
  */
 export type GatewayConversationPaneHostContext = {
   api: GatewayWebSocketClient;
@@ -136,11 +138,14 @@ export type GatewayConversationPaneHostContext = {
     draft: MentionComposerDraft,
     files: PendingUploadedFile[],
     workdir: string,
+    targetConversationId?: string,
   ) => Promise<{
     text: string;
     uploadedFiles: PendingUploadedFile[];
     referencedConversations: ConversationMentionReference[];
   }>;
+  /** 在途导入归属的会话 id:上传禁用/动画只作用在目标会话的 Pane 上。 */
+  uploadingConversationId: string | null;
   getPendingUploads: (conversationId: string) => PendingUploadedFile[];
   subscribePendingUploads: (listener: () => void) => () => void;
   updatePendingUploads: (
@@ -481,6 +486,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
 
   const handleSend = useCallback(() => {
     if (sendInFlightRef.current || context.transportInputDisabled) return;
+    // 本会话的附件导入尚未落账时不得发送:此刻 getPendingUploads 读到的
+    // 是空列表,消息会丢附件(与主 Pane 的上传中禁用同一边界)。
+    if (context.uploadingConversationId === conversationId) return;
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? null;
     sendInFlightRef.current = true;
@@ -492,7 +500,12 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         let referencedConversations = draft?.conversationMentions ?? [];
         try {
           const materialized = draft
-            ? await context.materializeComposerDraftForSend(draft, files, workdirRef.current)
+            ? await context.materializeComposerDraftForSend(
+                draft,
+                files,
+                workdirRef.current,
+                conversationId,
+              )
             : { text: "", uploadedFiles: files, referencedConversations: [] };
           text = materialized.text;
           uploadedFiles = materialized.uploadedFiles;
@@ -545,7 +558,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   }, [context, conversationId, handleRunQueuedTurnNow]);
 
   // ---- 草稿:挂载恢复缓存,卸载(聚焦切换/关 Pane)写回缓存(桌面端口径) --
+  // hydrated 必须参与触发:背景 Pane 冷启动时先渲染加载占位,composer 尚未
+  // 挂载,恢复会被无声跳过;水合完成后重跑一次才能把缓存草稿真正写进输入框。
   useLayoutEffect(() => {
+    if (!hydrated) return;
     const composer = composerRef.current;
     const cached = contextRef.current.getCachedComposerDraft(conversationId);
     if (cached) {
@@ -560,7 +576,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       if (!nextDraft || nextDraft.isEmpty || !nextDraft.text.trim()) return;
       contextRef.current.setCachedComposerDraft(conversationId, nextDraft);
     };
-  }, [conversationId]);
+  }, [conversationId, hydrated]);
 
   useLayoutEffect(() => {
     if (!isPrimary || !pageComposerRef) return;
@@ -838,7 +854,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             hidden={trajectoryActive}
             composerRef={composerRef}
             isSending={usePrimary ? (primary?.isSending ?? isRunning) : isRunning}
-            isUploadingFiles={usePrimary ? (primary?.isUploadingFiles ?? false) : false}
+            isUploadingFiles={
+              usePrimary
+                ? (primary?.isUploadingFiles ?? false)
+                : context.uploadingConversationId === conversationId
+            }
             isInputDisabled={resolveWorkbenchComposerInputDisabled({
               isPrimary: usePrimary,
               primaryInputDisabled: primary?.isInputDisabled ?? context.isInputDisabled,

@@ -239,6 +239,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     isImportingPastedTextRef,
     isSuggestionTyping,
     isUploadingFiles,
+    uploadingConversationId,
     loadComposerHistoryPrompts,
     loadingOlderHistory,
     localeContextValue,
@@ -481,7 +482,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const handlePrimaryComposerSend = useCallback(() => {
     const sendConversationId = getDisplayedConversationId();
     if (primarySendInFlightConversationRef.current === sendConversationId) return;
-    if (isUploadingFiles || isImportingPastedTextRef.current) return;
+    // 上传在途只封锁归属会话:背景 Pane 的导入不应吞掉主 Pane 的发送。
+    // 归属未知(null)时保守封锁,与旧全局互斥语义一致。
+    const uploadBlocksSend =
+      isUploadingFiles &&
+      (!uploadingConversationId || uploadingConversationId === sendConversationId);
+    if (uploadBlocksSend || isImportingPastedTextRef.current) return;
     if (composerInputDisabled) return;
     if (queuedChatEditSessionRef.current) {
       primarySendInFlightConversationRef.current = sendConversationId;
@@ -525,6 +531,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 draft,
                 pendingUploadedFiles,
                 displayedConversationWorkdir,
+                sendConversationId,
               )
             : { text: "", uploadedFiles: pendingUploadedFiles, referencedConversations: [] };
           text = materialized.text;
@@ -566,6 +573,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     getDisplayedConversationId,
     isImportingPastedTextRef,
     isUploadingFiles,
+    uploadingConversationId,
     materializeComposerDraftForSend,
     pendingUploadedFiles,
     queuedChatEditSessionRef,
@@ -601,6 +609,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     showUsage: isAgentDevExecutionMode,
     isInputDisabled: composerInputDisabled,
     transportInputDisabled: !status?.online || Boolean(chatProtocolIncompatibleMessage),
+    uploadingConversationId,
     inputPlaceholder: composerPlaceholder,
     modelOptions,
     enabledSkills: enabledComposerSkills,
@@ -707,7 +716,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
-    isUploadingFiles,
+    // 上传态只归属目标会话:背景 Pane 的导入不在主 Pane 显示"上传中"。
+    isUploadingFiles:
+      isUploadingFiles &&
+      (!uploadingConversationId || uploadingConversationId === displayedConversationId),
     isInputDisabled: composerInputDisabled,
     onSend: handlePrimaryComposerSend,
     onStop: handlePrimaryComposerStop,
@@ -1484,6 +1496,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                           draft,
                                           pendingUploadedFiles,
                                           displayedConversationWorkdir,
+                                          sendConversationId,
                                         )
                                       : {
                                           text: "",

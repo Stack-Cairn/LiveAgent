@@ -82,6 +82,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  // 在途导入归属的会话 id:多 Pane 下"上传中"的禁用/动画只应作用在目标
+  // 会话的 Pane 上,别的 Pane 不因全局互斥被误禁或误显示上传态。
+  const [uploadingConversationId, setUploadingConversationId] = useState<string | null>(null);
   const [isFileDropActive, setIsFileDropActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -99,9 +102,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const displayedConversationId = (selectedHistoryId || conversationId).trim();
   displayedConversationIdRef.current = displayedConversationId;
 
-  const setUploadingFiles = useCallback((active: boolean) => {
+  const setUploadingFiles = useCallback((active: boolean, targetConversationId = "") => {
     isUploadingFilesRef.current = active;
     setIsUploadingFiles(active);
+    setUploadingConversationId(active ? targetConversationId.trim() || null : null);
   }, []);
 
   const handleImportSelectedDirectoryFiles = useCallback(
@@ -200,6 +204,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     uploadDragDepthRef.current = 0;
     setPendingUploadedFiles([]);
     setIsUploadingFiles(false);
+    setUploadingConversationId(null);
     setIsFileDropActive(false);
   }, []);
 
@@ -228,7 +233,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.onlyInTools", locale));
         return;
       }
-      const workdir = target?.workdir.trim() || displayedConversationWorkdirRef.current.trim();
+      // 显式 target 的空 workdir 是 resolveConversationUploadWorkdir 的守卫
+      // 结果(背景会话没有自己的工作区),绝不回退到焦点会话的工作区——
+      // 否则文件会上传进别人的 workspace,却作为附件挂在目标会话上。
+      const workdir = target
+        ? target.workdir.trim()
+        : displayedConversationWorkdirRef.current.trim();
       if (!workdir) {
         addNotify("warning", translate("chat.upload.requireWorkdir", locale));
         return;
@@ -264,7 +274,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
       const importBatch = filesToImport.slice(0, remainingFileSlots);
       const ignoredForLimit = filesToImport.length - importBatch.length;
-      setUploadingFiles(true);
+      setUploadingFiles(true, targetConversationId);
       try {
         const agentID = await resolveAgentID();
         const result = await importReadableFiles(token, agentID, workdir, importBatch);
@@ -498,6 +508,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   return {
     pendingUploadedFiles,
     isUploadingFiles,
+    uploadingConversationId,
     isFileDropActive,
     fileInputRef,
     folderInputRef,

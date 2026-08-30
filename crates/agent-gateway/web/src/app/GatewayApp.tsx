@@ -257,6 +257,14 @@ function useGatewayAppController() {
   );
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
+  // 草稿 id → 真实会话 id。Pane 宿主草稿 effect 的 cleanup 闭包捕获的是旧
+  // conversationId:draft→real 原位重绑时 cleanup 在 rename 之后才执行,
+  // 若直接写 draft key 会落进永远读不到的孤儿条目,宿主新 effect 随即
+  // clear() 掉用户正在输入的内容。读写统一经本映射改写到真实 id。
+  const boundComposerDraftIdsRef = useRef<Map<string, string>>(new Map());
+  const resolveComposerDraftKey = useCallback((conversationId: string) => {
+    return boundComposerDraftIdsRef.current.get(conversationId) ?? conversationId;
+  }, []);
   const composerDraftOwnerRef = useRef("");
   const conversationIdRef = useRef(conversationId);
   const selectedHistoryIdRef = useRef(selectedHistoryId);
@@ -565,6 +573,7 @@ function useGatewayAppController() {
   const {
     pendingUploadedFiles,
     isUploadingFiles,
+    uploadingConversationId,
     isFileDropActive,
     fileInputRef,
     folderInputRef,
@@ -811,6 +820,12 @@ function useGatewayAppController() {
         conversationWorkdirsRef.current.set(nextId, workdir);
       }
 
+      // 先登记改写映射再搬缓存:宿主草稿 effect 的 cleanup 会在 rename 提交
+      // 后仍以旧 id 写回,经映射落到真实 id 上,不产生孤儿条目。
+      for (const [draftId, boundId] of boundComposerDraftIdsRef.current) {
+        if (boundId === previousId) boundComposerDraftIdsRef.current.set(draftId, nextId);
+      }
+      boundComposerDraftIdsRef.current.set(previousId, nextId);
       const cachedComposerDraft = composerDraftCacheRef.current.get(previousId);
       if (cachedComposerDraft) {
         composerDraftCacheRef.current.delete(previousId);
@@ -1278,6 +1293,7 @@ function useGatewayAppController() {
     historyWindowStatesRef.current.clear();
     conversationWorkdirsRef.current.clear();
     composerDraftCacheRef.current.clear();
+    boundComposerDraftIdsRef.current.clear();
     composerDraftOwnerRef.current = "";
     composerRef.current?.clear();
     resetSharedHistory();
@@ -1341,6 +1357,7 @@ function useGatewayAppController() {
       draftClientRequestsRef.current.clear();
       conversationWorkdirsRef.current.clear();
       composerDraftCacheRef.current.clear();
+      boundComposerDraftIdsRef.current.clear();
       composerDraftOwnerRef.current = "";
       composerRef.current?.clear();
       clearPendingUploads();
@@ -1897,9 +1914,9 @@ function useGatewayAppController() {
   // --- 多看板背景 Pane 的按会话绑定能力(复刻桌面端 buildBackgroundPaneBinding
   // 的数据面):工作区、草稿缓存、附件导入全部按显式 conversationId 路由。---
   const getCachedComposerDraft = (targetConversationId: string) =>
-    composerDraftCacheRef.current.get(targetConversationId);
+    composerDraftCacheRef.current.get(resolveComposerDraftKey(targetConversationId));
   const setCachedComposerDraft = (targetConversationId: string, draft: MentionComposerDraft) => {
-    composerDraftCacheRef.current.set(targetConversationId, draft);
+    composerDraftCacheRef.current.set(resolveComposerDraftKey(targetConversationId), draft);
   };
   const importFilesForConversation = (
     targetConversationId: string,
@@ -2055,6 +2072,7 @@ function useGatewayAppController() {
     isImportingPastedTextRef,
     isSuggestionTyping,
     isUploadingFiles,
+    uploadingConversationId,
     loadComposerHistoryPrompts,
     loadingOlderHistory,
     localeContextValue,
