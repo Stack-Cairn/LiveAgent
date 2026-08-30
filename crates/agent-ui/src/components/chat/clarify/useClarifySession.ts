@@ -79,6 +79,12 @@ export function createClarifySessionCore(
   };
 
   const ask = async (extraUser?: ClarifyMessage) => {
+    // 任何新轮次（start/submitAnswer/forceFinal/retry）都作废在途旧轮：
+    // 代际 +1 在先，再中止旧 controller。旧 ask 的迟到 delta/完成/失败
+    // 全部被下方代际闸门静默丢弃（abort 类错误尤其不得落 error 态）。
+    epoch += 1;
+    controller?.abort();
+    controller = null;
     if (extraUser) sessionMessages.push(extraUser);
     const localController = new AbortController();
     controller = localController;
@@ -101,8 +107,12 @@ export function createClarifySessionCore(
       // 会话已被 close()/start() 丢弃：旧请求的失败（包括 abort）不属于当前会话，
       // 不落 error 态——否则会把刚重置的 idle/新会话翻成 error。
       if (epoch !== currentEpoch) return;
-      // 同一代际内的失败才是真正的网络/模型错误。
-      setState({ status: "error", error: error instanceof Error ? error.message : String(error) });
+      // 同一代际内的失败才是真正的网络/模型错误；error 态不得残留半截流文本。
+      setState({
+        status: "error",
+        streamingText: "",
+        error: error instanceof Error ? error.message : String(error),
+      });
       return;
     } finally {
       // 只有自己仍是当前 controller 时才清引用：避免迟到的旧 ask 清掉新 ask 的 controller。
@@ -145,10 +155,7 @@ export function createClarifySessionCore(
       return () => listeners.delete(listener);
     },
     start(draftText) {
-      // 新会话开始：代际 +1 并中止在途请求，旧 ask 的任何迟到结果都会被作废。
-      epoch += 1;
-      controller?.abort();
-      controller = null;
+      // 新会话重置消息与计数；代际递增与在途请求中止统一由 ask() 负责。
       sessionMessages = [{ role: "user", content: draftText }];
       questionCount = 0;
       setState({
@@ -158,6 +165,8 @@ export function createClarifySessionCore(
       return ask();
     },
     submitAnswer(text) {
+      // done 之后会话已终稿：不接受新输入，也不得再触发新一轮/第二次 onFinal。
+      if (state.status === "done") return Promise.resolve();
       sessionMessages.push({ role: "user", content: text });
       setState({ visibleMessages: sessionMessages.slice() });
       if (questionCount >= CLARIFY_MAX_QUESTIONS) {
@@ -167,6 +176,8 @@ export function createClarifySessionCore(
       return ask();
     },
     forceFinal() {
+      // done 之后强制终稿是空操作：终稿已落定，不重开轮次。
+      if (state.status === "done") return Promise.resolve();
       return ask({ role: "user", content: buildForceFinalInstruction() });
     },
     retry() {

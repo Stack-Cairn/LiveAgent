@@ -208,6 +208,67 @@ test("streamingText accumulates onDelta values during asking", async () => {
   assert.equal(session.getState().streamingText, "", "streamingText cleared after turn end");
 });
 
+test("forceFinal while a question turn is in flight supersedes the stale turn", async () => {
+  const pending = [];
+  const deltaCbs = [];
+  const runTurn = (_messages, _signal, onDelta) =>
+    new Promise((resolve) => {
+      deltaCbs.push(onDelta);
+      pending.push(resolve);
+    });
+  const finals = [];
+  const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
+  const first = session.start("d");
+  const forced = session.forceFinal();
+  // 旧轮迟到的 delta 与完成结果：都不得污染强制终稿轮。
+  deltaCbs[0]("旧流");
+  deltaCbs[1]("新流");
+  assert.equal(session.getState().streamingText, "新流");
+  pending[0](QUESTION);
+  await first;
+  assert.equal(session.getState().status, "asking", "stale completion must not flip status");
+  assert.equal(session.getState().streamingText, "新流");
+  pending[1](FINAL);
+  await forced;
+  const s = session.getState();
+  assert.equal(s.status, "done");
+  assert.equal(s.questionCount, 0, "stale question must not count");
+  assert.equal(s.streamingText, "");
+  const contents = s.visibleMessages.map((m) => m.content);
+  assert.equal(contents[0], "d");
+  assert.ok(contents[1].includes("CLARIFY_FINAL"), "forced turn injects final instruction");
+  assert.equal(contents[2], FINAL);
+  assert.deepEqual(finals, ["优化后的提示词"]);
+});
+
+test("forceFinal after done is a no-op: no new turn, no second onFinal", async () => {
+  let calls = 0;
+  const runTurn = async () => {
+    calls += 1;
+    return FINAL;
+  };
+  const finals = [];
+  const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
+  await session.start("d");
+  assert.equal(session.getState().status, "done");
+  await session.forceFinal();
+  await session.submitAnswer("late");
+  assert.equal(calls, 1, "no second runTurn after done");
+  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.equal(session.getState().status, "done");
+});
+
+test("error turn clears streamingText", async () => {
+  const runTurn = async (_messages, _signal, onDelta) => {
+    if (onDelta) onDelta("部分输出");
+    throw new Error("boom");
+  };
+  const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
+  await session.start("d");
+  assert.equal(session.getState().status, "error");
+  assert.equal(session.getState().streamingText, "");
+});
+
 test("retry() is a no-op when status is not error", async () => {
   let calls = 0;
   const runTurn = async () => {
