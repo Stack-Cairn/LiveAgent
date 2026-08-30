@@ -216,6 +216,17 @@ export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): Workbench
       } else {
         identityValid = true;
       }
+    } else if (surface.kind === "fileTree") {
+      identityValid = Boolean(surface.project.projectPathKey.trim());
+      if (!identityValid) {
+        issues.push(
+          issue(
+            "invalid-pane-record",
+            `${panePath}.surface.project.projectPathKey`,
+            "File tree surfaces require a project path key.",
+          ),
+        );
+      }
     } else if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
       if (!surface.surfaceId.trim()) {
         issues.push(
@@ -263,6 +274,14 @@ export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): Workbench
                 "duplicate-conversation",
                 `${panePath}.surface.conversationId`,
                 `Conversation '${surface.conversationId.trim()}' is already bound to pane '${previousPaneId}'.`,
+              ),
+            );
+          } else if (surface.kind === "fileTree") {
+            issues.push(
+              issue(
+                "duplicate-surface",
+                `${panePath}.surface.project.projectPathKey`,
+                `File tree for project '${surface.project.projectPathKey.trim()}' is already bound to pane '${previousPaneId}'.`,
               ),
             );
           } else {

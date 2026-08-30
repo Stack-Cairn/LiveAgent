@@ -44,6 +44,8 @@ export const MIN_CONVERSATION_PANE_HEIGHT = 220;
 // horizontal padding and the chrome strip that folds to 220×140 CSS pixels.
 export const MIN_TERMINAL_PANE_WIDTH = 220;
 export const MIN_TERMINAL_PANE_HEIGHT = 140;
+export const MIN_FILE_TREE_PANE_WIDTH = 240;
+export const MIN_FILE_TREE_PANE_HEIGHT = 180;
 // Unsupported placeholders only show a short message; keep them small enough
 // to never block a restore.
 export const MIN_UNSUPPORTED_PANE_WIDTH = 160;
@@ -56,6 +58,8 @@ export type SurfaceMinSize = { minWidth: number; minHeight: number };
 /** Hard minimum CSS-pixel size a pane must keep, resolved per surface kind. */
 export function surfaceMinSize(surface: WorkbenchSurfaceSpec): SurfaceMinSize {
   switch (surface.kind) {
+    case "fileTree":
+      return { minWidth: MIN_FILE_TREE_PANE_WIDTH, minHeight: MIN_FILE_TREE_PANE_HEIGHT };
     case "localTerminal":
     case "sshTerminal":
       return { minWidth: MIN_TERMINAL_PANE_WIDTH, minHeight: MIN_TERMINAL_PANE_HEIGHT };

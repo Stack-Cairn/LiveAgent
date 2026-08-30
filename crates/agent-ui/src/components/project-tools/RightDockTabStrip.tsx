@@ -50,6 +50,8 @@ type RightDockTabStripProps = {
    * session beside the focused workbench pane. Enables the tab context menu.
    */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onOpenFileTreeInWorkbench?: () => void;
 };
 
 // One descriptor per tab regardless of kind, so every tab shares a single
@@ -102,6 +104,8 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     onCloseTerminalRequest,
     onTerminalTabDragStart,
     onOpenTerminalInWorkbench,
+    onFileTreeTabDragStart,
+    onOpenFileTreeInWorkbench,
   } = props;
   const { t } = useLocale();
   // One open menu at a time, keyed by tab id — the strip is a single row, so a
@@ -266,6 +270,14 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           const definition = getRightDockToolDefinition(tab.kind);
           if (!definition) return null;
           const closeLabel = t(definition.closeKey);
+          const isFileTree = tab.kind === "fileTree";
+          const menuItems =
+            isFileTree && onOpenFileTreeInWorkbench ? (
+              <DropdownMenuItem onSelect={onOpenFileTreeInWorkbench} className="gap-2 text-xs">
+                <Columns2 className="h-3.5 w-3.5" />
+                {t("workbench.openInSplit")}
+              </DropdownMenuItem>
+            ) : null;
           return renderDockTab({
             id: tab.id,
             label: t(definition.titleKey),
@@ -273,6 +285,20 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             isActive: currentActiveTab === tab.kind,
             closeLabel,
             closeTitle: closeLabel,
+            menuItems,
+            dragProps:
+              isFileTree && onFileTreeTabDragStart
+                ? {
+                    onPointerDown: (event) => {
+                      if (event.button !== 0 || event.pointerType === "touch") return;
+                      onFileTreeTabDragStart({
+                        pointerId: event.pointerId,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                    },
+                  }
+                : undefined,
             onActivate: () => onActivateTab(tab.id),
             onClose: () => onCloseToolTab(tab.kind),
           });

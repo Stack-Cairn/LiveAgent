@@ -16,6 +16,7 @@ import {
 import { RIGHT_DOCK_TOOL_DEFINITIONS, type RightDockSingletonTabKind } from "./rightDockRegistry";
 
 type RightDockLauncherActions = {
+  fileTreeLeased?: boolean;
   onCreateTerminal: (shell?: string) => void;
   onOpenNewTerminalInWorkbench?: () => void;
   onStartTool: (kind: RightDockSingletonTabKind) => void;
@@ -58,6 +59,7 @@ type RightDockChooserProps = RightDockLauncherActions & {
 
 export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
   const {
+    fileTreeLeased,
     open,
     onOpenChange,
     shellOptions,
@@ -135,7 +137,9 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
             {t("workbench.openNewTerminalInSplit")}
           </DropdownMenuItem>
         ) : null}
-        {RIGHT_DOCK_TOOL_DEFINITIONS.map((definition) => (
+        {RIGHT_DOCK_TOOL_DEFINITIONS.filter(
+          (definition) => definition.kind !== "fileTree" || !fileTreeLeased,
+        ).map((definition) => (
           <DropdownMenuItem
             key={definition.kind}
             onSelect={() => onStartTool(definition.kind)}
@@ -157,6 +161,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
 
 export function RightDockChooser(props: RightDockChooserProps) {
   const {
+    fileTreeLeased,
     terminalReady,
     terminalDisabledMessage,
     disabledMessage,
@@ -194,7 +199,9 @@ export function RightDockChooser(props: RightDockChooserProps) {
             }
           : undefined,
     },
-    ...RIGHT_DOCK_TOOL_DEFINITIONS.map((definition) => ({
+    ...RIGHT_DOCK_TOOL_DEFINITIONS.filter(
+      (definition) => definition.kind !== "fileTree" || !fileTreeLeased,
+    ).map((definition) => ({
       key: definition.kind,
       title: t(definition.createTitleKey),
       description: t(definition.descriptionKey),

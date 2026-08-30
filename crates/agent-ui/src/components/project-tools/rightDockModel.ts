@@ -123,19 +123,27 @@ export function rightDockTabRequiresProject(kind: RightDockSingletonTabKind) {
 
 export function getRightDockVisibleTabs(options: {
   backgroundTasksVisible: boolean;
+  fileTreeLeased?: boolean;
   localSessions: TerminalSession[];
   projectPathKey: string;
   projectState: RightDockProjectState;
   tunnelAvailable: boolean;
 }) {
-  const { backgroundTasksVisible, localSessions, projectPathKey, projectState, tunnelAvailable } =
-    options;
+  const {
+    backgroundTasksVisible,
+    fileTreeLeased,
+    localSessions,
+    projectPathKey,
+    projectState,
+    tunnelAvailable,
+  } = options;
   const nextTabs: RightDockVisibleTab[] = localSessions.map((session) => ({
     id: session.id,
     kind: "terminal",
     session,
   }));
   for (const kind of RIGHT_DOCK_SINGLETON_TAB_KINDS) {
+    if (kind === "fileTree" && fileTreeLeased) continue;
     if (!projectState.tools[kind]) continue;
     if (kind === "tunnel" && !tunnelAvailable) continue;
     if (rightDockTabRequiresProject(kind) && !projectPathKey) continue;

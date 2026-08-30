@@ -58,6 +58,19 @@ import {
   registerConversationReferenceDropZone,
 } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import {
+  clearActiveWorkspacePathDrag,
+  getActiveWorkspacePathDrag,
+  hasWorkspacePathDragPayload,
+  readNativeWorkspacePathDragOver,
+  readNativeWorkspacePathDrop,
+  readWorkspacePathDragPayload,
+  WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+  WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+  WORKSPACE_PATH_NATIVE_DROP_EVENT,
+  type WorkspacePathDragPayload,
+  workspacePathDragMatchesProject,
+} from "@liveagent/ui/lib/chat/workspacePathDrag";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -452,6 +465,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } | null>(null);
   const queueHadTurnsRef = useRef(false);
   const [queueCollapsed, setQueueCollapsed] = useState(false);
+  const [workspacePathDropState, setWorkspacePathDropState] = useState<"accept" | "blocked" | null>(
+    null,
+  );
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
@@ -486,6 +502,95 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
     : t("chat.composer.expand");
+
+  const resolveWorkspacePathDropState = useCallback((): "accept" | "blocked" => {
+    const payload = getActiveWorkspacePathDrag();
+    return payload && !isInputDisabled && workspacePathDragMatchesProject(payload, workdir)
+      ? "accept"
+      : "blocked";
+  }, [isInputDisabled, workdir]);
+
+  const insertWorkspacePathMention = useCallback(
+    (payload: WorkspacePathDragPayload) => {
+      setWorkspacePathDropState(null);
+      if (isInputDisabled || !workspacePathDragMatchesProject(payload, workdir)) return false;
+      composerRef.current?.insertFileMention(payload.relativePath, payload.entryKind);
+      composerRef.current?.focus();
+      return true;
+    },
+    [composerRef, isInputDisabled, workdir],
+  );
+
+  const handleWorkspacePathDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const state = resolveWorkspacePathDropState();
+      event.dataTransfer.dropEffect = state === "accept" ? "copy" : "none";
+      setWorkspacePathDropState(state);
+    },
+    [resolveWorkspacePathDropState],
+  );
+
+  const handleWorkspacePathDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!hasWorkspacePathDragPayload(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const payload = readWorkspacePathDragPayload(event.dataTransfer);
+      clearActiveWorkspacePathDrag();
+      if (payload) insertWorkspacePathMention(payload);
+    },
+    [insertWorkspacePathMention],
+  );
+
+  useEffect(() => {
+    const target = glassCardRef.current;
+    if (!target) return;
+    const handleNativeWorkspacePathDragOver = (event: Event) => {
+      const payload = readNativeWorkspacePathDragOver(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setWorkspacePathDropState(
+        !isInputDisabled && workspacePathDragMatchesProject(payload, workdir)
+          ? "accept"
+          : "blocked",
+      );
+    };
+    const handleNativeWorkspacePathDragLeave = (event: Event) => {
+      if (event.type !== WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT) return;
+      setWorkspacePathDropState(null);
+    };
+    const handleNativeWorkspacePathDrop = (event: Event) => {
+      const payload = readNativeWorkspacePathDrop(event);
+      if (!payload) return;
+      event.preventDefault();
+      event.stopPropagation();
+      insertWorkspacePathMention(payload);
+    };
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+      handleNativeWorkspacePathDragOver,
+    );
+    target.addEventListener(
+      WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+      handleNativeWorkspacePathDragLeave,
+    );
+    target.addEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    return () => {
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT,
+        handleNativeWorkspacePathDragOver,
+      );
+      target.removeEventListener(
+        WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT,
+        handleNativeWorkspacePathDragLeave,
+      );
+      target.removeEventListener(WORKSPACE_PATH_NATIVE_DROP_EVENT, handleNativeWorkspacePathDrop);
+    };
+  }, [insertWorkspacePathMention, isInputDisabled, workdir]);
 
   const showConversationDropNotice = useCallback((result: ConversationReferenceInsertResult) => {
     if (result === "inserted") {
@@ -608,6 +713,51 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       clearConversationDropState();
     },
     [clearConversationDropState, insertConversationReference, showConversationDropNotice],
+  );
+
+  const handleComposerDragEnter = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (hasWorkspacePathDragPayload(event.dataTransfer)) {
+        handleWorkspacePathDragOver(event);
+        return;
+      }
+      handleConversationDragEnter(event);
+    },
+    [handleConversationDragEnter, handleWorkspacePathDragOver],
+  );
+
+  const handleComposerDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (hasWorkspacePathDragPayload(event.dataTransfer)) {
+        handleWorkspacePathDragOver(event);
+        return;
+      }
+      handleConversationDragOver(event);
+    },
+    [handleConversationDragOver, handleWorkspacePathDragOver],
+  );
+
+  const handleComposerDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (hasWorkspacePathDragPayload(event.dataTransfer)) {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setWorkspacePathDropState(null);
+        return;
+      }
+      handleConversationDragLeave(event);
+    },
+    [handleConversationDragLeave],
+  );
+
+  const handleComposerDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (hasWorkspacePathDragPayload(event.dataTransfer)) {
+        handleWorkspacePathDrop(event);
+        return;
+      }
+      handleConversationDrop(event);
+    },
+    [handleConversationDrop, handleWorkspacePathDrop],
   );
 
   const toggleQueueCollapsed = useCallback(() => {
@@ -1060,14 +1210,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           ref={glassCardRef}
           data-file-upload-drop-zone=""
           data-file-upload-conversation-id={conversationId}
+          data-workspace-path-drop-zone={workspacePathDropState ?? "idle"}
           data-conversation-reference-drop-zone={
             canDropConversationReference ? "enabled" : "disabled"
           }
           data-conversation-reference-drop-conversation-id={conversationId}
-          onDragEnter={handleConversationDragEnter}
-          onDragOver={handleConversationDragOver}
-          onDragLeave={handleConversationDragLeave}
-          onDrop={handleConversationDrop}
+          onDragEnter={handleComposerDragEnter}
+          onDragOver={handleComposerDragOver}
+          onDragLeave={handleComposerDragLeave}
+          onDrop={handleComposerDrop}
           onKeyDown={
             isComposerExpanded
               ? (event) => {
@@ -1088,7 +1239,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             isComposerExpanded && "min-h-0 flex-1",
           )}
         >
-          {conversationDropReference ? (
+          {workspacePathDropState ? (
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-3xl border-2 border-dashed bg-background/90 text-sm font-medium backdrop-blur-sm",
+                workspacePathDropState === "accept"
+                  ? "border-sky-500/70 text-sky-600 dark:text-sky-300"
+                  : "border-destructive/60 text-destructive",
+              )}
+            >
+              {workspacePathDropState === "accept"
+                ? t("chat.workspacePathDrop.reference")
+                : t("chat.workspacePathDrop.crossProject")}
+            </div>
+          ) : conversationDropReference ? (
             <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-3xl border border-dashed border-primary/45 bg-background/88 px-6 text-center shadow-inner backdrop-blur-sm">
               <span className="max-w-full truncate rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
                 {t("chat.conversationReference.drop").replace(
