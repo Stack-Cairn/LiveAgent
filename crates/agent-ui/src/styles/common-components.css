@@ -310,6 +310,12 @@
   .chat-markdown.plan-markdown [data-streamdown^="heading-"] {
     @apply mb-1.5 mt-4 text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[1.6] tracking-[0.01em] text-foreground;
   }
+  /* 标题 mt-4 特异性高于全局 first-child 重置;计划又以标题开头时会在卡片
+     padding 之外再多出一段空白。同作用域补一条,压过标题规则。 */
+  .chat-markdown.plan-markdown > *:first-child,
+  .chat-markdown.plan-markdown > *:first-child > *:first-child {
+    margin-top: 0;
+  }
   .chat-markdown.plan-markdown [data-streamdown="heading-1"],
   .chat-markdown.plan-markdown [data-streamdown="heading-2"] {
     @apply text-[calc(13.5px*var(--zone-font-scale,1))];
