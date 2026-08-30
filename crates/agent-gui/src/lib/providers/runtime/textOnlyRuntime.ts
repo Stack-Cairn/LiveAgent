@@ -187,6 +187,7 @@ export async function streamAssistantMessage(params: {
   context: Context;
   workdir?: string;
   onTextDelta: (delta: string) => void;
+  onThinkingDelta?: (delta: string) => void;
   sessionId?: string;
   cacheRetention?: CacheRetention;
   signal?: AbortSignal;
@@ -526,6 +527,9 @@ export async function streamAssistantMessage(params: {
               appendOrderedText(delta);
               params.onTextDelta(delta);
             }
+          } else if (event.type === "thinking_delta") {
+            // 思考内容不进 orderedBlocks——那套排序只服务于正文与 hosted search 的交织。
+            params.onThinkingDelta?.(event.delta);
           }
         }
 

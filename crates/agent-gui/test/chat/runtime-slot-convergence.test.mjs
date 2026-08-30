@@ -74,7 +74,7 @@ function createHookHarness() {
   };
 }
 
-function mountRuntimeStore() {
+function mountRuntimeStore(overrides = {}) {
   const hookHarness = createHookHarness();
   const loader = createTsModuleLoader({
     mocks: {
@@ -112,6 +112,7 @@ function mountRuntimeStore() {
       setErrorMessage: trackedSetter("errorMessage"),
       setHookWarning: trackedSetter("hookWarning"),
       setRunningConversationIds: trackedSetter("runningIds"),
+      ...overrides,
     }),
   );
   return { runtime, setterCalls, state, cleanup: () => hookHarness.cleanup() };
@@ -148,6 +149,40 @@ test("identity and model selection live in the registry, not in mirrored setters
   assert.equal(rebuilt.sessionId, "session-a");
   assert.equal(rebuilt.createdAt, 11);
   assert.deepEqual(rebuilt.selectedModel, { customProviderId: "prov", model: "m1" });
+  cleanup();
+});
+
+test("buildRuntimeEntryFromVisibleState prefers the registry entry over a stale mirror", () => {
+  // The visible isSending/compactionStatus setters only catch up on the next
+  // render. If the conversation is left (switch/new-conversation) after a
+  // background updateConversationRuntimeEntry landed but before that render
+  // happened, buildRuntimeEntryFromVisibleState must not resurrect the stale
+  // pre-update value into the cache entry it is about to overwrite — that
+  // was observed as isSending stuck true and the context-usage ring never
+  // hiding after reopening the conversation.
+  //
+  // isSending/compactionStatus start "true"/"running" here to stand in for
+  // the still-unflushed render: the mirrored args below stay at these values
+  // for the rest of the test (this harness never re-renders), while the
+  // registry is updated to the real, settled values underneath them.
+  const { runtime, cleanup } = mountRuntimeStore({
+    isSending: true,
+    compactionStatus: { phase: "running" },
+  });
+
+  runtime.updateConversationRuntimeEntry("conversation-a", (prev) => ({
+    ...prev,
+    isSending: false,
+    compactionStatus: { phase: "idle" },
+  }));
+
+  // The mirrored setters were called with the fresh values, but this harness
+  // (like a real render that hasn't flushed yet) does not feed them back
+  // into the isSending/compactionStatus arguments closed over below — they
+  // remain stuck at the stale true/running mount values.
+  const rebuilt = runtime.buildRuntimeEntryFromVisibleState();
+  assert.equal(rebuilt.isSending, false);
+  assert.deepEqual(rebuilt.compactionStatus, { phase: "idle" });
   cleanup();
 });
 

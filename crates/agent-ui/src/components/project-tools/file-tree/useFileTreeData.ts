@@ -10,12 +10,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invokeFs, isFsBackendError } from "../../../lib/tools/fsBackend";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import {
+  applyFileTreeExternalRoots,
   applyFileTreeListResponse,
   createFileTreeBuckets,
   createRootNode,
   dirname,
+  externalRootChildPath,
+  externalRootPathInfo,
   type FileTreeBuckets,
   type FileTreeEntry,
+  type FileTreeExternalRoot,
   type FileTreeKind,
   type FileTreeNodes,
   getFileTreeNodes,
@@ -72,6 +76,7 @@ export type FileTreeSearchState = {
 export type UseFileTreeDataOptions = {
   projectPathKey: string;
   cwd: string;
+  externalRoots: readonly FileTreeExternalRoot[];
   active: boolean;
   initialized: boolean;
   workspaceActivityClient: WorkspaceActivityClient | null;
@@ -91,13 +96,23 @@ export type UseFileTreeDataResult = {
   renameEntry: (fromPath: string, name: string) => Promise<string>;
   deleteEntry: (path: string) => Promise<void>;
   openWorkspacePath: (path: string, mode: "open" | "reveal") => Promise<void>;
+  isExternalPath: (path: string) => boolean;
+  getDisplayPath: (path: string) => string;
   search: FileTreeSearchState;
+};
+
+type ResolvedFileTreePath = {
+  workdir: string;
+  fsPath: string;
+  external: boolean;
+  rootId?: string;
 };
 
 export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDataResult {
   const {
     projectPathKey,
     cwd,
+    externalRoots,
     active,
     initialized,
     workspaceActivityClient,
@@ -106,6 +121,40 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     showHidden,
   } = options;
   const { t } = useLocale();
+
+  const externalRootsById = useMemo(() => {
+    const roots = new Map<string, FileTreeExternalRoot>();
+    for (const root of externalRoots) {
+      const id = root.id.trim();
+      const workdir = root.cwd.trim();
+      if (!id || !workdir || roots.has(id)) continue;
+      roots.set(id, { ...root, id, cwd: workdir });
+    }
+    return roots;
+  }, [externalRoots]);
+
+  const withExternalRoots = useCallback(
+    (current: FileTreeNodes) => applyFileTreeExternalRoots(current, externalRoots),
+    [externalRoots],
+  );
+
+  const resolveTreePath = useCallback(
+    (path: string): ResolvedFileTreePath | null => {
+      const external = externalRootPathInfo(path);
+      if (!external) {
+        return { workdir: cwd, fsPath: path, external: false };
+      }
+      const root = externalRootsById.get(external.rootId);
+      if (!root) return null;
+      return {
+        workdir: root.cwd,
+        fsPath: external.relativePath,
+        external: true,
+        rootId: root.id,
+      };
+    },
+    [cwd, externalRootsById],
+  );
 
   const [buckets, setBuckets] = useState<FileTreeBuckets>(createFileTreeBuckets);
   const bucketsRef = useRef(buckets);
@@ -118,8 +167,8 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
   const [searchRefreshKey, setSearchRefreshKey] = useState(0);
 
   const nodes = useMemo(
-    () => getFileTreeNodes(buckets, projectPathKey, cwd),
-    [buckets, cwd, projectPathKey],
+    () => withExternalRoots(getFileTreeNodes(buckets, projectPathKey, cwd)),
+    [buckets, cwd, projectPathKey, withExternalRoots],
   );
 
   const expandedRef = useRef(expandedPaths);
@@ -146,9 +195,19 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
 
   const updateNodes = useCallback(
     (key: string, workdir: string, update: (nodes: FileTreeNodes) => FileTreeNodes) => {
-      commitBuckets(updateFileTreeNodes(bucketsRef.current, key, workdir, update));
+      commitBuckets(
+        updateFileTreeNodes(bucketsRef.current, key, workdir, (current) =>
+          withExternalRoots(update(withExternalRoots(current))),
+        ),
+      );
     },
-    [commitBuckets],
+    [commitBuckets, withExternalRoots],
+  );
+
+  const currentNodesForProject = useCallback(
+    (key: string, workdir: string) =>
+      withExternalRoots(getFileTreeNodes(bucketsRef.current, key, workdir)),
+    [withExternalRoots],
   );
 
   const trackerFor = useCallback((key: string): ProjectRequestTracker => {
@@ -164,20 +223,28 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
   // trackers for buckets the LRU evicted.
   useEffect(() => {
     if (!projectPathKey) return;
-    commitBuckets(touchFileTreeBucket(bucketsRef.current, projectPathKey, cwd));
+    commitBuckets(
+      updateFileTreeNodes(
+        touchFileTreeBucket(bucketsRef.current, projectPathKey, cwd),
+        projectPathKey,
+        cwd,
+        withExternalRoots,
+      ),
+    );
     const keep = new Set(bucketsRef.current.order);
     for (const key of [...trackersRef.current.keys()]) {
       if (!keep.has(key)) trackersRef.current.delete(key);
     }
-  }, [commitBuckets, cwd, projectPathKey]);
+  }, [commitBuckets, cwd, projectPathKey, withExternalRoots]);
 
   const loadChildren = useCallback(
     async (path: string, loadOptions?: LoadOptions) => {
       const key = projectPathKey;
-      const workdir = cwd;
-      if (!key || !workdir.trim()) return;
+      const target = resolveTreePath(path);
+      if (!key || !target?.workdir.trim()) return;
+      const { workdir } = target;
       const tracker = trackerFor(key);
-      const currentNodes = getFileTreeNodes(bucketsRef.current, key, workdir);
+      const currentNodes = currentNodesForProject(key, cwd);
       const node = currentNodes[path] ?? (path === ROOT_PATH ? createRootNode(workdir) : undefined);
       if (!node || node.kind !== "dir") return;
       // De-duplication happens synchronously against the ref-held tracker —
@@ -194,12 +261,12 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       tracker.epochByPath.set(path, epoch);
       tracker.loading.add(path);
       if (!loadOptions?.silent) {
-        updateNodes(key, workdir, (current) => markFileTreeNodeLoading(current, path, workdir));
+        updateNodes(key, cwd, (current) => markFileTreeNodeLoading(current, path, workdir));
       }
       try {
         const response = await invokeFs<FsListResponse>("fs_list", {
           workdir,
-          path: path || undefined,
+          path: target.fsPath || undefined,
           depth: 1,
           offset: 0,
           max_results: FILE_TREE_LIST_MAX_RESULTS,
@@ -209,15 +276,19 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
         // newest request issued for this path.
         if (tracker.epochByPath.get(path) !== epoch) return;
         const entries = sortFileTreeEntries(
-          Array.isArray(response.entries) ? response.entries : [],
+          (Array.isArray(response.entries) ? response.entries : []).map((entry) =>
+            target.external && target.rootId
+              ? { ...entry, path: externalRootChildPath(target.rootId, entry.path) }
+              : entry,
+          ),
         );
         const listError = response.hasMore ? t("projectTools.fileTree.tooManyItems") : undefined;
-        updateNodes(key, workdir, (current) =>
+        updateNodes(key, cwd, (current) =>
           applyFileTreeListResponse(current, path, workdir, entries, listError),
         );
       } catch (error) {
         if (tracker.epochByPath.get(path) !== epoch) return;
-        updateNodes(key, workdir, (current) =>
+        updateNodes(key, cwd, (current) =>
           markFileTreeNodeLoadError(
             current,
             path,
@@ -231,7 +302,7 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
         if (tracker.epochByPath.get(path) === epoch) tracker.loading.delete(path);
       }
     },
-    [cwd, projectPathKey, t, trackerFor, updateNodes],
+    [currentNodesForProject, cwd, projectPathKey, resolveTreePath, t, trackerFor, updateNodes],
   );
 
   // Initial root load once the tool is initialized for a project.
@@ -263,7 +334,7 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
   const refreshVisible = useCallback(
     (refreshOptions?: { silent?: boolean }) => {
       if (!projectPathKey || !cwd.trim()) return;
-      const currentNodes = getFileTreeNodes(bucketsRef.current, projectPathKey, cwd);
+      const currentNodes = currentNodesForProject(projectPathKey, cwd);
       const paths = new Set<string>([ROOT_PATH, ...expandedRef.current]);
       for (const path of paths) {
         const node = currentNodes[path];
@@ -273,7 +344,7 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       }
       bumpSearchRefresh();
     },
-    [bumpSearchRefresh, cwd, loadChildren, projectPathKey],
+    [bumpSearchRefresh, currentNodesForProject, cwd, loadChildren, projectPathKey],
   );
 
   useEffect(() => {
@@ -292,13 +363,13 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     const { state, batch } = takeFileTreeInvalidation(invalidationRef.current);
     invalidationRef.current = state;
     if (!batch || !projectPathKey || !cwd.trim()) return;
-    const currentNodes = getFileTreeNodes(bucketsRef.current, projectPathKey, cwd);
+    const currentNodes = currentNodesForProject(projectPathKey, cwd);
     const expanded = new Set(expandedRef.current);
     for (const path of planFileTreeInvalidationRefresh(batch, currentNodes, expanded)) {
       void loadChildren(path, { force: true, silent: true });
     }
     bumpSearchRefresh();
-  }, [bumpSearchRefresh, cwd, loadChildren, projectPathKey]);
+  }, [bumpSearchRefresh, currentNodesForProject, cwd, loadChildren, projectPathKey]);
 
   const flushInvalidationRef = useRef(flushInvalidation);
   useEffect(() => {
@@ -388,8 +459,8 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
   // ---------------------------------------------------------------------
 
   const entryExists = useCallback(
-    (path: string) => getFileTreeNodes(bucketsRef.current, projectPathKey, cwd)[path] !== undefined,
-    [cwd, projectPathKey],
+    (path: string) => currentNodesForProject(projectPathKey, cwd)[path] !== undefined,
+    [currentNodesForProject, cwd, projectPathKey],
   );
 
   const describeConflictError = useCallback(
@@ -414,17 +485,24 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
 
   const createEntry = useCallback(
     async (kind: FileTreeKind, targetDir: string, name: string) => {
+      const target = resolveTreePath(targetDir);
+      if (!target || target.external) {
+        throw new Error(t("projectTools.fileTree.actionFailed"));
+      }
       const nextPath = joinPath(targetDir, name);
       if (entryExists(nextPath)) {
         throw new Error(t("projectTools.fileTree.nameExists"));
       }
       try {
         if (kind === "dir") {
-          await invokeFs("fs_create_dir", { workdir: cwd, path: nextPath });
+          await invokeFs("fs_create_dir", {
+            workdir: target.workdir,
+            path: joinPath(target.fsPath, name),
+          });
         } else {
           await invokeFs("fs_write_text", {
-            workdir: cwd,
-            path: nextPath,
+            workdir: target.workdir,
+            path: joinPath(target.fsPath, name),
             content: "",
             mode: "rewrite",
           });
@@ -436,11 +514,15 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       if (kind === "dir") await loadChildren(nextPath);
       return nextPath;
     },
-    [cwd, describeConflictError, entryExists, loadChildren, t],
+    [describeConflictError, entryExists, loadChildren, resolveTreePath, t],
   );
 
   const renameEntry = useCallback(
     async (fromPath: string, name: string) => {
+      const target = resolveTreePath(fromPath);
+      if (!target || target.external) {
+        throw new Error(t("projectTools.fileTree.actionFailed"));
+      }
       const parent = dirname(fromPath);
       const nextPath = joinPath(parent, name);
       if (nextPath === fromPath) return nextPath;
@@ -448,7 +530,11 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
         throw new Error(t("projectTools.fileTree.nameExists"));
       }
       try {
-        await invokeFs("fs_rename", { workdir: cwd, from_path: fromPath, to_path: nextPath });
+        await invokeFs("fs_rename", {
+          workdir: target.workdir,
+          from_path: target.fsPath,
+          to_path: joinPath(dirname(target.fsPath), name),
+        });
       } catch (error) {
         throw new Error(describeConflictError(error, t("projectTools.fileTree.actionFailed")));
       }
@@ -456,28 +542,49 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       await loadChildren(parent, { force: true });
       return nextPath;
     },
-    [cwd, describeConflictError, entryExists, loadChildren, projectPathKey, t, updateNodes],
+    [
+      cwd,
+      describeConflictError,
+      entryExists,
+      loadChildren,
+      projectPathKey,
+      resolveTreePath,
+      t,
+      updateNodes,
+    ],
   );
 
   const deleteEntry = useCallback(
     async (path: string) => {
+      const target = resolveTreePath(path);
+      if (!target || target.external) {
+        throw new Error(t("projectTools.fileTree.deleteFailed"));
+      }
       try {
-        await invokeFs("fs_delete", { workdir: cwd, path });
+        await invokeFs("fs_delete", { workdir: target.workdir, path: target.fsPath });
       } catch (error) {
         throw new Error(toFileTreeErrorMessage(error, t("projectTools.fileTree.deleteFailed")));
       }
       updateNodes(projectPathKey, cwd, (current) => removeFileTreeNodeSubtree(current, path));
       await loadChildren(dirname(path), { force: true });
     },
-    [cwd, loadChildren, projectPathKey, t, updateNodes],
+    [cwd, loadChildren, projectPathKey, resolveTreePath, t, updateNodes],
   );
 
   // Desktop-only (see FILE_TREE_HAS_OS_INTEGRATION); callers hide the entry
   // points on the web where the command does not exist.
   const openWorkspacePath = useCallback(
     async (path: string, mode: "open" | "reveal") => {
+      const target = resolveTreePath(path);
+      if (!target) {
+        throw new Error(t("projectTools.fileTree.readFailed"));
+      }
       try {
-        await invokeFs("fs_open_workspace_path", { workdir: cwd, path, mode });
+        await invokeFs("fs_open_workspace_path", {
+          workdir: target.workdir,
+          path: target.fsPath,
+          mode,
+        });
       } catch (error) {
         throw new Error(
           toFileTreeErrorMessage(
@@ -491,7 +598,24 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
         );
       }
     },
-    [cwd, t],
+    [resolveTreePath, t],
+  );
+
+  const isExternalPath = useCallback(
+    (path: string) => Boolean(resolveTreePath(path)?.external),
+    [resolveTreePath],
+  );
+
+  const getDisplayPath = useCallback(
+    (path: string) => {
+      const target = resolveTreePath(path);
+      if (!target) return path;
+      if (!target.external) return path || cwd;
+      if (!target.fsPath) return target.workdir;
+      const separator = target.workdir.includes("\\") ? "\\" : "/";
+      return `${target.workdir.replace(/[\\/]+$/, "")}${separator}${target.fsPath}`;
+    },
+    [cwd, resolveTreePath],
   );
 
   // Sequentially loads a chain of directories (used by reveal flows). Loaded
@@ -524,6 +648,8 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    isExternalPath,
+    getDisplayPath,
     search,
   };
 }

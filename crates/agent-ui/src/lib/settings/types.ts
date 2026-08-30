@@ -153,6 +153,14 @@ export type ChatTranscriptSettings = {
   width: number;
 };
 
+/**
+ * Composer 上下文占用的三档展示样式（docs/design/composer-context-stats-bar.md §4.7）：
+ * "statsBar" 只显示卡片下方的会话统计状态栏（含占用读数），用量环不渲染；
+ * "both" 状态栏与常显用量环同时显示；
+ * "ring" 只显示常显用量环（0% 起），状态栏不渲染。三档都保留 ≥50% 的手动压缩入口。
+ */
+export type ComposerContextDisplayMode = "statsBar" | "both" | "ring";
+
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
   // AI commit-message generation in the Git review dock. Unset means "follow
@@ -162,6 +170,7 @@ export type CustomSettings = {
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
+  composerContextDisplay: ComposerContextDisplayMode;
   // Empty strings select the built-in stacks for each typography role.
   interfaceFontFamily: string;
   chatFontFamily: string;

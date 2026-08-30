@@ -45,6 +45,14 @@ const SAFE_TOKEN_METADATA_KEYS = new Set([
   "prompttokens",
   "completiontoken",
   "completiontokens",
+  "fixedtokens",
+  "observedtokens",
+  "trailingtokens",
+  "estimatedtotaltokens",
+  "toolschematokens",
+  "systemprompttokens",
+  "contextusagetokens",
+  "providerusagetotaltokens",
 ]);
 
 function isSensitiveDebugKey(key: string) {

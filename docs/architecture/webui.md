@@ -66,7 +66,7 @@ WebUI 是 Gateway 承载的浏览器端操作台。它与 GUI 共同复用 `crat
 | MCP | MCP settings 通过 settings 更新；运行期工具由桌面端执行。 |
 | Cron | `cron.manage` |
 | Memory | `memory.manage` |
-| Files | upload HTTP `/api/files/import`，mentions/fs roots/list dirs 走 Gateway request。 |
+| Files | 文件上传走 HTTP `/api/files/import`；目录选择会重建并导入目录树，将其挂载为当前项目的只读 workspace root，活动 root 显示在 File Tree 中。mentions/fs roots/list dirs 走 Gateway request。 |
 
 ## Provider Secret 处理
 

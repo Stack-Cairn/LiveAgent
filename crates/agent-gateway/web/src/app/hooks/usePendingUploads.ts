@@ -12,8 +12,11 @@ import {
 } from "@/lib/clipboardFiles";
 import {
   collectDroppedPayload,
+  collectSelectedDirectoryFiles,
   type DroppedDirectory,
   hasDirectoryEntry,
+  MAX_DIRECTORY_UPLOAD_BYTES,
+  MAX_DIRECTORY_UPLOAD_FILES,
   snapshotDroppedEntries,
 } from "@/lib/directoryDrop";
 import type { AppSettings } from "@/lib/settings";
@@ -80,6 +83,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [isFileDropActive, setIsFileDropActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadedFilesRef = useRef(pendingUploadedFiles);
   const pendingUploadsByConversationRef = useRef<Map<string, PendingUploadedFile[]>>(new Map());
   const isUploadingFilesRef = useRef(isUploadingFiles);
@@ -98,6 +102,39 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     isUploadingFilesRef.current = active;
     setIsUploadingFiles(active);
   }, []);
+
+  const handleImportSelectedDirectoryFiles = useCallback(
+    (files: File[]) => {
+      try {
+        const directories = collectSelectedDirectoryFiles(files);
+        if (directories.length > 0) {
+          onDropDirectories?.(directories);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith("TOO_MANY_FILES:")) {
+          addNotify(
+            "error",
+            formatTranslation(translate("chat.workspaceDropTooManyFiles", locale), {
+              max: MAX_DIRECTORY_UPLOAD_FILES,
+            }),
+          );
+          return;
+        }
+        if (message.startsWith("TOO_LARGE:")) {
+          addNotify(
+            "error",
+            formatTranslation(translate("chat.workspaceDropTooLarge", locale), {
+              max: Math.floor(MAX_DIRECTORY_UPLOAD_BYTES / 1024 / 1024),
+            }),
+          );
+          return;
+        }
+        addNotify("error", asErrorMessage(error, translate("chat.workspaceDropFailed", locale)));
+      }
+    },
+    [addNotify, locale, onDropDirectories],
+  );
 
   const isDisplayedConversation = useCallback((targetConversationId: string) => {
     const conversationIdValue = targetConversationId.trim();
@@ -472,6 +509,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     isUploadingFiles,
     isFileDropActive,
     fileInputRef,
+    folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
     setPendingUploadsForConversation,
@@ -479,6 +517,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     moveConversationUploads,
     clearPendingUploads,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleFileDragEnter,
     handleFileDragOver,
     handleFileDragLeave,

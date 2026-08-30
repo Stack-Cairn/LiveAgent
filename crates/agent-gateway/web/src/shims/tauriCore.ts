@@ -237,6 +237,9 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         typeof args?.query === "string" ? args.query : undefined,
         typeof args?.show_hidden === "boolean" ? args.show_hidden : undefined,
       )) as T;
+    // @ 应用提及：与 GUI 同名命令，经 Gateway 直通中继到桌面宿主枚举。
+    case "cua_driver_list_installed_apps":
+      return (await getGatewayWebSocketClient(loadToken().trim()).listInstalledApps()) as T;
     case "system_list_skill_files":
       return (await getGatewayWebSocketClient(loadToken().trim()).listSkillFiles()) as T;
     case "system_read_skill_metadata":

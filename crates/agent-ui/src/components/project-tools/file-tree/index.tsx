@@ -37,6 +37,7 @@ import {
   ancestorDirsOfPath,
   basename,
   dirname,
+  FILE_TREE_HAS_OS_INTEGRATION,
   FILE_TREE_ROW_HEIGHT,
   type FileTreeKind,
   flattenFileTreeRows,
@@ -87,10 +88,13 @@ export function FileTreePanel(props: { active: boolean }) {
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    isExternalPath,
+    getDisplayPath,
     search,
   } = useFileTreeData({
     projectPathKey,
     cwd,
+    externalRoots: fileTree.externalRoots,
     active,
     initialized,
     workspaceActivityClient: context.clients.workspaceActivity ?? null,
@@ -134,7 +138,7 @@ export function FileTreePanel(props: { active: boolean }) {
 
   const selectedNode = nodes[syncState.selectedPath] ?? nodes[ROOT_PATH];
   const selectedPath = selectedNode?.path ?? ROOT_PATH;
-  const canMutate = initialized && Boolean(projectPathKey && cwd);
+  const projectCanMutate = initialized && Boolean(projectPathKey && cwd);
 
   const selectPath = useCallback(
     (path: string) => {
@@ -258,20 +262,31 @@ export function FileTreePanel(props: { active: boolean }) {
   }, [fileTree.onOpenFile]);
   const handleOpenFile = useCallback(
     (path: string) => {
+      if (isExternalPath(path)) {
+        if (!FILE_TREE_HAS_OS_INTEGRATION) return;
+        setActionError(null);
+        void openWorkspacePath(path, "open").catch((error: unknown) => {
+          setActionError(error instanceof Error ? error.message : String(error));
+        });
+        return;
+      }
       onOpenFileRef.current?.(path, getSiblingImagePaths(path));
     },
-    [getSiblingImagePaths],
+    [getSiblingImagePaths, isExternalPath, openWorkspacePath],
   );
 
   const onInsertFileMentionRef = useRef(fileTree.onInsertFileMention);
   useEffect(() => {
     onInsertFileMentionRef.current = fileTree.onInsertFileMention;
   }, [fileTree.onInsertFileMention]);
-  const handleInsertMention = useCallback((path: string) => {
-    const node = nodesRef.current[path];
-    if (!path || !node) return;
-    onInsertFileMentionRef.current?.(path, node.kind);
-  }, []);
+  const handleInsertMention = useCallback(
+    (path: string) => {
+      const node = nodesRef.current[path];
+      if (!path || !node || isExternalPath(path)) return;
+      onInsertFileMentionRef.current?.(path, node.kind);
+    },
+    [isExternalPath],
+  );
 
   const openContextMenu = useCallback(
     (event: ReactMouseEvent, path: string) => {
@@ -473,7 +488,10 @@ export function FileTreePanel(props: { active: boolean }) {
           size="icon"
           className="h-8 w-8 rounded-lg"
           title={t("projectTools.fileTree.refresh")}
-          onClick={() => refreshVisible()}
+          onClick={() => {
+            void fileTree.refreshExternalRoots();
+            refreshVisible();
+          }}
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -617,7 +635,7 @@ export function FileTreePanel(props: { active: boolean }) {
                   expanded={expandedSet.has(row.path)}
                   selected={selectedPath === row.path}
                   loading={node.loading}
-                  title={row.path || cwd}
+                  title={getDisplayPath(row.path)}
                   onToggle={toggleDirectory}
                   onSelect={selectPath}
                   onOpen={handleOpenFile}
@@ -635,10 +653,15 @@ export function FileTreePanel(props: { active: boolean }) {
           anchor={{ x: contextMenu.x, y: contextMenu.y }}
           containerRef={panelRef}
           path={contextNode.path}
+          displayPath={
+            isExternalPath(contextNode.path) ? getDisplayPath(contextNode.path) : undefined
+          }
           kind={contextNode.kind}
-          canMutate={canMutate}
-          canOpenFile={Boolean(fileTree.onOpenFile)}
-          canInsertMention={Boolean(fileTree.onInsertFileMention)}
+          canMutate={projectCanMutate && !isExternalPath(contextNode.path)}
+          canOpenFile={Boolean(fileTree.onOpenFile) && !isExternalPath(contextNode.path)}
+          canInsertMention={
+            Boolean(fileTree.onInsertFileMention) && !isExternalPath(contextNode.path)
+          }
           showHidden={syncState.showHidden}
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}

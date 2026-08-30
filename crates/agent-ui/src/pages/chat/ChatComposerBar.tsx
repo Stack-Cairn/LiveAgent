@@ -1,6 +1,7 @@
 import {
   type ChatRuntimeControls,
   type CommandSafetyMode,
+  type ComposerContextDisplayMode,
   type ExecutionMode,
   isAgentExecutionMode,
   type ProviderId,
@@ -15,6 +16,7 @@ import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   MentionComposer,
+  type MentionComposerApp,
   type MentionComposerHandle,
   type MentionComposerSkill,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -23,6 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
+  FolderOpen,
   Lightbulb,
   Loader2,
   Maximize2,
@@ -214,6 +217,8 @@ function ComposerContextUsageRing(props: {
       contextWindow={contextWindow}
       disabled={disabled}
       onConfirm={onConfirm}
+      // 环在 "ring" / "both" 展示模式下渲染（见 contextDisplayMode），必须 0% 起
+      // 常显——"ring" 模式它是唯一占用读数，不再挂低占用隐藏门槛。
     />
   );
 }
@@ -247,6 +252,8 @@ export type ChatComposerBarProps = {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
+  /** @ 弹层的应用候选（computer use 目标）；由宿主门控，缺省不显示。 */
+  mentionApps?: MentionComposerApp[];
   executionMode: ExecutionMode;
   hasModels: boolean;
   currentModelLabel: string;
@@ -287,6 +294,8 @@ export type ChatComposerBarProps = {
   onOpenSettings: (section?: "providers", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
+  /** Select a folder to mount as a read-only project root. */
+  onPickWorkspaceFolder: () => void;
   onPasteFiles: (files: File[]) => void;
   onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
   /** Prompts previously sent in this conversation for ↑/↓ recall. */
@@ -305,6 +314,19 @@ export type ChatComposerBarProps = {
   approvalBar?: ReactNode;
   /** 文件拖入命中输入框时显示的局部反馈层。 */
   fileDropOverlay?: ReactNode;
+  /**
+   * 卡片正下方的会话统计状态栏插槽（docs/design/composer-context-stats-bar.md）。
+   * 卡片与胶囊已为它压缩过高度预算，宿主未接线时不占位。
+   */
+  statsBar?: ReactNode;
+  /**
+   * 上下文占用的三档展示样式（settings.customSettings.composerContextDisplay，
+   * docs/design/composer-context-stats-bar.md §4.7）。取舍在本组件内统一裁决：
+   * "statsBar"（缺省）渲染 statsBar 插槽、不渲染用量环；"both" 状态栏与常显
+   * 用量环同时渲染；"ring" 渲染常显用量环（0% 起，环是唯一读数）、statsBar
+   * 插槽即使传入也不挂载。
+   */
+  contextDisplayMode?: ComposerContextDisplayMode;
 };
 
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
@@ -324,6 +346,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     inputPlaceholder,
     workdir,
     enabledSkills,
+    mentionApps,
     executionMode,
     hasModels,
     currentModelLabel,
@@ -354,6 +377,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onOpenSettings,
     onChatRuntimeControlsChange,
     onPickReadableFiles,
+    onPickWorkspaceFolder,
     onPasteFiles,
     onLoadUploadedImagePreview,
     loadHistoryPrompts,
@@ -368,6 +392,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     taskProgressBar,
     approvalBar,
     fileDropOverlay,
+    statsBar,
+    contextDisplayMode,
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
@@ -952,16 +978,19 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             )}
           </button>
 
-          {/* 用量环位于卡片右侧控制列的垂直中心，保持在展开与发送按钮之间。 */}
-          <div className="absolute right-3 top-1/2 z-20 -translate-y-1/2">
-            <ComposerContextUsageRing
-              source={contextUsageTokensSource}
-              totalTokens={contextUsageTokens}
-              contextWindow={contextWindow}
-              disabled={controlsDisabled || isSending || manualCompactBlocked}
-              onConfirm={onManualCompactConfirm}
-            />
-          </div>
+          {/* 用量环位于卡片右侧控制列的垂直中心，保持在展开与发送按钮之间。
+              "ring" / "both" 展示模式渲染，"statsBar" 模式整枚不渲染（§4.7）。 */}
+          {contextDisplayMode === "ring" || contextDisplayMode === "both" ? (
+            <div className="absolute right-3 top-1/2 z-20 -translate-y-1/2">
+              <ComposerContextUsageRing
+                source={contextUsageTokensSource}
+                totalTokens={contextUsageTokens}
+                contextWindow={contextWindow}
+                disabled={controlsDisabled || isSending || manualCompactBlocked}
+                onConfirm={onManualCompactConfirm}
+              />
+            </div>
+          ) : null}
 
           {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
               全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
@@ -976,7 +1005,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           <div
             className={cn(
               "relative flex flex-1 pl-4 pr-12",
-              pendingUploadedFiles.length > 0 ? "pt-1.5" : "pt-3.5",
+              pendingUploadedFiles.length > 0 ? "pt-1.5" : "pt-2.5",
               isComposerExpanded && "min-h-0",
             )}
             onFocusCapture={onPrepareChatRuntime}
@@ -992,17 +1021,20 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               disabled={isInputDisabled || stt.active}
               workdir={workdir}
               enabledSkills={enabledSkills}
+              mentionApps={mentionApps}
               className={cn(
                 // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                 // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
-                "px-0 py-0",
+                // min-h 覆盖编辑器默认 70px（twMerge 后写胜出）：折叠态压到
+                // 3 行文本高，为卡片下方的会话统计状态栏腾出高度预算。
+                "min-h-[60px] px-0 py-0",
                 isComposerExpanded &&
                   (surface === "desktop" ? "h-full max-h-none" : "h-full! max-h-none!"),
               )}
             />
           </div>
 
-          <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
+          <div className="relative flex items-center justify-between gap-2 px-3 pb-1.5 pt-0.5">
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -1050,9 +1082,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
                   >
                     <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="font-medium leading-5">
-                      {t("chat.upload.filesAndFolders")}
-                    </span>
+                    <span className="font-medium leading-5">{t("chat.upload.files")}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={onPickWorkspaceFolder}
+                    disabled={uploadDisabled}
+                    className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="font-medium leading-5">{t("chat.upload.folder")}</span>
                   </DropdownMenuItem>
                   {isAgentMode ? (
                     // 计划模式开关行:整行即开关,右侧迷你 switch 呈现状态。
@@ -1238,6 +1276,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           </div>
           {fileDropOverlay}
         </div>
+        {/* 会话统计状态栏插槽：贴卡片下缘，与卡片同宽；审批面板可见时让位；
+            只在 "ring" 展示模式下不挂载——"statsBar" 与 "both" 都渲染（§4.7）。 */}
+        {statsBar && approvalBar == null && contextDisplayMode !== "ring" ? statsBar : null}
       </div>
     </div>
   );

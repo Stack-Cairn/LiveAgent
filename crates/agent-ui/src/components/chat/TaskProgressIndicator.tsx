@@ -125,7 +125,7 @@ export function TaskProgressIndicator({
     <fieldset
       ref={rootRef}
       aria-label={labels.title}
-      className="relative z-40 mx-auto mb-4 flex w-fit max-w-full justify-center border-0 p-0"
+      className="relative z-40 mx-auto mb-3 flex w-fit max-w-full justify-center border-0 p-0"
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onFocusCapture={handleFocusCapture}
@@ -143,7 +143,7 @@ export function TaskProgressIndicator({
         onClick={() => {
           if (lastPointerTypeRef.current === "touch") setTouchOpen((open) => !open);
         }}
-        className="flex h-10 max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full bg-background/88 px-3.5 text-[13px] text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_1px_2px_-1px_rgba(0,0,0,0.08),0_8px_24px_-14px_rgba(15,23,42,0.38)] backdrop-blur-xl backdrop-saturate-150 transition-[scale,box-shadow,background-color] duration-150 ease-out hover:bg-background/95 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_4px_-1px_rgba(0,0,0,0.10),0_10px_28px_-14px_rgba(15,23,42,0.46)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_8px_24px_-14px_rgba(0,0,0,0.72)]"
+        className="flex h-9 max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full bg-background/88 px-3 text-xs text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_1px_2px_-1px_rgba(0,0,0,0.08),0_8px_24px_-14px_rgba(15,23,42,0.38)] backdrop-blur-xl backdrop-saturate-150 transition-[scale,box-shadow,background-color] duration-150 ease-out hover:bg-background/95 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.10),0_2px_4px_-1px_rgba(0,0,0,0.10),0_10px_28px_-14px_rgba(15,23,42,0.46)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/55 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_8px_24px_-14px_rgba(0,0,0,0.72)]"
       >
         <span
           role="progressbar"

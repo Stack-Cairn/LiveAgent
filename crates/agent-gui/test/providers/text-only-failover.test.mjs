@@ -327,3 +327,37 @@ test("DeepSeek title-style text requests preserve explicit thinking-off and work
   assert.equal(streamCalls[0].options.deepSeekThinking, "disabled");
   assert.equal(streamCalls[0].options.workdir, "/workspace");
 });
+
+test("text mode forwards thinking deltas without leaking them into the answer", async () => {
+  const message = makeAssistantMessage({
+    content: [
+      { type: "thinking", thinking: "weighing options" },
+      { type: "text", text: "Answer" },
+    ],
+  });
+  streamImpl = () =>
+    makeSourceStream([
+      { type: "start", partial: message },
+      { type: "thinking_start", contentIndex: 0, partial: message },
+      { type: "thinking_delta", contentIndex: 0, delta: "weighing ", partial: message },
+      { type: "thinking_delta", contentIndex: 0, delta: "options", partial: message },
+      { type: "thinking_end", contentIndex: 0, content: "weighing options", partial: message },
+      { type: "text_start", contentIndex: 1, partial: message },
+      { type: "text_delta", contentIndex: 1, delta: "Answer", partial: message },
+      { type: "done", reason: "stop", message },
+    ]);
+
+  const thinking = [];
+  const deltas = [];
+  const final = await streamAssistantMessage(
+    baseParams({
+      onTextDelta: (delta) => deltas.push(delta),
+      onThinkingDelta: (delta) => thinking.push(delta),
+    }),
+  );
+
+  assert.deepEqual(thinking, ["weighing ", "options"]);
+  assert.deepEqual(deltas, ["Answer"]);
+  assert.equal(deltas.join("").includes("<think>"), false);
+  assert.equal(final.content[0].thinking, "weighing options");
+});

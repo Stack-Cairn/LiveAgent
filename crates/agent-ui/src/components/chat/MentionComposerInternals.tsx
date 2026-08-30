@@ -6,6 +6,7 @@ import {
 } from "@liveagent/adapters/userMessageContent";
 import { getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { SKILL_ICON_SVG_MARKUP } from "@liveagent/ui/components/IconSet";
+import { getAppMentionIconDataUrl } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
@@ -17,6 +18,7 @@ import {
   type FileMentionKind,
   fileMentionDisplayName,
   fileMentionTitle,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
@@ -31,6 +33,10 @@ export {
 } from "./MentionComposerInputUtils";
 
 import {
+  APP_MENTION_BUNDLE_ID_ATTR,
+  APP_MENTION_ICON_SVG,
+  APP_MENTION_NAME_ATTR,
+  APP_MENTION_PATH_ATTR,
   CARET_ANCHOR_TEXT,
   CODE_MENTION_END_ATTR,
   CODE_MENTION_PATH_ATTR,
@@ -74,6 +80,8 @@ import {
   LARGE_PASTE_TAG_ATTR,
   MENTION_KIND_ATTR,
   MENTION_TAG_ATTR,
+  type MentionComposerApp,
+  type MentionComposerAppMention,
   type MentionComposerCommitMention,
   type MentionComposerDraftSegment,
   type MentionComposerGitFileMention,
@@ -245,6 +253,12 @@ export function collectDraftSegments(
           });
           childIsLogical = true;
         }
+      } else if (el.hasAttribute(APP_MENTION_NAME_ATTR)) {
+        const app = appMentionFromElement(el);
+        if (app) {
+          childParts.push({ type: "appMention", app });
+          childIsLogical = true;
+        }
       } else {
         const largePasteId = el.getAttribute(LARGE_PASTE_TAG_ATTR);
         const largePaste = largePasteId ? largePastes.get(largePasteId) : undefined;
@@ -302,6 +316,7 @@ export function serializeDraftSegments(segments: MentionComposerDraftSegment[]) 
       if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
       if (segment.type === "largePaste") return segment.paste.text;
       if (segment.type === "skillMention") return formatSkillMentionToken(segment.skill);
+      if (segment.type === "appMention") return formatAppMentionToken(segment.app);
       if (segment.type === "commitMention") return formatCommitMentionToken(segment.commit);
       if (segment.type === "gitFileMention") return formatGitFileMentionToken(segment.file);
       if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
@@ -706,6 +721,23 @@ export function codeMentionFromElement(el: HTMLElement): CodeMentionReference | 
   });
 }
 
+export function normalizeAppMention(app: MentionComposerAppMention): MentionComposerAppMention {
+  const name = app.name.trim();
+  const bundleId = app.bundleId?.trim() || undefined;
+  const path = app.path.trim();
+  return { name, bundleId, path };
+}
+
+export function appMentionFromElement(el: HTMLElement): MentionComposerAppMention | null {
+  const name = el.getAttribute(APP_MENTION_NAME_ATTR)?.trim() ?? "";
+  if (!name) return null;
+  return normalizeAppMention({
+    name,
+    bundleId: el.getAttribute(APP_MENTION_BUNDLE_ID_ATTR)?.trim() || undefined,
+    path: el.getAttribute(APP_MENTION_PATH_ATTR)?.trim() ?? "",
+  });
+}
+
 export function clipboardRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -835,6 +867,23 @@ export function normalizeComposerClipboardSegment(
     const rawSkill = clipboardRecord(segment.skill);
     return rawSkill ? normalizeClipboardSkill(rawSkill, enabledSkills) : null;
   }
+  if (type === "appMention") {
+    // 与 commit/gitFile 同一信任边界：chip 本身没有任何特权动作（不打开
+    // URL、不执行命令），最坏情况等价于粘贴一段普通文本，所以不需要像
+    // skill 那样过白名单——只要求 name 非空。
+    const rawApp = clipboardRecord(segment.app);
+    if (!rawApp) return null;
+    const name = clipboardString(rawApp, "name").trim();
+    if (!name) return null;
+    return {
+      type,
+      app: normalizeAppMention({
+        name,
+        bundleId: clipboardString(rawApp, "bundleId") || undefined,
+        path: clipboardString(rawApp, "path"),
+      }),
+    };
+  }
   if (type === "commitMention") {
     const rawCommit = clipboardRecord(segment.commit);
     const commit = rawCommit ? normalizeClipboardCommit(rawCommit) : null;
@@ -919,6 +968,16 @@ export function parseSerializedComposerText(
       } else {
         pushTextSegment(segments, `/${segment.name}`);
       }
+    } else if (segment.type === "app") {
+      segments.push({
+        type: "appMention",
+        app: normalizeAppMention({
+          name: segment.app.name,
+          bundleId: segment.app.bundleId,
+          path: segment.app.path ?? "",
+        }),
+      });
+      matched = true;
     } else if (segment.type === "commit") {
       segments.push({
         type: "commitMention",
@@ -1016,11 +1075,36 @@ export function createSkillMentionIcon() {
   return createMentionIcon(SKILL_ICON_SVG_MARKUP);
 }
 
+/**
+ * 应用 chip 的图标：优先从注册表取真实 logo（<img>），查不到回退通用
+ * 占位 SVG。图标只作为子元素存在——序列化读的是 chip 属性，data URL
+ * 因此不进草稿/剪贴板 JSON；chip 重建（setDraft、粘贴恢复）时按身份
+ * 重查注册表，图标自然复原。
+ */
+export function createAppMentionIcon(app?: MentionComposerAppMention) {
+  const iconDataUrl = app ? getAppMentionIconDataUrl(app) : undefined;
+  if (!iconDataUrl) {
+    return createMentionIcon(APP_MENTION_ICON_SVG);
+  }
+  const icon = document.createElement("img");
+  icon.src = iconDataUrl;
+  icon.alt = "";
+  icon.width = 12;
+  icon.height = 12;
+  icon.draggable = false;
+  icon.style.flexShrink = "0";
+  icon.style.alignSelf = "center";
+  // 圆角走标准 token（Shared UI Boundaries 禁用任意值圆角，内联样式同理）。
+  icon.classList.add("rounded-xs");
+  return icon;
+}
+
 export function isComposerChipElement(node: Node | null): node is HTMLElement {
   return (
     node instanceof HTMLElement &&
     (node.hasAttribute(MENTION_TAG_ATTR) ||
       node.hasAttribute(SKILL_MENTION_NAME_ATTR) ||
+      node.hasAttribute(APP_MENTION_NAME_ATTR) ||
       node.hasAttribute(COMMIT_MENTION_SHA_ATTR) ||
       node.hasAttribute(GIT_FILE_MENTION_PATH_ATTR) ||
       node.hasAttribute(CODE_MENTION_PATH_ATTR) ||
@@ -1400,6 +1484,29 @@ export function insertSkillMentionChip(ctx: MentionContext, skill: MentionCompos
   insertMentionChipElement(ctx, chip);
 }
 
+export function createAppMentionChip(appInput: MentionComposerAppMention) {
+  const app = normalizeAppMention(appInput);
+  const chip = document.createElement("span");
+  chip.setAttribute(APP_MENTION_NAME_ATTR, app.name);
+  if (app.bundleId) {
+    chip.setAttribute(APP_MENTION_BUNDLE_ID_ATTR, app.bundleId);
+  }
+  chip.setAttribute(APP_MENTION_PATH_ATTR, app.path);
+  chip.contentEditable = "false";
+  chip.className = mentionChipClassName("app", { selectable: false });
+  chip.title = app.bundleId ? `${app.name}\n${app.bundleId}` : app.name;
+  chip.setAttribute("aria-label", app.name);
+
+  chip.appendChild(createAppMentionIcon(app));
+  chip.appendChild(document.createTextNode(app.name));
+  return chip;
+}
+
+export function insertAppMentionChip(ctx: MentionContext, app: MentionComposerApp) {
+  const chip = createAppMentionChip(app);
+  insertMentionChipElement(ctx, chip);
+}
+
 export function createCommitMentionChip(commitInput: MentionComposerCommitMention) {
   const commit = normalizeCommitMention(commitInput);
   const chip = document.createElement("span");
@@ -1522,6 +1629,9 @@ export function createComposerSegmentNode(
   }
   if (segment.type === "skillMention") {
     return createSkillMentionChip(segment.skill);
+  }
+  if (segment.type === "appMention") {
+    return createAppMentionChip(segment.app);
   }
   if (segment.type === "commitMention") {
     return createCommitMentionChip(segment.commit);

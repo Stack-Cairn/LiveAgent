@@ -76,6 +76,7 @@ import {
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
 import type { SectionId } from "@/pages/settings/types";
+import { ConversationStatsBarHost } from "../ConversationStatsBarHost";
 import {
   HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
   HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES,
@@ -105,6 +106,8 @@ export type GatewayConversationPaneHostContext = {
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
   enabledSkills: ChatComposerBarProps["enabledSkills"];
+  mentionApps: ChatComposerBarProps["mentionApps"];
+  contextDisplayMode: ChatComposerBarProps["contextDisplayMode"];
   commandSafetyMode: ChatComposerBarProps["commandSafetyMode"];
   onCommandSafetyModeChange: ChatComposerBarProps["onCommandSafetyModeChange"];
   sttProvider: ChatComposerBarProps["sttProvider"];
@@ -159,6 +162,7 @@ export type GatewayConversationPrimarySurface = {
   onPrepareChatRuntime: ChatComposerBarProps["onPrepareChatRuntime"];
   onComposerBusyChange: ChatComposerBarProps["onComposerBusyChange"];
   onPickReadableFiles: ChatComposerBarProps["onPickReadableFiles"];
+  onPickWorkspaceFolder: ChatComposerBarProps["onPickWorkspaceFolder"];
   onPasteFiles: ChatComposerBarProps["onPasteFiles"];
   loadHistoryPrompts: ChatComposerBarProps["loadHistoryPrompts"];
   pendingUploadedFiles: PendingUploadedFile[];
@@ -172,6 +176,7 @@ export type GatewayConversationPrimarySurface = {
   manualCompactBlocked: boolean;
   approvalBar: ReactNode;
   taskProgressBar: ReactNode;
+  statsBar: ReactNode;
   fileDropOverlay: ReactNode;
   transcriptExtras: ReactNode;
   stageRef?: MutableRefObject<HTMLElement | null>;
@@ -820,6 +825,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             inputPlaceholder={context.inputPlaceholder}
             workdir={workdir}
             enabledSkills={context.enabledSkills}
+            mentionApps={context.mentionApps}
             executionMode={context.settings.system.executionMode}
             hasModels={context.hasModels}
             currentModelLabel={modelLabel}
@@ -832,6 +838,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             thinkingAlwaysOn={paneThinkingAlwaysOn}
             contextUsageTokensSource={contextUsageTokensSource}
             contextWindow={contextWindow}
+            contextDisplayMode={context.contextDisplayMode}
             onManualCompactConfirm={
               usePrimary && primary ? primary.onManualCompactConfirm : () => onFocusPane()
             }
@@ -862,6 +869,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             onPrepareChatRuntime={usePrimary && primary ? primary.onPrepareChatRuntime : undefined}
             onPickReadableFiles={
               usePrimary && primary ? primary.onPickReadableFiles : () => onFocusPane()
+            }
+            onPickWorkspaceFolder={
+              usePrimary && primary ? primary.onPickWorkspaceFolder : () => onFocusPane()
             }
             onPasteFiles={
               usePrimary && primary
@@ -912,6 +922,22 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               )
             }
             approvalBar={usePrimary ? primary?.approvalBar : approvalBar}
+            statsBar={
+              usePrimary ? (
+                primary?.statsBar
+              ) : (
+                <ConversationStatsBarHost
+                  key={`stats-${conversationId}`}
+                  conversationId={conversationId}
+                  host={context.trajectoryHost}
+                  enabled={!trajectoryActive}
+                  contextUsageTokensSource={contextUsageTokensSource}
+                  contextWindow={contextWindow}
+                  onManualCompactConfirm={() => onFocusPane()}
+                  manualCompactBlocked={transcript.toolStatusIsCompaction === true}
+                />
+              )
+            }
             fileDropOverlay={usePrimary ? primary?.fileDropOverlay : null}
           />
         </section>
