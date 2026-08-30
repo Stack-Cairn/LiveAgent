@@ -318,9 +318,12 @@
     @apply my-1.5 text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
   }
   /* 计划里的标题就是阶段分节,层级本身不携带额外信息:统一收成一档字号,
-     靠字重与分节线区分,不再有 text-xl/text-lg 的落差。 */
+     靠字重与分节线区分,不再有 text-xl/text-lg 的落差。
+     字号带 ! —— Streamdown 把 text-3xl/text-2xl 直接写在 h1/h2 的 class 上,
+     那是 utilities 层,层级顺序上永远压过本文件所在的 components 层,单靠选择器
+     权重赢不了。 */
   .chat-markdown.plan-markdown [data-streamdown^="heading-"] {
-    @apply mb-1.5 mt-4 text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[1.6] tracking-[0.01em] text-foreground;
+    @apply mb-1.5 mt-4 !text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[1.6] tracking-[0.01em] text-foreground;
   }
   /* 标题 mt-4 特异性高于全局 first-child 重置;计划又以标题开头时会在卡片
      padding 之外再多出一段空白。同作用域补一条,压过标题规则。 */
@@ -330,7 +333,7 @@
   }
   .chat-markdown.plan-markdown [data-streamdown="heading-1"],
   .chat-markdown.plan-markdown [data-streamdown="heading-2"] {
-    @apply text-[calc(13.5px*var(--zone-font-scale,1))];
+    @apply !text-[calc(13.5px*var(--zone-font-scale,1))];
   }
   /* 非首个分节标题上方补一条发丝线,把"进入下一阶段"这件事画出来。
      流式渲染时 Streamdown 会给每个块包一层 display:contents 的方向 div
