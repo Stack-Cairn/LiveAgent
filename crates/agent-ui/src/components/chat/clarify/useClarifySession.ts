@@ -63,6 +63,11 @@ export function createClarifySessionCore(
   let sessionMessages: ClarifyMessage[] = [];
   let questionCount = 0;
   let controller: AbortController | null = null;
+  // 会话代际：start()/close() 各递增一次。在途 ask() 捕获进入时的代际，
+  // 之后任何 await 回来先比对——代际变了说明会话已被重置/替换，迟到结果一律丢弃。
+  // 这同时覆盖了「close 后迟到的 reject 把 idle 态写成 error」和
+  // 「close 后 start(new)，旧请求的成功结果污染新会话消息」两类竞态。
+  let epoch = 0;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const listener of listeners) listener();
@@ -75,41 +80,62 @@ export function createClarifySessionCore(
 
   const ask = async (extraUser?: ClarifyMessage) => {
     if (extraUser) sessionMessages.push(extraUser);
-    controller = new AbortController();
+    const localController = new AbortController();
+    controller = localController;
+    const currentEpoch = epoch;
     setState({ status: "asking", streamingText: "", error: null });
+    let raw: string;
     try {
       // context 用 getter 取：宿主切工作区后无需重建 core（设计文档「上下文感知」）。
-      const raw = await runTurn(
+      raw = await runTurn(
         buildClarifyMessages(sessionMessages, getContext?.()),
-        controller.signal,
-        (delta) => setState({ streamingText: state.streamingText + delta }),
+        localController.signal,
+        (delta) => {
+          // 仅当前代际且仍处 asking 态才累积：turn 结束或会话被重置后
+          // 迟到的 delta 不得写入已清空/已提交的 streamingText。
+          if (epoch !== currentEpoch || state.status !== "asking") return;
+          setState({ streamingText: state.streamingText + delta });
+        },
       );
-      const parsed = parseClarifyTurn(raw);
-      if (parsed.kind === "final") {
-        setState({ status: "synthesizing", streamingText: "" });
-        sessionMessages.push({ role: "assistant", content: raw });
-        setState({
-          status: "done",
-          finalText: parsed.text,
-          visibleMessages: sessionMessages.slice(),
-        });
-        callbacks.onFinal(parsed.text);
-        return;
-      }
-      questionCount += 1;
+    } catch (error) {
+      // 会话已被 close()/start() 丢弃：旧请求的失败（包括 abort）不属于当前会话，
+      // 不落 error 态——否则会把刚重置的 idle/新会话翻成 error。
+      if (epoch !== currentEpoch) return;
+      // 同一代际内的失败才是真正的网络/模型错误。
+      setState({ status: "error", error: error instanceof Error ? error.message : String(error) });
+      return;
+    } finally {
+      // 只有自己仍是当前 controller 时才清引用：避免迟到的旧 ask 清掉新 ask 的 controller。
+      if (controller === localController) controller = null;
+    }
+    // 成功结果同样要先过代际闸门，再解析/写消息。
+    if (epoch !== currentEpoch) return;
+    const parsed = parseClarifyTurn(raw);
+    if (parsed.kind === "final") {
+      setState({ status: "synthesizing", streamingText: "" });
       sessionMessages.push({ role: "assistant", content: raw });
       setState({
-        status: "awaitingInput",
-        streamingText: "",
-        questionCount,
+        status: "done",
+        finalText: parsed.text,
         visibleMessages: sessionMessages.slice(),
       });
-    } catch (error) {
-      // 用户取消走 close()，不产生 error 态；此处只兜网络/模型错误。
-      setState({ status: "error", error: error instanceof Error ? error.message : String(error) });
-    } finally {
-      controller = null;
+      // 宿主回调放在状态提交为 done 之后、且包住异常：宿主副作用抛错
+      // 不应把已落定的 done 态翻回 error，也不应让 start() 的 Promise reject。
+      try {
+        callbacks.onFinal(parsed.text);
+      } catch {
+        // 吞掉宿主回调异常：状态机对外只认会话自身的错误。
+      }
+      return;
     }
+    questionCount += 1;
+    sessionMessages.push({ role: "assistant", content: raw });
+    setState({
+      status: "awaitingInput",
+      streamingText: "",
+      questionCount,
+      visibleMessages: sessionMessages.slice(),
+    });
   };
 
   return {
@@ -119,6 +145,10 @@ export function createClarifySessionCore(
       return () => listeners.delete(listener);
     },
     start(draftText) {
+      // 新会话开始：代际 +1 并中止在途请求，旧 ask 的任何迟到结果都会被作废。
+      epoch += 1;
+      controller?.abort();
+      controller = null;
       sessionMessages = [{ role: "user", content: draftText }];
       questionCount = 0;
       setState({
@@ -140,16 +170,15 @@ export function createClarifySessionCore(
       return ask({ role: "user", content: buildForceFinalInstruction() });
     },
     retry() {
-      // 失败重试重发当前轮：把最后一条 assistant 之外的尾巴原样再发一次。
-      const last = sessionMessages.at(-1);
-      if (last?.role === "user" && state.status === "error") {
-        const retryTail = last;
-        sessionMessages.pop();
-        return ask(retryTail);
-      }
-      return Promise.resolve();
+      // 仅 error 态可重试：失败的轮次里 sessionMessages 尾部正是那轮的
+      // user 输入，直接原样重发即可（pop 再 push 同一条是恒等变换，不做）。
+      if (state.status !== "error") return Promise.resolve();
+      return ask();
     },
     close() {
+      // 代际 +1 在先：在途 ask 的迟到结果（成功或失败）全部作废，
+      // 不得写入刚清空的 sessionMessages / 复活幽灵 awaitingInput 会话。
+      epoch += 1;
       controller?.abort();
       controller = null;
       sessionMessages = [];
