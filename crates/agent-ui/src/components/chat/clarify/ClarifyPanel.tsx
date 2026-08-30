@@ -39,9 +39,12 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
   const canGenerate = !busy && state.status !== "done";
 
   return (
+    // mr-12 让出卡片右侧控制列：展开/用量环/发送都是 right-3 + w-8（44px 竖直
+    // 轨道，同编辑器容器的 pr-12 约定）；48px = 44 轨道 + 4px 间隙，根容器
+    // overflow-hidden，内部问答气泡与回答行一并收在轨道左侧。
     <div
       data-clarify-panel=""
-      className="mx-4 mb-1 mt-2 flex max-h-[40vh] flex-col overflow-hidden rounded-2xl border border-black/[0.055] bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl dark:border-white/[0.10] dark:bg-white/[0.06]"
+      className="ml-4 mr-12 mb-1 mt-2 flex max-h-[40vh] flex-col overflow-hidden rounded-2xl border border-black/[0.055] bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl dark:border-white/[0.10] dark:bg-white/[0.06]"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-1.5">
         <span className="flex items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground">

@@ -531,9 +531,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       // setDraft 按 segments 重建 DOM，stale 派生字段会被忽略。
       const draft = composer.getDraft();
       const preserved = draft.segments.filter((segment) => segment.type !== "text");
+      // 终稿可能为空：此时不插入空文本段，只保留原附件/提及。
       composer.setDraft({
         ...draft,
-        segments: [{ type: "text", text: finalText }, ...preserved],
+        segments:
+          finalText.trim().length > 0
+            ? [{ type: "text", text: finalText }, ...preserved]
+            : preserved,
       });
       setClarifyOpen(false);
       composer.focus();
