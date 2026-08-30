@@ -1,9 +1,11 @@
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { normalizeChatRuntimeControls } from "../../../lib/settings";
+import { createTextComposerDraft } from "../composer/composerDraftText";
 import {
   type ActiveGatewayBridgeRequest,
   type GatewayBridgeRuntimeRefs,
@@ -494,6 +496,13 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
         };
         const accepted = await latestParamsRef.current.sendActionRef.current({
           textOverride: message,
+          composerDraftOverride: createTextComposerDraft(
+            message,
+            normalizeConversationMentionReferences(
+              payload.referencedConversations,
+              resolvedConversationId,
+            ),
+          ),
           uploadedFilesOverride: uploadedFiles,
           conversationIdOverride: resolvedConversationId,
           executionModeOverride: gatewayBridgeRequest.executionModeOverride,

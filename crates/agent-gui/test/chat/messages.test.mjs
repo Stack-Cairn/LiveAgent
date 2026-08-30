@@ -205,18 +205,39 @@ test("uploaded file helpers preserve display text and strip model-hidden metadat
     ["assets/diagram.png", 3 * 1024 * 1024],
   ]);
 
-  const message = uploadedFiles.createUserMessageWithUploads(" Please review ", [fileA], 1234);
+  const referencedConversation = {
+    id: "conversation-source",
+    title: "Source conversation",
+    cwd: "/workspace/source",
+  };
+  const message = uploadedFiles.createUserMessageWithUploads(
+    " Please review ",
+    [fileA],
+    1234,
+    [referencedConversation],
+  );
   assert.ok(message);
   assert.equal(message.role, "user");
   assert.equal(message.timestamp, 1234);
   assert.equal(uploadedFiles.getUserMessageDisplayText(message), " Please review ");
   assert.deepEqual(uploadedFiles.getUserMessageAttachments(message), [fileA]);
+  assert.deepEqual(uploadedFiles.getUserMessageReferencedConversations(message), [
+    referencedConversation,
+  ]);
   assert.match(message.content, /The user attached the files below/);
   assert.match(message.content, /Use Read with these exact paths/);
+
+  const projected = conversationState.createConversationStateFromContext({
+    messages: [message],
+  });
+  assert.deepEqual(projected.transcript.items[0].referencedConversations, [
+    referencedConversation,
+  ]);
 
   const stripped = uploadedFiles.stripUploadedFilesMessageMetadata(message);
   assert.equal(uploadedFiles.getUserMessageDisplayText(stripped), message.content);
   assert.deepEqual(uploadedFiles.getUserMessageAttachments(stripped), []);
+  assert.deepEqual(uploadedFiles.getUserMessageReferencedConversations(stripped), []);
 });
 
 test("request context can preserve uploaded file metadata for native provider adapters", () => {

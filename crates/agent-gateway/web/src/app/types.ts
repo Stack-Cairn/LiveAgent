@@ -1,3 +1,4 @@
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { ChatCommandOutcome } from "@/lib/chat/stream/chatCommandPipeline";
@@ -7,6 +8,7 @@ export type SendChatOptions = {
   conversationId?: string;
   clientRequestId?: string;
   uploadedFiles?: PendingUploadedFile[];
+  referencedConversations?: ConversationMentionReference[];
   runtimeControls?: ChatRuntimeControls;
   workdir?: string;
   editMessageRef?: HistoryMessageRef;

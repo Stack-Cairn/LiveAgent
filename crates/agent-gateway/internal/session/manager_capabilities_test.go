@@ -26,9 +26,16 @@ func TestChatRuntimeReadinessRequiresChatIngressV1(t *testing.T) {
 	if manager.ChatIngressV1Ready("agent-1") {
 		t.Fatal("legacy desktop must not pass CHAT_INGRESS_V1 readiness")
 	}
+	if manager.SupportsCapability("agent-1", gatewayv2.ConversationReferencesV1Capability) {
+		t.Fatal("legacy desktop must not pass conversation reference capability readiness")
+	}
 
 	compatible := NewAgentSession(AuthSnapshot{AgentID: "agent-1", SessionID: "compatible-session"})
-	compatible.SetCapabilities([]string{"ignored", gatewayv2.ChatIngressV1Capability})
+	compatible.SetCapabilities([]string{
+		"ignored",
+		gatewayv2.ChatIngressV1Capability,
+		gatewayv2.ConversationReferencesV1Capability,
+	})
 	manager.SetSession(compatible)
 	t.Cleanup(func() { manager.ClearSession(compatible) })
 	manager.UpdateRuntimeStatus(compatible, &gatewayv2.RuntimeStatusEvent{
@@ -46,5 +53,8 @@ func TestChatRuntimeReadinessRequiresChatIngressV1(t *testing.T) {
 	}
 	if !manager.ChatIngressV1Ready("agent-1") {
 		t.Fatal("compatible desktop should pass CHAT_INGRESS_V1 readiness")
+	}
+	if !manager.SupportsCapability("agent-1", gatewayv2.ConversationReferencesV1Capability) {
+		t.Fatal("compatible desktop should pass conversation reference capability readiness")
 	}
 }

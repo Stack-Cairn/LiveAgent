@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  type ConversationReferenceDropZoneHit,
+  findConversationReferenceDropZone,
+} from "../chat/conversationReferenceDrag";
+import {
   canvasAllowsPointerSplit,
+  conversationReferenceForWorkbenchPayload,
   type DragSessionEvent,
   type DragSessionState,
   dragSessionReducer,
@@ -61,6 +66,8 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
   const { enabled, layoutRef, geometryRef, onCommit, onUnavailable } = params;
   const [dragState, setDragState] = useState<WorkbenchDragState | null>(null);
   const sessionRef = useRef<DragSessionState>(IDLE_DRAG_SESSION);
+  const referenceDragActiveRef = useRef(false);
+  const conversationDropZoneRef = useRef<ConversationReferenceDropZoneHit | null>(null);
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
   const onUnavailableRef = useRef(onUnavailable);
@@ -69,8 +76,21 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
 
   const cleanupListenersRef = useRef<(() => void) | null>(null);
 
+  const clearConversationDropHover = useCallback(() => {
+    const zone = conversationDropZoneRef.current;
+    const session = sessionRef.current;
+    const reference =
+      session.phase === "idle" ? null : conversationReferenceForWorkbenchPayload(session.payload);
+    if (zone && reference) {
+      zone.onHover?.(reference, false);
+    }
+    conversationDropZoneRef.current = null;
+  }, []);
+
   const teardown = useCallback(() => {
+    clearConversationDropHover();
     sessionRef.current = IDLE_DRAG_SESSION;
+    referenceDragActiveRef.current = false;
     cleanupListenersRef.current?.();
     cleanupListenersRef.current = null;
     const capture = pointerCaptureRef.current;
@@ -87,7 +107,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
     }
     document.documentElement.style.removeProperty("cursor");
     setDragState(null);
-  }, []);
+  }, [clearConversationDropHover]);
 
   useEffect(() => teardown, [teardown]);
 
@@ -139,36 +159,81 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       };
 
       const handleMove = (moveEvent: PointerEvent) => {
-        const session = sessionRef.current;
+        let session = sessionRef.current;
         if (session.phase === "idle" || moveEvent.pointerId !== session.pointerId) return;
-        if (session.phase === "armed") {
+        if (session.phase === "armed" && !referenceDragActiveRef.current) {
           if (
             !exceedsDragThreshold(session.start, { x: moveEvent.clientX, y: moveEvent.clientY })
           ) {
             return;
           }
+          const reference = conversationReferenceForWorkbenchPayload(session.payload);
+          referenceDragActiveRef.current = reference !== null;
           const canvasElement = document.querySelector("[data-workbench-canvas]");
           const geometry = geometryRef.current;
-          if (!canvasElement || !geometry) {
+          if ((!canvasElement || !geometry) && !reference) {
             onUnavailableRef.current?.("geometry-unavailable");
             teardown();
             return;
           }
-          if (!canvasAllowsPointerSplit(geometry)) {
+          if (geometry && !canvasAllowsPointerSplit(geometry) && !reference) {
             onUnavailableRef.current?.("canvas-too-narrow");
             teardown();
             return;
           }
-          const canvasRect = canvasElement.getBoundingClientRect();
-          dispatch({
-            type: "activate",
-            pointerId: session.pointerId,
-            canvasOrigin: { left: canvasRect.left, top: canvasRect.top },
-            geometry,
-            revision: layoutRef.current.revision,
-          });
+          if (canvasElement && geometry && canvasAllowsPointerSplit(geometry)) {
+            const canvasRect = canvasElement.getBoundingClientRect();
+            dispatch({
+              type: "activate",
+              pointerId: session.pointerId,
+              canvasOrigin: { left: canvasRect.left, top: canvasRect.top },
+              geometry,
+              revision: layoutRef.current.revision,
+            });
+          } else if (reference) {
+            setDragState({
+              payload: session.payload,
+              pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
+              target: null,
+              previewRect: null,
+            });
+          }
           armClickSuppressor();
           document.documentElement.style.setProperty("cursor", "grabbing");
+          session = sessionRef.current;
+        }
+        if (session.phase === "idle") return;
+        const reference = conversationReferenceForWorkbenchPayload(session.payload);
+        if (referenceDragActiveRef.current && reference) {
+          const zone = findConversationReferenceDropZone(moveEvent.clientX, moveEvent.clientY);
+          if (zone?.element !== conversationDropZoneRef.current?.element) {
+            if (conversationDropZoneRef.current) {
+              conversationDropZoneRef.current.onHover?.(reference, false);
+            }
+            conversationDropZoneRef.current = zone;
+            if (zone) zone.onHover?.(reference, true);
+          }
+          // A Composer is a semantic target even while disabled. Never let a
+          // self/duplicate/approval/text-mode rejection fall through to a Pane
+          // split merely because insertion is unavailable at this moment.
+          if (zone) {
+            setDragState({
+              payload: session.payload,
+              pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
+              target: null,
+              previewRect: null,
+            });
+            return;
+          }
+        }
+        if (session.phase !== "dragging") {
+          setDragState({
+            payload: session.payload,
+            pointer: { x: moveEvent.clientX, y: moveEvent.clientY },
+            target: null,
+            previewRect: null,
+          });
+          return;
         }
         // Once activated this is a workbench gesture, not text selection,
         // xterm input, or a menu interaction beneath the captured pointer.
@@ -185,6 +250,20 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
       const handleUp = (upEvent: PointerEvent) => {
         const session = sessionRef.current;
         if (session.phase === "idle" || upEvent.pointerId !== session.pointerId) return;
+        const reference = conversationReferenceForWorkbenchPayload(session.payload);
+        if (referenceDragActiveRef.current && reference) {
+          const zone = findConversationReferenceDropZone(upEvent.clientX, upEvent.clientY);
+          if (zone) {
+            upEvent.preventDefault();
+            zone.onDrop(reference);
+            teardown();
+            return;
+          }
+        }
+        if (session.phase !== "dragging") {
+          teardown();
+          return;
+        }
         if (session.phase === "dragging") upEvent.preventDefault();
         const result = dispatch({
           type: "pointer-up",

@@ -82,6 +82,7 @@ fn gateway_chat_request(
         workdir: String::new(),
         command_safety_mode: String::new(),
         uploaded_files: Vec::new(),
+        referenced_conversations: Vec::new(),
         queue_policy: String::new(),
     }
 }
@@ -114,6 +115,12 @@ fn gateway_chat_command_mapping_preserves_rebase_signal() {
         execution_mode: "tools".to_string(),
         workdir: "/workspace".to_string(),
         command_safety_mode: "sandbox".to_string(),
+        referenced_conversations: vec![proto::ChatConversationReference {
+            id: "conversation-source".to_string(),
+            title: "Earlier investigation".to_string(),
+            cwd: "/source".to_string(),
+            updated_at: 1_772_000_000_000,
+        }],
         ..Default::default()
     };
 
@@ -149,6 +156,64 @@ fn gateway_chat_command_mapping_preserves_rebase_signal() {
     assert_eq!(event.execution_mode, "tools");
     assert_eq!(event.workdir, "/workspace");
     assert_eq!(event.command_safety_mode, "sandbox");
+    assert_eq!(event.referenced_conversations.len(), 1);
+    assert_eq!(event.referenced_conversations[0].id, "conversation-source");
+    assert_eq!(
+        event.referenced_conversations[0].title,
+        "Earlier investigation"
+    );
+    assert_eq!(event.referenced_conversations[0].cwd, "/source");
+    assert_eq!(
+        event.referenced_conversations[0].updated_at,
+        1_772_000_000_000
+    );
+}
+
+#[test]
+fn gateway_chat_command_mapping_normalizes_conversation_reference_boundaries() {
+    let request = proto::ChatRequest {
+        conversation_id: "conversation-current".to_string(),
+        client_request_id: "client-reference-boundaries".to_string(),
+        message: "compare prior work".to_string(),
+        referenced_conversations: vec![
+            proto::ChatConversationReference {
+                id: "conversation-current".to_string(),
+                title: "Self".to_string(),
+                ..Default::default()
+            },
+            proto::ChatConversationReference {
+                id: "conversation\u{85}invalid".to_string(),
+                title: "Control id".to_string(),
+                ..Default::default()
+            },
+            proto::ChatConversationReference {
+                id: "😀".repeat(257),
+                title: "Long id".to_string(),
+                ..Default::default()
+            },
+            proto::ChatConversationReference {
+                id: "conversation-source".to_string(),
+                title: "😀".repeat(241),
+                cwd: " /source ".to_string(),
+                updated_at: 1_772_000_000_000,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let event = GatewayController::build_gateway_chat_request_event(
+        "run-reference-boundaries".to_string(),
+        request,
+        false,
+        None,
+    );
+
+    assert_eq!(event.referenced_conversations.len(), 1);
+    let reference = &event.referenced_conversations[0];
+    assert_eq!(reference.id, "conversation-source");
+    assert_eq!(reference.title.chars().count(), 240);
+    assert_eq!(reference.title, "😀".repeat(240));
+    assert_eq!(reference.cwd, "/source");
 }
 
 #[test]

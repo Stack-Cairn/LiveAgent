@@ -92,17 +92,18 @@ test("app suggestions ride the @ trigger and are host-gated by the mentionApps p
   assert.match(composer, /insertAppMentionChip\(mentionCtx, suggestion\.app\)/);
 });
 
-test("the popup renders apps and files as two labelled sections with real app icons", () => {
-  // 应用在前、文件在后，各自独立封顶——应用分组只留一小撮（3 条），
-  // 既保证 @ 首先看到应用，又不把文件结果推出视野。分组标题按第一条
-  // 文件行的边界插入（仅当上方有应用行）。
-  const appsLoopFirst =
-    composer.indexOf("of orderedApps") < composer.indexOf("of mentionSessionSearchIndex");
-  assert.ok(appsLoopFirst, "app suggestions must precede file suggestions");
-  assert.match(model, /MAX_APP_SUGGESTIONS = 3/);
-  assert.match(composer, /appCount >= MAX_APP_SUGGESTIONS/);
-  assert.match(overlays, /firstFileIndex/);
-  assert.match(overlays, /i === firstFileIndex && hasAppRows/);
+test("the root popup folds installed apps into a dedicated submenu", () => {
+  // 根级只呈现类别入口；应用候选和文件、会话候选一样，进入二级菜单后
+  // 才生成。应用子菜单沿用统一的 30 项上限，不再为根级混排而裁到 3 项。
+  assert.match(model, /category: "apps" \| "files" \| "conversations"/);
+  assert.match(model, /MentionMenuMode = "root" \| "apps" \| "files" \| "conversations"/);
+  assert.match(composer, /\{ type: "category", category: "apps" \}/);
+  assert.match(composer, /if \(mentionMenuMode === "apps"\)/);
+  assert.match(composer, /sortAppsByMentionRecency\(mentionApps, readAppMentionRecents\(\)\)/);
+  assert.match(composer, /if \(next\.length >= MAX_SUGGESTIONS\) break/);
+  assert.doesNotMatch(composer, /MAX_APP_SUGGESTIONS/);
+  assert.match(overlays, /mode === "apps"/);
+  assert.match(overlays, /category === "apps"/);
   // 应用行优先渲染宿主提供的真实图标（data URL），缺失时回退占位图标。
   assert.match(overlays, /app\?\.iconDataUrl \?/);
   assert.match(overlays, /img src=\{app\.iconDataUrl\}/);

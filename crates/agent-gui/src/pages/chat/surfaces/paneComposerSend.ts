@@ -13,6 +13,7 @@ export const EMPTY_PANE_COMPOSER_DRAFT: MentionComposerDraft = {
   appMentions: [],
   commitMentions: [],
   gitFileMentions: [],
+  conversationMentions: [],
   codeMentions: [],
   isEmpty: true,
 };

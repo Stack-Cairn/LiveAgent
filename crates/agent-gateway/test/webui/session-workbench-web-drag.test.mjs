@@ -39,6 +39,10 @@ const workspaceDropCommitSource = readFileSync(
   path.join(webRoot, "../../agent-ui/src/lib/workbench/workspaceDropCommit.ts"),
   "utf8",
 );
+const sharedDragSessionSource = readFileSync(
+  path.join(webRoot, "../../agent-ui/src/lib/workbench/useWorkbenchDragSession.ts"),
+  "utf8",
+);
 
 const PROJECT = { projectId: "project-1", projectPathKey: "/repo" };
 
@@ -362,6 +366,22 @@ test("file-drop hover focuses the pane under the cursor via workbench hit-testin
   assert.match(viewSource, /focusWorkbenchPaneUnderPoint/);
   assert.match(viewSource, /hitTestWorkbenchDrop\(/);
   assert.match(viewSource, /onDragEnter: handleChatFileDragEnter/);
+});
+
+test("conversation reference drags and sends keep the same semantics in every Web pane", () => {
+  const conversationDrag = blockFrom(hookSource, "const handleConversationDragIntent = useCallback(");
+  assert.match(conversationDrag, /cwd: item\.cwd/);
+  assert.match(conversationDrag, /updatedAt: item\.updatedAt/);
+  assert.match(sharedDragSessionSource, /findConversationReferenceDropZone/);
+  assert.match(sharedDragSessionSource, /zone\.onDrop\(reference\)/);
+  assert.match(hostSource, /mentionableConversations=\{context\.mentionableConversations\}/);
+  assert.match(
+    hostSource,
+    /searchMentionableConversations=\{context\.searchMentionableConversations\}/,
+  );
+  assert.match(hostSource, /referencedConversations,/);
+  assert.match(viewSource, /mentionableConversations,/);
+  assert.match(viewSource, /searchMentionableConversations,/);
 });
 
 test("archived and missing workspaces render a blocked banner without rebinding the pane", () => {

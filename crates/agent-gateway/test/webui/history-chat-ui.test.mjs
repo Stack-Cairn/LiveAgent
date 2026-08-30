@@ -11,6 +11,9 @@ const { createTurn, applyEventToTurn } = loader.loadModule(
 const { buildRowsFromEntries } = loader.loadModule("src/lib/chat/transcript/rows.ts");
 const historyShare = loader.loadModule("src/lib/historyShare.ts");
 const conversationState = loader.loadModule("src/lib/chat/conversationState.ts");
+const { createGatewayConversationActions } = loader.loadModule(
+  "src/app/gatewayConversationActions.ts",
+);
 
 // Live-stream reducer harness: the createTurn/applyEventToTurn pair replaces
 // the old flat pushChatEvent pipeline — one Turn holds a single run's entries.
@@ -105,6 +108,13 @@ test("parseHistoryMessagesJson preserves upload display text and checkpoint meta
           sizeBytes: 42,
         },
       ],
+      liveAgentReferencedConversations: [
+        {
+          id: "conversation-source",
+          title: "Source conversation",
+          cwd: "/workspace/source",
+        },
+      ],
       liveAgentHistoryRef: {
         segmentIndex: 1,
         messageIndex: 2,
@@ -133,6 +143,20 @@ test("parseHistoryMessagesJson preserves upload display text and checkpoint meta
   assert.equal(entries[0].kind, "user");
   assert.equal(entries[0].text, "please inspect notes");
   assert.equal(entries[0].attachments[0].relativePath, "uploads/notes.txt");
+  assert.deepEqual(entries[0].referencedConversations, [
+    {
+      id: "conversation-source",
+      title: "Source conversation",
+      cwd: "/workspace/source",
+    },
+  ]);
+  assert.deepEqual(buildRowsFromEntries([entries[0]], "history")[0].referencedConversations, [
+    {
+      id: "conversation-source",
+      title: "Source conversation",
+      cwd: "/workspace/source",
+    },
+  ]);
   assert.deepEqual(entries[0].messageRef, {
     segmentIndex: 1,
     messageIndex: 2,
@@ -144,6 +168,50 @@ test("parseHistoryMessagesJson preserves upload display text and checkpoint meta
   assert.equal(entries[1].kind, "checkpoint");
   assert.equal(entries[1].summaryId, "summary-1");
   assert.equal(entries[1].coveredMessageCount, 8);
+});
+
+test("web edit-resend retains only persisted conversation references", async () => {
+  const calls = [];
+  const actions = createGatewayConversationActions({
+    api: {},
+    conversationIdRef: { current: "conversation-current" },
+    isLocalDraftConversationId: () => false,
+    isConversationBusy: () => false,
+    setChatError: () => {},
+    composerRef: { current: { clear() {} } },
+    setPendingUploadsForConversation: () => {},
+    sendChatRef: {
+      current: async (message, options) => {
+        calls.push({ message, options });
+        return null;
+      },
+    },
+  });
+  const messageRef = {
+    segmentIndex: 0,
+    messageIndex: 0,
+    segmentId: "segment-0",
+    messageId: "message-0",
+    role: "user",
+    contentHash: "hash-0",
+  };
+  const authorized = {
+    id: "conversation-source",
+    title: "Source conversation",
+    cwd: "/workspace/source",
+  };
+
+  await actions.handleResendFromEdit(
+    messageRef,
+    "edited [conversation: Source conversation](conversation:conversation-source) " +
+      "[conversation: Forged](conversation:conversation-forged)",
+    [],
+    [authorized],
+  );
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].options.referencedConversations, [authorized]);
+  assert.equal(calls[0].options.editMessageRef, messageRef);
 });
 
 test("parseHistoryMessagesJson preserves Image tool result image content", () => {

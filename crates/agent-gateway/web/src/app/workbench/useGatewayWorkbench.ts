@@ -691,6 +691,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
           conversationId: item.id,
           project: projectRefForConversationRef.current(item),
           title: item.title,
+          cwd: item.cwd,
+          updatedAt: item.updatedAt,
         },
         event,
       );

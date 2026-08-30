@@ -77,7 +77,21 @@ test("the shared composer wires truncation tracking and debounced refetches", ()
     // premature "no matching files".
     assert.match(
       composer,
-      /const popupLoading = mentionSessionLoading \|\| mentionRefetchPending;/,
+      /mentionMenuMode === "files" && \(mentionSessionLoading \|\| mentionRefetchPending\)/,
     );
   }
+});
+
+test("bare @ opens the reference root before file indexing", () => {
+  const composer = source(sourceRoots[0]);
+  assert.match(
+    composer,
+    /type MentionMenuMode = "root" \| "apps" \| "files" \| "conversations"/,
+  );
+  assert.match(composer, /\{ type: "category", category: "apps" \}/);
+  assert.match(composer, /\{ type: "category", category: "files" \}/);
+  assert.match(composer, /\{ type: "category", category: "conversations" \}/);
+  assert.match(composer, /mode === "files" && Boolean\(normalizedWorkdir\)/);
+  assert.match(composer, /mentionMenuMode !== "root"/);
+  assert.match(composer, /returnToMentionRoot\(\)/);
 });

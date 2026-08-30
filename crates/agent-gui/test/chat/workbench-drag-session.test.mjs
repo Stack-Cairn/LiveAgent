@@ -8,6 +8,7 @@ const machine = loader.loadModule("src/pages/chat/workbench/workbenchDragMachine
 const {
   canSplitRectAtEdge,
   canvasAllowsPointerSplit,
+  conversationReferenceForWorkbenchPayload,
   dragSessionReducer,
   dragStateFor,
   DRAG_THRESHOLD_PX,
@@ -51,6 +52,33 @@ function geometry({ canvas, panes = [], dividers = [] }) {
 function conversationPayload(conversationId = "conversation-a") {
   return { kind: "conversation", conversationId, project: PROJECT, title: conversationId };
 }
+
+function workspacePayload() {
+  return {
+    kind: "workspace",
+    projectId: "project-main",
+    projectPath: "/workspace/main",
+    title: "main",
+  };
+}
+
+test("conversation drag payload preserves a cross-project reference identity", () => {
+  assert.deepEqual(
+    conversationReferenceForWorkbenchPayload({
+      ...conversationPayload("conversation-other-project"),
+      title: "Other project work",
+      cwd: "/workspace/other-project",
+      updatedAt: 42,
+    }),
+    {
+      id: "conversation-other-project",
+      title: "Other project work",
+      cwd: "/workspace/other-project",
+      updatedAt: 42,
+    },
+  );
+  assert.equal(conversationReferenceForWorkbenchPayload(panePayload()), null);
+});
 
 function panePayload(paneId = "pane-a", conversationId = "conversation-a") {
   return {
@@ -125,7 +153,7 @@ test("dropping a conversation on its own pane resolves to focus, not a split", (
   );
 });
 
-test("sidebar payloads auto-dock on a pane center: right first on wide canvases", () => {
+test("a foreign conversation on a pane center keeps the original auto-dock behavior", () => {
   const geo = geometry({ canvas: WIDE_CANVAS, panes: [{ paneId: "pane-a", rect: WIDE_CANVAS }] });
   assert.deepEqual(
     resolveWorkbenchDropTarget(
@@ -138,7 +166,20 @@ test("sidebar payloads auto-dock on a pane center: right first on wide canvases"
   );
 });
 
-test("sidebar auto-dock prefers bottom when the canvas is narrower than 680", () => {
+test("non-conversation sidebar payloads auto-dock right first on wide canvases", () => {
+  const geo = geometry({ canvas: WIDE_CANVAS, panes: [{ paneId: "pane-a", rect: WIDE_CANVAS }] });
+  assert.deepEqual(
+    resolveWorkbenchDropTarget(
+      { kind: "pane-center", paneId: "pane-a" },
+      workspacePayload(),
+      geo,
+      EMPTY_LAYOUT,
+    ),
+    { kind: "pane-edge", paneId: "pane-a", edge: "right" },
+  );
+});
+
+test("non-conversation auto-dock prefers bottom when the canvas is narrower than 680", () => {
   // 679 wide still allows a horizontal split (>= 646), so the bottom-first
   // preference — not a fallback — is what selects the vertical axis.
   const canvas = rect(0, 0, 679, 800);
@@ -146,7 +187,7 @@ test("sidebar auto-dock prefers bottom when the canvas is narrower than 680", ()
   assert.deepEqual(
     resolveWorkbenchDropTarget(
       { kind: "pane-center", paneId: "pane-a" },
-      conversationPayload("conversation-new"),
+      workspacePayload(),
       geo,
       EMPTY_LAYOUT,
     ),
@@ -157,7 +198,7 @@ test("sidebar auto-dock prefers bottom when the canvas is narrower than 680", ()
   assert.deepEqual(
     resolveWorkbenchDropTarget(
       { kind: "pane-center", paneId: "pane-a" },
-      conversationPayload("conversation-new"),
+      workspacePayload(),
       geometry({ canvas: wide, panes: [{ paneId: "pane-a", rect: wide }] }),
       EMPTY_LAYOUT,
     ),
@@ -165,7 +206,7 @@ test("sidebar auto-dock prefers bottom when the canvas is narrower than 680", ()
   );
 });
 
-test("auto-dock falls back to the other axis, then to no target at all", () => {
+test("non-conversation auto-dock falls back to the other axis, then to no target", () => {
   // Too narrow to split horizontally (600 < 646) but tall enough for bottom.
   const narrowPane = rect(0, 0, 600, 800);
   const geo = geometry({
@@ -175,7 +216,7 @@ test("auto-dock falls back to the other axis, then to no target at all", () => {
   assert.deepEqual(
     resolveWorkbenchDropTarget(
       { kind: "pane-center", paneId: "pane-a" },
-      conversationPayload("conversation-new"),
+      workspacePayload(),
       geo,
       EMPTY_LAYOUT,
     ),
@@ -186,7 +227,7 @@ test("auto-dock falls back to the other axis, then to no target at all", () => {
   assert.equal(
     resolveWorkbenchDropTarget(
       { kind: "pane-center", paneId: "pane-a" },
-      conversationPayload("conversation-new"),
+      workspacePayload(),
       geometry({ canvas: rect(0, 0, 900, 800), panes: [{ paneId: "pane-a", rect: tinyPane }] }),
       EMPTY_LAYOUT,
     ),
@@ -410,6 +451,14 @@ const ARM = { type: "arm", payload: conversationPayload("conversation-new"), poi
 const ACTIVATE = { type: "activate", pointerId: 1, ...ACTIVATION };
 // Canvas origin (50, 20) puts this pointer at the pane centre (450, 380).
 const MOVE_CENTER = { type: "pointer-move", pointerId: 1, clientX: 500, clientY: 400, layout: EMPTY_LAYOUT };
+// Local x=800 is inside the pane's right-edge band, outside the 16px canvas edge.
+const MOVE_RIGHT_EDGE = {
+  type: "pointer-move",
+  pointerId: 1,
+  clientX: 850,
+  clientY: 400,
+  layout: EMPTY_LAYOUT,
+};
 
 test("the machine walks idle -> armed -> dragging and previews on move", () => {
   const armed = dragSessionReducer(IDLE_DRAG_SESSION, ARM);
@@ -423,9 +472,9 @@ test("the machine walks idle -> armed -> dragging and previews on move", () => {
   assert.equal(dragging.state.revision, 7);
   assert.equal(dragStateFor(dragging.state), null);
 
-  const moved = dragSessionReducer(dragging.state, MOVE_CENTER);
+  const moved = dragSessionReducer(dragging.state, MOVE_RIGHT_EDGE);
   const drag = dragStateFor(moved.state);
-  assert.deepEqual(drag.pointer, { x: 500, y: 400 });
+  assert.deepEqual(drag.pointer, { x: 850, y: 400 });
   assert.deepEqual(drag.target, { kind: "pane-edge", paneId: "pane-a", edge: "right" });
   assert.ok(drag.previewRect, "an accepted target must render a preview rect");
   assert.equal(moved.commit, null);
@@ -433,7 +482,7 @@ test("the machine walks idle -> armed -> dragging and previews on move", () => {
 
 test("Escape and pointer-cancel return to idle without committing", () => {
   for (const label of ["escape", "pointercancel", "blur"]) {
-    const { state, commits } = run([ARM, ACTIVATE, MOVE_CENTER, { type: "cancel" }]);
+    const { state, commits } = run([ARM, ACTIVATE, MOVE_RIGHT_EDGE, { type: "cancel" }]);
     assert.equal(state.phase, "idle", `${label} must land in idle`);
     assert.equal(dragStateFor(state), null);
     assert.deepEqual(commits, []);
@@ -442,7 +491,7 @@ test("Escape and pointer-cancel return to idle without committing", () => {
   const { state, commits } = run([
     ARM,
     ACTIVATE,
-    MOVE_CENTER,
+    MOVE_RIGHT_EDGE,
     { type: "cancel" },
     { type: "pointer-up", pointerId: 1, clientX: 500, clientY: 400, layout: EMPTY_LAYOUT },
   ]);
@@ -451,8 +500,8 @@ test("Escape and pointer-cancel return to idle without committing", () => {
 });
 
 test("pointer-up over a target commits exactly once with the frozen revision", () => {
-  const upEvent = { type: "pointer-up", pointerId: 1, clientX: 500, clientY: 400, layout: EMPTY_LAYOUT };
-  const { state, commits } = run([ARM, ACTIVATE, MOVE_CENTER, upEvent, upEvent]);
+  const upEvent = { type: "pointer-up", pointerId: 1, clientX: 850, clientY: 400, layout: EMPTY_LAYOUT };
+  const { state, commits } = run([ARM, ACTIVATE, MOVE_RIGHT_EDGE, upEvent, upEvent]);
   assert.equal(state.phase, "idle");
   assert.equal(commits.length, 1);
   assert.deepEqual(commits[0], {
@@ -466,7 +515,7 @@ test("pointer-up over a target commits exactly once with the frozen revision", (
 test("pointer-up without a resolvable target commits nothing", () => {
   // Outside the canvas: the hit test returns null.
   const outside = { type: "pointer-up", pointerId: 1, clientX: 5000, clientY: 5000, layout: EMPTY_LAYOUT };
-  const { state, commits } = run([ARM, ACTIVATE, MOVE_CENTER, outside]);
+  const { state, commits } = run([ARM, ACTIVATE, MOVE_RIGHT_EDGE, outside]);
   assert.equal(state.phase, "idle");
   assert.deepEqual(commits, []);
 

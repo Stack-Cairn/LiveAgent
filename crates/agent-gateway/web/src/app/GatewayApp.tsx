@@ -6,6 +6,7 @@ import type {
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import {
@@ -382,6 +383,20 @@ function useGatewayAppController() {
   // inputs) and the byId index (list commits only; never running/idle ticks).
   const sidebarWorkdirs = useSidebarSelector(sidebarStore, (snapshot) => snapshot.workdirs);
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (snapshot) => snapshot.byId);
+  const mentionableConversations = useMemo(
+    () =>
+      [...sidebarConversationsById.values()]
+        .filter((item) => !item.isPending)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map(({ id, title, cwd, updatedAt, messageCount }) => ({
+          id,
+          title,
+          cwd,
+          updatedAt,
+          messageCount,
+        })),
+    [sidebarConversationsById],
+  );
   const {
     handleCloseShareModal,
     handleDisableSharedHistory,
@@ -1468,6 +1483,15 @@ function useGatewayAppController() {
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+  const searchMentionableConversations = useCallback(
+    (query: string) =>
+      searchMentionConversations({
+        query,
+        currentConversationId: displayedConversationId,
+        currentWorkdir: displayedConversationWorkdir,
+      }),
+    [displayedConversationId, displayedConversationWorkdir],
+  );
   displayedConversationWorkdirRef.current = displayedConversationWorkdir;
   // Switching conversations keeps every conversation's uploads, but a workdir
   // change within the same conversation (a draft switching projects)
@@ -2025,6 +2049,8 @@ function useGatewayAppController() {
     localeContextValue,
     manualCompactPending,
     manualCompactTransientConversations,
+    mentionableConversations,
+    searchMentionableConversations,
     materializeComposerDraftForSend,
     mentionApps,
     missingWorkspaceProjectPathKeys,

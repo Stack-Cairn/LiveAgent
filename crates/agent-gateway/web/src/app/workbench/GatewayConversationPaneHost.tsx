@@ -24,6 +24,7 @@ import {
   type CheckpointRewoundInfo,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
 import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import {
   readToolApprovalDeadlineAt,
@@ -106,6 +107,8 @@ export type GatewayConversationPaneHostContext = {
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
   enabledSkills: ChatComposerBarProps["enabledSkills"];
+  mentionableConversations: ChatComposerBarProps["mentionableConversations"];
+  searchMentionableConversations: ChatComposerBarProps["searchMentionableConversations"];
   mentionApps: ChatComposerBarProps["mentionApps"];
   contextDisplayMode: ChatComposerBarProps["contextDisplayMode"];
   commandSafetyMode: ChatComposerBarProps["commandSafetyMode"];
@@ -133,7 +136,11 @@ export type GatewayConversationPaneHostContext = {
     draft: MentionComposerDraft,
     files: PendingUploadedFile[],
     workdir: string,
-  ) => Promise<{ text: string; uploadedFiles: PendingUploadedFile[] }>;
+  ) => Promise<{
+    text: string;
+    uploadedFiles: PendingUploadedFile[];
+    referencedConversations: ConversationMentionReference[];
+  }>;
   getPendingUploads: (conversationId: string) => PendingUploadedFile[];
   subscribePendingUploads: (listener: () => void) => () => void;
   updatePendingUploads: (
@@ -482,12 +489,14 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         const files = context.getPendingUploads(conversationId).slice();
         let text: string;
         let uploadedFiles: PendingUploadedFile[];
+        let referencedConversations = draft?.conversationMentions ?? [];
         try {
           const materialized = draft
             ? await context.materializeComposerDraftForSend(draft, files, workdirRef.current)
-            : { text: "", uploadedFiles: files };
+            : { text: "", uploadedFiles: files, referencedConversations: [] };
           text = materialized.text;
           uploadedFiles = materialized.uploadedFiles;
+          referencedConversations = materialized.referencedConversations;
         } catch (error) {
           context.notifyError(error instanceof Error ? error.message : "大段粘贴内容导入失败");
           return;
@@ -511,6 +520,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           const outcome = await context.sendChat(text, {
             conversationId,
             uploadedFiles,
+            referencedConversations,
             runtimeControls: paneRuntimeControls,
             ...(busy ? { queuePolicy: "append" as const, optimisticEcho: false } : {}),
           });
@@ -843,6 +853,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             inputPlaceholder={context.inputPlaceholder}
             workdir={workdir}
             enabledSkills={context.enabledSkills}
+            mentionableConversations={context.mentionableConversations}
+            searchMentionableConversations={context.searchMentionableConversations}
             mentionApps={context.mentionApps}
             executionMode={context.settings.system.executionMode}
             hasModels={context.hasModels}

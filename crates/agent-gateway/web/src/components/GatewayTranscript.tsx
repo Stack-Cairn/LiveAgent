@@ -16,6 +16,7 @@ import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   type PendingUploadedFile,
   splitUserAttachmentsForDisplay,
@@ -106,6 +107,7 @@ type GatewayTranscriptProps = {
     messageRef: HistoryMessageRef,
     text: string,
     uploadedFiles: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
   // Anchor messageId of the branch request in flight; the matching row shows
@@ -263,6 +265,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
     messageRef: HistoryMessageRef,
     text: string,
     uploadedFiles: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
 }) {
   const {
@@ -303,7 +306,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         onCancel={() => setEditingMessageId(null)}
         onSubmit={(text, attachments) => {
           setEditingMessageId(null);
-          onResendFromEdit?.(effectiveMessageRef, text, attachments);
+          onResendFromEdit?.(effectiveMessageRef, text, attachments, row.referencedConversations);
         }}
       />
     );
@@ -366,6 +369,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     messageRef: HistoryMessageRef,
     text: string,
     uploadedFiles: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
   branchPendingMessageId?: string | null;
@@ -415,7 +419,12 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
       retryTitle={retryTitle}
       onRetry={() => {
         if (!retryTarget || !retryMessageRef) return;
-        onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
+        onResendFromEdit?.(
+          retryMessageRef,
+          retryTarget.text,
+          retryTarget.attachments,
+          retryTarget.referencedConversations,
+        );
       }}
       branchDisabled={branchDisabled}
       branchTitle={branchTitle}
@@ -510,6 +519,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     messageRef: HistoryMessageRef,
     text: string,
     uploadedFiles: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
   branchPendingMessageId?: string | null;
