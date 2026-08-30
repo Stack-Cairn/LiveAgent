@@ -297,8 +297,20 @@
     @apply my-7 border-border/60;
   }
 
+  /* First/last child margin reset */
+  .chat-markdown > *:first-child,
+  .chat-markdown > *:first-child > *:first-child {
+    margin-top: 0;
+  }
+  .chat-markdown > *:last-child,
+  .chat-markdown > *:last-child > *:last-child {
+    margin-bottom: 0;
+  }
+
   /* Plan markdown — 计划卡片正文按"规格文档"排版而非聊天正文:更紧的行距与
-     压平的标题层级,让整份计划尽量在一屏内读完再决定是否批准。 */
+     压平的标题层级,让整份计划尽量在一屏内读完再决定是否批准。
+     整块位于全局 first/last reset 之后:本作用域按更高特异性覆盖全局规则,
+     保持"特异性随源顺序递增",不触发 noDescendingSpecificity。 */
   .chat-markdown.plan-markdown {
     @apply text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
   }
@@ -320,9 +332,18 @@
   .chat-markdown.plan-markdown [data-streamdown="heading-2"] {
     @apply text-[calc(13.5px*var(--zone-font-scale,1))];
   }
-  /* 非首个分节标题上方补一条发丝线,把"进入下一阶段"这件事画出来。 */
+  /* 非首个分节标题上方补一条发丝线,把"进入下一阶段"这件事画出来。
+     流式渲染时 Streamdown 会给每个块包一层 display:contents 的方向 div
+     (带 dir 属性),标题便不再是容器的直接子元素;两种层级各写一组,
+     静态/流式两种渲染模式都能命中。 */
   .chat-markdown.plan-markdown > [data-streamdown="heading-1"]:not(:first-child),
-  .chat-markdown.plan-markdown > [data-streamdown="heading-2"]:not(:first-child) {
+  .chat-markdown.plan-markdown > [data-streamdown="heading-2"]:not(:first-child),
+  .chat-markdown.plan-markdown
+    > [dir]:not(:first-child)
+    > [data-streamdown="heading-1"]:first-child,
+  .chat-markdown.plan-markdown
+    > [dir]:not(:first-child)
+    > [data-streamdown="heading-2"]:first-child {
     @apply border-t border-border/30 pt-3.5 dark:border-white/[0.06];
   }
   .chat-markdown.plan-markdown [data-streamdown="unordered-list"],
@@ -355,16 +376,6 @@
   }
   .chat-markdown.plan-markdown [data-streamdown="horizontal-rule"] {
     @apply my-3.5 border-border/35;
-  }
-
-  /* First/last child margin reset */
-  .chat-markdown > *:first-child,
-  .chat-markdown > *:first-child > *:first-child {
-    margin-top: 0;
-  }
-  .chat-markdown > *:last-child,
-  .chat-markdown > *:last-child > *:last-child {
-    margin-bottom: 0;
   }
 
   /* Context checkpoint animations */
