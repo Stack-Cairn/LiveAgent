@@ -45,6 +45,10 @@ const conversationPaneHostSource = readFileSync(
   new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
   "utf8",
 );
+const paneComposerDraftSessionSource = readFileSync(
+  new URL("../../src/pages/chat/surfaces/paneComposerDraftSession.ts", import.meta.url),
+  "utf8",
+);
 const conversationPaneEnvironmentSource = readFileSync(
   new URL(
     "../../src/pages/chat/surfaces/ConversationPaneHostEnvironment.tsx",
@@ -196,8 +200,13 @@ test("conversation transcript and composer share one stable workbench surface", 
   assert.match(conversationSurfaceSource, /useConversationSurfaceSnapshot\(controller\)/);
   assert.match(conversationPaneHostSource, /const composerRef = useRef/);
   assert.match(conversationPaneHostSource, /const scrollFollowRef = useRef/);
-  assert.match(conversationPaneHostSource, /controllerRef\.current\.getSnapshot\(\)\.draft/);
-  assert.match(conversationPaneHostSource, /controllerRef\.current\.setDraft\(nextDraft\)/);
+  assert.match(
+    conversationPaneHostSource,
+    /const composer = composerRef\.current;\s*return beginPaneComposerDraftSession\(composer,\s*\{/,
+  );
+  assert.doesNotMatch(conversationPaneHostSource, /controllerRef/);
+  assert.match(paneComposerDraftSessionSource, /const draft = controller\.getDraft\(\)/);
+  assert.match(paneComposerDraftSessionSource, /controller\.setDraft\(nextDraft\)/);
   assert.match(conversationPaneHostSource, /<ChatTranscript/);
   assert.match(conversationPaneHostSource, /<ChatComposerBar/);
   assert.match(conversationPaneHostSource, /pendingUploadedFiles=\{snapshot\.uploads\}/);

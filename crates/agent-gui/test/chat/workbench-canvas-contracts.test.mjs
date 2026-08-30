@@ -19,6 +19,9 @@ const dividerLayerSource = readSource(
 const workbenchCanvasSource = readSource(
   "../../../agent-ui/src/components/workbench/WorkbenchCanvas.tsx",
 );
+const workspaceDropCommitSource = readSource(
+  "../../../agent-ui/src/lib/workbench/workspaceDropCommit.ts",
+);
 const chatPageSource = readSource("../../src/pages/ChatPage.tsx");
 const gatewayViewSource = readSource(
   "../../../agent-gateway/web/src/app/GatewayAppView.tsx",
@@ -96,9 +99,12 @@ test("workspace drops create the conversation before the pane, verified by workd
   assert.match(chatPageSource, /pendingWorkspaceDropRef/);
   assert.match(chatPageSource, /commitWorkspaceDropConversation\(\{/);
   assert.match(chatPageSource, /handleNewConversationForProject\(project\)/);
+  assert.match(chatPageSource, /shouldDeferWorkspaceDropConversationSync\(/);
+  assert.match(workspaceDropCommitSource, /params\.onConversationCreated\?\.\(conversationId\)/);
+  assert.match(workspaceDropCommitSource, /if \(exactId\) return exactId === currentId/);
   assert.match(
-    chatPageSource,
-    /workspaceProjectPathKey\(draftWorkdir\) === pendingWorkspaceDrop\.projectPathKey/,
+    workspaceDropCommitSource,
+    /currentProjectPathKey\.trim\(\) === pending\.projectPathKey\.trim\(\)/,
   );
 });
 
