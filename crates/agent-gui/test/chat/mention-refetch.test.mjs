@@ -84,7 +84,11 @@ test("the shared composer wires truncation tracking and debounced refetches", ()
 
 test("bare @ opens the reference root before file indexing", () => {
   const composer = source(sourceRoots[0]);
-  assert.match(composer, /type MentionMenuMode = "root" \| "files" \| "conversations"/);
+  assert.match(
+    composer,
+    /type MentionMenuMode = "root" \| "apps" \| "files" \| "conversations"/,
+  );
+  assert.match(composer, /\{ type: "category", category: "apps" \}/);
   assert.match(composer, /\{ type: "category", category: "files" \}/);
   assert.match(composer, /\{ type: "category", category: "conversations" \}/);
   assert.match(composer, /mode === "files" && Boolean\(normalizedWorkdir\)/);

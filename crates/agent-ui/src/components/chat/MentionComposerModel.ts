@@ -97,9 +97,9 @@ export type MentionSuggestion =
   | { type: "skill"; skill: MentionComposerSkill }
   | { type: "app"; app: MentionComposerApp }
   | { type: "conversation"; conversation: MentionComposerConversation }
-  | { type: "category"; category: "files" | "conversations" };
+  | { type: "category"; category: "apps" | "files" | "conversations" };
 
-export type MentionMenuMode = "root" | "files" | "conversations";
+export type MentionMenuMode = "root" | "apps" | "files" | "conversations";
 
 export type ComposerContextMenuState = {
   x: number;
@@ -221,8 +221,6 @@ export interface MentionComposerProps {
 
 export const MAX_SUGGESTIONS = 30;
 export const MAX_CONVERSATION_MENTIONS = MAX_CONVERSATION_MENTION_REFERENCES;
-/** 应用分组的独立上限——应用排在弹层最前，条数过多会把文件结果推出视野。 */
-export const MAX_APP_SUGGESTIONS = 3;
 export const MENTION_INDEX_MAX_RESULTS = 5000;
 export const MENTION_REFETCH_DEBOUNCE_MS = 150;
 export const MENTION_TAG_ATTR = "data-mention-path";

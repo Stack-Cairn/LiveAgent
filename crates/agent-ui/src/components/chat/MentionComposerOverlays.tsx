@@ -10,7 +10,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { Fragment, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   formatLargePasteCount,
@@ -66,10 +66,6 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
-  // 文件与应用两个分组在扁平 suggestions 数组里连续排布（应用在前）；
-  // 键盘导航按扁平索引走，分组标题只是渲染时按边界插入的静态行。
-  const firstFileIndex = suggestions.findIndex((suggestion) => suggestion.type === "file");
-  const hasAppRows = suggestions.some((suggestion) => suggestion.type === "app");
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
@@ -139,9 +135,11 @@ export function Popup({
             }}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            {mode === "files"
-              ? t("chat.composer.filesAndFolders")
-              : t("chat.composer.conversations")}
+            {mode === "apps"
+              ? t("chat.composer.mentionGroupApps")
+              : mode === "files"
+                ? t("chat.composer.filesAndFolders")
+                : t("chat.composer.conversations")}
           </button>
         )}
       </div>
@@ -153,9 +151,11 @@ export function Popup({
             ? "Skills"
             : mode === "root"
               ? t("chat.composer.add")
-              : mode === "files"
-                ? t("chat.composer.filesAndFolders")
-                : t("chat.composer.conversations")
+              : mode === "apps"
+                ? t("chat.composer.mentionGroupApps")
+                : mode === "files"
+                  ? t("chat.composer.filesAndFolders")
+                  : t("chat.composer.conversations")
         }
         className="mention-popup-scroll relative flex max-h-[320px] flex-col overflow-y-auto px-2 pb-2"
       >
@@ -183,42 +183,34 @@ export function Popup({
           const category = suggestion.type === "category" ? suggestion.category : null;
           const title =
             app?.name ??
-            (category === "files"
-              ? t("chat.composer.filesAndFolders")
-              : category === "conversations"
-                ? t("chat.composer.conversations")
-                : (conversation?.title ?? skill?.name ?? fileName));
+            (category === "apps"
+              ? t("chat.composer.mentionGroupApps")
+              : category === "files"
+                ? t("chat.composer.filesAndFolders")
+                : category === "conversations"
+                  ? t("chat.composer.conversations")
+                  : (conversation?.title ?? skill?.name ?? fileName));
           const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
           const conversationMeta = [conversation?.cwd, updatedAtLabel].filter(Boolean).join(" · ");
           const subtitle =
-            category === "files"
-              ? t("chat.composer.filesAndFoldersHint")
-              : category === "conversations"
-                ? t("chat.composer.conversationsHint")
-                : conversation
-                  ? conversation.searchPreview || conversationMeta
-                  : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
+            category === "apps"
+              ? t("chat.composer.appsHint")
+              : category === "files"
+                ? t("chat.composer.filesAndFoldersHint")
+                : category === "conversations"
+                  ? t("chat.composer.conversationsHint")
+                  : conversation
+                    ? conversation.searchPreview || conversationMeta
+                    : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
           const RowIcon =
-            category === "files"
-              ? Paperclip
-              : category === "conversations" || conversation
-                ? MessageSquareText
-                : Icon;
-          // 文件分组标题插在第一条文件行之前，仅当上方有应用行时——只剩
-          // 文件时顶栏已直接写「文件」，再插一行就是重复标签。
-          const fileSectionHeader =
-            entry && i === firstFileIndex && hasAppRows ? (
-              <div className="mt-1.5 shrink-0 border-t border-border/50 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                {t("chat.composer.mentionGroupFiles")}
-              </div>
-            ) : null;
-          const appSectionHeader =
-            isApp && i === 0 ? (
-              <div className="shrink-0 px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                {t("chat.composer.mentionGroupApps")}
-              </div>
-            ) : null;
-          const row = (
+            category === "apps"
+              ? AppWindow
+              : category === "files"
+                ? Paperclip
+                : category === "conversations" || conversation
+                  ? MessageSquareText
+                  : Icon;
+          return (
             <button
               type="button"
               role="option"
@@ -290,20 +282,6 @@ export function Popup({
                 )
               )}
             </button>
-          );
-          if (!fileSectionHeader && !appSectionHeader) return row;
-          return (
-            <Fragment
-              key={
-                app
-                  ? `app-section:${app.bundleId || app.path || app.name}`
-                  : `file-section:${entry?.kind}:${entry?.path}`
-              }
-            >
-              {appSectionHeader}
-              {fileSectionHeader}
-              {row}
-            </Fragment>
           );
         })}
         {showEmpty && !isLoading && !error && suggestions.length === 0 && (

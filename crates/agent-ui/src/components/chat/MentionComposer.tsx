@@ -89,7 +89,6 @@ import {
   isImeKeyboardEvent,
   isLargePasteText,
   LARGE_PASTE_TAG_ATTR,
-  MAX_APP_SUGGESTIONS,
   MAX_CONVERSATION_MENTIONS,
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
@@ -537,33 +536,40 @@ export const MentionComposer = memo(
       }
 
       if (mentionMenuMode === "root") {
-        // 根级菜单同时保留 main 的应用快捷项与会话引用分支的两层入口。
-        // 应用仍然位于最前，文件索引只在用户进入 files 子菜单后启动。
-        const next: MentionSuggestion[] = [];
-        const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
-        let appCount = 0;
-        for (const app of orderedApps) {
-          const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
-          if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) continue;
-          next.push({ type: "app", app });
-          appCount += 1;
-          if (appCount >= MAX_APP_SUGGESTIONS) break;
-        }
+        // 根级只展示引用类别，候选实体全部收进各自的二级菜单。
         const categories: MentionSuggestion[] = [
+          ...(mentionApps.length > 0
+            ? ([{ type: "category", category: "apps" }] satisfies MentionSuggestion[])
+            : []),
           { type: "category", category: "files" },
           ...(conversationMentionsEnabled
             ? ([{ type: "category", category: "conversations" }] satisfies MentionSuggestion[])
             : []),
         ];
+        const next: MentionSuggestion[] = [];
         for (const suggestion of categories) {
           if (suggestion.type !== "category") continue;
           const haystack =
-            suggestion.category === "files"
-              ? `${t("chat.composer.filesAndFolders")} ${t("chat.composer.filesAndFoldersHint")}`
-              : `${t("chat.composer.conversations")} ${t("chat.composer.conversationsHint")}`;
+            suggestion.category === "apps"
+              ? `${t("chat.composer.mentionGroupApps")} ${t("chat.composer.appsHint")}`
+              : suggestion.category === "files"
+                ? `${t("chat.composer.filesAndFolders")} ${t("chat.composer.filesAndFoldersHint")}`
+                : `${t("chat.composer.conversations")} ${t("chat.composer.conversationsHint")}`;
           if (!normalizedMentionQuery || haystack.toLowerCase().includes(normalizedMentionQuery)) {
             next.push(suggestion);
           }
+        }
+        return next;
+      }
+
+      if (mentionMenuMode === "apps") {
+        const next: MentionSuggestion[] = [];
+        const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
+        for (const app of orderedApps) {
+          const haystack = `${app.name}\n${app.bundleId ?? ""}\n${app.path}`.toLowerCase();
+          if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) continue;
+          next.push({ type: "app", app });
+          if (next.length >= MAX_SUGGESTIONS) break;
         }
         return next;
       }
@@ -595,7 +601,7 @@ export const MentionComposer = memo(
         return next;
       }
 
-      // files 子菜单只承载工作区文件与文件夹；应用已经位于根级菜单前部。
+      // files 子菜单只承载工作区文件与文件夹。
       const next: MentionSuggestion[] = [];
       let fileCount = 0;
       for (const item of mentionSessionSearchIndex) {
@@ -645,13 +651,15 @@ export const MentionComposer = memo(
     const popupEmptyLabel =
       mentionCtx?.trigger === "skill"
         ? t("chat.composer.noMatchingEnabledSkills")
-        : mentionMenuMode === "conversations"
-          ? conversationMentionLimitReached
-            ? t("chat.composer.conversationLimitReached")
-            : t("chat.composer.noMatchingConversations")
-          : mentionMenuMode === "root"
-            ? t("chat.composer.noMatchingReferenceTypes")
-            : t("chat.composer.noMatchingFiles");
+        : mentionMenuMode === "apps"
+          ? t("chat.composer.noMatchingApps")
+          : mentionMenuMode === "conversations"
+            ? conversationMentionLimitReached
+              ? t("chat.composer.conversationLimitReached")
+              : t("chat.composer.noMatchingConversations")
+            : mentionMenuMode === "root"
+              ? t("chat.composer.noMatchingReferenceTypes")
+              : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
