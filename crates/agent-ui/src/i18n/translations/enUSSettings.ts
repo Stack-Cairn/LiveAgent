@@ -668,11 +668,16 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Model used to generate commit messages in Git review. Follows the current chat model when unselected or unavailable.",
   "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
   "settings.composerContextDisplay": "Context usage display",
-  "settings.composerContextDisplayDesc":
-    "Stats bar shows only the conversation stats bar below the card (context usage readout included); Both shows the stats bar plus the always-visible usage ring at the composer's lower right; Usage ring shows only the ring. All three keep the manual compaction entry at ≥50% usage.",
+  "settings.composerContextDisplayHint":
+    "Choose how the composer shows context usage. Every mode keeps the manual compaction entry at ≥50% usage.",
   "settings.composerContextDisplayStatsBar": "Stats bar",
   "settings.composerContextDisplayBoth": "Both",
   "settings.composerContextDisplayRing": "Usage ring",
+  "settings.composerContextDisplayStatsBarDesc": "Only the conversation stats bar below the card.",
+  "settings.composerContextDisplayBothDesc":
+    "The stats bar plus the usage ring at the composer's lower right.",
+  "settings.composerContextDisplayRingDesc":
+    "Only the always-visible usage ring at the composer's lower right.",
   "settings.failoverTitle": "Auto Failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, retry it on the next {vendor} provider in the queue with the same model, staying on the provider that succeeds. Never crosses vendors.",

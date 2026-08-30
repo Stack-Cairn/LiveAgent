@@ -21,6 +21,7 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
+  Activity,
   ChevronDown,
   Pencil,
   Plus,
@@ -33,7 +34,6 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import { SegmentedSlider } from "@liveagent/ui/components/ui/segmented-slider";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
@@ -392,6 +392,12 @@ function CustomSettingsDrawer(
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
+  const contextDisplayModeDesc = {
+    statsBar: t("settings.composerContextDisplayStatsBarDesc"),
+    both: t("settings.composerContextDisplayBothDesc"),
+    ring: t("settings.composerContextDisplayRingDesc"),
+  } as const;
 
   function handleModelSettingChange(
     key: "conversationTitleModel" | "commitMessageModel",
@@ -465,14 +471,18 @@ function CustomSettingsDrawer(
               </div>
             </section>
             {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
-                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。 */}
+                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。
+                通用说明收进分区头的提示气泡，滑块下方只保留当前档位的一行动态描述。 */}
             <section className="py-5">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-[12.5px] font-medium text-foreground/85">
-                  {t("settings.composerContextDisplay")}
-                </Label>
+              <DrawerSectionHeader
+                icon={<Activity className="h-3.5 w-3.5" />}
+                title={t("settings.composerContextDisplay")}
+                hint={t("settings.composerContextDisplayHint")}
+              />
+              <div className="mt-3.5 space-y-2">
                 <SegmentedSlider
                   aria-label={t("settings.composerContextDisplay")}
+                  className="w-full"
                   value={settings.customSettings.composerContextDisplay}
                   options={[
                     { value: "statsBar", label: t("settings.composerContextDisplayStatsBar") },
@@ -485,10 +495,10 @@ function CustomSettingsDrawer(
                     )
                   }
                 />
+                <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                  {contextDisplayModeDesc[settings.customSettings.composerContextDisplay]}
+                </p>
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground/80">
-                {t("settings.composerContextDisplayDesc")}
-              </p>
             </section>
             <FailoverSettingsCard
               settings={settings}
