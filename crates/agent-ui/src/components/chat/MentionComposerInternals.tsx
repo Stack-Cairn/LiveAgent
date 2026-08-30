@@ -1725,34 +1725,94 @@ export function createComposerSegmentNode(
   return createCodeMentionChip(segment.reference);
 }
 
-/** 粘贴路径与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限、自引用）。
- *  违反约束的会话段不能静默丢弃——降级为序列化 token 文本，粘贴内容一字
- *  不丢，同时该文本不再具备结构化引用身份（发送侧只授权结构化 chip）。 */
+export type SanitizeConversationMentionOptions = {
+  currentConversationId?: string;
+  /**
+   * 文本模式等关闭会话引用时，所有会话段都降级为 token 文本。
+   * 缺省视为开启，与 MentionComposer 的默认 prop 一致。
+   */
+  conversationMentionsEnabled?: boolean;
+  /**
+   * setDraft 会先清空编辑器再重建，此时不应把即将被替换的旧 chip 计入配额。
+   * 缺省 true：粘贴路径要叠加编辑器里已有的 chip。
+   */
+  includeExistingChips?: boolean;
+};
+
+export function collectConversationMentionIds(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]
+    .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+    .filter((id): id is string => Boolean(id));
+}
+
+function conversationMentionConstraintState(options: SanitizeConversationMentionOptions = {}) {
+  return {
+    enabled: options.conversationMentionsEnabled !== false,
+    currentId: options.currentConversationId?.trim() ?? "",
+    selectedIds: new Set<string>(),
+  };
+}
+
+function conversationMentionIsRejected(
+  id: string,
+  state: { enabled: boolean; currentId: string; selectedIds: Set<string> },
+) {
+  return (
+    !state.enabled ||
+    !id ||
+    (state.currentId !== "" && id === state.currentId) ||
+    state.selectedIds.has(id) ||
+    state.selectedIds.size >= MAX_CONVERSATION_MENTIONS
+  );
+}
+
+/** 粘贴 / setDraft 与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限、自引用、
+ *  以及会话引用开关）。违反约束的会话段不能静默丢弃——降级为序列化 token
+ *  文本，内容一字不丢，同时不再具备结构化引用身份。 */
 export function sanitizeConversationMentionSegments(
   root: HTMLElement,
   segments: MentionComposerDraftSegment[],
-  currentConversationId?: string,
+  options: SanitizeConversationMentionOptions = {},
 ): MentionComposerDraftSegment[] {
-  const selectedIds = new Set(
-    [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]
-      .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
-      .filter((id): id is string => Boolean(id)),
-  );
-  const currentId = currentConversationId?.trim() ?? "";
+  const state = conversationMentionConstraintState(options);
+  if (options.includeExistingChips !== false) {
+    for (const id of collectConversationMentionIds(root)) state.selectedIds.add(id);
+  }
   return segments.map((segment) => {
     if (segment.type !== "conversationMention") return segment;
     const id = segment.conversation.id.trim();
-    const rejected =
-      !id ||
-      (currentId !== "" && id === currentId) ||
-      selectedIds.has(id) ||
-      selectedIds.size >= MAX_CONVERSATION_MENTIONS;
-    if (!rejected) {
-      selectedIds.add(id);
-      return segment;
+    if (conversationMentionIsRejected(id, state)) {
+      return { type: "text", text: formatConversationMentionToken(segment.conversation) };
     }
-    return { type: "text", text: formatConversationMentionToken(segment.conversation) };
+    state.selectedIds.add(id);
+    return segment;
   });
+}
+
+function downgradeConversationMentionChip(chip: HTMLElement) {
+  const conversation = conversationMentionFromElement(chip);
+  const text = conversation
+    ? formatConversationMentionToken(conversation)
+    : chip.getAttribute(CONVERSATION_MENTION_TITLE_ATTR)?.trim() || chip.textContent?.trim() || "";
+  chip.replaceWith(document.createTextNode(text));
+}
+
+/** execCommand("paste") 等原生插入不会经过 segment 管道；事后按同一套约束
+ *  把违规 chip 降级为 token 文本。 */
+export function enforceConversationMentionConstraintsInEditor(
+  root: HTMLElement,
+  options: SanitizeConversationMentionOptions = {},
+) {
+  const state = conversationMentionConstraintState(options);
+  for (const chip of [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]) {
+    const conversation = conversationMentionFromElement(chip);
+    const id = conversation?.id.trim() ?? "";
+    if (conversationMentionIsRejected(id, state) || !conversation) {
+      downgradeConversationMentionChip(chip);
+      continue;
+    }
+    state.selectedIds.add(id);
+  }
 }
 
 export function insertComposerSegmentsAtSelection(

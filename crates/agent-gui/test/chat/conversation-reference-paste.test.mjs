@@ -10,6 +10,8 @@ const internals = env.loadModule("@liveagent/ui/components/chat/MentionComposerI
 const {
   CONVERSATION_MENTION_ID_ATTR,
   MAX_CONVERSATION_MENTIONS,
+  createConversationMentionChip,
+  enforceConversationMentionConstraintsInEditor,
   parseSerializedComposerText,
   sanitizeConversationMentionSegments,
 } = internals;
@@ -72,11 +74,9 @@ test("pasted self-reference collapses to text when the current conversation id i
   const selfReference = conversationSegment("conv-self");
   const other = conversationSegment("conv-other");
 
-  const withId = sanitizeConversationMentionSegments(
-    editor,
-    [selfReference, other],
-    " conv-self ",
-  );
+  const withId = sanitizeConversationMentionSegments(editor, [selfReference, other], {
+    currentConversationId: " conv-self ",
+  });
   assert.deepEqual(withId, [downgradedText(selfReference), other]);
 
   // 宿主未提供当前会话 ID 时保持宽松（发送边界仍会归一化过滤）。
@@ -113,4 +113,58 @@ test("a pasted token flood ends up with at most the cap as structured chips", ()
   );
   // 重复的 conv-1 与超限的 conv-4 都降级为文本，粘贴内容一字不丢。
   assert.equal(downgraded.length, 2);
+});
+
+test("disabled conversation mentions collapse every chip to text", () => {
+  const editor = editorWithChips(["conv-existing"]);
+  const first = conversationSegment("conv-new");
+  const second = conversationSegment("conv-other");
+
+  const result = sanitizeConversationMentionSegments(editor, [first, second], {
+    conversationMentionsEnabled: false,
+  });
+
+  assert.deepEqual(result, [downgradedText(first), downgradedText(second)]);
+});
+
+test("setDraft rebuild ignores leftover editor chips when counting the cap", () => {
+  const editor = editorWithChips(["stale-a", "stale-b", "stale-c"]);
+  const incoming = ["conv-1", "conv-2", "conv-3", "conv-4"].map((id) => conversationSegment(id));
+
+  const result = sanitizeConversationMentionSegments(editor, incoming, {
+    includeExistingChips: false,
+  });
+
+  assert.deepEqual(
+    result.filter((segment) => segment.type === "conversationMention"),
+    incoming.slice(0, 3),
+  );
+  assert.deepEqual(result[3], downgradedText(incoming[3]));
+});
+
+test("native paste post-pass downgrades duplicate, over-cap, self, and disabled chips", () => {
+  const editor = document.createElement("div");
+  for (const id of ["conv-a", "conv-a", "conv-b", "conv-c", "conv-d", "conv-self"]) {
+    const chip = createConversationMentionChip({ id, title: `Conversation ${id}` });
+    assert.ok(chip, `chip for ${id}`);
+    editor.appendChild(chip);
+  }
+
+  enforceConversationMentionConstraintsInEditor(editor, { currentConversationId: "conv-self" });
+
+  const kept = [...editor.querySelectorAll(`[${CONVERSATION_MENTION_ID_ATTR}]`)].map((chip) =>
+    chip.getAttribute(CONVERSATION_MENTION_ID_ATTR),
+  );
+  assert.deepEqual(kept, ["conv-a", "conv-b", "conv-c"]);
+  assert.match(editor.textContent ?? "", /conversation: Conversation conv-a/);
+  assert.match(editor.textContent ?? "", /conversation: Conversation conv-d/);
+  assert.match(editor.textContent ?? "", /conversation: Conversation conv-self/);
+
+  const disabledEditor = document.createElement("div");
+  disabledEditor.appendChild(createConversationMentionChip({ id: "conv-x", title: "X" }));
+  enforceConversationMentionConstraintsInEditor(disabledEditor, {
+    conversationMentionsEnabled: false,
+  });
+  assert.equal(disabledEditor.querySelectorAll(`[${CONVERSATION_MENTION_ID_ATTR}]`).length, 0);
+  assert.match(disabledEditor.textContent ?? "", /conversation: X/);
 });

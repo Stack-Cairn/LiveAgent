@@ -70,6 +70,7 @@ import {
   editorSelectionRange,
   editorTextIsEmpty,
   ejectCaretFromChip,
+  enforceConversationMentionConstraintsInEditor,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
   formatCommitMentionToken,
@@ -979,7 +980,12 @@ export const MentionComposer = memo(
           closeCommitTooltip();
           closeComposerContextMenu();
 
-          for (const segment of draft.segments) {
+          const sanitizedSegments = sanitizeConversationMentionSegments(el, draft.segments, {
+            currentConversationId,
+            conversationMentionsEnabled,
+            includeExistingChips: false,
+          });
+          for (const segment of sanitizedSegments) {
             if (segment.type === "largePaste") {
               largePastesRef.current.set(segment.paste.id, segment.paste);
               el.appendChild(createLargePasteChip(segment.paste));
@@ -1267,6 +1273,8 @@ export const MentionComposer = memo(
         placeCaretAtEditorEnd,
         refreshEmptyState,
         resetPromptHistoryRecall,
+        conversationMentionsEnabled,
+        currentConversationId,
         disabled,
         isTypewriting,
       ],
@@ -1428,6 +1436,10 @@ export const MentionComposer = memo(
 
       if (text === null) {
         document.execCommand("paste");
+        enforceConversationMentionConstraintsInEditor(el, {
+          currentConversationId,
+          conversationMentionsEnabled,
+        });
         closeMentionSession();
         refreshEmptyState();
         refreshMention();
@@ -1452,7 +1464,10 @@ export const MentionComposer = memo(
         serializedSegments &&
         insertComposerSegmentsAtSelection(
           el,
-          sanitizeConversationMentionSegments(el, serializedSegments, currentConversationId),
+          sanitizeConversationMentionSegments(el, serializedSegments, {
+            currentConversationId,
+            conversationMentionsEnabled,
+          }),
           largePastesRef.current,
         )
       ) {
@@ -1472,6 +1487,7 @@ export const MentionComposer = memo(
       closeComposerContextMenu,
       closeMentionSession,
       disabled,
+      conversationMentionsEnabled,
       currentConversationId,
       enabledSkills,
       insertLargePaste,
@@ -1999,7 +2015,10 @@ export const MentionComposer = memo(
           if (editor) {
             insertComposerSegmentsAtSelection(
               editor,
-              sanitizeConversationMentionSegments(editor, restoredSegments, currentConversationId),
+              sanitizeConversationMentionSegments(editor, restoredSegments, {
+                currentConversationId,
+                conversationMentionsEnabled,
+              }),
               largePastesRef.current,
             );
           }
@@ -2027,7 +2046,10 @@ export const MentionComposer = memo(
           editor &&
           insertComposerSegmentsAtSelection(
             editor,
-            sanitizeConversationMentionSegments(editor, serializedSegments, currentConversationId),
+            sanitizeConversationMentionSegments(editor, serializedSegments, {
+              currentConversationId,
+              conversationMentionsEnabled,
+            }),
             largePastesRef.current,
           )
         ) {
@@ -2043,6 +2065,7 @@ export const MentionComposer = memo(
       [
         disabled,
         closeMentionSession,
+        conversationMentionsEnabled,
         createLargePaste,
         currentConversationId,
         enabledSkills,
