@@ -165,3 +165,30 @@ test("syncCurrentConversation is a no-op while a terminal pane is focused", () =
   assert.equal(after.panes[opened.paneId].surface.kind, "localTerminal");
   harness.cleanup();
 });
+
+test("an explicit null persistence storage never falls back to localStorage", () => {
+  const previousLocalStorage = globalThis.localStorage;
+  let reads = 0;
+  let writes = 0;
+  globalThis.localStorage = {
+    getItem() {
+      reads += 1;
+      return null;
+    },
+    setItem() {
+      writes += 1;
+    },
+    removeItem() {},
+  };
+  try {
+    const harness = createHookHarness();
+    const { useWindowWorkbench } = loadHook(harness);
+    renderWorkbench(harness, useWindowWorkbench, { persistence: { storage: null } });
+    assert.equal(reads, 0);
+    assert.equal(writes, 0);
+    harness.cleanup();
+  } finally {
+    if (previousLocalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousLocalStorage;
+  }
+});

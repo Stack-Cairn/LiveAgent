@@ -119,7 +119,11 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
   assert.match(composerSource, /aria-label=\{addMenuTooltip\}/);
   assert.match(composerSource, /disabled=\{composerAddMenuDisabled\}/);
   assert.match(composerSource, /onSelect=\{onPickReadableFiles\}\s+disabled=\{uploadDisabled\}/);
-  assert.match(composerSource, /chat\.upload\.filesAndFolders/);
+  assert.match(composerSource, /onSelect=\{onPickWorkspaceFolder\}\s+disabled=\{uploadDisabled\}/);
+  assert.match(composerSource, /chat\.upload\.files/);
+  assert.match(composerSource, /chat\.upload\.folder/);
+  assert.match(composerSource, /<FolderOpen/);
+  assert.doesNotMatch(composerSource, /chat\.upload\.filesAndFolders/);
   assert.match(composerSource, /<CommandSafetyModeSelector/);
   assert.ok(
     composerSource.indexOf("aria-label={addMenuTooltip}") <

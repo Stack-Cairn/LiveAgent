@@ -1,6 +1,8 @@
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { type MutableRefObject, useCallback, useRef } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
+import { createTextComposerDraft } from "../composer/composerDraftText";
 import type { SendChatAction } from "../gateway/gatewayBridgeTypes";
 
 type UseEditResendParams = {
@@ -24,7 +26,12 @@ export function useEditResend(params: UseEditResendParams) {
   const editResendInFlightRef = useRef(false);
 
   const handleResendFromEdit = useCallback(
-    async (messageRef: HistoryMessageRef, text: string, uploadedFiles: PendingUploadedFile[]) => {
+    async (
+      messageRef: HistoryMessageRef,
+      text: string,
+      uploadedFiles: PendingUploadedFile[],
+      referencedConversations: ConversationMentionReference[],
+    ) => {
       if (
         editResendInFlightRef.current ||
         isSending ||
@@ -42,6 +49,7 @@ export function useEditResend(params: UseEditResendParams) {
       try {
         const accepted = await sendActionRef.current({
           textOverride: normalized,
+          composerDraftOverride: createTextComposerDraft(normalized, referencedConversations),
           uploadedFilesOverride: uploadedFiles,
           conversationIdOverride: conversationId,
           editResendBaseMessageRef: messageRef,

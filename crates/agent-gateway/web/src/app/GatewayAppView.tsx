@@ -77,6 +77,7 @@ import {
 } from "@/lib/trajectory/liveTrajectory";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { AgentSelector } from "./AgentSelector";
+import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
 import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
@@ -143,10 +144,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     fileDropLimitHint,
     fileDropTitle,
     fileInputRef,
+    folderInputRef,
     gatewayConnectionLost,
     getCachedComposerDraft,
     getDisplayedConversationId,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     gitClient,
     gitDisabledMessage,
     gitReviewFocusRequest,
@@ -173,6 +176,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleFloorJump,
     handleGitReviewFocusRequestHandled,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleInsertCodeMention,
     handleLoadEarlierHistory,
     handleLoadSharedHistoryStatus,
@@ -239,12 +243,16 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     isImportingPastedTextRef,
     isSuggestionTyping,
     isUploadingFiles,
+    uploadingConversationId,
     loadComposerHistoryPrompts,
     loadingOlderHistory,
     localeContextValue,
     manualCompactPending,
     manualCompactTransientConversations,
+    mentionableConversations,
+    searchMentionableConversations,
     materializeComposerDraftForSend,
+    mentionApps,
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
@@ -357,6 +365,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
+    workspaceRootRevision,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
@@ -479,7 +488,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const handlePrimaryComposerSend = useCallback(() => {
     const sendConversationId = getDisplayedConversationId();
     if (primarySendInFlightConversationRef.current === sendConversationId) return;
-    if (isUploadingFiles || isImportingPastedTextRef.current) return;
+    // 上传在途只封锁归属会话:背景 Pane 的导入不应吞掉主 Pane 的发送。
+    // 归属未知(null)时保守封锁,与旧全局互斥语义一致。
+    const uploadBlocksSend =
+      isUploadingFiles &&
+      (!uploadingConversationId || uploadingConversationId === sendConversationId);
+    if (uploadBlocksSend || isImportingPastedTextRef.current) return;
     if (composerInputDisabled) return;
     if (queuedChatEditSessionRef.current) {
       primarySendInFlightConversationRef.current = sendConversationId;
@@ -516,16 +530,19 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         const draft = composerRef.current?.getDraft() ?? null;
         let text: string;
         let files: PendingUploadedFile[];
+        let referencedConversations = draft?.conversationMentions ?? [];
         try {
           const materialized = draft
             ? await materializeComposerDraftForSend(
                 draft,
                 pendingUploadedFiles,
                 displayedConversationWorkdir,
+                sendConversationId,
               )
-            : { text: "", uploadedFiles: pendingUploadedFiles };
+            : { text: "", uploadedFiles: pendingUploadedFiles, referencedConversations: [] };
           text = materialized.text;
           files = materialized.uploadedFiles;
+          referencedConversations = materialized.referencedConversations;
         } catch (error) {
           addNotify("error", asErrorMessage(error, "大段粘贴内容导入失败"));
           return;
@@ -538,6 +555,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         void sendChat(text, {
           conversationId: sendConversationId,
           uploadedFiles: files,
+          referencedConversations,
           runtimeControls: chatRuntimeControlsForCurrentProvider,
         }).catch(() => {
           updatePendingUploadsForConversation(sendConversationId, (current) =>
@@ -561,6 +579,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     getDisplayedConversationId,
     isImportingPastedTextRef,
     isUploadingFiles,
+    uploadingConversationId,
     materializeComposerDraftForSend,
     pendingUploadedFiles,
     queuedChatEditSessionRef,
@@ -596,9 +615,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     showUsage: isAgentDevExecutionMode,
     isInputDisabled: composerInputDisabled,
     transportInputDisabled: !status?.online || Boolean(chatProtocolIncompatibleMessage),
+    uploadingConversationId,
     inputPlaceholder: composerPlaceholder,
     modelOptions,
     enabledSkills: enabledComposerSkills,
+    mentionableConversations,
+    searchMentionableConversations,
+    mentionApps,
+    contextDisplayMode: settings.customSettings.composerContextDisplay,
     commandSafetyMode: settings.system.commandSafetyMode,
     onCommandSafetyModeChange: (mode) =>
       setSettings((prev) =>
@@ -631,6 +655,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     cancelChat,
     materializeComposerDraftForSend,
     getPendingUploads: getPendingUploadsForConversation,
+    subscribePendingUploads,
     updatePendingUploads: updatePendingUploadsForConversation,
     importFilesForConversation,
     getCachedComposerDraft,
@@ -687,10 +712,20 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     [handleFileDragLeave],
   );
+  const handleChatFileDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      lastFileDropHoverPaneRef.current = null;
+      handleFileDrop(event);
+    },
+    [handleFileDrop],
+  );
 
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
-    isUploadingFiles,
+    // 上传态只归属目标会话:背景 Pane 的导入不在主 Pane 显示"上传中"。
+    isUploadingFiles:
+      isUploadingFiles &&
+      (!uploadingConversationId || uploadingConversationId === displayedConversationId),
     isInputDisabled: composerInputDisabled,
     onSend: handlePrimaryComposerSend,
     onStop: handlePrimaryComposerStop,
@@ -707,6 +742,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     onComposerBusyChange: handleComposerBusyChange,
     onPickReadableFiles: () => fileInputRef.current?.click(),
+    onPickWorkspaceFolder: () => folderInputRef.current?.click(),
     onPasteFiles: handleImportReadableFiles,
     loadHistoryPrompts: loadComposerHistoryPrompts,
     pendingUploadedFiles,
@@ -728,6 +764,18 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         key={displayedConversationId}
         snapshot={taskProgressSnapshot}
         isConversationRunning={transcriptBusy}
+      />
+    ),
+    statsBar: (
+      <ConversationStatsBarHost
+        key={`stats-${displayedConversationId}`}
+        conversationId={displayedConversationId}
+        host={trajectoryHost}
+        enabled={renderedConversationView !== "trajectory"}
+        contextUsageTokensSource={contextUsageTokensSource}
+        contextWindow={currentModelContextWindow}
+        onManualCompactConfirm={handleManualCompact}
+        manualCompactBlocked={manualCompactPending || composerCompactionBlocked}
       />
     ),
     fileDropOverlay: isFileDropActive ? (
@@ -1037,6 +1085,20 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               event.currentTarget.value = "";
             }}
           />
+          <input
+            ref={(element) => {
+              folderInputRef.current = element;
+              element?.setAttribute("webkitdirectory", "");
+            }}
+            type="file"
+            multiple
+            aria-label={translate("chat.upload.selectFolder", settings.locale)}
+            className="gateway-hidden-file-input"
+            onChange={(event) => {
+              handleImportSelectedDirectoryFiles(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
           {workbenchDragGhost}
 
           <div className="gateway-editor-host">
@@ -1232,7 +1294,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     onDragEnter: handleChatFileDragEnter,
                     onDragOver: handleChatFileDragOver,
                     onDragLeave: handleChatFileDragLeave,
-                    onDrop: handleFileDrop,
+                    onDrop: handleChatFileDrop,
                   },
                   content: (
                     <>
@@ -1404,6 +1466,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             inputPlaceholder={composerPlaceholder}
                             workdir={displayedConversationWorkdir}
                             enabledSkills={enabledComposerSkills}
+                            mentionableConversations={mentionableConversations}
+                            searchMentionableConversations={searchMentionableConversations}
+                            mentionApps={mentionApps}
                             executionMode={settings.system.executionMode}
                             hasModels={modelOptions.length > 0}
                             currentModelLabel={currentModelLabel}
@@ -1422,6 +1487,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
                             contextUsageTokensSource={contextUsageTokensSource}
                             contextWindow={currentModelContextWindow}
+                            contextDisplayMode={settings.customSettings.composerContextDisplay}
                             onManualCompactConfirm={handleManualCompact}
                             manualCompactBlocked={manualCompactPending || composerCompactionBlocked}
                             gitClient={gitClient}
@@ -1478,16 +1544,23 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   const sendConversationId = getDisplayedConversationId();
                                   let text: string;
                                   let files: PendingUploadedFile[];
+                                  let referencedConversations = draft?.conversationMentions ?? [];
                                   try {
                                     const materialized = draft
                                       ? await materializeComposerDraftForSend(
                                           draft,
                                           pendingUploadedFiles,
                                           displayedConversationWorkdir,
+                                          sendConversationId,
                                         )
-                                      : { text: "", uploadedFiles: pendingUploadedFiles };
+                                      : {
+                                          text: "",
+                                          uploadedFiles: pendingUploadedFiles,
+                                          referencedConversations: [],
+                                        };
                                     text = materialized.text;
                                     files = materialized.uploadedFiles;
+                                    referencedConversations = materialized.referencedConversations;
                                   } catch (error) {
                                     addNotify(
                                       "error",
@@ -1506,6 +1579,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   void sendChat(text, {
                                     conversationId: sendConversationId,
                                     uploadedFiles: files,
+                                    referencedConversations,
                                     runtimeControls: chatRuntimeControlsForCurrentProvider,
                                   }).catch(() => {
                                     updatePendingUploadsForConversation(
@@ -1541,6 +1615,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             onComposerBusyChange={handleComposerBusyChange}
                             onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                             onPickReadableFiles={() => fileInputRef.current?.click()}
+                            onPickWorkspaceFolder={() => folderInputRef.current?.click()}
                             onPasteFiles={handleImportReadableFiles}
                             onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
                             loadHistoryPrompts={loadComposerHistoryPrompts}
@@ -1565,6 +1640,23 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               />
                             }
                             approvalBar={approvalBar}
+                            statsBar={
+                              <ConversationStatsBarHost
+                                // 前缀防与同级 taskProgressBar 的 key（裸会话 id）碰撞：React 对
+                                // 同键兄弟的 keyed diff 会让旧 fiber 逃过删除，DOM 残留逐次累积。
+                                key={`stats-${displayedConversationId}`}
+                                conversationId={displayedConversationId}
+                                host={trajectoryHost}
+                                // 轨迹视图下输入区隐藏，状态栏无需拉取。
+                                enabled={renderedConversationView !== "trajectory"}
+                                contextUsageTokensSource={contextUsageTokensSource}
+                                contextWindow={currentModelContextWindow}
+                                onManualCompactConfirm={handleManualCompact}
+                                manualCompactBlocked={
+                                  manualCompactPending || composerCompactionBlocked
+                                }
+                              />
+                            }
                             fileDropOverlay={
                               isFileDropActive ? (
                                 <FileDropOverlay
@@ -1634,6 +1726,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               fontScale={settings.customSettings.fontScale.rightDock}
               projectPathKey={terminalProjectPathKey}
               cwd={terminalProjectPath}
+              workspaceProject={activeWorkspaceProject}
+              workspaceProjectRootClient={workspaceProjectRootClient}
+              workspaceRootRevision={workspaceRootRevision}
               sessions={terminalSessions}
               sessionsLoaded={terminalSessionsLoaded}
               leasedSessionIds={workbenchLeasedDockSessionIds}

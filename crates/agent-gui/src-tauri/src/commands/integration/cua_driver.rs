@@ -8,6 +8,7 @@
 
 use tauri::AppHandle;
 
+use crate::services::cua_driver::installed_apps::InstalledApp;
 use crate::services::cua_driver::{
     self, CuaDriverPermissions, CuaDriverProbe, InstallCommandPreview, SelfIdentity, SelfWindowRect,
 };
@@ -83,4 +84,19 @@ pub fn cua_driver_self_windows(app: AppHandle) -> Vec<SelfWindowRect> {
 #[tauri::command(rename_all = "camelCase")]
 pub fn cua_driver_frontmost_pid() -> Result<u32, String> {
     cua_driver::frontmost_pid()
+}
+
+/// 枚举已安装应用，供输入框 @ 提及作 computer use 的操作目标。
+///
+/// 宿主自己（按 tauri identifier）恒被剔除——`cuaSelfGuard` 会拒绝一切
+/// 以宿主为目标的操作，把它留在候选里只会让用户选中一个必然失败的项。
+/// 只读；扫目录 + 逐个读 plist 有 IO 量，走 spawn_blocking。
+#[tauri::command(rename_all = "camelCase")]
+pub async fn cua_driver_list_installed_apps(app: AppHandle) -> Result<Vec<InstalledApp>, String> {
+    let host_identifier = app.config().identifier.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        cua_driver::installed_apps::list_installed_apps(&host_identifier)
+    })
+    .await
+    .map_err(|error| format!("cua_driver_list_installed_apps join failed: {error}"))
 }

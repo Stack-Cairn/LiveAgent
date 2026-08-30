@@ -66,6 +66,7 @@ message GatewayEnvelope {
     ImportDirectoryRequest import_directory = 97;
     CheckpointRequest checkpoint = 98;
     TrajectoryFetchRequest trajectory_fetch = 99;
+    InstalledAppsListRequest installed_apps_list = 100;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -145,6 +146,7 @@ message AgentEnvelope {
     ImportDirectoryResponse import_directory_resp = 102;
     CheckpointResponse checkpoint_resp = 103;
     TrajectoryFetchResponse trajectory_fetch_resp = 104;
+    InstalledAppsListResponse installed_apps_list_resp = 105;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -685,6 +687,10 @@ message ChatRequest {
   // 命令安全模式(ask/auto/sandbox/sandboxOffline)。远端 WebUI 直带,桌面端据此
   // 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
   string command_safety_mode = 11;
+  // Structured conversation references selected through the WebUI @ menu.
+  // The desktop runtime binds ReadConversation authorization to this list;
+  // a markdown conversation token is display-only and cannot grant access.
+  repeated ChatConversationReference referenced_conversations = 12;
 }
 
 message ChatMessageRef {
@@ -1092,6 +1098,24 @@ message FileMentionListResponse {
   bool truncated = 2;
 }
 
+// 桌面宿主的已安装应用（computer use 操作目标），供 WebUI 的 @ 弹层展示
+// 应用分组。Gateway 只直通转发，不自己枚举；字段对齐桌面 InstalledApp
+// 的序列化契约（services/cua_driver/installed_apps.rs）。
+message InstalledAppsListRequest {}
+
+message InstalledAppEntry {
+  string name = 1;
+  // macOS bundle id；Windows 等无 bundle id 的平台留空，身份以 path 兜底。
+  string bundle_id = 2;
+  string path = 3;
+  // `data:image/png;base64,…` 应用图标；取不到时留空。
+  string icon_data_url = 4;
+}
+
+message InstalledAppsListResponse {
+  repeated InstalledAppEntry apps = 1;
+}
+
 message FsRoot {
   string id = 1;
   string path = 2;
@@ -1458,4 +1482,11 @@ message CheckpointRequest {
 message CheckpointResponse {
   string action = 1;
   string result_json = 2;
+}
+
+message ChatConversationReference {
+  string id = 1;
+  string title = 2;
+  string cwd = 3;
+  int64 updated_at = 4;
 }

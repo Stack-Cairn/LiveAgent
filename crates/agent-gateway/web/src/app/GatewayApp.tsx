@@ -6,6 +6,8 @@ import type {
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import {
   type ConversationOpenState,
@@ -67,8 +69,13 @@ import {
   createOpenConversationInitial,
   createRefreshDisplayedConversationHistorySnapshot,
 } from "./gatewayHistoryWindowActions";
-import { createLocalDraftConversationId, isLocalDraftConversationId } from "./gatewayLocalDraft";
+import {
+  createGatewayHomeConversationState,
+  createLocalDraftConversationId,
+  isLocalDraftConversationId,
+} from "./gatewayLocalDraft";
 import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
+import { resolveConversationUploadWorkdir } from "./hooks/uploadWorkdirRouting";
 import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
 import { useGatewayChatConfiguration } from "./hooks/useGatewayChatConfiguration";
 import { useGatewayChatPresentation } from "./hooks/useGatewayChatPresentation";
@@ -90,6 +97,7 @@ import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useStableCallback } from "./hooks/useStableCallback";
 import type { SendChatFn } from "./types";
+import { shouldRestorePageComposerDraft } from "./workbench/pageComposerDraftRestore";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
 import { useGatewayWorkbench } from "./workbench/useGatewayWorkbench";
 
@@ -117,7 +125,11 @@ function useGatewayAppController() {
   // A cached Agent status is usable only after it has been observed on the
   // currently authenticated browser-socket epoch.
   const [sidebarAgentStatusFresh, setSidebarAgentStatusFresh] = useState(false);
-  const [conversationId, setConversationId] = useState("");
+  // The homepage is a real unsaved conversation. A stable local-draft id keeps
+  // the initial Workbench root valid and lets the first sidebar/dock drop form
+  // an actual split without changing the visible homepage experience.
+  const [initialHomeConversation] = useState(createGatewayHomeConversationState);
+  const [conversationId, setConversationId] = useState(initialHomeConversation.conversationId);
   // 本地未持久化的会话模型切换（按会话 id 键）；发消息随 selected_model
   // 落库后由 history-sync 回声在清理 effect 中收敛删除。
   const [conversationModelOverrides, setConversationModelOverrides] = useState<
@@ -168,7 +180,9 @@ function useGatewayAppController() {
   const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
   const [, setChatQueueRevision] = useState(0);
-  const [selectedHistoryId, setSelectedHistoryId] = useState("");
+  const [selectedHistoryId, setSelectedHistoryId] = useState(
+    initialHomeConversation.selectedHistoryId,
+  );
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   // Two-phase conversation open (openController): "opening" gates the
   // composer/transcript loading affordances; showOverlay drives the switch
@@ -190,6 +204,10 @@ function useGatewayAppController() {
     () => (api ? createGatewayWorkspaceProjectRootClient(api) : undefined),
     [api],
   );
+  const [workspaceRootRevision, setWorkspaceRootRevision] = useState(0);
+  const handleWorkspaceDirectoriesMounted = useCallback(() => {
+    setWorkspaceRootRevision((revision) => revision + 1);
+  }, []);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
@@ -239,6 +257,14 @@ function useGatewayAppController() {
   );
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
+  // 草稿 id → 真实会话 id。Pane 宿主草稿 effect 的 cleanup 闭包捕获的是旧
+  // conversationId:draft→real 原位重绑时 cleanup 在 rename 之后才执行,
+  // 若直接写 draft key 会落进永远读不到的孤儿条目,宿主新 effect 随即
+  // clear() 掉用户正在输入的内容。读写统一经本映射改写到真实 id。
+  const boundComposerDraftIdsRef = useRef<Map<string, string>>(new Map());
+  const resolveComposerDraftKey = useCallback((conversationId: string) => {
+    return boundComposerDraftIdsRef.current.get(conversationId) ?? conversationId;
+  }, []);
   const composerDraftOwnerRef = useRef("");
   const conversationIdRef = useRef(conversationId);
   const selectedHistoryIdRef = useRef(selectedHistoryId);
@@ -266,7 +292,7 @@ function useGatewayAppController() {
   const visibleConversationRevisionRef = useRef(0);
   const previousDisplayedConversationIdRef = useRef("");
   const pendingDisplayedConversationAutoBottomRef = useRef<string | null>(null);
-  const protectedConversationRef = useRef("");
+  const protectedConversationRef = useRef(PROTECTED_DRAFT_CONVERSATION);
   const chatRuntimePreparePromiseRef = useRef<Promise<AgentStatus> | null>(null);
   const submitInFlightRef = useRef(false);
   // clientRequestId → draft conversation id, until the command binds.
@@ -274,6 +300,17 @@ function useGatewayAppController() {
   const sendChatRef = useRef<SendChatFn | null>(null);
   const isImportingPastedTextRef = useRef(false);
   const resetProjectToolsRuntimeRef = useRef<() => void>(() => undefined);
+
+  const resetToFreshHomeConversation = useCallback(() => {
+    const next = createGatewayHomeConversationState();
+    conversationIdRef.current = next.conversationId;
+    selectedHistoryIdRef.current = next.selectedHistoryId;
+    selectedHistoryRef.current = null;
+    protectedConversationRef.current = PROTECTED_DRAFT_CONVERSATION;
+    setConversationId(next.conversationId);
+    setSelectedHistoryId(next.selectedHistoryId);
+    setSelectedHistory(null);
+  }, []);
 
   // --- Chat streaming infrastructure (Phase 4) -----------------------------
   // Transcript stores (one per conversation), the global activity map, and
@@ -375,6 +412,20 @@ function useGatewayAppController() {
   // inputs) and the byId index (list commits only; never running/idle ticks).
   const sidebarWorkdirs = useSidebarSelector(sidebarStore, (snapshot) => snapshot.workdirs);
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (snapshot) => snapshot.byId);
+  const mentionableConversations = useMemo(
+    () =>
+      [...sidebarConversationsById.values()]
+        .filter((item) => !item.isPending)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map(({ id, title, cwd, updatedAt, messageCount }) => ({
+          id,
+          title,
+          cwd,
+          updatedAt,
+          messageCount,
+        })),
+    [sidebarConversationsById],
+  );
   const {
     handleCloseShareModal,
     handleDisableSharedHistory,
@@ -494,30 +545,47 @@ function useGatewayAppController() {
       activeWorkspaceProject,
       workspaceProjectRootClient,
       onWorkspaceCreated: handleWorkdirPickerSelect,
+      onWorkspaceDirectoriesMounted: handleWorkspaceDirectoriesMounted,
     });
 
   // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
   const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
   const workdirForConversation = useCallback(
-    (targetConversationId: string) =>
-      sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
-      conversationWorkdirsRef.current.get(targetConversationId)?.trim() ||
-      (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : ""),
+    (targetConversationId: string) => {
+      const targetId = targetConversationId.trim();
+      const displayedId = resolveVisibleConversationId(
+        selectedHistoryIdRef.current,
+        conversationIdRef.current,
+      );
+      return resolveConversationUploadWorkdir({
+        targetConversationId: targetId,
+        displayedConversationId: displayedId,
+        persistedWorkdir: sidebarStore.peek(targetId)?.cwd,
+        runtimeWorkdir: conversationWorkdirsRef.current.get(targetId),
+        isAgentMode,
+        activeWorkspacePath: activeWorkspaceProjectPath,
+        defaultWorkdir: settings.system.workdir,
+      });
+    },
     [activeWorkspaceProjectPath, isAgentMode, settings.system.workdir, sidebarStore],
   );
 
   const {
     pendingUploadedFiles,
     isUploadingFiles,
+    uploadingConversationId,
     isFileDropActive,
     fileInputRef,
+    folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     setPendingUploadsForConversation,
     updatePendingUploadsForConversation,
     moveConversationUploads,
     clearPendingUploads,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleFileDragEnter,
     handleFileDragOver: handlePendingFileDragOver,
     handleFileDragLeave,
@@ -752,6 +820,12 @@ function useGatewayAppController() {
         conversationWorkdirsRef.current.set(nextId, workdir);
       }
 
+      // 先登记改写映射再搬缓存:宿主草稿 effect 的 cleanup 会在 rename 提交
+      // 后仍以旧 id 写回,经映射落到真实 id 上,不产生孤儿条目。
+      for (const [draftId, boundId] of boundComposerDraftIdsRef.current) {
+        if (boundId === previousId) boundComposerDraftIdsRef.current.set(draftId, nextId);
+      }
+      boundComposerDraftIdsRef.current.set(previousId, nextId);
       const cachedComposerDraft = composerDraftCacheRef.current.get(previousId);
       if (cachedComposerDraft) {
         composerDraftCacheRef.current.delete(previousId);
@@ -1219,21 +1293,17 @@ function useGatewayAppController() {
     historyWindowStatesRef.current.clear();
     conversationWorkdirsRef.current.clear();
     composerDraftCacheRef.current.clear();
+    boundComposerDraftIdsRef.current.clear();
     composerDraftOwnerRef.current = "";
     composerRef.current?.clear();
-    conversationIdRef.current = "";
-    selectedHistoryIdRef.current = "";
-    selectedHistoryRef.current = null;
     resetSharedHistory();
     clearPendingUploads();
-    protectedConversationRef.current = "";
     submitInFlightRef.current = false;
     setUserMenuOpen(false);
     setProjectSettingsProject(null);
     resetSettingsOverlay();
     setStatus(null);
     setStatusError(null);
-    setConversationId("");
     setChatError(null);
     setSidebarActionError(null);
     setFullHistoryLoading(false);
@@ -1245,8 +1315,7 @@ function useGatewayAppController() {
     setChatQueueRevision(0);
     resetProjectToolsRuntimeRef.current();
     workbenchClearRef.current();
-    setSelectedHistoryId("");
-    setSelectedHistory(null);
+    resetToFreshHomeConversation();
   }, [
     activityStore,
     chatCommandPipeline,
@@ -1256,6 +1325,7 @@ function useGatewayAppController() {
     markVisibleConversationRevision,
     openController,
     resetSharedHistory,
+    resetToFreshHomeConversation,
     transcriptStoreRegistry,
     resetSettingsOverlay,
     setProjectSettingsProject,
@@ -1287,15 +1357,12 @@ function useGatewayAppController() {
       draftClientRequestsRef.current.clear();
       conversationWorkdirsRef.current.clear();
       composerDraftCacheRef.current.clear();
+      boundComposerDraftIdsRef.current.clear();
       composerDraftOwnerRef.current = "";
       composerRef.current?.clear();
       clearPendingUploads();
       pendingUploadContextRef.current = null;
-      protectedConversationRef.current = "";
       submitInFlightRef.current = false;
-      conversationIdRef.current = "";
-      selectedHistoryIdRef.current = "";
-      selectedHistoryRef.current = null;
       previousDisplayedConversationIdRef.current = "";
       pendingDisplayedConversationAutoBottomRef.current = null;
       displayedConversationWorkdirRef.current = "";
@@ -1308,9 +1375,6 @@ function useGatewayAppController() {
       setStatus(null);
       setSidebarAgentStatusFresh(false);
       setGatewayConnectionLost(false);
-      setConversationId("");
-      setSelectedHistoryId("");
-      setSelectedHistory(null);
       setConversationModelOverrides(new Map());
       setFullHistoryLoading(false);
       setQueuedChatTurns([]);
@@ -1323,6 +1387,7 @@ function useGatewayAppController() {
       setNotifyItems([]);
       resetProjectToolsRuntimeRef.current();
       workbenchClearRef.current();
+      resetToFreshHomeConversation();
     },
     [
       activityStore,
@@ -1332,6 +1397,7 @@ function useGatewayAppController() {
       markVisibleConversationRevision,
       openController,
       resetSharedHistory,
+      resetToFreshHomeConversation,
       transcriptStoreRegistry,
       setRightDockOpen,
       setActiveView,
@@ -1363,6 +1429,7 @@ function useGatewayAppController() {
     modelOptions,
     selectedValue,
     skillsRootDir,
+    workspaceResources,
   } = useGatewayChatConfiguration({
     activeSelectedModel,
     displayedConversationId,
@@ -1372,6 +1439,9 @@ function useGatewayAppController() {
     setSettings,
     settings,
   });
+  // @ 弹层的应用候选：门控与 GUI 完全同源（agent 模式 + 工作区挂
+  // cua-driver），列表经 Gateway 直通中继自桌面宿主本机。
+  const mentionApps = useMentionApps(workspaceResources.mcpServers, isAgentMode);
   const {
     cancelChat,
     commitQueuedChatEdit,
@@ -1441,6 +1511,15 @@ function useGatewayAppController() {
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+  const searchMentionableConversations = useCallback(
+    (query: string) =>
+      searchMentionConversations({
+        query,
+        currentConversationId: displayedConversationId,
+        currentWorkdir: displayedConversationWorkdir,
+      }),
+    [displayedConversationId, displayedConversationWorkdir],
+  );
   displayedConversationWorkdirRef.current = displayedConversationWorkdir;
   // Switching conversations keeps every conversation's uploads, but a workdir
   // change within the same conversation (a draft switching projects)
@@ -1621,6 +1700,11 @@ function useGatewayAppController() {
       addNotify("error", translate("workbench.noSpaceForSplit", settings.locale)),
     onDropStateChanged: () =>
       addNotify("error", translate("workbench.dropStateChanged", settings.locale)),
+    onWorkspaceDropFailed: (error) =>
+      addNotify(
+        "error",
+        asErrorMessage(error, translate("workbench.workspaceDropFailed", settings.locale)),
+      ),
     onConversationAlreadyOpen: () =>
       addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
   });
@@ -1643,7 +1727,6 @@ function useGatewayAppController() {
     workbenchController.closePanesForRemovedConversations([id]);
     handleSidebarLocalDraftDeleted(id);
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: layoutRef is a ref sampled at restore time; pane-count changes must not re-trigger the draft restore.
   useEffect(() => {
     if (activeView !== "chat") {
       return;
@@ -1655,20 +1738,24 @@ function useGatewayAppController() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      // 多 Pane 时每个宿主自己管草稿,页面级 restore 会把焦点 Pane
-      // 正在输入的内容清掉(owner 对不上新 composer)。
-      const paneCount = Object.keys(workbenchController.workbench.layoutRef.current.panes).length;
-      if (sessionWorkbench.enabled && paneCount > 1) {
+      // Workbench 开启后草稿始终由稳定 Pane 宿主管理，包括布局从多 Pane
+      // 收敛回单 Pane 的一帧；页面级 restore 只能服务关闭 Workbench 的
+      // legacy composer，否则会用旧缓存覆盖宿主里尚未写回的输入。
+      if (sessionWorkbench.enabled) {
         composerDraftOwnerRef.current = targetConversationId;
         return;
       }
       const composer = composerRef.current;
+      if (!composer) return;
       if (
-        !composer ||
-        (composerDraftOwnerRef.current === targetConversationId && composer.hasContent())
-      ) {
+        !shouldRestorePageComposerDraft({
+          workbenchEnabled: false,
+          targetConversationId,
+          ownerConversationId: composerDraftOwnerRef.current,
+          composerHasContent: composer.hasContent(),
+        })
+      )
         return;
-      }
       restoreCachedComposerDraft(targetConversationId);
     });
 
@@ -1827,9 +1914,9 @@ function useGatewayAppController() {
   // --- 多看板背景 Pane 的按会话绑定能力(复刻桌面端 buildBackgroundPaneBinding
   // 的数据面):工作区、草稿缓存、附件导入全部按显式 conversationId 路由。---
   const getCachedComposerDraft = (targetConversationId: string) =>
-    composerDraftCacheRef.current.get(targetConversationId);
+    composerDraftCacheRef.current.get(resolveComposerDraftKey(targetConversationId));
   const setCachedComposerDraft = (targetConversationId: string, draft: MentionComposerDraft) => {
-    composerDraftCacheRef.current.set(targetConversationId, draft);
+    composerDraftCacheRef.current.set(resolveComposerDraftKey(targetConversationId), draft);
   };
   const importFilesForConversation = (
     targetConversationId: string,
@@ -1886,10 +1973,12 @@ function useGatewayAppController() {
     fileDropLimitHint,
     fileDropTitle,
     fileInputRef,
+    folderInputRef,
     gatewayConnectionLost,
     getCachedComposerDraft,
     getDisplayedConversationId,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     gitClient,
     gitDisabledMessage,
     gitReviewFocusRequest,
@@ -1916,6 +2005,7 @@ function useGatewayAppController() {
     handleFloorJump,
     handleGitReviewFocusRequestHandled,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleInsertCodeMention,
     handleLoadEarlierHistory,
     handleLoadSharedHistoryStatus,
@@ -1982,12 +2072,16 @@ function useGatewayAppController() {
     isImportingPastedTextRef,
     isSuggestionTyping,
     isUploadingFiles,
+    uploadingConversationId,
     loadComposerHistoryPrompts,
     loadingOlderHistory,
     localeContextValue,
     manualCompactPending,
     manualCompactTransientConversations,
+    mentionableConversations,
+    searchMentionableConversations,
     materializeComposerDraftForSend,
+    mentionApps,
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
@@ -2100,6 +2194,7 @@ function useGatewayAppController() {
     workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
+    workspaceRootRevision,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,

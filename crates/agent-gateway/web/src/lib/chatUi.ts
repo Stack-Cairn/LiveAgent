@@ -11,9 +11,11 @@ import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
+  getUserMessageReferencedConversations,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { hashText } from "@liveagent/ui/lib/shared/hash";
@@ -35,7 +37,12 @@ type SharedGatewayChatEntry = SharedChatEntry<
   ToolCall,
   ToolResultMessage,
   AssistantMeta,
-  { messageId?: string; messageRef?: HistoryMessageRef; timestamp?: number },
+  {
+    messageId?: string;
+    messageRef?: HistoryMessageRef;
+    timestamp?: number;
+    referencedConversations?: ConversationMentionReference[];
+  },
   { timestamp?: number }
 >;
 
@@ -701,6 +708,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
       const userRecord = asUploadedFilesUserMessage(message);
       const text = getUserMessageDisplayText(userRecord);
       const attachments = getUserMessageAttachments(userRecord);
+      const referencedConversations = getUserMessageReferencedConversations(userRecord);
       const messageRef = readHistoryMessageRef(userRecord.liveAgentHistoryRef);
       if (text.trim() || attachments.length > 0) {
         const baseId = messageRef ? `hu:${messageRef.messageId}` : `hu:~${hashText(text)}`;
@@ -714,6 +722,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
           kind: "user",
           text,
           attachments,
+          referencedConversations,
           messageId: messageRef?.messageId,
           messageRef,
           timestamp: readMessageTimestamp(message.timestamp),

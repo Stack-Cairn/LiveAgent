@@ -1,5 +1,5 @@
-// 稳定消息引用（HistoryMessageRef）的纯 JSON 工具：与前端 chatHistory.ts 的
-// contentHash/stableId 算法逐字节对齐，供 history.prefix 与分支会话共用。
+// 稳定消息引用（HistoryMessageRef）的纯 JSON 工具：与前端 conversationState.ts
+// 的 contentHash/stableId 算法逐字节对齐，供 history.prefix 与分支会话共用。
 
 pub(crate) fn read_json_trimmed_string(object: &Map<String, Value>, key: &str) -> Option<String> {
     object
@@ -31,6 +31,112 @@ pub(crate) fn flatten_user_content(content: Option<&Value>) -> String {
 pub(crate) fn append_hash_part(parts: &mut Vec<String>, value: impl AsRef<str>) {
     let value = value.as_ref();
     parts.push(format!("{}:{value}", value.len()));
+}
+
+const MAX_HASHED_CONVERSATION_REFERENCES: usize = 3;
+
+struct HashedConversationReference {
+    id: String,
+    title: String,
+    cwd: String,
+    updated_at: String,
+}
+
+fn trim_unicode_whitespace(value: &str) -> &str {
+    // char::is_whitespace 与前端 \p{White_Space} 同为 Unicode White_Space 属性。
+    value.trim_matches(char::is_whitespace)
+}
+
+fn collapse_unicode_whitespace(value: &str) -> String {
+    let trimmed = trim_unicode_whitespace(value);
+    let mut collapsed = String::with_capacity(trimmed.len());
+    let mut pending_gap = false;
+    for character in trimmed.chars() {
+        if character.is_whitespace() {
+            pending_gap = true;
+            continue;
+        }
+        if pending_gap {
+            collapsed.push(' ');
+            pending_gap = false;
+        }
+        collapsed.push(character);
+    }
+    collapsed
+}
+
+fn normalize_conversation_mention_id(value: &str) -> Option<String> {
+    let id = trim_unicode_whitespace(value);
+    if id.is_empty() || id.chars().count() > 256 {
+        return None;
+    }
+    let has_control_character = id.chars().any(|character| {
+        let code = character as u32;
+        code <= 0x1f || (0x7f..=0x9f).contains(&code)
+    });
+    if has_control_character {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+// 与前端 normalizeConversationMentionReferences（哈希路径不带
+// currentConversationId，因此这里同样不做自引用过滤）逐字节对齐：
+// id 修剪空白并校验长度/控制字符，标题折叠空白后按 Unicode 标量截断到
+// 240，按 id 去重，最多保留 3 条。
+fn hashed_conversation_references(
+    object: Option<&Map<String, Value>>,
+) -> Vec<HashedConversationReference> {
+    let Some(entries) = object
+        .and_then(|object| object.get("liveAgentReferencedConversations"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut normalized: Vec<HashedConversationReference> = Vec::new();
+    for entry in entries {
+        let Some(entry) = entry.as_object() else {
+            continue;
+        };
+        let Some(id) = entry
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(normalize_conversation_mention_id)
+        else {
+            continue;
+        };
+        let title: String =
+            collapse_unicode_whitespace(entry.get("title").and_then(Value::as_str).unwrap_or(""))
+                .chars()
+                .take(240)
+                .collect();
+        if title.is_empty() || normalized.iter().any(|reference| reference.id == id) {
+            continue;
+        }
+        let cwd = entry
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(trim_unicode_whitespace)
+            .unwrap_or("")
+            .to_string();
+        // 前端 appendHashPart 里 undefined 参与 String(value ?? "") 得空串；
+        // 数字沿用 sizeBytes 的 Value::to_string 对齐策略。
+        let updated_at = entry
+            .get("updatedAt")
+            .filter(|value| value.is_number())
+            .map(Value::to_string)
+            .unwrap_or_default();
+        normalized.push(HashedConversationReference {
+            id,
+            title,
+            cwd,
+            updated_at,
+        });
+        if normalized.len() >= MAX_HASHED_CONVERSATION_REFERENCES {
+            break;
+        }
+    }
+    normalized
 }
 
 pub(crate) fn fnv1a32(input: &str) -> String {
@@ -114,6 +220,18 @@ pub(crate) fn history_message_content_hash(message: &Value) -> String {
                     .map(Value::to_string)
                     .unwrap_or_else(|| "0".to_string()),
             );
+        }
+        // 仅在存在引用时追加（与前端一致）：无引用消息的哈希保持旧算法
+        // 不变，历史数据与旧版本客户端产出的 ref 向后兼容。
+        let referenced_conversations = hashed_conversation_references(object);
+        if !referenced_conversations.is_empty() {
+            append_hash_part(&mut parts, referenced_conversations.len().to_string());
+            for reference in referenced_conversations {
+                append_hash_part(&mut parts, reference.id);
+                append_hash_part(&mut parts, reference.title);
+                append_hash_part(&mut parts, reference.cwd);
+                append_hash_part(&mut parts, reference.updated_at);
+            }
         }
     } else {
         append_hash_part(

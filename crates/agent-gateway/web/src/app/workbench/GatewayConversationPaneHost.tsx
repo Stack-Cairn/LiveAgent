@@ -24,6 +24,7 @@ import {
   type CheckpointRewoundInfo,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
 import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import {
   readToolApprovalDeadlineAt,
@@ -76,6 +77,7 @@ import {
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
 import type { SectionId } from "@/pages/settings/types";
+import { ConversationStatsBarHost } from "../ConversationStatsBarHost";
 import {
   HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
   HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES,
@@ -89,8 +91,10 @@ type ChatQueueSnapshotLike = Parameters<
 >[0];
 
 /**
- * 页面级共享上下文:所有背景会话 Pane 共用一份(在 GatewayAppView 里 useMemo
- * 组装)。函数字段一律按 conversationId 显式路由,不依赖"当前展示会话"。
+ * 页面级共享上下文:所有背景会话 Pane 共用一份,在 GatewayAppView 渲染体内
+ * 逐帧重建(未 memo 化——宿主经 contextRef 读取最新值,不依赖引用稳定;
+ * 真正的稳定化需要先把上游 handler 链整体 useCallback 化,留待性能收敛)。
+ * 函数字段一律按 conversationId 显式路由,不依赖"当前展示会话"。
  */
 export type GatewayConversationPaneHostContext = {
   api: GatewayWebSocketClient;
@@ -105,6 +109,10 @@ export type GatewayConversationPaneHostContext = {
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
   enabledSkills: ChatComposerBarProps["enabledSkills"];
+  mentionableConversations: ChatComposerBarProps["mentionableConversations"];
+  searchMentionableConversations: ChatComposerBarProps["searchMentionableConversations"];
+  mentionApps: ChatComposerBarProps["mentionApps"];
+  contextDisplayMode: ChatComposerBarProps["contextDisplayMode"];
   commandSafetyMode: ChatComposerBarProps["commandSafetyMode"];
   onCommandSafetyModeChange: ChatComposerBarProps["onCommandSafetyModeChange"];
   sttProvider: ChatComposerBarProps["sttProvider"];
@@ -130,8 +138,16 @@ export type GatewayConversationPaneHostContext = {
     draft: MentionComposerDraft,
     files: PendingUploadedFile[],
     workdir: string,
-  ) => Promise<{ text: string; uploadedFiles: PendingUploadedFile[] }>;
+    targetConversationId?: string,
+  ) => Promise<{
+    text: string;
+    uploadedFiles: PendingUploadedFile[];
+    referencedConversations: ConversationMentionReference[];
+  }>;
+  /** 在途导入归属的会话 id:上传禁用/动画只作用在目标会话的 Pane 上。 */
+  uploadingConversationId: string | null;
   getPendingUploads: (conversationId: string) => PendingUploadedFile[];
+  subscribePendingUploads: (listener: () => void) => () => void;
   updatePendingUploads: (
     conversationId: string,
     updater: (current: PendingUploadedFile[]) => PendingUploadedFile[],
@@ -159,6 +175,7 @@ export type GatewayConversationPrimarySurface = {
   onPrepareChatRuntime: ChatComposerBarProps["onPrepareChatRuntime"];
   onComposerBusyChange: ChatComposerBarProps["onComposerBusyChange"];
   onPickReadableFiles: ChatComposerBarProps["onPickReadableFiles"];
+  onPickWorkspaceFolder: ChatComposerBarProps["onPickWorkspaceFolder"];
   onPasteFiles: ChatComposerBarProps["onPasteFiles"];
   loadHistoryPrompts: ChatComposerBarProps["loadHistoryPrompts"];
   pendingUploadedFiles: PendingUploadedFile[];
@@ -172,6 +189,7 @@ export type GatewayConversationPrimarySurface = {
   manualCompactBlocked: boolean;
   approvalBar: ReactNode;
   taskProgressBar: ReactNode;
+  statsBar: ReactNode;
   fileDropOverlay: ReactNode;
   transcriptExtras: ReactNode;
   stageRef?: MutableRefObject<HTMLElement | null>;
@@ -253,6 +271,13 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const [hydrated, setHydrated] = useState(isDraft);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const loadedMaxMessagesRef = useRef(HISTORY_DETAIL_INITIAL_MAX_MESSAGES);
+  const historyConversationIdRef = useRef(conversationId);
+  historyConversationIdRef.current = conversationId;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity is the reset trigger; the effect intentionally does not read it.
+  useEffect(() => {
+    loadedMaxMessagesRef.current = HISTORY_DETAIL_INITIAL_MAX_MESSAGES;
+    setHasMoreHistory(false);
+  }, [conversationId]);
   useEffect(() => {
     if (isDraft || isPrimary) {
       setHydrated(true);
@@ -291,13 +316,16 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const loadingEarlierRef = useRef(false);
   const handleLoadEarlierHistory = useCallback(() => {
     if (isDraft || loadingEarlierRef.current) return;
+    const requestedConversationId = conversationId;
     loadingEarlierRef.current = true;
     setLoadingEarlier(true);
     const nextMax = loadedMaxMessagesRef.current + HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES;
     void (async () => {
       try {
-        const detail = await api.getHistory(conversationId, { maxMessages: nextMax });
+        const detail = await api.getHistory(requestedConversationId, { maxMessages: nextMax });
+        if (historyConversationIdRef.current !== requestedConversationId) return;
         const parsed = await parseHistoryMessagesJsonAsync(detail.messages_json);
+        if (historyConversationIdRef.current !== requestedConversationId) return;
         const entries = detail.has_more === true ? trimLeadingHeadlessEntries(parsed) : parsed;
         store.applyHistorySnapshot(entries, { mode: "enrich" });
         loadedMaxMessagesRef.current = nextMax;
@@ -305,11 +333,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       } catch {
         // 拉取失败保持现状,按钮可重试。
       } finally {
-        loadingEarlierRef.current = false;
-        setLoadingEarlier(false);
+        if (historyConversationIdRef.current === requestedConversationId) {
+          loadingEarlierRef.current = false;
+          setLoadingEarlier(false);
+        }
       }
     })();
   }, [api, conversationId, isDraft, store]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity cancels the previous pane's loading indicator; the effect intentionally does not read it.
+  useEffect(() => {
+    loadingEarlierRef.current = false;
+    setLoadingEarlier(false);
+  }, [conversationId]);
 
   const subscribeTranscript = useCallback(
     (listener: () => void) => store.subscribe(listener),
@@ -397,13 +433,14 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [api, applyQueueSnapshot, conversationId],
   );
 
-  // ---- 每会话待发附件:写通页面级 per-conversation 存储,本地镜像驱动渲染 --
-  const [pendingUploads, setPendingUploads] = useState<PendingUploadedFile[]>(() =>
-    context.getPendingUploads(conversationId).slice(),
+  // ---- 每会话待发附件:直接订阅页面级 per-conversation 存储 ----------------
+  // 文档级 paste/drop 可以写入背景会话；订阅保证 chip 与发送读取同一份
+  // 权威快照，不再依赖 Pane 自己动作后的手动镜像刷新。
+  const pendingUploads = useSyncExternalStore(
+    context.subscribePendingUploads,
+    () => context.getPendingUploads(conversationId),
+    () => context.getPendingUploads(conversationId),
   );
-  const syncPendingUploads = useCallback(() => {
-    setPendingUploads(context.getPendingUploads(conversationId).slice());
-  }, [context, conversationId]);
 
   // ---- 发送/停止:严格按本 Pane 的 conversationId 路由(桌面端口径) --------
   const composerRef = useRef<MentionComposerHandle | null>(null);
@@ -449,6 +486,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
 
   const handleSend = useCallback(() => {
     if (sendInFlightRef.current || context.transportInputDisabled) return;
+    // 本会话的附件导入尚未落账时不得发送:此刻 getPendingUploads 读到的
+    // 是空列表,消息会丢附件(与主 Pane 的上传中禁用同一边界)。
+    if (context.uploadingConversationId === conversationId) return;
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? null;
     sendInFlightRef.current = true;
@@ -457,12 +497,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         const files = context.getPendingUploads(conversationId).slice();
         let text: string;
         let uploadedFiles: PendingUploadedFile[];
+        let referencedConversations = draft?.conversationMentions ?? [];
         try {
           const materialized = draft
-            ? await context.materializeComposerDraftForSend(draft, files, workdirRef.current)
-            : { text: "", uploadedFiles: files };
+            ? await context.materializeComposerDraftForSend(
+                draft,
+                files,
+                workdirRef.current,
+                conversationId,
+              )
+            : { text: "", uploadedFiles: files, referencedConversations: [] };
           text = materialized.text;
           uploadedFiles = materialized.uploadedFiles;
+          referencedConversations = materialized.referencedConversations;
         } catch (error) {
           context.notifyError(error instanceof Error ? error.message : "大段粘贴内容导入失败");
           return;
@@ -470,7 +517,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         if (!text && uploadedFiles.length === 0) return;
         composerRef.current?.clear();
         context.updatePendingUploads(conversationId, () => []);
-        syncPendingUploads();
         // 忙时入队(与桌面端背景 Pane enqueue 一致):队列面板持有提示词,
         // 不做转录乐观回显;闲时直发。
         const busy = isRunningRef.current || queuedTurnsRef.current.length > 0;
@@ -478,7 +524,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           context.updatePendingUploads(conversationId, (current) =>
             mergePendingUploadedFiles(current, uploadedFiles),
           );
-          syncPendingUploads();
           const currentComposer = composerRef.current;
           if (draft && currentComposer && !currentComposer.hasContent()) {
             currentComposer.setDraft(draft);
@@ -488,6 +533,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           const outcome = await context.sendChat(text, {
             conversationId,
             uploadedFiles,
+            referencedConversations,
             runtimeControls: paneRuntimeControls,
             ...(busy ? { queuePolicy: "append" as const, optimisticEcho: false } : {}),
           });
@@ -499,7 +545,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         sendInFlightRef.current = false;
       }
     })();
-  }, [context, conversationId, paneRuntimeControls, syncPendingUploads]);
+  }, [context, conversationId, paneRuntimeControls]);
 
   const handleStop = useCallback(() => {
     // 与桌面端/聚焦舞台一致:有排队回合先"停当前、跑下一条",否则纯停止。
@@ -512,7 +558,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   }, [context, conversationId, handleRunQueuedTurnNow]);
 
   // ---- 草稿:挂载恢复缓存,卸载(聚焦切换/关 Pane)写回缓存(桌面端口径) --
+  // hydrated 必须参与触发:背景 Pane 冷启动时先渲染加载占位,composer 尚未
+  // 挂载,恢复会被无声跳过;水合完成后重跑一次才能把缓存草稿真正写进输入框。
   useLayoutEffect(() => {
+    if (!hydrated) return;
     const composer = composerRef.current;
     const cached = contextRef.current.getCachedComposerDraft(conversationId);
     if (cached) {
@@ -527,7 +576,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       if (!nextDraft || nextDraft.isEmpty || !nextDraft.text.trim()) return;
       contextRef.current.setCachedComposerDraft(conversationId, nextDraft);
     };
-  }, [conversationId]);
+  }, [conversationId, hydrated]);
 
   useLayoutEffect(() => {
     if (!isPrimary || !pageComposerRef) return;
@@ -805,7 +854,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             hidden={trajectoryActive}
             composerRef={composerRef}
             isSending={usePrimary ? (primary?.isSending ?? isRunning) : isRunning}
-            isUploadingFiles={usePrimary ? (primary?.isUploadingFiles ?? false) : false}
+            isUploadingFiles={
+              usePrimary
+                ? (primary?.isUploadingFiles ?? false)
+                : context.uploadingConversationId === conversationId
+            }
             isInputDisabled={resolveWorkbenchComposerInputDisabled({
               isPrimary: usePrimary,
               primaryInputDisabled: primary?.isInputDisabled ?? context.isInputDisabled,
@@ -820,6 +873,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             inputPlaceholder={context.inputPlaceholder}
             workdir={workdir}
             enabledSkills={context.enabledSkills}
+            mentionableConversations={context.mentionableConversations}
+            searchMentionableConversations={context.searchMentionableConversations}
+            mentionApps={context.mentionApps}
             executionMode={context.settings.system.executionMode}
             hasModels={context.hasModels}
             currentModelLabel={modelLabel}
@@ -832,6 +888,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             thinkingAlwaysOn={paneThinkingAlwaysOn}
             contextUsageTokensSource={contextUsageTokensSource}
             contextWindow={contextWindow}
+            contextDisplayMode={context.contextDisplayMode}
             onManualCompactConfirm={
               usePrimary && primary ? primary.onManualCompactConfirm : () => onFocusPane()
             }
@@ -863,13 +920,18 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             onPickReadableFiles={
               usePrimary && primary ? primary.onPickReadableFiles : () => onFocusPane()
             }
+            onPickWorkspaceFolder={
+              usePrimary && primary ? primary.onPickWorkspaceFolder : () => onFocusPane()
+            }
             onPasteFiles={
               usePrimary && primary
                 ? primary.onPasteFiles
                 : (files) => {
-                    void context
-                      .importFilesForConversation(conversationId, workdirRef.current, files)
-                      .then(syncPendingUploads);
+                    void context.importFilesForConversation(
+                      conversationId,
+                      workdirRef.current,
+                      files,
+                    );
                   }
             }
             onLoadUploadedImagePreview={context.onLoadUploadedImagePreview}
@@ -884,7 +946,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                     context.updatePendingUploads(conversationId, (current) =>
                       current.filter((file) => file.relativePath !== relativePath),
                     );
-                    syncPendingUploads();
                   }
             }
             queuedTurns={usePrimary && primary ? primary.queuedTurns : queuedTurns}
@@ -912,6 +973,22 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               )
             }
             approvalBar={usePrimary ? primary?.approvalBar : approvalBar}
+            statsBar={
+              usePrimary ? (
+                primary?.statsBar
+              ) : (
+                <ConversationStatsBarHost
+                  key={`stats-${conversationId}`}
+                  conversationId={conversationId}
+                  host={context.trajectoryHost}
+                  enabled={!trajectoryActive}
+                  contextUsageTokensSource={contextUsageTokensSource}
+                  contextWindow={contextWindow}
+                  onManualCompactConfirm={() => onFocusPane()}
+                  manualCompactBlocked={transcript.toolStatusIsCompaction === true}
+                />
+              )
+            }
             fileDropOverlay={usePrimary ? primary?.fileDropOverlay : null}
           />
         </section>

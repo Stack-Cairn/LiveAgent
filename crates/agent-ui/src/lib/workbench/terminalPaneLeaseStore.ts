@@ -12,6 +12,12 @@ export type TerminalPaneLeaseStore = {
    * acquire 幂等返回既有 release。release 幂等,且不会误释放后建租约。
    */
   acquire(sessionId: string, paneId: string): () => void;
+  /**
+   * 释放指定 pane 持有的租约(幂等)。drop 事务会在宿主挂载前同步占约,
+   * 若 Pane 在宿主从未取得租约前就被关闭,release 无人持有,只能按
+   * paneId 对账回收,否则该会话在 Right Dock 永久隐藏。
+   */
+  releaseForPane(paneId: string): void;
   paneIdFor(sessionId: string): string | null;
   sessionIdFor(paneId: string): string | null;
   /** 当前被 pane 持有的全部 sessionId;引用在租约不变时保持稳定(useSyncExternalStore 快照)。 */
@@ -86,6 +92,11 @@ export function createTerminalPaneLeaseStore(): TerminalPaneLeaseStore {
       emit();
       return record.release;
     },
+    releaseForPane(paneId) {
+      const key = paneId.trim();
+      if (!key) return;
+      leasesByPaneId.get(key)?.release();
+    },
     paneIdFor(sessionId) {
       const key = sessionId.trim();
       if (!key) return null;
@@ -106,4 +117,22 @@ export function createTerminalPaneLeaseStore(): TerminalPaneLeaseStore {
       };
     },
   };
+}
+
+/**
+ * 按布局对账回收孤儿租约:drop 事务同步占约后,Pane 若在宿主挂载(接手
+ * release)之前就被关闭,租约将无人释放。两端在布局变化时调用本函数,
+ * 释放持有者已不在布局中的租约;宿主正常持有的租约在其卸载 cleanup 中
+ * 先于本对账释放,不受影响。
+ */
+export function releaseOrphanTerminalPaneLeases(
+  lease: Pick<TerminalPaneLeaseStore, "leasedSessionIds" | "paneIdFor" | "releaseForPane">,
+  layout: { panes: Record<string, unknown> },
+): void {
+  for (const sessionId of lease.leasedSessionIds()) {
+    const paneId = lease.paneIdFor(sessionId);
+    if (paneId && layout.panes[paneId] === undefined) {
+      lease.releaseForPane(paneId);
+    }
+  }
 }

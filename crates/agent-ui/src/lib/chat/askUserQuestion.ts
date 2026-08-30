@@ -124,7 +124,6 @@ export function parseAskUserQuestionItems(raw: unknown): AskUserQuestionItem[] {
     );
   }
   const seenIds = new Set<string>();
-  let expectedOptionCount = 0;
   return raw.map((value, index) => {
     if (!value || typeof value !== "object") {
       throw new Error(`AskUserQuestion questions[${index}] must be an object.`);
@@ -145,15 +144,6 @@ export function parseAskUserQuestionItems(raw: unknown): AskUserQuestionItem[] {
         `AskUserQuestion questions[${index}] needs ${ASK_USER_QUESTION_MIN_OPTIONS}-${ASK_USER_QUESTION_MAX_OPTIONS} options; got ${record.options.length}.`,
       );
     }
-    // 同一轮里各问题的选项数必须一致，保证卡片切 tab 时布局稳定。
-    if (index === 0) {
-      expectedOptionCount = record.options.length;
-    } else if (record.options.length !== expectedOptionCount) {
-      throw new Error(
-        `AskUserQuestion requires every question in one call to have the same number of options; questions[0] has ${expectedOptionCount} while questions[${index}] has ${record.options.length}.`,
-      );
-    }
-
     const labels = new Set<string>();
     let recommendedCount = 0;
     const options = record.options.map((optionValue, optionIndex) => {

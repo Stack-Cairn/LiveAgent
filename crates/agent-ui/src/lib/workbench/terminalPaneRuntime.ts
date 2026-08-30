@@ -20,8 +20,8 @@ export class TerminalPaneSshPromptError extends Error {
 
 /**
  * 自动建会话授权集(窗口级内存):记录本窗口已经显式创建或重启过的
- * surfaceId。当前恢复路径默认按 launchSpec 自动重建;该集合仍由拖入事务
- * 写入并供窗口级运行时协调使用。
+ * surfaceId。布局恢复出的 surface 不在集合中，宿主必须停在 dormant
+ * 占位，直到用户显式点击恢复；这也阻止应用启动时静默建立 SSH 连接。
  */
 export function createTerminalPaneAutoLaunchRegistry() {
   const authorized = new Set<string>();
@@ -39,6 +39,13 @@ export function createTerminalPaneAutoLaunchRegistry() {
 export type TerminalPaneAutoLaunchRegistry = ReturnType<
   typeof createTerminalPaneAutoLaunchRegistry
 >;
+
+export function isTerminalPaneAutoLaunchAuthorized(
+  surfaceId: string,
+  registry: Pick<TerminalPaneAutoLaunchRegistry, "isAuthorized">,
+): boolean {
+  return registry.isAuthorized(surfaceId.trim());
+}
 
 /**
  * 应用退出护栏:退出流程会先关闭全部终端再退出进程,期间广播的 `closed`

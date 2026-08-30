@@ -597,6 +597,53 @@ test("optimistic user bubble binds to its run keeping its key", () => {
   assert.equal(users[0].key, optimisticKey, "user bubble keeps its identity");
 });
 
+test("user_message enriches an optimistic user bubble with conversation references", () => {
+  const store = createTranscriptStore();
+  store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "compare prior work" });
+  store.applyEvent(
+    userMessage("run-1", 1, "compare prior work", {
+      client_request_id: "client-1",
+      referenced_conversations: [
+        {
+          id: "conversation-source",
+          title: "Earlier investigation",
+          cwd: "/workspace/source",
+          updated_at: 1772000000000,
+        },
+      ],
+    }),
+  );
+  store.flush();
+
+  const users = allRows(store.getSnapshot()).filter((row) => row.kind === "user");
+  assert.deepEqual(users[0].referencedConversations, [
+    {
+      id: "conversation-source",
+      title: "Earlier investigation",
+      cwd: "/workspace/source",
+      updatedAt: 1772000000000,
+    },
+  ]);
+});
+
+test("foreign seeded user_message preserves conversation references before history refresh", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(
+    userMessage("run-foreign", 1, "compare prior work", {
+      client_request_id: "someone-else",
+      referenced_conversations: [
+        { id: "conversation-source", title: "Earlier investigation" },
+      ],
+    }),
+  );
+  store.flush();
+
+  const users = allRows(store.getSnapshot()).filter((row) => row.kind === "user");
+  assert.deepEqual(users[0].referencedConversations, [
+    { id: "conversation-source", title: "Earlier investigation" },
+  ]);
+});
+
 test("a desktop identity echo binds the live turn to its persisted message id", () => {
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "same prompt"));

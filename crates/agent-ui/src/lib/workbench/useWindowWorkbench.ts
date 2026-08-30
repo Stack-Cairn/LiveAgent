@@ -67,6 +67,15 @@ function singlePaneLayout(conversationId: string, project: ProjectRef): Workbenc
   };
 }
 
+/** Never let a homepage/boot race manufacture an invalid blank conversation pane. */
+export function createInitialWorkbenchLayout(
+  conversationId: string,
+  project: ProjectRef,
+): WorkbenchLayout {
+  const key = conversationId.trim();
+  return key ? singlePaneLayout(key, project) : createEmptyWorkbenchLayout();
+}
+
 /**
  * Draft promotion: rebind the pane hosting `fromConversationId` to
  * `toConversationId` in place. Topology, focus and view state are preserved so
@@ -122,6 +131,9 @@ export type UseWindowWorkbenchParams = {
    * Window layout recovery. Enabled by default for Desktop and Web so reloads
    * and app/browser restarts preserve topology and terminal launch specs without persisting
    * terminal session ids, output, drafts, prompts, approvals, or secrets.
+   *
+   * 首个非 false 值一经采样即固定:此后修改 storage/storageKey 或改回
+   * false 均不生效。调用方应在首渲染就确定持久化策略。
    */
   persistence?: false | { storage?: WorkbenchLayoutStorage | null; storageKey?: string };
 };
@@ -170,6 +182,9 @@ export type WindowWorkbench = {
  * focused pane's conversation by `syncCurrentConversation` plus the caller
  * selecting a conversation whenever focus moves to another pane.
  */
+/** 布局落盘防抖间隔:拖动分隔条等高频变更合并为尾随一次写入。 */
+const WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS = 300;
+
 export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWorkbench {
   const {
     initialConversationId,
@@ -186,7 +201,8 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   } | null>(null);
   if (persistenceRef.current === null && persistence !== false) {
     persistenceRef.current = {
-      storage: persistence?.storage ?? resolveWorkbenchLayoutStorage(),
+      storage:
+        persistence?.storage === undefined ? resolveWorkbenchLayoutStorage() : persistence.storage,
       storageKey: persistence?.storageKey?.trim() || WORKBENCH_LAYOUT_STORAGE_KEY,
     };
   }
@@ -195,7 +211,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     const persisted = persistenceRef.current;
     return (
       (persisted ? readStoredWorkbenchLayout(persisted.storage, persisted.storageKey) : null) ??
-      singlePaneLayout(initialConversationId, initialProject)
+      createInitialWorkbenchLayout(initialConversationId, initialProject)
     );
   });
   const layoutRef = useRef(layout);
@@ -207,12 +223,39 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   const commandErrorRef = useRef(onCommandError);
   commandErrorRef.current = onCommandError;
 
-  useEffect(() => {
+  // 拖动分隔条期间每个 pointermove 都会产生一次 layout 变更,而
+  // localStorage 写入是同步 IO:合并为尾随一次落盘,pagehide 与卸载前
+  // flush,保证窗口关闭时仍写入最后状态。
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushPersistedLayout = useCallback(() => {
+    if (persistTimerRef.current === null) return;
+    clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = null;
     const persisted = persistenceRef.current;
     if (persisted) {
-      writeStoredWorkbenchLayout(layout, persisted.storage, persisted.storageKey);
+      writeStoredWorkbenchLayout(layoutRef.current, persisted.storage, persisted.storageKey);
     }
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: layout 变化是落盘触发器;写入读取 layoutRef 以合并防抖窗口内的中间状态。
+  useEffect(() => {
+    if (persistenceRef.current === null) return;
+    if (persistTimerRef.current !== null) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      const persisted = persistenceRef.current;
+      if (persisted) {
+        writeStoredWorkbenchLayout(layoutRef.current, persisted.storage, persisted.storageKey);
+      }
+    }, WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS);
   }, [layout]);
+  useEffect(() => {
+    if (persistenceRef.current === null || typeof window === "undefined") return;
+    window.addEventListener("pagehide", flushPersistedLayout);
+    return () => {
+      window.removeEventListener("pagehide", flushPersistedLayout);
+      flushPersistedLayout();
+    };
+  }, [flushPersistedLayout]);
 
   /**
    * Pixel context for the reducer's feasibility checks, read fresh per command

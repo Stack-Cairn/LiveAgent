@@ -1,4 +1,8 @@
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import {
+  type ConversationMentionReference,
+  normalizeConversationMentionReferences,
+} from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 export type UploadedReadableFileKind =
@@ -22,6 +26,7 @@ const UPLOADED_READABLE_FILE_KINDS = new Set<string>([
 
 const DISPLAY_CONTENT_FIELD = "liveAgentDisplayContent";
 const ATTACHMENTS_FIELD = "liveAgentAttachments";
+const REFERENCED_CONVERSATIONS_FIELD = "liveAgentReferencedConversations";
 
 function createUserMessageId() {
   return `user-${createUuid()}`;
@@ -56,6 +61,7 @@ export type UploadedUserMessage = {
   timestamp: number;
   [DISPLAY_CONTENT_FIELD]?: string;
   [ATTACHMENTS_FIELD]?: PendingUploadedFile[];
+  [REFERENCED_CONVERSATIONS_FIELD]?: ConversationMentionReference[];
 };
 
 export function mergePendingUploadedFiles(
@@ -171,6 +177,7 @@ export function createUserMessageWithUploads(
   userText: string,
   files: PendingUploadedFile[],
   timestamp = Date.now(),
+  referencedConversations: readonly ConversationMentionReference[] = [],
 ): UploadedUserMessage | null {
   const content = buildUserMessageContentWithUploads(userText, files);
   if (!content.trim()) return null;
@@ -184,6 +191,10 @@ export function createUserMessageWithUploads(
   if (files.length > 0) {
     message[DISPLAY_CONTENT_FIELD] = normalizeLogicalLineEndings(userText);
     message[ATTACHMENTS_FIELD] = clonePendingUploadedFiles(files);
+  }
+  const normalizedReferences = normalizeConversationMentionReferences(referencedConversations);
+  if (normalizedReferences.length > 0) {
+    message[REFERENCED_CONVERSATIONS_FIELD] = normalizedReferences;
   }
   return message;
 }
@@ -251,6 +262,18 @@ export function getUserMessageAttachments(message: { role: string } & Record<str
   });
 }
 
+export function getUserMessageReferencedConversations(
+  message: { role: string } & Record<string, unknown>,
+  currentConversationId?: string,
+) {
+  const raw = message[REFERENCED_CONVERSATIONS_FIELD];
+  if (!Array.isArray(raw)) return [];
+  return normalizeConversationMentionReferences(
+    raw as ConversationMentionReference[],
+    currentConversationId,
+  );
+}
+
 export function normalizeUploadedFileForDisplayComparison(file: PendingUploadedFile) {
   return {
     relativePath: file.relativePath,
@@ -287,13 +310,18 @@ export function stripUploadedFilesMessageMetadata<TMessage extends { role: strin
 ): TMessage {
   if (message.role !== "user") return message;
   const userMessage = message as TMessage & Record<string, unknown>;
-  if (!(DISPLAY_CONTENT_FIELD in userMessage) && !(ATTACHMENTS_FIELD in userMessage)) {
+  if (
+    !(DISPLAY_CONTENT_FIELD in userMessage) &&
+    !(ATTACHMENTS_FIELD in userMessage) &&
+    !(REFERENCED_CONVERSATIONS_FIELD in userMessage)
+  ) {
     return message;
   }
 
   const next = { ...userMessage };
   delete next[DISPLAY_CONTENT_FIELD];
   delete next[ATTACHMENTS_FIELD];
+  delete next[REFERENCED_CONVERSATIONS_FIELD];
   return next as TMessage;
 }
 

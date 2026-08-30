@@ -383,6 +383,13 @@ func (m *Manager) ChatIngressV1Ready(agentID string) bool {
 	return err == nil && entry.session.SupportsCapability(gatewayv2.ChatIngressV1Capability)
 }
 
+func (m *Manager) SupportsCapability(agentID string, capability string) bool {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	return err == nil && entry.session.SupportsCapability(capability)
+}
+
 // ChatRuntimeProbeEpoch 返回目标 Agent 的会话 epoch；探活完成后以同一 agent_id +
 // epoch 调 RecordChatRuntimeProbe，把结果绑定到发起探活的那次连接。
 func (m *Manager) ChatRuntimeProbeEpoch(agentID string) (uint64, bool) {

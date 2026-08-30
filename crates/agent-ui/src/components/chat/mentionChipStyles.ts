@@ -2,8 +2,10 @@ export type MentionChipVariant =
   | "file"
   | "dir"
   | "skill"
+  | "app"
   | "commit"
   | "gitFile"
+  | "conversation"
   | "codeRef"
   | "pastedText";
 
@@ -19,8 +21,10 @@ const VARIANT_CLASS: Record<MentionChipVariant, string> = {
   file: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
   dir: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
   skill: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  app: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
   commit: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-200",
   gitFile: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
+  conversation: "bg-teal-500/15 text-teal-800 dark:text-teal-200",
   codeRef: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
   pastedText: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };

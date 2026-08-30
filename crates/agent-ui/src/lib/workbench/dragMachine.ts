@@ -1,4 +1,5 @@
 import { WORKBENCH_CANVAS_DIVIDER_SIZE as CANVAS_DIVIDER_SIZE } from "../../components/workbench/WorkbenchCanvas";
+import type { ConversationMentionReference } from "../chat/mentionReferences";
 import {
   hitTestWorkbenchDrop,
   MIN_CONVERSATION_PANE_HEIGHT,
@@ -104,7 +105,14 @@ export function canvasAllowsPointerSplit(geometry: WorkbenchGeometry): boolean {
 }
 
 export type WorkbenchDragPayload =
-  | { kind: "conversation"; conversationId: string; project: ProjectRef; title: string }
+  | {
+      kind: "conversation";
+      conversationId: string;
+      project: ProjectRef;
+      title: string;
+      cwd?: string;
+      updatedAt?: number;
+    }
   /** Moving an existing pane; surfaceKey is surfaceIdentityKey(pane.surface). */
   | { kind: "pane"; paneId: string; surfaceKey: string; title: string }
   /** Dragging a workspace creates a new conversation for it at the drop spot. */
@@ -115,6 +123,18 @@ export type WorkbenchDragPayload =
   | { kind: "newTerminal"; project: ProjectRef; title: string }
   /** Dragging the singleton File Tree tool opens/moves its project surface. */
   | { kind: "fileTree"; project: ProjectRef; title: string };
+
+export function conversationReferenceForWorkbenchPayload(
+  payload: WorkbenchDragPayload,
+): ConversationMentionReference | null {
+  if (payload.kind !== "conversation") return null;
+  return {
+    id: payload.conversationId,
+    title: payload.title,
+    ...(payload.cwd?.trim() ? { cwd: payload.cwd } : {}),
+    ...(payload.updatedAt === undefined ? {} : { updatedAt: payload.updatedAt }),
+  };
+}
 
 export type WorkbenchDropCommit = {
   payload: WorkbenchDragPayload;
@@ -217,7 +237,9 @@ export function resolveWorkbenchDropTarget(
     if (ownPaneId && raw.paneId === ownPaneId) {
       return { kind: "pane-center", paneId: ownPaneId };
     }
-    // Sidebar payloads never overwrite a pane: deterministic auto-dock.
+    // Sidebar payloads never overwrite a pane: deterministic auto-dock. A
+    // Composer reference target is resolved by the pointer adapter before the
+    // layout hit-test reaches this branch.
     if (payload.kind !== "pane") {
       const rect = paneRect(raw.paneId);
       if (!rect) return null;

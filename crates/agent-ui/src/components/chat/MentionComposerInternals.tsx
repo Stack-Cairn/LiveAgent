@@ -6,18 +6,22 @@ import {
 } from "@liveagent/adapters/userMessageContent";
 import { getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { SKILL_ICON_SVG_MARKUP } from "@liveagent/ui/components/IconSet";
+import { getAppMentionIconDataUrl } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
   codeMentionDisplayName,
   codeMentionLineLabel,
   createCodeMentionReference,
+  createConversationMentionReference,
   createFileMentionReference,
   escapeMarkdownReferenceLabel,
   type FileMentionKind,
   fileMentionDisplayName,
   fileMentionTitle,
+  formatAppMentionToken,
   formatCodeMentionToken,
+  formatConversationMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -31,6 +35,10 @@ export {
 } from "./MentionComposerInputUtils";
 
 import {
+  APP_MENTION_BUNDLE_ID_ATTR,
+  APP_MENTION_ICON_SVG,
+  APP_MENTION_NAME_ATTR,
+  APP_MENTION_PATH_ATTR,
   CARET_ANCHOR_TEXT,
   CODE_MENTION_END_ATTR,
   CODE_MENTION_PATH_ATTR,
@@ -56,6 +64,10 @@ import {
   COMPOSER_CONTEXT_MENU_HEIGHT,
   COMPOSER_CONTEXT_MENU_MARGIN,
   COMPOSER_CONTEXT_MENU_WIDTH,
+  CONVERSATION_MENTION_CWD_ATTR,
+  CONVERSATION_MENTION_ID_ATTR,
+  CONVERSATION_MENTION_TITLE_ATTR,
+  CONVERSATION_MENTION_UPDATED_AT_ATTR,
   type ComposerClipboardSnapshot,
   formatLargePasteCount,
   GIT_FILE_MENTION_COMMIT_SHA_ATTR,
@@ -72,9 +84,13 @@ import {
   LARGE_PASTE_LINE_THRESHOLD,
   LARGE_PASTE_PREVIEW_CHARS,
   LARGE_PASTE_TAG_ATTR,
+  MAX_CONVERSATION_MENTIONS,
   MENTION_KIND_ATTR,
   MENTION_TAG_ATTR,
+  type MentionComposerApp,
+  type MentionComposerAppMention,
   type MentionComposerCommitMention,
+  type MentionComposerConversationMention,
   type MentionComposerDraftSegment,
   type MentionComposerGitFileMention,
   type MentionComposerLargePaste,
@@ -125,6 +141,8 @@ export function formatGitFileMentionToken(
   }
   return `${label} (${file.commitSha})`;
 }
+
+export { formatConversationMentionToken };
 
 export function removeCaretAnchors(value: string) {
   return value.split(CARET_ANCHOR_TEXT).join("");
@@ -211,6 +229,12 @@ export function collectDraftSegments(
           childParts.push({ type: "fileMention", reference });
           childIsLogical = true;
         }
+      } else if (el.hasAttribute(CONVERSATION_MENTION_ID_ATTR)) {
+        const conversation = conversationMentionFromElement(el);
+        if (conversation) {
+          childParts.push({ type: "conversationMention", conversation });
+          childIsLogical = true;
+        }
       } else if (el.hasAttribute(GIT_FILE_MENTION_PATH_ATTR)) {
         const file = gitFileMentionFromElement(el);
         if (file) {
@@ -243,6 +267,12 @@ export function collectDraftSegments(
               description: el.getAttribute(SKILL_MENTION_DESCRIPTION_ATTR)?.trim() ?? "",
             },
           });
+          childIsLogical = true;
+        }
+      } else if (el.hasAttribute(APP_MENTION_NAME_ATTR)) {
+        const app = appMentionFromElement(el);
+        if (app) {
+          childParts.push({ type: "appMention", app });
           childIsLogical = true;
         }
       } else {
@@ -302,8 +332,12 @@ export function serializeDraftSegments(segments: MentionComposerDraftSegment[]) 
       if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
       if (segment.type === "largePaste") return segment.paste.text;
       if (segment.type === "skillMention") return formatSkillMentionToken(segment.skill);
+      if (segment.type === "appMention") return formatAppMentionToken(segment.app);
       if (segment.type === "commitMention") return formatCommitMentionToken(segment.commit);
       if (segment.type === "gitFileMention") return formatGitFileMentionToken(segment.file);
+      if (segment.type === "conversationMention") {
+        return formatConversationMentionToken(segment.conversation);
+      }
       if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
       return segment.text;
     })
@@ -696,6 +730,17 @@ export function gitFileMentionFromElement(el: HTMLElement): MentionComposerGitFi
   });
 }
 
+export function conversationMentionFromElement(
+  el: HTMLElement,
+): MentionComposerConversationMention | null {
+  return createConversationMentionReference({
+    id: el.getAttribute(CONVERSATION_MENTION_ID_ATTR) ?? "",
+    title: el.getAttribute(CONVERSATION_MENTION_TITLE_ATTR) ?? "",
+    cwd: el.getAttribute(CONVERSATION_MENTION_CWD_ATTR)?.trim() || undefined,
+    updatedAt: Number(el.getAttribute(CONVERSATION_MENTION_UPDATED_AT_ATTR) ?? "") || undefined,
+  });
+}
+
 export function codeMentionFromElement(el: HTMLElement): CodeMentionReference | null {
   const path = el.getAttribute(CODE_MENTION_PATH_ATTR)?.trim() ?? "";
   if (!path) return null;
@@ -703,6 +748,23 @@ export function codeMentionFromElement(el: HTMLElement): CodeMentionReference | 
     path,
     startLine: Number(el.getAttribute(CODE_MENTION_START_ATTR) ?? "1"),
     endLine: Number(el.getAttribute(CODE_MENTION_END_ATTR) ?? "1"),
+  });
+}
+
+export function normalizeAppMention(app: MentionComposerAppMention): MentionComposerAppMention {
+  const name = app.name.trim();
+  const bundleId = app.bundleId?.trim() || undefined;
+  const path = app.path.trim();
+  return { name, bundleId, path };
+}
+
+export function appMentionFromElement(el: HTMLElement): MentionComposerAppMention | null {
+  const name = el.getAttribute(APP_MENTION_NAME_ATTR)?.trim() ?? "";
+  if (!name) return null;
+  return normalizeAppMention({
+    name,
+    bundleId: el.getAttribute(APP_MENTION_BUNDLE_ID_ATTR)?.trim() || undefined,
+    path: el.getAttribute(APP_MENTION_PATH_ATTR)?.trim() ?? "",
   });
 }
 
@@ -835,6 +897,23 @@ export function normalizeComposerClipboardSegment(
     const rawSkill = clipboardRecord(segment.skill);
     return rawSkill ? normalizeClipboardSkill(rawSkill, enabledSkills) : null;
   }
+  if (type === "appMention") {
+    // 与 commit/gitFile 同一信任边界：chip 本身没有任何特权动作（不打开
+    // URL、不执行命令），最坏情况等价于粘贴一段普通文本，所以不需要像
+    // skill 那样过白名单——只要求 name 非空。
+    const rawApp = clipboardRecord(segment.app);
+    if (!rawApp) return null;
+    const name = clipboardString(rawApp, "name").trim();
+    if (!name) return null;
+    return {
+      type,
+      app: normalizeAppMention({
+        name,
+        bundleId: clipboardString(rawApp, "bundleId") || undefined,
+        path: clipboardString(rawApp, "path"),
+      }),
+    };
+  }
   if (type === "commitMention") {
     const rawCommit = clipboardRecord(segment.commit);
     const commit = rawCommit ? normalizeClipboardCommit(rawCommit) : null;
@@ -844,6 +923,17 @@ export function normalizeComposerClipboardSegment(
     const rawFile = clipboardRecord(segment.file);
     const file = rawFile ? normalizeClipboardGitFile(rawFile) : null;
     return file ? { type, file } : null;
+  }
+  if (type === "conversationMention") {
+    const rawConversation = clipboardRecord(segment.conversation);
+    if (!rawConversation) return null;
+    const conversation = createConversationMentionReference({
+      id: clipboardString(rawConversation, "id"),
+      title: clipboardString(rawConversation, "title"),
+      cwd: clipboardString(rawConversation, "cwd") || undefined,
+      updatedAt: clipboardNumber(rawConversation, "updatedAt") || undefined,
+    });
+    return conversation ? { type, conversation } : null;
   }
   if (type === "codeMention") {
     const rawReference = clipboardRecord(segment.reference);
@@ -919,6 +1009,16 @@ export function parseSerializedComposerText(
       } else {
         pushTextSegment(segments, `/${segment.name}`);
       }
+    } else if (segment.type === "app") {
+      segments.push({
+        type: "appMention",
+        app: normalizeAppMention({
+          name: segment.app.name,
+          bundleId: segment.app.bundleId,
+          path: segment.app.path ?? "",
+        }),
+      });
+      matched = true;
     } else if (segment.type === "commit") {
       segments.push({
         type: "commitMention",
@@ -948,6 +1048,9 @@ export function parseSerializedComposerText(
           ...segment.file,
         }),
       });
+      matched = true;
+    } else if (segment.type === "conversation") {
+      segments.push({ type: "conversationMention", conversation: segment.reference });
       matched = true;
     } else if (segment.type === "codeRef") {
       segments.push({ type: "codeMention", reference: segment.reference });
@@ -1016,12 +1119,45 @@ export function createSkillMentionIcon() {
   return createMentionIcon(SKILL_ICON_SVG_MARKUP);
 }
 
+const CONVERSATION_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 8h8M8 12h5"/></svg>';
+
+export function createConversationMentionIcon() {
+  return createMentionIcon(CONVERSATION_ICON_SVG);
+}
+
+/**
+ * 应用 chip 的图标：优先从注册表取真实 logo（<img>），查不到回退通用
+ * 占位 SVG。图标只作为子元素存在——序列化读的是 chip 属性，data URL
+ * 因此不进草稿/剪贴板 JSON；chip 重建（setDraft、粘贴恢复）时按身份
+ * 重查注册表，图标自然复原。
+ */
+export function createAppMentionIcon(app?: MentionComposerAppMention) {
+  const iconDataUrl = app ? getAppMentionIconDataUrl(app) : undefined;
+  if (!iconDataUrl) {
+    return createMentionIcon(APP_MENTION_ICON_SVG);
+  }
+  const icon = document.createElement("img");
+  icon.src = iconDataUrl;
+  icon.alt = "";
+  icon.width = 12;
+  icon.height = 12;
+  icon.draggable = false;
+  icon.style.flexShrink = "0";
+  icon.style.alignSelf = "center";
+  // 圆角走标准 token（Shared UI Boundaries 禁用任意值圆角，内联样式同理）。
+  icon.classList.add("rounded-xs");
+  return icon;
+}
+
 export function isComposerChipElement(node: Node | null): node is HTMLElement {
   return (
     node instanceof HTMLElement &&
     (node.hasAttribute(MENTION_TAG_ATTR) ||
       node.hasAttribute(SKILL_MENTION_NAME_ATTR) ||
+      node.hasAttribute(APP_MENTION_NAME_ATTR) ||
       node.hasAttribute(COMMIT_MENTION_SHA_ATTR) ||
+      node.hasAttribute(CONVERSATION_MENTION_ID_ATTR) ||
       node.hasAttribute(GIT_FILE_MENTION_PATH_ATTR) ||
       node.hasAttribute(CODE_MENTION_PATH_ATTR) ||
       node.hasAttribute(LARGE_PASTE_TAG_ATTR))
@@ -1400,6 +1536,57 @@ export function insertSkillMentionChip(ctx: MentionContext, skill: MentionCompos
   insertMentionChipElement(ctx, chip);
 }
 
+export function createConversationMentionChip(
+  input: MentionComposerConversationMention,
+): HTMLElement | null {
+  const conversation = createConversationMentionReference(input);
+  if (!conversation) return null;
+  const chip = document.createElement("span");
+  chip.setAttribute(CONVERSATION_MENTION_ID_ATTR, conversation.id);
+  chip.setAttribute(CONVERSATION_MENTION_TITLE_ATTR, conversation.title);
+  if (conversation.cwd) chip.setAttribute(CONVERSATION_MENTION_CWD_ATTR, conversation.cwd);
+  if (conversation.updatedAt !== undefined) {
+    chip.setAttribute(CONVERSATION_MENTION_UPDATED_AT_ATTR, String(conversation.updatedAt));
+  }
+  chip.contentEditable = "false";
+  chip.className = mentionChipClassName("conversation", { selectable: false });
+  chip.title = conversation.cwd ? `${conversation.title}\n${conversation.cwd}` : conversation.title;
+  chip.appendChild(createConversationMentionIcon());
+  chip.appendChild(document.createTextNode(conversation.title));
+  return chip;
+}
+
+export function insertConversationMentionChip(
+  ctx: MentionContext,
+  conversation: MentionComposerConversationMention,
+) {
+  const chip = createConversationMentionChip(conversation);
+  if (chip) insertMentionChipElement(ctx, chip);
+}
+
+export function createAppMentionChip(appInput: MentionComposerAppMention) {
+  const app = normalizeAppMention(appInput);
+  const chip = document.createElement("span");
+  chip.setAttribute(APP_MENTION_NAME_ATTR, app.name);
+  if (app.bundleId) {
+    chip.setAttribute(APP_MENTION_BUNDLE_ID_ATTR, app.bundleId);
+  }
+  chip.setAttribute(APP_MENTION_PATH_ATTR, app.path);
+  chip.contentEditable = "false";
+  chip.className = mentionChipClassName("app", { selectable: false });
+  chip.title = app.bundleId ? `${app.name}\n${app.bundleId}` : app.name;
+  chip.setAttribute("aria-label", app.name);
+
+  chip.appendChild(createAppMentionIcon(app));
+  chip.appendChild(document.createTextNode(app.name));
+  return chip;
+}
+
+export function insertAppMentionChip(ctx: MentionContext, app: MentionComposerApp) {
+  const chip = createAppMentionChip(app);
+  insertMentionChipElement(ctx, chip);
+}
+
 export function createCommitMentionChip(commitInput: MentionComposerCommitMention) {
   const commit = normalizeCommitMention(commitInput);
   const chip = document.createElement("span");
@@ -1523,13 +1710,109 @@ export function createComposerSegmentNode(
   if (segment.type === "skillMention") {
     return createSkillMentionChip(segment.skill);
   }
+  if (segment.type === "appMention") {
+    return createAppMentionChip(segment.app);
+  }
   if (segment.type === "commitMention") {
     return createCommitMentionChip(segment.commit);
   }
   if (segment.type === "gitFileMention") {
     return createGitFileMentionChip(segment.file);
   }
+  if (segment.type === "conversationMention") {
+    return createConversationMentionChip(segment.conversation);
+  }
   return createCodeMentionChip(segment.reference);
+}
+
+export type SanitizeConversationMentionOptions = {
+  currentConversationId?: string;
+  /**
+   * 文本模式等关闭会话引用时，所有会话段都降级为 token 文本。
+   * 缺省视为开启，与 MentionComposer 的默认 prop 一致。
+   */
+  conversationMentionsEnabled?: boolean;
+  /**
+   * setDraft 会先清空编辑器再重建，此时不应把即将被替换的旧 chip 计入配额。
+   * 缺省 true：粘贴路径要叠加编辑器里已有的 chip。
+   */
+  includeExistingChips?: boolean;
+};
+
+export function collectConversationMentionIds(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]
+    .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+    .filter((id): id is string => Boolean(id));
+}
+
+function conversationMentionConstraintState(options: SanitizeConversationMentionOptions = {}) {
+  return {
+    enabled: options.conversationMentionsEnabled !== false,
+    currentId: options.currentConversationId?.trim() ?? "",
+    selectedIds: new Set<string>(),
+  };
+}
+
+function conversationMentionIsRejected(
+  id: string,
+  state: { enabled: boolean; currentId: string; selectedIds: Set<string> },
+) {
+  return (
+    !state.enabled ||
+    !id ||
+    (state.currentId !== "" && id === state.currentId) ||
+    state.selectedIds.has(id) ||
+    state.selectedIds.size >= MAX_CONVERSATION_MENTIONS
+  );
+}
+
+/** 粘贴 / setDraft 与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限、自引用、
+ *  以及会话引用开关）。违反约束的会话段不能静默丢弃——降级为序列化 token
+ *  文本，内容一字不丢，同时不再具备结构化引用身份。 */
+export function sanitizeConversationMentionSegments(
+  root: HTMLElement,
+  segments: MentionComposerDraftSegment[],
+  options: SanitizeConversationMentionOptions = {},
+): MentionComposerDraftSegment[] {
+  const state = conversationMentionConstraintState(options);
+  if (options.includeExistingChips !== false) {
+    for (const id of collectConversationMentionIds(root)) state.selectedIds.add(id);
+  }
+  return segments.map((segment) => {
+    if (segment.type !== "conversationMention") return segment;
+    const id = segment.conversation.id.trim();
+    if (conversationMentionIsRejected(id, state)) {
+      return { type: "text", text: formatConversationMentionToken(segment.conversation) };
+    }
+    state.selectedIds.add(id);
+    return segment;
+  });
+}
+
+function downgradeConversationMentionChip(chip: HTMLElement) {
+  const conversation = conversationMentionFromElement(chip);
+  const text = conversation
+    ? formatConversationMentionToken(conversation)
+    : chip.getAttribute(CONVERSATION_MENTION_TITLE_ATTR)?.trim() || chip.textContent?.trim() || "";
+  chip.replaceWith(document.createTextNode(text));
+}
+
+/** execCommand("paste") 等原生插入不会经过 segment 管道；事后按同一套约束
+ *  把违规 chip 降级为 token 文本。 */
+export function enforceConversationMentionConstraintsInEditor(
+  root: HTMLElement,
+  options: SanitizeConversationMentionOptions = {},
+) {
+  const state = conversationMentionConstraintState(options);
+  for (const chip of [...root.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]) {
+    const conversation = conversationMentionFromElement(chip);
+    const id = conversation?.id.trim() ?? "";
+    if (conversationMentionIsRejected(id, state) || !conversation) {
+      downgradeConversationMentionChip(chip);
+      continue;
+    }
+    state.selectedIds.add(id);
+  }
 }
 
 export function insertComposerSegmentsAtSelection(

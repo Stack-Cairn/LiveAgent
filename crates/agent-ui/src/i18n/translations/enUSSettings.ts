@@ -355,6 +355,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.memory_manager.desc": "Read and write long-term memory across sessions",
   "settings.builtinTool.memory_manager.detail":
     "Maintains long-term memory across sessions: saving preferences, project conventions and key conclusions for later recall. Contents can be reviewed and organized in the Memory settings panel.",
+  "settings.builtinTool.read_conversation.name": "Read Conversation",
+  "settings.builtinTool.read_conversation.desc":
+    "Read conversations referenced with @ in the current turn on demand",
+  "settings.builtinTool.read_conversation.detail":
+    "Registered only after the current message explicitly references an earlier conversation through the @ menu. The model can page through persisted summaries and conversation text; historical tool output is filtered and all historical text is treated as untrusted context. Read-only; chat sessions only.",
   "settings.builtinTool.agent.name": "Subagent",
   "settings.builtinTool.agent.desc": "Spawn subagents to work on complex tasks in parallel",
   "settings.builtinTool.agent.detail":
@@ -662,6 +667,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Model used to generate commit messages in Git review. Follows the current chat model when unselected or unavailable.",
   "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
+  "settings.composerContextDisplay": "Context usage display",
+  "settings.composerContextDisplayDesc":
+    "Stats bar shows only the conversation stats bar below the card (context usage readout included); Both shows the stats bar plus the always-visible usage ring at the composer's lower right; Usage ring shows only the ring. All three keep the manual compaction entry at ≥50% usage.",
+  "settings.composerContextDisplayStatsBar": "Stats bar",
+  "settings.composerContextDisplayBoth": "Both",
+  "settings.composerContextDisplayRing": "Usage ring",
   "settings.failoverTitle": "Auto Failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, retry it on the next {vendor} provider in the queue with the same model, staying on the provider that succeeds. Never crosses vendors.",

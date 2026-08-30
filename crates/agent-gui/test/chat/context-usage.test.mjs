@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
@@ -825,4 +826,86 @@ test("buildContextUsageScanItems counts the streaming draft as a trailing round"
     deriveContextUsageTokens(items),
     50_000 + Math.ceil(contextUsage.estimateTextTokenUnits(draft)) + 8,
   );
+});
+
+// 环 hideBelowWarn 的真实 DOM 验收
+// (docs/design/composer-context-stats-bar.md §4.5 语义分工、§9 组件层)。
+// DOM env 在用例内创建/销毁：本文件其余用例是纯函数，不需要 jsdom 全局。
+async function withRing(run) {
+  const env = await createDomTestEnv();
+  try {
+    const { React, act, createRoot } = env;
+    const doc = env.dom.window.document;
+    const { ContextUsageRing } = env.loadModule(
+      "@liveagent/ui/components/chat/ContextUsageRing.tsx",
+    );
+    const { LocaleContext } = env.loadModule("@liveagent/ui/i18n/LocaleContext.tsx");
+    const { t: translate } = env.loadModule("@liveagent/app/i18n/config.ts");
+    const locale = { locale: "en-US", t: (key) => translate(key, "en-US") };
+
+    const container = doc.createElement("div");
+    doc.body.appendChild(container);
+    const root = createRoot(container);
+    const paint = async (props) => {
+      await act(async () => {
+        root.render(
+          React.createElement(
+            LocaleContext.Provider,
+            { value: locale },
+            React.createElement(ContextUsageRing, { contextWindow: 100_000, ...props }),
+          ),
+        );
+      });
+      return container.innerHTML;
+    };
+
+    await run(paint);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  } finally {
+    env.cleanup();
+  }
+}
+
+test("context usage ring hides below the warn ratio and reappears exactly at 50%", async () => {
+  await withRing(async (paint) => {
+    // 阈值取等号，与 canManualCompact 同一口径：环恰在能承担压缩入口时浮现。
+    assert.equal(await paint({ totalTokens: 49_000, hideBelowWarn: true }), "", "49% 应隐藏");
+    const atThreshold = await paint({ totalTokens: 50_000, hideBelowWarn: true });
+    assert.notEqual(atThreshold, "", "50% 必须浮现");
+    assert.match(atThreshold, /50%/);
+    // 环管「当前上下文占用」（瞬时、压缩后回落），与状态栏的累计读数互补。
+    assert.equal(
+      await paint({ totalTokens: 12_000, hideBelowWarn: true }),
+      "",
+      "压缩后占用回落到阈值下应重新隐藏",
+    );
+  });
+});
+
+test("context usage ring still renders at low usage without hideBelowWarn", async () => {
+  await withRing(async (paint) => {
+    // 默认 false：其他调用方（非 composer）行为不受本次改动影响。
+    const lowUsage = await paint({ totalTokens: 12_000 });
+    assert.notEqual(lowUsage, "", "未传 hideBelowWarn 时低占用仍渲染");
+    assert.match(lowUsage, /12%/);
+  });
+});
+
+test("composer renders ring and stats bar per three-state contextDisplayMode", () => {
+  // 三档（docs/design/composer-context-stats-bar.md §4.7）：ring/both 模式环常显
+  // （composer 不传 hideBelowWarn，低占用也不得隐身）；statsBar 模式环整枚不渲染；
+  // statsBar 插槽只在 ring 模式下不挂载——statsBar/both 两档都渲染。
+  assert.match(
+    chatComposerBarSource,
+    /\{contextDisplayMode === "ring" \|\| contextDisplayMode === "both" \? \(/,
+  );
+  assert.match(
+    chatComposerBarSource,
+    /statsBar && approvalBar == null && contextDisplayMode !== "ring"/,
+  );
+  assert.doesNotMatch(chatComposerBarSource, /hideBelowWarn/);
 });

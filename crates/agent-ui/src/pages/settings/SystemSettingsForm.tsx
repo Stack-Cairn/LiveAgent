@@ -675,12 +675,13 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                         spellCheck={false}
                         autoComplete="off"
                         placeholder={t("settings.fontFamilyPlaceholder")}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           setCustomFontDrafts((current) => ({
                             ...current,
-                            [key]: event.currentTarget.value,
-                          }))
-                        }
+                            [key]: value,
+                          }));
+                        }}
                         onBlur={() => commitCustomFontFamily(key)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {

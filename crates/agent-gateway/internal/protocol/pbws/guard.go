@@ -51,6 +51,9 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_SkillTextRead,
 		*gatewayv2.GatewayEnvelope_SkillManage,
 		*gatewayv2.GatewayEnvelope_FileMentionList,
+		// 已安装应用清单（@ 应用提及）：只读宿主能力，桌面端返回什么由
+		// 桌面自己裁决（枚举实现见 services/cua_driver/installed_apps.rs）。
+		*gatewayv2.GatewayEnvelope_InstalledAppsList,
 		*gatewayv2.GatewayEnvelope_UploadedImagePreview,
 		*gatewayv2.GatewayEnvelope_MemoryManage,
 		*gatewayv2.GatewayEnvelope_CronManage,

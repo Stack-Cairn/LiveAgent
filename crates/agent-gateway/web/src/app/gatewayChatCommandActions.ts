@@ -3,6 +3,7 @@ import type {
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -77,7 +78,7 @@ type GatewayChatCommandActionOptions = {
   setConversationId: Dispatch<SetStateAction<string>>;
   setPendingUploadsForConversation: (conversationId: string, files: PendingUploadedFile[]) => void;
   setSelectedHistoryId: Dispatch<SetStateAction<string>>;
-  setUploadingFiles: (active: boolean) => void;
+  setUploadingFiles: (active: boolean, targetConversationId?: string) => void;
   settings: AppSettings;
   sidebarStore: SidebarStore;
   token: string;
@@ -212,6 +213,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       clientRequestId,
       message,
       attachments: uploadedFiles,
+      referencedConversations: sendOptions?.referencedConversations,
       isEditResend: Boolean(sendOptions?.editMessageRef),
       baseMessageRef: sendOptions?.editMessageRef,
       optimistic: sendOptions?.optimisticEcho !== false,
@@ -224,6 +226,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           selectedModel: buildGatewaySelectedModel(turnSelectedModel, activeProviders),
           systemSettings: buildGatewaySystemSettings(settings, effectiveWorkdir),
           uploadedFiles,
+          referencedConversations: sendOptions?.referencedConversations,
           clientRequestId,
           runtimeControls,
           baseMessageRef: sendOptions?.editMessageRef,
@@ -273,6 +276,8 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     draft: MentionComposerDraft,
     files: PendingUploadedFile[],
     workdir: string,
+    // 大段粘贴导入期间的"上传中"状态归属会话:多 Pane 下只禁用目标 Pane。
+    targetConversationId?: string,
   ) => {
     let text = normalizeLogicalLineEndings(
       isAgentMode && draft.largePastes.length > 0
@@ -283,7 +288,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     if (isAgentMode && draft.largePastes.length > 0) {
       setChatError(null);
       isImportingPastedTextRef.current = true;
-      setUploadingFiles(true);
+      setUploadingFiles(true, targetConversationId);
       try {
         const agentID = await resolveActiveAgentID();
         const imported = await importPastedTextsAsFiles({
@@ -302,7 +307,11 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
         setUploadingFiles(false);
       }
     }
-    return { text, uploadedFiles };
+    return {
+      text,
+      uploadedFiles,
+      referencedConversations: normalizeConversationMentionReferences(draft.conversationMentions),
+    };
   };
 
   const clearCurrentComposerDraftForQueuedTurn = (conversationId: string) => {
@@ -326,7 +335,12 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       settings.system.workdir
     ).trim();
     try {
-      const materialized = await materializeComposerDraftForSend(draft, uploadedFiles, workdir);
+      const materialized = await materializeComposerDraftForSend(
+        draft,
+        uploadedFiles,
+        workdir,
+        conversationId,
+      );
       if (!materialized.text && materialized.uploadedFiles.length === 0) return false;
       clearCurrentComposerDraftForQueuedTurn(conversationId);
       clearedComposer = true;
@@ -342,6 +356,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           ),
           systemSettings: buildGatewaySystemSettings(settings, workdir),
           uploadedFiles: materialized.uploadedFiles,
+          referencedConversations: materialized.referencedConversations,
           clientRequestId: createUuid(),
           runtimeControls: chatRuntimeControlsForCurrentProvider,
           queuePolicy,
@@ -352,6 +367,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
       const outcome = await sendChat(materialized.text, {
         conversationId,
         uploadedFiles: materialized.uploadedFiles,
+        referencedConversations: materialized.referencedConversations,
         runtimeControls: chatRuntimeControlsForCurrentProvider,
         workdir,
         queuePolicy,

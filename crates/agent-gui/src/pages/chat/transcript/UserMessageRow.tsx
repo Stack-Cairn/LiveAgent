@@ -1,4 +1,5 @@
 import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   type PendingUploadedFile,
   splitUserAttachmentsForDisplay,
@@ -28,6 +29,7 @@ export type UserMessageRowProps = {
     messageRef: HistoryMessageRef,
     text: string,
     attachments: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => void;
 };
 
@@ -63,7 +65,12 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
         onCancel={onCancelEdit}
         onSubmit={(newText, nextAttachments) => {
           onCancelEdit();
-          onResendFromEdit(effectiveMessageRef, newText, nextAttachments);
+          onResendFromEdit(
+            effectiveMessageRef,
+            newText,
+            nextAttachments,
+            item.referencedConversations,
+          );
         }}
       />
     );

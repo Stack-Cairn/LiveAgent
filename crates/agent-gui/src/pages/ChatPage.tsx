@@ -25,6 +25,7 @@ import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-edito
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
+import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -32,6 +33,7 @@ import {
   useComposerSkillSelection,
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
@@ -62,6 +64,8 @@ import {
   findPaneIdBySurfaceKey,
   findParentSplitId,
   hitTestWorkbenchDrop,
+  type PendingWorkspaceDropOperation,
+  shouldDeferWorkspaceDropConversationSync,
   type WorkbenchCommandError,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
@@ -72,6 +76,7 @@ import {
   surfaceIdentityKey,
   surfaceProjectRef,
 } from "@liveagent/ui/lib/workbench/types";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   type CSSProperties,
@@ -150,6 +155,7 @@ import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
 import type { ChatPageProps } from "./chat/chatPageTypes";
+import { asErrorMessage } from "./chat/chatPageUtils";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
 import type {
   ConversationControllerActions,
@@ -212,6 +218,7 @@ import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
 import { resolveWorkbenchPaneProject } from "./chat/workbench/paneProjectContext";
 import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
 import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
+import { releaseOrphanTerminalPaneLeases } from "./chat/workbench/terminalPaneLeaseStore";
 import {
   createTerminalSurfaceId,
   findTerminalPaneForSession,
@@ -355,6 +362,10 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef,
     prepareComposerForConversationChangeActionRef,
   });
+  const [workspaceRootRevision, setWorkspaceRootRevision] = useState(0);
+  const handleWorkspaceDirectoriesMounted = useCallback(() => {
+    setWorkspaceRootRevision((revision) => revision + 1);
+  }, []);
   useEffect(() => {
     sidebarStore.start();
     return () => {
@@ -370,6 +381,19 @@ export function ChatPage(props: ChatPageProps) {
   // The only page-level subscription to the sidebar list: ChatPage's own
   // render needs (draft detection, pending-item effect, workspace root).
   const historyItems = useSidebarSelector(sidebarStore, selectConversations);
+  const mentionableConversations = useMemo(
+    () =>
+      historyItems
+        .filter((item) => !item.isPending)
+        .map(({ id, title, cwd, updatedAt, messageCount }) => ({
+          id,
+          title,
+          cwd,
+          updatedAt,
+          messageCount,
+        })),
+    [historyItems],
+  );
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
   const {
     canShareHistory,
@@ -646,6 +670,15 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || workdir : "");
+  const searchMentionableConversations = useCallback(
+    (query: string) =>
+      searchMentionConversations({
+        query,
+        currentConversationId,
+        currentWorkdir: displayedConversationWorkdir,
+      }),
+    [currentConversationId, displayedConversationWorkdir],
+  );
   const activeWorkspaceResources = useMemo(
     () => resolveWorkspaceResources(settings, displayedConversationWorkdir),
     [displayedConversationWorkdir, settings],
@@ -660,6 +693,7 @@ export function ChatPage(props: ChatPageProps) {
     selectedSkillNames,
     skillsEnabled,
   );
+  const mentionApps = useMentionApps(activeWorkspaceResources.mcpServers, isAgentMode);
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
@@ -2040,7 +2074,24 @@ export function ChatPage(props: ChatPageProps) {
     addNotify,
     setErrorMessage,
     t,
+    onWorkspaceDirectoriesMounted: handleWorkspaceDirectoriesMounted,
   });
+  const pickWorkspaceFolder = useCallback(
+    async (targetConversationId?: string, initialWorkdir?: string) => {
+      try {
+        const selected = await invoke<string | null>("system_pick_folder", {
+          initial_workdir:
+            initialWorkdir?.trim() || displayedConversationWorkdir.trim() || undefined,
+        });
+        const folderPath = selected?.trim();
+        if (!folderPath) return;
+        await importUploadZonePaths([folderPath], targetConversationId);
+      } catch (error) {
+        setErrorMessage(asErrorMessage(error, t("chat.workspaceMountDropFailed")));
+      }
+    },
+    [displayedConversationWorkdir, importUploadZonePaths, t],
+  );
   // Late-bound hover focus keeps visual feedback and keyboard context aligned.
   // The final upload owner is read directly from the composer under the drop
   // point, so routing never depends on this asynchronous focus transition.
@@ -2163,6 +2214,9 @@ export function ChatPage(props: ChatPageProps) {
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
+      mentionableConversations,
+      searchMentionableConversations,
+      mentionApps,
       executionMode: settings.system.executionMode,
       hasModels,
       currentModelLabel,
@@ -2180,6 +2234,7 @@ export function ChatPage(props: ChatPageProps) {
       thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
       contextUsageTokensSource,
       contextWindow: currentModelContextWindow,
+      contextDisplayMode: settings.customSettings.composerContextDisplay,
       gitClient: tauriGitClient,
       workspaceActivityClient: tauriWorkspaceActivityClient,
       onOpenWorktree: handleOpenWorktree,
@@ -2191,6 +2246,7 @@ export function ChatPage(props: ChatPageProps) {
       onOpenSettings,
       onChatRuntimeControlsChange: handleChatRuntimeControlsChange,
       onPickReadableFiles: pickReadableFiles,
+      onPickWorkspaceFolder: pickWorkspaceFolder,
       onPasteFiles: importReadableFiles,
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
@@ -2344,10 +2400,7 @@ export function ChatPage(props: ChatPageProps) {
   // path. The sync effect only pauses for that identified draft, so it cannot
   // consume the target on an unrelated current-conversation update.
   const workspaceDropSequenceRef = useRef(0);
-  const pendingWorkspaceDropRef = useRef<{
-    operationId: number;
-    projectPathKey: string;
-  } | null>(null);
+  const pendingWorkspaceDropRef = useRef<PendingWorkspaceDropOperation | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: The mutable runtime cache ref intentionally supplies the latest draft workdir without changing the drag handler identity.
   const handleWorkbenchDropCommit = useCallback(
@@ -2369,12 +2422,22 @@ export function ChatPage(props: ChatPageProps) {
         if (!project) return;
         const operationId = workspaceDropSequenceRef.current + 1;
         workspaceDropSequenceRef.current = operationId;
-        pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };
+        pendingWorkspaceDropRef.current = {
+          operationId,
+          projectPathKey: pathKey,
+          conversationId: null,
+        };
         void commitWorkspaceDropConversation({
           revision: commit.revision,
           target,
           project: { projectId: project.id, projectPathKey: pathKey },
           startConversation: () => handleNewConversationForProject(project),
+          onConversationCreated: (conversationId) => {
+            const pending = pendingWorkspaceDropRef.current;
+            if (pending?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = { ...pending, conversationId };
+            }
+          },
           currentRevision: () => workbench.layoutRef.current.revision,
           conversationMatchesProject: (conversationId) => {
             const draftWorkdir =
@@ -2383,24 +2446,40 @@ export function ChatPage(props: ChatPageProps) {
           },
           paneIdForConversation: workbench.paneIdForConversation,
           openConversation: workbench.openConversation,
-        }).then((result) => {
-          if (pendingWorkspaceDropRef.current?.operationId === operationId) {
-            pendingWorkspaceDropRef.current = null;
-          }
-          if (result.kind === "opened" || result.kind === "not-created") return;
-          if (result.kind === "already-open") {
-            const paneId = workbench.paneIdForConversation(result.conversationId);
-            if (paneId) handleWorkbenchFocusPane(paneId);
-            return;
-          }
-          workbench.syncCurrentConversation(result.conversationId, {
-            projectId: project.id,
-            projectPathKey: pathKey,
+        })
+          .then((result) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            if (result.kind === "opened") return;
+            if (result.kind === "already-open") {
+              const paneId = workbench.paneIdForConversation(result.conversationId);
+              if (paneId) handleWorkbenchFocusPane(paneId);
+              return;
+            }
+            // not-created/stale/identity-mismatch/rejected:暂停窗口内被 defer
+            // 掉的会话切换必须补一次同步,且项目身份取当前会话自己的解析——
+            // identity-mismatch 的定义就是草稿 workdir 不属于拖入项目,绝不能
+            // 拿拖入项目的 ProjectRef 强绑聚焦 Pane(checkpoint 授权根、文件
+            // 投放作用域都会跟着错位)。
+            workbench.syncCurrentConversation(
+              currentConversationIdRef.current,
+              conversationSurfaceProject,
+            );
+            if (result.kind === "stale" || result.kind === "identity-mismatch") {
+              addNotify("error", t("workbench.dropStateChanged"));
+            }
+          })
+          .catch((error) => {
+            if (pendingWorkspaceDropRef.current?.operationId === operationId) {
+              pendingWorkspaceDropRef.current = null;
+            }
+            workbench.syncCurrentConversation(
+              currentConversationIdRef.current,
+              conversationSurfaceProject,
+            );
+            addNotify("error", asErrorMessage(error, t("workbench.workspaceDropFailed")));
           });
-          if (result.kind !== "rejected") {
-            addNotify("error", t("workbench.dropStateChanged"));
-          }
-        });
         return;
       }
       if (payload.kind === "conversation") {
@@ -2483,6 +2562,7 @@ export function ChatPage(props: ChatPageProps) {
     [
       archivedWorkspaceProjectPathKeys,
       addNotify,
+      conversationSurfaceProject,
       handleNewConversationForProject,
       handleWorkbenchFocusPane,
       selectWorkbenchConversation,
@@ -2529,6 +2609,8 @@ export function ChatPage(props: ChatPageProps) {
           conversationId: item.id,
           project: workbenchProjectForConversation(item),
           title: item.title,
+          cwd: item.cwd,
+          updatedAt: item.updatedAt,
         },
         event,
       );
@@ -2900,24 +2982,22 @@ export function ChatPage(props: ChatPageProps) {
       return;
     }
     workbenchPendingSelectRef.current = null;
-    const previousSynced = lastWorkbenchSyncedConversationRef.current;
-    lastWorkbenchSyncedConversationRef.current = currentConversationId;
-
-    // Workspace drop: the fresh draft conversation opens a NEW pane at the
-    // remembered drop target instead of rebinding the focused pane. The
-    // pending intent is one-shot and verified against the draft's workdir so
-    // a failed directory check can never misplace a later conversation.
+    // Workspace drop: keep normal sync paused for the whole operation, not
+    // merely its first render. Once startConversation resolves, the exact
+    // draft id replaces the temporary project-key match.
     const pendingWorkspaceDrop = pendingWorkspaceDropRef.current;
-    if (pendingWorkspaceDrop && previousSynced !== currentConversationId) {
-      const draftWorkdir =
-        conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
-      if (
-        draftWorkdir &&
-        workspaceProjectPathKey(draftWorkdir) === pendingWorkspaceDrop.projectPathKey
-      ) {
-        return;
-      }
+    const draftWorkdir =
+      conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
+    if (
+      shouldDeferWorkspaceDropConversationSync(
+        pendingWorkspaceDrop,
+        currentConversationId,
+        workspaceProjectPathKey(draftWorkdir),
+      )
+    ) {
+      return;
     }
+    lastWorkbenchSyncedConversationRef.current = currentConversationId;
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
   }, [currentConversationId, conversationSurfaceProject, conversationRuntimeCacheRef, workbench]);
 
@@ -3032,6 +3112,12 @@ export function ChatPage(props: ChatPageProps) {
         backgroundControllersRef.current.delete(conversationId);
       }
     }
+  }, [workbench.layout]);
+  // 布局对账:终端 drop 事务在宿主挂载前同步占约,Pane 若在宿主接手
+  // release 前被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有
+  // 的租约在其卸载 cleanup 中先于本 effect 释放,不受影响。
+  useEffect(() => {
+    releaseOrphanTerminalPaneLeases(terminalPaneLease, workbench.layout);
   }, [workbench.layout]);
   useEffect(
     () => () => {
@@ -3208,6 +3294,14 @@ export function ChatPage(props: ChatPageProps) {
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,
+        mentionableConversations,
+        searchMentionableConversations: (query) =>
+          searchMentionConversations({
+            query,
+            currentConversationId: conversationId,
+            currentWorkdir: workspaceRoot ?? "",
+          }),
+        mentionApps,
         executionMode: settings.system.executionMode,
         hasModels,
         currentModelLabel: paneModelLabel,
@@ -3225,6 +3319,7 @@ export function ChatPage(props: ChatPageProps) {
         thinkingAlwaysOn: paneThinkingAlwaysOn,
         contextUsageTokensSource: paneContextUsageTokensSource,
         contextWindow: paneContextWindow,
+        contextDisplayMode: settings.customSettings.composerContextDisplay,
         gitClient: tauriGitClient,
         workspaceActivityClient: tauriWorkspaceActivityClient,
         onOpenWorktree: handleOpenWorktree,
@@ -3238,6 +3333,9 @@ export function ChatPage(props: ChatPageProps) {
         onOpenSettings,
         onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
         onPickReadableFiles: focusGuard(pickReadableFiles),
+        onPickWorkspaceFolder: focusGuard(() => {
+          void pickWorkspaceFolder(conversationId, workspaceRoot ?? "");
+        }),
         // Paste must not wait for pane focus: Cmd+Alt+Arrow / Tab can leave
         // the caret in this composer while currentConversationIdRef is still
         // the focused pane. Same explicit target as native drop.
@@ -3278,15 +3376,15 @@ export function ChatPage(props: ChatPageProps) {
                     ...primaryPaneBinding,
                     composer: {
                       ...primaryPaneBinding.composer,
-                      // Multi-pane focus starts the page hydration pipeline;
-                      // that must not freeze a composer the user is already
-                      // typing in. Send still rejects hydrating conversations.
+                      // Keep Desktop aligned with Web: history hydration is a
+                      // real disabled state even when the workbench has more
+                      // than one pane, so typing cannot race stale history.
                       isInputDisabled:
                         isCompactionRunning ||
                         isConversationHydrationFailed ||
                         isImportingPastedText ||
                         isUploadingFiles ||
-                        (isConversationHydrating && Object.keys(workbench.layout.panes).length < 2),
+                        isConversationHydrating,
                     },
                   }
                 : buildBackgroundPaneBinding(surface),
@@ -3807,6 +3905,9 @@ export function ChatPage(props: ChatPageProps) {
         fontScale={settings.customSettings.fontScale.rightDock}
         projectPathKey={terminalProjectPathKey}
         cwd={terminalProjectPath}
+        workspaceProject={activeWorkspaceProject}
+        workspaceProjectRootClient={desktopWorkspaceProjectRootClient}
+        workspaceRootRevision={workspaceRootRevision}
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
         leasedSessionIds={leasedDockSessionIds}

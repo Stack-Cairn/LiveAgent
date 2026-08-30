@@ -22,7 +22,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-27";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-29";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -264,6 +264,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "qwen3.7-flash", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.7-max", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.7-plus", contextWindow: 1000000, maxOutputToken: 64000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "qwen3.8-flash", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "medium", "xhigh"], off: true } },
     { id: "qwen3.8-max", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "medium", "xhigh"], off: true } },
     { id: "qwq-32b", contextWindow: 131072, maxOutputToken: 8192, thinking: { levels: [], off: false } },
     { id: "qwq-plus", contextWindow: 131072, maxOutputToken: 8192, thinking: { levels: [], off: false } },

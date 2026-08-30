@@ -389,6 +389,31 @@ test("custom settings migrate the legacy font family and normalize each typograp
   );
 });
 
+test("composer context display normalizes to the three-state union", () => {
+  // 三档枚举（docs/design/composer-context-stats-bar.md §4.7）：默认统计状态栏。
+  assert.equal(settings.getDefaultSettings().customSettings.composerContextDisplay, "statsBar");
+  assert.equal(
+    settings.normalizeSettings({ customSettings: {} }).customSettings.composerContextDisplay,
+    "statsBar",
+  );
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { composerContextDisplay: "ring" } })
+      .customSettings.composerContextDisplay,
+    "ring",
+  );
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { composerContextDisplay: "both" } })
+      .customSettings.composerContextDisplay,
+    "both",
+  );
+  // 脏值/历史遗留值（如曾经设想过的 "auto"）一律落回默认，不留第四态。
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { composerContextDisplay: "auto" } })
+      .customSettings.composerContextDisplay,
+    "statsBar",
+  );
+});
+
 test("settings normalization canonicalizes project keyed maps with Windows path compatibility", () => {
   const normalized = settings.normalizeSettings({
     ssh: {
@@ -2758,6 +2783,23 @@ test("gateway sync keeps all desktop font families local", () => {
   assert.equal(merged.interfaceFontFamily, "Inter");
   assert.equal(merged.chatFontFamily, "Charter");
   assert.equal(merged.codeFontFamily, "Menlo");
+});
+
+test("gateway sync carries the composer context display mode across surfaces", () => {
+  // 与字体/宽度等设备本地偏好不同：展示样式是全局产品偏好，不进
+  // syncableCustomSettings 的重置清单，桌面端与 WebUI 同步生效。
+  const current = settings.normalizeSettings({});
+  for (const mode of ["ring", "both"]) {
+    const incoming = sync.buildGatewaySettingsSyncPayload(
+      settings.normalizeSettings({ customSettings: { composerContextDisplay: mode } }),
+    );
+    assert.equal(incoming.customSettings.composerContextDisplay, mode);
+    assert.equal(
+      sync.applyGatewaySettingsSyncPayload(current, incoming).customSettings
+        .composerContextDisplay,
+      mode,
+    );
+  }
 });
 
 test("degenerate catalog limits (output == context window) are clamped in the snapshot", () => {

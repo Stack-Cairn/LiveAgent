@@ -5,6 +5,7 @@ import type {
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { getAutomationState } from "@liveagent/ui/lib/automation/index";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   createUserMessageWithUploads,
   mergePendingUploadedFiles,
@@ -565,9 +566,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const textOverride =
       typeof overrides?.textOverride === "string" ? overrides.textOverride : null;
     const hasTextOverride = textOverride !== null;
-    const composerDraft = hasTextOverride
-      ? null
-      : (overrides?.composerDraftOverride ?? composerRef.current?.getDraft() ?? null);
+    const composerDraft =
+      overrides?.composerDraftOverride ??
+      (hasTextOverride ? null : (composerRef.current?.getDraft() ?? null));
     let text = normalizeLogicalLineEndings(
       hasTextOverride
         ? textOverride
@@ -622,7 +623,18 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    const userMessage = createUserMessageWithUploads(text, uploadedFiles, Date.now());
+    // 粘贴等路径可能让草稿携带超限/重复/自引用的会话引用；发送边界统一
+    // 归一化（带当前会话 ID 过滤自引用），与 gateway 队列路径语义一致。
+    const referencedConversations = normalizeConversationMentionReferences(
+      composerDraft?.conversationMentions ?? [],
+      conversationId,
+    );
+    const userMessage = createUserMessageWithUploads(
+      text,
+      uploadedFiles,
+      Date.now(),
+      referencedConversations,
+    );
     if (!userMessage) {
       if (gatewayBridgeRequest) {
         const message = "Message is required.";
@@ -1214,6 +1226,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
       messageId: pendingUserMessage.id,
       baseMessageRef: overrides?.editResendBaseMessageRef,
+      referencedConversations,
       // The new message's own stable identity: lets remote transcripts bind
       // their user bubble's messageRef immediately, so a follow-up edit of
       // this message can anchor its rebase without a history round-trip.
@@ -1728,6 +1741,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             taskStateStore,
             conversationId,
+            referencedConversations,
             checkpointTurnId: pendingUserMessage.id,
             conversationCwd,
             fallbackTitle,

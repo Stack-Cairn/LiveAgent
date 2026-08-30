@@ -28,6 +28,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use wait_timeout::ChildExt;
 
+pub mod installed_apps;
+
 /// 单次外部命令的等待上限。`manifest` / `permissions status` 都在 1 秒
 /// 内返回；留足余量给冷启动的守护进程握手。
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
@@ -181,14 +183,18 @@ fn candidate_paths() -> Vec<PathBuf> {
 /// `CREATE_NO_WINDOW` 只影响是否分配控制台，stdout / stderr 仍照常通过
 /// 管道拿到。非 Windows 平台没有这个概念，helper 退化成 `Command::new`。
 fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut command = Command::new(program);
         command.creation_flags(CREATE_NO_WINDOW);
+        command
     }
-    command
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {

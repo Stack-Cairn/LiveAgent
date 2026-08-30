@@ -204,7 +204,7 @@ test("renders props-only copy, progress semantics, and an absolute reduced-motio
   const { root, button, progress, panel } = readIndicator(indicator.render());
 
   assert.equal(root.type, "fieldset");
-  assert.match(root.props.className, /\bmb-4\b/);
+  assert.match(root.props.className, /\bmb-3\b/);
   assert.equal(button.props["aria-expanded"], false);
   assert.equal(button.props["aria-controls"], panel.props.id);
   assert.equal(button.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");

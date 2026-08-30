@@ -18,12 +18,17 @@ const resizeHandleSource = readFileSync(
 );
 
 test("narrow trajectory container keeps empty details beside the list", () => {
-  assert.match(trajectoryViewSource, /className="@container flex min-h-0 flex-1 flex-col"/);
+  assert.match(trajectoryViewSource, /className="@container flex h-full min-h-0 flex-1 flex-col"/);
   assert.match(detailsSource, /min-w-\[160px\] max-w-\[calc\(100%-140px\)\]/);
   assert.match(detailsSource, /trajectory\.details\.empty/);
   assert.match(tableSource, /min-h-0 min-w-0 flex-1 overflow-y-auto/);
   assert.doesNotMatch(detailsSource, /@max-\[820px\]:hidden/);
   assert.match(trajectoryViewSource, /relative flex min-h-0 flex-1 overflow-hidden/);
+});
+
+test("trajectory details keep a bounded vertical scroll owner in the WebUI host", () => {
+  assert.match(trajectoryViewSource, /@container flex h-full min-h-0 flex-1 flex-col/);
+  assert.match(detailsSource, /min-h-0 flex-1 overflow-y-auto/);
 });
 
 test("selected narrow-container details remain in a two-column layout", () => {

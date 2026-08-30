@@ -46,7 +46,9 @@ import {
   ancestorDirsOfPath,
   basename,
   dirname,
+  FILE_TREE_HAS_OS_INTEGRATION,
   FILE_TREE_ROW_HEIGHT,
+  type FileTreeExternalRoot,
   type FileTreeKind,
   flattenFileTreeRows,
   ROOT_PATH,
@@ -58,6 +60,7 @@ import { FileTreeErrorRow, FileTreeRow } from "./Row";
 import { useFileTreeData } from "./useFileTreeData";
 
 const FILE_TREE_QUERY_SYNC_DEBOUNCE_MS = 180;
+const NO_EXTERNAL_FILE_TREE_ROOTS: readonly FileTreeExternalRoot[] = [];
 
 type PendingAction = "file" | "folder" | "rename" | null;
 
@@ -76,8 +79,10 @@ export function FileTreePanel(props: { active: boolean }) {
       cwd={context.cwd}
       state={context.fileTree.state}
       initialized={context.fileTree.initialized}
+      externalRoots={context.fileTree.externalRoots}
       workspaceActivityClient={context.clients.workspaceActivity ?? null}
       onInitializedChange={context.fileTree.onInitializedChange}
+      onRefreshExternalRoots={context.fileTree.refreshExternalRoots}
       onStateChange={context.fileTree.onStateChange}
       onInsertFileMention={context.fileTree.onInsertFileMention}
       onOpenFile={context.fileTree.onOpenFile}
@@ -91,8 +96,10 @@ export type FileTreeSurfaceProps = {
   cwd: string;
   state: RightDockFileTreeState;
   initialized?: boolean;
+  externalRoots?: readonly FileTreeExternalRoot[];
   workspaceActivityClient?: WorkspaceActivityClient | null;
   onInitializedChange?: (initialized: boolean) => void;
+  onRefreshExternalRoots?: () => Promise<void>;
   onStateChange: (patch: RightDockFileTreeStatePatch) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onOpenFile?: (path: string, imagePaths?: string[]) => void;
@@ -105,8 +112,10 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     cwd,
     state: syncState,
     initialized = true,
+    externalRoots = NO_EXTERNAL_FILE_TREE_ROOTS,
     workspaceActivityClient,
     onInitializedChange,
+    onRefreshExternalRoots,
     onStateChange,
     onInsertFileMention,
     onOpenFile,
@@ -134,10 +143,13 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    isExternalPath,
+    getDisplayPath,
     search,
   } = useFileTreeData({
     projectPathKey,
     cwd,
+    externalRoots,
     active,
     initialized,
     workspaceActivityClient: workspaceActivityClient ?? null,
@@ -305,20 +317,31 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
   }, [onOpenFile]);
   const handleOpenFile = useCallback(
     (path: string) => {
+      if (isExternalPath(path)) {
+        if (!FILE_TREE_HAS_OS_INTEGRATION) return;
+        setActionError(null);
+        void openWorkspacePath(path, "open").catch((error: unknown) => {
+          setActionError(error instanceof Error ? error.message : String(error));
+        });
+        return;
+      }
       onOpenFileRef.current?.(path, getSiblingImagePaths(path));
     },
-    [getSiblingImagePaths],
+    [getSiblingImagePaths, isExternalPath, openWorkspacePath],
   );
 
   const onInsertFileMentionRef = useRef(onInsertFileMention);
   useEffect(() => {
     onInsertFileMentionRef.current = onInsertFileMention;
   }, [onInsertFileMention]);
-  const handleInsertMention = useCallback((path: string) => {
-    const node = nodesRef.current[path];
-    if (!path || !node) return;
-    onInsertFileMentionRef.current?.(path, node.kind);
-  }, []);
+  const handleInsertMention = useCallback(
+    (path: string) => {
+      const node = nodesRef.current[path];
+      if (!path || !node || isExternalPath(path)) return;
+      onInsertFileMentionRef.current?.(path, node.kind);
+    },
+    [isExternalPath],
+  );
 
   const handleWorkspacePathDragStart = useCallback(
     (event: ReactDragEvent, path: string, kind: FileTreeKind) => {
@@ -543,7 +566,10 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
           size="icon"
           className="h-8 w-8 rounded-lg"
           title={t("projectTools.fileTree.refresh")}
-          onClick={() => refreshVisible()}
+          onClick={() => {
+            void onRefreshExternalRoots?.();
+            refreshVisible();
+          }}
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -692,7 +718,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   expanded={expandedSet.has(row.path)}
                   selected={selectedPath === row.path}
                   loading={node.loading}
-                  title={row.path || cwd}
+                  title={getDisplayPath(row.path)}
                   onToggle={toggleDirectory}
                   onSelect={selectPath}
                   onOpen={handleOpenFile}
@@ -712,10 +738,13 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
           anchor={{ x: contextMenu.x, y: contextMenu.y }}
           containerRef={panelRef}
           path={contextNode.path}
+          displayPath={
+            isExternalPath(contextNode.path) ? getDisplayPath(contextNode.path) : undefined
+          }
           kind={contextNode.kind}
-          canMutate={canMutate}
-          canOpenFile={Boolean(onOpenFile)}
-          canInsertMention={Boolean(onInsertFileMention)}
+          canMutate={canMutate && !isExternalPath(contextNode.path)}
+          canOpenFile={Boolean(onOpenFile) && !isExternalPath(contextNode.path)}
+          canInsertMention={Boolean(onInsertFileMention) && !isExternalPath(contextNode.path)}
           showHidden={syncState.showHidden}
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}
