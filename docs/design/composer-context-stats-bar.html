@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composer 上下文统计状态栏实现方案</title>
+<style>
+  :root {
+    --fg: #24292f; --muted: #57606a; --border: #d0d7de;
+    --bg-soft: #f6f8fa; --accent: #0969da; --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #d5dbe1; --muted: #9aa4af; --border: #3d444d;
+      --bg-soft: #1c2128; --accent: #539bf5; --code-bg: #22272e;
+    }
+    body { background: #16191d; }
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: var(--fg); line-height: 1.75; max-width: 900px;
+    margin: 0 auto; padding: 2.5rem 1.5rem 5rem;
+  }
+  h1 { font-size: 1.7rem; border-bottom: 1px solid var(--border); padding-bottom: .5rem; }
+  h2 { font-size: 1.3rem; margin-top: 2.4rem; border-bottom: 1px solid var(--border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.8rem; }
+  blockquote {
+    margin: 1rem 0; padding: .6rem 1rem; border-left: 4px solid var(--accent);
+    background: var(--bg-soft); color: var(--muted); border-radius: 0 6px 6px 0;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); }
+  code { background: var(--code-bg); padding: .12rem .35rem; border-radius: 4px; font-size: .88em;
+         font-family: "Cascadia Code", Consolas, "SF Mono", monospace; }
+  pre { background: var(--code-bg); padding: .9rem 1.1rem; border-radius: 8px; overflow-x: auto;
+        border: 1px solid var(--border); }
+  pre code { background: none; padding: 0; }
+  strong { font-weight: 650; }
+  .statusbar-demo {
+    font-size: .85rem; color: var(--muted); background: var(--bg-soft);
+    border: 1px solid var(--border); border-radius: 8px; padding: .5rem 1rem;
+    text-align: center; margin: 1rem 0; white-space: nowrap; overflow-x: auto;
+  }
+  ol li, ul li { margin: .25rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Composer 上下文统计状态栏（Conversation Stats Bar）实现方案</h1>
+
+<blockquote>状态：设计稿（未实施）<br>
+参照物：DSH 输入框下方的会话统计状态栏，形如</blockquote>
+
+<div class="statusbar-demo">51 轮 · 672 步 ｜ LLM 306m34s · 工具调用 395m8s ｜ 首 token 平均 20.9s · 170 tok/s ｜ 缓存命中 85% ｜ 输入 111M tok · …</div>
+
+<h2>1. 目标</h2>
+<p>在聊天输入框（composer 玻璃卡片）下方增加一条<strong>全会话累计统计</strong>的单行状态栏，让用户对当前会话的规模与开销一目了然：</p>
+<ul>
+  <li>会话规模：轮数（turn）、步数（step，即 provider 请求次数）</li>
+  <li>时间开销：LLM 累计时长、工具调用累计时长</li>
+  <li>响应性能：首 token 平均延迟（TTFT）、解码吞吐（tok/s）</li>
+  <li>token 开销：缓存命中率、累计输入/输出 token</li>
+</ul>
+<p>非目标（本期不做）：</p>
+<ul>
+  <li>子代理（Agent 工具派生的 subagent run）的耗时/token 并入主会话统计</li>
+  <li>跨会话/全局的用量看板（Settings 级别的统计页是另一个 feature）</li>
+  <li>费用（金额）估算——依赖各 provider 价格表，另行立项</li>
+</ul>
+
+<h2>2. 现状盘点：数据基础已经齐了</h2>
+<p>结论先行：<strong>本功能不需要新增任何埋点或线格式字段</strong>。轨迹（trajectory）体系已经记录了状态栏需要的全部原始事实。</p>
+
+<h3>2.1 轨迹事件（单一真源）</h3>
+<p><code>crates/agent-ui/src/lib/trajectory/types.ts</code> 中的线格式 <code>TrajectoryEvent</code> 已包含：</p>
+<table>
+  <tr><th>事件</th><th>关键字段</th><th>可推导的指标</th></tr>
+  <tr><td><code>user</code> / <code>turn_end</code></td><td><code>t</code>（turn 号）、<code>at</code></td><td>轮数</td></tr>
+  <tr><td><code>step_start</code></td><td><code>s</code>（step 号）、<code>at</code></td><td>步数、LLM 时长起点</td></tr>
+  <tr><td><code>first_token</code></td><td><code>at</code></td><td>TTFT</td></tr>
+  <tr><td><code>step_end</code></td><td><code>at</code>、<code>u</code>（<code>TrajectoryUsage</code>：input/output/cacheRead/cacheWrite/reasoning）</td><td>LLM 时长终点、token 累计、缓存命中、tok/s</td></tr>
+  <tr><td><code>tool_start</code> / <code>tool_end</code></td><td><code>at</code>、<code>id</code></td><td>工具调用时长、工具调用次数</td></tr>
+  <tr><td><code>compaction_start</code> / <code>compaction_end</code></td><td><code>before</code> / <code>after</code></td><td>压缩次数（可选展示）</td></tr>
+</table>
+
+<h3>2.2 双端数据通道（已存在，直接复用）</h3>
+<table>
+  <tr><th>通道</th><th>桌面端（agent-gui）</th><th>WebUI（agent-gateway/web）</th></tr>
+  <tr><td>实时事件</td><td>recorder 经 <code>recorderRegistry</code> 写入本地 live store（<code>lib/trajectory/liveTrajectory.ts</code>，100ms 合并通知）</td><td><code>transcriptStore.ts</code> 在 seq 门之前无条件调用 <code>absorbTrajectoryChatEvent</code>（250ms 合并通知）——<strong>轨迹视图没打开也在收</strong></td></tr>
+  <tr><td>落盘读取</td><td>Tauri 命令 <code>trajectory_get_window</code>（<code>trajectory_window.rs</code>，每页默认 8 段、上限 64 段，返回 <code>hasMoreBefore</code>）</td><td><code>trajectory.fetch</code> 经 Gateway 中继由桌面端应答（<code>shims/tauriCore.ts</code> 同形转发）</td></tr>
+  <tr><td>幂等收敛</td><td><code>eventLog.ts</code> 的 <code>buildTrajectoryLedger</code>：按事件语义身份去重，对乱序、重复、截断稳健</td><td>同一份共享实现</td></tr>
+</table>
+
+<h3>2.3 UI 挂载点（已存在插槽模式）</h3>
+<p><code>crates/agent-ui/src/pages/chat/ChatComposerBar.tsx</code> 已经用 ReactNode 插槽接收宿主注入的附属条（<code>taskProgressBar</code>、<code>approvalBar</code>），状态栏沿用同一模式即可，不破坏 <code>check-ui-boundaries</code> 的共享层边界（agent-ui 不 import 宿主代码，数据全部经 props 注入）。</p>
+
+<h2>3. 指标定义</h2>
+<p>所有指标都从收敛后的 <code>TrajectoryLedger</code>（turns → steps → tools）推导。记号：<code>Σ</code> 遍历全部已加载 turn 的全部 step / tool。</p>
+<table>
+  <tr><th>指标</th><th>公式</th><th>说明</th></tr>
+  <tr><td>轮数</td><td><code>ledger.turns.length</code></td><td>含运行中的当前轮</td></tr>
+  <tr><td>步数</td><td><code>Σ turn.steps.length</code></td><td>一步 = 一次 provider 请求</td></tr>
+  <tr><td>LLM 时长</td><td><code>Σ (step.endedAt − step.startedAt)</code>；运行中的 step 用 <code>now − startedAt</code></td><td>含 TTFT 等待段</td></tr>
+  <tr><td>工具调用时长</td><td><code>Σ (tool.endedAt − tool.startedAt)</code>；运行中同上</td><td>并行工具调用按各自 wall time 相加，<strong>总和可能超过物理时长</strong>（DSH 同样如此），文案不需要回避</td></tr>
+  <tr><td>首 token 平均</td><td><code>mean(step.firstTokenAt − step.startedAt)</code>，仅统计有 <code>firstTokenAt</code> 的 step</td><td>重试后的 <code>step_start</code> 已是最后一次尝试的起点，无需特判</td></tr>
+  <tr><td>tok/s</td><td><code>Σ usage.output ÷ Σ (step.endedAt − step.firstTokenAt)</code></td><td>分母缺 <code>firstTokenAt</code> 的 step 回退 <code>endedAt − startedAt</code>；分母 ≤ 0 时该 step 不计入</td></tr>
+  <tr><td>缓存命中</td><td><code>Σ cacheRead ÷ Σ (input + cacheRead + cacheWrite)</code></td><td>口径 = 「prompt token 中有多少来自缓存读」。cacheWrite 计入分母：写缓存那次请求这部分确实没命中</td></tr>
+  <tr><td>输入 tok</td><td><code>Σ (input + cacheRead + cacheWrite)</code></td><td>与账单口径一致的 prompt 总量</td></tr>
+  <tr><td>输出 tok</td><td><code>Σ (output)</code></td><td><code>reasoning</code> 已含在各 provider 的 output 里则不重复加；以 <code>TrajectoryUsage</code> 现有语义为准</td></tr>
+</table>
+<p>补充规则：</p>
+<ul>
+  <li><code>usage</code> 缺失的 step（provider 未返回）只计入步数与时长，不污染 token 类指标。</li>
+  <li>全部指标只统计<strong>主会话</strong>事件；<code>tool_end.run</code>（子代理 runId）不展开。</li>
+  <li>数值格式化：token 用 <code>Intl.NumberFormat(locale, { notation: "compact" })</code> → <code>111M</code>、<code>2.3K</code>；时长统一 <code>formatStatDuration(ms)</code>：<code>&lt; 60s → "42s"</code>、<code>&lt; 60min → "12m34s"</code>、<code>≥ 60min → "5h06m"</code>（不学 DSH 的 <code>306m34s</code>，分钟数超过三位可读性差）；TTFT 保留一位小数（<code>20.9s</code>），tok/s 取整。</li>
+</ul>
+
+<h2>4. 总体架构</h2>
+<p>三层结构，全部落在共享层 agent-ui，宿主只做接线：</p>
+<pre><code>┌────────────────────────────────────────────────────────────┐
+│ 宿主接线层                                                    │
+│  desktop: ConversationPaneHost → statsBar={&lt;…/&gt;}             │
+│  web:     GatewayAppView       → statsBar={&lt;…/&gt;}             │
+│  注入：TrajectoryHost.loadWindow + live events 订阅源          │
+├────────────────────────────────────────────────────────────┤
+│ 组件层  agent-ui/components/chat/ConversationStatsBar.tsx     │
+│  展示 + 响应式收缩 + 运行中 1s 心跳 + 点击跳转轨迹视图（可选）      │
+├────────────────────────────────────────────────────────────┤
+│ 聚合层  agent-ui/lib/trajectory/stats.ts                      │
+│  aggregateTrajectoryStats(ledger, now) → ConversationStats   │
+│  useConversationStats(host, conversationId, liveEvents…)     │
+│  模块级缓存：conversationId → {persisted events, 聚合快照}      │
+└────────────────────────────────────────────────────────────┘</code></pre>
+
+<h3>4.1 聚合层 <code>lib/trajectory/stats.ts</code></h3>
+<pre><code>export type ConversationStats = {
+  turns: number;
+  steps: number;
+  llmMs: number;            // 已完成部分
+  llmRunningSinceAt: number | null;   // 运行中 step 的起点，展示层用 now 补齐
+  toolMs: number;
+  toolRunningSinceAt: number | null;
+  ttftAvgMs: number | null; // 无样本为 null
+  ttftSamples: number;
+  decodeTokPerSec: number | null;
+  cacheHitRatio: number | null;
+  inputTokens: number;      // input + cacheRead + cacheWrite
+  outputTokens: number;
+  compactions: number;
+  /** 事件被截断或未加载完时为 true，展示层加 "≈" 前缀 */
+  approximate: boolean;
+};
+
+export function aggregateTrajectoryStats(ledger: TrajectoryLedger): ConversationStats;</code></pre>
+<p>纯函数、无 IO，直接吃 <code>buildTrajectoryLedger</code> 的产物——<strong>去重、乱序、重复回放的全部脏活都复用现有账本层</strong>，聚合层不重新发明收敛逻辑。</p>
+<p>配套 hook（同文件或 <code>useConversationStats.ts</code>）：</p>
+<pre><code>export function useConversationStats(options: {
+  conversationId: string;
+  host: Pick&lt;TrajectoryHost, "loadWindow"&gt;;
+  liveEvents: readonly TrajectoryEvent[];      // useSyncExternalStore 产物，宿主传入
+  authoritativeRevision?: number;               // edit-resend/rebase 后整体重载
+  enabled: boolean;                             // 条为空/隐藏时不加载
+}): { stats: ConversationStats | null; loading: boolean };</code></pre>
+<p>行为：</p>
+<ol>
+  <li><strong>首次加载</strong>：<code>loadWindow(conversationId)</code> 拿最近窗口；若 <code>hasMoreBefore</code>，用 <code>requestIdleCallback</code>（回退 <code>setTimeout</code>）在后台向前分页直到读完（每页沿用后端上限，最多 64 段/次）。分页期间 <code>approximate = true</code>，读完后翻 false。</li>
+  <li><strong>实时合并</strong>：<code>persisted ∪ liveEvents</code> → <code>buildTrajectoryLedger(events, { liveIdentities })</code> → <code>aggregateTrajectoryStats</code>。重建节流到 <strong>1s</strong>（与运行中时长的心跳同步），空闲（非 isSending 且无新事件）时不重建。</li>
+  <li><strong>模块级缓存</strong>：<code>Map&lt;conversationId, { events, oldestSegmentIndex, statsSnapshot }&gt;</code>，LRU 上限 8 个会话。多 pane 打开同一会话共享一份；切走再切回不重新分页。</li>
+  <li><strong>权威重载</strong>：<code>authoritativeRevision</code> 变化（edit-resend、断线 rebase、手动压缩截断历史）时丢弃缓存整体重载——语义与 <code>TrajectoryView.reconcileAuthoritativeWindow</code> 一致。</li>
+  <li><strong>内存挡板</strong>：累计事件数超过 50k（约对应数 MB JSON）时停止向前分页，保持 <code>approximate = true</code>。这是给极端长会话的保险丝，正常会话（数百 step）远够不着。</li>
+</ol>
+
+<h3>4.2 组件层 <code>components/chat/ConversationStatsBar.tsx</code></h3>
+<ul>
+  <li>单行、水平居中、<code>text-[calc(11px*var(--zone-font-scale,1))]</code>、<code>text-muted-foreground/70</code>，分组间用 <code>｜</code>（<code>text-muted-foreground/40</code>），组内用 <code>·</code>——与 <code>UsagePanel</code> 现有视觉语言一致。</li>
+  <li>渲染在 composer 玻璃卡片<strong>下方</strong>、与卡片同宽的容器内（见 4.3），高度约 20px，不参与卡片的展开/收起动画。</li>
+  <li><strong>响应式收缩</strong>：composer 卡片已是 <code>@container</code>，按容器宽度分档隐藏低优先级分组：
+    <ol>
+      <li>恒显：<code>轮 · 步</code></li>
+      <li>≥ 28rem：<code>+ LLM 时长 · 工具时长</code></li>
+      <li>≥ 40rem：<code>+ 输入/输出 tok</code></li>
+      <li>≥ 52rem：<code>+ 首 token · tok/s · 缓存命中</code></li>
+    </ol>
+  </li>
+  <li><strong>运行中心跳</strong>：<code>isSending</code> 时每 1s 触发一次重渲染，把 <code>llmRunningSinceAt</code>/<code>toolRunningSinceAt</code> 折算进显示值；空闲时零定时器。</li>
+  <li><strong>空态</strong>：<code>stats === null</code>（无任何轨迹事件）时返回 <code>null</code>，整条不占高度——老会话、text 模式（<code>NOOP_TRAJECTORY_RECORDER</code>）自动隐藏，无需特判来源。</li>
+  <li><strong>可选交互</strong>（建议做，成本极低）：整条可点击 → 切换到该会话的轨迹视图（<code>ConversationViewTabs</code> 已有该入口）；hover 出 <code>LabelTooltip</code> 显示未被收缩掉的完整指标 + 压缩次数。</li>
+  <li>无障碍：容器 <code>role="status"</code> + <code>aria-label</code> 拼完整文本；数字变化不用 <code>aria-live</code>（流式期间会刷屏）。</li>
+</ul>
+
+<h3>4.3 ChatComposerBar 的改动（最小侵入）</h3>
+<pre><code>// props 新增一个插槽，与 taskProgressBar / approvalBar 同模式
+statsBar?: ReactNode;</code></pre>
+<p>渲染位置：玻璃卡片 <code>&lt;/div&gt;</code>（现 L1240）之后、外层宽度容器之内，保证与卡片左右对齐：</p>
+<pre><code>  {fileDropOverlay}
+&lt;/div&gt;
+{statsBar /* ← 新增：卡片下方，占位由组件自身决定 */}</code></pre>
+<p>注意：<code>onHeightChange</code>（transcript 底部预留高度）测量的是整个 composer 覆盖层，statsBar 出现/消失会改变高度——现有 ResizeObserver 逻辑已覆盖，无需额外处理，只需回归验证。</p>
+
+<h3>4.4 宿主接线</h3>
+<p><strong>桌面端</strong> <code>crates/agent-gui/src/pages/chat/surfaces/ConversationPaneHost.tsx</code>：</p>
+<pre><code>statsBar={
+  &lt;ConversationStatsBarHost   // agent-gui 侧薄包装
+    conversationId={snapshot.conversationId}
+    isSending={isSending}
+  /&gt;
+}</code></pre>
+<p>薄包装内部：<code>useSyncExternalStore(subscribeDesktopLiveTrajectory, () =&gt; desktopLiveTrajectoryEvents(id))</code> + <code>createInvokeTrajectoryHost(invoke)</code>（<code>ConversationTrajectorySurface.tsx</code> 已有同款取数代码，可直接抽用）。</p>
+<p><strong>WebUI</strong> <code>crates/agent-gateway/web/src/app/GatewayAppView.tsx</code>：同构——<code>subscribeLiveTrajectory</code> + <code>liveTrajectoryEvents</code> + <code>trajectory.fetch</code> 适配器（<code>agent-ui-adapters/trajectory.ts</code> 现成）。<code>liveOwnership</code> 语义沿用轨迹视图：桌面 <code>authoritative</code>、Web <code>observed</code>。</p>
+
+<h3>4.5 布局影响：卡片与胶囊压缩一号，为状态栏预留高度预算（已落地）</h3>
+<p>产品决策（已确认）：输入卡片和任务胶囊整体做小一号，把省下的高度让给状态栏，保证状态栏上线后底部总占位与改版前基本持平。以下尺寸调整<strong>已实施</strong>：</p>
+<table>
+  <tr><th>元素</th><th>调整</th><th>收益</th></tr>
+  <tr><td>编辑器最小高度</td><td><code>min-h-[70px]</code> → <code>min-h-[60px]</code>（3 行文本高；经 ChatComposerBar 的 className 覆盖，twMerge 后写胜出，不影响 MentionComposer 其他使用方）</td><td>−10px</td></tr>
+  <tr><td>编辑器区上内距</td><td><code>pt-3.5</code> → <code>pt-2.5</code></td><td>−4px</td></tr>
+  <tr><td>工具栏行内距</td><td><code>pb-2 pt-1</code> → <code>pb-1.5 pt-0.5</code></td><td>−4px</td></tr>
+  <tr><td>任务胶囊</td><td><code>h-10</code> → <code>h-9</code>、<code>px-3.5</code> → <code>px-3</code>、字号 13px → <code>text-xs</code></td><td>−4px</td></tr>
+  <tr><td>胶囊与卡片间距</td><td><code>mb-4</code> → <code>mb-3</code></td><td>−4px</td></tr>
+</table>
+<p>高度预算：卡片折叠态约 128px → 110px（−18px），胶囊栈 −8px；状态栏上线约 +20px，净增 ≈ +2px，视觉上与改版前持平。</p>
+<p>同时已落地的还有 <strong><code>statsBar</code> 插槽</strong>：ChatComposerBar 新增 <code>statsBar?: ReactNode</code>，渲染在玻璃卡片正下方、与卡片同宽的容器内，且内置 <code>approvalBar</code> 互斥——审批面板可见时状态栏自动让位（审批操作优先级高于统计读数）。宿主未接线时不占位，transcript 底部预留走既有 ResizeObserver 自动适应。</p>
+<ul>
+  <li><strong>上下文用量环（ContextUsageRing）改为低占用隐藏</strong>（已确认的产品决策，随状态栏一起实施）：占用 <code>&lt; CONTEXT_USAGE_WARN_RATIO</code>（50%，即不可手动压缩时）环不渲染；≥ 50% 时浮现，恰好与手动压缩入口的可用窗口重合。语义分工：环管「当前上下文占用」（瞬时、压缩后回落），状态栏管「全会话累计」（单调增长），状态栏<strong>不含</strong>上下文占用分组。实现为 <code>ContextUsageRing</code> 新增 <code>hideBelowWarn?: boolean</code>（默认 false，本处传 true），环在 <code>ratio &lt; CONTEXT_USAGE_WARN_RATIO</code> 时返回 null；环是 absolute 定位，隐藏不影响右侧控制列布局。</li>
+</ul>
+
+<h2>5. 方案取舍：为什么不先做后端聚合</h2>
+<table>
+  <tr><th></th><th>A. 纯前端（本方案）</th><th>B. 后端聚合命令</th></tr>
+  <tr><td>新增后端面</td><td>无</td><td>Tauri 命令 + Gateway 中继方法 + WebUI shim 三处</td></tr>
+  <tr><td>去重/收敛</td><td>复用 <code>buildTrajectoryLedger</code>，一套逻辑</td><td>落盘聚合与实时尾巴之间需要新的去重边界（段不按 turn 对齐，很难切干净）</td></tr>
+  <tr><td>大会话成本</td><td>首开时后台分页 + 常驻事件内存（数 MB 级，有 50k 挡板）</td><td>后端一次 SQL 扫描，前端零内存</td></tr>
+  <tr><td>一致性风险</td><td>与轨迹视图读数天然一致（同一账本）</td><td>两套聚合口径可能漂移</td></tr>
+</table>
+<p><strong>结论：A 起步。</strong> B 作为二期优化预留——如果实测发现巨型会话首开分页耗时/内存不可接受，再加 <code>trajectory_stats_get</code>（只聚合<strong>已关闭段</strong>，开放段仍走前端事件收敛，天然避开去重边界问题）。聚合层的 <code>ConversationStats</code> 结构对两种来源保持中立，切换来源不动组件层。</p>
+
+<h2>6. i18n</h2>
+<p><code>crates/agent-ui/src/i18n/translations/{zhCNCommon,enUSCommon}.ts</code> 新增：</p>
+<table>
+  <tr><th>key</th><th>zh-CN</th><th>en-US</th></tr>
+  <tr><td><code>chat.stats.turns</code></td><td>{n} 轮</td><td>{n} turns</td></tr>
+  <tr><td><code>chat.stats.steps</code></td><td>{n} 步</td><td>{n} steps</td></tr>
+  <tr><td><code>chat.stats.llmTime</code></td><td>LLM {t}</td><td>LLM {t}</td></tr>
+  <tr><td><code>chat.stats.toolTime</code></td><td>工具调用 {t}</td><td>Tools {t}</td></tr>
+  <tr><td><code>chat.stats.ttftAvg</code></td><td>首 token 平均 {t}</td><td>Avg TTFT {t}</td></tr>
+  <tr><td><code>chat.stats.throughput</code></td><td>{n} tok/s</td><td>{n} tok/s</td></tr>
+  <tr><td><code>chat.stats.cacheHit</code></td><td>缓存命中 {p}%</td><td>Cache hit {p}%</td></tr>
+  <tr><td><code>chat.stats.inputTokens</code></td><td>输入 {n} tok</td><td>In {n} tok</td></tr>
+  <tr><td><code>chat.stats.outputTokens</code></td><td>输出 {n} tok</td><td>Out {n} tok</td></tr>
+  <tr><td><code>chat.stats.compactions</code></td><td>压缩 {n} 次（仅 tooltip）</td><td>{n} compactions</td></tr>
+  <tr><td><code>chat.stats.approximate</code></td><td>≈（前缀，含 tooltip 释义）</td><td>≈</td></tr>
+  <tr><td><code>chat.stats.openTrajectory</code></td><td>查看轨迹详情</td><td>Open trajectory</td></tr>
+</table>
+
+<h2>7. 边界与降级</h2>
+<table>
+  <tr><th>场景</th><th>行为</th></tr>
+  <tr><td>老会话/text 模式，无轨迹事件</td><td>整条隐藏（<code>stats === null</code>）</td></tr>
+  <tr><td><code>trajectory_truncated</code> 段或分页未完成/触发 50k 挡板</td><td>显示但带 <code>≈</code> 前缀</td></tr>
+  <tr><td>手动/自动压缩</td><td>统计是<strong>事件累计</strong>，不受上下文截断影响（与用量环的「当前上下文占用」口径互补，不冲突）；压缩次数进 tooltip</td></tr>
+  <tr><td>edit-resend 砍掉旧轮次</td><td><code>authoritativeRevision</code> 触发整体重载，读数收敛到新历史</td></tr>
+  <tr><td>断线重连重放事件</td><td>账本身份去重，读数不跳变</td></tr>
+  <tr><td>provider 未返回 usage</td><td>token 类指标只算有 usage 的 step；全都没有时对应分组隐藏</td></tr>
+  <tr><td>轨迹视图打开中</td><td>composer 挂起（<code>hidden</code>），状态栏随之隐藏；数据缓存共享，无重复拉取</td></tr>
+  <tr><td>多 pane 同会话</td><td>模块级缓存共享事件与聚合，只多一份订阅</td></tr>
+  <tr><td><code>approvalBar</code> 可见</td><td>状态栏暂时隐藏，审批操作优先</td></tr>
+  <tr><td>上下文占用 &lt; 50%</td><td>用量环隐藏（见 4.5）；≥ 50% 浮现并承担手动压缩入口</td></tr>
+</table>
+
+<h2>8. 文件改动清单</h2>
+<table>
+  <tr><th>文件</th><th>动作</th></tr>
+  <tr><td><code>crates/agent-ui/src/lib/trajectory/stats.ts</code></td><td>新增：类型 + <code>aggregateTrajectoryStats</code> + 格式化函数</td></tr>
+  <tr><td><code>crates/agent-ui/src/lib/trajectory/useConversationStats.ts</code></td><td>新增：加载/分页/缓存/节流 hook</td></tr>
+  <tr><td><code>crates/agent-ui/src/components/chat/ConversationStatsBar.tsx</code></td><td>新增：展示组件</td></tr>
+  <tr><td><code>crates/agent-ui/src/pages/chat/ChatComposerBar.tsx</code></td><td>✅ 已落地：<code>statsBar</code> 插槽（含 approvalBar 互斥）+ 卡片压缩（4.5）；待补：给环传 <code>hideBelowWarn</code></td></tr>
+  <tr><td><code>crates/agent-ui/src/components/chat/TaskProgressIndicator.tsx</code></td><td>✅ 已落地：胶囊压缩（4.5，两端测试同步更新）</td></tr>
+  <tr><td><code>crates/agent-ui/src/components/chat/ContextUsageRing.tsx</code></td><td>修改：<code>hideBelowWarn</code> prop，低于 50% 返回 null（约 +4 行）</td></tr>
+  <tr><td><code>crates/agent-ui/src/i18n/translations/zhCNCommon.ts</code> / <code>enUSCommon.ts</code></td><td>修改：新增 key</td></tr>
+  <tr><td><code>crates/agent-gui/src/pages/chat/surfaces/ConversationPaneHost.tsx</code>（+ 薄包装组件）</td><td>修改：桌面接线</td></tr>
+  <tr><td><code>crates/agent-gateway/web/src/app/GatewayAppView.tsx</code>（+ 薄包装组件）</td><td>修改：Web 接线</td></tr>
+  <tr><td><code>crates/agent-gui/test/trajectory/stats.test.mjs</code></td><td>新增：聚合单测</td></tr>
+  <tr><td><code>crates/agent-gui/test/chat/conversation-stats-bar.test.mjs</code></td><td>新增：组件行为测试</td></tr>
+</table>
+<p>后端（Rust）零改动。</p>
+
+<h2>9. 测试计划</h2>
+<p>聚合层（纯函数，重点覆盖）：</p>
+<ul>
+  <li>完整回合事件流 → 各指标数值正确（手工算好的黄金样例）</li>
+  <li>乱序 + 重复回放 → 与顺序输入结果一致（幂等）</li>
+  <li>运行中 step/tool → <code>*RunningSinceAt</code> 正确、已完成部分不含运行段</li>
+  <li>usage 缺失 step、<code>firstTokenAt</code> 缺失、分母为 0 → 不 NaN、对应指标为 null</li>
+  <li>缓存命中/输入 token 口径：cacheWrite 计入分母与输入</li>
+  <li>截断/挡板 → <code>approximate</code> 置位</li>
+</ul>
+<p>hook 层：</p>
+<ul>
+  <li>首窗 + 后台分页拼接、<code>hasMoreBefore</code> 边界</li>
+  <li>live 事件与 persisted 重叠 → 去重后读数不双算</li>
+  <li><code>authoritativeRevision</code> 变化 → 缓存失效重载</li>
+  <li>1s 节流：连续 live 通知只触发一次重建</li>
+</ul>
+<p>组件层：</p>
+<ul>
+  <li>空态返回 null；容器分档收缩（现有 workbench-dom-boundaries 测试风格）</li>
+  <li><code>≈</code> 前缀、<code>role="status"</code> aria-label 完整性</li>
+  <li>时长/token 格式化边界（59s、60s、999K、1M…）</li>
+  <li><code>approvalBar</code> 可见时状态栏隐藏</li>
+  <li>环 <code>hideBelowWarn</code>：49% 隐藏、50% 显示、压缩后回落再隐藏（补进现有 <code>context-usage.test.mjs</code>）</li>
+</ul>
+<p>回归：composer 高度上报（<code>onHeightChange</code>）在状态栏出现/消失时正确更新；<code>pnpm check</code>（biome + ui-boundaries）通过。</p>
+
+<h2>10. 实施步骤</h2>
+<ol>
+  <li><strong>聚合层 + 单测</strong>（stats.ts，纯函数，半天）——先把口径钉死</li>
+  <li><strong>hook 层</strong>（加载/缓存/节流，1 天）</li>
+  <li><strong>组件 + i18n + ChatComposerBar 插槽 + 环低占用隐藏</strong>（1 天）</li>
+  <li><strong>双端接线 + 回归</strong>（桌面先行，Web 复用，1 天）</li>
+  <li><strong>可选增强</strong>：点击跳转轨迹视图、tooltip 明细（半天）</li>
+  <li><strong>二期观察项</strong>：巨型会话首开性能数据 → 决定是否上后端聚合（方案 B）</li>
+</ol>
+<p>总量约 3–4 人日，风险集中在 hook 层的缓存/去重正确性——但全部复用轨迹视图已验证的收敛原语，属于组合而非新造。</p>
+
+</body>
+</html>

@@ -65,6 +65,7 @@ export type FileTreeContextMenuProps = {
   anchor: { x: number; y: number };
   containerRef: RefObject<HTMLDivElement | null>;
   path: string;
+  displayPath?: string;
   kind: FileTreeKind;
   canMutate: boolean;
   canOpenFile: boolean;
@@ -87,6 +88,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     anchor,
     containerRef,
     path,
+    displayPath,
     kind,
     canMutate,
     canOpenFile,
@@ -143,17 +145,18 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
       // Keep the menu open so the "copied" feedback is actually visible (the
       // global click listener would close it otherwise).
       event.stopPropagation();
-      if (!path) return;
+      const pathToCopy = displayPath ?? path;
+      if (!pathToCopy) return;
       let copiedOk = false;
       try {
         if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(path);
+          await navigator.clipboard.writeText(pathToCopy);
           copiedOk = true;
         }
       } catch {
         copiedOk = false;
       }
-      if (!copiedOk) copiedOk = fallbackCopyToClipboard(path);
+      if (!copiedOk) copiedOk = fallbackCopyToClipboard(pathToCopy);
       if (!copiedOk) {
         onActionError(t("projectTools.fileTree.copyFailed"));
         onClose();
@@ -168,7 +171,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
         copyTimerRef.current = null;
       }, COPY_FEEDBACK_MS);
     },
-    [onActionError, onClose, path, t],
+    [displayPath, onActionError, onClose, path, t],
   );
 
   return (

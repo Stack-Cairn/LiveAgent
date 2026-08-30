@@ -111,6 +111,25 @@ test("debug sanitizer redacts nested credentials without hiding token usage", ()
   assert.equal(sanitized.maxTokens, 456);
 });
 
+test("debug sanitizer preserves context-usage diagnostic counters", () => {
+  const payload = {
+    providerUsageTotalTokens: 31_000,
+    request: {
+      systemPromptTokens: 12_000,
+      toolSchemaTokens: 8_000,
+    },
+    ledger: {
+      fixedTokens: 20_000,
+      observedTokens: 30_000,
+      trailingTokens: 1_000,
+      estimatedTotalTokens: 0,
+      contextUsageTokens: 31_000,
+    },
+  };
+
+  assert.deepEqual(agentDebug.__agentDebugTest.sanitizeDebugValue(payload), payload);
+});
+
 test("stream request debug payload never includes runtime or option credentials", () => {
   const payload = agentDebug.buildStreamRequestDebugPayload({
     runtime: {

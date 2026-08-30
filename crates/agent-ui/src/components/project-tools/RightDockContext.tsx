@@ -16,6 +16,7 @@ import { createContext, useContext } from "react";
 import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
 import type { TerminalClient, TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
+import type { FileTreeExternalRoot } from "./file-tree/model";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
 
 export type RightDockToolClients = {
@@ -41,6 +42,8 @@ export type RightDockToolCapabilities = {
 export type RightDockFileTreeContext = {
   state: RightDockFileTreeState;
   initialized: boolean;
+  externalRoots: readonly FileTreeExternalRoot[];
+  refreshExternalRoots: () => Promise<void>;
   onInitializedChange: (initialized: boolean) => void;
   onStateChange: (patch: RightDockFileTreeStatePatch) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;

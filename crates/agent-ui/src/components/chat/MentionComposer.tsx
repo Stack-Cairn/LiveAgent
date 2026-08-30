@@ -11,11 +11,17 @@ import {
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  readAppMentionRecents,
+  recordAppMentionUse,
+  sortAppsByMentionRecency,
+} from "@liveagent/ui/lib/chat/appMentionRecency";
+import {
   insertPlainTextWithUndo,
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
+  formatAppMentionToken,
   formatCodeMentionToken,
   formatFileMentionToken,
 } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -44,6 +50,7 @@ import {
   clampComposerContextMenuPosition,
   commitMentionFromElement,
   countLargePasteLines,
+  createAppMentionChip,
   createCodeMentionChip,
   createCommitMentionChip,
   createFileMentionChip,
@@ -67,6 +74,7 @@ import {
   hasLegacyImeKeyboardSignal,
   IME_COMPOSITION_END_ENTER_TAIL_MS,
   IME_ENTER_SUPPRESS_WINDOW_MS,
+  insertAppMentionChip,
   insertComposerSegmentsAtSelection,
   insertMentionChip,
   insertNodeAtCursor,
@@ -76,9 +84,11 @@ import {
   isImeKeyboardEvent,
   isLargePasteText,
   LARGE_PASTE_TAG_ATTR,
+  MAX_APP_SUGGESTIONS,
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
   MENTION_REFETCH_DEBOUNCE_MS,
+  type MentionComposerAppMention,
   type MentionComposerCommitMention,
   type MentionComposerDraft,
   type MentionComposerGitFileMention,
@@ -118,6 +128,8 @@ import {
 } from "./MentionComposerInternals";
 
 export type {
+  MentionComposerApp,
+  MentionComposerAppMention,
   MentionComposerCommitMention,
   MentionComposerDraft,
   MentionComposerDraftSegment,
@@ -155,6 +167,7 @@ export const MentionComposer = memo(
       placeholder = "",
       workdir,
       enabledSkills = [],
+      mentionApps = [],
       className,
     }: MentionComposerProps,
     ref,
@@ -441,18 +454,40 @@ export const MentionComposer = memo(
         return next;
       }
 
+      // 文件与应用是弹层里的两个并列分组：应用在前、文件在后，各自独立
+      // 封顶——应用只留一小撮（MAX_APP_SUGGESTIONS）避免把文件结果推出
+      // 视野，文件配额也不会被应用吃掉。应用按「最近使用在前，其余保持
+      // 宿主的字母序」排列（榜单随 @ 选中落 localStorage，会话开启时重读，
+      // 见 appMentionRecency.ts）。应用列表已由宿主门控（未挂 cua-driver
+      // 时恒为空），有查询词时两组都按包含匹配过滤。键盘导航走拼接后的
+      // 扁平数组，分组只是渲染形态。
       const next: MentionSuggestion[] = [];
+      const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
+      let appCount = 0;
+      for (const app of orderedApps) {
+        const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
+        if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
+          continue;
+        }
+        next.push({ type: "app", app });
+        appCount += 1;
+        if (appCount >= MAX_APP_SUGGESTIONS) {
+          break;
+        }
+      }
+      let fileCount = 0;
       for (const item of mentionSessionSearchIndex) {
         if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
           continue;
         }
         next.push({ type: "file", entry: item.entry });
-        if (next.length >= MAX_SUGGESTIONS) {
+        fileCount += 1;
+        if (fileCount >= MAX_SUGGESTIONS) {
           break;
         }
       }
       return next;
-    }, [enabledSkills, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
+    }, [enabledSkills, mentionApps, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
 
     useEffect(() => {
       setHighlightIdx((current) => {
@@ -466,7 +501,9 @@ export const MentionComposer = memo(
     const popupEmptyLabel =
       mentionCtx?.trigger === "skill"
         ? t("chat.composer.noMatchingEnabledSkills")
-        : t("chat.composer.noMatchingFiles");
+        : mentionApps.length > 0
+          ? t("chat.composer.noMatchingFilesOrApps")
+          : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
@@ -583,6 +620,7 @@ export const MentionComposer = memo(
           textWithoutLargePastes: "",
           largePastes: [],
           skillMentions: [],
+          appMentions: [],
           commitMentions: [],
           gitFileMentions: [],
           codeMentions: [],
@@ -593,6 +631,7 @@ export const MentionComposer = memo(
       const segments = serializeChildrenToSegments(el, largePastesRef.current);
       const largePastes: MentionComposerLargePaste[] = [];
       const skillMentions: MentionComposerSkillMention[] = [];
+      const appMentions: MentionComposerAppMention[] = [];
       const commitMentions: MentionComposerCommitMention[] = [];
       const gitFileMentions: MentionComposerGitFileMention[] = [];
       const codeMentions: CodeMentionReference[] = [];
@@ -612,6 +651,11 @@ export const MentionComposer = memo(
         } else if (segment.type === "skillMention") {
           skillMentions.push(segment.skill);
           const token = formatSkillMentionToken(segment.skill);
+          textParts.push(token);
+          textWithoutLargePastesParts.push(token);
+        } else if (segment.type === "appMention") {
+          appMentions.push(segment.app);
+          const token = formatAppMentionToken(segment.app);
           textParts.push(token);
           textWithoutLargePastesParts.push(token);
         } else if (segment.type === "commitMention") {
@@ -640,6 +684,7 @@ export const MentionComposer = memo(
         textWithoutLargePastes,
         largePastes,
         skillMentions,
+        appMentions,
         commitMentions,
         gitFileMentions,
         codeMentions,
@@ -777,6 +822,8 @@ export const MentionComposer = memo(
               if (chip) el.appendChild(chip);
             } else if (segment.type === "skillMention") {
               el.appendChild(createSkillMentionChip(segment.skill));
+            } else if (segment.type === "appMention") {
+              el.appendChild(createAppMentionChip(segment.app));
             } else if (segment.type === "commitMention") {
               el.appendChild(createCommitMentionChip(segment.commit));
             } else if (segment.type === "gitFileMention") {
@@ -1043,6 +1090,10 @@ export const MentionComposer = memo(
         }
         if (suggestion.type === "skill") {
           insertSkillMentionChip(mentionCtx, suggestion.skill);
+        } else if (suggestion.type === "app") {
+          insertAppMentionChip(mentionCtx, suggestion.app);
+          // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
+          recordAppMentionUse(suggestion.app);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
         }

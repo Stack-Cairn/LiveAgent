@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { PaneLoadingSkeleton } from "../../../components/app/PaneLoadingSkeleton";
+import { ConversationStatsBarHost } from "../components/ConversationStatsBarHost";
 import { CurrentTaskProgress } from "../components/CurrentTaskProgress";
 import { DesktopCheckpointRewindProvider } from "../components/DesktopCheckpointRewindProvider";
 import { PendingToolApprovalBar } from "../components/PendingToolApprovalBar";
@@ -237,6 +238,20 @@ export const ConversationPaneHost = forwardRef<
                     approvals={snapshot.approvals}
                   />
                 ) : null
+              }
+              statsBar={
+                <ConversationStatsBarHost
+                  // 前缀防与同级 taskProgressBar 的 key（裸会话 id）碰撞：React 对同键
+                  // 兄弟的 keyed diff 会让旧 fiber 逃过删除，DOM 残留逐次累积。
+                  key={`stats-${snapshot.conversationId}`}
+                  conversationId={snapshot.conversationId}
+                  // 轨迹页挂起输入区时状态栏随之隐藏，无需重复拉取。
+                  enabled={!trajectoryActive}
+                  contextUsageTokensSource={composer.contextUsageTokensSource}
+                  contextWindow={composer.contextWindow}
+                  onManualCompactConfirm={controller.compact}
+                  manualCompactBlocked={isCompactionRunning}
+                />
               }
               fileDropOverlay={
                 fileDrop.active ? (

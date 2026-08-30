@@ -124,6 +124,11 @@ function readLocalUiSettings(): {
       },
       chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
       rightDock: normalizeRightDockSettings(obj.rightDock),
+      // 三档枚举（与 normalizeCustomSettings 同口径）：脏值/缺省落回统计状态栏。
+      composerContextDisplay:
+        obj.composerContextDisplay === "ring" || obj.composerContextDisplay === "both"
+          ? obj.composerContextDisplay
+          : "statsBar",
       // fontFamily was the single pre-split preference. Read it only to migrate
       // old local settings into the interface-specific field.
       interfaceFontFamily: normalizeFontFamily(obj.interfaceFontFamily ?? obj.fontFamily),

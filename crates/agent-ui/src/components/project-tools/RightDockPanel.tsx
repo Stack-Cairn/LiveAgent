@@ -6,6 +6,7 @@ import {
   type RightDockFileTreeStatePatch,
   type RightDockProjectState,
   type SshHostConfig,
+  type WorkspaceProject,
 } from "@liveagent/app/lib/settings";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { X } from "@liveagent/ui/components/IconSet";
@@ -13,6 +14,7 @@ import type {
   GitCommitContextPayload,
   GitFileContextPayload,
 } from "@liveagent/ui/components/project-tools/git-review/index";
+import type { WorkspaceProjectRootClient } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import {
@@ -34,6 +36,7 @@ import { cn } from "../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { Button } from "../ui/button";
+import type { FileTreeExternalRoot } from "./file-tree/model";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
 import { RightDockContent } from "./RightDockContent";
 import {
@@ -61,6 +64,9 @@ type RightDockPanelProps = {
   fontScale?: number;
   projectPathKey: string;
   cwd: string;
+  workspaceProject?: WorkspaceProject;
+  workspaceProjectRootClient?: WorkspaceProjectRootClient;
+  workspaceRootRevision?: number;
   sessions?: TerminalSession[];
   sessionsLoaded?: boolean;
   /**
@@ -136,6 +142,7 @@ const RIGHT_DOCK_TABS_SCROLLBAR_MIN_THUMB_WIDTH = 28;
 // both the panel memo and the context useMemo below.
 const NO_SSH_HOSTS: SshHostConfig[] = [];
 const NO_ASSOCIATED_SSH_HOST_IDS: string[] = [];
+const NO_EXTERNAL_FILE_TREE_ROOTS: FileTreeExternalRoot[] = [];
 
 function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | null> }) {
   const { scrollRef } = props;
@@ -362,6 +369,9 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     fontScale = 1,
     projectPathKey,
     cwd,
+    workspaceProject,
+    workspaceProjectRootClient,
+    workspaceRootRevision = 0,
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
@@ -404,6 +414,46 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   } = props;
   const { t } = useLocale();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [externalFileTreeRoots, setExternalFileTreeRoots] = useState<FileTreeExternalRoot[]>([]);
+  const [externalRootsScope, setExternalRootsScope] = useState("");
+  const externalRootsRequestRef = useRef(0);
+  const workspaceRootScope = workspaceProject
+    ? `${workspaceProject.id}\u0000${workspaceProject.path}`
+    : "";
+  const refreshExternalRoots = useCallback(async (_revision?: number) => {
+    const requestId = ++externalRootsRequestRef.current;
+    if (!workspaceProject || !workspaceProjectRootClient) {
+      setExternalFileTreeRoots([]);
+      setExternalRootsScope(workspaceRootScope);
+      return;
+    }
+    try {
+      const grants = await workspaceProjectRootClient.list(workspaceProject);
+      if (requestId !== externalRootsRequestRef.current) return;
+      setExternalFileTreeRoots(
+        grants
+          .filter((grant) => grant.state === "active" && grant.id.trim() && grant.displayPath.trim())
+          .map((grant) => ({
+            id: grant.id.trim(),
+            name: grant.alias.trim() || grant.displayPath.trim(),
+            cwd: grant.displayPath.trim(),
+          })),
+      );
+      setExternalRootsScope(workspaceRootScope);
+    } catch {
+      if (requestId === externalRootsRequestRef.current) {
+        setExternalFileTreeRoots([]);
+        setExternalRootsScope(workspaceRootScope);
+      }
+    }
+  }, [workspaceProject, workspaceProjectRootClient, workspaceRootScope]);
+  useEffect(() => {
+    void refreshExternalRoots(workspaceRootRevision);
+  }, [refreshExternalRoots, workspaceRootRevision]);
+  const visibleExternalFileTreeRoots =
+    externalRootsScope === workspaceRootScope
+      ? externalFileTreeRoots
+      : NO_EXTERNAL_FILE_TREE_ROOTS;
   const {
     effectiveShouldRenderContent,
     effectiveWidthCollapsed,
@@ -709,6 +759,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       fileTree: {
         state: fileTreeState,
         initialized: fileTreeInitialized,
+        externalRoots: visibleExternalFileTreeRoots,
+        refreshExternalRoots,
         onInitializedChange: setFileTreeInitialized,
         onStateChange: onFileTreeStateChange,
         onInsertFileMention,
@@ -739,6 +791,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       client,
       cwd,
       disabledMessage,
+      visibleExternalFileTreeRoots,
       fileTreeInitialized,
       fileTreeState,
       forgetTerminalSession,
@@ -760,6 +813,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       projectReady,
       reconcileSshSessions,
       rememberTerminalSnapshot,
+      refreshExternalRoots,
       revealPathInFileTree,
       setFileTreeInitialized,
       sshHosts,

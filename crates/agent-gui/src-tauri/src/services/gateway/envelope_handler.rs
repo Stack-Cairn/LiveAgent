@@ -1014,6 +1014,22 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::InstalledAppsList(_request)) => {
+                let host_identifier = self.app_handle.config().identifier.clone();
+                match gateway_bridge::handle_installed_apps_list(host_identifier).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::InstalledAppsListResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::UploadReadableFiles(request)) => {
                 match gateway_bridge::handle_upload_readable_files(request).await {
                     Ok(response) => {

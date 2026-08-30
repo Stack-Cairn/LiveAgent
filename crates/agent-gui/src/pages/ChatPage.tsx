@@ -30,6 +30,7 @@ import {
   useComposerSkillSelection,
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
@@ -69,6 +70,7 @@ import {
   surfaceIdentityKey,
   surfaceProjectRef,
 } from "@liveagent/ui/lib/workbench/types";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   type CSSProperties,
@@ -142,6 +144,7 @@ import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
 import type { ChatPageProps } from "./chat/chatPageTypes";
+import { asErrorMessage } from "./chat/chatPageUtils";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
 import type {
   ConversationControllerActions,
@@ -346,6 +349,10 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef,
     prepareComposerForConversationChangeActionRef,
   });
+  const [workspaceRootRevision, setWorkspaceRootRevision] = useState(0);
+  const handleWorkspaceDirectoriesMounted = useCallback(() => {
+    setWorkspaceRootRevision((revision) => revision + 1);
+  }, []);
   useEffect(() => {
     sidebarStore.start();
     return () => {
@@ -651,6 +658,7 @@ export function ChatPage(props: ChatPageProps) {
     selectedSkillNames,
     skillsEnabled,
   );
+  const mentionApps = useMentionApps(activeWorkspaceResources.mcpServers, isAgentMode);
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
@@ -2031,7 +2039,24 @@ export function ChatPage(props: ChatPageProps) {
     addNotify,
     setErrorMessage,
     t,
+    onWorkspaceDirectoriesMounted: handleWorkspaceDirectoriesMounted,
   });
+  const pickWorkspaceFolder = useCallback(
+    async (targetConversationId?: string, initialWorkdir?: string) => {
+      try {
+        const selected = await invoke<string | null>("system_pick_folder", {
+          initial_workdir:
+            initialWorkdir?.trim() || displayedConversationWorkdir.trim() || undefined,
+        });
+        const folderPath = selected?.trim();
+        if (!folderPath) return;
+        await importUploadZonePaths([folderPath], targetConversationId);
+      } catch (error) {
+        setErrorMessage(asErrorMessage(error, t("chat.workspaceMountDropFailed")));
+      }
+    },
+    [displayedConversationWorkdir, importUploadZonePaths, t],
+  );
   // Late-bound hover focus keeps visual feedback and keyboard context aligned.
   // The final upload owner is read directly from the composer under the drop
   // point, so routing never depends on this asynchronous focus transition.
@@ -2154,6 +2179,7 @@ export function ChatPage(props: ChatPageProps) {
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
+      mentionApps,
       executionMode: settings.system.executionMode,
       hasModels,
       currentModelLabel,
@@ -2171,6 +2197,7 @@ export function ChatPage(props: ChatPageProps) {
       thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
       contextUsageTokensSource,
       contextWindow: currentModelContextWindow,
+      contextDisplayMode: settings.customSettings.composerContextDisplay,
       gitClient: tauriGitClient,
       workspaceActivityClient: tauriWorkspaceActivityClient,
       onOpenWorktree: handleOpenWorktree,
@@ -2182,6 +2209,7 @@ export function ChatPage(props: ChatPageProps) {
       onOpenSettings,
       onChatRuntimeControlsChange: handleChatRuntimeControlsChange,
       onPickReadableFiles: pickReadableFiles,
+      onPickWorkspaceFolder: pickWorkspaceFolder,
       onPasteFiles: importReadableFiles,
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
@@ -3000,6 +3028,7 @@ export function ChatPage(props: ChatPageProps) {
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,
+        mentionApps,
         executionMode: settings.system.executionMode,
         hasModels,
         currentModelLabel: paneModelLabel,
@@ -3017,6 +3046,7 @@ export function ChatPage(props: ChatPageProps) {
         thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
         contextUsageTokensSource: paneContextUsageTokensSource,
         contextWindow: paneContextWindow,
+        contextDisplayMode: settings.customSettings.composerContextDisplay,
         gitClient: tauriGitClient,
         workspaceActivityClient: tauriWorkspaceActivityClient,
         onOpenWorktree: handleOpenWorktree,
@@ -3030,6 +3060,9 @@ export function ChatPage(props: ChatPageProps) {
         onOpenSettings,
         onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
         onPickReadableFiles: focusGuard(pickReadableFiles),
+        onPickWorkspaceFolder: focusGuard(() => {
+          void pickWorkspaceFolder(conversationId, workspaceRoot ?? "");
+        }),
         // Paste must not wait for pane focus: Cmd+Alt+Arrow / Tab can leave
         // the caret in this composer while currentConversationIdRef is still
         // the focused pane. Same explicit target as native drop.
@@ -3521,6 +3554,9 @@ export function ChatPage(props: ChatPageProps) {
         fontScale={settings.customSettings.fontScale.rightDock}
         projectPathKey={terminalProjectPathKey}
         cwd={terminalProjectPath}
+        workspaceProject={activeWorkspaceProject}
+        workspaceProjectRootClient={desktopWorkspaceProjectRootClient}
+        workspaceRootRevision={workspaceRootRevision}
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
         leasedSessionIds={leasedDockSessionIds}

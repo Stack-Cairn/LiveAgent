@@ -6,6 +6,7 @@ import type {
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import {
   type ConversationOpenState,
@@ -185,6 +186,10 @@ function useGatewayAppController() {
     () => (api ? createGatewayWorkspaceProjectRootClient(api) : undefined),
     [api],
   );
+  const [workspaceRootRevision, setWorkspaceRootRevision] = useState(0);
+  const handleWorkspaceDirectoriesMounted = useCallback(() => {
+    setWorkspaceRootRevision((revision) => revision + 1);
+  }, []);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
@@ -489,6 +494,7 @@ function useGatewayAppController() {
       activeWorkspaceProject,
       workspaceProjectRootClient,
       onWorkspaceCreated: handleWorkdirPickerSelect,
+      onWorkspaceDirectoriesMounted: handleWorkspaceDirectoriesMounted,
     });
 
   // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
@@ -499,6 +505,7 @@ function useGatewayAppController() {
     isUploadingFiles,
     isFileDropActive,
     fileInputRef,
+    folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
     setPendingUploadsForConversation,
@@ -506,6 +513,7 @@ function useGatewayAppController() {
     moveConversationUploads,
     clearPendingUploads,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleFileDragEnter,
     handleFileDragOver: handlePendingFileDragOver,
     handleFileDragLeave,
@@ -1341,6 +1349,7 @@ function useGatewayAppController() {
     modelOptions,
     selectedValue,
     skillsRootDir,
+    workspaceResources,
   } = useGatewayChatConfiguration({
     activeSelectedModel,
     displayedConversationId,
@@ -1350,6 +1359,9 @@ function useGatewayAppController() {
     setSettings,
     settings,
   });
+  // @ 弹层的应用候选：门控与 GUI 完全同源（agent 模式 + 工作区挂
+  // cua-driver），列表经 Gateway 直通中继自桌面宿主本机。
+  const mentionApps = useMentionApps(workspaceResources.mcpServers, isAgentMode);
   const {
     cancelChat,
     commitQueuedChatEdit,
@@ -1780,6 +1792,7 @@ function useGatewayAppController() {
     fileDropLimitHint,
     fileDropTitle,
     fileInputRef,
+    folderInputRef,
     gatewayConnectionLost,
     getDisplayedConversationId,
     gitClient,
@@ -1808,6 +1821,7 @@ function useGatewayAppController() {
     handleFloorJump,
     handleGitReviewFocusRequestHandled,
     handleImportReadableFiles,
+    handleImportSelectedDirectoryFiles,
     handleInsertCodeMention,
     handleLoadEarlierHistory,
     handleLoadSharedHistoryStatus,
@@ -1878,6 +1892,7 @@ function useGatewayAppController() {
     manualCompactPending,
     manualCompactTransientConversations,
     materializeComposerDraftForSend,
+    mentionApps,
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
@@ -1984,6 +1999,7 @@ function useGatewayAppController() {
     workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
+    workspaceRootRevision,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,

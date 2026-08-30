@@ -72,6 +72,23 @@ export function formatFileMentionToken(reference: Pick<FileMentionReference, "pa
   return `[${escapeMarkdownReferenceLabel(fileMentionDisplayName(normalized))}](${formatMarkdownReferenceDestination(target)})`;
 }
 
+export type AppMentionReference = {
+  name: string;
+  /** macOS bundle id；其他平台可能缺失，此时以 path 兜底标识。 */
+  bundleId?: string;
+  path: string;
+};
+
+/** Serialize an app mention so the model can address the app via the CUA
+ *  toolset: the visible name plus the stable identity (bundle id, or the
+ *  install path when the platform has no bundle ids). 组件内序列化与发送
+ *  路径（composerDraft）共用这一份实现。 */
+export function formatAppMentionToken(app: AppMentionReference) {
+  const identity = app.bundleId?.trim() || app.path.trim();
+  if (!identity || identity === app.name) return `app "${app.name}"`;
+  return `app "${app.name}" (${identity})`;
+}
+
 export function parseMarkdownFileMentionReference(
   label: string,
   rawDestination: string,

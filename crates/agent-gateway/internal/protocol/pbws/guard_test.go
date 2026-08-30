@@ -22,6 +22,18 @@ func TestVetAgentRequestAllowsProviderUsage(t *testing.T) {
 	}
 }
 
+func TestVetAgentRequestAllowsInstalledAppsList(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_InstalledAppsList{
+			InstalledAppsList: &gatewayv2.InstalledAppsListRequest{},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
 func TestVetAgentRequestAllowsValidChatFileOpen(t *testing.T) {
 	line := uint32(12)
 	column := uint32(4)

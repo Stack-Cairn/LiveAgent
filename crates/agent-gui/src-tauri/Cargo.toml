@@ -81,10 +81,13 @@ keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sy
 getrandom = "0.3.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSButton", "NSControl", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSButton", "NSControl", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "objc2-core-graphics"] }
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDictionary", "NSArray", "NSObject", "NSEnumerator", "NSGeometry", "objc2-core-foundation"] }
 block2 = "0.6"
+# 读 .app bundle 的 Info.plist（输入框 @ 应用提及的枚举）。
+plist = "1.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
@@ -100,6 +103,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
+    # 已安装应用枚举（输入框 @ 应用提及）：SHGetFileInfoW 取图标需要
+    # Shell + Com（SHGetFileInfo 要求 COM 已初始化），位图转像素走 Gdi。
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
 ] }
 
 [dev-dependencies]

@@ -556,6 +556,50 @@ test("GatewayWebSocketClient sends mention query payloads", async () => {
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient lists the desktop host's installed apps", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const appsPromise = client.listInstalledApps();
+  const socket = await connectAndAuth(codec);
+  await waitFor(() => findAgentRequest(codec, socket, "installed_apps_list"), "installed apps frame");
+  const request = findAgentRequest(codec, socket, "installed_apps_list");
+  // 请求体无参：空消息臂就是全部载荷。
+  assert.deepEqual(request.json.agent_request.installed_apps_list, {});
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: {
+        installed_apps_list_resp: {
+          apps: [
+            {
+              name: "Safari",
+              bundle_id: "com.apple.Safari",
+              path: "/Applications/Safari.app",
+              icon_data_url: "data:image/png;base64,QUJD",
+            },
+            // Windows 形态：无 bundle id、无图标——身份以 path 兜底。
+            { name: "Notepad", path: "C:\\Windows\\notepad.exe" },
+          ],
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(await appsPromise, [
+    {
+      name: "Safari",
+      bundleId: "com.apple.Safari",
+      path: "/Applications/Safari.app",
+      iconDataUrl: "data:image/png;base64,QUJD",
+    },
+    { name: "Notepad", bundleId: "", path: "C:\\Windows\\notepad.exe", iconDataUrl: "" },
+  ]);
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient sends memory manage payloads", async () => {
   installBrowser();
   const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
