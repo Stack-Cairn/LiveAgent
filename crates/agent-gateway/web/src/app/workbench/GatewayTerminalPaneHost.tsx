@@ -2,9 +2,16 @@ import {
   TerminalPaneHost,
   type TerminalPaneHostProps,
 } from "@liveagent/ui/components/workbench/TerminalPaneHost";
-import { gatewayTerminalPaneBindings, gatewayTerminalPaneLease } from "./terminalPaneRuntime";
+import {
+  gatewayTerminalPaneAutoLaunch,
+  gatewayTerminalPaneBindings,
+  gatewayTerminalPaneLease,
+} from "./terminalPaneRuntime";
 
-export type GatewayTerminalPaneHostProps = Omit<TerminalPaneHostProps, "bindings" | "lease">;
+export type GatewayTerminalPaneHostProps = Omit<
+  TerminalPaneHostProps,
+  "bindings" | "lease" | "autoLaunch"
+>;
 
 /**
  * Web 端终端 Pane 宿主:共享实现 + 网关注入(网关终端 client 与窗口级
@@ -16,6 +23,7 @@ export function GatewayTerminalPaneHost(props: GatewayTerminalPaneHostProps) {
       {...props}
       bindings={gatewayTerminalPaneBindings}
       lease={gatewayTerminalPaneLease}
+      autoLaunch={gatewayTerminalPaneAutoLaunch}
     />
   );
 }

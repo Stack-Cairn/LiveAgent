@@ -5,6 +5,8 @@ import type { TerminalPaneBindingStore } from "../../lib/workbench/terminalPaneB
 import type { TerminalPaneLeaseStore } from "../../lib/workbench/terminalPaneLeaseStore";
 import {
   ensureTerminalPaneSession,
+  isTerminalPaneAutoLaunchAuthorized,
+  type TerminalPaneAutoLaunchRegistry,
   TerminalPaneSshPromptError,
 } from "../../lib/workbench/terminalPaneRuntime";
 import type { TerminalWorkbenchSurface } from "../../lib/workbench/types";
@@ -27,6 +29,8 @@ export type TerminalPaneHostProps = {
   bindings: TerminalPaneBindingStore;
   /** 窗口级视图租约,保证一个会话的输出流单消费。 */
   lease: TerminalPaneLeaseStore;
+  /** Explicit-create/restart authorization; restored surfaces start dormant. */
+  autoLaunch: TerminalPaneAutoLaunchRegistry;
   /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
   sessions: readonly TerminalSession[];
   sessionsLoaded: boolean;
@@ -48,10 +52,10 @@ const SSH_LATENCY_POLL_MS = 15_000;
 
 /**
  * 终端 Pane 的页面侧宿主:把布局层的 launchSpec 身份接到运行时——
- * 绑定(surfaceId→sessionId)解析既有会话;绑定缺失时按持久化 launchSpec
- * 自动重建新的 PTY/SSH 会话。完整应用重启无法复活旧进程,但 Pane、cwd、
- * shell/host 与交互能力会自动恢复。渲染前必须持有该会话的视图租约,保证输出流单消费、
- * 输入单写。
+ * 绑定(surfaceId→sessionId)解析既有会话;显式创建或用户确认恢复后，才按
+ * launchSpec 建立新的 PTY/SSH 会话。完整应用重启无法复活旧进程，恢复出的
+ * Pane 会先停在 dormant 占位，避免静默启动本地进程或 SSH 连接。渲染前必须
+ * 持有该会话的视图租约，保证输出流单消费、输入单写。
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const {
@@ -63,6 +67,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     client,
     bindings,
     lease,
+    autoLaunch,
     sessions,
     sessionsLoaded,
     onSessionGhost,
@@ -81,6 +86,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   // 发生在 terminal:event 进入 sessions 之前；保留这次创建 Promise，下一轮
   // effect 能继续等待同一结果，而不会把刚写入的绑定误判为恢复期陈旧绑定。
   const ensureSessionPromiseRef = useRef<Promise<TerminalSession> | null>(null);
+  const [launchRequestedSurfaceId, setLaunchRequestedSurfaceId] = useState<string | null>(null);
+  const launchAuthorized =
+    launchRequestedSurfaceId === surface.surfaceId ||
+    isTerminalPaneAutoLaunchAuthorized(surface.surfaceId, autoLaunch);
 
   const liveSession = boundSessionId
     ? (sessions.find((entry) => entry.id === boundSessionId) ?? null)
@@ -123,6 +132,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       setCreatedSession(null);
       return;
     }
+    // Layout restoration deliberately does not authorize process creation.
+    // Existing live bindings may reattach, but an unbound restored surface
+    // remains dormant until restartFromLaunchSpec records explicit consent.
+    if (!launchAuthorized && !pendingEnsure) return;
     // 全新的 surface 没有旧绑定需要对账，直接创建 PTY。create() 写入
     // binding 后会触发本 effect 重跑；pendingEnsure 让重跑继续订阅同一
     // Promise，直到 create 响应或 terminal:event 任一方提供可渲染会话。
@@ -159,7 +172,16 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     return () => {
       cancelled = true;
     };
-  }, [bindings, boundSessionId, client, errorState, session, sessionsLoaded, surface]);
+  }, [
+    bindings,
+    boundSessionId,
+    client,
+    errorState,
+    launchAuthorized,
+    session,
+    sessionsLoaded,
+    surface,
+  ]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -242,11 +264,13 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       // 退出的会话重启时顺手回收注册表条目;失败不阻塞重建。
       void client.close(staleSessionId).catch(() => {});
     }
+    autoLaunch.authorize(surface.surfaceId);
+    setLaunchRequestedSurfaceId(surface.surfaceId);
     bindings.delete(surface.surfaceId);
     setCreatedSession(null);
     setViewportError(null);
     setErrorState(null);
-  }, [bindings, client, surface.surfaceId]);
+  }, [autoLaunch, bindings, client, surface.surfaceId]);
 
   const errorMessageFor = (state: TerminalPaneErrorState): string => {
     switch (state.kind) {
@@ -280,6 +304,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     } else {
       phase = session.running ? "ready" : "exited";
     }
+  } else if (!launchAuthorized && !boundSessionId) {
+    phase = "dormant";
   } else {
     phase = "connecting";
     onRetry = undefined;

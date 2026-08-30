@@ -17,6 +17,7 @@ export {
   ensureTerminalPaneSession,
   type FindTerminalPaneForSessionDeps,
   findTerminalPaneForSession,
+  isTerminalPaneAutoLaunchAuthorized,
   type ResolveLiveTerminalSurfaceIdsDeps,
   resolveLiveTerminalSurfaceIds,
   type TerminalPaneAutoLaunchRegistry,

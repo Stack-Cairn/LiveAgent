@@ -180,7 +180,8 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   } | null>(null);
   if (persistenceRef.current === null && persistence !== false) {
     persistenceRef.current = {
-      storage: persistence?.storage ?? resolveWorkbenchLayoutStorage(),
+      storage:
+        persistence?.storage === undefined ? resolveWorkbenchLayoutStorage() : persistence.storage,
       storageKey: persistence?.storageKey?.trim() || WORKBENCH_LAYOUT_STORAGE_KEY,
     };
   }

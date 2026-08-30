@@ -1483,6 +1483,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.terminalRestart": "Restart terminal",
   "workbench.terminalRetry": "Retry",
   "workbench.terminalSessionMissing": "This terminal session is no longer available",
+  "workbench.terminalRestoreRequired":
+    "This terminal was restored from the previous layout. Confirm to start a new session.",
+  "workbench.terminalRestore": "Restore terminal",
   "workbench.terminalSshPrompt":
     "SSH authentication is required — open this host from the project tools panel first",
   "workbench.sshStatusConnected": "Connected",

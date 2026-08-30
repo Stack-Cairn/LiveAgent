@@ -3,11 +3,15 @@ import {
   type TerminalPaneHostProps as SharedTerminalPaneHostProps,
 } from "@liveagent/ui/components/workbench/TerminalPaneHost";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
-import { terminalPaneBindings, terminalPaneLease } from "../workbench/terminalPaneRuntime";
+import {
+  terminalPaneAutoLaunch,
+  terminalPaneBindings,
+  terminalPaneLease,
+} from "../workbench/terminalPaneRuntime";
 
 export type TerminalPaneHostProps = Omit<
   SharedTerminalPaneHostProps,
-  "client" | "bindings" | "lease"
+  "client" | "bindings" | "lease" | "autoLaunch"
 >;
 
 /**
@@ -21,6 +25,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       client={tauriTerminalClient}
       bindings={terminalPaneBindings}
       lease={terminalPaneLease}
+      autoLaunch={terminalPaneAutoLaunch}
     />
   );
 }

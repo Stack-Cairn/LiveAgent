@@ -1413,6 +1413,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.terminalRestart": "重新启动终端",
   "workbench.terminalRetry": "重试",
   "workbench.terminalSessionMissing": "该终端会话已不存在",
+  "workbench.terminalRestoreRequired": "终端已从上次布局恢复，确认后再建立新会话",
+  "workbench.terminalRestore": "恢复终端",
   "workbench.terminalSshPrompt": "SSH 认证需先在项目工具面板中完成该主机的连接",
   "workbench.sshStatusConnected": "已连接",
   "workbench.sshStatusReconnecting": "重连中",
