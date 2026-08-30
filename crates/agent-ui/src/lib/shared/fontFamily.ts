@@ -54,8 +54,9 @@ const MAX_FONT_FAMILY_LENGTH = 200;
 // Reject values that could break out of a CSS declaration or inject external resources.
 const UNSAFE_FONT_FAMILY_PATTERN = /[;{}<>\\]|url\s*\(|@import|expression\s*\(/i;
 // Allow Unicode letters/numbers so localized family names (微软雅黑, 苹方, ...) pass;
-// the unsafe pattern above already blocks the CSS injection vectors.
-const ALLOWED_FONT_FAMILY_PATTERN = /^[\p{L}\p{N}\s,"'\-.+]+$/u;
+// keep `_` since quoteFontFamilyName treats it as a valid identifier character.
+// The unsafe pattern above already blocks the CSS injection vectors.
+const ALLOWED_FONT_FAMILY_PATTERN = /^[\p{L}\p{N}\s,"'\-.+_]+$/u;
 
 type LocalFontData = {
   family?: string;
