@@ -68,6 +68,7 @@ export function getToolMeta(name: string): {
     case "CronTaskManager":
       return { Icon: Clock3, accent: "var(--tool-list-accent)", category: "system" };
     case "MemoryManager":
+    case "ReadConversation":
       return { Icon: Brain, accent: "var(--tool-list-accent)", category: "system" };
     case "McpManager":
       return { Icon: Plug, accent: "var(--tool-list-accent)", category: "mcp" };
@@ -431,6 +432,7 @@ export function isBuiltinShareToolName(name: string) {
     "McpManager",
     "MemoryManager",
     "Read",
+    "ReadConversation",
     "ReadTerminal",
     "SendMessage",
     "SkillsManager",

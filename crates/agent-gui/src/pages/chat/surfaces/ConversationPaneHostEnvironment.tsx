@@ -83,7 +83,12 @@ export type ConversationPaneBinding = {
 };
 
 export type ConversationPaneHostEnvironment = {
-  resolvePane(identity: ConversationPaneIdentity): ConversationPaneBinding;
+  /**
+   * Pane id is the sole host lookup key. Conversation/project identity lives
+   * in the registration so a host retained by React for one transition never
+   * combines stale props with a freshly rebound pane.
+   */
+  resolvePane(paneId: string): ConversationPaneRegistration | null;
 };
 
 export type ConversationPaneRegistration = {
@@ -110,18 +115,7 @@ export function createConversationPaneHostEnvironment(
   }
 
   return {
-    resolvePane(identity) {
-      const registration = registrationsByPaneId.get(identity.paneId.trim());
-      if (
-        !registration ||
-        registration.identity.conversationId !== identity.conversationId ||
-        registration.identity.project.projectId !== identity.project.projectId ||
-        registration.identity.project.projectPathKey !== identity.project.projectPathKey
-      ) {
-        throw new Error(`Conversation pane environment cannot resolve pane: ${identity.paneId}`);
-      }
-      return registration.binding;
-    },
+    resolvePane: (paneId) => registrationsByPaneId.get(paneId.trim()) ?? null,
   };
 }
 
@@ -139,14 +133,10 @@ export function ConversationPaneHostEnvironmentProvider(props: {
   );
 }
 
-export function useConversationPaneBinding(identity: ConversationPaneIdentity) {
+export function useConversationPaneRegistration(paneId: string) {
   const environment = useContext(ConversationPaneHostEnvironmentContext);
   if (!environment) {
     throw new Error("ConversationPaneHost requires a ConversationPaneHostEnvironmentProvider.");
   }
-  const binding = environment.resolvePane(identity);
-  if (binding.controller.conversationId !== identity.conversationId) {
-    throw new Error("ConversationPaneHost resolved a controller for a different conversation.");
-  }
-  return binding;
+  return environment.resolvePane(paneId);
 }

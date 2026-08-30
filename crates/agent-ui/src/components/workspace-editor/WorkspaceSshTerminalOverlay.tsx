@@ -64,7 +64,12 @@ type WorkspaceSshTerminalOverlayProps = {
    */
   onSessionTabDragStart?: (
     session: TerminalSession,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
 };
 
@@ -409,6 +414,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                         pointerId: event.pointerId,
                         clientX: event.clientX,
                         clientY: event.clientY,
+                        currentTarget: event.currentTarget,
                       });
                     }
                   : undefined

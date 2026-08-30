@@ -495,7 +495,10 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       }
       try {
         if (kind === "dir") {
-          await invokeFs("fs_create_dir", { workdir: target.workdir, path: joinPath(target.fsPath, name) });
+          await invokeFs("fs_create_dir", {
+            workdir: target.workdir,
+            path: joinPath(target.fsPath, name),
+          });
         } else {
           await invokeFs("fs_write_text", {
             workdir: target.workdir,
@@ -539,7 +542,16 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       await loadChildren(parent, { force: true });
       return nextPath;
     },
-    [cwd, describeConflictError, entryExists, loadChildren, projectPathKey, resolveTreePath, t, updateNodes],
+    [
+      cwd,
+      describeConflictError,
+      entryExists,
+      loadChildren,
+      projectPathKey,
+      resolveTreePath,
+      t,
+      updateNodes,
+    ],
   );
 
   const deleteEntry = useCallback(

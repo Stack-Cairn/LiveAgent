@@ -279,11 +279,14 @@ export function FileTreePanel(props: { active: boolean }) {
   useEffect(() => {
     onInsertFileMentionRef.current = fileTree.onInsertFileMention;
   }, [fileTree.onInsertFileMention]);
-  const handleInsertMention = useCallback((path: string) => {
-    const node = nodesRef.current[path];
-    if (!path || !node || isExternalPath(path)) return;
-    onInsertFileMentionRef.current?.(path, node.kind);
-  }, [isExternalPath]);
+  const handleInsertMention = useCallback(
+    (path: string) => {
+      const node = nodesRef.current[path];
+      if (!path || !node || isExternalPath(path)) return;
+      onInsertFileMentionRef.current?.(path, node.kind);
+    },
+    [isExternalPath],
+  );
 
   const openContextMenu = useCallback(
     (event: ReactMouseEvent, path: string) => {
@@ -656,7 +659,9 @@ export function FileTreePanel(props: { active: boolean }) {
           kind={contextNode.kind}
           canMutate={projectCanMutate && !isExternalPath(contextNode.path)}
           canOpenFile={Boolean(fileTree.onOpenFile) && !isExternalPath(contextNode.path)}
-          canInsertMention={Boolean(fileTree.onInsertFileMention) && !isExternalPath(contextNode.path)}
+          canInsertMention={
+            Boolean(fileTree.onInsertFileMention) && !isExternalPath(contextNode.path)
+          }
           showHidden={syncState.showHidden}
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}

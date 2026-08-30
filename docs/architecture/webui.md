@@ -42,6 +42,14 @@ WebUI 是 Gateway 承载的浏览器端操作台。它与 GUI 共同复用 `crat
 | `draft conversation` | WebUI 本地临时 id | 新对话提交后迁移到桌面端返回的真实 conversationId。 |
 | upload cache | HTTP upload response | 将导入后的 `ChatUploadedFile` 附到下一次 Chat Command。 |
 
+## Session Workbench
+
+- WebUI 与 Desktop 复用 `@liveagent/ui` 的 PaneTree、几何、拖拽事务、终端租约和 Surface 外壳。
+- 会话的流、草稿、附件、队列、审批、模型与轨迹状态均按 `conversationId` 分桶；drop/paste 在事件落点读取 Pane 的会话标记，不依赖异步焦点切换。
+- WebUI 刷新始终以当前会话创建单 Root Pane，并向 `useWindowWorkbench` 传入 `persistence: false`，不会恢复浏览器上一次多 Pane 布局。
+- WebUI 终端通过 Gateway 创建；显式拖入或菜单新建会立即授权启动。若未来恢复出无运行时绑定的终端 Surface，仍须用户确认后才能创建本地或 SSH 会话。
+- `VITE_LIVEAGENT_SESSION_WORKBENCH=0` 可回退旧单 Pane 渲染路径，默认值为开启。
+
 ## 与 GUI 的共享和分离
 
 | 维度 | 说明 |

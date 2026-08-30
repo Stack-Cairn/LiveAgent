@@ -49,12 +49,22 @@ type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   onConversationCwdChanged: (id: string, cwd: string) => void;
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   onConversationOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
   onProjectWorkbenchDragIntent?: (
     project: WorkspaceProject,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   appUpdate?: AppUpdateController;
 };

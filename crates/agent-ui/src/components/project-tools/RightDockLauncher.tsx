@@ -1,4 +1,4 @@
-import { ChevronRight, Cpu, Plus, Terminal } from "@liveagent/ui/components/IconSet";
+import { ChevronRight, Columns2, Cpu, Plus, Terminal } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "../../lib/shared/utils";
@@ -17,6 +17,7 @@ import { RIGHT_DOCK_TOOL_DEFINITIONS, type RightDockSingletonTabKind } from "./r
 
 type RightDockLauncherActions = {
   onCreateTerminal: (shell?: string) => void;
+  onOpenNewTerminalInWorkbench?: () => void;
   onStartTool: (kind: RightDockSingletonTabKind) => void;
   // Opens the derived background-tasks tab via ephemeral session state; it
   // is not a registry tool and never writes persisted right-dock settings.
@@ -47,7 +48,12 @@ type RightDockChooserProps = RightDockLauncherActions & {
    * 存在时"新建终端"入口可拖出到工作台画板(拖到落点新建终端 Pane);
    * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
    */
-  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onNewTerminalDragStart?: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
 };
 
 export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
@@ -61,6 +67,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
     tunnelAvailable,
     creating,
     onCreateTerminal,
+    onOpenNewTerminalInWorkbench,
     onStartTool,
     onOpenBackgroundTasks,
   } = props;
@@ -117,6 +124,17 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="min-w-40">
         {terminalItem}
+        {onOpenNewTerminalInWorkbench ? (
+          <DropdownMenuItem
+            onSelect={onOpenNewTerminalInWorkbench}
+            disabled={!terminalReady || creating}
+            className="gap-2 text-xs"
+            title={terminalDisabledMessage}
+          >
+            <Columns2 className="h-3.5 w-3.5" />
+            {t("workbench.openNewTerminalInSplit")}
+          </DropdownMenuItem>
+        ) : null}
         {RIGHT_DOCK_TOOL_DEFINITIONS.map((definition) => (
           <DropdownMenuItem
             key={definition.kind}
@@ -171,6 +189,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
                 pointerId: event.pointerId,
                 clientX: event.clientX,
                 clientY: event.clientY,
+                currentTarget: event.currentTarget,
               });
             }
           : undefined,

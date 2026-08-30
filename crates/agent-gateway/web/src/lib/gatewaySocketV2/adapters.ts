@@ -32,6 +32,7 @@ import type {
 import {
   CancelChatRequestSchema,
   ChatCommandRequestSchema,
+  ChatConversationReferenceSchema,
   ChatFileOpenRequestSchema,
   ChatMessageRefSchema,
   ChatQueueRequestSchema,
@@ -327,6 +328,9 @@ function buildChatCommand(body: J) {
   const selectedModel = rec(inner.selected_model);
   const runtimeControls = rec(inner.runtime_controls);
   const uploadedFiles = Array.isArray(inner.uploaded_files) ? inner.uploaded_files : [];
+  const referencedConversations = Array.isArray(inner.referenced_conversations)
+    ? inner.referenced_conversations
+    : [];
   return create(ChatCommandRequestSchema, {
     type: str(body.type),
     request: create(ChatRequestSchema, {
@@ -350,6 +354,15 @@ function buildChatCommand(body: J) {
           fileName: str(raw.file_name),
           kind: str(raw.kind),
           sizeBytes: toI64(raw.size_bytes),
+        });
+      }),
+      referencedConversations: referencedConversations.map((reference) => {
+        const raw = rec(reference);
+        return create(ChatConversationReferenceSchema, {
+          id: str(raw.id),
+          title: str(raw.title),
+          cwd: str(raw.cwd),
+          updatedAt: toI64(raw.updated_at),
         });
       }),
       clientRequestId: str(inner.client_request_id),

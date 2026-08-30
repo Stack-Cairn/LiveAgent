@@ -1,3 +1,4 @@
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
@@ -74,6 +75,7 @@ export type TranscriptRow =
       kind: "user";
       text: string;
       attachments: PendingUploadedFile[];
+      referencedConversations: ConversationMentionReference[];
       messageRef?: HistoryMessageRef;
       timestamp?: number;
     }

@@ -114,6 +114,12 @@ function enrichUserSlot(user: UserChatEntry, historyUser: UserChatEntry): UserCh
   if (next.attachments.length === 0 && historyUser.attachments.length > 0) {
     next = { ...next, attachments: historyUser.attachments };
   }
+  if (
+    (next.referencedConversations?.length ?? 0) === 0 &&
+    (historyUser.referencedConversations?.length ?? 0) > 0
+  ) {
+    next = { ...next, referencedConversations: historyUser.referencedConversations };
+  }
   return next;
 }
 

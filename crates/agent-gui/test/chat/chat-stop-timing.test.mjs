@@ -240,8 +240,13 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         },
       },
       "../composer/composerDraftText": {
-        createTextComposerDraft(text) {
-          return { text, isEmpty: !text.trim(), segments: [{ type: "text", text }] };
+        createTextComposerDraft(text, referencedConversations = []) {
+          return {
+            text,
+            isEmpty: !text.trim(),
+            segments: [{ type: "text", text }],
+            conversationMentions: referencedConversations,
+          };
         },
       },
       "../gateway/gatewayBridgeTypes": {
@@ -381,7 +386,11 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
           requestId: "gateway-request-sandbox",
           clientRequestId: "gateway-client-sandbox",
           conversationId: "conversation-1",
-          message: "remote queued turn",
+          message:
+            "use [conversation: Earlier investigation](conversation:conversation-source)",
+          referencedConversations: [
+            { id: "conversation-source", title: "Earlier investigation" },
+          ],
           executionMode: "tools",
           commandSafetyMode: "sandboxOffline",
           queuePolicy: "append",
@@ -400,6 +409,9 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
     gatewaySend.gatewayBridgeRequestOverride.commandSafetyModeOverride,
     "sandboxOffline",
   );
+  assert.deepEqual(gatewaySend.composerDraftOverride.conversationMentions, [
+    { id: "conversation-source", title: "Earlier investigation" },
+  ]);
   hookHarness.cleanup();
 });
 

@@ -207,6 +207,7 @@ export function buildRowsFromEntries(
           kind: "user",
           text: entry.text,
           attachments: entry.attachments,
+          referencedConversations: entry.referencedConversations ?? [],
           messageRef: entry.messageRef,
           timestamp: entry.timestamp,
         });
@@ -399,6 +400,7 @@ export function buildTurnRows(turn: Turn): TranscriptRow[] {
       kind: "user",
       text: turn.user.text,
       attachments: turn.user.attachments,
+      referencedConversations: turn.user.referencedConversations ?? [],
       messageRef: turn.user.messageRef,
       timestamp: turn.user.timestamp,
     });

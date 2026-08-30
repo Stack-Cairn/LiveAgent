@@ -1733,6 +1733,61 @@ mod tests {
         ]
     }
 
+    // 与前端 getHistoryMessageContentHash 的跨语言对齐校验：fixture 与期望
+    // 哈希和 crates/agent-gui/test/chat/edit-resend-message-ref.test.mjs 中的
+    // "content hash stays byte-aligned with the Rust implementation" 用例
+    // 逐字面值一致。任何一侧改动哈希算法都必须同步更新两处。
+    #[test]
+    fn history_message_content_hash_matches_frontend_fixture() {
+        let plain = json!({
+            "role": "user",
+            "id": "user-plain",
+            "content": "hello there",
+            "timestamp": 1000,
+        });
+        let empty_refs = json!({
+            "role": "user",
+            "id": "user-plain",
+            "content": "hello there",
+            "timestamp": 1000,
+            "liveAgentReferencedConversations": [],
+        });
+        let with_refs = json!({
+            "role": "user",
+            "id": "user-refs",
+            "content": "hello there\n\nThe user attached the files below to this message.",
+            "timestamp": 1000,
+            "liveAgentDisplayContent": "hello there",
+            "liveAgentAttachments": [
+                {
+                    "relativePath": "notes/spec.md",
+                    "fileName": "spec.md",
+                    "kind": "text",
+                    "sizeBytes": 2048,
+                },
+            ],
+            "liveAgentReferencedConversations": [
+                {
+                    "id": " conv-alpha ",
+                    "title": "  Fix   login\tflow ",
+                    "cwd": " /tmp/work ",
+                    "updatedAt": 1_735_689_600_123_i64,
+                },
+                { "id": "conv-beta", "title": "训练 β 运行" },
+                { "id": "conv-alpha", "title": "duplicate entry" },
+                { "id": "conv-gamma", "title": "third reference" },
+                { "id": "conv-delta", "title": "over the cap" },
+            ],
+        });
+
+        assert_eq!(history_message_content_hash(&plain), "fnv1a32:73027b85");
+        // 空引用数组不追加哈希段：旧消息与旧客户端产出的 ref 向后兼容。
+        assert_eq!(history_message_content_hash(&empty_refs), "fnv1a32:73027b85");
+        // 引用参与哈希前经过与前端一致的归一化：id 修剪、标题折叠空白并
+        // 截断、按 id 去重、最多 3 条。
+        assert_eq!(history_message_content_hash(&with_refs), "fnv1a32:87daff4d");
+    }
+
     #[test]
     fn history_window_tail_uses_absolute_offsets_and_message_refs() {
         let mut conn = open_test_db().expect("open test db");

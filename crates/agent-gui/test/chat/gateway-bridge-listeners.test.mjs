@@ -294,7 +294,16 @@ test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", 
       requestId: "request-sandbox-direct",
       clientRequestId: "client-sandbox-direct",
       conversationId: "conversation-sandbox-direct",
-      message: "run inside the offline sandbox",
+      message:
+        "compare [conversation: Earlier investigation](conversation:conversation-source)",
+      referencedConversations: [
+        {
+          id: "conversation-source",
+          title: "Earlier investigation",
+          cwd: "/workspace/source",
+          updatedAt: 1772000000000,
+        },
+      ],
       executionMode: "tools",
       workdir: "/workspace/project",
       commandSafetyMode: "sandboxOffline",
@@ -409,6 +418,15 @@ test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", 
     );
     assert.equal(overrides.executionModeOverride, "tools");
     assert.equal(overrides.workdirOverride, "/workspace/project");
+    assert.deepEqual(overrides.composerDraftOverride.conversationMentions, [
+      {
+        id: "conversation-source",
+        title: "Earlier investigation",
+        cwd: "/workspace/source",
+        updatedAt: 1772000000000,
+      },
+    ]);
+    assert.equal(overrides.composerDraftOverride.segments[1].type, "conversationMention");
     assert.ok(
       invokeCalls.some((call) => call.command === "gateway_chat_complete"),
       "the directly claimed request should complete after the sandbox mode is forwarded",

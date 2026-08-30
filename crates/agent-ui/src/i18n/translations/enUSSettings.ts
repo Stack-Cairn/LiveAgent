@@ -355,6 +355,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.memory_manager.desc": "Read and write long-term memory across sessions",
   "settings.builtinTool.memory_manager.detail":
     "Maintains long-term memory across sessions: saving preferences, project conventions and key conclusions for later recall. Contents can be reviewed and organized in the Memory settings panel.",
+  "settings.builtinTool.read_conversation.name": "Read Conversation",
+  "settings.builtinTool.read_conversation.desc":
+    "Read conversations referenced with @ in the current turn on demand",
+  "settings.builtinTool.read_conversation.detail":
+    "Registered only after the current message explicitly references an earlier conversation through the @ menu. The model can page through persisted summaries and conversation text; historical tool output is filtered and all historical text is treated as untrusted context. Read-only; chat sessions only.",
   "settings.builtinTool.agent.name": "Subagent",
   "settings.builtinTool.agent.desc": "Spawn subagents to work on complex tasks in parallel",
   "settings.builtinTool.agent.detail":

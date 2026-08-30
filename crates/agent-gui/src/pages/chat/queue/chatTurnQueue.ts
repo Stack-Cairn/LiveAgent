@@ -76,6 +76,8 @@ export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
         return segment.commit.subject || segment.commit.shortSha || segment.commit.sha;
       case "gitFileMention":
         return segment.file.path;
+      case "conversationMention":
+        return segment.conversation.title;
       case "codeMention":
         return `${segment.reference.path}:${segment.reference.startLine}~${segment.reference.endLine}`;
       case "fileMention":

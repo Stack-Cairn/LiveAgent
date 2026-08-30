@@ -50,7 +50,9 @@ export function externalRootChildPath(rootId: string, relativePath: string) {
   return normalized ? `${rootPath}/${normalized}` : rootPath;
 }
 
-export function externalRootPathInfo(path: string): { rootId: string; relativePath: string } | null {
+export function externalRootPathInfo(
+  path: string,
+): { rootId: string; relativePath: string } | null {
   if (!path.startsWith(EXTERNAL_ROOT_PATH_PREFIX)) return null;
   const remainder = path.slice(EXTERNAL_ROOT_PATH_PREFIX.length);
   const separator = remainder.indexOf("/");
@@ -59,7 +61,8 @@ export function externalRootPathInfo(path: string): { rootId: string; relativePa
   try {
     return {
       rootId: decodeURIComponent(encodedRootId),
-      relativePath: separator < 0 ? "" : normalizeFileTreeRelativePath(remainder.slice(separator + 1)),
+      relativePath:
+        separator < 0 ? "" : normalizeFileTreeRelativePath(remainder.slice(separator + 1)),
     };
   } catch {
     return null;
@@ -196,12 +199,7 @@ export function applyFileTreeExternalRoots(
   for (const root of normalizedRoots) {
     const path = externalRootPath(root.id);
     const existing = next[path];
-    if (
-      existing &&
-      existing.kind === "dir" &&
-      existing.name === root.name &&
-      !existing.hidden
-    ) {
+    if (existing && existing.kind === "dir" && existing.name === root.name && !existing.hidden) {
       continue;
     }
     const initial = createExternalRootNode(root);

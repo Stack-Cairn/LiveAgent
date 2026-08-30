@@ -9,6 +9,7 @@ const loader = createWebModuleLoader({
 });
 
 const adapters = loader.loadModule("src/lib/gatewaySocketV2/adapters.ts");
+const socketShared = loader.loadModule("src/lib/gatewaySocketShared.ts");
 const pb = loader.loadModule("@bufbuild/protobuf");
 const v2 = loader.loadModule("src/lib/proto/gen/proto/v2/gateway_ws_pb.ts");
 
@@ -25,6 +26,28 @@ function roundtrip(frame) {
 function decodeClientFrame(bytes) {
   return pb.fromBinary(v2.WebClientFrameSchema, bytes);
 }
+
+test("chat command payload normalizes conversation references before transport", () => {
+  const command = socketShared.buildChatCommandPayload({
+    type: "chat.submit",
+    conversationId: "conversation-current",
+    message: "compare prior conversations",
+    referencedConversations: [
+      { id: "conversation-current", title: "Current" },
+      { id: "conversation-a", title: "  Earlier   investigation  ", cwd: " /a " },
+      { id: "conversation-a", title: "Duplicate" },
+      { id: "conversation-b", title: "Second" },
+      { id: "conversation-c", title: "Third" },
+      { id: "conversation-d", title: "Fourth" },
+    ],
+  });
+
+  assert.deepEqual(command.payload.referenced_conversations, [
+    { id: "conversation-a", title: "Earlier investigation", cwd: "/a", updated_at: 0 },
+    { id: "conversation-b", title: "Second", cwd: "", updated_at: 0 },
+    { id: "conversation-c", title: "Third", cwd: "", updated_at: 0 },
+  ]);
+});
 
 test("provider model requests carry the stored provider identity to the desktop", () => {
   const encoded = encodeRequestFrame(
@@ -567,12 +590,29 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
             size_bytes: 4102444800000,
           },
         ],
+        referenced_conversations: [
+          {
+            id: "conversation-source",
+            title: "Earlier investigation",
+            cwd: "/workspace/source",
+            updated_at: 1772000000000,
+          },
+        ],
         queue_policy: "auto",
       },
     }, "agent-a"),
   );
   assert.equal(commandFrame.payload.case, "chatCommand");
   assert.equal(commandFrame.payload.value.request.uploadedFiles[0].sizeBytes, 4102444800000n);
+  assert.deepEqual(commandFrame.payload.value.request.referencedConversations, [
+    {
+      $typeName: "liveagent.gateway.v2.ChatConversationReference",
+      id: "conversation-source",
+      title: "Earlier investigation",
+      cwd: "/workspace/source",
+      updatedAt: 1772000000000n,
+    },
+  ]);
 
   assert.throws(
     () => encodeRequestFrame("missing-agent", "status.get", {}),

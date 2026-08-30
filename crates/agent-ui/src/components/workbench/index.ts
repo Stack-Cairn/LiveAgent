@@ -6,5 +6,6 @@ export * from "./PaneSurfaceLayer";
 export * from "./surfaces/LocalTerminalPaneSurface";
 export * from "./surfaces/SshTerminalPaneSurface";
 export * from "./surfaces/UnsupportedPaneSurface";
+export * from "./TerminalPaneHost";
 export * from "./WorkbenchCanvas";
 export * from "./WorkbenchEmptyState";

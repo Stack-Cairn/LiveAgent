@@ -1,12 +1,13 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
-import { AppWindow, SkillIcon } from "@liveagent/ui/components/IconSet";
+import { AppWindow, MessageSquareText, SkillIcon } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useAppMentionIcon } from "@liveagent/ui/lib/chat/appMentionIcons";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
+  type ConversationMentionReference,
   codeMentionDisplayName,
   codeMentionLineLabel,
   codeMentionTitle,
@@ -18,6 +19,7 @@ import {
   normalizeMentionPath,
   parseFileMentionPath,
   parseMarkdownCodeMentionReference,
+  parseMarkdownConversationMentionReference,
   parseMarkdownFileMentionReference,
   unescapeMarkdownReferenceLabel,
 } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -79,6 +81,7 @@ export type UserMessageSegment =
   | { type: "commit"; commit: CommitDisplayReference }
   | { type: "gitFile"; file: GitFileDisplayReference }
   | { type: "codeRef"; reference: CodeMentionReference }
+  | { type: "conversation"; reference: ConversationMentionReference }
   | {
       type: "pastedText";
       reference: PastedTextDisplayReference;
@@ -480,9 +483,15 @@ function tokenizeMentions(text: string, options: UserMessageTokenizeOptions): Us
     const commit = gitFile ? null : markdownCommitReference(label, destination);
     const codeRef =
       gitFile || commit ? null : parseMarkdownCodeMentionReference(label, destination);
+    const conversation =
+      gitFile || commit || codeRef
+        ? null
+        : parseMarkdownConversationMentionReference(label, destination);
     const reference =
-      gitFile || commit || codeRef ? null : parseMarkdownFileMentionReference(label, destination);
-    if (!gitFile && !commit && !codeRef && !reference) continue;
+      gitFile || commit || codeRef || conversation
+        ? null
+        : parseMarkdownFileMentionReference(label, destination);
+    if (!gitFile && !commit && !codeRef && !conversation && !reference) continue;
 
     if (matchIndex > cursor) {
       appendSegments(segments, tokenizeInlineMentions(text.slice(cursor, matchIndex), options));
@@ -493,6 +502,8 @@ function tokenizeMentions(text: string, options: UserMessageTokenizeOptions): Us
       segments.push({ type: "commit", commit });
     } else if (codeRef) {
       segments.push({ type: "codeRef", reference: codeRef });
+    } else if (conversation) {
+      segments.push({ type: "conversation", reference: conversation });
     } else if (reference) {
       segments.push({ type: "mention", reference });
     }
@@ -795,6 +806,15 @@ function CodeRefMentionChip({ reference }: { reference: CodeMentionReference }) 
   );
 }
 
+function ConversationMentionChip({ reference }: { reference: ConversationMentionReference }) {
+  return (
+    <span title={reference.title} className={mentionChipClassName("conversation")}>
+      <MessageSquareText className="h-3 w-3 shrink-0 self-center" />
+      {reference.title}
+    </span>
+  );
+}
+
 function userMessageSegmentKey(part: UserMessageSegment, index: number) {
   if (part.type === "text") return `text:${index}:${part.value}`;
   if (part.type === "mention") {
@@ -810,6 +830,9 @@ function userMessageSegmentKey(part: UserMessageSegment, index: number) {
   }
   if (part.type === "codeRef") {
     return `code-ref:${index}:${part.reference.path}:${part.reference.startLine}:${part.reference.endLine}`;
+  }
+  if (part.type === "conversation") {
+    return `conversation:${index}:${part.reference.id}`;
   }
   return `pasted-text:${index}:${part.file.relativePath}:${part.reference.raw}`;
 }
@@ -1026,6 +1049,7 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "commit" ||
       part.type === "gitFile" ||
       part.type === "codeRef" ||
+      part.type === "conversation" ||
       part.type === "pastedText",
   );
   const trailingNewlineAnchor = normalizedText.endsWith("\n") ? (
@@ -1067,6 +1091,9 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         if (part.type === "codeRef") {
           return <CodeRefMentionChip key={key} reference={part.reference} />;
+        }
+        if (part.type === "conversation") {
+          return <ConversationMentionChip key={key} reference={part.reference} />;
         }
         if (part.type === "pastedText") {
           return <PastedTextChip key={key} reference={part.reference} file={part.file} />;

@@ -153,8 +153,7 @@ export function useConversationStats(
         return;
       }
 
-      const cursor =
-        current.oldestSegmentIndex === null ? undefined : current.oldestSegmentIndex;
+      const cursor = current.oldestSegmentIndex === null ? undefined : current.oldestSegmentIndex;
       setLoading(true);
       hostRef.current
         .loadWindow(conversationId, cursor)
@@ -218,6 +217,7 @@ export function useConversationStats(
   const pendingLiveRef = useRef(false);
   const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveEvents is the intentional trigger; the latest payload is read through liveEventsRef after throttling.
   useEffect(() => {
     if (!enabled || conversationId === "") return;
     if (liveTimerRef.current !== null) {
@@ -244,6 +244,7 @@ export function useConversationStats(
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: eventVersion and liveVersion intentionally invalidate the memo after paged or throttled ledger updates.
   const stats = useMemo(() => {
     if (!enabled || conversationId === "") return null;
     const entry = cache.get(conversationId);

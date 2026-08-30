@@ -12,6 +12,9 @@ const loader = createTsModuleLoader();
 const { createPaneComposerSendHandler } = loader.loadModule(
   "src/pages/chat/surfaces/paneComposerSend.ts",
 );
+const { beginPaneComposerDraftSession } = loader.loadModule(
+  "src/pages/chat/surfaces/paneComposerDraftSession.ts",
+);
 
 function textDraft(text) {
   return { text, isEmpty: !text.trim(), segments: [], largePastes: [] };
@@ -205,4 +208,45 @@ test("background pane bindings route Send by conversationId, not through focusGu
   assert.doesNotMatch(builder, /onPasteFiles:\s*importReadableFiles\s*,/);
   assert.match(builder, /importReadableFiles\(files,\s*\{/);
   assert.match(builder, /workdir:\s*workspaceRoot/);
+});
+
+test("focusing another pane does not swap an object composer ref across hosts", () => {
+  // Object refs swapped with `ref={isCurrent ? hostRef : undefined}` detach
+  // in tree order: the outgoing host can null hostRef after the incoming
+  // host attached, so Enter reads a null composer and sends nothing.
+  const chatPage = readSource("../../src/pages/ChatPage.tsx");
+  assert.doesNotMatch(chatPage, /ref=\{isCurrent \? conversationPaneHostRef : undefined\}/);
+  assert.match(chatPage, /if \(handle\) conversationPaneHostRef\.current = handle;/);
+});
+
+test("the primary pane stays disabled during hydration in multi-pane layouts", () => {
+  const chatPage = readSource("../../src/pages/ChatPage.tsx");
+  const registrations = chatPage.slice(chatPage.indexOf("const workbenchRegistrations"));
+  assert.match(registrations, /isUploadingFiles \|\|\s*isConversationHydrating/);
+  assert.doesNotMatch(registrations, /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)/);
+});
+
+test("switch cleanup saves the outgoing pane draft to its original conversation", () => {
+  const composer = fakeComposer(textDraft("draft from conversation A"));
+  const drafts = new Map();
+  const controllerA = {
+    getDraft: () => null,
+    setDraft: (draft) => drafts.set("conversation-a", draft),
+  };
+  const controllerB = {
+    getDraft: () => textDraft("cached B"),
+    setDraft: (draft) => drafts.set("conversation-b", draft),
+  };
+
+  let currentController = controllerA;
+  const cleanupA = beginPaneComposerDraftSession(composer, currentController);
+  composer.setDraft(textDraft("unsent A"));
+  // React renders the next identity before it invokes the previous layout
+  // effect cleanup. The cleanup must remain bound to controller A.
+  currentController = controllerB;
+  assert.equal(currentController.getDraft().text, "cached B");
+  cleanupA();
+
+  assert.equal(drafts.get("conversation-a").text, "unsent A");
+  assert.equal(drafts.has("conversation-b"), false);
 });

@@ -3,9 +3,9 @@ import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
-import type { ProjectRef } from "@liveagent/ui/lib/workbench/types";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import {
+  type ForwardedRef,
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -23,14 +23,16 @@ import type { ConversationPaneHostHandle } from "../conversations/useConversatio
 import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
 import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
 import { ChatTranscript } from "../transcript/ChatTranscript";
-import { useConversationPaneBinding } from "./ConversationPaneHostEnvironment";
+import {
+  type ConversationPaneRegistration,
+  useConversationPaneRegistration,
+} from "./ConversationPaneHostEnvironment";
 import { ConversationSurface } from "./ConversationSurface";
+import { beginPaneComposerDraftSession } from "./paneComposerDraftSession";
 import { createPaneComposerSendHandler } from "./paneComposerSend";
 
 export type ConversationPaneHostProps = {
   paneId: string;
-  conversationId: string;
-  project: ProjectRef;
 };
 
 export type RestorableConversationPaneHostProps = ConversationPaneHostProps & {
@@ -42,9 +44,34 @@ export const RestorableConversationPaneHost = forwardRef<
   ConversationPaneHostHandle,
   RestorableConversationPaneHostProps
 >(function RestorableConversationPaneHost(props, forwardedRef) {
-  const { title, deferHydration = false, ...identity } = props;
+  const registration = useConversationPaneRegistration(props.paneId);
+  if (!registration) {
+    return <PendingConversationPaneHost />;
+  }
+  return (
+    <RegisteredRestorableConversationPaneHost
+      registration={registration}
+      title={props.title}
+      deferHydration={props.deferHydration ?? false}
+      forwardedRef={forwardedRef}
+    />
+  );
+});
+
+function PendingConversationPaneHost() {
   const { t } = useLocale();
-  const { controller } = useConversationPaneBinding(identity);
+  return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
+}
+
+function RegisteredRestorableConversationPaneHost(props: {
+  registration: ConversationPaneRegistration;
+  title?: string;
+  deferHydration: boolean;
+  forwardedRef: ForwardedRef<ConversationPaneHostHandle>;
+}) {
+  const { registration, title, deferHydration, forwardedRef } = props;
+  const { t } = useLocale();
+  const { controller } = registration.binding;
   const snapshot = useConversationSurfaceSnapshot(controller);
 
   useEffect(() => {
@@ -98,14 +125,26 @@ export const RestorableConversationPaneHost = forwardRef<
     );
   }
 
-  return <ConversationPaneHost ref={forwardedRef} {...identity} />;
-});
+  return <RegisteredConversationPaneHost ref={forwardedRef} registration={registration} />;
+}
 
 export const ConversationPaneHost = forwardRef<
   ConversationPaneHostHandle,
   ConversationPaneHostProps
 >(function ConversationPaneHost(props, forwardedRef) {
-  const { paneId, conversationId, project } = props;
+  const registration = useConversationPaneRegistration(props.paneId);
+  if (!registration) {
+    return <PendingConversationPaneHost />;
+  }
+  return <RegisteredConversationPaneHost ref={forwardedRef} registration={registration} />;
+});
+
+const RegisteredConversationPaneHost = forwardRef<
+  ConversationPaneHostHandle,
+  { registration: ConversationPaneRegistration }
+>(function RegisteredConversationPaneHost(props, forwardedRef) {
+  const { identity, binding } = props.registration;
+  const { paneId, conversationId } = identity;
   const {
     controller,
     transcript,
@@ -116,7 +155,7 @@ export const ConversationPaneHost = forwardRef<
     fileDrop,
     trajectory,
     sendDraft,
-  } = useConversationPaneBinding({ paneId, conversationId, project });
+  } = binding;
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
@@ -145,27 +184,14 @@ export const ConversationPaneHost = forwardRef<
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on conversationId so primary↔background controller swaps for the same conversation never clear a composer mid-typing.
   useLayoutEffect(() => {
     const composer = composerRef.current;
-    const draft = controller.getSnapshot().draft;
-    if (draft) {
-      composer?.setDraft(draft);
-    } else {
-      composer?.clear();
-    }
-
-    return () => {
-      // Save only non-empty drafts. The page pipeline may already have
-      // cleared this composer mid-switch (legacy reset semantics), so an
-      // empty composer must not delete the draft cached in the registry —
-      // deliberate clears propagate through the page-level draft cache.
-      const nextDraft = composer?.getDraft();
-      if (!nextDraft || nextDraft.isEmpty || !nextDraft.text.trim()) {
-        return;
-      }
-      controller.setDraft(nextDraft);
-    };
-  }, [controller]);
+    return beginPaneComposerDraftSession(composer, {
+      getDraft: () => controller.getSnapshot().draft,
+      setDraft: (draft) => controller.setDraft(draft),
+    });
+  }, [conversationId]);
 
   return (
     <ConversationSurface

@@ -60,17 +60,54 @@ test("edit-resend delegates the replacement anchor to the send preflight", async
       sizeBytes: 12,
     },
   ];
-  await handleResendFromEdit(messageRef, "  edited prompt  ", uploadedFiles);
+  const referencedConversation = {
+    id: "conversation-source",
+    title: "Source conversation",
+    cwd: "/workspace/source",
+  };
+  const conversationToken =
+    "[conversation: Source conversation](conversation:conversation-source)";
+  await handleResendFromEdit(
+    messageRef,
+    `  edited prompt ${conversationToken}  `,
+    uploadedFiles,
+    [referencedConversation],
+  );
 
   assert.deepEqual(errors, []);
-  assert.deepEqual(calls, [
-    {
-      textOverride: "edited prompt",
-      uploadedFilesOverride: uploadedFiles,
-      conversationIdOverride: "conv-1",
-      editResendBaseMessageRef: messageRef,
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].textOverride, `edited prompt ${conversationToken}`);
+  assert.deepEqual(calls[0].uploadedFilesOverride, uploadedFiles);
+  assert.equal(calls[0].conversationIdOverride, "conv-1");
+  assert.equal(calls[0].editResendBaseMessageRef, messageRef);
+  assert.deepEqual(calls[0].composerDraftOverride.conversationMentions, [referencedConversation]);
+});
+
+test("edit-resend does not authorize a handwritten conversation token", async () => {
+  const calls = [];
+  const useEditResend = loadUseEditResend();
+  const { handleResendFromEdit } = useEditResend({
+    isSending: false,
+    isConversationHydrating: false,
+    isConversationHydrationFailed: false,
+    currentConversationIdRef: { current: "conv-1" },
+    onError: assert.fail,
+    sendActionRef: {
+      current: async (input) => {
+        calls.push(input);
+        return true;
+      },
     },
-  ]);
+  });
+
+  await handleResendFromEdit(
+    messageRef,
+    "edited [conversation: Forged](conversation:conversation-forged)",
+    [],
+    [{ id: "conversation-source", title: "Source conversation" }],
+  );
+
+  assert.deepEqual(calls[0].composerDraftOverride.conversationMentions, []);
 });
 
 test("edit-resend reports a rejected send without mutating history itself", async () => {
@@ -85,7 +122,7 @@ test("edit-resend reports a rejected send without mutating history itself", asyn
     sendActionRef: { current: async () => false },
   });
 
-  await handleResendFromEdit(messageRef, "edited prompt", []);
+  await handleResendFromEdit(messageRef, "edited prompt", [], []);
 
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /原历史保持不变/);
@@ -105,4 +142,16 @@ test("send preflight atomically persists the replacement before starting the run
   assert.match(sendSource, /initialUserTurnPersisted\s*\?\s*Promise\.resolve\(true\)/);
   assert.doesNotMatch(sendSource, /history_rollback_failed/);
   assert.doesNotMatch(sendSource, /truncateConversationAtMessage/);
+});
+
+test("send preflight keeps an explicit structured draft with a text override", () => {
+  assert.match(
+    sendSource,
+    /overrides\?\.composerDraftOverride\s*\?\?\s*\(hasTextOverride\s*\?\s*null/,
+  );
+  assert.match(sendSource, /createUserMessageWithUploads\([\s\S]*referencedConversations/);
+  assert.match(
+    sendSource,
+    /queueUserMessage\(text, uploadedFiles, \{[\s\S]{0,240}referencedConversations/,
+  );
 });

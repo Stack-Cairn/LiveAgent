@@ -2,6 +2,7 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { invoke } from "@tauri-apps/api/core";
@@ -826,7 +827,13 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const queuedTurn = createQueuedChatTurn({
       id: `gateway-${requestId}`,
       conversationId: targetConversationId,
-      draft: createTextComposerDraft(message),
+      draft: createTextComposerDraft(
+        message,
+        normalizeConversationMentionReferences(
+          payload.referencedConversations,
+          targetConversationId,
+        ),
+      ),
       uploadedFiles,
       executionMode,
       workdir: isAgentExecutionMode(executionMode) ? workdir : "",

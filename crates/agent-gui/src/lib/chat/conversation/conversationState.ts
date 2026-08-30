@@ -1,8 +1,10 @@
 import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
 import type { HistoryMessageRef } from "@liveagent/ui/lib/chat/historyMessageRef";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
+  getUserMessageReferencedConversations,
   type PendingUploadedFile,
   stripUploadedFilesMessageMetadata,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -119,6 +121,7 @@ export type RenderUserMessage = {
   messageRef?: HistoryMessageRef;
   text: string;
   attachments: PendingUploadedFile[];
+  referencedConversations: ConversationMentionReference[];
   timestamp: number;
   isFromCompactedSegment: boolean;
 };
@@ -317,6 +320,18 @@ export function getHistoryMessageContentHash(message: Message): string {
       appendHashPart(parts, file.fileName);
       appendHashPart(parts, file.kind);
       appendHashPart(parts, file.sizeBytes);
+    }
+    const referencedConversations = getUserMessageReferencedConversations(
+      message as Message & Record<string, unknown>,
+    );
+    if (referencedConversations.length > 0) {
+      appendHashPart(parts, referencedConversations.length);
+      for (const reference of referencedConversations) {
+        appendHashPart(parts, reference.id);
+        appendHashPart(parts, reference.title);
+        appendHashPart(parts, reference.cwd);
+        appendHashPart(parts, reference.updatedAt);
+      }
     }
   } else {
     appendHashPart(parts, JSON.stringify(message.content ?? null));
@@ -696,6 +711,9 @@ function buildTimelineItemsForSlice(
         messageRef,
         text: uiMessage.text,
         attachments: uiMessage.attachments ?? [],
+        referencedConversations: source
+          ? getUserMessageReferencedConversations(source as Message & Record<string, unknown>)
+          : [],
         timestamp: getMessageTimestamp(source),
         isFromCompactedSegment: isCompacted,
       });

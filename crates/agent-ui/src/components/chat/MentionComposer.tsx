@@ -19,10 +19,12 @@ import {
   insertPlainTextWithUndo,
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
+import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import {
   type CodeMentionReference,
   formatAppMentionToken,
   formatCodeMentionToken,
+  formatConversationMentionToken,
   formatFileMentionToken,
 } from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
@@ -45,6 +47,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   COMMIT_MENTION_SHA_ATTR,
+  CONVERSATION_MENTION_ID_ATTR,
   CommitMentionTooltip,
   type ComposerContextMenuState,
   clampComposerContextMenuPosition,
@@ -53,6 +56,7 @@ import {
   createAppMentionChip,
   createCodeMentionChip,
   createCommitMentionChip,
+  createConversationMentionChip,
   createFileMentionChip,
   createGitFileMentionChip,
   createLargePasteChip,
@@ -66,6 +70,7 @@ import {
   editorSelectionRange,
   editorTextIsEmpty,
   ejectCaretFromChip,
+  enforceConversationMentionConstraintsInEditor,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
   formatCommitMentionToken,
@@ -76,6 +81,7 @@ import {
   IME_ENTER_SUPPRESS_WINDOW_MS,
   insertAppMentionChip,
   insertComposerSegmentsAtSelection,
+  insertConversationMentionChip,
   insertMentionChip,
   insertNodeAtCursor,
   insertSkillMentionChip,
@@ -84,12 +90,14 @@ import {
   isImeKeyboardEvent,
   isLargePasteText,
   LARGE_PASTE_TAG_ATTR,
-  MAX_APP_SUGGESTIONS,
+  MAX_CONVERSATION_MENTIONS,
   MAX_SUGGESTIONS,
   MENTION_INDEX_MAX_RESULTS,
   MENTION_REFETCH_DEBOUNCE_MS,
   type MentionComposerAppMention,
   type MentionComposerCommitMention,
+  type MentionComposerConversation,
+  type MentionComposerConversationMention,
   type MentionComposerDraft,
   type MentionComposerGitFileMention,
   type MentionComposerHandle,
@@ -100,6 +108,7 @@ import {
   type MentionFetchSnapshot,
   type MentionFileEntry,
   type MentionListResponse,
+  type MentionMenuMode,
   type MentionSearchEntry,
   type MentionSuggestion,
   mentionContextEquals,
@@ -116,6 +125,7 @@ import {
   removeStaleCaretAnchorsAroundSelection,
   resolveComposerSelection,
   resolveComposerSelectionText,
+  sanitizeConversationMentionSegments,
   scheduleComposerSelectionScroll,
   selectComposerContents,
   selectionContainsPoint,
@@ -131,6 +141,8 @@ export type {
   MentionComposerApp,
   MentionComposerAppMention,
   MentionComposerCommitMention,
+  MentionComposerConversation,
+  MentionComposerConversationMention,
   MentionComposerDraft,
   MentionComposerDraftSegment,
   MentionComposerGitFileMention,
@@ -167,6 +179,10 @@ export const MentionComposer = memo(
       placeholder = "",
       workdir,
       enabledSkills = [],
+      conversations = [],
+      searchConversations,
+      conversationMentionsEnabled = true,
+      currentConversationId,
       mentionApps = [],
       className,
     }: MentionComposerProps,
@@ -279,7 +295,20 @@ export const MentionComposer = memo(
 
     // ---- Mention state ----
     const [mentionCtx, setMentionCtx] = useState<MentionContext | null>(null);
+    const [mentionMenuMode, setMentionMenuModeState] = useState<MentionMenuMode>("root");
+    const mentionMenuModeRef = useRef<MentionMenuMode>("root");
     const [highlightIdx, setHighlightIdx] = useState(0);
+    const [conversationSearchResults, setConversationSearchResults] = useState<
+      MentionComposerConversation[]
+    >([]);
+    const [conversationSearchLoading, setConversationSearchLoading] = useState(false);
+    const [conversationSearchError, setConversationSearchError] = useState<string | null>(null);
+    const conversationSearchRequestSeqRef = useRef(0);
+
+    const setMentionMenuMode = useCallback((mode: MentionMenuMode) => {
+      mentionMenuModeRef.current = mode;
+      setMentionMenuModeState(mode);
+    }, []);
 
     const cancelMentionRefetch = useCallback(() => {
       if (mentionRefetchTimerRef.current !== null) {
@@ -301,16 +330,19 @@ export const MentionComposer = memo(
 
     const closeMentionSession = useCallback(() => {
       mentionActiveRef.current = false;
+      setMentionMenuMode("root");
       setMentionCtx(null);
       setHighlightIdx(0);
       resetMentionSession();
-    }, [resetMentionSession]);
+    }, [resetMentionSession, setMentionMenuMode]);
 
     const startMentionSession = useCallback(
-      (ctx: MentionContext, opts?: { keepEntries?: boolean }) => {
+      (ctx: MentionContext, opts?: { keepEntries?: boolean; mode?: MentionMenuMode }) => {
         cancelMentionRefetch();
         const requestSeq = ++mentionSessionRequestSeqRef.current;
-        const isFileFetch = ctx.trigger === "file" && Boolean(normalizedWorkdir);
+        const mode = opts?.mode ?? mentionMenuModeRef.current;
+        const isFileFetch =
+          ctx.trigger === "file" && mode === "files" && Boolean(normalizedWorkdir);
         mentionSessionQueryRef.current = ctx.query;
         mentionFetchRef.current = {
           trigger: ctx.trigger,
@@ -327,6 +359,9 @@ export const MentionComposer = memo(
         setMentionSessionError(null);
 
         if (ctx.trigger === "skill") {
+          return;
+        }
+        if (mode !== "files") {
           return;
         }
         if (!normalizedWorkdir) {
@@ -381,6 +416,42 @@ export const MentionComposer = memo(
         })),
       [mentionSessionEntries],
     );
+    const normalizedMentionQuery = mentionCtx ? normalizeMentionQuery(mentionCtx.query) : "";
+
+    useEffect(() => {
+      const shouldSearch =
+        mentionCtx?.trigger === "file" &&
+        mentionMenuMode === "conversations" &&
+        Boolean(normalizedMentionQuery) &&
+        Boolean(searchConversations);
+      const requestSeq = ++conversationSearchRequestSeqRef.current;
+      if (!shouldSearch || !searchConversations) {
+        setConversationSearchResults([]);
+        setConversationSearchLoading(false);
+        setConversationSearchError(null);
+        return;
+      }
+
+      setConversationSearchLoading(true);
+      setConversationSearchError(null);
+      const timer = window.setTimeout(() => {
+        void searchConversations(mentionCtx.query.trim())
+          .then((results) => {
+            if (requestSeq !== conversationSearchRequestSeqRef.current) return;
+            setConversationSearchResults(results);
+          })
+          .catch(() => {
+            if (requestSeq !== conversationSearchRequestSeqRef.current) return;
+            setConversationSearchResults([]);
+            setConversationSearchError(t("chat.composer.conversationSearchFailed"));
+          })
+          .finally(() => {
+            if (requestSeq !== conversationSearchRequestSeqRef.current) return;
+            setConversationSearchLoading(false);
+          });
+      }, MENTION_REFETCH_DEBOUNCE_MS);
+      return () => window.clearTimeout(timer);
+    }, [mentionCtx, mentionMenuMode, normalizedMentionQuery, searchConversations, t]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: normalizedWorkdir is the trigger — any workdir change must tear down the open mention session so stale entries from the previous project can never satisfy new queries.
     useEffect(() => {
@@ -433,7 +504,20 @@ export const MentionComposer = memo(
       };
     }, [closeComposerContextMenu, composerContextMenu]);
 
-    const normalizedMentionQuery = mentionCtx ? normalizeMentionQuery(mentionCtx.query) : "";
+    const selectedConversationIdKey = [
+      ...(editorRef.current?.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`) ??
+        []),
+    ]
+      .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+      .filter((id): id is string => Boolean(id))
+      .sort()
+      .join("\n");
+    const selectedConversationIds = useMemo(
+      () => new Set(selectedConversationIdKey ? selectedConversationIdKey.split("\n") : []),
+      [selectedConversationIdKey],
+    );
+    const conversationMentionLimitReached =
+      selectedConversationIds.size >= MAX_CONVERSATION_MENTIONS;
     const suggestions = useMemo<MentionSuggestion[]>(() => {
       if (mentionCtx === null) {
         return [];
@@ -454,27 +538,74 @@ export const MentionComposer = memo(
         return next;
       }
 
-      // 文件与应用是弹层里的两个并列分组：应用在前、文件在后，各自独立
-      // 封顶——应用只留一小撮（MAX_APP_SUGGESTIONS）避免把文件结果推出
-      // 视野，文件配额也不会被应用吃掉。应用按「最近使用在前，其余保持
-      // 宿主的字母序」排列（榜单随 @ 选中落 localStorage，会话开启时重读，
-      // 见 appMentionRecency.ts）。应用列表已由宿主门控（未挂 cua-driver
-      // 时恒为空），有查询词时两组都按包含匹配过滤。键盘导航走拼接后的
-      // 扁平数组，分组只是渲染形态。
-      const next: MentionSuggestion[] = [];
-      const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
-      let appCount = 0;
-      for (const app of orderedApps) {
-        const haystack = `${app.name}\n${app.bundleId ?? ""}`.toLowerCase();
-        if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
-          continue;
+      if (mentionMenuMode === "root") {
+        // 根级只展示引用类别，候选实体全部收进各自的二级菜单。
+        const categories: MentionSuggestion[] = [
+          ...(mentionApps.length > 0
+            ? ([{ type: "category", category: "apps" }] satisfies MentionSuggestion[])
+            : []),
+          { type: "category", category: "files" },
+          ...(conversationMentionsEnabled
+            ? ([{ type: "category", category: "conversations" }] satisfies MentionSuggestion[])
+            : []),
+        ];
+        const next: MentionSuggestion[] = [];
+        for (const suggestion of categories) {
+          if (suggestion.type !== "category") continue;
+          const haystack =
+            suggestion.category === "apps"
+              ? `${t("chat.composer.mentionGroupApps")} ${t("chat.composer.appsHint")}`
+              : suggestion.category === "files"
+                ? `${t("chat.composer.filesAndFolders")} ${t("chat.composer.filesAndFoldersHint")}`
+                : `${t("chat.composer.conversations")} ${t("chat.composer.conversationsHint")}`;
+          if (!normalizedMentionQuery || haystack.toLowerCase().includes(normalizedMentionQuery)) {
+            next.push(suggestion);
+          }
         }
-        next.push({ type: "app", app });
-        appCount += 1;
-        if (appCount >= MAX_APP_SUGGESTIONS) {
-          break;
-        }
+        return next;
       }
+
+      if (mentionMenuMode === "apps") {
+        const next: MentionSuggestion[] = [];
+        const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
+        for (const app of orderedApps) {
+          const haystack = `${app.name}\n${app.bundleId ?? ""}\n${app.path}`.toLowerCase();
+          if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) continue;
+          next.push({ type: "app", app });
+          if (next.length >= MAX_SUGGESTIONS) break;
+        }
+        return next;
+      }
+
+      if (mentionMenuMode === "conversations") {
+        if (conversationMentionLimitReached) return [];
+        const next: MentionSuggestion[] = [];
+        const source = normalizedMentionQuery
+          ? [...conversationSearchResults, ...conversations]
+          : conversations;
+        const seen = new Set<string>();
+        for (const conversation of source) {
+          if (seen.has(conversation.id) || selectedConversationIds.has(conversation.id)) continue;
+          seen.add(conversation.id);
+          const haystack =
+            `${conversation.title}\n${conversation.cwd ?? ""}\n${conversation.id}\n${conversation.searchPreview ?? ""}`.toLowerCase();
+          const isServerMatch = conversationSearchResults.some(
+            (result) => result.id === conversation.id,
+          );
+          if (
+            normalizedMentionQuery &&
+            !isServerMatch &&
+            !haystack.includes(normalizedMentionQuery)
+          )
+            continue;
+          next.push({ type: "conversation", conversation });
+          if (next.length >= MAX_SUGGESTIONS) break;
+        }
+        return next;
+      }
+
+      // files 子菜单只承载工作区文件与文件夹。
+      const next: MentionSuggestion[] = [];
       let fileCount = 0;
       for (const item of mentionSessionSearchIndex) {
         if (normalizedMentionQuery && !item.searchPath.includes(normalizedMentionQuery)) {
@@ -487,7 +618,20 @@ export const MentionComposer = memo(
         }
       }
       return next;
-    }, [enabledSkills, mentionApps, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
+    }, [
+      conversations,
+      conversationMentionLimitReached,
+      conversationMentionsEnabled,
+      conversationSearchResults,
+      enabledSkills,
+      mentionApps,
+      mentionCtx,
+      mentionMenuMode,
+      mentionSessionSearchIndex,
+      normalizedMentionQuery,
+      selectedConversationIds,
+      t,
+    ]);
 
     useEffect(() => {
       setHighlightIdx((current) => {
@@ -496,14 +640,29 @@ export const MentionComposer = memo(
       });
     }, [suggestions.length]);
 
-    const popupLoading = mentionSessionLoading || mentionRefetchPending;
-    const popupError = suggestions.length === 0 ? mentionSessionError : null;
+    const popupLoading =
+      (mentionMenuMode === "files" && (mentionSessionLoading || mentionRefetchPending)) ||
+      (mentionMenuMode === "conversations" && conversationSearchLoading);
+    const popupError =
+      suggestions.length !== 0
+        ? null
+        : mentionMenuMode === "files"
+          ? mentionSessionError
+          : mentionMenuMode === "conversations"
+            ? conversationSearchError
+            : null;
     const popupEmptyLabel =
       mentionCtx?.trigger === "skill"
         ? t("chat.composer.noMatchingEnabledSkills")
-        : mentionApps.length > 0
-          ? t("chat.composer.noMatchingFilesOrApps")
-          : t("chat.composer.noMatchingFiles");
+        : mentionMenuMode === "apps"
+          ? t("chat.composer.noMatchingApps")
+          : mentionMenuMode === "conversations"
+            ? conversationMentionLimitReached
+              ? t("chat.composer.conversationLimitReached")
+              : t("chat.composer.noMatchingConversations")
+            : mentionMenuMode === "root"
+              ? t("chat.composer.noMatchingReferenceTypes")
+              : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
@@ -623,6 +782,7 @@ export const MentionComposer = memo(
           appMentions: [],
           commitMentions: [],
           gitFileMentions: [],
+          conversationMentions: [],
           codeMentions: [],
           isEmpty: true,
         };
@@ -634,6 +794,7 @@ export const MentionComposer = memo(
       const appMentions: MentionComposerAppMention[] = [];
       const commitMentions: MentionComposerCommitMention[] = [];
       const gitFileMentions: MentionComposerGitFileMention[] = [];
+      const conversationMentions: MentionComposerConversationMention[] = [];
       const codeMentions: CodeMentionReference[] = [];
       const textParts: string[] = [];
       const textWithoutLargePastesParts: string[] = [];
@@ -668,6 +829,11 @@ export const MentionComposer = memo(
           const token = formatGitFileMentionToken(segment.file);
           textParts.push(token);
           textWithoutLargePastesParts.push(token);
+        } else if (segment.type === "conversationMention") {
+          conversationMentions.push(segment.conversation);
+          const token = formatConversationMentionToken(segment.conversation);
+          textParts.push(token);
+          textWithoutLargePastesParts.push(token);
         } else if (segment.type === "codeMention") {
           codeMentions.push(segment.reference);
           const token = formatCodeMentionToken(segment.reference);
@@ -687,6 +853,7 @@ export const MentionComposer = memo(
         appMentions,
         commitMentions,
         gitFileMentions,
+        conversationMentions,
         codeMentions,
         isEmpty: editorTextIsEmpty(el),
       };
@@ -813,7 +980,12 @@ export const MentionComposer = memo(
           closeCommitTooltip();
           closeComposerContextMenu();
 
-          for (const segment of draft.segments) {
+          const sanitizedSegments = sanitizeConversationMentionSegments(el, draft.segments, {
+            currentConversationId,
+            conversationMentionsEnabled,
+            includeExistingChips: false,
+          });
+          for (const segment of sanitizedSegments) {
             if (segment.type === "largePaste") {
               largePastesRef.current.set(segment.paste.id, segment.paste);
               el.appendChild(createLargePasteChip(segment.paste));
@@ -828,6 +1000,9 @@ export const MentionComposer = memo(
               el.appendChild(createCommitMentionChip(segment.commit));
             } else if (segment.type === "gitFileMention") {
               el.appendChild(createGitFileMentionChip(segment.file));
+            } else if (segment.type === "conversationMention") {
+              const chip = createConversationMentionChip(segment.conversation);
+              if (chip) el.appendChild(chip);
             } else if (segment.type === "codeMention") {
               const chip = createCodeMentionChip(segment.reference);
               if (chip) el.appendChild(chip);
@@ -887,6 +1062,29 @@ export const MentionComposer = memo(
           insertNodeAtCursor(el, createGitFileMentionChip(file));
           closeMentionSession();
           refreshEmptyState();
+        },
+        insertConversationMention: (
+          conversation: MentionComposerConversationMention,
+        ): ConversationReferenceInsertResult => {
+          const el = editorRef.current;
+          if (!el) return "disabled";
+          const normalized = createConversationMentionChip(conversation);
+          if (!normalized) return "invalid";
+          const selectedIds = new Set(
+            [...el.querySelectorAll<HTMLElement>(`[${CONVERSATION_MENTION_ID_ATTR}]`)]
+              .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+              .filter((id): id is string => Boolean(id)),
+          );
+          if (selectedIds.has(conversation.id.trim())) return "duplicate";
+          if (selectedIds.size >= MAX_CONVERSATION_MENTIONS) return "limit";
+
+          finishTypewriter();
+          resetPromptHistoryRecall();
+          focusEditorAtSavedSelection();
+          insertNodeAtCursor(el, normalized);
+          closeMentionSession();
+          refreshEmptyState();
+          return "inserted";
         },
         insertCodeMention: (reference: CodeMentionReference) => {
           const el = editorRef.current;
@@ -1075,12 +1273,33 @@ export const MentionComposer = memo(
         placeCaretAtEditorEnd,
         refreshEmptyState,
         resetPromptHistoryRecall,
+        conversationMentionsEnabled,
+        currentConversationId,
         disabled,
         isTypewriting,
       ],
     );
 
     // ---- Select suggestion ----
+    const openMentionMenuMode = useCallback(
+      (mode: Exclude<MentionMenuMode, "root">) => {
+        if (!mentionCtx) return;
+        setMentionMenuMode(mode);
+        setHighlightIdx(0);
+        startMentionSession(mentionCtx, { mode });
+        editorRef.current?.focus();
+      },
+      [mentionCtx, setMentionMenuMode, startMentionSession],
+    );
+
+    const returnToMentionRoot = useCallback(() => {
+      if (!mentionCtx || mentionCtx.trigger === "skill") return;
+      setMentionMenuMode("root");
+      setHighlightIdx(0);
+      startMentionSession(mentionCtx, { mode: "root" });
+      editorRef.current?.focus();
+    }, [mentionCtx, setMentionMenuMode, startMentionSession]);
+
     const selectSuggestion = useCallback(
       (suggestion: MentionSuggestion) => {
         if (!mentionCtx) return;
@@ -1088,8 +1307,29 @@ export const MentionComposer = memo(
           closeMentionSession();
           return;
         }
+        if (suggestion.type === "category") {
+          openMentionMenuMode(suggestion.category);
+          return;
+        }
         if (suggestion.type === "skill") {
           insertSkillMentionChip(mentionCtx, suggestion.skill);
+        } else if (suggestion.type === "conversation") {
+          const selectedIds = new Set(
+            [
+              ...(editorRef.current?.querySelectorAll<HTMLElement>(
+                `[${CONVERSATION_MENTION_ID_ATTR}]`,
+              ) ?? []),
+            ]
+              .map((element) => element.getAttribute(CONVERSATION_MENTION_ID_ATTR)?.trim())
+              .filter((id): id is string => Boolean(id)),
+          );
+          if (
+            selectedIds.has(suggestion.conversation.id) ||
+            selectedIds.size >= MAX_CONVERSATION_MENTIONS
+          ) {
+            return;
+          }
+          insertConversationMentionChip(mentionCtx, suggestion.conversation);
         } else if (suggestion.type === "app") {
           insertAppMentionChip(mentionCtx, suggestion.app);
           // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
@@ -1102,7 +1342,13 @@ export const MentionComposer = memo(
         refreshEmptyState();
         editorRef.current?.focus();
       },
-      [closeMentionSession, mentionCtx, refreshEmptyState, resetPromptHistoryRecall],
+      [
+        closeMentionSession,
+        mentionCtx,
+        openMentionMenuMode,
+        refreshEmptyState,
+        resetPromptHistoryRecall,
+      ],
     );
 
     const restoreComposerContextSelection = useCallback(() => {
@@ -1190,6 +1436,10 @@ export const MentionComposer = memo(
 
       if (text === null) {
         document.execCommand("paste");
+        enforceConversationMentionConstraintsInEditor(el, {
+          currentConversationId,
+          conversationMentionsEnabled,
+        });
         closeMentionSession();
         refreshEmptyState();
         refreshMention();
@@ -1212,7 +1462,14 @@ export const MentionComposer = memo(
       const serializedSegments = parseSerializedComposerText(text, enabledSkills);
       if (
         serializedSegments &&
-        insertComposerSegmentsAtSelection(el, serializedSegments, largePastesRef.current)
+        insertComposerSegmentsAtSelection(
+          el,
+          sanitizeConversationMentionSegments(el, serializedSegments, {
+            currentConversationId,
+            conversationMentionsEnabled,
+          }),
+          largePastesRef.current,
+        )
       ) {
         closeMentionSession();
         refreshEmptyState();
@@ -1230,6 +1487,8 @@ export const MentionComposer = memo(
       closeComposerContextMenu,
       closeMentionSession,
       disabled,
+      conversationMentionsEnabled,
+      currentConversationId,
       enabledSkills,
       insertLargePaste,
       refreshEmptyState,
@@ -1562,7 +1821,11 @@ export const MentionComposer = memo(
         }
         if (popupVisible && e.key === "Escape") {
           e.preventDefault();
-          closeMentionSession();
+          if (mentionCtx?.trigger === "file" && mentionMenuMode !== "root") {
+            returnToMentionRoot();
+          } else {
+            closeMentionSession();
+          }
           return;
         }
 
@@ -1679,6 +1942,8 @@ export const MentionComposer = memo(
         selectSuggestion,
         disabled,
         closeMentionSession,
+        mentionCtx?.trigger,
+        mentionMenuMode,
         onSend,
         refreshEmptyState,
         refreshMention,
@@ -1686,6 +1951,7 @@ export const MentionComposer = memo(
         applyPromptHistoryText,
         restorePromptHistoryStash,
         resetPromptHistoryRecall,
+        returnToMentionRoot,
       ],
     );
 
@@ -1747,7 +2013,14 @@ export const MentionComposer = memo(
           );
           const editor = editorRef.current;
           if (editor) {
-            insertComposerSegmentsAtSelection(editor, restoredSegments, largePastesRef.current);
+            insertComposerSegmentsAtSelection(
+              editor,
+              sanitizeConversationMentionSegments(editor, restoredSegments, {
+                currentConversationId,
+                conversationMentionsEnabled,
+              }),
+              largePastesRef.current,
+            );
           }
           closeMentionSession();
           refreshEmptyState();
@@ -1771,7 +2044,14 @@ export const MentionComposer = memo(
         if (
           serializedSegments &&
           editor &&
-          insertComposerSegmentsAtSelection(editor, serializedSegments, largePastesRef.current)
+          insertComposerSegmentsAtSelection(
+            editor,
+            sanitizeConversationMentionSegments(editor, serializedSegments, {
+              currentConversationId,
+              conversationMentionsEnabled,
+            }),
+            largePastesRef.current,
+          )
         ) {
           closeMentionSession();
           refreshEmptyState();
@@ -1785,7 +2065,9 @@ export const MentionComposer = memo(
       [
         disabled,
         closeMentionSession,
+        conversationMentionsEnabled,
         createLargePaste,
+        currentConversationId,
         enabledSkills,
         insertLargePaste,
         onPasteFiles,
@@ -1853,12 +2135,14 @@ export const MentionComposer = memo(
           <Popup
             anchorRef={wrapperRef}
             trigger={mentionCtx.trigger}
+            mode={mentionMenuMode}
             suggestions={suggestions}
             highlightIndex={highlightIdx}
             isLoading={popupLoading}
             error={popupError}
             showEmpty={showEmpty}
             emptyLabel={popupEmptyLabel}
+            onBack={returnToMentionRoot}
             onSelect={selectSuggestion}
           />
         )}

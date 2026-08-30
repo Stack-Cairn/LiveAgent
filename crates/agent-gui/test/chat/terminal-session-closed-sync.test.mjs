@@ -22,8 +22,12 @@ const chatPageSource = readFileSync(
   new URL("../../src/pages/ChatPage.tsx", import.meta.url),
   "utf8",
 );
+// 宿主实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现。
 const hostSource = readFileSync(
-  new URL("../../src/pages/chat/surfaces/TerminalPaneHost.tsx", import.meta.url),
+  new URL(
+    "../../../agent-ui/src/components/workbench/TerminalPaneHost.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 const projectTerminalsSource = readFileSync(
@@ -193,10 +197,10 @@ test("the exit flow marks the guard before invoking and resets it on failure", (
 // ---------------------------------------------------------------------------
 
 test("a session seen live that disappears parks in session-closed instead of recreating", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
   const guard = ensureEffect.indexOf("seenLiveSessionIdRef.current === boundSessionId");
   const parked = ensureEffect.indexOf('setErrorState({ kind: "session-closed" })');
-  const staleDelete = ensureEffect.indexOf("terminalPaneBindings.delete(surface.surfaceId)");
+  const staleDelete = ensureEffect.indexOf("bindings.delete(surface.surfaceId)");
   const ensureCall = ensureEffect.indexOf("ensureTerminalPaneSession(surface, {");
   assert.ok(guard !== -1, "missing seen-live guard");
   assert.ok(parked !== -1, "missing session-closed state");

@@ -4,12 +4,12 @@
 |---|---|
 | 状态 | Release baseline / 正式版实现基线（目标架构与当前实现边界分列记录） |
 | 版本 | v0.5 |
-| 日期 | 2026-08-20 |
-| 适用基线 | PR #521 HEAD `31244950e56d18f454b7c230c2f1c3bfff9efbae`；Native Drop 跨 Pane 目标会话仍待修复 |
+| 日期 | 2026-08-31 |
+| 适用基线 | Issue #659 / PR #662；Desktop 与 WebUI 共享多 Pane Workbench |
 
 研究依据：[OTTY 多会话、分块、焦点与文件 Pane 架构拆解](../reverse-engineering/otty/1.3.1/pane-architecture.md) · [OTTY 当前实现](../reverse-engineering/otty/1.3.1/current-state.md)
 
-> **当前实现说明**：本文件保留窗口级布局持久化、恢复和完整三平台验收等目标设计，不能将这些目标段落视为当前代码已启用的能力。正式版当前默认开启 Workbench，但启动时创建单 Root Pane，不恢复历史多 Pane 布局；`VITE_LIVEAGENT_SESSION_WORKBENCH=0` 仅用于回退。Native Drop 的命中坐标已覆盖多 Pane，但最终 upload 目标仍需在 drop 时同步绑定 `conversationId`，完成前不应宣称发布验收全部通过。
+> **当前实现说明**：Workbench 默认开启，`VITE_LIVEAGENT_SESSION_WORKBENCH=0` 仅用于回退。Desktop 将布局拓扑保存在本机，恢复出的终端先进入 dormant 占位，用户确认后才创建 PTY/SSH；WebUI 每次打开固定从当前会话的单 Root Pane 开始，不恢复浏览器中的旧布局。两端附件 drop/paste 都在事件落点同步携带 `conversationId`。
 
 ## 1. 本轮需求结论
 
@@ -62,7 +62,7 @@ LiveAgent 会话页应从：
 | Right Dock 项目 | 当前激活项目 | 当前聚焦 Surface 的显式项目引用 |
 | 实施顺序 | 先 Active Conversation Host | 先拆 Conversation Controller，再开放多会话 Pane |
 
-保留 v0.4 中正确的边界：PaneTree/Runtime 分离、唯一交互 View Lease、整数几何、Revision CAS、未知 Surface 无损往返、Native Drop 坐标适配和三平台实机门槛。本机布局持久化仍是目标设计，当前正式版不启用。
+保留 v0.4 中正确的边界：PaneTree/Runtime 分离、唯一交互 View Lease、整数几何、Revision CAS、未知 Surface 无损往返、Native Drop 坐标适配和三平台实机门槛。Desktop 启用本机布局持久化；WebUI 显式关闭布局持久化。
 
 ## 3. 产品交互定义
 
@@ -604,7 +604,7 @@ TerminalPaneSurface
 
 终止进程树和断开 SSH 不在 Pane 关闭路径上：两者统一从 Right Dock 的终端会话管理入口执行，Pane 内不再叠加文字按钮。
 
-反向联动（dock → Pane）：Right Dock 关闭一个被 Pane 租用的 Session 意味着终止进程 **并连带关闭该 Pane**（`closed` 事件驱动，按 Runtime Binding 而非 Lease 查找，覆盖宿主尚未取得租约的 connecting 窗口）。宿主对「本次挂载见过、随后从会话列表消失」的绑定停在 `session-closed` 占位（可显式重启），**绝不按 launchSpec 自动重建**——launchSpec 自动重建只属于应用重启后的恢复路径（从未见过该 sessionId 存活）。否则 dock 关闭会触发「杀旧进程 + 复活新进程」循环，表现为终端关不掉。应用退出的 `close_all` 经退出护栏豁免此联动，布局落盘保留全部终端 Pane 供重启恢复。
+反向联动（dock → Pane）：Right Dock 关闭一个被 Pane 租用的 Session 意味着终止进程 **并连带关闭该 Pane**（`closed` 事件驱动，按 Runtime Binding 而非 Lease 查找，覆盖宿主尚未取得租约的 connecting 窗口）。宿主对「本次挂载见过、随后从会话列表消失」的绑定停在 `session-closed` 占位（可显式重启），绝不自行复活。应用重启后的恢复 Surface 也没有自动启动授权，统一停在 dormant 占位；用户点击恢复后，才按 launchSpec 创建本地或 SSH 会话。应用退出的 `close_all` 经退出护栏豁免 closed 联动，布局拓扑仍可落盘。
 
 关闭 Conversation Pane 绝不等于删除会话。会话仍在左侧，可再次拖入复用；后台运行状态继续显示。删除会话时若 Pane 可见，必须确认并原子关闭 View/Runtime，再删除历史。
 
@@ -977,7 +977,8 @@ Surface Registry 统一 Renderer、尺寸、关闭、唯一性和 Context，避�
 ### 30.1 发布基线
 
 - Session Workbench 正式版默认启用；`VITE_LIVEAGENT_SESSION_WORKBENCH=0` 仅回退旧单 Pane 路径。
-- 冷启动从当前会话创建单 Root Pane；当前版本不持久化或恢复历史多 Pane 布局。
+- WebUI 冷启动从当前会话创建单 Root Pane，不持久化或恢复历史多 Pane 布局；Desktop 恢复本机布局拓扑。
+- Desktop 恢复的终端 Surface 默认为 dormant，用户显式恢复后才创建 PTY/SSH 会话。
 - T-1 cwd 范围校验已完成：Rust 双边 canonicalize + containment，前端 drop/restore/invariant 三道护栏。
 - 终端 Pane、Runtime/草稿/队列/审批隔离、Right Dock 项目上下文和核心回归测试已落地。
 
@@ -987,16 +988,15 @@ Surface Registry 统一 Renderer、尺寸、关闭、唯一性和 Context，避�
 |---|---|
 | PaneTree、Geometry、Divider、Focus、Move、Swap、Close、Resize | 已完成并有模型/合同测试 |
 | Conversation、Local Terminal、SSH Terminal 宿主 | 已完成，租约与绑定保证单宿主 |
-| Runtime、Draft、Upload、Queue、Approval、Model、Streaming 存储隔离 | 已完成，按 `conversationId` 分桶；Native Drop 的最终目标绑定仍是合入阻塞 |
+| Runtime、Draft、Upload、Queue、Approval、Model、Streaming 存储隔离 | 已完成，按 `conversationId` 分桶；Native/Web Drop 与 Paste 按事件落点绑定目标会话 |
 | T-1 cwd 校验、T-2 stale 恢复、T-3 拖入入口、T-4 关闭语义 | 已完成 |
 | T-5 Right Dock 互斥、T-6 resize 去重、T-7 几何 context | 已完成 |
-| GUI/WebUI/TypeScript/UI boundary/Tauri Rust Check | 当前 PR CI 全部通过 |
+| GUI/WebUI/TypeScript/UI boundary/Tauri Rust Check | 由 `make check-all` 统一验证 |
 
 ### 30.3 合入前阻塞与后续验证
 
-1. **Native Drop P1**：坐标命中已覆盖多 Pane，但异步聚焦完成前，上传管线仍可能读取旧 `currentConversationIdRef`，导致附件写入错误会话。必须在 drop 时同步携带目标 Pane 的 `conversationId`，并补真实 upload-store 断言。
-2. **实机矩阵**：macOS Retina、Windows 混合 DPI、Linux X11/Wayland，以及 IME、键盘、Forced Colors、读屏器和双流式性能冒烟仍需完成。
-3. **独立重构**：剩余的五个页面级瞬态镜像、完整 Composer Controller 化和更深的性能收敛不属于本次正式版合入范围。
+1. **实机矩阵**：macOS Retina、Windows 混合 DPI、Linux X11/Wayland，以及 IME、键盘、Forced Colors、读屏器和双流式性能冒烟仍需完成。
+2. **独立重构**：剩余的页面级瞬态镜像、完整 Composer Controller 化和更深的性能收敛不属于本次正式版合入范围。
 
 ### 30.4 当前验证边界
 

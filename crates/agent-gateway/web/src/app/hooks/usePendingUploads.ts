@@ -26,6 +26,11 @@ import { asErrorMessage } from "../chatEventUtils";
 import { MAX_UPLOAD_FILES } from "../constants";
 import { dragEventHasFiles } from "../domUtils";
 import { formatTranslation } from "../historyUtils";
+import {
+  resolveFileUploadConversationId,
+  resolveFileUploadDropZone,
+} from "./fileUploadDropRouting";
+import { createPendingUploadsRegistry } from "./pendingUploadsRegistry";
 
 type UsePendingUploadsParams = {
   token: string;
@@ -51,6 +56,8 @@ type UsePendingUploadsParams = {
    * 首条消息发出后随现有的 moveConversationUploads 迁移到真实会话。
    */
   ensureUploadConversation?: () => string;
+  /** Resolve the workspace owned by an explicitly targeted workbench Pane. */
+  workdirForConversation: (conversationId: string) => string;
 };
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -70,15 +77,19 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     addNotify,
     onDropDirectories,
     ensureUploadConversation,
+    workdirForConversation,
   } = params;
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  // 在途导入归属的会话 id:多 Pane 下"上传中"的禁用/动画只应作用在目标
+  // 会话的 Pane 上,别的 Pane 不因全局互斥被误禁或误显示上传态。
+  const [uploadingConversationId, setUploadingConversationId] = useState<string | null>(null);
   const [isFileDropActive, setIsFileDropActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadedFilesRef = useRef(pendingUploadedFiles);
-  const pendingUploadsByConversationRef = useRef<Map<string, PendingUploadedFile[]>>(new Map());
+  const pendingUploadsRegistryRef = useRef(createPendingUploadsRegistry());
   const isUploadingFilesRef = useRef(isUploadingFiles);
   const uploadDragDepthRef = useRef(0);
   const displayedConversationIdRef = useRef("");
@@ -91,9 +102,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const displayedConversationId = (selectedHistoryId || conversationId).trim();
   displayedConversationIdRef.current = displayedConversationId;
 
-  const setUploadingFiles = useCallback((active: boolean) => {
+  const setUploadingFiles = useCallback((active: boolean, targetConversationId = "") => {
     isUploadingFilesRef.current = active;
     setIsUploadingFiles(active);
+    setUploadingConversationId(active ? targetConversationId.trim() || null : null);
   }, []);
 
   const handleImportSelectedDirectoryFiles = useCallback(
@@ -134,27 +146,22 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     return conversationIdValue !== "" && displayedConversationIdRef.current === conversationIdValue;
   }, []);
 
-  const getPendingUploadsForConversation = useCallback(
-    (targetConversationId: string) => {
-      const conversationIdValue = targetConversationId.trim();
-      if (!conversationIdValue || isDisplayedConversation(conversationIdValue)) {
-        return pendingUploadedFilesRef.current;
-      }
-      return pendingUploadsByConversationRef.current.get(conversationIdValue) ?? [];
-    },
-    [isDisplayedConversation],
-  );
+  const subscribePendingUploads = useCallback((listener: () => void) => {
+    return pendingUploadsRegistryRef.current.subscribe(listener);
+  }, []);
+
+  const getPendingUploadsForConversation = useCallback((targetConversationId: string) => {
+    const conversationIdValue = targetConversationId.trim();
+    if (!conversationIdValue) return pendingUploadedFilesRef.current;
+    return pendingUploadsRegistryRef.current.get(conversationIdValue);
+  }, []);
 
   const setPendingUploadsForConversation = useCallback(
     (targetConversationId: string, nextFiles: PendingUploadedFile[]) => {
       const conversationIdValue = targetConversationId.trim();
       const normalizedFiles = nextFiles.slice();
       if (conversationIdValue) {
-        if (normalizedFiles.length > 0) {
-          pendingUploadsByConversationRef.current.set(conversationIdValue, normalizedFiles);
-        } else {
-          pendingUploadsByConversationRef.current.delete(conversationIdValue);
-        }
+        pendingUploadsRegistryRef.current.set(conversationIdValue, normalizedFiles);
       }
       if (!conversationIdValue || isDisplayedConversation(conversationIdValue)) {
         pendingUploadedFilesRef.current = normalizedFiles;
@@ -187,34 +194,34 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     if (!previous || !next || previous === next) {
       return;
     }
-    const files = pendingUploadsByConversationRef.current.get(previous);
-    if (files === undefined) {
-      return;
-    }
-    pendingUploadsByConversationRef.current.delete(previous);
-    pendingUploadsByConversationRef.current.set(next, files);
+    pendingUploadsRegistryRef.current.move(previous, next);
   }, []);
 
   const clearPendingUploads = useCallback(() => {
     pendingUploadedFilesRef.current = [];
-    pendingUploadsByConversationRef.current.clear();
+    pendingUploadsRegistryRef.current.clear();
     isUploadingFilesRef.current = false;
     uploadDragDepthRef.current = 0;
     setPendingUploadedFiles([]);
     setIsUploadingFiles(false);
+    setUploadingConversationId(null);
     setIsFileDropActive(false);
   }, []);
 
   useEffect(() => {
     const nextFiles = displayedConversationId
-      ? (pendingUploadsByConversationRef.current.get(displayedConversationId) ?? [])
+      ? pendingUploadsRegistryRef.current.get(displayedConversationId)
       : [];
     pendingUploadedFilesRef.current = nextFiles;
     setPendingUploadedFiles(nextFiles);
   }, [displayedConversationId]);
 
   const handleImportReadableFiles = useCallback(
-    async (filesToImport: File[]) => {
+    async (
+      filesToImport: File[],
+      // 多看板的背景 Pane 显式指定目标会话与其工作区;缺省仍导入到当前展示会话。
+      target?: { conversationId: string; workdir: string },
+    ) => {
       if (filesToImport.length === 0) {
         return;
       }
@@ -226,12 +233,18 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.onlyInTools", locale));
         return;
       }
-      const workdir = displayedConversationWorkdirRef.current.trim();
+      // 显式 target 的空 workdir 是 resolveConversationUploadWorkdir 的守卫
+      // 结果(背景会话没有自己的工作区),绝不回退到焦点会话的工作区——
+      // 否则文件会上传进别人的 workspace,却作为附件挂在目标会话上。
+      const workdir = target
+        ? target.workdir.trim()
+        : displayedConversationWorkdirRef.current.trim();
       if (!workdir) {
         addNotify("warning", translate("chat.upload.requireWorkdir", locale));
         return;
       }
-      let targetConversationId = displayedConversationIdRef.current;
+      let targetConversationId =
+        target?.conversationId.trim() || displayedConversationIdRef.current;
       if (!targetConversationId && ensureUploadConversation) {
         targetConversationId = ensureUploadConversation().trim();
         if (targetConversationId) {
@@ -261,7 +274,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
       const importBatch = filesToImport.slice(0, remainingFileSlots);
       const ignoredForLimit = filesToImport.length - importBatch.length;
-      setUploadingFiles(true);
+      setUploadingFiles(true, targetConversationId);
       try {
         const agentID = await resolveAgentID();
         const result = await importReadableFiles(token, agentID, workdir, importBatch);
@@ -329,6 +342,18 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     ],
   );
 
+  const resolveEventUploadTarget = useCallback(
+    (eventTarget: EventTarget | null) => {
+      const targetConversationId = resolveFileUploadConversationId(eventTarget);
+      if (!targetConversationId) return undefined;
+      return {
+        conversationId: targetConversationId,
+        workdir: workdirForConversation(targetConversationId),
+      };
+    },
+    [workdirForConversation],
+  );
+
   useEffect(() => {
     if (
       !token ||
@@ -342,11 +367,14 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
     const handleDocumentPaste = (event: globalThis.ClipboardEvent) => {
       if (event.defaultPrevented) return;
+      // Capture ownership synchronously. Clipboard fallback is asynchronous,
+      // and focus may move to another Pane before it resolves.
+      const uploadTarget = resolveEventUploadTarget(event.target);
       const clipboardFiles = extractClipboardFiles(event.clipboardData);
       if (clipboardFiles.length > 0) {
         event.preventDefault();
         event.stopPropagation();
-        void handleImportReadableFiles(clipboardFiles);
+        void handleImportReadableFiles(clipboardFiles, uploadTarget);
         return;
       }
       if (!clipboardHasFileSignal(event.clipboardData)) return;
@@ -359,7 +387,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             addNotify("warning", "无法读取剪贴板中的文件，请尝试拖拽或点击上传。");
             return;
           }
-          return handleImportReadableFiles(files);
+          return handleImportReadableFiles(files, uploadTarget);
         })
         .catch((error) => {
           addNotify("error", asErrorMessage(error, "读取剪贴板文件失败"));
@@ -375,6 +403,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     addNotify,
     handleImportReadableFiles,
     historyShareToken,
+    resolveEventUploadTarget,
     settingsOpen,
     settingsSyncReady,
     token,
@@ -383,10 +412,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   // 上传命中区与桌面端对齐：只有落在标记的输入框对话框内的拖放才算上传，
   // 对话正文、聊天头部等其他区域忽略。
   const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
-    return (
-      event.target instanceof Element &&
-      event.target.closest("[data-file-upload-drop-zone]") !== null
-    );
+    return resolveFileUploadDropZone(event.target) !== null;
   }, []);
 
   const handleFileDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -433,6 +459,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       setIsFileDropActive(false);
       if (!dropLandsInUploadZone(event)) return;
 
+      // DataTransferItem and the landing Pane are both event-scoped. Snapshot
+      // them before directory traversal or any other asynchronous operation.
+      const uploadTarget = resolveEventUploadTarget(event.target);
+
       // DataTransferItem 只在同步阶段有效，目录判定必须先于任何 await。
       const entries = snapshotDroppedEntries(event.dataTransfer);
       if (hasDirectoryEntry(entries)) {
@@ -446,7 +476,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
               addNotify("warning", options.disabledMessage);
               return;
             }
-            return handleImportReadableFiles(payload.files);
+            return handleImportReadableFiles(payload.files, uploadTarget);
           })
           .catch((error) => {
             addNotify(
@@ -463,19 +493,28 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", options.disabledMessage);
         return;
       }
-      void handleImportReadableFiles(files);
+      void handleImportReadableFiles(files, uploadTarget);
     },
-    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, locale, onDropDirectories],
+    [
+      addNotify,
+      dropLandsInUploadZone,
+      handleImportReadableFiles,
+      locale,
+      onDropDirectories,
+      resolveEventUploadTarget,
+    ],
   );
 
   return {
     pendingUploadedFiles,
     isUploadingFiles,
+    uploadingConversationId,
     isFileDropActive,
     fileInputRef,
     folderInputRef,
     setUploadingFiles,
     getPendingUploadsForConversation,
+    subscribePendingUploads,
     setPendingUploadsForConversation,
     updatePendingUploadsForConversation,
     moveConversationUploads,

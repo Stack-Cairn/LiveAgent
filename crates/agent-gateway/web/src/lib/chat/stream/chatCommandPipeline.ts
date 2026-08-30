@@ -15,6 +15,10 @@ export type ChatCommandRequest = {
     Parameters<TranscriptStore["addOptimisticUserEntry"]>[0]["attachments"],
     unknown
   >;
+  referencedConversations?: Extract<
+    Parameters<TranscriptStore["addOptimisticUserEntry"]>[0]["referencedConversations"],
+    unknown
+  >;
   // edit_resend commands apply the truncation and replacement bubble in the
   // same optimistic transcript commit. Compensation paths
   // (queued_in_gui / failed) need to know to restore the persisted suffix.
@@ -97,6 +101,7 @@ export class ChatCommandPipeline {
         clientRequestId: request.clientRequestId,
         text: request.message,
         attachments: request.attachments as never,
+        referencedConversations: request.referencedConversations as never,
         baseMessageRef: request.baseMessageRef,
       });
     }

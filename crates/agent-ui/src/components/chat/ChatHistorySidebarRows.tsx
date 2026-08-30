@@ -38,9 +38,14 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  clearActiveConversationReferenceDrag,
+  writeConversationReferenceDragPayload,
+} from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   memo,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -106,7 +111,12 @@ type HistoryRowProps = {
    */
   onWorkbenchDragIntent?: (
     item: SidebarConversation,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   /** Menu alternative to dragging: open the conversation in a split pane. */
   onOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
@@ -383,6 +393,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
           pointerId: event.pointerId,
           clientX: event.clientX,
           clientY: event.clientY,
+          currentTarget: event.currentTarget,
         });
       }
       if (isInteractionDisabled || isSelectionMode || !isMobileMenuLayout || isBusy) {
@@ -493,6 +504,42 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       setIsLongPressActive(false);
     },
     [isMobileMenuLayout],
+  );
+
+  const handleNativeConversationDragStart = useCallback(
+    (event: ReactDragEvent<HTMLButtonElement>) => {
+      if (
+        onWorkbenchDragIntent ||
+        isInteractionDisabled ||
+        isSelectionMode ||
+        isRenaming ||
+        isPendingDelete ||
+        menuOpen ||
+        item.isPending
+      ) {
+        event.preventDefault();
+        return;
+      }
+      if (
+        !writeConversationReferenceDragPayload(event.dataTransfer, {
+          id: item.id,
+          title: item.title,
+          cwd: item.cwd,
+          updatedAt: item.updatedAt,
+        })
+      ) {
+        event.preventDefault();
+      }
+    },
+    [
+      isInteractionDisabled,
+      isPendingDelete,
+      isRenaming,
+      isSelectionMode,
+      item,
+      menuOpen,
+      onWorkbenchDragIntent,
+    ],
   );
 
   const shouldShowMobilePressFeedback = isMobileMenuLayout && (isLongPressActive || menuOpen);
@@ -615,6 +662,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
               <button
                 type="button"
+                draggable={!onWorkbenchDragIntent && !item.isPending}
+                onDragStart={handleNativeConversationDragStart}
+                onDragEnd={clearActiveConversationReferenceDrag}
                 onClick={handleTitleClick}
                 onMouseDown={(event) => {
                   if (event.shiftKey) event.preventDefault();
@@ -1015,7 +1065,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
    */
   onWorkbenchDragIntent?: (
     project: WorkspaceProject,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
 }) {
   const {
@@ -1269,6 +1324,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   pointerId: event.pointerId,
                   clientX: event.clientX,
                   clientY: event.clientY,
+                  currentTarget: event.currentTarget,
                 });
               }}
               onDoubleClick={(event) => {
