@@ -180,8 +180,8 @@
       scale(0.98);
   }
 
-  /* Composer reasoning select / branch selector animations.
-   * Base UI drives both popups, so open styling keys off data-popup-open on
+  /* Composer reasoning select / add menu / branch selector animations.
+   * Base UI drives these popups, so open styling keys off data-popup-open on
    * the trigger and enter/exit key off data-starting-style / data-ending-style
    * on the popup (data-state rules never match Base UI). */
   .composer-reasoning-trigger[data-popup-open] {
@@ -190,6 +190,7 @@
       inset 0 0 0 1px rgba(167, 139, 250, 0.12);
   }
 
+  .composer-add-dropdown,
   .composer-branch-dropdown,
   .composer-safety-dropdown {
     transform-origin: var(--transform-origin);
@@ -198,6 +199,8 @@
       transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .composer-add-dropdown[data-starting-style],
+  .composer-add-dropdown[data-ending-style],
   .composer-branch-dropdown[data-starting-style],
   .composer-branch-dropdown[data-ending-style],
   .composer-safety-dropdown[data-starting-style],
@@ -206,6 +209,7 @@
     transform: translateY(6px) scale(0.97);
   }
 
+  .composer-add-dropdown[data-ending-style],
   .composer-branch-dropdown[data-ending-style],
   .composer-safety-dropdown[data-ending-style] {
     transition-duration: 0.12s;
@@ -216,6 +220,7 @@
   @media (prefers-reduced-motion: reduce) {
     .composer-reasoning-trigger,
     .composer-reasoning-trigger svg:last-child,
+    .composer-add-dropdown,
     .composer-branch-dropdown,
     .composer-safety-dropdown {
       /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion must override component open/close transition states. */
