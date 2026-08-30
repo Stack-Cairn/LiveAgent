@@ -48,6 +48,43 @@ test("findHistoryMessageRefByMessageId returns undefined for unknown or blank id
   assert.equal(conversationState.findHistoryMessageRefByMessageId(state, "   "), undefined);
 });
 
+// 与 Rust history_message_content_hash 的跨语言对齐校验：fixture 与期望哈希和
+// src-tauri/src/commands/history/chat_history/tests.rs 中的
+// history_message_content_hash_matches_frontend_fixture 逐字面值一致。
+// 任何一侧改动哈希算法都必须同步更新两处。
+test("content hash stays byte-aligned with the Rust implementation", () => {
+  const plain = { role: "user", id: "user-plain", content: "hello there", timestamp: 1000 };
+  const emptyRefs = { ...plain, liveAgentReferencedConversations: [] };
+  const withRefs = {
+    role: "user",
+    id: "user-refs",
+    content: "hello there\n\nThe user attached the files below to this message.",
+    timestamp: 1000,
+    liveAgentDisplayContent: "hello there",
+    liveAgentAttachments: [
+      { relativePath: "notes/spec.md", fileName: "spec.md", kind: "text", sizeBytes: 2048 },
+    ],
+    liveAgentReferencedConversations: [
+      {
+        id: " conv-alpha ",
+        title: "  Fix   login\tflow ",
+        cwd: " /tmp/work ",
+        updatedAt: 1735689600123,
+      },
+      { id: "conv-beta", title: "训练 β 运行" },
+      { id: "conv-alpha", title: "duplicate entry" },
+      { id: "conv-gamma", title: "third reference" },
+      { id: "conv-delta", title: "over the cap" },
+    ],
+  };
+
+  assert.equal(conversationState.getHistoryMessageContentHash(plain), "fnv1a32:73027b85");
+  // 空引用数组不追加哈希段：与无引用消息哈希一致，保证旧历史向后兼容。
+  assert.equal(conversationState.getHistoryMessageContentHash(emptyRefs), "fnv1a32:73027b85");
+  // 归一化（id 修剪、标题折叠空白、去重、上限 3）后的引用参与哈希。
+  assert.equal(conversationState.getHistoryMessageContentHash(withRefs), "fnv1a32:87daff4d");
+});
+
 function collectEvents() {
   const events = [];
   const controller = gatewayBridgeEvents.createGatewayBridgeEventController({
