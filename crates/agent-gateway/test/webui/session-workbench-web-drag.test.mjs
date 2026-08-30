@@ -35,6 +35,10 @@ const hookSource = readFileSync(
   "utf8",
 );
 const viewSource = readFileSync(path.join(webRoot, "src/app/GatewayAppView.tsx"), "utf8");
+const workspaceDropCommitSource = readFileSync(
+  path.join(webRoot, "../../agent-ui/src/lib/workbench/workspaceDropCommit.ts"),
+  "utf8",
+);
 
 const PROJECT = { projectId: "project-1", projectPathKey: "/repo" };
 
@@ -227,9 +231,12 @@ test("workspace drops await the exact draft id before opening the frozen target"
       'if (payload.kind === "workspace") {',
       'if (target.kind === "pane-center") return;',
       "if (archivedProjectPathKeys.has(pathKey)) return;",
-      "pendingWorkspaceDropRef.current = { operationId, projectPathKey: pathKey };",
+      "pendingWorkspaceDropRef.current = {",
+      "conversationId: null,",
       "commitWorkspaceDropConversation({",
       "startConversation: () => startConversationForProjectRef.current(project),",
+      "onConversationCreated: (conversationId) => {",
+      "pendingWorkspaceDropRef.current = { ...pending, conversationId };",
       "conversationMatchesProject:",
       "openConversation: workbench.openConversation,",
     ],
@@ -242,12 +249,14 @@ test("the sync effect pauses only for the identified workspace draft", () => {
   assertOrder(
     sync,
     [
-      "workspaceProjectPathKey(workdir) === pendingDrop.projectPathKey",
+      "shouldDeferWorkspaceDropConversationSync(",
       "return;",
+      "lastSyncedConversationRef.current = key;",
       "workbench.syncCurrentConversation(key, sidebarProjectRef(key));",
     ],
     "pending workspace drop guard",
   );
+  assert.match(workspaceDropCommitSource, /if \(exactId\) return exactId === currentId/);
 });
 
 test("Web exposes the shared unavailable-drop feedback path", () => {
