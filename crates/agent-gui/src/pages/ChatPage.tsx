@@ -30,6 +30,7 @@ import {
   useComposerSkillSelection,
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
+import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
@@ -169,7 +170,6 @@ import {
 } from "./chat/hooks/useContextUsageTokensSource";
 import { useEditResend } from "./chat/hooks/useEditResend";
 import { useLiveTranscriptController } from "./chat/hooks/useLiveTranscriptController";
-import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
