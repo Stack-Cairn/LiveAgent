@@ -22,6 +22,7 @@ import {
   type WorkbenchRect,
 } from "@liveagent/ui/lib/workbench/index";
 import { commitTerminalDrop } from "@liveagent/ui/lib/workbench/terminalDropCommit";
+import { releaseOrphanTerminalPaneLeases } from "@liveagent/ui/lib/workbench/terminalPaneLeaseStore";
 import {
   createTerminalSurfaceId,
   findTerminalPaneForSession,
@@ -241,7 +242,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     geometryRef.current = geometry;
   }, []);
 
-  // 冷启动单 Root Pane（与桌面端一致，不做布局持久化）。
+  // Web 冷启动始终从单 Root Pane 开始,不做布局持久化(persistence: false);
+  // 桌面端与此不同,走共享 Hook 默认的 localStorage 布局恢复。
   const initialRef = useRef<{ conversationId: string; project: ProjectRef } | null>(null);
   if (initialRef.current === null) {
     initialRef.current = {
@@ -555,17 +557,23 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
             if (pendingWorkspaceDropRef.current?.operationId === operationId) {
               pendingWorkspaceDropRef.current = null;
             }
-            if (result.kind === "opened" || result.kind === "not-created") return;
+            if (result.kind === "opened") return;
             if (result.kind === "already-open") {
               const paneId = workbench.paneIdForConversation(result.conversationId);
               if (paneId) handleFocusPane(paneId);
               return;
             }
-            workbench.syncCurrentConversation(result.conversationId, {
-              projectId: project.id,
-              projectPathKey: pathKey,
-            });
-            if (result.kind !== "rejected") onDropStateChanged();
+            // not-created/stale/identity-mismatch/rejected:暂停窗口内被 defer
+            // 掉的会话切换必须补一次同步,且项目身份取当前会话自己的解析——
+            // identity-mismatch 的定义就是草稿 workdir 不属于拖入项目,不能
+            // 拿拖入项目的 ProjectRef 强绑聚焦 Pane。
+            const currentId = displayedConversationId.trim();
+            if (currentId) {
+              workbench.syncCurrentConversation(currentId, sidebarProjectRef(currentId));
+            }
+            if (result.kind === "stale" || result.kind === "identity-mismatch") {
+              onDropStateChanged();
+            }
           })
           .catch((error) => {
             if (pendingWorkspaceDropRef.current?.operationId === operationId) {
@@ -862,6 +870,13 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     gatewayTerminalPaneLease.subscribe,
     gatewayTerminalPaneLease.leasedSessionIds,
   );
+
+  // 布局对账:drop 事务在宿主挂载前同步占约,Pane 若在宿主接手 release 前
+  // 被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有的租约在其
+  // 卸载 cleanup 中先于本 effect 释放,不受影响。
+  useEffect(() => {
+    releaseOrphanTerminalPaneLeases(gatewayTerminalPaneLease, workbench.layout);
+  }, [workbench.layout]);
 
   // 会话被删除：只收布局，不迁移选中（displayed 选中迁移由既有移除通路负责，
   // 之后 syncCurrentConversation 会把聚焦 Pane 重新绑定到新的当前会话）。

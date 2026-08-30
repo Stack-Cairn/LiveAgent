@@ -213,6 +213,7 @@ import { TerminalPaneHost } from "./chat/surfaces/TerminalPaneHost";
 import { resolveWorkbenchPaneProject } from "./chat/workbench/paneProjectContext";
 import { sessionWorkbench } from "./chat/workbench/sessionWorkbench";
 import { commitTerminalDrop } from "./chat/workbench/terminalDropCommit";
+import { releaseOrphanTerminalPaneLeases } from "./chat/workbench/terminalPaneLeaseStore";
 import {
   createTerminalSurfaceId,
   findTerminalPaneForSession,
@@ -2445,17 +2446,22 @@ export function ChatPage(props: ChatPageProps) {
             if (pendingWorkspaceDropRef.current?.operationId === operationId) {
               pendingWorkspaceDropRef.current = null;
             }
-            if (result.kind === "opened" || result.kind === "not-created") return;
+            if (result.kind === "opened") return;
             if (result.kind === "already-open") {
               const paneId = workbench.paneIdForConversation(result.conversationId);
               if (paneId) handleWorkbenchFocusPane(paneId);
               return;
             }
-            workbench.syncCurrentConversation(result.conversationId, {
-              projectId: project.id,
-              projectPathKey: pathKey,
-            });
-            if (result.kind !== "rejected") {
+            // not-created/stale/identity-mismatch/rejected:暂停窗口内被 defer
+            // 掉的会话切换必须补一次同步,且项目身份取当前会话自己的解析——
+            // identity-mismatch 的定义就是草稿 workdir 不属于拖入项目,绝不能
+            // 拿拖入项目的 ProjectRef 强绑聚焦 Pane(checkpoint 授权根、文件
+            // 投放作用域都会跟着错位)。
+            workbench.syncCurrentConversation(
+              currentConversationIdRef.current,
+              conversationSurfaceProject,
+            );
+            if (result.kind === "stale" || result.kind === "identity-mismatch") {
               addNotify("error", t("workbench.dropStateChanged"));
             }
           })
@@ -3032,6 +3038,12 @@ export function ChatPage(props: ChatPageProps) {
         backgroundControllersRef.current.delete(conversationId);
       }
     }
+  }, [workbench.layout]);
+  // 布局对账:终端 drop 事务在宿主挂载前同步占约,Pane 若在宿主接手
+  // release 前被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有
+  // 的租约在其卸载 cleanup 中先于本 effect 释放,不受影响。
+  useEffect(() => {
+    releaseOrphanTerminalPaneLeases(terminalPaneLease, workbench.layout);
   }, [workbench.layout]);
   useEffect(
     () => () => {
