@@ -108,7 +108,12 @@ import {
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
-import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
+import {
+  assistantMessageToText,
+  createProviderRuntimeConfig,
+  streamAssistantMessage,
+  toModelValue,
+} from "../lib/providers/llm";
 import {
   findProviderModelConfig,
   isAgentDevMode,
@@ -185,7 +190,7 @@ import {
   pruneIdleConversationRuntimeCaches,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
-import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
+import { buildClarifyCallContext, createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
 import {
   resolveActiveModelSelection,
   resolveEffectiveChatModelSelection,
@@ -1442,6 +1447,31 @@ export function ChatPage(props: ChatPageProps) {
     requestConversationStop,
     requestActiveConversationStop,
     consumeConversationStop,
+    runGatewayClarifyTurn: async (messages, selection, runtimeControls) => {
+      const provider = settings.customProviders.find(
+        (p) => p.id === selection.providerId,
+      );
+      if (!provider) {
+        throw new Error(`clarify provider not found: ${selection.providerId}`);
+      }
+      const runtime = createProviderRuntimeConfig(provider, selection.model, runtimeControls);
+      const assistant = await streamAssistantMessage({
+        providerId: provider.type,
+        model: selection.model,
+        runtime,
+        signal: new AbortController().signal,
+        cacheRetention: "none",
+        nativeWebSearch: false,
+        context: buildClarifyCallContext(messages, {
+          selectedModel: { customProviderId: provider.id, model: selection.model },
+          provider,
+          providerId: provider.type,
+          model: selection.model,
+        }),
+        onTextDelta: () => undefined,
+      });
+      return assistantMessageToText(assistant);
+    },
   });
 
   const { send } = useSendChatTurn({

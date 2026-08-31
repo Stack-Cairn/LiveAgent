@@ -61,6 +61,24 @@ export type GatewayChatCancelEvent = {
   conversationId: string;
 };
 
+export type GatewayClarifyTurnRequestEvent = {
+  requestId: string;
+  messagesJson: string;
+  providerId: string;
+  model: string;
+  requestFormat: string;
+  runtimeControlsJson: string;
+  workdir: string;
+  gitBranch: string;
+};
+
+export type GatewayClarifyRespondInput = {
+  requestId: string;
+  finalText?: string;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type ActiveGatewayBridgeRequest = {
   requestId: string;
   conversationId: string;

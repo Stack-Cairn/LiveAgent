@@ -47,7 +47,7 @@ function toAssistantContextMessage(
  * provider 载荷装配丢弃；因此把 system 消息并入 systemPrompt，其余消息原样
  * 映射（text-only 后缀由 buildTextOnlyCallContext 统一追加）。
  */
-function buildClarifyCallContext(
+export function buildClarifyCallContext(
   messages: ClarifyMessage[],
   selection: EffectiveChatModelSelection,
 ): Context {
