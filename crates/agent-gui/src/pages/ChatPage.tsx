@@ -2,6 +2,7 @@ import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
+import type { RunClarifyTurn } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
@@ -107,7 +108,7 @@ import {
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
-import { toModelValue } from "../lib/providers/llm";
+import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
   isAgentDevMode,
@@ -184,7 +185,11 @@ import {
   pruneIdleConversationRuntimeCaches,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
-import { resolveActiveModelSelection } from "./chat/runtime/modelSelection";
+import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
+import {
+  resolveActiveModelSelection,
+  resolveEffectiveChatModelSelection,
+} from "./chat/runtime/modelSelection";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
@@ -2071,6 +2076,38 @@ export function ChatPage(props: ChatPageProps) {
     t,
   });
 
+  // 提示词澄清执行器（按会话缓存）：ChatComposerBar 是 memo 组件，runner 的
+  // identity 必须跨渲染稳定。背景 Pane 的 binding 在普通函数里逐 Pane 构建
+  // （Pane 数量随布局变化），不能在里面 useMemo，故用 ref 缓存 + 惰性 getter：
+  // 每轮澄清调用时才解析当前设置与会话模型，中途切模型下一轮即生效。
+  const clarifySettingsRef = useRef(settings);
+  clarifySettingsRef.current = settings;
+  const clarifyRunnersRef = useRef(new Map<string, RunClarifyTurn>());
+  const getConversationClarifyRunner = useCallback(
+    (conversationId: string): RunClarifyTurn => {
+      let runner = clarifyRunnersRef.current.get(conversationId);
+      if (!runner) {
+        const resolveClarifySelection = () =>
+          resolveEffectiveChatModelSelection({
+            settings: clarifySettingsRef.current,
+            conversationSelectedModel:
+              conversationRuntimeRegistry.getSnapshot(conversationId)?.selectedModel ?? undefined,
+          });
+        runner = createGuiClarifyRunner(resolveClarifySelection, () => {
+          const selection = resolveClarifySelection();
+          return createProviderRuntimeConfig(
+            selection.provider,
+            selection.model,
+            clarifySettingsRef.current.chatRuntimeControls,
+          );
+        });
+        clarifyRunnersRef.current.set(conversationId, runner);
+      }
+      return runner;
+    },
+    [conversationRuntimeRegistry],
+  );
+
   // Full-featured binding for the pane hosting the page's current
   // conversation; it is the only pane wired to page-level composer bridging,
   // uploads, native drop and usage telemetry.
@@ -2188,6 +2225,10 @@ export function ChatPage(props: ChatPageProps) {
       onPasteFiles: importReadableFiles,
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
+      // 提示词澄清：当前会话模型跑纯文本补全；clarifyContext 只喂轻量工作区
+      // 信息（分支无现成状态，留空不为此新拉 git）。
+      runClarifyTurn: getConversationClarifyRunner(currentConversationId),
+      clarifyContext: { workdir: displayedConversationWorkdir },
       onRemovePendingUpload: removePendingUpload,
       onRunQueuedTurnNow: runQueuedTurnNow,
       onMoveQueuedTurnUp: moveQueuedTurnUp,
@@ -3045,6 +3086,10 @@ export function ChatPage(props: ChatPageProps) {
         },
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
+        // 背景 Pane 的澄清执行器同样按本 Pane 会话解析模型（见
+        // getConversationClarifyRunner 的惰性 getter）。
+        runClarifyTurn: getConversationClarifyRunner(conversationId),
+        clarifyContext: { workdir: workspaceRoot ?? "" },
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,
