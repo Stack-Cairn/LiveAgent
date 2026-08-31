@@ -41,6 +41,7 @@ import {
   ChatUploadedFileSchema,
   CheckpointExpectedEntrySchema,
   CheckpointRequestSchema,
+  ClarifyTurnRequestSchema,
   CronManageRequestSchema,
   FileMentionListRequestSchema,
   FsCreateDirRequestSchema,
@@ -865,6 +866,31 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         }),
       };
     }
+    case "clarify.prompt_turn":
+      return {
+        case: "clarifyTurn",
+        value: create(ClarifyTurnRequestSchema, {
+          messagesJson:
+            typeof body.messages === "string"
+              ? body.messages
+              : JSON.stringify(body.messages ?? []),
+          providerId: trimStr(body.provider_id),
+          model: trimStr(body.model),
+          requestFormat: trimStr(body.request_format),
+          runtimeControls: body.runtime_controls
+            ? create(ChatRuntimeControlsSchema, {
+                thinkingEnabled: bool(rec(body.runtime_controls).thinking_enabled),
+                nativeWebSearchEnabled: bool(
+                  rec(body.runtime_controls).native_web_search_enabled,
+                ),
+                reasoning: str(rec(body.runtime_controls).reasoning),
+                planModeEnabled: bool(rec(body.runtime_controls).plan_mode_enabled),
+              })
+            : undefined,
+          workdir: trimStr(body.workdir),
+          gitBranch: trimStr(body.git_branch),
+        }),
+      };
     default:
       throw new Error(`unsupported gateway request type: ${type}`);
   }
@@ -1241,6 +1267,12 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           bytes: Number(section.bytes),
         })),
       };
+    case "clarifyTurnResp": {
+      const result: J = { final_text: payload.value.finalText };
+      if (payload.value.errorCode) result.error_code = payload.value.errorCode;
+      if (payload.value.errorMessage) result.error_message = payload.value.errorMessage;
+      return result;
+    }
     case "cronManageResp":
       return { action: payload.value.action, result_json: payload.value.resultJson };
     case "fsRootsResp":

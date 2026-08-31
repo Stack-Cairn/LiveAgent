@@ -48,6 +48,8 @@ import type {
   TerminalSshLatency,
 } from "@liveagent/ui/lib/terminal/types";
 import type { TunnelCreateInput, TunnelUpdateInput } from "@liveagent/ui/lib/tunnels/constants";
+import type { ClarifyMessage } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
+import type { ChatRuntimeControls } from "@/lib/settings";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
   ChatCommandAccepted,
@@ -480,6 +482,41 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       ...(payload.include_subagent_runs === undefined
         ? {}
         : { include_subagent_runs: payload.include_subagent_runs }),
+    });
+  }
+
+  async clarifyPromptTurn(input: {
+    messages: ClarifyMessage[];
+    providerId: string;
+    model: string;
+    requestFormat: string;
+    runtimeControls?: ChatRuntimeControls;
+    workdir: string;
+    gitBranch?: string;
+  }): Promise<{
+    final_text: string;
+    error_code?: string;
+    error_message?: string;
+  }> {
+    return this.request<{
+      final_text: string;
+      error_code?: string;
+      error_message?: string;
+    }>("clarify.prompt_turn", {
+      messages: input.messages,
+      provider_id: input.providerId,
+      model: input.model,
+      request_format: input.requestFormat,
+      runtime_controls: input.runtimeControls
+        ? {
+            thinking_enabled: input.runtimeControls.thinkingEnabled,
+            native_web_search_enabled: input.runtimeControls.nativeWebSearchEnabled,
+            reasoning: input.runtimeControls.reasoning,
+            plan_mode_enabled: input.runtimeControls.planModeEnabled === true,
+          }
+        : undefined,
+      workdir: input.workdir,
+      git_branch: input.gitBranch ?? "",
     });
   }
 
