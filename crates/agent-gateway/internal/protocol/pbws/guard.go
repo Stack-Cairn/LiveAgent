@@ -69,7 +69,9 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_FsReadWorkspaceImage,
 		// 轨迹只读：不含任何写能力，也不触碰工作区，直通即可。
 		*gatewayv2.GatewayEnvelope_TrajectoryFetch,
-		*gatewayv2.GatewayEnvelope_ChatQueue:
+		*gatewayv2.GatewayEnvelope_ChatQueue,
+		// 澄清轮次：一次纯文本补全，载荷转发给桌面端执行，无网关侧门控。
+		*gatewayv2.GatewayEnvelope_ClarifyTurn:
 		return nil
 	case *gatewayv2.GatewayEnvelope_ChatFileOpen:
 		return vetChatFileOpen(payload.ChatFileOpen)
