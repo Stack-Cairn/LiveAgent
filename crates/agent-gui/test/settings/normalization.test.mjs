@@ -277,22 +277,33 @@ test("gemini provider normalization keeps native routing and model limits", () =
   assert.equal(provider.models[0].maxOutputToken, 65_536);
 });
 
-test("DeepSeek is the fifth built-in provider with Responses search enabled", () => {
+test("DeepSeek and OrcaRouter are built-in providers with Responses search enabled", () => {
   const providers = settings.getBuiltinCustomProviders();
   assert.deepEqual(
     providers.map((provider) => provider.type),
-    ["claude_code", "codex", "gemini", "xai", "deepseek"],
+    ["claude_code", "codex", "gemini", "xai", "deepseek", "codex"],
   );
 
-  const provider = providers.at(-1);
-  assert.equal(provider.id, "builtin-deepseek");
-  assert.equal(provider.name, "DeepSeek");
-  assert.equal(provider.baseUrl, "https://api.deepseek.com");
-  assert.equal(provider.reasoning, "high");
-  assert.equal(provider.promptCachingEnabled, false);
-  assert.equal(provider.promptCacheHintMode, undefined);
-  assert.equal(provider.nativeWebSearchEnabled, true);
-  assert.equal(provider.requestFormat, undefined);
+  const deepseek = providers.find((provider) => provider.type === "deepseek");
+  assert.equal(deepseek.id, "builtin-deepseek");
+  assert.equal(deepseek.name, "DeepSeek");
+  assert.equal(deepseek.baseUrl, "https://api.deepseek.com");
+  assert.equal(deepseek.reasoning, "high");
+  assert.equal(deepseek.promptCachingEnabled, false);
+  assert.equal(deepseek.promptCacheHintMode, undefined);
+  assert.equal(deepseek.nativeWebSearchEnabled, true);
+  assert.equal(deepseek.requestFormat, undefined);
+
+  const orcarouter = providers.find((provider) => provider.id === "builtin-orcarouter");
+  assert.equal(orcarouter.type, "codex");
+  assert.equal(orcarouter.name, "OrcaRouter");
+  assert.equal(orcarouter.baseUrl, "https://api.orcarouter.ai/v1");
+  assert.equal(orcarouter.requestFormat, "openai-responses");
+  assert.equal(orcarouter.promptCachingEnabled, true);
+  assert.equal(orcarouter.promptCacheHintMode, "auto");
+  assert.equal(orcarouter.reasoning, "high");
+  assert.equal(orcarouter.nativeWebSearchEnabled, true);
+  assert.equal(orcarouter.useSystemProxy, false);
 });
 
 test("DeepSeek provider normalization keeps native routing and native search", () => {

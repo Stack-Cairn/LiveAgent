@@ -338,6 +338,24 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
     },
+    {
+      id: "builtin-orcarouter",
+      name: "OrcaRouter",
+      type: "codex",
+      baseUrl: "https://api.orcarouter.ai/v1",
+      isFullUrl: false,
+      apiKey: "",
+      customHeaders: [],
+      models: [],
+      activeModels: [],
+      requestFormat: "openai-responses",
+      reasoning: "high",
+      promptCachingEnabled: true,
+      promptCacheHintMode: "auto",
+      nativeWebSearchEnabled: true,
+      useSystemProxy: false,
+      usageQuery: getDefaultUsageQueryConfig(),
+    },
   ];
 }
 
