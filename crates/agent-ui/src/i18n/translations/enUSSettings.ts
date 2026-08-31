@@ -1334,4 +1334,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.groupBehavior": "Behavior",
   "settings.cuaDriver.permissionsChecking": "Checking permissions…",
   "settings.cuaDriver.permissionsUnknown": "Status unavailable",
+  "settings.cuaDriver.desktopOnlyInstall":
+    "Install from the desktop app: the script is downloaded and run on the desktop host, and the person at that machine has to review the full command first.",
+  "settings.cuaDriver.desktopOnlyGrant":
+    "Grant from the desktop app: the system permission dialogs only appear on the desktop host's screen.",
 } as const satisfies Record<string, string>;

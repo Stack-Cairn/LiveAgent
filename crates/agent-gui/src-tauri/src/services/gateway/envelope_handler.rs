@@ -1042,6 +1042,19 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::CuaDriver(request)) => {
+                match gateway_bridge::handle_cua_driver(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::CuaDriverResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::UploadReadableFiles(request)) => {
                 match gateway_bridge::handle_upload_readable_files(request).await {
                     Ok(response) => {

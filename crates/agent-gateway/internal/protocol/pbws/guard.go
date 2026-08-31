@@ -79,6 +79,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		return vetWorkspaceRootGrants(payload.WorkspaceRootGrants)
 	case *gatewayv2.GatewayEnvelope_Checkpoint:
 		return vetCheckpoint(payload.Checkpoint)
+	case *gatewayv2.GatewayEnvelope_CuaDriver:
+		return vetCuaDriver(payload.CuaDriver)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -117,6 +119,18 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		// 含 chat_command（须走网关编排）、ping（探活由网关发起）、upload_readable_files
 		// （走 HTTP 上传）、history_share_resolve（公共分享端点专用）及网关内部推送臂。
 		return errors.New("unsupported agent_request payload")
+	}
+}
+
+// vetCuaDriver 只放行 Computer Use 设置页的两个只读 action。安装（在宿主上联网执行安装脚本）与授权
+// （在宿主屏幕上弹 macOS TCC 对话框）是桌面本机动作，浏览器这端确认不了命令全文也点不到弹窗，
+// 一律不经网关下发；桌面端 handle_cua_driver 有同一份白名单兜底。
+func vetCuaDriver(req *gatewayv2.CuaDriverRequest) error {
+	switch strings.TrimSpace(req.GetAction()) {
+	case "probe", "permissions_status":
+		return nil
+	default:
+		return errors.New("unsupported cua_driver action")
 	}
 }
 

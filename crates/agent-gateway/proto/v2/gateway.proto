@@ -68,6 +68,7 @@ message GatewayEnvelope {
     TrajectoryFetchRequest trajectory_fetch = 99;
     InstalledAppsListRequest installed_apps_list = 100;
     ClarifyTurnRequest clarify_turn = 101;
+    CuaDriverRequest cua_driver = 102;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -149,6 +150,7 @@ message AgentEnvelope {
     TrajectoryFetchResponse trajectory_fetch_resp = 104;
     InstalledAppsListResponse installed_apps_list_resp = 105;
     ClarifyTurnResponse clarify_turn_resp = 106;
+    CuaDriverResponse cua_driver_resp = 107;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1134,6 +1136,26 @@ message InstalledAppEntry {
 
 message InstalledAppsListResponse {
   repeated InstalledAppEntry apps = 1;
+}
+
+// Computer Use（CUA）驱动的只读引导状态，供 WebUI 的 Computer Use 设置页
+// 展示桌面宿主上装没装 cua-driver、macOS 的 TCC 授权给了没有。Gateway 只
+// 直通转发，不自己探测。
+//
+// 安装与授权**有意不在这条通道上**：安装是在宿主上联网下载并执行 shell
+// 脚本，授权会在宿主屏幕上弹 macOS 系统对话框——浏览器这端的人既确认不了
+// 前者的命令全文，也点不到后者的弹窗，只能在桌面端做。
+message CuaDriverRequest {
+  // "probe" | "permissions_status"。写动作不走这里，网关侧亦按白名单拒绝。
+  string action = 1;
+}
+
+message CuaDriverResponse {
+  string action = 1;
+  // 与桌面 invoke 同一份序列化：services/cua_driver 的 CuaDriverProbe /
+  // CuaDriverPermissions（camelCase）。走 JSON 而不是在 proto 里再刻一份
+  // 结构化镜像，是为了让两端拿到的就是同一个对象，不会各自漂移。
+  string result_json = 2;
 }
 
 message FsRoot {

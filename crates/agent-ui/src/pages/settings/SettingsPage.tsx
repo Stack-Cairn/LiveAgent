@@ -10,6 +10,7 @@ import {
   Key,
   Mic,
   Settings2,
+  SquareMousePointer,
   Wrench,
   Zap,
 } from "@liveagent/ui/components/IconSet";
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";
 import { CronSection } from "./CronSection";
+import { CuaDriverSection } from "./CuaDriverSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { ProvidersSection } from "./ProvidersSection";
@@ -133,6 +135,24 @@ export function SettingsPage(props: SettingsPageProps) {
         labelKey: "settings.navSystemTools",
         icon: <Wrench className={extension.iconClassName} />,
         render: () => <SystemToolsSection settings={settings} setSettings={setSettings} />,
+      },
+      {
+        // Computer Use（CUA）。两端同一份引导页：探测与授权状态经宿主真实读取
+        // （WebUI 走 gateway 中继），设置项两端同样可写，只有安装与授权两个必须
+        // 在桌面主机那台机器上完成的动作在 web 面收起——判定交给组件的 surface。
+        id: "cua",
+        groupKey: "settings.groupIntelligence",
+        groupOrder: 20,
+        order: 25,
+        labelKey: "settings.navCua",
+        icon: <SquareMousePointer className={extension.iconClassName} />,
+        render: () => (
+          <CuaDriverSection
+            settings={settings}
+            setSettings={setSettings}
+            surface={extension.surface}
+          />
+        ),
       },
       {
         id: "stt",
