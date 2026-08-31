@@ -502,22 +502,29 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       final_text: string;
       error_code?: string;
       error_message?: string;
-    }>("clarify.prompt_turn", {
-      messages: input.messages,
-      provider_id: input.providerId,
-      model: input.model,
-      request_format: input.requestFormat,
-      runtime_controls: input.runtimeControls
-        ? {
-            thinking_enabled: input.runtimeControls.thinkingEnabled,
-            native_web_search_enabled: input.runtimeControls.nativeWebSearchEnabled,
-            reasoning: input.runtimeControls.reasoning,
-            plan_mode_enabled: input.runtimeControls.planModeEnabled === true,
-          }
-        : undefined,
-      workdir: input.workdir,
-      git_branch: input.gitBranch ?? "",
-    });
+    }>(
+      "clarify.prompt_turn",
+      {
+        messages: input.messages,
+        provider_id: input.providerId,
+        model: input.model,
+        request_format: input.requestFormat,
+        runtime_controls: input.runtimeControls
+          ? {
+              thinking_enabled: input.runtimeControls.thinkingEnabled,
+              native_web_search_enabled: input.runtimeControls.nativeWebSearchEnabled,
+              reasoning: input.runtimeControls.reasoning,
+              plan_mode_enabled: input.runtimeControls.planModeEnabled === true,
+            }
+          : undefined,
+        workdir: input.workdir,
+        git_branch: input.gitBranch ?? "",
+      },
+      // The desktop bridge reserves up to 120s for slow clarifications
+      // (final drafts / complex follow-ups); match that window instead of
+      // the 30s default request timeout.
+      { timeoutMs: 120_000 },
+    );
   }
 
   async gitRequest<T = unknown>(
