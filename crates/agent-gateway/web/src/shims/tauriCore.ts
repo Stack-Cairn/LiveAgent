@@ -240,6 +240,16 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
     // @ 应用提及：与 GUI 同名命令，经 Gateway 直通中继到桌面宿主枚举。
     case "cua_driver_list_installed_apps":
       return (await getGatewayWebSocketClient(loadToken().trim()).listInstalledApps()) as T;
+    // Computer Use 设置页：探测与授权状态只读中继到桌面宿主。安装与授权
+    // （cua_driver_install / cua_driver_permissions_grant）有意不实现——前者
+    // 要用户先看清将要执行的安装命令全文，后者会在桌面机屏幕上弹 macOS 系统
+    // 对话框，两件事浏览器这端都完成不了，设置页据此在 web 面隐藏入口。
+    case "cua_driver_probe":
+      return (await getGatewayWebSocketClient(loadToken().trim()).cuaDriverStatus<T>("probe")) as T;
+    case "cua_driver_permissions_status":
+      return (await getGatewayWebSocketClient(loadToken().trim()).cuaDriverStatus<T>(
+        "permissions_status",
+      )) as T;
     case "system_list_skill_files":
       return (await getGatewayWebSocketClient(loadToken().trim()).listSkillFiles()) as T;
     case "system_read_skill_metadata":

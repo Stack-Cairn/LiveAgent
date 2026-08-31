@@ -1270,4 +1270,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.groupBehavior": "行为",
   "settings.cuaDriver.permissionsChecking": "正在检查授权…",
   "settings.cuaDriver.permissionsUnknown": "无法读取状态",
+  "settings.cuaDriver.desktopOnlyInstall":
+    "安装需要在桌面端完成：安装脚本在桌面主机上联网下载并执行，须由使用那台机器的人确认命令全文。",
+  "settings.cuaDriver.desktopOnlyGrant":
+    "授权需要在桌面端完成：系统授权对话框只会出现在桌面主机的屏幕上。",
 } as const satisfies Record<string, string>;

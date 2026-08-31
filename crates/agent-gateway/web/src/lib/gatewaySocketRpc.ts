@@ -1158,6 +1158,15 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     return response.apps;
   }
 
+  /**
+   * Computer Use 设置页的只读引导状态。`action` 与桌面端的 Tauri 命令同名，
+   * 返回的就是那条命令的原始返回值（camelCase JSON），由调用方按 CuaProbe /
+   * CuaPermissions 解读——两端读的是同一个对象。
+   */
+  async cuaDriverStatus<T>(action: "probe" | "permissions_status"): Promise<T> {
+    return this.requestWithRecovery<T>(`cua.driver.${action}`, {});
+  }
+
   async listFsRoots(): Promise<FsRootsResponse> {
     return this.requestWithRecovery<FsRootsResponse>("fs.roots", {});
   }

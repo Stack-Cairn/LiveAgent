@@ -44,6 +44,7 @@ import {
   CheckpointRequestSchema,
   ClarifyTurnRequestSchema,
   CronManageRequestSchema,
+  CuaDriverRequestSchema,
   FileMentionListRequestSchema,
   FsCreateDirRequestSchema,
   FsCreateProjectFolderRequestSchema,
@@ -679,6 +680,18 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "apps.installed.list":
       return { case: "installedAppsList", value: create(InstalledAppsListRequestSchema, {}) };
+    // Computer Use 设置页的只读引导状态。action 与桌面端的两条 Tauri 命令同名，
+    // 写动作（安装 / 授权）不在这条通道上——见 proto 的 CuaDriverRequest 注释。
+    case "cua.driver.probe":
+      return {
+        case: "cuaDriver",
+        value: create(CuaDriverRequestSchema, { action: "probe" }),
+      };
+    case "cua.driver.permissions_status":
+      return {
+        case: "cuaDriver",
+        value: create(CuaDriverRequestSchema, { action: "permissions_status" }),
+      };
     case "files.preview":
       return {
         case: "uploadedImagePreview",
@@ -1376,6 +1389,8 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
     case "fsDeleteResp":
       return { path: payload.value.path, kind: payload.value.kind };
     case "gitResponse":
+      return unmarshalJsonPayload(payload.value.resultJson);
+    case "cuaDriverResp":
       return unmarshalJsonPayload(payload.value.resultJson);
     case "sftpResponse":
       return sftpResponsePayload(payload.value);

@@ -24,6 +24,7 @@ import {
   Terminal,
   Video,
 } from "@liveagent/ui/components/IconSet";
+import type { UiSurface } from "@liveagent/ui/contracts/registry";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -313,9 +314,16 @@ const TIMEOUT_PRESETS = [
   { label: "300s", value: 300_000 },
 ];
 
-export function CuaDriverSection(props: SettingsSectionProps) {
-  const { settings, setSettings } = props;
+/**
+ * `surface` 决定引导动作的可达性，而不是决定显示什么：探测与授权状态两端
+ * 都经宿主真实读取（WebUI 走 gateway 中继），设置项两端同样可写；只有安装
+ * 与授权这两个**必须在桌面主机那台机器上完成**的动作在 web 面收起——安装要
+ * 用户先看清将要联网执行的命令全文，授权的系统对话框只弹在桌面机屏幕上。
+ */
+export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSurface }) {
+  const { settings, setSettings, surface = "desktop" } = props;
   const { t } = useLocale();
+  const canProvision = surface === "desktop";
 
   const [probe, setProbe] = useState<CuaProbe | null>(null);
   const [permissions, setPermissions] = useState<CuaPermissions | null>(null);
@@ -647,7 +655,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {displayCommand ? <CopyButton value={displayCommand} /> : null}
-              {installed ? null : (
+              {installed || !canProvision ? null : (
                 <Button
                   size="sm"
                   className="h-8 gap-1.5 rounded-lg text-xs"
@@ -666,6 +674,14 @@ export function CuaDriverSection(props: SettingsSectionProps) {
               )}
             </div>
           </CardBlock>
+
+          {!installed && !canProvision && !probingInitial ? (
+            <CardBlock className="py-3">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("settings.cuaDriver.desktopOnlyInstall")}
+              </p>
+            </CardBlock>
+          ) : null}
 
           {/* 配置漂移 / 安装确认 / 日志 / 错误 */}
           {commandDrift || (confirmingInstall && preview) || log.length > 0 || error ? (
@@ -778,7 +794,7 @@ export function CuaDriverSection(props: SettingsSectionProps) {
             connector={grantState === "done" ? "done" : "default"}
             title={t("settings.cuaDriver.permissionsTitle")}
             action={
-              permissionsKnown && !permissionsPending ? undefined : (
+              !canProvision || (permissionsKnown && !permissionsPending) ? undefined : (
                 <Button
                   variant="outline"
                   size="sm"
@@ -800,6 +816,11 @@ export function CuaDriverSection(props: SettingsSectionProps) {
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {t("settings.cuaDriver.permissionsDesc")}
               </p>
+              {canProvision ? null : (
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.cuaDriver.desktopOnlyGrant")}
+                </p>
+              )}
             </CardBlock>
             <PermissionRow
               icon={Accessibility}

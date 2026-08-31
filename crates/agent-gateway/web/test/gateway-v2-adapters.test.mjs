@@ -645,3 +645,54 @@ test("trajectory fetch keeps prompt section ids and subagent run ids in separate
   assert.deepEqual(request.subagentRunIds, ["run-a", "run-b"]);
   assert.equal(request.includeSubagentRuns, true);
 });
+
+// Computer Use 设置页只中继两个只读 action；返回的 JSON 就是桌面端那两条 Tauri
+// 命令的原始返回值，设置页在两端读到的是同一个对象。
+test("cua driver status requests carry the read-only action and decode the host payload verbatim", () => {
+  const probe = decodeClientFrame(
+    encodeRequestFrame("cua-1", "cua.driver.probe", {}, "agent-1"),
+  );
+  assert.equal(probe.payload.value.payload.case, "cuaDriver");
+  assert.equal(probe.payload.value.payload.value.action, "probe");
+
+  const permissions = decodeClientFrame(
+    encodeRequestFrame("cua-2", "cua.driver.permissions_status", {}, "agent-1"),
+  );
+  assert.equal(permissions.payload.value.payload.case, "cuaDriver");
+  assert.equal(permissions.payload.value.payload.value.action, "permissions_status");
+
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "cua-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "cua-1",
+          cua_driver_resp: {
+            action: "probe",
+            result_json: JSON.stringify({
+              installed: true,
+              path: "/Users/a/.local/bin/cua-driver",
+              version: "0.4.1",
+              mcpCommand: "/Users/a/.local/bin/cua-driver",
+              mcpArgs: ["mcp"],
+              permissionsRequired: true,
+              error: null,
+            }),
+          },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload, {
+    installed: true,
+    path: "/Users/a/.local/bin/cua-driver",
+    version: "0.4.1",
+    mcpCommand: "/Users/a/.local/bin/cua-driver",
+    mcpArgs: ["mcp"],
+    permissionsRequired: true,
+    error: null,
+  });
+});
