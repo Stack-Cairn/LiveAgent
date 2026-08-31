@@ -294,7 +294,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             return merged.files.slice(0, MAX_UPLOAD_FILES);
           });
           if (duplicateCount > 0) {
-            addNotify("warning", `已合并 ${duplicateCount} 个重复文件`);
+            addNotify(
+              "warning",
+              formatTranslation(translate("chat.upload.duplicatesMerged", locale), {
+                count: duplicateCount,
+              }),
+            );
           }
           if (overflowCount > 0) {
             addNotify(
