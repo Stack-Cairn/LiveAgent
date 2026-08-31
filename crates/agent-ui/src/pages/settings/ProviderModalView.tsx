@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Fingerprint,
   Globe,
   Key,
   Link2,
@@ -36,6 +37,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -48,6 +56,10 @@ import {
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  CLI_IDENTITY_PROVIDER_IDS,
+  CLI_IDENTITY_USER_AGENTS,
+} from "@liveagent/ui/lib/providers/customHeaders";
 import {
   applyUsageQueryModePreset,
   formatTokenCount,
@@ -78,6 +90,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     apiKeyForRequest,
     apiKeyIsRedactedDisplay,
     applyHeaderSuggestion,
+    applyCliIdentityHeaders,
     applyModelBulkState,
     baseUrl,
     canOverrideModelInputModalities,
@@ -1057,6 +1070,40 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-2 max-[720px]:w-full">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 gap-1.5 max-[720px]:h-11 max-[720px]:flex-1"
+                          />
+                        }
+                      >
+                        <Fingerprint className="h-3.5 w-3.5" />
+                        {t("settings.cliIdentityHeaders")}
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                          {t("settings.cliIdentityHeadersHint")}
+                        </DropdownMenuLabel>
+                        {CLI_IDENTITY_PROVIDER_IDS.map((identity) => (
+                          <DropdownMenuItem
+                            key={identity}
+                            className="items-center gap-2 rounded-md py-1.5 text-xs"
+                            onSelect={() => applyCliIdentityHeaders(identity)}
+                          >
+                            <span className="font-medium leading-5">
+                              {t(`settings.cliIdentity.${identity}`)}
+                            </span>
+                            <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                              {CLI_IDENTITY_USER_AGENTS[identity].split(" ")[0]}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button
                       type="button"
                       variant="outline"

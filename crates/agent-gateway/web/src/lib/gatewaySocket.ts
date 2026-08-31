@@ -414,6 +414,7 @@ export type GatewayWebSocketClientLike = {
     modelsUrl?: string,
     providerId?: string,
     isFullUrl?: boolean,
+    customHeaders?: readonly { key: string; value: string }[],
   ): Promise<unknown>;
   providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T>;
   providerUsageTest<T = unknown>(providerId: string, configJson: string): Promise<T>;

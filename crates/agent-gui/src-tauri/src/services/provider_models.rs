@@ -13,7 +13,7 @@ const CODEX_MODELS_SUFFIXES: [&str; 3] = ["/chat/completions", "/responses", "/r
 #[derive(Clone, Debug)]
 struct ProviderModelsAttempt {
     url: Url,
-    headers: Vec<(&'static str, String)>,
+    headers: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -29,6 +29,7 @@ pub async fn fetch_provider_models(
     use_system_proxy: bool,
     models_url: Option<&str>,
     is_full_url: bool,
+    custom_headers: &[(String, String)],
 ) -> Result<String, String> {
     // 与本地反代的 x-liveagent-use-system-proxy 语义一致：勾选时代理配置异常
     // fail fast，绝不静默降级；未勾选一律直连（忽略环境代理）。
@@ -47,6 +48,7 @@ pub async fn fetch_provider_models(
             api_key,
             models_url,
             is_full_url,
+            custom_headers,
         ),
     )
     .await
@@ -71,6 +73,7 @@ async fn fetch_provider_models_with_client(
     api_key: &str,
     models_url: Option<&str>,
     is_full_url: bool,
+    custom_headers: &[(String, String)],
 ) -> Result<String, String> {
     let attempts = build_provider_models_attempts_with_override(
         provider_type,
@@ -78,6 +81,7 @@ async fn fetch_provider_models_with_client(
         api_key,
         models_url,
         is_full_url,
+        custom_headers,
     )?;
     let mut failures = Vec::new();
     let mut empty_result = None;
@@ -271,7 +275,7 @@ fn build_provider_models_attempts(
     base_url: &str,
     api_key: &str,
 ) -> Result<Vec<ProviderModelsAttempt>, String> {
-    build_provider_models_attempts_with_override(provider_type, base_url, api_key, None, false)
+    build_provider_models_attempts_with_override(provider_type, base_url, api_key, None, false, &[])
 }
 
 fn build_provider_models_attempts_with_override(
@@ -280,6 +284,7 @@ fn build_provider_models_attempts_with_override(
     api_key: &str,
     models_url: Option<&str>,
     is_full_url: bool,
+    custom_headers: &[(String, String)],
 ) -> Result<Vec<ProviderModelsAttempt>, String> {
     validate_provider_type(provider_type)?;
     let explicit_url = if provider_type == "gemini" {
@@ -301,7 +306,10 @@ fn build_provider_models_attempts_with_override(
             .as_ref()
             .cloned()
             .unwrap_or_else(|| build_provider_models_url(provider_type, &base_url, official)),
-        headers: build_provider_models_headers(provider_type, api_key, official),
+        headers: merge_custom_headers(
+            build_provider_models_headers(provider_type, api_key, official),
+            custom_headers,
+        ),
     });
     // codex/xai/deepseek 的官方形式与统一首次尝试完全一致，重复请求同一端点没有意义，收敛为一次。
     let mut attempts = vec![default_attempt];
@@ -359,6 +367,66 @@ fn build_provider_models_headers(
         }
     }
     headers
+}
+
+// KEEP IN SYNC: crates/agent-ui/src/lib/providers/customHeaders.ts 的
+// RESERVED_CUSTOM_HEADER_KEYS / RESERVED_CUSTOM_HEADER_KEY_PREFIX。鉴权头与
+// host/content-length 属保留头：用户改不了，自定义头也不得顶掉它们。
+const RESERVED_CUSTOM_HEADER_KEYS: [&str; 6] = [
+    "authorization",
+    "x-api-key",
+    "x-goog-api-key",
+    "anthropic-beta",
+    "host",
+    "content-length",
+];
+const RESERVED_CUSTOM_HEADER_KEY_PREFIX: &str = "x-liveagent-";
+
+fn is_valid_custom_header_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || "!#$%&'*+-.^_`|~".contains(character)
+        })
+}
+
+// 取值只允许可见 ASCII 与水平制表符：CR/LF 会造成 header 注入。
+fn is_valid_custom_header_value(value: &str) -> bool {
+    value
+        .chars()
+        .all(|character| character == '\t' || ('\x20'..='\x7e').contains(&character))
+}
+
+fn is_reserved_custom_header_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
+    RESERVED_CUSTOM_HEADER_KEYS.contains(&normalized.as_str())
+        || normalized.starts_with(RESERVED_CUSTOM_HEADER_KEY_PREFIX)
+}
+
+/// 把用户显式配置的自定义请求头并入自动装配的头集合。非法键名/取值与保留头
+/// 直接丢弃（与前端 mergeCustomHeaders 同语义），同名头大小写不敏感地覆盖。
+fn merge_custom_headers(
+    base: Vec<(&'static str, String)>,
+    custom_headers: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut merged: Vec<(String, String)> = base
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
+        .collect();
+
+    for (key, value) in custom_headers {
+        if !is_valid_custom_header_key(key)
+            || !is_valid_custom_header_value(value)
+            || is_reserved_custom_header_key(key)
+        {
+            continue;
+        }
+        let normalized = key.to_ascii_lowercase();
+        merged.retain(|(name, _)| name.to_ascii_lowercase() != normalized);
+        merged.push((key.clone(), value.clone()));
+    }
+
+    merged
 }
 
 fn provider_models_payload_has_entries(payload: &Value) -> bool {
@@ -472,6 +540,7 @@ mod tests {
             "key",
             None,
             true,
+            &[],
         )
         .expect("full URL attempts");
 
@@ -504,6 +573,7 @@ mod tests {
             "key",
             Some("https://models.example.com/catalog?api-version=2026-01"),
             false,
+            &[],
         )
         .expect("models URL override attempts");
 
@@ -517,6 +587,7 @@ mod tests {
             "key",
             Some("https://user:pass@example.com/models"),
             false,
+            &[],
         )
         .is_err());
 
@@ -526,6 +597,7 @@ mod tests {
             "key",
             Some("https://ignored.example.com/custom/models"),
             false,
+            &[],
         )
         .expect("gemini keeps automatic model discovery");
         assert_eq!(
@@ -535,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_model_headers_exclude_inference_identity() {
+    fn provider_model_headers_never_forge_a_client_identity() {
         for provider_type in ["claude_code", "codex", "gemini", "xai", "deepseek"] {
             for official in [false, true] {
                 let headers = build_provider_models_headers(provider_type, "key", official);
@@ -544,19 +616,68 @@ mod tests {
                     .map(|(name, _)| name.to_ascii_lowercase())
                     .collect::<Vec<_>>();
 
+                // 不开启伪装就照实发：既不带 UA，也不带 SDK 指纹头。伪装只能由用户
+                // 在设置里显式写进自定义请求头，经 merge_custom_headers 落到请求上。
+                assert!(
+                    !names.iter().any(|name| name == "user-agent"),
+                    "{provider_type}"
+                );
                 assert!(!names.iter().any(|name| name.starts_with("x-stainless-")));
                 for forbidden in [
                     "x-app",
-                    "user-agent",
                     "anthropic-beta",
                     "anthropic-dangerous-direct-browser-access",
                     "session_id",
                     "conversation_id",
                 ] {
-                    assert!(!names.iter().any(|name| name == forbidden));
+                    assert!(!names.iter().any(|name| name == forbidden), "{forbidden}");
                 }
             }
         }
+    }
+
+    #[test]
+    fn provider_model_custom_headers_override_identity_but_not_auth() {
+        let custom = [
+            ("User-Agent".to_string(), "my-relay-client/9.9".to_string()),
+            ("X-Request-ID".to_string(), "abc123".to_string()),
+            // 保留头：鉴权与 host/content-length 不可被顶掉。
+            ("authorization".to_string(), "Bearer stolen".to_string()),
+            ("Host".to_string(), "evil.example.com".to_string()),
+            ("x-liveagent-proxy-token".to_string(), "leak".to_string()),
+            // 非法键名/取值直接丢弃（CR/LF 会造成 header 注入）。
+            ("Bad Key".to_string(), "value".to_string()),
+            ("X-Inject".to_string(), "a\r\nX-Evil: 1".to_string()),
+        ];
+        let attempts = build_provider_models_attempts_with_override(
+            "claude_code",
+            "https://relay.example.com",
+            "key",
+            None,
+            false,
+            &custom,
+        )
+        .expect("attempts with custom headers");
+
+        for attempt in &attempts {
+            let get = |wanted: &str| {
+                attempt
+                    .headers
+                    .iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
+                    .map(|(_, value)| value.clone())
+            };
+            // UA 只可能来自用户显式配置——这里就是它落到请求上的唯一路径。
+            assert_eq!(get("user-agent").as_deref(), Some("my-relay-client/9.9"));
+            assert_eq!(get("x-request-id").as_deref(), Some("abc123"));
+            assert_eq!(get("host"), None);
+            assert_eq!(get("x-liveagent-proxy-token"), None);
+            assert_eq!(get("bad key"), None);
+            assert_eq!(get("x-inject"), None);
+            assert_ne!(get("authorization").as_deref(), Some("Bearer stolen"));
+        }
+        // 鉴权头仍恰好一条，自定义头不得让 attempts 分裂成重复请求。
+        assert_eq!(attempts.len(), 2);
     }
 
     #[test]
@@ -627,6 +748,7 @@ mod tests {
             "test-key",
             None,
             false,
+            &[],
         )
         .await
         .expect("fetch provider models");

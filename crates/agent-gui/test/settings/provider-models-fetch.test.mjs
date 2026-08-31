@@ -130,21 +130,43 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
   assert.equal(attemptsFor.claude_code[1].headers["anthropic-version"], "2023-06-01");
   assert.equal(attemptsFor.gemini[1].headers["x-goog-api-key"], "test-key");
 
-  const inferenceOnlyHeaders = [
-    "x-app",
+  // 拉模型列表不带任何客户端身份:不开启伪装就照实发。SDK 指纹头更是推理请求才有
+  // 的东西,带上它们等于谎报了一次没发生的 SDK 调用,上游据此做限流/统计会被污染。
+  const neverAutoInjected = [
     "user-agent",
+    "x-app",
     "anthropic-beta",
     "anthropic-dangerous-direct-browser-access",
     "session_id",
     "conversation_id",
   ];
-  for (const [, attempts] of attemptsByProvider) {
+  for (const [type, attempts] of attemptsByProvider) {
     for (const attempt of attempts) {
       const headerNames = Object.keys(attempt.headers).map((name) => name.toLowerCase());
       assert.ok(!headerNames.some((name) => name.startsWith("x-stainless-")));
-      for (const name of inferenceOnlyHeaders) assert.ok(!headerNames.includes(name), name);
+      for (const name of neverAutoInjected) {
+        assert.ok(!headerNames.includes(name), `${type}:${name}`);
+      }
     }
   }
+});
+
+test("custom headers reach the model-list request, and never override auth", () => {
+  // 不点「模拟 CLI」就没有任何身份头——伪装只能来自用户显式配置。
+  const [bare] = providerUtils.buildProviderModelsAttempts("claude_code", "test-key");
+  assert.ok(!Object.keys(bare.headers).some((name) => name.toLowerCase() === "user-agent"));
+
+  const [overridden] = providerUtils.buildProviderModelsAttempts("claude_code", "test-key", [
+    { key: "user-agent", value: "my-relay/1.0" },
+    { key: "X-Trace", value: "abc" },
+    // 保留头：鉴权头顶不掉，非法取值（CR/LF 注入）整条丢弃。
+    { key: "Authorization", value: "Bearer stolen" },
+    { key: "X-Bad", value: "line\r\nInjected: 1" },
+  ]);
+  assert.equal(overridden.headers["user-agent"], "my-relay/1.0");
+  assert.equal(overridden.headers["X-Trace"], "abc");
+  assert.equal(overridden.headers.Authorization, "Bearer test-key");
+  assert.equal(overridden.headers["X-Bad"], undefined);
 });
 
 test("provider model fetch identity changes when system proxy routing changes", () => {
@@ -439,6 +461,7 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
         isFullUrl: true,
         modelsUrl: "https://catalog.example.com/models?api-version=2026-01",
         providerId: "provider-codex",
+        customHeaders: [{ key: "User-Agent", value: "claude-cli/2.1.186 (external, cli)" }],
       },
     );
     assert.deepEqual(
@@ -454,6 +477,9 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
         models_url: "https://catalog.example.com/models?api-version=2026-01",
         provider_id: "provider-codex",
         is_full_url: true,
+        // WebView 的 fetch() 会静默丢掉 User-Agent，Gateway 路径必须把用户配的头
+        // 原样交给桌面端去落地，否则改了头也到不了上游。
+        custom_headers: [{ key: "User-Agent", value: "claude-cli/2.1.186 (external, cli)" }],
       },
     ]);
   } finally {
