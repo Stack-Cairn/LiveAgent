@@ -341,3 +341,51 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
   assert.match(viewerSource, /zoomByStep\(-1\)/);
   assert.match(viewerSource, /zoomByStep\(1\)/);
 });
+
+test("slide keys stay compact for megabyte inline payloads and never embed the full data", () => {
+  const bigPayload = "A".repeat(4 * 1024 * 1024);
+  const bigSrc = `data:image/svg+xml;base64,${bigPayload}`;
+  const slide = { src: bigSrc, dataBase64: bigPayload };
+
+  const key = viewer.getImagePreviewSlideKey(slide);
+  // 指纹必须是 O(1) 体积——巨串进 React key/effect deps 会让缩放拖拽的每帧
+  // 重渲染反复物化整图体积的字符串（SVG 预览内存暴涨回归点）。
+  assert.ok(key.length < 1024, `slide key must stay compact, got ${key.length} chars`);
+  assert.equal(key, viewer.getImagePreviewSlideKey({ ...slide }));
+
+  // 不同 payload（长度相同、内容不同头尾）必须区分。
+  const otherPayload = `B${"A".repeat(4 * 1024 * 1024 - 2)}C`;
+  assert.notEqual(
+    viewer.getImagePreviewSlideKey({ src: bigSrc, dataBase64: otherPayload }),
+    key,
+  );
+  // 短串走原文，行为与旧 key 等价。
+  assert.equal(
+    viewer.getImagePreviewSlideKey({ src: "data:image/png;base64,AQ==", dataBase64: "AQ==" }),
+    "data:image/png;base64,AQ==\0AQ==",
+  );
+});
+
+test("image render paths avoid re-materializing inline payloads per render", () => {
+  const toolImages = fs.readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/components/chat/assistant-bubble/ToolImages.tsx", import.meta.url)),
+    "utf8",
+  );
+  const viewerSource = fs.readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/components/chat/ImagePreview.tsx", import.meta.url)),
+    "utf8",
+  );
+
+  // 巨串禁止直接拼进 key/deps：换灯片检测统一走紧凑指纹。
+  assert.match(viewerSource, /getImagePreviewSlideKey\(slide\)/);
+  assert.doesNotMatch(viewerSource, /\$\{slide\.src\}\\0/);
+  assert.doesNotMatch(viewerSource, /key=\{`\$\{slide\.src\}/);
+
+  // data URL 按 ImageContent 缓存，只拼一次。
+  assert.match(toolImages, /const imageDataUrlCache = new WeakMap<ImageContent, string>\(\)/);
+  // sources 数组身份稳定化，撑起下游 slides/ImagePreview 的 memo 链。
+  assert.match(toolImages, /return useMemo\(\s*\(\)\s*=>\s*entries\.map/);
+  // display_image payload 按 toolResult 缓存 + 组件 memo，隔离转录区高频渲染。
+  assert.match(toolImages, /const displayImagePayloadCache = new WeakMap</);
+  assert.match(toolImages, /export const NativeDisplayImageBlock = memo\(/);
+});

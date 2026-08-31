@@ -15,7 +15,7 @@ import type {
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { prepareImageProxyUrl } from "@liveagent/ui/lib/providers/proxy";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, ImageOff, Loader2 } from "../../IconSet";
 import { getBuiltinResultKind } from "./assistantBubbleUtils";
 
@@ -41,8 +41,17 @@ export type NativeDisplayImageSourceState = {
 
 type ToolImageLoadState = "loading" | "loaded" | "error";
 
+// data URL = `data:...;base64,` + 完整 payload 的巨串（内联 SVG 可达 MB 级）。
+// 按 ImageContent 对象缓存，保证全生命周期只拼一次、引用恒定——否则转录区
+// 每次渲染都重新物化一份，流式/缩放期间分配速率可达每秒数百 MB。
+const imageDataUrlCache = new WeakMap<ImageContent, string>();
+
 function getImageDataUrl(image: ImageContent) {
-  return `data:${image.mimeType};base64,${image.data}`;
+  const cached = imageDataUrlCache.get(image);
+  if (cached !== undefined) return cached;
+  const dataUrl = `data:${image.mimeType};base64,${image.data}`;
+  imageDataUrlCache.set(image, dataUrl);
+  return dataUrl;
 }
 
 function imageFileExtension(mimeType: string | undefined) {
@@ -204,15 +213,21 @@ function useNativeDisplayImageSources(entries: NativeDisplayImageEntry[]) {
     };
   }, [proxyKey]);
 
-  return entries.map((entry, index) => {
-    if (entry.image) {
-      return { src: getImageDataUrl(entry.image), status: "ready" as const };
-    }
-    if (!getProxyImageSource(entry.detail)) {
-      return { src: "", status: "error" as const };
-    }
-    return proxySources[index] ?? { src: "", status: "loading" as const };
-  });
+  // memo：返回数组的身份决定下游 slides/ImagePreview 的 memo 是否生效。
+  // 每渲染重建会让整条预览链在转录区任何一次渲染时全量重算（含重拼 data URL）。
+  return useMemo(
+    () =>
+      entries.map((entry, index) => {
+        if (entry.image) {
+          return { src: getImageDataUrl(entry.image), status: "ready" as const };
+        }
+        if (!getProxyImageSource(entry.detail)) {
+          return { src: "", status: "error" as const };
+        }
+        return proxySources[index] ?? { src: "", status: "loading" as const };
+      }),
+    [entries, proxySources],
+  );
 }
 
 const LARGE_TOOL_IMAGE_INLINE_THRESHOLD_BYTES = 2 * 1024 * 1024;
@@ -341,7 +356,7 @@ export function ToolResultImagePreview(props: {
         fileName: `tool-image-${id}.${imageFileExtension(image.mimeType)}`,
       },
     ],
-    [alt, estimatedBytes, id, image.data, image.mimeType, src],
+    [alt, estimatedBytes, id, image, src],
   );
 
   useEffect(() => {
@@ -458,21 +473,34 @@ export function ToolResultImagePreview(props: {
   );
 }
 
+// RoundContent 每次渲染都会调用本函数（含流式期间的高频渲染）。entries 数组
+// 的身份是下游 useNativeDisplayImageSources/slides memo 的输入，每次重建会让
+// 整条 memo 链失效，所以按 toolResult 引用缓存——toolResult 落定后引用稳定
+// （uiMessages 增量更新只在结果变化时才换引用）。
+const displayImagePayloadCache = new WeakMap<
+  ToolResultMessage,
+  { details: DisplayImageResultDetails; entries: NativeDisplayImageEntry[] } | null
+>();
+
 export function getNativeDisplayImagePayload(item: ToolTraceItem) {
   const result = item.toolResult;
   if (!result || result.isError || getBuiltinResultKind(result) !== "display_image") {
     return null;
   }
 
-  const entries = getNativeDisplayImageEntries(result);
-  if (entries.length === 0) {
-    return null;
-  }
+  const cached = displayImagePayloadCache.get(result);
+  if (cached !== undefined) return cached;
 
-  return {
-    details: result.details as DisplayImageResultDetails,
-    entries,
-  };
+  const entries = getNativeDisplayImageEntries(result);
+  const payload =
+    entries.length === 0
+      ? null
+      : {
+          details: result.details as DisplayImageResultDetails,
+          entries,
+        };
+  displayImagePayloadCache.set(result, payload);
+  return payload;
 }
 
 function getNativeImageGridClass(imageCount: number) {
@@ -603,7 +631,9 @@ function NativeDisplayImageTile(props: {
   );
 }
 
-export function NativeDisplayImageBlock(props: {
+// memo：payload 经 WeakMap 缓存后引用稳定，转录区高频渲染（流式增量、状态
+// 心跳）不再穿透到图片块——巨型 data URL 的 slides 重算由此被整体short-circuit。
+export const NativeDisplayImageBlock = memo(function NativeDisplayImageBlock(props: {
   payload: NonNullable<ReturnType<typeof getNativeDisplayImagePayload>>;
   readOnly?: boolean;
 }) {
@@ -678,4 +708,4 @@ export function NativeDisplayImageBlock(props: {
       <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
     </>
   );
-}
+});

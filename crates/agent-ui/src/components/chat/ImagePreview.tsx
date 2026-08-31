@@ -17,6 +17,7 @@ import {
   getImagePreviewDisplaySource,
   getImagePreviewFileName,
   getImagePreviewMimeType,
+  getImagePreviewSlideKey,
   IMAGE_VIEWER_MAX_SCALE,
   IMAGE_VIEWER_MIN_SCALE,
   type ImagePreviewSlide,
@@ -469,8 +470,10 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
 
   const clampedIndex = clampImagePreviewIndex(activeIndex, slides.length);
   const slide = slides[clampedIndex];
-  const activeSlideKey = slide ? `${slide.src}\0${slide.dataBase64 ?? ""}` : null;
-  const imageSource = slide ? getImagePreviewDisplaySource(slide) : "";
+  // 紧凑指纹而非整串 src/dataBase64：内联图的 payload 是 MB 级巨串，进 deps
+  // 会让缩放/拖拽的每帧重渲染都重新物化+全量比较一次（内存churn 主因）。
+  const activeSlideKey = slide ? getImagePreviewSlideKey(slide) : null;
+  const imageSource = useMemo(() => (slide ? getImagePreviewDisplaySource(slide) : ""), [slide]);
   const hasInlineImageData = Boolean(slide?.dataBase64?.trim() || imageSource.startsWith("data:"));
 
   const resolveCachedImageData = useCallback((candidate: ImagePreviewSlide) => {
@@ -901,7 +904,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 style={{ transform: `rotate(${viewerState.rotation}deg)` }}
               >
                 <img
-                  key={`${slide.src}:${slide.dataBase64?.length ?? 0}`}
+                  key={activeSlideKey ?? undefined}
                   className="h-full w-full select-none object-contain"
                   src={imageSource}
                   alt={slide.alt ?? getImagePreviewDisplayName(slide)}
