@@ -130,3 +130,10 @@ Web 宿主（`GatewayAppView`）：新增 gateway RPC `clarify_prompt_turn`，
 - GUI 宿主包装器：mock `streamAssistantMessage`，断言参数映射（当前模型、sessionId 前缀、context 构造）。
 - Web RPC：对齐 `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs` 现有模式加 envelope 用例。
 - 测试落 `crates/agent-gui/test/`（`.mjs`，现有惯例），不新建测试框架。
+
+## 实施偏差记录（计划 1 落地后）
+
+- 无模型配置：按钮隐藏而非禁用（原表：禁用+title 提示）。GUI 零模型用户本就无法澄清，影响低；Web 接线（计划 2）时统一决定。
+- 面板打开期间发送：实现为 handleComposerSend 内守卫（Enter/点击静默无操作），发送按钮保持视觉启用。后续可改为视觉禁用。
+- clarifyRunner 未传 sessionId（与 conversationTitleJob 同惯例）；provider 代理若按 session 隔离需补 `clarify-` 前缀。
+- 计划 2（Web）应逐字复用 clarifyProtocol 标记协议；Web 宿主只需实现 RunClarifyTurn。

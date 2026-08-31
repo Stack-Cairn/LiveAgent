@@ -197,6 +197,18 @@ const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
 const unavailableClarifyTurn: RunClarifyTurn = () =>
   Promise.reject(new Error("runClarifyTurn is not provided"));
 
+/** 可澄清文本 = 草稿中存在非空白纯文本段。提及/附件 token 与大段粘贴不算：
+ * 澄清的输入是用户写的提示词文本，只有 chip/附件时按钮应禁用而非点击空转。
+ * 只在事件处理器里调用（读 DOM），渲染路径零调用。 */
+function draftHasClarifiableText(composer: MentionComposerHandle | null): boolean {
+  return (
+    composer
+      ?.getDraft()
+      .segments.some((segment) => segment.type === "text" && segment.text.trim().length > 0) ??
+    false
+  );
+}
+
 /** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
 export type ContextUsageTokensSource = {
   subscribe: (listener: () => void) => () => void;
@@ -393,6 +405,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
+  // 可澄清文本存在性：与 composerIsEmpty 分开跟踪——空态只看编辑器整体
+  // （chip 文本也算非空），而澄清需要纯文本段。仅在事件里读草稿：
+  // 编辑器 input（用户敲键/插删 chip）、空态翻转（程序化改稿兜底）与
+  // 澄清按钮点击三处更新，渲染路径不读 DOM。
+  const [composerHasClarifiableText, setComposerHasClarifiableText] = useState(false);
+  const handleComposerEmptyChange = useCallback(
+    (isEmpty: boolean) => {
+      setComposerIsEmpty(isEmpty);
+      setComposerHasClarifiableText(isEmpty ? false : draftHasClarifiableText(composerRef.current));
+    },
+    [composerRef],
+  );
+  const handleComposerInput = useCallback(() => {
+    setComposerHasClarifiableText(draftHasClarifiableText(composerRef.current));
+  }, [composerRef]);
   const stt = useComposerStt({
     composerRef,
     provider: sttProvider,
@@ -550,7 +577,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     { onFinal: applyClarifyFinal },
   );
   const clarifyEnabled = Boolean(runClarifyTurn) && hasModels;
-  const clarifyButtonDisabled = !clarifyEnabled || composerIsEmpty;
+  const clarifyButtonDisabled = !clarifyEnabled || composerIsEmpty || !composerHasClarifiableText;
   const handleClarifyToggle = useCallback(() => {
     if (!clarifyEnabled) return;
     if (clarifyOpen) {
@@ -560,7 +587,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     }
     const composer = composerRef.current;
     const draftText = composer?.getDraft().textWithoutLargePastes.trim() || "";
-    if (!draftText) return;
+    if (!draftText) {
+      // 谓词失准的兜底（程序化改稿不发 input 事件）：点击时才发现无可澄清
+      // 文本就把按钮翻成禁用并露出禁用 title，不静默吞掉这次点击。
+      setComposerHasClarifiableText(false);
+      return;
+    }
     setClarifyOpen(true);
     clarifySession.start(draftText);
   }, [clarifyEnabled, clarifyOpen, composerRef, clarifySession.start, clarifySession.close]);
@@ -1072,11 +1104,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               isComposerExpanded && "min-h-0",
             )}
             onFocusCapture={onPrepareChatRuntime}
+            onInput={handleComposerInput}
           >
             <MentionComposer
               ref={composerRef}
               onSend={handleComposerSend}
-              onEmptyChange={setComposerIsEmpty}
+              onEmptyChange={handleComposerEmptyChange}
               onBusyChange={onComposerBusyChange}
               onPasteFiles={onPasteFiles}
               loadHistoryPrompts={loadHistoryPrompts}

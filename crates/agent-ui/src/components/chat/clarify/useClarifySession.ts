@@ -1,5 +1,5 @@
 // crates/agent-ui/src/components/chat/clarify/useClarifySession.ts
-import { useCallback, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import {
   buildClarifyMessages,
   buildForceFinalInstruction,
@@ -242,6 +242,14 @@ export function useClarifySession(
   const forceFinal = useCallback(() => void core.forceFinal(), [core]);
   const retry = useCallback(() => void core.retry(), [core]);
   const close = useCallback(() => core.close(), [core]);
+
+  // 卸载即丢弃：宿主（ChatComposerBar）已在 close()/切会话路径显式关会话，
+  // 这里兜底纯卸载路径（视图切换等组件直接消失）——core.close() 里的
+  // AbortController 贯穿到在途请求（设计文档「错误处理」）。依赖数组留空：
+  // coreRef 是稳定的 ref，cleanup 只在卸载时执行一次。
+  useEffect(() => {
+    return () => coreRef.current?.close();
+  }, []);
 
   return { state, start, submitAnswer, forceFinal, retry, close };
 }

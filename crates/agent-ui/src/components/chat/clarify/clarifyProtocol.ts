@@ -24,7 +24,8 @@ export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
 
 /**
  * 流式显示用：剥掉开头已到/未到的标记前缀。流首 token 往往劈在标记中间，
- * 前 20 个字符在凑齐标记（或确认不是标记）之前一律隐藏。
+ * CLARIFY_QUESTION_MARKER.length 以内的前缀在凑齐标记（或确认不是标记）
+ * 之前一律隐藏。
  */
 export function stripLeadingMarker(partial: string): string {
   const value = partial ?? "";
@@ -34,8 +35,8 @@ export function stripLeadingMarker(partial: string): string {
   if (value.startsWith(CLARIFY_QUESTION_MARKER)) {
     return value.slice(CLARIFY_QUESTION_MARKER.length).replace(/^\s+/, "");
   }
-  // 尚未排除标记可能性：标记最长 16 字符，前缀不足 16 字符且每个字符都
-  // 与某一标记前缀一致时先隐藏，避免标记碎片闪现在气泡里。
+  // 尚未排除标记可能性：标记最长 CLARIFY_QUESTION_MARKER.length（18）字符，
+  // 前缀不足该长度且每个字符都与某一标记前缀一致时先隐藏，避免标记碎片闪现在气泡里。
   const prefixWindow = value.slice(0, CLARIFY_QUESTION_MARKER.length);
   const couldBeMarker =
     CLARIFY_QUESTION_MARKER.startsWith(prefixWindow) ||
@@ -59,8 +60,8 @@ export function buildClarifySystemPrompt(context?: ClarifyContext): string {
     "Rules:",
     `- 一次只问一个问题 (ask exactly ONE question per reply). Start every reply with the line "${CLARIFY_QUESTION_MARKER}".`,
     `- Prefer 2-4 concrete options the user can pick from (e.g. "A) ... B) ... C) ..."), or an open question when options would mislead.`,
-    "  You may ask the user to choose \"Other\" and type freely.",
-    "- Focus on: purpose (what outcome they want), constraints (tech/scope/style), and success criteria (what \"done\" looks like).",
+    '  You may ask the user to choose "Other" and type freely.',
+    '- Focus on: purpose (what outcome they want), constraints (tech/scope/style), and success criteria (what "done" looks like).',
     "- Never re-ask what the draft already makes clear. At most 5 questions total.",
     "- When the requirement is clear enough (or you have asked 5 questions), stop asking: start your reply with the line",
     `  "${CLARIFY_FINAL_MARKER}" and write the full optimized prompt. The final prompt must be a single ready-to-send message in the user's language, incorporating every answer given so far. Do not add explanations around it.`,
