@@ -136,19 +136,37 @@ export function getImagePreviewMimeType(slide: ImagePreviewSlide) {
 
 const SLIDE_KEY_SAMPLE_THRESHOLD = 256;
 
+function fnv1aHash(value: string) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function compactSlideKeyPart(value: string) {
   if (value.length <= SLIDE_KEY_SAMPLE_THRESHOLD) return value;
-  return `${value.length}:${value.slice(0, 96)}:${value.slice(-32)}`;
+  // 长度+头尾采样区分不了"同模板只改中间"的 SVG（相同 XML 头/尾、等长正文），
+  // 必须叠加全串哈希才能覆盖正文差异。
+  return `${value.length}:${fnv1aHash(value)}:${value.slice(0, 96)}:${value.slice(-32)}`;
 }
+
+const slideKeyCache = new WeakMap<ImagePreviewSlide, string>();
 
 /**
  * 换灯片检测用的紧凑指纹。src/dataBase64 对内联图是 MB 级巨串，绝不能整串
  * 进 React key 或 effect deps——每次渲染都会重新物化一份并触发全量比较，
  * 缩放/拖拽的每帧重渲染会把分配速率推到每秒数百 MB（SVG 预览内存暴涨主因）。
- * 长度+头尾采样在 O(1) 成本下足以区分换灯片；碰撞的代价只是缩放状态未重置。
+ * 全串哈希只在每个 slide 对象上算一次（WeakMap 缓存，依赖上游 sources/slides
+ * 的 useMemo 身份稳定链），后续每帧渲染都是缓存命中，摊还后仍是 O(1)。
  */
 export function getImagePreviewSlideKey(slide: ImagePreviewSlide) {
-  return `${compactSlideKeyPart(slide.src)}\0${compactSlideKeyPart(slide.dataBase64 ?? "")}`;
+  const cached = slideKeyCache.get(slide);
+  if (cached !== undefined) return cached;
+  const key = `${compactSlideKeyPart(slide.src)}\0${compactSlideKeyPart(slide.dataBase64 ?? "")}`;
+  slideKeyCache.set(slide, key);
+  return key;
 }
 
 export function getImagePreviewDisplaySource(slide: ImagePreviewSlide) {

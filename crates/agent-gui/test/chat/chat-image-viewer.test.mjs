@@ -359,6 +359,24 @@ test("slide keys stay compact for megabyte inline payloads and never embed the f
     viewer.getImagePreviewSlideKey({ src: bigSrc, dataBase64: otherPayload }),
     key,
   );
+
+  // 模板化 SVG 形态：相同头（XML 声明/样式）、相同尾（</svg>）、等长，
+  // 只有中间的文本/颜色/坐标不同——头尾采样对此确定性碰撞，全串哈希必须区分。
+  const svgHead = `<svg xmlns="http://www.w3.org/2000/svg"><style>.t{fill:#000}</style>`;
+  const svgTail = `</svg>`;
+  const templatedSvg = (fill) =>
+    `${svgHead}<rect fill="#${fill}" width="100" height="100"/>${"A".repeat(4096)}${svgTail}`;
+  const redSvg = templatedSvg("ff0000");
+  const greenSvg = templatedSvg("00ff00");
+  assert.equal(redSvg.length, greenSvg.length);
+  assert.notEqual(
+    viewer.getImagePreviewSlideKey({ src: redSvg, dataBase64: "" }),
+    viewer.getImagePreviewSlideKey({ src: greenSvg, dataBase64: "" }),
+  );
+
+  // 同一 slide 对象重复取 key 必须缓存命中（引用相等），撑住每帧渲染。
+  assert.equal(viewer.getImagePreviewSlideKey(slide), viewer.getImagePreviewSlideKey(slide));
+
   // 短串走原文，行为与旧 key 等价。
   assert.equal(
     viewer.getImagePreviewSlideKey({ src: "data:image/png;base64,AQ==", dataBase64: "AQ==" }),
