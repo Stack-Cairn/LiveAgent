@@ -85,6 +85,18 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::ChatQueue(request)) => {
                 self.handle_chat_queue_request(request_id, request).await
             }
+            Some(proto::gateway_envelope::Payload::ClarifyTurn(request)) => {
+                // handle_clarify_turn blocks on a 120s oneshot for slow
+                // completions; spawn it so it never stalls the single-threaded
+                // gateway dispatcher loop.
+                let this = Arc::clone(self);
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = this.handle_clarify_turn(request_id, request).await {
+                        eprintln!("handle clarify turn failed: {error}");
+                    }
+                });
+                Ok(())
+            }
             Some(proto::gateway_envelope::Payload::ChatIngressAck(ack)) => {
                 self.handle_chat_ingress_ack(request_id, ack).await
             }

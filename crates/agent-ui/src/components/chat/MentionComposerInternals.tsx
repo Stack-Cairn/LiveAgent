@@ -7,6 +7,7 @@ import {
 import { getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { SKILL_ICON_SVG_MARKUP } from "@liveagent/ui/components/IconSet";
 import { getAppMentionIconDataUrl } from "@liveagent/ui/lib/chat/appMentionIcons";
+import { appMentionRecencyKey } from "@liveagent/ui/lib/chat/appMentionRecency";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
@@ -766,6 +767,48 @@ export function appMentionFromElement(el: HTMLElement): MentionComposerAppMentio
     bundleId: el.getAttribute(APP_MENTION_BUNDLE_ID_ATTR)?.trim() || undefined,
     path: el.getAttribute(APP_MENTION_PATH_ATTR)?.trim() ?? "",
   });
+}
+
+export function collectAppMentionKeys(root: HTMLElement | null) {
+  if (!root) return [];
+  return [...root.querySelectorAll<HTMLElement>(`[${APP_MENTION_NAME_ATTR}]`)]
+    .map(appMentionFromElement)
+    .filter((app): app is MentionComposerAppMention => app !== null)
+    .map(appMentionRecencyKey)
+    .filter(Boolean);
+}
+
+export function sanitizeAppMentionSegments(
+  root: HTMLElement,
+  segments: MentionComposerDraftSegment[],
+  options: { includeExistingChips?: boolean } = {},
+): MentionComposerDraftSegment[] {
+  const selectedKeys = new Set<string>();
+  if (options.includeExistingChips !== false) {
+    for (const key of collectAppMentionKeys(root)) selectedKeys.add(key);
+  }
+  return segments.filter((segment) => {
+    if (segment.type !== "appMention") return true;
+    const key = appMentionRecencyKey(segment.app);
+    if (!key || selectedKeys.has(key)) return false;
+    selectedKeys.add(key);
+    return true;
+  });
+}
+
+/** Native paste can bypass the segment pipeline. Retain only the first chip
+ * for each stable app identity there as well. */
+export function enforceUniqueAppMentionsInEditor(root: HTMLElement) {
+  const selectedKeys = new Set<string>();
+  for (const chip of [...root.querySelectorAll<HTMLElement>(`[${APP_MENTION_NAME_ATTR}]`)]) {
+    const app = appMentionFromElement(chip);
+    const key = app ? appMentionRecencyKey(app) : "";
+    if (!key || selectedKeys.has(key)) {
+      chip.remove();
+      continue;
+    }
+    selectedKeys.add(key);
+  }
 }
 
 export function clipboardRecord(value: unknown): Record<string, unknown> | null {

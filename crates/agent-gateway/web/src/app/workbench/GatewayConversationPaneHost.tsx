@@ -9,6 +9,10 @@ import {
   ChangedFilesActionsProvider,
 } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
+import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -57,6 +61,7 @@ import {
 } from "react";
 import type { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
 import { trimLeadingHeadlessEntries } from "@/lib/chat/historyWindow";
 import type { TranscriptStoreRegistry } from "@/lib/chat/stream/useConversationChat";
 import { submitToolApprovalDecision } from "@/lib/chat/toolApprovalBridge";
@@ -480,6 +485,29 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [selectedProvider?.type, selection?.model],
   );
 
+  // 提示词澄清执行器（桌面端背景 Pane 口径）：模型覆盖/回退/错误拍平在
+  // executeClarifyPromptTurn（两宿主共用），fallback 按本 Pane 会话解析。
+  // runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换身份不打断会话。
+  const runClarifyTurn = useCallback<RunClarifyTurn>(
+    (messages) =>
+      executeClarifyPromptTurn(
+        context.api,
+        context.settings,
+        {
+          provider: selectedProvider,
+          model: selection?.model,
+          runtimeControls: paneRuntimeControls,
+        },
+        messages,
+      ),
+    [context, selection, selectedProvider, paneRuntimeControls],
+  );
+  // 与桌面端口径一致：会话无 workdir 时不传空串，避免系统提示词带噪音。
+  const clarifyContext = useMemo<ClarifyContext | undefined>(
+    () => (workdir ? { workdir } : undefined),
+    [workdir],
+  );
+
   const isRunning = transcript.activeRun !== null || context.isConversationBusy(conversationId);
   const isRunningRef = useRef(isRunning);
   isRunningRef.current = isRunning;
@@ -850,6 +878,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           )}
           <ChatComposerBar
             surface="web"
+            runClarifyTurn={
+              context.settings.customSettings.promptClarifyEnabled ? runClarifyTurn : undefined
+            }
+            clarifyContext={clarifyContext}
             conversationId={conversationId}
             hidden={trajectoryActive}
             composerRef={composerRef}

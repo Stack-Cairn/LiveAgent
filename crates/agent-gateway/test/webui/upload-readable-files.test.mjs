@@ -64,6 +64,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
             {
               relativePath: "uploads/a.txt",
               absolutePath: " /workspace/uploads/a.txt ",
+              dedupeKey: " content:a.txt:abc123 ",
               fileName: "a.txt",
               kind: "text",
               sizeBytes: 12,
@@ -134,6 +135,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/a.txt",
         absolutePath: "/workspace/uploads/a.txt",
+        dedupeKey: "content:a.txt:abc123",
         fileName: "a.txt",
         kind: "text",
         sizeBytes: 12,
@@ -141,6 +143,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/report.docx",
         absolutePath: undefined,
+        dedupeKey: undefined,
         fileName: "report.docx",
         kind: "word",
         sizeBytes: 34,
@@ -148,6 +151,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/screenshot.webp",
         absolutePath: undefined,
+        dedupeKey: undefined,
         fileName: "screenshot.webp",
         kind: "image",
         sizeBytes: 45,
@@ -155,6 +159,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/report.pdf",
         absolutePath: undefined,
+        dedupeKey: undefined,
         fileName: "report.pdf",
         kind: "pdf",
         sizeBytes: 67,
@@ -162,6 +167,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/workbook.xlsx",
         absolutePath: undefined,
+        dedupeKey: undefined,
         fileName: "workbook.xlsx",
         kind: "spreadsheet",
         sizeBytes: 56,
@@ -169,6 +175,7 @@ test("importReadableFiles posts multipart form and normalizes response files", a
       {
         relativePath: "uploads/assets.zip",
         absolutePath: undefined,
+        dedupeKey: undefined,
         fileName: "assets.zip",
         kind: "archive",
         sizeBytes: 78,

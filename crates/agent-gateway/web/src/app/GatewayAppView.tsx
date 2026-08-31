@@ -3,6 +3,10 @@ import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
+import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
@@ -12,6 +16,7 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceCloneTaskOverlay } from "@liveagent/ui/components/chat/WorkspaceCloneTaskOverlay";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
+import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
@@ -21,6 +26,7 @@ import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfa
 import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
 import {
   type CheckpointRewindClient,
@@ -34,7 +40,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
-import { hitTestWorkbenchDrop } from "@liveagent/ui/lib/workbench/index";
+import { findPaneIdBySurfaceKey, hitTestWorkbenchDrop } from "@liveagent/ui/lib/workbench/index";
 import type { PaneRecord } from "@liveagent/ui/lib/workbench/types";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
@@ -56,10 +62,13 @@ import {
 } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
 import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
+  getRightDockFileTreeState,
   updateExecutionModeFromChatSelection,
+  updateRightDockFileTreeState,
   updateSystem,
   updateWorkspaceResourceSettings,
   workspaceProjectPathKey,
@@ -94,6 +103,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   useWindowFileDropGuard();
   const {
     activeFloorKey,
+    activeSelectedModel,
     activeView,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
@@ -125,6 +135,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     confirmDialog,
     contextUsageTokensSource,
     conversationOpenState,
+    currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
     dismissNotify,
@@ -453,6 +464,33 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     [addNotify, settings.locale],
   );
+  // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本
+  // 补全；模型覆盖/回退/错误拍平在 executeClarifyPromptTurn（两宿主共用）。
+  const runClarifyTurn = useCallback<RunClarifyTurn>(
+    (messages) =>
+      executeClarifyPromptTurn(
+        api,
+        settings,
+        {
+          provider: currentChatProvider,
+          model: activeSelectedModel?.model,
+          runtimeControls: chatRuntimeControlsForCurrentProvider,
+        },
+        messages,
+      ),
+    [
+      settings,
+      activeSelectedModel,
+      currentChatProvider,
+      chatRuntimeControlsForCurrentProvider,
+      api,
+    ],
+  );
+
+  const clarifyContext = useMemo<ClarifyContext | undefined>(
+    () => (displayedConversationWorkdir ? { workdir: displayedConversationWorkdir } : undefined),
+    [displayedConversationWorkdir],
+  );
 
   // --- Session Workbench（多看板分屏）----------------------------------------
   // Pane 标题/无障碍标签取自侧栏权威索引；标题变化需要触发重渲染，所以走
@@ -464,6 +502,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       switch (surface.kind) {
         case "conversation":
           return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
+        case "fileTree":
+          return translate("projectTools.fileTreeTitle", settings.locale);
         case "localTerminal":
           return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
         case "sshTerminal":
@@ -472,7 +512,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           return surface.originalKind;
       }
     },
-    [sidebarConversationsById],
+    [settings.locale, sidebarConversationsById],
   );
 
   const workbenchHasMultiplePanes =
@@ -897,6 +937,54 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               />
             );
           }
+          if (surface.kind === "fileTree") {
+            const project = workspaceProjects.find(
+              (entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey,
+            );
+            if (!project) {
+              return (
+                <UnsupportedPaneSurface paneId={pane.paneId} originalKind="fileTree:missing" />
+              );
+            }
+            return (
+              <FileTreePaneSurface
+                active
+                projectPathKey={surface.project.projectPathKey}
+                cwd={project.path}
+                state={getRightDockFileTreeState(
+                  settings.customSettings,
+                  surface.project.projectPathKey,
+                )}
+                workspaceProject={project}
+                workspaceProjectRootClient={workspaceProjectRootClient}
+                workspaceRootRevision={workspaceRootRevision}
+                workspaceActivityClient={workspaceActivityClient}
+                onStateChange={(patch) =>
+                  setSettings((current) =>
+                    updateRightDockFileTreeState(current, surface.project.projectPathKey, patch),
+                  )
+                }
+                onInsertFileMention={
+                  surface.project.projectPathKey === terminalProjectPathKey
+                    ? handleRightDockInsertFileMention
+                    : undefined
+                }
+                onOpenFile={(path, imagePaths) => {
+                  const request = {
+                    projectPathKey: surface.project.projectPathKey,
+                    workdir: project.path,
+                    path,
+                    imagePaths,
+                  };
+                  if (isWorkspacePreviewPath(path)) {
+                    openWorkspaceFilePreview(request);
+                  } else {
+                    openWorkspaceEditorFile(request);
+                  }
+                }}
+              />
+            );
+          }
           if (surface.kind === "unsupported") {
             return (
               <UnsupportedPaneSurface paneId={pane.paneId} originalKind={surface.originalKind} />
@@ -1003,11 +1091,15 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchController.dragState ? (
       <div
+        ref={workbenchController.dragGhostRef}
         data-workbench-drag-ghost=""
         className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
-          left: workbenchController.dragState.pointer.x + 14,
-          top: workbenchController.dragState.pointer.y + 10,
+          left: 0,
+          top: 0,
+          transform:
+            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+          willChange: "transform",
         }}
       >
         {workbenchController.dragState.payload.title ||
@@ -1387,6 +1479,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           ) : null}
                           <ChatComposerBar
                             surface="web"
+                            runClarifyTurn={
+                              settings.customSettings.promptClarifyEnabled
+                                ? runClarifyTurn
+                                : undefined
+                            }
+                            clarifyContext={clarifyContext}
                             conversationId={displayedConversationId}
                             // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
                             hidden={renderedConversationView === "trajectory"}
@@ -1677,6 +1775,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               sessions={terminalSessions}
               sessionsLoaded={terminalSessionsLoaded}
               leasedSessionIds={workbenchLeasedDockSessionIds}
+              fileTreeLeased={Boolean(
+                findPaneIdBySurfaceKey(
+                  workbenchController.workbench.layout,
+                  `fileTree:${terminalProjectPathKey}`,
+                ),
+              )}
               width={settings.customSettings.rightDock.width}
               theme={effectiveTheme}
               disabledMessage={projectToolsDisabledMessage}
@@ -1712,6 +1816,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               }
               onOpenTerminalInWorkbench={
                 sessionWorkbench.enabled ? workbenchController.handleOpenTerminalInSplit : undefined
+              }
+              onFileTreeTabDragStart={
+                sessionWorkbench.enabled
+                  ? workbenchController.handleFileTreeTabDragIntent
+                  : undefined
+              }
+              onOpenFileTreeInWorkbench={
+                sessionWorkbench.enabled ? workbenchController.handleOpenFileTreeInSplit : undefined
               }
               onOpenNewTerminalInWorkbench={
                 sessionWorkbench.enabled

@@ -79,6 +79,8 @@ import type {
   McpSettings,
   McpTransport,
   MemorySettings,
+  ModelInputModalitiesOverride,
+  ModelInputModality,
   ModelLimitsSource,
   ProjectPromptStrategy,
   PromptCacheHintMode,
@@ -118,6 +120,7 @@ import {
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
+  MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
@@ -863,6 +866,7 @@ export function normalizeProviderModelConfig(
 
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
+  const inputModalities = normalizeInputModalities(obj.inputModalities);
   return {
     id,
     ...(ownedBy ? { ownedBy } : {}),
@@ -870,7 +874,30 @@ export function normalizeProviderModelConfig(
     maxOutputToken: limits.maxOutputToken,
     limitsSource,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
+    // 用户手动的输入模态覆盖（如给未识别的多模态模型强制开启图片输入）；
+    // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
+    // 重排顺序），合法覆盖永不被自动删除。
+    ...(inputModalities ? { inputModalities } : {}),
   };
+}
+
+/**
+ * 输入模态覆盖的运行时归一化（设置加载与 modelFactory 共用的唯一校验）：
+ * - 非数组、空数组、全部非法 -> undefined（等价于“无覆盖，用内置推断”）；
+ * - 混合非法项采用“过滤合法项”的容错策略；
+ * - 本应用的聊天协议始终发送文本，因此含 "image" 缺 "text" 时自动补齐；
+ * - 输出固定为 ["text","image"] 规范顺序，避免同义配置产生持久化差异。
+ */
+export function normalizeInputModalities(input: unknown): ModelInputModalitiesOverride | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const valid = new Set<string>(
+    input.filter(
+      (item): item is ModelInputModality =>
+        typeof item === "string" && (MODEL_INPUT_MODALITIES as readonly string[]).includes(item),
+    ),
+  );
+  if (valid.size === 0) return undefined;
+  return valid.has("image") ? ["text", "image"] : ["text"];
 }
 export function normalizeProviderModelConfigs(
   input: unknown,
@@ -1583,6 +1610,12 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.commitMessageModel),
       customProviders,
     ),
+    // 缺省开启：老配置无此字段时保持澄清按钮可见（与上线前行为一致）。
+    promptClarifyEnabled: obj.promptClarifyEnabled !== false,
+    promptClarifyModel: normalizeSelectedModelForProviders(
+      normalizeSelectedModel(obj.promptClarifyModel),
+      customProviders,
+    ),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
@@ -2029,6 +2062,25 @@ export function updateCustomSettings(
       ...patch,
     },
   });
+}
+
+/**
+ * 澄清提示词的模型覆盖解析（两端共用）。返回 null 表示「跟随当前对话模型」：
+ * 未选择、供应商已删或模型已停用（与 commitMessageModel 同一回退契约——
+ * normalize 已在落库时清掉失效选择，这里再挡一次会话内的时序空窗）。
+ */
+export function resolvePromptClarifyModel(
+  settings: AppSettings,
+): { provider: CustomProvider; model: string } | null {
+  const selected = settings.customSettings.promptClarifyModel;
+  if (!selected) {
+    return null;
+  }
+  const provider = settings.customProviders.find((item) => item.id === selected.customProviderId);
+  if (!provider?.activeModels.includes(selected.model)) {
+    return null;
+  }
+  return { provider, model: selected.model };
 }
 
 export function updateModelFailover(

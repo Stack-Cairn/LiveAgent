@@ -609,6 +609,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "估计值",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelInputModalities": "输入能力",
+  "settings.modelInputModalitiesAuto": "自动推断（推荐）",
+  "settings.modelInputModalitiesText": "仅文本",
+  "settings.modelInputModalitiesTextImage": "文本与图片",
+  "settings.modelInputModalitiesHint":
+    "默认按模型名称和内置目录推断；仅在供应商能力与推断不一致时手动覆盖。",
   "settings.positiveIntegerRequired": "请输入大于 0 的整数",
   "settings.add": "添加",
   "settings.cancel": "取消",
@@ -640,12 +646,21 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Git 审查中生成提交说明使用的模型，未选择或失效时跟随当前对话模型。",
   "settings.customSettingsModelEmpty": "当前 Provider 未配置模型。",
+  "settings.promptClarifyTitle": "澄清提示词",
+  "settings.promptClarifyToggleHint":
+    "输入框旁的「澄清提示词」按钮通过多轮追问完善提示词草稿。关闭后桌面端与 Web 端输入框都不再显示该按钮。",
+  "settings.promptClarifyModel": "澄清对话模型",
+  "settings.promptClarifyModelHint":
+    "澄清追问与生成终稿使用的模型，未选择或失效时跟随当前对话模型。",
   "settings.composerContextDisplay": "上下文占用展示",
-  "settings.composerContextDisplayDesc":
-    "「状态栏」只显示卡片下方的会话统计状态栏（上下文占用读数含在其中）；「都显示」同时显示状态栏与输入框右下角的常显用量环；「用量环」只显示用量环。三档都保留占用 ≥50% 时的手动压缩入口。",
+  "settings.composerContextDisplayHint":
+    "选择输入区展示上下文占用的方式。无论哪一档，占用 ≥50% 时都保留手动压缩入口。",
   "settings.composerContextDisplayStatsBar": "状态栏",
   "settings.composerContextDisplayBoth": "都显示",
   "settings.composerContextDisplayRing": "用量环",
+  "settings.composerContextDisplayStatsBarDesc": "仅显示卡片下方的会话统计状态栏。",
+  "settings.composerContextDisplayBothDesc": "状态栏与输入框右下角的用量环同时显示。",
+  "settings.composerContextDisplayRingDesc": "仅显示输入框右下角的常显用量环。",
   "settings.failoverTitle": "自动故障转移",
   "settings.failoverToggleHint":
     "{vendor} 请求失败时按队列顺序切换到下一个 {vendor} 供应商重试（模型不变），成功后停留在该供应商。不会跨厂商转移。",

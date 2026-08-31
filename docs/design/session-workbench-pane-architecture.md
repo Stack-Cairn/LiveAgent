@@ -506,9 +506,21 @@ canvas-edge > divider > pane-edge > pane-center
 - xterm Fit 可按帧计算，Runtime Resize 约 80～100ms 去重节流，Pointer Up 最终 Flush。
 - Conversation Transcript 只响应宽度，不在每帧重建虚拟列表。
 
-### 13.3 应用内 Drag 与 Native Drop 分离
+### 13.3 布局 Drag、路径引用 Drag 与 Native Drop 分离
 
-Pane/侧栏用 Pointer Event；Finder/Explorer/File Manager 文件用 Tauri Native Drop：
+Pane/侧栏使用 Workbench Pointer Drag；File Tree 节点使用独立的
+`workspacePath` 内容拖拽；Finder/Explorer/File Manager 文件使用 Tauri
+Native Drop。三者不能共享 payload 或提交路径：
+
+```ts
+type WorkspacePathDragPayload = {
+  kind: "workspacePath";
+  projectPathKey: string;
+  cwd: string;
+  relativePath: string;
+  entryKind: "file" | "dir";
+};
+```
 
 ```ts
 type NativeDropTarget =
@@ -519,6 +531,11 @@ type NativeDropTarget =
 ```
 
 当前工作树已把上传区收窄到 Composer，必须保留。文件只准备附件、不自动发送；路径只转义插入 Terminal、不自动回车。
+
+File Tree 内部节点拖到 Composer 时插入现有文件/目录 Mention，不上传或复制文件；
+拖到同项目 Local/Gateway Terminal 时由 xterm paste 管线插入绝对路径，并按
+POSIX、PowerShell 或 cmd 规则转义。跨项目目标与没有显式本地/远端根映射的
+SSH Terminal 一律 blocked。
 
 ## 14. Focus、快捷键与 Right Dock 上下文
 
@@ -579,16 +596,21 @@ TerminalPaneSurface
 9. Pane 内不叠加文字终止控件；终止进程/断开连接统一在 Right Dock 的会话管理入口完成。
 10. 裁决理由：关闭视图远比终止进程高频，默认确认会训练用户盲点头并误杀长任务；终端进程的生命周期与视图解耦后，Detach 可随时从 dock 找回或重新拖入，破坏性动作集中在会话管理入口。
 
-## 16. Right Dock 与文件树边界
+## 16. File Tree Surface 与 Right Dock 边界
 
-首期文件树明确不进入 PaneTree：
+File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 PaneTree：
 
 - Right Dock 保留 File、Git、SSH/Connection、Tunnel、Background Tasks。
-- 文件按钮默认打开 File Tab，并可折叠 Dock。
+- File Tab 支持拖出或通过菜单在分屏中打开，使用 `fileTree:${projectPathKey}`
+  作为稳定身份。
 - File Tree 展开、选择、滚动状态按 `projectPathKey` 分桶。
 - Right Dock 可调宽；Canvas 狭窄时 Overlay 打开，不永久压缩全部 Pane。
-- 中央 Pane 不复用 Right Dock 单一 File Tree UI State。
-- 后续 Folder Pane 需重新评审数据层、权限和多实例状态，不能直接搬 DOM。
+- 同一项目只挂一个交互式 File Tree 视图；Surface 在 Workbench 时，Right Dock
+  隐藏对应标签、内容和新建入口，避免重复数据请求、workspace activity 订阅和
+  状态竞争；关闭 Pane 释放租约后，Dock 直接复用项目级状态恢复树。
+- `FileTreeSurface` 通过显式 project/state/client/action props 挂载，不依赖
+  `RightDockContext`；Right Dock 与 Pane Host 只是不同适配层。
+- 文件树 Surface 关闭只关闭视图，不修改项目、会话或文件。
 
 运行终端列表是 Detach 后的找回入口，必须保留；持有 Workbench Lease 的 Session 从 dock 的终端 tab 中整体隐藏（终端在任一时刻只出现在一个宿主里），Pane Detach 释放租约后自动回归 dock。SSH overlay 的 shell tab 保持「占位 + 聚焦 Pane」互斥（overlay 是 SSH 连接管理入口，tab 需持续可见）。
 
@@ -597,6 +619,7 @@ TerminalPaneSurface
 | Surface | 主关闭动作 | 运行对象结果 |
 |---|---|---|
 | Conversation | 关闭视图 | 不删除历史；运行/队列按后台策略继续 |
+| File Tree | 关闭视图并回到 Right Dock 入口 | 不修改项目或文件；项目级 UI 状态保留 |
 | 运行 Local Terminal | Detach 视图并回 Right Dock | 进程树继续运行，Session 保留，可再次拖入 |
 | 已退出 Local Terminal | 关闭视图 | 保留历史按现有策略清理 |
 | 已连接 SSH Terminal | Detach 视图并回 Right Dock | 连接保持，Session 保留，可再次拖入 |

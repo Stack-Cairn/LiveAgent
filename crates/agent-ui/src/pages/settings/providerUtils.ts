@@ -1,5 +1,6 @@
 import {
   createProviderModelConfig,
+  normalizeInputModalities,
   normalizeProviderModelConfigs,
   type ProviderId,
   type ProviderModelConfig,
@@ -24,6 +25,30 @@ const ANTHROPIC_API_VERSION = "2023-06-01";
 export { isGatewayWebuiRuntime };
 
 const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
+
+export type ModelInputModalitiesMode = "auto" | "text" | "text-image";
+
+export function providerSupportsModelInputModalitiesOverride(providerId: ProviderId): boolean {
+  return providerId === "codex" || providerId === "xai" || providerId === "gemini";
+}
+
+export function getModelInputModalitiesMode(model: ProviderModelConfig): ModelInputModalitiesMode {
+  if (!model.inputModalities) return "auto";
+  return model.inputModalities.length === 2 ? "text-image" : "text";
+}
+
+export function applyModelInputModalitiesMode(
+  model: ProviderModelConfig,
+  mode: ModelInputModalitiesMode,
+): ProviderModelConfig {
+  const modelWithoutOverride = { ...model };
+  delete modelWithoutOverride.inputModalities;
+  if (mode === "auto") return modelWithoutOverride;
+  return {
+    ...modelWithoutOverride,
+    inputModalities: mode === "text-image" ? ["text", "image"] : ["text"],
+  };
+}
 
 // KEEP IN SYNC:general/newapi 预设与桌面端 Rust services/provider_usage.rs 的
 // GENERAL_SCRIPT / NEWAPI_SCRIPT 逐字符一致(脚本为空的存量配置由 Rust 兜底执行);
@@ -557,12 +582,16 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
     const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
     const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
+    // 已有存档里的用户自定义字段（如 inputModalities 输入模态覆盖）必须透传；
+    // API 响应不会携带这些字段，透传对刷新场景是无害的。
+    const inputModalities = normalizeInputModalities(obj.inputModalities);
     out.push({
       id,
       ...(ownedBy ? { ownedBy } : {}),
       contextWindow: contextWindow ?? draft.contextWindow,
       maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
       limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
+      ...(inputModalities ? { inputModalities } : {}),
     });
   }
 

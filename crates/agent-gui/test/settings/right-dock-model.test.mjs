@@ -302,6 +302,34 @@ test("resolveEffectiveActiveTabId resolves persisted ids against visible tabs", 
   assert.equal(resolve(undefined, [], true), null);
 });
 
+test("a leased file tree leaves the dock without clearing its persisted tool state", () => {
+  const projectState = {
+    activeTabId: RIGHT_DOCK_TAB_IDS.fileTree,
+    tabOrder: [RIGHT_DOCK_TAB_IDS.fileTree, RIGHT_DOCK_TAB_IDS.gitReview],
+    tools: { fileTree: { openedAt: 2 }, gitReview: { openedAt: 1 } },
+  };
+  const options = {
+    backgroundTasksVisible: false,
+    localSessions: [],
+    projectPathKey: "/workspace/app",
+    projectState,
+    tunnelAvailable: true,
+  };
+
+  const leased = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: true });
+  assert.deepEqual(
+    leased.map((tab) => tab.kind),
+    ["gitReview"],
+  );
+  assert.deepEqual(Object.keys(projectState.tools), ["fileTree", "gitReview"]);
+
+  const released = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: false });
+  assert.deepEqual(
+    released.map((tab) => tab.kind),
+    ["fileTree", "gitReview"],
+  );
+});
+
 test("closeRightDockToolTabState removes the tool and reassigns activeTabId only when needed", () => {
   const state = {
     activeTabId: RIGHT_DOCK_TAB_IDS.gitReview,

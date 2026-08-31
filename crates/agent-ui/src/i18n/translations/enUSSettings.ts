@@ -635,6 +635,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "Estimated",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelInputModalities": "Input capabilities",
+  "settings.modelInputModalitiesAuto": "Auto-detect (recommended)",
+  "settings.modelInputModalitiesText": "Text only",
+  "settings.modelInputModalitiesTextImage": "Text and images",
+  "settings.modelInputModalitiesHint":
+    "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
   "settings.positiveIntegerRequired": "Please enter a positive integer",
   "settings.add": "Add",
   "settings.cancel": "Cancel",
@@ -667,12 +673,23 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Model used to generate commit messages in Git review. Follows the current chat model when unselected or unavailable.",
   "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
+  "settings.promptClarifyTitle": "Clarify prompt",
+  "settings.promptClarifyToggleHint":
+    "The composer's Clarify prompt button refines a draft through follow-up questions. Turning this off hides the button on both the desktop and web composers.",
+  "settings.promptClarifyModel": "Clarify model",
+  "settings.promptClarifyModelHint":
+    "Model used for clarify questions and the final prompt. Follows the current chat model when unselected or unavailable.",
   "settings.composerContextDisplay": "Context usage display",
-  "settings.composerContextDisplayDesc":
-    "Stats bar shows only the conversation stats bar below the card (context usage readout included); Both shows the stats bar plus the always-visible usage ring at the composer's lower right; Usage ring shows only the ring. All three keep the manual compaction entry at ≥50% usage.",
+  "settings.composerContextDisplayHint":
+    "Choose how the composer shows context usage. Every mode keeps the manual compaction entry at ≥50% usage.",
   "settings.composerContextDisplayStatsBar": "Stats bar",
   "settings.composerContextDisplayBoth": "Both",
   "settings.composerContextDisplayRing": "Usage ring",
+  "settings.composerContextDisplayStatsBarDesc": "Only the conversation stats bar below the card.",
+  "settings.composerContextDisplayBothDesc":
+    "The stats bar plus the usage ring at the composer's lower right.",
+  "settings.composerContextDisplayRingDesc":
+    "Only the always-visible usage ring at the composer's lower right.",
   "settings.failoverTitle": "Auto Failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, retry it on the next {vendor} provider in the queue with the same model, staying on the provider that succeeds. Never crosses vendors.",

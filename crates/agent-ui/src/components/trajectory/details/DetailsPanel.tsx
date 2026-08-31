@@ -146,9 +146,10 @@ export function DetailsPanel(props: {
   }, [neededSectionIds, props.loadSections, reloadToken]);
 
   if (record === null) {
+    // 窄容器为上下排布：空态占位直接隐藏，把整块高度让给列表。
     return (
       <aside
-        className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground @max-[520px]:p-3"
+        className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden"
         style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
       >
         <DetailsResizeHandle
@@ -182,7 +183,7 @@ export function DetailsPanel(props: {
 
   return (
     <aside
-      className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 flex-col border-l border-border/60 bg-background"
+      className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 flex-col border-l border-border/60 bg-background @max-[640px]:h-[55%] @max-[640px]:w-full @max-[640px]:min-w-0 @max-[640px]:max-w-none @max-[640px]:border-l-0 @max-[640px]:border-t"
       style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
     >
       <DetailsResizeHandle

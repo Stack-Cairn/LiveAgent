@@ -21,6 +21,7 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
+  Activity,
   ChevronDown,
   Pencil,
   Plus,
@@ -33,7 +34,6 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import { SegmentedSlider } from "@liveagent/ui/components/ui/segmented-slider";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
@@ -392,9 +392,15 @@ function CustomSettingsDrawer(
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
+  const contextDisplayModeDesc = {
+    statsBar: t("settings.composerContextDisplayStatsBarDesc"),
+    both: t("settings.composerContextDisplayBothDesc"),
+    ring: t("settings.composerContextDisplayRingDesc"),
+  } as const;
 
   function handleModelSettingChange(
-    key: "conversationTitleModel" | "commitMessageModel",
+    key: "conversationTitleModel" | "commitMessageModel" | "promptClarifyModel",
     value: string,
   ) {
     // "" comes from the picker's follow-current entry and parses to undefined.
@@ -464,15 +470,63 @@ function CustomSettingsDrawer(
                 ) : null}
               </div>
             </section>
-            {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
-                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。 */}
+            {/* 澄清提示词（composer clarify）：总开关直接控制两端输入框魔杖按钮
+                的显隐；展开区选澄清对话用的模型，未选跟随当前对话模型（与
+                commitMessageModel 同一回退契约）。开关-展开模式同 failover。 */}
             <section className="py-5">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-[12.5px] font-medium text-foreground/85">
-                  {t("settings.composerContextDisplay")}
-                </Label>
+              <DrawerSectionHeader
+                icon={<WandSparkles className="h-3.5 w-3.5" />}
+                title={t("settings.promptClarifyTitle")}
+                hint={t("settings.promptClarifyToggleHint")}
+                action={
+                  <Switch
+                    checked={settings.customSettings.promptClarifyEnabled}
+                    onCheckedChange={(checked) =>
+                      setSettings((prev) =>
+                        updateCustomSettings(prev, { promptClarifyEnabled: checked === true }),
+                      )
+                    }
+                    aria-label={t("settings.promptClarifyTitle")}
+                  />
+                }
+              />
+              <div
+                className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+                style={{
+                  gridTemplateRows: settings.customSettings.promptClarifyEnabled ? "1fr" : "0fr",
+                }}
+              >
+                <div
+                  className="min-h-0 overflow-hidden"
+                  inert={!settings.customSettings.promptClarifyEnabled}
+                  aria-hidden={!settings.customSettings.promptClarifyEnabled}
+                >
+                  <div className="space-y-3 pt-3.5">
+                    <CustomSettingsModelField
+                      label={t("settings.promptClarifyModel")}
+                      hint={t("settings.promptClarifyModelHint")}
+                      followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+                      selected={settings.customSettings.promptClarifyModel}
+                      modelOptions={modelOptions}
+                      onChange={(value) => handleModelSettingChange("promptClarifyModel", value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+            {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
+                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。
+                通用说明收进分区头的提示气泡，滑块下方只保留当前档位的一行动态描述。 */}
+            <section className="py-5">
+              <DrawerSectionHeader
+                icon={<Activity className="h-3.5 w-3.5" />}
+                title={t("settings.composerContextDisplay")}
+                hint={t("settings.composerContextDisplayHint")}
+              />
+              <div className="mt-3.5 space-y-2">
                 <SegmentedSlider
                   aria-label={t("settings.composerContextDisplay")}
+                  className="w-full"
                   value={settings.customSettings.composerContextDisplay}
                   options={[
                     { value: "statsBar", label: t("settings.composerContextDisplayStatsBar") },
@@ -485,10 +539,10 @@ function CustomSettingsDrawer(
                     )
                   }
                 />
+                <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                  {contextDisplayModeDesc[settings.customSettings.composerContextDisplay]}
+                </p>
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground/80">
-                {t("settings.composerContextDisplayDesc")}
-              </p>
             </section>
             <FailoverSettingsCard
               settings={settings}

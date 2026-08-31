@@ -35,6 +35,8 @@ function createUserMessageId() {
 export type PendingUploadedFile = {
   relativePath: string;
   absolutePath?: string;
+  /** Stable source/content identity used only to collapse pending duplicates. */
+  dedupeKey?: string;
   fileName: string;
   kind: UploadedReadableFileKind;
   sizeBytes: number;
@@ -68,14 +70,30 @@ export function mergePendingUploadedFiles(
   current: PendingUploadedFile[],
   incoming: PendingUploadedFile[],
 ) {
+  return mergePendingUploadedFilesWithStats(current, incoming).files;
+}
+
+export function pendingUploadedFileDedupeKey(file: PendingUploadedFile) {
+  return file.dedupeKey?.trim() || `relative:${file.relativePath}`;
+}
+
+export function mergePendingUploadedFilesWithStats(
+  current: PendingUploadedFile[],
+  incoming: PendingUploadedFile[],
+) {
   const merged = new Map<string, PendingUploadedFile>();
+  let duplicateCount = 0;
   for (const file of current) {
-    merged.set(file.relativePath, file);
+    const key = pendingUploadedFileDedupeKey(file);
+    if (merged.has(key)) duplicateCount += 1;
+    merged.set(key, file);
   }
   for (const file of incoming) {
-    merged.set(file.relativePath, file);
+    const key = pendingUploadedFileDedupeKey(file);
+    if (merged.has(key)) duplicateCount += 1;
+    merged.set(key, file);
   }
-  return Array.from(merged.values());
+  return { files: Array.from(merged.values()), duplicateCount };
 }
 
 function clonePendingUploadedFiles(files: PendingUploadedFile[]) {

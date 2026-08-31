@@ -2,12 +2,14 @@ import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
+import type { RunClarifyTurn } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
+import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -20,6 +22,7 @@ import {
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
@@ -59,6 +62,7 @@ import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
   commitWorkspaceDropConversation,
   findAdjacentPaneId,
+  findPaneIdBySurfaceKey,
   findParentSplitId,
   hitTestWorkbenchDrop,
   type PendingWorkspaceDropOperation,
@@ -111,10 +115,11 @@ import {
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
-import { toModelValue } from "../lib/providers/llm";
+import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
+  getRightDockFileTreeState,
   isAgentDevMode,
   isAgentExecutionMode,
   isThinkingAlwaysOnForModel,
@@ -125,6 +130,7 @@ import {
   resolveEffectiveTheme,
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
+  updateRightDockFileTreeState,
   updateSystem,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
@@ -192,7 +198,12 @@ import {
   pruneIdleConversationRuntimeCaches,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
-import { resolveActiveModelSelection } from "./chat/runtime/modelSelection";
+import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
+import {
+  resolveActiveModelSelection,
+  resolveEffectiveChatModelSelection,
+} from "./chat/runtime/modelSelection";
+import { resolvePromptClarifyModelSelection } from "./chat/runtime/providerRuntimeConfig";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
@@ -1109,6 +1120,7 @@ export function ChatPage(props: ChatPageProps) {
           deleteConversationLocalCaches(conversationId);
           subagentStoresRef.current.dispose(conversationId);
           cancelConversationTransientInteractions(conversationId);
+          clarifyRunnersRef.current.delete(conversationId);
         },
       });
     },
@@ -1472,6 +1484,24 @@ export function ChatPage(props: ChatPageProps) {
     requestConversationStop,
     requestActiveConversationStop,
     consumeConversationStop,
+    runGatewayClarifyTurn: async (messages, selection, runtimeControls) => {
+      const provider = settings.customProviders.find((p) => p.id === selection.providerId);
+      if (!provider) {
+        throw new Error(`clarify provider not found: ${selection.providerId}`);
+      }
+      // 与本地澄清共用 createGuiClarifyRunner：调用参数（cacheRetention/
+      // nativeWebSearch/context 拼装）单一来源，桥接路径不再手写一份。
+      const guiSelection = {
+        selectedModel: { customProviderId: provider.id, model: selection.model },
+        provider,
+        providerId: provider.type,
+        model: selection.model,
+      };
+      return createGuiClarifyRunner(
+        () => guiSelection,
+        () => createProviderRuntimeConfig(provider, selection.model, runtimeControls),
+      )(messages, new AbortController().signal);
+    },
   });
 
   const { send } = useSendChatTurn({
@@ -2124,6 +2154,40 @@ export function ChatPage(props: ChatPageProps) {
     t,
   });
 
+  // 提示词澄清执行器（按会话缓存）：ChatComposerBar 是 memo 组件，runner 的
+  // identity 必须跨渲染稳定。背景 Pane 的 binding 在普通函数里逐 Pane 构建
+  // （Pane 数量随布局变化），不能在里面 useMemo，故用 ref 缓存 + 惰性 getter：
+  // 每轮澄清调用时才解析当前设置与会话模型，中途切模型下一轮即生效。
+  const clarifySettingsRef = useRef(settings);
+  clarifySettingsRef.current = settings;
+  const clarifyRunnersRef = useRef(new Map<string, RunClarifyTurn>());
+  const getConversationClarifyRunner = useCallback(
+    (conversationId: string): RunClarifyTurn => {
+      let runner = clarifyRunnersRef.current.get(conversationId);
+      if (!runner) {
+        // 设置里的「澄清对话模型」优先；未选或失效时回退本会话当前模型。
+        const resolveClarifySelection = () =>
+          resolvePromptClarifyModelSelection(clarifySettingsRef.current) ??
+          resolveEffectiveChatModelSelection({
+            settings: clarifySettingsRef.current,
+            conversationSelectedModel:
+              conversationRuntimeRegistry.getSnapshot(conversationId)?.selectedModel ?? undefined,
+          });
+        runner = createGuiClarifyRunner(resolveClarifySelection, () => {
+          const selection = resolveClarifySelection();
+          return createProviderRuntimeConfig(
+            selection.provider,
+            selection.model,
+            clarifySettingsRef.current.chatRuntimeControls,
+          );
+        });
+        clarifyRunnersRef.current.set(conversationId, runner);
+      }
+      return runner;
+    },
+    [conversationRuntimeRegistry],
+  );
+
   // Full-featured binding for the pane hosting the page's current
   // conversation; it is the only pane wired to page-level composer bridging,
   // uploads, native drop and usage telemetry.
@@ -2245,6 +2309,13 @@ export function ChatPage(props: ChatPageProps) {
       onPasteFiles: importReadableFiles,
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
+      // 提示词澄清：当前会话模型跑纯文本补全；clarifyContext 只喂轻量工作区
+      // 信息（分支无现成状态，留空不为此新拉 git）。总开关关闭时不传执行器，
+      // ChatComposerBar 随之隐藏澄清按钮。
+      runClarifyTurn: settings.customSettings.promptClarifyEnabled
+        ? getConversationClarifyRunner(currentConversationId)
+        : undefined,
+      clarifyContext: { workdir: displayedConversationWorkdir },
       onRemovePendingUpload: removePendingUpload,
       onRunQueuedTurnNow: runQueuedTurnNow,
       onMoveQueuedTurnUp: moveQueuedTurnUp,
@@ -2524,6 +2595,22 @@ export function ChatPage(props: ChatPageProps) {
         });
         return;
       }
+      if (payload.kind === "fileTree") {
+        const surfaceKey = `fileTree:${payload.project.projectPathKey}`;
+        const existingPaneId = findPaneIdBySurfaceKey(workbench.layoutRef.current, surfaceKey);
+        if (target.kind === "pane-center") {
+          if (existingPaneId && target.paneId === existingPaneId) {
+            handleWorkbenchFocusPane(existingPaneId);
+          }
+          return;
+        }
+        if (existingPaneId) {
+          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
+          return;
+        }
+        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+        return;
+      }
       // Moving an existing pane by its chrome drag handle.
       if (target.kind === "canvas-empty") return;
       if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
@@ -2551,7 +2638,11 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  const { dragState: workbenchDragState, beginDrag: beginWorkbenchDrag } = useWorkbenchDragSession({
+  const {
+    dragState: workbenchDragState,
+    beginDrag: beginWorkbenchDrag,
+    dragGhostRef: workbenchDragGhostRef,
+  } = useWorkbenchDragSession({
     enabled: sessionWorkbench.enabled,
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
@@ -2655,6 +2746,29 @@ export function ChatPage(props: ChatPageProps) {
       );
     },
     [beginWorkbenchDrag, t, terminalProjectPath, terminalProjectPathKey, workspaceProjects],
+  );
+
+  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+    if (!terminalProjectPathKey) return null;
+    const project = workspaceProjects.find(
+      (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
+    );
+    return {
+      projectId: project?.id ?? `project:${terminalProjectPathKey}`,
+      projectPathKey: terminalProjectPathKey,
+    };
+  }, [terminalProjectPathKey, workspaceProjects]);
+
+  const handleFileTreeTabWorkbenchDragIntent = useCallback(
+    (event: { pointerId: number; clientX: number; clientY: number }) => {
+      const project = fileTreeProjectRef();
+      if (!project) return;
+      beginWorkbenchDrag(
+        { kind: "fileTree", project, title: t("projectTools.fileTreeTitle") },
+        event,
+      );
+    },
+    [beginWorkbenchDrag, fileTreeProjectRef, t],
   );
 
   // 画板 Pane 持有租约的会话:overlay/占位的"前往 Pane"聚焦通路。
@@ -2814,6 +2928,32 @@ export function ChatPage(props: ChatPageProps) {
       workspaceProjects,
     ],
   );
+
+  const handleOpenFileTreeInWorkbenchSplit = useCallback(() => {
+    const project = fileTreeProjectRef();
+    if (!project) return;
+    const existingPaneId = findPaneIdBySurfaceKey(
+      workbench.layoutRef.current,
+      `fileTree:${project.projectPathKey}`,
+    );
+    if (existingPaneId) {
+      handleWorkbenchFocusPane(existingPaneId);
+      return;
+    }
+    const target = resolveWorkbenchAutoDockTarget();
+    if (!target) {
+      addNotify("error", t("workbench.noSpaceForSplit"));
+      return;
+    }
+    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
+  }, [
+    addNotify,
+    fileTreeProjectRef,
+    handleWorkbenchFocusPane,
+    resolveWorkbenchAutoDockTarget,
+    t,
+    workbench,
+  ]);
 
   const handleOpenNewTerminalInWorkbenchSplit = useCallback(() => {
     const target = resolveWorkbenchAutoDockTarget();
@@ -3273,6 +3413,14 @@ export function ChatPage(props: ChatPageProps) {
         },
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
+        // 背景 Pane 的澄清执行器同样按本 Pane 会话解析模型（见
+        // getConversationClarifyRunner 的惰性 getter）；总开关与主 Pane 同源。
+        runClarifyTurn: settings.customSettings.promptClarifyEnabled
+          ? getConversationClarifyRunner(conversationId)
+          : undefined,
+        // 与主 Pane 口径一致：clarifyContext 只喂本 Pane 会话的轻量工作区
+        // 信息；会话无 cwd/workdir 时不传空串，避免系统提示词带噪音。
+        clarifyContext: workspaceRoot ? { workdir: workspaceRoot } : undefined,
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,
@@ -3336,6 +3484,8 @@ export function ChatPage(props: ChatPageProps) {
     switch (surface.kind) {
       case "conversation":
         return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
+      case "fileTree":
+        return t("projectTools.fileTreeTitle");
       case "localTerminal":
         return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
       case "sshTerminal":
@@ -3354,6 +3504,9 @@ export function ChatPage(props: ChatPageProps) {
     const title = workbenchPaneTitle(surface);
     if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
       return t("workbench.paneRegionTerminal").replace("{title}", title);
+    }
+    if (surface.kind === "fileTree") {
+      return t("projectTools.fileTreeTitle");
     }
     if (!title) return t("workbench.paneRegion");
     const workspaceName = workspaceProjects
@@ -3449,6 +3602,54 @@ export function ChatPage(props: ChatPageProps) {
               />
             );
           }
+          if (surface.kind === "fileTree") {
+            const project = workspaceProjects.find(
+              (entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey,
+            );
+            if (!project) {
+              return (
+                <UnsupportedPaneSurface paneId={pane.paneId} originalKind="fileTree:missing" />
+              );
+            }
+            return (
+              <FileTreePaneSurface
+                active
+                projectPathKey={surface.project.projectPathKey}
+                cwd={project.path}
+                state={getRightDockFileTreeState(
+                  settings.customSettings,
+                  surface.project.projectPathKey,
+                )}
+                workspaceProject={project}
+                workspaceProjectRootClient={desktopWorkspaceProjectRootClient}
+                workspaceRootRevision={workspaceRootRevision}
+                workspaceActivityClient={tauriWorkspaceActivityClient}
+                onStateChange={(patch) =>
+                  setSettings((current) =>
+                    updateRightDockFileTreeState(current, surface.project.projectPathKey, patch),
+                  )
+                }
+                onInsertFileMention={
+                  surface.project.projectPathKey === terminalProjectPathKey
+                    ? handleRightDockInsertFileMention
+                    : undefined
+                }
+                onOpenFile={(path, imagePaths) => {
+                  const request = {
+                    projectPathKey: surface.project.projectPathKey,
+                    workdir: project.path,
+                    path,
+                    imagePaths,
+                  };
+                  if (isWorkspacePreviewPath(path)) {
+                    openWorkspaceFilePreview(request);
+                  } else {
+                    openWorkspaceEditorFile(request);
+                  }
+                }}
+              />
+            );
+          }
           if (surface.kind === "unsupported") {
             return (
               <UnsupportedPaneSurface paneId={pane.paneId} originalKind={surface.originalKind} />
@@ -3531,11 +3732,15 @@ export function ChatPage(props: ChatPageProps) {
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchDragState ? (
       <div
+        ref={workbenchDragGhostRef}
         data-workbench-drag-ghost=""
         className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
-          left: workbenchDragState.pointer.x + 14,
-          top: workbenchDragState.pointer.y + 10,
+          left: 0,
+          top: 0,
+          transform:
+            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+          willChange: "transform",
         }}
       >
         {workbenchDragState.payload.title || t("chat.pendingTitle")}
@@ -3783,6 +3988,9 @@ export function ChatPage(props: ChatPageProps) {
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
         leasedSessionIds={leasedDockSessionIds}
+        fileTreeLeased={Boolean(
+          findPaneIdBySurfaceKey(workbench.layout, `fileTree:${terminalProjectPathKey}`),
+        )}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
@@ -3813,6 +4021,12 @@ export function ChatPage(props: ChatPageProps) {
         }
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
+        }
+        onFileTreeTabDragStart={
+          sessionWorkbench.enabled ? handleFileTreeTabWorkbenchDragIntent : undefined
+        }
+        onOpenFileTreeInWorkbench={
+          sessionWorkbench.enabled ? handleOpenFileTreeInWorkbenchSplit : undefined
         }
         onOpenNewTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenNewTerminalInWorkbenchSplit : undefined

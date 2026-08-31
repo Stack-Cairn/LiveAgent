@@ -46,6 +46,7 @@ mod chat;
 mod chat_inbox;
 mod chat_ingress;
 mod chat_ingress_transport;
+mod clarify;
 mod connection;
 mod controller;
 mod envelope_handler;
@@ -63,6 +64,7 @@ mod ws_transport;
 pub(crate) use chat::*;
 pub(crate) use chat_inbox::*;
 pub(crate) use chat_ingress::*;
+pub(crate) use clarify::*;
 pub(crate) use connection::*;
 pub(crate) use history_sync::*;
 pub use history_sync::{build_history_sync_delete, build_history_sync_upsert};
@@ -142,6 +144,8 @@ pub struct GatewayController {
     pub(crate) tunnel_proxy: TunnelProxy,
     pub(crate) workspace_watch: Arc<WorkspaceWatchService>,
     pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
+    pending_clarify_turns:
+        Mutex<HashMap<String, oneshot::Sender<proto::ClarifyTurnResponse>>>,
     chat_ingress: ChatIngressMirror,
     chat_ingress_flush_lock: tokio::sync::Mutex<()>,
     terminal_forwarder_once: Once,

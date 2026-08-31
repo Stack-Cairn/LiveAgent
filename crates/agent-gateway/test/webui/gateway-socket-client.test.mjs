@@ -633,6 +633,49 @@ test("GatewayWebSocketClient sends memory manage payloads", async () => {
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const clarifyPromise = client.clarifyPromptTurn({
+    messages: [{ role: "user", content: "帮我做一个网站" }],
+    providerId: "builtin-gemini",
+    model: "gemini-2.0-flash",
+    runtimeControls: {
+      thinkingEnabled: true,
+      nativeWebSearchEnabled: false,
+      reasoning: "low",
+      planModeEnabled: false,
+    },
+  });
+  const socket = await connectAndAuth(codec);
+  await waitFor(() => findAgentRequest(codec, socket, "clarify_turn"), "clarify frame");
+  const request = findAgentRequest(codec, socket, "clarify_turn");
+  assert.deepEqual(JSON.parse(request.json.agent_request.clarify_turn.messages_json), [
+    { role: "user", content: "帮我做一个网站" },
+  ]);
+  assert.equal(request.json.agent_request.clarify_turn.provider_id, "builtin-gemini");
+  assert.equal(request.json.agent_request.clarify_turn.model, "gemini-2.0-flash");
+  assert.equal(request.json.agent_request.clarify_turn.runtime_controls.thinking_enabled, true);
+  assert.equal(request.json.agent_request.clarify_turn.runtime_controls.reasoning, "low");
+
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: {
+        clarify_turn_resp: {
+          final_text: "优化后的提示词",
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(await clarifyPromise, { final_text: "优化后的提示词" });
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient retries recoverable memory manage commands after a clean disconnect", async () => {
   installBrowser();
   const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();

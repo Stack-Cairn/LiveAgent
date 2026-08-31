@@ -67,6 +67,7 @@ message GatewayEnvelope {
     CheckpointRequest checkpoint = 98;
     TrajectoryFetchRequest trajectory_fetch = 99;
     InstalledAppsListRequest installed_apps_list = 100;
+    ClarifyTurnRequest clarify_turn = 101;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -147,6 +148,7 @@ message AgentEnvelope {
     CheckpointResponse checkpoint_resp = 103;
     TrajectoryFetchResponse trajectory_fetch_resp = 104;
     InstalledAppsListResponse installed_apps_list_resp = 105;
+    ClarifyTurnResponse clarify_turn_resp = 106;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -170,12 +172,30 @@ message ChatRuntimeControls {
   bool plan_mode_enabled = 4;
 }
 
+// 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
+// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），system
+// 提示词（含工作区上下文）已在 Web 侧拼入 messages，无需单独字段；provider/
+// model/runtime 由 Web 当前选中下发，桌面端按 provider_id 查本地配置构造 runtime。
+message ClarifyTurnRequest {
+  string messages_json = 1;
+  string provider_id = 2;
+  string model = 3;
+  ChatRuntimeControls runtime_controls = 4;
+}
+
+message ClarifyTurnResponse {
+  string final_text = 1;
+  string error_code = 2;
+  string error_message = 3;
+}
+
 message ChatUploadedFile {
   string relative_path = 1;
   string absolute_path = 2;
   string file_name = 3;
   string kind = 4;
   int64 size_bytes = 5;
+  string dedupe_key = 6;
 }
 
 message UploadReadableFile {

@@ -414,6 +414,59 @@ test("composer context display normalizes to the three-state union", () => {
   );
 });
 
+test("prompt clarify settings keep the follow-current fallback contract", () => {
+  // 总开关缺省开启：老配置无此字段时澄清按钮保持可见（上线前行为）。
+  assert.equal(settings.getDefaultSettings().customSettings.promptClarifyEnabled, true);
+  assert.equal(
+    settings.normalizeSettings({ customSettings: {} }).customSettings.promptClarifyEnabled,
+    true,
+  );
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { promptClarifyEnabled: false } }).customSettings
+      .promptClarifyEnabled,
+    false,
+  );
+
+  const provider = {
+    id: "provider-1",
+    name: "P1",
+    type: "claude_code",
+    baseUrl: "https://api.example.com",
+    apiKey: "key",
+    models: ["model-1"],
+    activeModels: ["model-1"],
+  };
+  // 有效选择保留；模型失效清空回「跟随当前对话模型」（commitMessageModel 同契约）。
+  const kept = settings.normalizeSettings({
+    customProviders: [provider],
+    customSettings: { promptClarifyModel: { customProviderId: "provider-1", model: "model-1" } },
+  });
+  assert.deepEqual(kept.customSettings.promptClarifyModel, {
+    customProviderId: "provider-1",
+    model: "model-1",
+  });
+  assert.equal(
+    settings.normalizeSettings({
+      customProviders: [provider],
+      customSettings: { promptClarifyModel: { customProviderId: "provider-1", model: "gone" } },
+    }).customSettings.promptClarifyModel,
+    undefined,
+  );
+
+  // 运行时解析器（两端共用）：未选/失效回退 null，由调用方落回当前对话模型。
+  assert.deepEqual(settings.resolvePromptClarifyModel(kept), {
+    provider: kept.customProviders.find((item) => item.id === "provider-1"),
+    model: "model-1",
+  });
+  assert.equal(
+    settings.resolvePromptClarifyModel({
+      ...kept,
+      customSettings: { ...kept.customSettings, promptClarifyModel: undefined },
+    }),
+    null,
+  );
+});
+
 test("settings normalization canonicalizes project keyed maps with Windows path compatibility", () => {
   const normalized = settings.normalizeSettings({
     ssh: {

@@ -12,6 +12,8 @@ const {
   createEmptyWorkbenchLayout,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
+  MIN_FILE_TREE_PANE_HEIGHT,
+  MIN_FILE_TREE_PANE_WIDTH,
   MIN_TERMINAL_PANE_HEIGHT,
   MIN_TERMINAL_PANE_WIDTH,
   paneRendersCompact,
@@ -80,6 +82,13 @@ test("surfaceMinSize resolves per kind", () => {
     minWidth: MIN_TERMINAL_PANE_WIDTH,
     minHeight: MIN_TERMINAL_PANE_HEIGHT,
   });
+  assert.deepEqual(
+    surfaceMinSize({
+      kind: "fileTree",
+      project: { projectId: "project-main", projectPathKey: "/workspace/project-main" },
+    }),
+    { minWidth: MIN_FILE_TREE_PANE_WIDTH, minHeight: MIN_FILE_TREE_PANE_HEIGHT },
+  );
   const unsupported = surfaceMinSize({ kind: "unsupported", originalKind: "future", raw: {} });
   assert.ok(unsupported.minWidth < MIN_TERMINAL_PANE_WIDTH);
   assert.ok(unsupported.minHeight < MIN_TERMINAL_PANE_HEIGHT);

@@ -5,7 +5,7 @@
 
 import { ChevronRight, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { memo, type MouseEvent as ReactMouseEvent } from "react";
+import { memo, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cn } from "../../../lib/shared/utils";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { FILE_TREE_ROW_HEIGHT, type FileTreeKind } from "./model";
@@ -26,6 +26,8 @@ export type FileTreeRowProps = {
   onSelect: (path: string) => void;
   onOpen: (path: string) => void;
   onContextMenu: (event: ReactMouseEvent, path: string) => void;
+  onDragStart?: (event: ReactDragEvent, path: string, kind: FileTreeKind) => void;
+  onDragEnd?: () => void;
 };
 
 export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
@@ -43,6 +45,8 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
     onSelect,
     onOpen,
     onContextMenu,
+    onDragStart,
+    onDragEnd,
   } = props;
   const { t } = useLocale();
   const TypeIcon = getFileTypeIcon(path, kind, { expanded });
@@ -66,6 +70,9 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
       )}
       style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: 6 + depth * 14 }}
       title={title}
+      draggable={Boolean(onDragStart)}
+      onDragStart={(event) => onDragStart?.(event, path, kind)}
+      onDragEnd={onDragEnd}
       onClick={activateRow}
       onKeyDown={(event) => {
         if (event.currentTarget !== event.target || (event.key !== "Enter" && event.key !== " "))

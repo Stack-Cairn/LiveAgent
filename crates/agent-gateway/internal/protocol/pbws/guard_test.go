@@ -34,6 +34,22 @@ func TestVetAgentRequestAllowsInstalledAppsList(t *testing.T) {
 	}
 }
 
+func TestVetAgentRequestAllowsClarifyTurn(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_ClarifyTurn{
+			ClarifyTurn: &gatewayv2.ClarifyTurnRequest{
+				MessagesJson: `[{"role":"user","content":"hi"}]`,
+				ProviderId:   "builtin-gemini",
+				Model:        "gemini-2.0-flash",
+			},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
 func TestVetAgentRequestAllowsValidChatFileOpen(t *testing.T) {
 	line := uint32(12)
 	column := uint32(4)

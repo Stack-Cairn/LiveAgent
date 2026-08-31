@@ -232,6 +232,10 @@ statsBar={
 - **滑块 UI**：新增通用组件 `SegmentedSlider`（`components/ui/segmented-slider.tsx`）——等宽分段 + 滑动指示块，底层同名原生 radio，方向键换档、Tab 进出分组由浏览器原生承担；`ProvidersSection` 抽屉用它替换 Switch。i18n 标题改为「上下文占用展示」，新增三档标签 key `settings.composerContextDisplayStatsBar` / `...Both` / `...Ring`（zhCN/enUS）。
 - **测试**：`normalization.test.mjs` 改覆盖三态归一化、gateway 同步携带 `"both"`；`context-usage.test.mjs` 与 `conversation-stats-bar.test.mjs` 的源码断言改为三档语义。
 
+### 4.8 修订（2026-08-31）：设置抽屉该分区的布局重构与文案精简（已落地）
+
+纯 UI/文案调整，设置字段与组件裁决逻辑零改动。原「裸标签 + 滑块 + 罗列三档的四行长段落」改为与抽屉其他分区一致的形态：`DrawerSectionHeader`（Activity 图标 + 标题 + 提示气泡）+ 通栏 `SegmentedSlider` + 滑块下方一行只描述**当前选中档**的动态说明。「≥50% 保留手动压缩入口」这类通用信息收进分区头的提示气泡。i18n：删除长段落 key `settings.composerContextDisplayDesc`，新增 `...Hint`（气泡）与 `...StatsBarDesc` / `...BothDesc` / `...RingDesc`（单行档位描述，zhCN/enUS）。
+
 ## 5. 方案取舍：为什么不先做后端聚合
 
 | | A. 纯前端（本方案） | B. 后端聚合命令 |

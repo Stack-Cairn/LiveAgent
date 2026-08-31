@@ -1,10 +1,11 @@
+import type { ClarifyMessage } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { type Event, listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import { normalizeChatRuntimeControls } from "../../../lib/settings";
+import { type ChatRuntimeControls, normalizeChatRuntimeControls } from "../../../lib/settings";
 import { createTextComposerDraft } from "../composer/composerDraftText";
 import {
   type ActiveGatewayBridgeRequest,
@@ -12,6 +13,7 @@ import {
   type GatewayChatCancelEvent,
   type GatewayChatClaimedRequest,
   type GatewayChatRequestReadyEvent,
+  type GatewayClarifyTurnRequestEvent,
   normalizeGatewayCommandSafetyMode,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
@@ -36,6 +38,12 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   requestConversationStop: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
+  /** 执行一次澄清补全（Web 下发模型选择，桌面端按 providerId 查表重建 runtime）。返回 assistant 全文文本。 */
+  runGatewayClarifyTurn: (
+    messages: ClarifyMessage[],
+    selection: { providerId: string; model: string },
+    runtimeControls: ChatRuntimeControls,
+  ) => Promise<string>;
 };
 
 type GatewayBridgeRequestRegistry = {
@@ -155,6 +163,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
     let unlistenChatRuntimeWake: (() => void) | null = null;
     let unlistenChatCancel: (() => void) | null = null;
     let unlistenGatewayStatus: (() => void) | null = null;
+    let unlistenClarifyTurnRequested: (() => void) | null = null;
     let drainInFlight = false;
     const workerId = workerIdRef.current;
     const heartbeatTimers = new Map<string, number>();
@@ -711,6 +720,54 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       unlistenChatCancel = dispose;
     });
 
+    const handleClarifyTurnRequested = async (event: Event<GatewayClarifyTurnRequestEvent>) => {
+      const { requestId } = event.payload;
+      let finalText: string | undefined;
+      let errorCode: string | undefined;
+      let errorMessage: string | undefined;
+      try {
+        let messages: ClarifyMessage[];
+        try {
+          messages = JSON.parse(event.payload.messagesJson) as ClarifyMessage[];
+        } catch {
+          messages = [{ role: "user", content: event.payload.messagesJson }];
+        }
+        const runtimeControls = event.payload.runtimeControlsJson
+          ? (JSON.parse(event.payload.runtimeControlsJson) as Partial<ChatRuntimeControls>)
+          : undefined;
+        finalText = await latestParamsRef.current.runGatewayClarifyTurn(
+          messages,
+          { providerId: event.payload.providerId, model: event.payload.model },
+          normalizeChatRuntimeControls(runtimeControls),
+        );
+      } catch (error) {
+        errorCode = "execution_error";
+        errorMessage = error instanceof Error ? error.message : String(error);
+      } finally {
+        await invoke<unknown>("gateway_clarify_respond", {
+          input: {
+            requestId,
+            finalText: finalText || undefined,
+            errorCode,
+            errorMessage,
+          },
+        }).catch((error: unknown) => {
+          console.warn("gateway_clarify_respond failed", error);
+        });
+      }
+    };
+
+    void listen<GatewayClarifyTurnRequestEvent>(
+      "gateway:clarify-turn-requested",
+      handleClarifyTurnRequested,
+    ).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      unlistenClarifyTurnRequested = dispose;
+    });
+
     return () => {
       disposed = true;
       window.clearInterval(idlePollId);
@@ -728,6 +785,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       unlistenChatRuntimeWake?.();
       unlistenChatCancel?.();
       unlistenGatewayStatus?.();
+      unlistenClarifyTurnRequested?.();
     };
   }, []);
 }
