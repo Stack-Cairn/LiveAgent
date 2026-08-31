@@ -4,6 +4,7 @@ export const WORKSPACE_PATH_DRAG_MIME = "application/x-liveagent-workspace-path+
 export const WORKSPACE_PATH_NATIVE_DRAG_OVER_EVENT = "liveagent:workspace-path-native-drag-over";
 export const WORKSPACE_PATH_NATIVE_DRAG_LEAVE_EVENT = "liveagent:workspace-path-native-drag-leave";
 export const WORKSPACE_PATH_NATIVE_DROP_EVENT = "liveagent:workspace-path-native-drop";
+export const WORKSPACE_PATH_DRAG_IMAGE_HOTSPOT_PX = 12;
 
 export type WorkspacePathDragPayload = {
   kind: "workspacePath";
@@ -172,6 +173,23 @@ export function writeWorkspacePathDragPayload(
   dataTransfer.effectAllowed = "copy";
   dataTransfer.setData(WORKSPACE_PATH_DRAG_MIME, JSON.stringify(payload));
   dataTransfer.setData("text/plain", payload.relativePath);
+  return true;
+}
+
+/**
+ * Replace the browser/WebView's full-row drag snapshot with the shared compact
+ * add affordance. Payload and drop routing remain owned by DataTransfer.
+ */
+export function setWorkspacePathDragImage(
+  dataTransfer: DataTransfer,
+  indicator: Element | null,
+): boolean {
+  if (!indicator || typeof dataTransfer.setDragImage !== "function") return false;
+  dataTransfer.setDragImage(
+    indicator,
+    WORKSPACE_PATH_DRAG_IMAGE_HOTSPOT_PX,
+    WORKSPACE_PATH_DRAG_IMAGE_HOTSPOT_PX,
+  );
   return true;
 }
 

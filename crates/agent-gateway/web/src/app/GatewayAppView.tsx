@@ -20,6 +20,7 @@ import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
 import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
+import { WorkbenchDragGhost } from "@liveagent/ui/components/workbench/WorkbenchDragGhost";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
@@ -1056,21 +1057,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   // 拖拽幽灵:跟随指针的载荷标题,提交/取消后随 dragState 清空。
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchController.dragState ? (
-      <div
+      <WorkbenchDragGhost
         ref={workbenchController.dragGhostRef}
-        data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
-        style={{
-          left: 0,
-          top: 0,
-          transform:
-            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
-          willChange: "transform",
-        }}
-      >
-        {workbenchController.dragState.payload.title ||
-          translate("chat.pendingTitle", settings.locale)}
-      </div>
+        payload={workbenchController.dragState.payload}
+        fallbackTitle={translate("chat.pendingTitle", settings.locale)}
+      />
     ) : null;
   return (
     <LocaleContext.Provider value={localeContextValue}>

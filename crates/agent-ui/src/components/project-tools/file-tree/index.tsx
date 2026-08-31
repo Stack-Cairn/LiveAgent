@@ -32,11 +32,13 @@ import {
 } from "react";
 import {
   finishWorkspacePathDrag,
+  setWorkspacePathDragImage,
   writeWorkspacePathDragPayload,
 } from "../../../lib/chat/workspacePathDrag";
 import { cn } from "../../../lib/shared/utils";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
+import { DragAddIndicator } from "../../drag/DragAddIndicator";
 import { Button } from "../../ui/button";
 import { useConfirmDialog } from "../../ui/confirm-dialog";
 import { Input } from "../../ui/input";
@@ -167,6 +169,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
   const [revealTarget, setRevealTarget] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const workspacePathDragImageRef = useRef<HTMLDivElement | null>(null);
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
 
   const {
@@ -388,18 +391,19 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         event.preventDefault();
         return;
       }
-      if (
-        !writeWorkspacePathDragPayload(event.dataTransfer, {
-          kind: "workspacePath",
-          projectPathKey,
-          cwd,
-          relativePath: path,
-          entryKind: kind,
-          label: node.name,
-        })
-      ) {
+      const wrotePayload = writeWorkspacePathDragPayload(event.dataTransfer, {
+        kind: "workspacePath",
+        projectPathKey,
+        cwd,
+        relativePath: path,
+        entryKind: kind,
+        label: node.name,
+      });
+      if (!wrotePayload) {
         event.preventDefault();
+        return;
       }
+      setWorkspacePathDragImage(event.dataTransfer, workspacePathDragImageRef.current);
     },
     [cwd, isExternalPath, projectPathKey],
   );
@@ -589,6 +593,11 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
 
   return (
     <div ref={panelRef} className="relative flex h-full min-h-0 select-none flex-col">
+      <DragAddIndicator
+        ref={workspacePathDragImageRef}
+        data-workspace-path-drag-image=""
+        className="pointer-events-none fixed -left-12 -top-12"
+      />
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
