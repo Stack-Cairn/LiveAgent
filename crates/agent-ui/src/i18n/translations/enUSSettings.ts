@@ -673,6 +673,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Model used to generate commit messages in Git review. Follows the current chat model when unselected or unavailable.",
   "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
+  "settings.promptClarifyTitle": "Clarify prompt",
+  "settings.promptClarifyToggleHint":
+    "The composer's Clarify prompt button refines a draft through follow-up questions. Turning this off hides the button on both the desktop and web composers.",
+  "settings.promptClarifyModel": "Clarify model",
+  "settings.promptClarifyModelHint":
+    "Model used for clarify questions and the final prompt. Follows the current chat model when unselected or unavailable.",
   "settings.composerContextDisplay": "Context usage display",
   "settings.composerContextDisplayHint":
     "Choose how the composer shows context usage. Every mode keeps the manual compaction entry at ≥50% usage.",

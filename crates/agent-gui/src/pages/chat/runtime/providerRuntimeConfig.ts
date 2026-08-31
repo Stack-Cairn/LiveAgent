@@ -1,6 +1,11 @@
 import { createProviderRuntimeConfig } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import type { ProviderRuntimeConfig } from "../../../lib/providers/runtime/types";
-import type { AppSettings, ChatRuntimeControls, SelectedModel } from "../../../lib/settings";
+import {
+  type AppSettings,
+  type ChatRuntimeControls,
+  resolvePromptClarifyModel,
+  type SelectedModel,
+} from "../../../lib/settings";
 import type { EffectiveChatModelSelection } from "./modelSelection";
 
 export function resolveMemorySummaryModelSelection(
@@ -71,6 +76,25 @@ export function resolveCommitMessageModelSelection(
     provider,
     providerId: provider.type,
     model: commitModel.model,
+  };
+}
+
+// Prompt-clarify model override (设置抽屉「澄清对话模型」). Returns null when
+// unset or stale so the caller falls back to the current conversation model —
+// same contract as resolveCommitMessageModelSelection, validation shared with
+// the web surface via resolvePromptClarifyModel.
+export function resolvePromptClarifyModelSelection(
+  settings: AppSettings,
+): EffectiveChatModelSelection | null {
+  const resolved = resolvePromptClarifyModel(settings);
+  if (!resolved) {
+    return null;
+  }
+  return {
+    selectedModel: { customProviderId: resolved.provider.id, model: resolved.model },
+    provider: resolved.provider,
+    providerId: resolved.provider.type,
+    model: resolved.model,
   };
 }
 

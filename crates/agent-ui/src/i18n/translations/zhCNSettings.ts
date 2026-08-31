@@ -646,6 +646,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Git 审查中生成提交说明使用的模型，未选择或失效时跟随当前对话模型。",
   "settings.customSettingsModelEmpty": "当前 Provider 未配置模型。",
+  "settings.promptClarifyTitle": "澄清提示词",
+  "settings.promptClarifyToggleHint":
+    "输入框旁的「澄清提示词」按钮通过多轮追问完善提示词草稿。关闭后桌面端与 Web 端输入框都不再显示该按钮。",
+  "settings.promptClarifyModel": "澄清对话模型",
+  "settings.promptClarifyModelHint":
+    "澄清追问与生成终稿使用的模型，未选择或失效时跟随当前对话模型。",
   "settings.composerContextDisplay": "上下文占用展示",
   "settings.composerContextDisplayHint":
     "选择输入区展示上下文占用的方式。无论哪一档，占用 ≥50% 时都保留手动压缩入口。",

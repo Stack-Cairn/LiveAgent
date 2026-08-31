@@ -73,6 +73,7 @@ import {
   getChatRuntimeReasoningLevelsForProvider,
   isThinkingAlwaysOnForModel,
   normalizeChatRuntimeControlsForProvider,
+  resolvePromptClarifyModel,
   type SelectedModel,
 } from "@/lib/settings";
 import {
@@ -484,21 +485,31 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [selectedProvider?.type, selection?.model],
   );
 
-  // 提示词澄清执行器（桌面端背景 Pane 口径）：按本 Pane 会话解析供应商/模型，
-  // 经 gateway 中继到桌面宿主跑一轮纯文本补全。Web 端无轻量 git 分支状态，
-  // gitBranch 留空（spec 允许只喂 workdir）。runTurn 在 useClarifySession 内
-  // 走 latest-ref，依赖变化只换身份不打断会话。
+  // 提示词澄清执行器（桌面端背景 Pane 口径）：设置里的「澄清对话模型」优先，
+  // 未选或失效时按本 Pane 会话解析供应商/模型；经 gateway 中继到桌面宿主跑
+  // 一轮纯文本补全。Web 端无轻量 git 分支状态，gitBranch 留空（spec 允许只
+  // 喂 workdir）。runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换
+  // 身份不打断会话。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
     async (messages, _signal) => {
-      if (!selection || !selectedProvider) {
+      const override = resolvePromptClarifyModel(context.settings);
+      const provider = override?.provider ?? selectedProvider;
+      const model = override?.model ?? selection?.model;
+      if (!provider || !model) {
         throw new Error("no active model selected");
       }
       const result = await context.api.clarifyPromptTurn({
         messages,
-        providerId: selectedProvider.id,
-        model: selection.model,
-        requestFormat: selectedProvider.requestFormat ?? "",
-        runtimeControls: paneRuntimeControls,
+        providerId: provider.id,
+        model,
+        requestFormat: provider.requestFormat ?? "",
+        runtimeControls: override
+          ? normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
+              providerId: provider.type,
+              requestFormat: provider.requestFormat,
+              modelId: model,
+            })
+          : paneRuntimeControls,
         workdir: workdirRef.current,
         gitBranch: "",
       });
@@ -885,7 +896,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           )}
           <ChatComposerBar
             surface="web"
-            runClarifyTurn={runClarifyTurn}
+            runClarifyTurn={
+              context.settings.customSettings.promptClarifyEnabled ? runClarifyTurn : undefined
+            }
             clarifyContext={clarifyContext}
             conversationId={conversationId}
             hidden={trajectoryActive}

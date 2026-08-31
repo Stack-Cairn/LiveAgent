@@ -1333,6 +1333,10 @@ export function applyGatewaySettingsSyncPayload(
       composerContextDisplay:
         incomingCustomSettings.composerContextDisplay ??
         current.customSettings.composerContextDisplay,
+      // 澄清提示词总开关同上（全局偏好 + 老对端兼容）；promptClarifyModel
+      // 经上方展开随同步走——缺省即「跟随当前对话模型」，与标题/commit 模型同轨。
+      promptClarifyEnabled:
+        incomingCustomSettings.promptClarifyEnabled ?? current.customSettings.promptClarifyEnabled,
       // Typography, scale, and transcript width are local UI preferences, never gateway-synced.
       interfaceFontFamily: current.customSettings.interfaceFontFamily,
       chatFontFamily: current.customSettings.chatFontFamily,

@@ -1610,6 +1610,12 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.commitMessageModel),
       customProviders,
     ),
+    // 缺省开启：老配置无此字段时保持澄清按钮可见（与上线前行为一致）。
+    promptClarifyEnabled: obj.promptClarifyEnabled !== false,
+    promptClarifyModel: normalizeSelectedModelForProviders(
+      normalizeSelectedModel(obj.promptClarifyModel),
+      customProviders,
+    ),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
@@ -2056,6 +2062,25 @@ export function updateCustomSettings(
       ...patch,
     },
   });
+}
+
+/**
+ * 澄清提示词的模型覆盖解析（两端共用）。返回 null 表示「跟随当前对话模型」：
+ * 未选择、供应商已删或模型已停用（与 commitMessageModel 同一回退契约——
+ * normalize 已在落库时清掉失效选择，这里再挡一次会话内的时序空窗）。
+ */
+export function resolvePromptClarifyModel(
+  settings: AppSettings,
+): { provider: CustomProvider; model: string } | null {
+  const selected = settings.customSettings.promptClarifyModel;
+  if (!selected) {
+    return null;
+  }
+  const provider = settings.customProviders.find((item) => item.id === selected.customProviderId);
+  if (!provider?.activeModels.includes(selected.model)) {
+    return null;
+  }
+  return { provider, model: selected.model };
 }
 
 export function updateModelFailover(

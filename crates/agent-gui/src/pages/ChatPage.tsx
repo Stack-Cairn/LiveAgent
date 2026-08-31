@@ -208,6 +208,7 @@ import {
   resolveActiveModelSelection,
   resolveEffectiveChatModelSelection,
 } from "./chat/runtime/modelSelection";
+import { resolvePromptClarifyModelSelection } from "./chat/runtime/providerRuntimeConfig";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
@@ -2174,7 +2175,9 @@ export function ChatPage(props: ChatPageProps) {
     (conversationId: string): RunClarifyTurn => {
       let runner = clarifyRunnersRef.current.get(conversationId);
       if (!runner) {
+        // 设置里的「澄清对话模型」优先；未选或失效时回退本会话当前模型。
         const resolveClarifySelection = () =>
+          resolvePromptClarifyModelSelection(clarifySettingsRef.current) ??
           resolveEffectiveChatModelSelection({
             settings: clarifySettingsRef.current,
             conversationSelectedModel:
@@ -2317,8 +2320,11 @@ export function ChatPage(props: ChatPageProps) {
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
       // 提示词澄清：当前会话模型跑纯文本补全；clarifyContext 只喂轻量工作区
-      // 信息（分支无现成状态，留空不为此新拉 git）。
-      runClarifyTurn: getConversationClarifyRunner(currentConversationId),
+      // 信息（分支无现成状态，留空不为此新拉 git）。总开关关闭时不传执行器，
+      // ChatComposerBar 随之隐藏澄清按钮。
+      runClarifyTurn: settings.customSettings.promptClarifyEnabled
+        ? getConversationClarifyRunner(currentConversationId)
+        : undefined,
       clarifyContext: { workdir: displayedConversationWorkdir },
       onRemovePendingUpload: removePendingUpload,
       onRunQueuedTurnNow: runQueuedTurnNow,
@@ -3418,8 +3424,10 @@ export function ChatPage(props: ChatPageProps) {
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
         // 背景 Pane 的澄清执行器同样按本 Pane 会话解析模型（见
-        // getConversationClarifyRunner 的惰性 getter）。
-        runClarifyTurn: getConversationClarifyRunner(conversationId),
+        // getConversationClarifyRunner 的惰性 getter）；总开关与主 Pane 同源。
+        runClarifyTurn: settings.customSettings.promptClarifyEnabled
+          ? getConversationClarifyRunner(conversationId)
+          : undefined,
         // 与主 Pane 口径一致：clarifyContext 只喂本 Pane 会话的轻量工作区
         // 信息；会话无 cwd/workdir 时不传空串，避免系统提示词带噪音。
         clarifyContext: workspaceRoot ? { workdir: workspaceRoot } : undefined,

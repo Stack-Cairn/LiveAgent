@@ -167,6 +167,13 @@ export type CustomSettings = {
   // the current conversation model"; a stored selection whose provider/model
   // is no longer active normalizes back to unset, restoring that fallback.
   commitMessageModel?: SelectedModel;
+  // Composer prompt-clarify (澄清提示词). The master switch hides the composer
+  // wand button on both surfaces when off. The model override follows the
+  // commitMessageModel contract: unset means "follow the current conversation
+  // model", and a stored selection whose provider/model is no longer active
+  // normalizes back to unset.
+  promptClarifyEnabled: boolean;
+  promptClarifyModel?: SelectedModel;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;

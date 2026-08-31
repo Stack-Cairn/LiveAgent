@@ -66,6 +66,8 @@ import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   getRightDockFileTreeState,
+  normalizeChatRuntimeControlsForProvider,
+  resolvePromptClarifyModel,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
   updateSystem,
@@ -467,15 +469,26 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   // Web 端无轻量 git 分支状态，gitBranch 传空串（spec 允许只喂 workdir 的轻量上下文）。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
     async (messages, _signal) => {
-      if (!activeSelectedModel || !currentChatProvider) {
+      // 设置里的「澄清对话模型」优先；未选或失效时回退当前对话模型。覆盖
+      // 生效时 runtime controls 按覆盖供应商/模型重新归一化。
+      const override = resolvePromptClarifyModel(settings);
+      const provider = override?.provider ?? currentChatProvider;
+      const model = override?.model ?? activeSelectedModel?.model;
+      if (!provider || !model) {
         throw new Error("no active model selected");
       }
       const result = await api.clarifyPromptTurn({
         messages,
-        providerId: currentChatProvider.id,
-        model: activeSelectedModel.model,
-        requestFormat: currentChatProvider.requestFormat ?? "",
-        runtimeControls: chatRuntimeControlsForCurrentProvider,
+        providerId: provider.id,
+        model,
+        requestFormat: provider.requestFormat ?? "",
+        runtimeControls: override
+          ? normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
+              providerId: provider.type,
+              requestFormat: provider.requestFormat,
+              modelId: model,
+            })
+          : chatRuntimeControlsForCurrentProvider,
         workdir: displayedConversationWorkdir,
         gitBranch: "",
       });
@@ -485,6 +498,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       return result.final_text;
     },
     [
+      settings,
       activeSelectedModel,
       currentChatProvider,
       chatRuntimeControlsForCurrentProvider,
@@ -1485,7 +1499,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           ) : null}
                           <ChatComposerBar
                             surface="web"
-                            runClarifyTurn={runClarifyTurn}
+                            runClarifyTurn={
+                              settings.customSettings.promptClarifyEnabled
+                                ? runClarifyTurn
+                                : undefined
+                            }
                             clarifyContext={clarifyContext}
                             conversationId={displayedConversationId}
                             // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。

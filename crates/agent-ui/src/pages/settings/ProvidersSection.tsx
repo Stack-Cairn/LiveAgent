@@ -400,7 +400,7 @@ function CustomSettingsDrawer(
   } as const;
 
   function handleModelSettingChange(
-    key: "conversationTitleModel" | "commitMessageModel",
+    key: "conversationTitleModel" | "commitMessageModel" | "promptClarifyModel",
     value: string,
   ) {
     // "" comes from the picker's follow-current entry and parses to undefined.
@@ -468,6 +468,50 @@ function CustomSettingsDrawer(
                     {t("settings.customSettingsModelEmpty")}
                   </div>
                 ) : null}
+              </div>
+            </section>
+            {/* 澄清提示词（composer clarify）：总开关直接控制两端输入框魔杖按钮
+                的显隐；展开区选澄清对话用的模型，未选跟随当前对话模型（与
+                commitMessageModel 同一回退契约）。开关-展开模式同 failover。 */}
+            <section className="py-5">
+              <DrawerSectionHeader
+                icon={<WandSparkles className="h-3.5 w-3.5" />}
+                title={t("settings.promptClarifyTitle")}
+                hint={t("settings.promptClarifyToggleHint")}
+                action={
+                  <Switch
+                    checked={settings.customSettings.promptClarifyEnabled}
+                    onCheckedChange={(checked) =>
+                      setSettings((prev) =>
+                        updateCustomSettings(prev, { promptClarifyEnabled: checked === true }),
+                      )
+                    }
+                    aria-label={t("settings.promptClarifyTitle")}
+                  />
+                }
+              />
+              <div
+                className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+                style={{
+                  gridTemplateRows: settings.customSettings.promptClarifyEnabled ? "1fr" : "0fr",
+                }}
+              >
+                <div
+                  className="min-h-0 overflow-hidden"
+                  inert={!settings.customSettings.promptClarifyEnabled}
+                  aria-hidden={!settings.customSettings.promptClarifyEnabled}
+                >
+                  <div className="space-y-3 pt-3.5">
+                    <CustomSettingsModelField
+                      label={t("settings.promptClarifyModel")}
+                      hint={t("settings.promptClarifyModelHint")}
+                      followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+                      selected={settings.customSettings.promptClarifyModel}
+                      modelOptions={modelOptions}
+                      onChange={(value) => handleModelSettingChange("promptClarifyModel", value)}
+                    />
+                  </div>
+                </div>
               </div>
             </section>
             {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
