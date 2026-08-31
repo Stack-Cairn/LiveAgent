@@ -9,6 +9,7 @@ import {
   Paperclip,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { resolveMentionPopupHorizontalLayout } from "@liveagent/ui/lib/chat/mentionPopupLayout";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -79,9 +80,10 @@ export function Popup({
 
     const update = () => {
       const rect = inputSurface.getBoundingClientRect();
-      popup.style.left = `${rect.left}px`;
+      const horizontal = resolveMentionPopupHorizontalLayout(rect, window.innerWidth);
+      popup.style.left = `${horizontal.left}px`;
       popup.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 8)}px`;
-      popup.style.width = `${rect.width}px`;
+      popup.style.width = `${horizontal.width}px`;
     };
 
     update();
