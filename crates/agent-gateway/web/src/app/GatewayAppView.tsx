@@ -30,6 +30,10 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
+import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import {
   CHAT_TRANSCRIPT_WIDTH_CSS_VAR,
@@ -75,6 +79,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   useWindowFileDropGuard();
   const {
     activeFloorKey,
+    activeSelectedModel,
     activeView,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
@@ -106,6 +111,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     confirmDialog,
     contextUsageTokensSource,
     conversationOpenState,
+    currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
     dismissNotify,
@@ -412,6 +418,40 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       addNotify(notice.level, notice.message);
     },
     [addNotify, settings.locale],
+  );
+  // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本补全。
+  // Web 端无轻量 git 分支状态，gitBranch 传空串（spec 允许只喂 workdir 的轻量上下文）。
+  const runClarifyTurn = useCallback<RunClarifyTurn>(
+    async (messages, _signal) => {
+      if (!activeSelectedModel || !currentChatProvider) {
+        throw new Error("no active model selected");
+      }
+      const result = await api.clarifyPromptTurn({
+        messages,
+        providerId: currentChatProvider.id,
+        model: activeSelectedModel.model,
+        requestFormat: currentChatProvider.requestFormat ?? "",
+        runtimeControls: chatRuntimeControlsForCurrentProvider,
+        workdir: displayedConversationWorkdir,
+        gitBranch: "",
+      });
+      if (result.error_code) {
+        throw new Error(result.error_message || result.error_code);
+      }
+      return result.final_text;
+    },
+    [
+      activeSelectedModel,
+      currentChatProvider,
+      chatRuntimeControlsForCurrentProvider,
+      displayedConversationWorkdir,
+      api,
+    ],
+  );
+
+  const clarifyContext = useMemo<ClarifyContext | undefined>(
+    () => (displayedConversationWorkdir ? { workdir: displayedConversationWorkdir } : undefined),
+    [displayedConversationWorkdir],
   );
   return (
     <LocaleContext.Provider value={localeContextValue}>
@@ -753,6 +793,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                         ) : null}
                         <ChatComposerBar
                           surface="web"
+                          runClarifyTurn={runClarifyTurn}
+                          clarifyContext={clarifyContext}
                           conversationId={displayedConversationId}
                           // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
                           hidden={renderedConversationView === "trajectory"}

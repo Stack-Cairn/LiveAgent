@@ -1738,6 +1738,7 @@ function useGatewayAppController() {
   }
   const viewModel = {
     activeFloorKey,
+    activeSelectedModel,
     activeView,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
@@ -1770,6 +1771,7 @@ function useGatewayAppController() {
     contextUsageTokensSource,
     conversationId,
     conversationOpenState,
+    currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
     dismissNotify,
