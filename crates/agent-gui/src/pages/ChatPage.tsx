@@ -1078,6 +1078,7 @@ export function ChatPage(props: ChatPageProps) {
           deleteConversationLocalCaches(conversationId);
           subagentStoresRef.current.dispose(conversationId);
           cancelConversationTransientInteractions(conversationId);
+          clarifyRunnersRef.current.delete(conversationId);
         },
       });
     },
@@ -3089,7 +3090,9 @@ export function ChatPage(props: ChatPageProps) {
         // 背景 Pane 的澄清执行器同样按本 Pane 会话解析模型（见
         // getConversationClarifyRunner 的惰性 getter）。
         runClarifyTurn: getConversationClarifyRunner(conversationId),
-        clarifyContext: { workdir: workspaceRoot ?? "" },
+        // 与主 Pane 口径一致：clarifyContext 只喂本 Pane 会话的轻量工作区
+        // 信息；会话无 cwd/workdir 时不传空串，避免系统提示词带噪音。
+        clarifyContext: workspaceRoot ? { workdir: workspaceRoot } : undefined,
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,

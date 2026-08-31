@@ -94,11 +94,6 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             {t("chat.clarify.writing")}
           </div>
         ) : null}
-        {state.status === "done" ? (
-          <div className="self-start rounded-xl bg-primary/10 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-foreground/90">
-            {t("chat.clarify.applied")}
-          </div>
-        ) : null}
         {state.status === "error" && state.error ? (
           <div className="flex items-center gap-2 self-start rounded-xl bg-destructive/10 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-destructive">
             <span className="min-w-0 flex-1">

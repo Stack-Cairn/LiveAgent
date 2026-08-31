@@ -458,7 +458,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.clarify.close": "Close",
   "chat.clarify.thinking": "Thinking…",
   "chat.clarify.writing": "Writing the final prompt…",
-  "chat.clarify.applied": "Applied to the composer — edit freely",
   "chat.clarify.errorPrefix": "Request failed",
   "chat.composer.commitTooltipUnknownAuthor": "Unknown author",
   "chat.composer.commitTooltipFilesChanged": "{count} files changed",

@@ -418,7 +418,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.clarify.close": "关闭",
   "chat.clarify.thinking": "思考中…",
   "chat.clarify.writing": "正在生成最终提示词…",
-  "chat.clarify.applied": "已写入输入框，可继续编辑",
   "chat.clarify.errorPrefix": "请求失败",
   "chat.composer.commitTooltipUnknownAuthor": "未知作者",
   "chat.composer.commitTooltipFilesChanged": "已更改 {count} 个文件",
