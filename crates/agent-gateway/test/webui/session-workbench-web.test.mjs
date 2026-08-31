@@ -5,7 +5,10 @@
 // 2) 草稿转正的 Pane 原位重绑——renameWorkbenchConversation 保持拓扑/焦点/
 //    paneId 不变，只换会话 id；违反「一个会话最多一个 Pane」时拒绝。
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
@@ -249,4 +252,19 @@ test("background pane runtime controls resolve from that conversation's provider
     runtimeControls,
   });
   assert.equal(resolved.reasoning, "low");
+});
+
+test("workbench pane composer wires the clarify runner (web default path)", () => {
+  // sessionWorkbench 默认开启：Web 聊天一律经 GatewayConversationPaneHost 渲染，
+  // 澄清按钮必须在这条路径接线（GatewayAppView 的内联 composer 只是
+  // VITE_LIVEAGENT_SESSION_WORKBENCH=0 的逃生路径）。runner 按本 Pane 会话
+  // 解析供应商/模型（桌面端背景 Pane 口径）。
+  const webRoot = fileURLToPath(new URL("../../web", import.meta.url));
+  const paneHostSource = readFileSync(
+    path.join(webRoot, "src/app/workbench/GatewayConversationPaneHost.tsx"),
+    "utf8",
+  );
+  assert.match(paneHostSource, /context\.api\.clarifyPromptTurn\(/);
+  assert.match(paneHostSource, /runClarifyTurn=\{runClarifyTurn\}/);
+  assert.match(paneHostSource, /clarifyContext=\{clarifyContext\}/);
 });

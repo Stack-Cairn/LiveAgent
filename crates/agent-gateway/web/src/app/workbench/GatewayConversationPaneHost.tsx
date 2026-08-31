@@ -9,6 +9,10 @@ import {
   ChangedFilesActionsProvider,
 } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
+import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -480,6 +484,37 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [selectedProvider?.type, selection?.model],
   );
 
+  // 提示词澄清执行器（桌面端背景 Pane 口径）：按本 Pane 会话解析供应商/模型，
+  // 经 gateway 中继到桌面宿主跑一轮纯文本补全。Web 端无轻量 git 分支状态，
+  // gitBranch 留空（spec 允许只喂 workdir）。runTurn 在 useClarifySession 内
+  // 走 latest-ref，依赖变化只换身份不打断会话。
+  const runClarifyTurn = useCallback<RunClarifyTurn>(
+    async (messages, _signal) => {
+      if (!selection || !selectedProvider) {
+        throw new Error("no active model selected");
+      }
+      const result = await context.api.clarifyPromptTurn({
+        messages,
+        providerId: selectedProvider.id,
+        model: selection.model,
+        requestFormat: selectedProvider.requestFormat ?? "",
+        runtimeControls: paneRuntimeControls,
+        workdir: workdirRef.current,
+        gitBranch: "",
+      });
+      if (result.error_code) {
+        throw new Error(result.error_message || result.error_code);
+      }
+      return result.final_text;
+    },
+    [context, selection, selectedProvider, paneRuntimeControls],
+  );
+  // 与桌面端口径一致：会话无 workdir 时不传空串，避免系统提示词带噪音。
+  const clarifyContext = useMemo<ClarifyContext | undefined>(
+    () => (workdir ? { workdir } : undefined),
+    [workdir],
+  );
+
   const isRunning = transcript.activeRun !== null || context.isConversationBusy(conversationId);
   const isRunningRef = useRef(isRunning);
   isRunningRef.current = isRunning;
@@ -850,6 +885,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           )}
           <ChatComposerBar
             surface="web"
+            runClarifyTurn={runClarifyTurn}
+            clarifyContext={clarifyContext}
             conversationId={conversationId}
             hidden={trajectoryActive}
             composerRef={composerRef}
