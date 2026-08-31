@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220">
+  <defs>
+    <style>
+      .card { fill: #ffffff; stroke: #e4e4e7; }
+      .card-hover { fill: #fafafa; }
+      .title { font: 600 14px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .muted { font: 12px system-ui, -apple-system, sans-serif; fill: #71717a; }
+      .badge { font: 11px system-ui, -apple-system, sans-serif; fill: #71717a; }
+      .tab-active { fill: #ffffff; stroke: #d4d4d8; }
+      .tab { font: 500 13px system-ui, -apple-system, sans-serif; fill: #71717a; }
+      .tab-on { font: 500 13px system-ui, -apple-system, sans-serif; fill: #18181b; }
+      .pill { fill: #f4f4f5; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="640" height="220" rx="12" fill="#fafafa"/>
+  <text x="16" y="30" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#18181b">Settings · Providers</text>
+
+  <!-- Provider tabs row -->
+  <rect x="16" y="44" width="380" height="36" rx="9" fill="#e4e4e7"/>
+  <rect x="18" y="46" width="74" height="32" rx="7" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="34" y="66" class="tab-on">OpenAI</text>
+  <text x="112" y="66" class="tab">Anthropic</text>
+  <text x="206" y="66" class="tab">Gemini</text>
+  <text x="292" y="66" class="tab">Grok</text>
+  <text x="362" y="66" class="tab">DeepSeek</text>
+
+  <!-- Provider card: OrcaRouter -->
+  <rect x="16" y="92" width="608" height="64" rx="12" class="card" stroke-width="1"/>
+  <circle cx="46" cy="112" r="4" fill="#d4d4d8"/>
+  <circle cx="46" cy="124" r="4" fill="#d4d4d8"/>
+  <circle cx="58" cy="112" r="4" fill="#d4d4d8"/>
+  <circle cx="58" cy="124" r="4" fill="#d4d4d8"/>
+  <text x="82" y="118" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#18181b">OrcaRouter</text>
+  <text x="82" y="140" class="muted">https://api.orcarouter.ai/v1 · 0 active models</text>
+  <!-- edit + delete icon buttons -->
+  <g stroke="#71717a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M560 108 l2-2 a2.5 2.5 0 0 1 3.5 0 l3 3 a2.5 2.5 0 0 1 0 3.5 l-9 9 l-4.5 1 l1-4.5 z"/>
+    <path d="M596 106 h12 M602 106 v10 a2 2 0 0 0 4 0 v-10 M597 108 v-2 a2 2 0 0 1 2-2 h8 a2 2 0 0 1 2 2 v2"/>
+  </g>
+
+  <!-- Provider card: DeepSeek (existing built-in, for context) -->
+  <rect x="16" y="164" width="608" height="40" rx="12" class="card" stroke-width="1" opacity="0.55"/>
+  <circle cx="46" cy="184" r="4" fill="#d4d4d8"/>
+  <circle cx="46" cy="196" r="4" fill="#d4d4d8"/>
+  <circle cx="58" cy="184" r="4" fill="#d4d4d8"/>
+  <circle cx="58" cy="196" r="4" fill="#d4d4d8"/>
+  <text x="82" y="188" class="title">DeepSeek</text>
+  <text x="82" y="202" class="muted">https://api.deepseek.com · 0 active models</text>
+</svg>
