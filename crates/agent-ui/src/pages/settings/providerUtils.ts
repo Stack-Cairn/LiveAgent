@@ -26,6 +26,30 @@ export { isGatewayWebuiRuntime };
 
 const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
 
+export type ModelInputModalitiesMode = "auto" | "text" | "text-image";
+
+export function providerSupportsModelInputModalitiesOverride(providerId: ProviderId): boolean {
+  return providerId === "codex" || providerId === "xai" || providerId === "gemini";
+}
+
+export function getModelInputModalitiesMode(model: ProviderModelConfig): ModelInputModalitiesMode {
+  if (!model.inputModalities) return "auto";
+  return model.inputModalities.length === 2 ? "text-image" : "text";
+}
+
+export function applyModelInputModalitiesMode(
+  model: ProviderModelConfig,
+  mode: ModelInputModalitiesMode,
+): ProviderModelConfig {
+  const modelWithoutOverride = { ...model };
+  delete modelWithoutOverride.inputModalities;
+  if (mode === "auto") return modelWithoutOverride;
+  return {
+    ...modelWithoutOverride,
+    inputModalities: mode === "text-image" ? ["text", "image"] : ["text"],
+  };
+}
+
 // KEEP IN SYNC:general/newapi 预设与桌面端 Rust services/provider_usage.rs 的
 // GENERAL_SCRIPT / NEWAPI_SCRIPT 逐字符一致(脚本为空的存量配置由 Rust 兜底执行);
 // custom 骨架仅前端填充(Rust 对空的 custom 脚本直接报错,无兜底)。三者内容

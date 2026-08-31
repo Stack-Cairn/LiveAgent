@@ -897,7 +897,6 @@ export function normalizeInputModalities(input: unknown): ModelInputModalitiesOv
     ),
   );
   if (valid.size === 0) return undefined;
-  if (valid.has("image")) valid.add("text");
   return valid.has("image") ? ["text", "image"] : ["text"];
 }
 export function normalizeProviderModelConfigs(

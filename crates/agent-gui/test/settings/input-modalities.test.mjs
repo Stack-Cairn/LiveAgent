@@ -18,9 +18,12 @@ const { createModelFromConfig } = loader.loadModule(
 const providerUtilsLoader = createTsModuleLoader({
   mocks: { "@tauri-apps/api/core": { invoke: async () => ({}) } },
 });
-const { normalizeFetchedModels } = providerUtilsLoader.loadModule(
-  "@liveagent/ui/pages/settings/providerUtils.ts",
-);
+const {
+  applyModelInputModalitiesMode,
+  getModelInputModalitiesMode,
+  normalizeFetchedModels,
+  providerSupportsModelInputModalitiesOverride,
+} = providerUtilsLoader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
 
 test("normalizeInputModalities rejects non-arrays and empty/fully-invalid arrays", () => {
   assert.equal(normalizeInputModalities(undefined), undefined);
@@ -81,9 +84,31 @@ test("modelFactory: codex completions custom model honors the override", () => {
     maxOutputToken: 32000,
     inputModalities: ["text", "image"],
   });
+  // 构造带覆盖的模型不能反向污染此前创建的无覆盖模型实例。
   assert.deepEqual(withoutOverride.input, ["text"]);
   assert.deepEqual(withOverride.input, ["text", "image"]);
 });
+
+test(
+  "ProviderModal input capability mode preserves auto/text/image semantics and provider boundary",
+  () => {
+    const baseModel = { id: "k3", contextWindow: 258000, maxOutputToken: 32000 };
+    const textOnly = applyModelInputModalitiesMode(baseModel, "text");
+    const textAndImage = applyModelInputModalitiesMode(textOnly, "text-image");
+    const automatic = applyModelInputModalitiesMode(textAndImage, "auto");
+
+    assert.equal(getModelInputModalitiesMode(baseModel), "auto");
+    assert.equal(getModelInputModalitiesMode(textOnly), "text");
+    assert.equal(getModelInputModalitiesMode(textAndImage), "text-image");
+    assert.equal("inputModalities" in automatic, false);
+
+    assert.equal(providerSupportsModelInputModalitiesOverride("codex"), true);
+    assert.equal(providerSupportsModelInputModalitiesOverride("xai"), true);
+    assert.equal(providerSupportsModelInputModalitiesOverride("gemini"), true);
+    assert.equal(providerSupportsModelInputModalitiesOverride("deepseek"), false);
+    assert.equal(providerSupportsModelInputModalitiesOverride("claude_code"), false);
+  },
+);
 
 test("modelFactory: codex custom model ignores a malformed override", () => {
   const model = createModelFromConfig(

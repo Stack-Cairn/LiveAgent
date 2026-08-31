@@ -635,6 +635,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "Estimated",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelInputModalities": "Input capabilities",
+  "settings.modelInputModalitiesAuto": "Auto-detect (recommended)",
+  "settings.modelInputModalitiesText": "Text only",
+  "settings.modelInputModalitiesTextImage": "Text and images",
+  "settings.modelInputModalitiesHint":
+    "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
   "settings.positiveIntegerRequired": "Please enter a positive integer",
   "settings.add": "Add",
   "settings.cancel": "Cancel",

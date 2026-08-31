@@ -609,6 +609,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "估计值",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelInputModalities": "输入能力",
+  "settings.modelInputModalitiesAuto": "自动推断（推荐）",
+  "settings.modelInputModalitiesText": "仅文本",
+  "settings.modelInputModalitiesTextImage": "文本与图片",
+  "settings.modelInputModalitiesHint":
+    "默认按模型名称和内置目录推断；仅在供应商能力与推断不一致时手动覆盖。",
   "settings.positiveIntegerRequired": "请输入大于 0 的整数",
   "settings.add": "添加",
   "settings.cancel": "取消",

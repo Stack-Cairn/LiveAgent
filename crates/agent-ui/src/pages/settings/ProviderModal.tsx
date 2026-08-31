@@ -29,6 +29,7 @@ import {
 } from "@liveagent/ui/lib/providers/modelVendor";
 import {
   applyModelBulkActiveState,
+  applyModelInputModalitiesMode,
   applyUsageQueryModePreset,
   buildProviderModelsFetchKey,
   clampUsageQueryTimeoutSecs,
@@ -37,10 +38,13 @@ import {
   detectCodingPlanProvider,
   fetchModelsFromApi,
   getModelBulkActionCounts,
+  getModelInputModalitiesMode,
   getPersistedUsageQueryProviderId,
   isGatewayWebuiRuntime,
+  type ModelInputModalitiesMode,
   matchBalanceProviders,
   mergeFetchedModels,
+  providerSupportsModelInputModalitiesOverride,
   requiresCustomUsageQueryConfirmation,
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
@@ -566,8 +570,24 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const editingModelMaxOutputToken = editingModel
     ? parsePositiveInteger(editingModel.maxOutputToken)
     : null;
+  const canOverrideModelInputModalities =
+    providerSupportsModelInputModalitiesOverride(providerType);
+  const editingModelInputModalitiesMode = editingModel
+    ? getModelInputModalitiesMode(editingModel.model)
+    : "auto";
   const canSaveEditingModel =
     editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+
+  function setEditingModelInputModalitiesMode(mode: ModelInputModalitiesMode) {
+    setEditingModel((prev) =>
+      prev
+        ? {
+            ...prev,
+            model: applyModelInputModalitiesMode(prev.model, mode),
+          }
+        : prev,
+    );
+  }
 
   function saveInlineModelSettings() {
     if (
@@ -911,12 +931,14 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     applyModelBulkState,
     baseUrl,
     canSaveEditingModel,
+    canOverrideModelInputModalities,
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
     draggingModelId,
     editingModel,
     editingModelContextWindow,
+    editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
     exitModelBulkMode,
     fetchError,
@@ -977,6 +999,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setApiKey,
     setBaseUrl,
     setEditingModel,
+    setEditingModelInputModalitiesMode,
     setHeaderImportError,
     setHeaderImportOpen,
     setHeaderImportSummary,
