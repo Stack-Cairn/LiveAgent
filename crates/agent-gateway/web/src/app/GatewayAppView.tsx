@@ -3,6 +3,10 @@ import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
+import type {
+  ClarifyContext,
+  RunClarifyTurn,
+} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
@@ -39,10 +43,6 @@ import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConver
 import { findPaneIdBySurfaceKey, hitTestWorkbenchDrop } from "@liveagent/ui/lib/workbench/index";
 import type { PaneRecord } from "@liveagent/ui/lib/workbench/types";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
-import type {
-  ClarifyContext,
-  RunClarifyTurn,
-} from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import {
   CHAT_TRANSCRIPT_WIDTH_CSS_VAR,

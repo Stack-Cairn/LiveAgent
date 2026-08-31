@@ -1489,9 +1489,7 @@ export function ChatPage(props: ChatPageProps) {
     requestActiveConversationStop,
     consumeConversationStop,
     runGatewayClarifyTurn: async (messages, selection, runtimeControls) => {
-      const provider = settings.customProviders.find(
-        (p) => p.id === selection.providerId,
-      );
+      const provider = settings.customProviders.find((p) => p.id === selection.providerId);
       if (!provider) {
         throw new Error(`clarify provider not found: ${selection.providerId}`);
       }

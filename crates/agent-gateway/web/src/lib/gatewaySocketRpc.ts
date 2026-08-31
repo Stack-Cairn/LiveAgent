@@ -1,3 +1,4 @@
+import type { ClarifyMessage } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { buildHistoryMessageRefPayload } from "@liveagent/ui/lib/chat/historyMessageRef";
 import type {
   GatewaySettingsSyncPayload,
@@ -48,13 +49,12 @@ import type {
   TerminalSshLatency,
 } from "@liveagent/ui/lib/terminal/types";
 import type { TunnelCreateInput, TunnelUpdateInput } from "@liveagent/ui/lib/tunnels/constants";
-import type { ClarifyMessage } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
-import type { ChatRuntimeControls } from "@/lib/settings";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
   ChatCommandAccepted,
   ConversationStreamHandlers,
 } from "@/lib/chat/stream/streamTypes";
+import type { ChatRuntimeControls } from "@/lib/settings";
 import {
   buildChatCommandPayload,
   CHAT_COMMAND_ACK_TIMEOUT_MS,

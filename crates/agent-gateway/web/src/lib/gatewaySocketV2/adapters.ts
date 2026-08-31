@@ -884,18 +884,14 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         case: "clarifyTurn",
         value: create(ClarifyTurnRequestSchema, {
           messagesJson:
-            typeof body.messages === "string"
-              ? body.messages
-              : JSON.stringify(body.messages ?? []),
+            typeof body.messages === "string" ? body.messages : JSON.stringify(body.messages ?? []),
           providerId: trimStr(body.provider_id),
           model: trimStr(body.model),
           requestFormat: trimStr(body.request_format),
           runtimeControls: body.runtime_controls
             ? create(ChatRuntimeControlsSchema, {
                 thinkingEnabled: bool(rec(body.runtime_controls).thinking_enabled),
-                nativeWebSearchEnabled: bool(
-                  rec(body.runtime_controls).native_web_search_enabled,
-                ),
+                nativeWebSearchEnabled: bool(rec(body.runtime_controls).native_web_search_enabled),
                 reasoning: str(rec(body.runtime_controls).reasoning),
                 planModeEnabled: bool(rec(body.runtime_controls).plan_mode_enabled),
               })
