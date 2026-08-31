@@ -10,6 +10,7 @@ class DataTransferStub {
   #values = new Map();
   effectAllowed = "none";
   dropEffect = "none";
+  dragImage = null;
 
   get types() {
     return [...this.#values.keys()];
@@ -21,6 +22,10 @@ class DataTransferStub {
 
   setData(type, value) {
     this.#values.set(type, value);
+  }
+
+  setDragImage(element, x, y) {
+    this.dragImage = { element, x, y };
   }
 }
 
@@ -44,6 +49,32 @@ test("workspace path drag payload round-trips without becoming an upload", () =>
   assert.deepEqual(workspacePathDrag.readWorkspacePathDragPayload(transfer), payload);
   assert.equal(transfer.getData("text/plain"), payload.relativePath);
   workspacePathDrag.clearActiveWorkspacePathDrag();
+});
+
+test("workspace path drag uses the shared compact add indicator as its drag image", () => {
+  const transfer = new DataTransferStub();
+  const indicator = { dataset: { dragAddIndicator: "" } };
+  assert.equal(workspacePathDrag.setWorkspacePathDragImage(transfer, indicator), true);
+  assert.deepEqual(transfer.dragImage, {
+    element: indicator,
+    x: workspacePathDrag.WORKSPACE_PATH_DRAG_IMAGE_HOTSPOT_PX,
+    y: workspacePathDrag.WORKSPACE_PATH_DRAG_IMAGE_HOTSPOT_PX,
+  });
+  assert.equal(workspacePathDrag.setWorkspacePathDragImage(transfer, null), false);
+
+  const fileTreeSource = readFileSync(
+    new URL(
+      "../../../agent-ui/src/components/project-tools/file-tree/index.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(fileTreeSource, /<DragAddIndicator/);
+  assert.match(fileTreeSource, /data-workspace-path-drag-image/);
+  assert.match(
+    fileTreeSource,
+    /setWorkspacePathDragImage\(event\.dataTransfer, workspacePathDragImageRef\.current\)/,
+  );
 });
 
 test("an OS file drag is never claimed by a lingering workspace path payload", () => {

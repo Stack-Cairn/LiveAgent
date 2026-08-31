@@ -361,7 +361,8 @@ test("an explicit dock close cascades to the leased pane via the closed event", 
 
 test("the canvas renders the drop preview and the drag ghost from dragState", () => {
   assert.match(viewSource, /dropPreview=\{\s*dragState\?\.previewRect/);
-  assert.ok(viewSource.includes("data-workbench-drag-ghost"));
+  assert.ok(viewSource.includes("<WorkbenchDragGhost"));
+  assert.ok(viewSource.includes("payload={workbenchController.dragState.payload}"));
 });
 
 test("pane chrome, sidebar and right dock all expose drag entry points", () => {

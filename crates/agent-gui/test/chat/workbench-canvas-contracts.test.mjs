@@ -19,6 +19,12 @@ const dividerLayerSource = readSource(
 const workbenchCanvasSource = readSource(
   "../../../agent-ui/src/components/workbench/WorkbenchCanvas.tsx",
 );
+const workbenchDragGhostSource = readSource(
+  "../../../agent-ui/src/components/workbench/WorkbenchDragGhost.tsx",
+);
+const dragAddIndicatorSource = readSource(
+  "../../../agent-ui/src/components/drag/DragAddIndicator.tsx",
+);
 const workspaceDropCommitSource = readSource(
   "../../../agent-ui/src/lib/workbench/workspaceDropCommit.ts",
 );
@@ -114,14 +120,17 @@ test("desktop exposes the same unavailable-drop feedback path as Web", () => {
   assert.match(chatPageSource, /workbench\.conversationAlreadyOpen/);
 });
 
-test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost styling", () => {
+test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost", () => {
   for (const source of [chatPageSource, gatewayViewSource]) {
     assert.match(source, /<WorkbenchCanvas/);
     assert.match(source, /<PaneChrome/);
+    assert.match(source, /<WorkbenchDragGhost/);
   }
-  const dragGhostClass =
-    /className="(layer-popover pointer-events-none fixed max-w-\[220px\][^"]+)"/;
-  assert.equal(chatPageSource.match(dragGhostClass)?.[1], gatewayViewSource.match(dragGhostClass)?.[1]);
+  assert.match(workbenchDragGhostSource, /payload\.kind !== "pane"/);
+  assert.match(workbenchDragGhostSource, /data-workbench-drag-operation/);
+  assert.match(workbenchDragGhostSource, /<DragAddIndicator/);
+  assert.match(dragAddIndicatorSource, /bg-emerald-500/);
+  assert.match(dragAddIndicatorSource, /<Plus/);
 
   const blockedBannerClass =
     /className="(flex shrink-0 items-center gap-2 border-b border-amber-500\/30[^"]+)"/;

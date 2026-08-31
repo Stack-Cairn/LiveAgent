@@ -18,6 +18,7 @@ import {
   WORKBENCH_CANVAS_DIVIDER_SIZE,
   WorkbenchCanvas,
 } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
+import { WorkbenchDragGhost } from "@liveagent/ui/components/workbench/WorkbenchDragGhost";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
@@ -3657,20 +3658,11 @@ export function ChatPage(props: ChatPageProps) {
 
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchDragState ? (
-      <div
+      <WorkbenchDragGhost
         ref={workbenchDragGhostRef}
-        data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
-        style={{
-          left: 0,
-          top: 0,
-          transform:
-            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
-          willChange: "transform",
-        }}
-      >
-        {workbenchDragState.payload.title || t("chat.pendingTitle")}
-      </div>
+        payload={workbenchDragState.payload}
+        fallbackTitle={t("chat.pendingTitle")}
+      />
     ) : null;
 
   return (
