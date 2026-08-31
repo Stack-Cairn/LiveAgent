@@ -1,5 +1,6 @@
 import {
   createProviderModelConfig,
+  normalizeInputModalities,
   normalizeProviderModelConfigs,
   type ProviderId,
   type ProviderModelConfig,
@@ -557,12 +558,16 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
     const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
     const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
+    // 已有存档里的用户自定义字段（如 inputModalities 输入模态覆盖）必须透传；
+    // API 响应不会携带这些字段，透传对刷新场景是无害的。
+    const inputModalities = normalizeInputModalities(obj.inputModalities);
     out.push({
       id,
       ...(ownedBy ? { ownedBy } : {}),
       contextWindow: contextWindow ?? draft.contextWindow,
       maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
       limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
+      ...(inputModalities ? { inputModalities } : {}),
     });
   }
 

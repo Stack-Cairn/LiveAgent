@@ -3,6 +3,7 @@ import {
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
+  normalizeProviderModelConfigs,
   PROVIDER_RETRY_DEFAULT_MAX_RETRIES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   type PromptCacheHintMode,
@@ -40,7 +41,6 @@ import {
   isGatewayWebuiRuntime,
   matchBalanceProviders,
   mergeFetchedModels,
-  normalizeFetchedModels,
   requiresCustomUsageQueryConfirmation,
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
@@ -139,7 +139,11 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [headerImportError, setHeaderImportError] = useState<HeaderImportErrorCode | null>(null);
   const [headerImportSummary, setHeaderImportSummary] = useState<HeaderImportSummary | null>(null);
   const [models, setModels] = useState<ProviderModelConfig[]>(() =>
-    normalizeFetchedModels(initialData?.models ?? [], providerType),
+    // 弹窗初始化处理的是已持久化的模型配置，必须走持久化归一化（保留
+    // contextWindow/maxOutputToken/limitsSource/inputModalities 等用户字段）；
+    // normalizeFetchedModels 只用于供应商 API 刷新结果（如 Gemini 的
+    // inputTokenLimit 字段形状），混用会在“打开并保存”往返中重置用户配置。
+    normalizeProviderModelConfigs(initialData?.models ?? [], providerType),
   );
   const [modelOrder, setModelOrder] = useState<string[] | undefined>(() =>
     initialData?.modelOrder ? [...initialData.modelOrder] : undefined,
