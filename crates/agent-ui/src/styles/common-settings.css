@@ -124,7 +124,7 @@
   .mention-popup-enter {
     animation: mentionPopupIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: bottom center;
-    min-width: min(380px, calc(100vw - 24px));
+    min-width: 0;
   }
 
   .mention-popup-item {

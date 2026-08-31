@@ -1,7 +1,7 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import {
-  mergePendingUploadedFiles,
+  mergePendingUploadedFilesWithStats,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
@@ -33,7 +33,6 @@ type SystemUploadedReadableFileInput = {
 type UploadTarget = {
   targetConversationId: string;
   targetWorkdir: string;
-  remainingFileSlots: number;
 };
 
 export type ConversationUploadTarget = {
@@ -160,26 +159,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         return null;
       }
 
-      const currentTargetUploads = getPendingUploadsForConversation(targetConversationId);
-      const remainingFileSlots = Math.max(0, MAX_UPLOAD_FILES - currentTargetUploads.length);
-      if (remainingFileSlots === 0) {
-        addNotify("warning", `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略多余文件`);
-        return null;
-      }
-
       return {
         targetConversationId,
         targetWorkdir: (requested?.workdir ?? workdir).trim(),
-        remainingFileSlots,
       };
     },
-    [
-      addNotify,
-      currentConversationIdRef,
-      getPendingUploadsForConversation,
-      setErrorMessage,
-      workdir,
-    ],
+    [currentConversationIdRef, setErrorMessage, workdir],
   );
 
   const appendImportedFiles = useCallback(
@@ -205,11 +190,21 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
           invalidateUploadedImagePreviewCache(targetWorkdir, file);
         }
         const previous = getPendingUploadsForConversation(targetConversationId);
-        const merged = mergePendingUploadedFiles(previous, result.files);
-        if (merged.length > MAX_UPLOAD_FILES) {
-          addNotify("warning", `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略多余文件`);
+        const merged = mergePendingUploadedFilesWithStats(previous, result.files);
+        if (merged.duplicateCount > 0) {
+          addNotify("warning", `已合并 ${merged.duplicateCount} 个重复文件`);
         }
-        setPendingUploadsForConversation(targetConversationId, merged.slice(0, MAX_UPLOAD_FILES));
+        const overflowCount = Math.max(0, merged.files.length - MAX_UPLOAD_FILES);
+        if (overflowCount > 0) {
+          addNotify(
+            "warning",
+            `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${overflowCount} 个额外文件`,
+          );
+        }
+        setPendingUploadsForConversation(
+          targetConversationId,
+          merged.files.slice(0, MAX_UPLOAD_FILES),
+        );
         if (isTargetDisplayed) {
           composerRef.current?.focus();
         }
@@ -298,10 +293,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       runUploadTask({
         emptySelectionMessage: "所选文件均不受当前 Read 支持",
         errorFallback: "导入文件失败",
-        importer: ({ targetWorkdir, remainingFileSlots }) =>
+        importer: ({ targetWorkdir }) =>
           invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
             workdir: targetWorkdir,
-            maxFiles: remainingFileSlots,
+            maxFiles: MAX_UPLOAD_FILES,
           }),
       }),
     [runUploadTask],
@@ -314,11 +309,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         {
           emptySelectionMessage: "拖入文件均不受当前 Read 支持",
           errorFallback: "导入文件失败",
-          importer: ({ targetWorkdir, remainingFileSlots }) =>
+          importer: ({ targetWorkdir }) =>
             invoke<SystemPickReadableFilesResponse>("system_import_readable_file_paths", {
               workdir: targetWorkdir,
               paths,
-              maxFiles: remainingFileSlots,
+              maxFiles: MAX_UPLOAD_FILES,
             }),
         },
         target,
@@ -334,8 +329,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         {
           emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
           errorFallback: "导入剪贴板文件失败",
-          importer: async ({ targetWorkdir, remainingFileSlots }) => {
-            const importBatch = files.slice(0, remainingFileSlots);
+          importer: async ({ targetWorkdir }) => {
+            const importBatch = files.slice(0, MAX_UPLOAD_FILES);
             const ignoredForLimit = files.length - importBatch.length;
             if (ignoredForLimit > 0) {
               addNotify(
@@ -349,7 +344,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
               {
                 workdir: targetWorkdir,
                 files: uploadFiles,
-                maxFiles: remainingFileSlots,
+                maxFiles: MAX_UPLOAD_FILES,
               },
             );
           },

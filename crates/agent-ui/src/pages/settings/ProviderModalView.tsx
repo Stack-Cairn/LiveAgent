@@ -80,6 +80,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     applyHeaderSuggestion,
     applyModelBulkState,
     baseUrl,
+    canOverrideModelInputModalities,
     canSaveEditingModel,
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
@@ -87,6 +88,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     draggingModelId,
     editingModel,
     editingModelContextWindow,
+    editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
     exitModelBulkMode,
     fetchError,
@@ -147,6 +149,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setApiKey,
     setBaseUrl,
     setEditingModel,
+    setEditingModelInputModalitiesMode,
     setHeaderImportError,
     setHeaderImportOpen,
     setHeaderImportSummary,
@@ -725,6 +728,51 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                       }}
                                     />
                                   </div>
+                                  {canOverrideModelInputModalities ? (
+                                    <div className="col-span-2 space-y-1.5 max-[720px]:col-span-1">
+                                      <Label>{t("settings.modelInputModalities")}</Label>
+                                      <Select
+                                        value={editingModelInputModalitiesMode}
+                                        onValueChange={(value) => {
+                                          if (
+                                            value === "auto" ||
+                                            value === "text" ||
+                                            value === "text-image"
+                                          ) {
+                                            setEditingModelInputModalitiesMode(value);
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger
+                                          aria-label={t("settings.modelInputModalities")}
+                                        >
+                                          <SelectValue>
+                                            {t(
+                                              editingModelInputModalitiesMode === "auto"
+                                                ? "settings.modelInputModalitiesAuto"
+                                                : editingModelInputModalitiesMode === "text"
+                                                  ? "settings.modelInputModalitiesText"
+                                                  : "settings.modelInputModalitiesTextImage",
+                                            )}
+                                          </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="auto">
+                                            {t("settings.modelInputModalitiesAuto")}
+                                          </SelectItem>
+                                          <SelectItem value="text">
+                                            {t("settings.modelInputModalitiesText")}
+                                          </SelectItem>
+                                          <SelectItem value="text-image">
+                                            {t("settings.modelInputModalitiesTextImage")}
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs leading-relaxed text-muted-foreground">
+                                        {t("settings.modelInputModalitiesHint")}
+                                      </p>
+                                    </div>
+                                  ) : null}
                                   {providerType === "codex" ? (
                                     <div className="col-span-2 space-y-1.5 max-[720px]:col-span-1">
                                       <Label>{t("settings.promptCacheHintModelOverride")}</Label>

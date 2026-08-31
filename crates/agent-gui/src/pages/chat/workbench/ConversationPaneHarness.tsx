@@ -35,11 +35,7 @@ export function ConversationPaneHarness(props: ConversationPaneHarnessProps) {
                 : "relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
             }
           >
-            <ConversationPaneHost
-              paneId={pane.paneId}
-              conversationId={pane.conversationId}
-              project={pane.project}
-            />
+            <ConversationPaneHost paneId={pane.paneId} />
           </div>
         ))}
       </div>

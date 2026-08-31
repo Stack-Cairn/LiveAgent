@@ -76,7 +76,12 @@ type WorkspaceOverlayHostProps = {
   onSshTerminalFocusLeasedSession?: (sessionId: string) => void;
   onSshTerminalSessionTabDragStart?: (
     session: TerminalSession,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
 };
 

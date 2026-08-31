@@ -1,4 +1,5 @@
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { MutableRefObject } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
@@ -34,6 +35,7 @@ export type GatewayChatRequestEvent = {
   workdir?: string;
   commandSafetyMode?: string;
   uploadedFiles?: PendingUploadedFile[];
+  referencedConversations?: ConversationMentionReference[];
   queuePolicy?: "auto" | "append" | "interrupt" | string;
 };
 

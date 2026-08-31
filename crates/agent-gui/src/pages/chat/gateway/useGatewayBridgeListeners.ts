@@ -1,4 +1,5 @@
 import type { ClarifyMessage } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
+import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type Event } from "@tauri-apps/api/event";
@@ -8,6 +9,7 @@ import {
   normalizeChatRuntimeControls,
   type ChatRuntimeControls,
 } from "../../../lib/settings";
+import { createTextComposerDraft } from "../composer/composerDraftText";
 import {
   type ActiveGatewayBridgeRequest,
   type GatewayBridgeRuntimeRefs,
@@ -511,6 +513,13 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
         };
         const accepted = await latestParamsRef.current.sendActionRef.current({
           textOverride: message,
+          composerDraftOverride: createTextComposerDraft(
+            message,
+            normalizeConversationMentionReferences(
+              payload.referencedConversations,
+              resolvedConversationId,
+            ),
+          ),
           uploadedFilesOverride: uploadedFiles,
           conversationIdOverride: resolvedConversationId,
           executionModeOverride: gatewayBridgeRequest.executionModeOverride,

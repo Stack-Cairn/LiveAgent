@@ -22,13 +22,13 @@ type UseWorkspaceProjectRemovalParams = {
   activateWorkspaceProject: (
     project: WorkspaceProject,
     options?: { startConversation?: boolean },
-  ) => void;
+  ) => string | null;
   setActiveWorkspaceProjectId: Dispatch<SetStateAction<string>>;
   terminalProjectPathKey: string;
   setTerminalSessions: Dispatch<SetStateAction<TerminalSession[]>>;
   setRightDockOpen: Dispatch<SetStateAction<boolean>>;
   displayedConversationWorkdir: string;
-  startNewConversationActionRef: MutableRefObject<(options?: { workdir?: string }) => void>;
+  startNewConversationActionRef: MutableRefObject<(options?: { workdir?: string }) => string>;
 };
 
 export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalParams) {

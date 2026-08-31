@@ -13,6 +13,7 @@ import (
 var ErrAgentIDRequired = errors.New("agent_id is required")
 var ErrAgentOffline = errors.New("agent offline")
 var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update LiveAgent desktop")
+var ErrConversationReferencesProtocolIncompatible = errors.New("desktop conversation references are incompatible; update LiveAgent desktop")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
 

@@ -446,7 +446,7 @@ export function TrajectoryView(props: {
   }
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col">
+    <div className="@container flex h-full min-h-0 flex-1 flex-col">
       <TrajectoryToolbar
         actualDuration={actualDuration}
         hasTiming={hasTiming}
@@ -495,7 +495,11 @@ export function TrajectoryView(props: {
         onRecordSelect={selectRecordAtIndex}
       />
 
-      <div ref={contentRef} className="relative flex min-h-0 flex-1 overflow-hidden">
+      {/* 窄容器（小窗口/移动端）下左右分栏互相挤压，改为上下排布。 */}
+      <div
+        ref={contentRef}
+        className="relative flex min-h-0 flex-1 overflow-hidden @max-[640px]:flex-col"
+      >
         <TrajectoryTable
           turns={turns}
           collapsedTurns={collapsedTurns}

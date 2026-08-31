@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// TerminalPaneHost 的纯逻辑层:恢复 Pane 自动重建、陈旧绑定清理、
+// TerminalPaneHost 的纯逻辑层:恢复 Pane 显式授权、陈旧绑定清理、
 // ensure 的挂载竞态去重、restartFromLaunchSpec 的收尾顺序。
 // 宿主本身需要 DOM 才能挂载,这里分两层覆盖:
 //   1) 模型层——真实 runtime 模块(授权集 + 绑定表 + ensure)的组合语义;
@@ -12,15 +12,24 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // 并发共享一次 create、失败后可重试、SSH 提示错误)不在此重复。
 
 const loader = createTsModuleLoader();
-const { ensureTerminalPaneSession } = loader.loadModule(
+const {
+  createTerminalPaneAutoLaunchRegistry,
+  ensureTerminalPaneSession,
+  isTerminalPaneAutoLaunchAuthorized,
+} = loader.loadModule(
   "src/pages/chat/workbench/terminalPaneRuntime.ts",
 );
 const { createTerminalPaneBindingStore } = loader.loadModule(
   "src/pages/chat/workbench/terminalPaneBindingStore.ts",
 );
 
+// 宿主实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现;
+// 桌面文件只是注入 Tauri client 与窗口级单例的薄包装。
 const hostSource = readFileSync(
-  new URL("../../src/pages/chat/surfaces/TerminalPaneHost.tsx", import.meta.url),
+  new URL(
+    "../../../agent-ui/src/components/workbench/TerminalPaneHost.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -65,12 +74,14 @@ function countingClient() {
 }
 
 // ---------------------------------------------------------------------------
-// 模型层:自动恢复
+// 模型层:恢复授权
 // ---------------------------------------------------------------------------
 
-test("a restored surface without a binding mounts ready to auto-launch", () => {
+test("a restored surface without a binding stays unauthorized", () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
+  const autoLaunch = createTerminalPaneAutoLaunchRegistry();
   assert.equal(bindings.get("surface-a"), null);
+  assert.equal(isTerminalPaneAutoLaunchAuthorized("surface-a", autoLaunch), false);
 });
 
 test("a webview reload that keeps its binding mounts live", () => {
@@ -80,12 +91,15 @@ test("a webview reload that keeps its binding mounts live", () => {
   assert.equal(bindings.get("surface-a"), "session-1");
 });
 
-test("a restored unbound surface immediately ensures a replacement PTY", async () => {
+test("an explicitly authorized surface can ensure a replacement PTY", async () => {
   const bindings = createTerminalPaneBindingStore({ storage: null });
+  const autoLaunch = createTerminalPaneAutoLaunchRegistry();
   const client = countingClient();
   const surface = localSurface("surface-a");
   const inflight = new Map();
 
+  autoLaunch.authorize(surface.surfaceId);
+  assert.equal(isTerminalPaneAutoLaunchAuthorized(surface.surfaceId, autoLaunch), true);
   const created = await ensureTerminalPaneSession(surface, { client, bindings, inflight });
   assert.equal(client.created, 1);
   assert.equal(bindings.get("surface-a"), created.id);
@@ -160,41 +174,64 @@ function assertOrder(block, steps, label) {
   }
 }
 
-test("host has no pane-local termination state", () => {
-  assert.equal(hostSource.includes("launchRequested"), false);
-  assert.equal(hostSource.includes("dormant"), false);
+test("host exposes a dormant state for restored unbound surfaces", () => {
+  assert.equal(hostSource.includes("launchRequestedSurfaceId"), true);
+  assert.equal(hostSource.includes('phase = "dormant"'), true);
   assert.equal(hostSource.includes("killSession"), false);
 });
 
-test("the ensure effect only waits for session state prerequisites", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
-  assert.match(ensureEffect, /if \(!sessionsLoaded \|\| session \|\| errorState\) return;/);
-  assertOrder(
-    ensureEffect,
-    ["if (!sessionsLoaded || session || errorState) return;", "ensureTerminalPaneSession(surface, {"],
-    "session-state early return",
-  );
-});
-
-test("a bound-but-missing session drops the stale binding before auto-recreate", () => {
-  const ensureEffect = blockFrom(hostSource, "if (!sessionsLoaded || session || errorState");
+test("an unbound surface requires explicit auto-launch authorization", () => {
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
+  assert.match(ensureEffect, /if \(session \|\| errorState\) return;/);
   assertOrder(
     ensureEffect,
     [
-      "if (boundSessionId) {",
-      "terminalPaneBindings.delete(surface.surfaceId)",
+      "if (boundSessionId && !pendingEnsure) {",
+      "if (!sessionsLoaded) return;",
+      "if (!launchAuthorized && !pendingEnsure) return;",
+      "ensureTerminalPaneSession(surface, {",
+    ],
+    "binding-only session-list gate",
+  );
+});
+
+test("a bound-but-missing restored session drops the stale binding before going dormant", () => {
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
+  assertOrder(
+    ensureEffect,
+    [
+      "if (boundSessionId && !pendingEnsure) {",
+      "bindings.delete(surface.surfaceId)",
       "setCreatedSession(null)",
     ],
     "stale-binding branch",
   );
   assert.match(
     ensureEffect,
-    /terminalPaneBindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
+    /bindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
   );
   // 先触发 binding store 更新,下一轮 effect 才进入 ensure,避免同轮双建。
   assert.ok(
-    ensureEffect.indexOf("terminalPaneBindings.delete(surface.surfaceId)") <
+    ensureEffect.indexOf("bindings.delete(surface.surfaceId)") <
       ensureEffect.indexOf("ensureTerminalPaneSession(surface, {"),
+  );
+});
+
+test("a fresh binding cannot be deleted while its create promise is settling", () => {
+  const ensureEffect = blockFrom(hostSource, "if (session || errorState) return;");
+  assertOrder(
+    ensureEffect,
+    [
+      "const pendingEnsure = ensureSessionPromiseRef.current;",
+      "if (boundSessionId && !pendingEnsure) {",
+      "bindings.delete(surface.surfaceId)",
+      "const ensurePromise =",
+      "pendingEnsure ??",
+      "ensureSessionPromiseRef.current = ensurePromise;",
+      "void ensurePromise",
+      "setCreatedSession(created)",
+    ],
+    "create binding/list race guard",
   );
 });
 
@@ -203,9 +240,10 @@ test("restartFromLaunchSpec closes the stale session and drops the binding", () 
   assertOrder(
     restart,
     [
-      "terminalPaneBindings.get(surface.surfaceId)",
-      "tauriTerminalClient.close(staleSessionId)",
-      "terminalPaneBindings.delete(surface.surfaceId)",
+      "bindings.get(surface.surfaceId)",
+      "client.close(staleSessionId)",
+      "autoLaunch.authorize(surface.surfaceId)",
+      "bindings.delete(surface.surfaceId)",
       "setErrorState(null)",
     ],
     "restartFromLaunchSpec",

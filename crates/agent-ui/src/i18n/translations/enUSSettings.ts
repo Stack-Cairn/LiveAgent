@@ -355,6 +355,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.memory_manager.desc": "Read and write long-term memory across sessions",
   "settings.builtinTool.memory_manager.detail":
     "Maintains long-term memory across sessions: saving preferences, project conventions and key conclusions for later recall. Contents can be reviewed and organized in the Memory settings panel.",
+  "settings.builtinTool.read_conversation.name": "Read Conversation",
+  "settings.builtinTool.read_conversation.desc":
+    "Read conversations referenced with @ in the current turn on demand",
+  "settings.builtinTool.read_conversation.detail":
+    "Registered only after the current message explicitly references an earlier conversation through the @ menu. The model can page through persisted summaries and conversation text; historical tool output is filtered and all historical text is treated as untrusted context. Read-only; chat sessions only.",
   "settings.builtinTool.agent.name": "Subagent",
   "settings.builtinTool.agent.desc": "Spawn subagents to work on complex tasks in parallel",
   "settings.builtinTool.agent.detail":
@@ -630,6 +635,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "Estimated",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelInputModalities": "Input capabilities",
+  "settings.modelInputModalitiesAuto": "Auto-detect (recommended)",
+  "settings.modelInputModalitiesText": "Text only",
+  "settings.modelInputModalitiesTextImage": "Text and images",
+  "settings.modelInputModalitiesHint":
+    "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
   "settings.positiveIntegerRequired": "Please enter a positive integer",
   "settings.add": "Add",
   "settings.cancel": "Cancel",
@@ -662,6 +673,17 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.commitMessageModelHint":
     "Model used to generate commit messages in Git review. Follows the current chat model when unselected or unavailable.",
   "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
+  "settings.composerContextDisplay": "Context usage display",
+  "settings.composerContextDisplayHint":
+    "Choose how the composer shows context usage. Every mode keeps the manual compaction entry at ≥50% usage.",
+  "settings.composerContextDisplayStatsBar": "Stats bar",
+  "settings.composerContextDisplayBoth": "Both",
+  "settings.composerContextDisplayRing": "Usage ring",
+  "settings.composerContextDisplayStatsBarDesc": "Only the conversation stats bar below the card.",
+  "settings.composerContextDisplayBothDesc":
+    "The stats bar plus the usage ring at the composer's lower right.",
+  "settings.composerContextDisplayRingDesc":
+    "Only the always-visible usage ring at the composer's lower right.",
   "settings.failoverTitle": "Auto Failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, retry it on the next {vendor} provider in the queue with the same model, staying on the provider that succeeds. Never crosses vendors.",

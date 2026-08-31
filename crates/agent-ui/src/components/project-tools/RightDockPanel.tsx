@@ -6,6 +6,7 @@ import {
   type RightDockFileTreeStatePatch,
   type RightDockProjectState,
   type SshHostConfig,
+  type WorkspaceProject,
 } from "@liveagent/app/lib/settings";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { X } from "@liveagent/ui/components/IconSet";
@@ -13,6 +14,7 @@ import type {
   GitCommitContextPayload,
   GitFileContextPayload,
 } from "@liveagent/ui/components/project-tools/git-review/index";
+import type { WorkspaceProjectRootClient } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import {
@@ -34,6 +36,7 @@ import { cn } from "../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { Button } from "../ui/button";
+import { useFileTreeExternalRoots } from "./file-tree/useFileTreeExternalRoots";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
 import { RightDockContent } from "./RightDockContent";
 import {
@@ -61,6 +64,9 @@ type RightDockPanelProps = {
   fontScale?: number;
   projectPathKey: string;
   cwd: string;
+  workspaceProject?: WorkspaceProject;
+  workspaceProjectRootClient?: WorkspaceProjectRootClient;
+  workspaceRootRevision?: number;
   sessions?: TerminalSession[];
   sessionsLoaded?: boolean;
   /**
@@ -68,6 +74,7 @@ type RightDockPanelProps = {
    * 视口互斥(绝不同时挂两个 XTermViewport)是这里唯一的硬不变量。
    */
   leasedSessionIds?: ReadonlySet<string>;
+  fileTreeLeased?: boolean;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -97,12 +104,28 @@ type RightDockPanelProps = {
   /** 存在时终端 tab 可拖出 dock(工作台宿主);默认无行为。 */
   onTerminalTabDragStart?: (
     session: TerminalSession,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   /** 存在时空态"新建终端"入口可拖出到工作台画板;点击行为不变。 */
-  onNewTerminalDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onNewTerminalDragStart?: (event: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    currentTarget?: EventTarget | null;
+  }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  /** File Tree 单例 tab 拖出到 Workbench。 */
+  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  /** File Tree 菜单式“在分屏中打开”。 */
+  onOpenFileTreeInWorkbench?: () => void;
+  /** 新建菜单「在分屏中新建终端」;与拖拽 newTerminal 走同一提交语义。 */
+  onOpenNewTerminalInWorkbench?: () => void;
   /**
    * dock 视口报错时上抛 sessionId,由宿主按后端权威列表校验:会话确认
    * 消失(幽灵记录)则整表刷新,坏 tab 自动退场;仍存活的瞬时错误不动列表。
@@ -362,9 +385,13 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     fontScale = 1,
     projectPathKey,
     cwd,
+    workspaceProject,
+    workspaceProjectRootClient,
+    workspaceRootRevision = 0,
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
+    fileTreeLeased,
     width,
     theme,
     disabledMessage,
@@ -392,6 +419,9 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onTerminalTabDragStart,
     onNewTerminalDragStart,
     onOpenTerminalInWorkbench,
+    onFileTreeTabDragStart,
+    onOpenFileTreeInWorkbench,
+    onOpenNewTerminalInWorkbench,
     onSessionGhost,
     onInsertFileMention,
     onOpenFile,
@@ -404,6 +434,12 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   } = props;
   const { t } = useLocale();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const { externalRoots: visibleExternalFileTreeRoots, refreshExternalRoots } =
+    useFileTreeExternalRoots({
+      workspaceProject,
+      workspaceProjectRootClient,
+      workspaceRootRevision,
+    });
   const {
     effectiveShouldRenderContent,
     effectiveWidthCollapsed,
@@ -544,6 +580,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     tunnelInitialized,
   } = useRightDockProjectTabs({
     backgroundTasksVisible,
+    fileTreeLeased,
     localSessions,
     onProjectStateChange,
     projectPathKey,
@@ -635,6 +672,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
 
   const startToolTab = useCallback(
     (kind: RightDockSingletonTabKind) => {
+      if (kind === "fileTree" && fileTreeLeased) return;
       if (rightDockTabRequiresProject(kind)) {
         if (!projectReady) return;
       } else if (!tunnelClient) {
@@ -642,7 +680,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       }
       openSingletonTab(kind);
     },
-    [openSingletonTab, projectReady, tunnelClient],
+    [fileTreeLeased, openSingletonTab, projectReady, tunnelClient],
   );
 
   const setFileTreeInitialized = useCallback(
@@ -709,6 +747,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       fileTree: {
         state: fileTreeState,
         initialized: fileTreeInitialized,
+        externalRoots: visibleExternalFileTreeRoots,
+        refreshExternalRoots,
         onInitializedChange: setFileTreeInitialized,
         onStateChange: onFileTreeStateChange,
         onInsertFileMention,
@@ -739,6 +779,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       client,
       cwd,
       disabledMessage,
+      visibleExternalFileTreeRoots,
       fileTreeInitialized,
       fileTreeState,
       forgetTerminalSession,
@@ -760,6 +801,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       projectReady,
       reconcileSshSessions,
       rememberTerminalSnapshot,
+      refreshExternalRoots,
       revealPathInFileTree,
       setFileTreeInitialized,
       sshHosts,
@@ -863,11 +905,14 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onCloseTerminalRequest={handleCloseRequest}
                       onTerminalTabDragStart={onTerminalTabDragStart}
                       onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
+                      onFileTreeTabDragStart={onFileTreeTabDragStart}
+                      onOpenFileTreeInWorkbench={onOpenFileTreeInWorkbench}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
                 </div>
                 <RightDockCreateMenu
+                  fileTreeLeased={fileTreeLeased}
                   open={createMenuOpen}
                   onOpenChange={setCreateMenuOpen}
                   shellOptions={shellOptions}
@@ -877,6 +922,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   tunnelAvailable={tunnelAvailable}
                   creating={creating}
                   onCreateTerminal={createTerminal}
+                  onOpenNewTerminalInWorkbench={onOpenNewTerminalInWorkbench}
                   onStartTool={startToolTab}
                   onOpenBackgroundTasks={openBackgroundTasks}
                 />
@@ -932,6 +978,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                 </div>
               ) : showRightDockChooser ? (
                 <RightDockChooser
+                  fileTreeLeased={fileTreeLeased}
                   terminalReady={terminalReady}
                   terminalDisabledMessage={terminalDisabledMessage}
                   disabledMessage={disabledMessage}
@@ -958,6 +1005,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
+                  fileTreeLeased={fileTreeLeased}
                 />
               )}
             </>

@@ -67,6 +67,10 @@ func NormalizeRequestBody(body *handler.ChatRequestBody) error {
 	body.CommandSafetyMode = handler.NormalizeCommandSafetyMode(body.CommandSafetyMode)
 	body.QueuePolicy = normalizeQueuePolicy(body.QueuePolicy)
 	body.UploadedFiles = handler.NormalizeChatUploadedFiles(body.UploadedFiles)
+	body.ReferencedConversations = handler.NormalizeChatConversationReferences(
+		body.ReferencedConversations,
+		body.ConversationID,
+	)
 	body.RuntimeControls = handler.NormalizeChatRuntimeControls(body.RuntimeControls)
 	selectedModel, err := handler.NormalizeChatSelectedModel(body.SelectedModel)
 	if err != nil {
@@ -270,14 +274,15 @@ func buildUserMessageAppendedPayload(
 	baseMessageRef *MessageRef,
 ) map[string]any {
 	payload := map[string]any{
-		"type":                  "user_message",
-		"message":               body.Message,
-		"uploaded_files":        body.UploadedFiles,
-		"execution_mode":        body.ExecutionMode,
-		"workdir":               body.Workdir,
-		"command_safety_mode":   body.CommandSafetyMode,
-		"runtime_controls":      body.RuntimeControls,
-		"selected_model":        body.SelectedModel,
+		"type":                     "user_message",
+		"message":                  body.Message,
+		"uploaded_files":           body.UploadedFiles,
+		"referenced_conversations": body.ReferencedConversations,
+		"execution_mode":           body.ExecutionMode,
+		"workdir":                  body.Workdir,
+		"command_safety_mode":      body.CommandSafetyMode,
+		"runtime_controls":         body.RuntimeControls,
+		"selected_model":           body.SelectedModel,
 	}
 	if baseMessageRef != nil {
 		payload["base_message_ref"] = baseMessageRef
@@ -319,16 +324,17 @@ func BuildCancelCommandPayload(conversationID string) *gatewayv2.GatewayEnvelope
 
 func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 	return &gatewayv2.ChatRequest{
-		ConversationId:      body.ConversationID,
-		ClientRequestId:     body.ClientRequestID,
-		Message:             body.Message,
-		SelectedModel:       handler.ToProtoChatSelectedModel(body.SelectedModel),
-		RuntimeControls:     handler.ToProtoChatRuntimeControls(body.RuntimeControls),
-		ExecutionMode:       body.ExecutionMode,
-		Workdir:             body.Workdir,
-		CommandSafetyMode:   body.CommandSafetyMode,
-		UploadedFiles:       handler.ToProtoChatUploadedFiles(body.UploadedFiles),
-		QueuePolicy:         body.QueuePolicy,
+		ConversationId:          body.ConversationID,
+		ClientRequestId:         body.ClientRequestID,
+		Message:                 body.Message,
+		SelectedModel:           handler.ToProtoChatSelectedModel(body.SelectedModel),
+		RuntimeControls:         handler.ToProtoChatRuntimeControls(body.RuntimeControls),
+		ExecutionMode:           body.ExecutionMode,
+		Workdir:                 body.Workdir,
+		CommandSafetyMode:       body.CommandSafetyMode,
+		UploadedFiles:           handler.ToProtoChatUploadedFiles(body.UploadedFiles),
+		ReferencedConversations: handler.ToProtoChatConversationReferences(body.ReferencedConversations),
+		QueuePolicy:             body.QueuePolicy,
 	}
 }
 
@@ -354,13 +360,24 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 		return handler.ChatRequestBody{}
 	}
 	body := handler.ChatRequestBody{
-		ConversationID:      req.GetConversationId(),
-		ClientRequestID:     req.GetClientRequestId(),
-		Message:             req.GetMessage(),
-		ExecutionMode:       req.GetExecutionMode(),
-		Workdir:             req.GetWorkdir(),
-		CommandSafetyMode:   req.GetCommandSafetyMode(),
-		QueuePolicy:         req.GetQueuePolicy(),
+		ConversationID:    req.GetConversationId(),
+		ClientRequestID:   req.GetClientRequestId(),
+		Message:           req.GetMessage(),
+		ExecutionMode:     req.GetExecutionMode(),
+		Workdir:           req.GetWorkdir(),
+		CommandSafetyMode: req.GetCommandSafetyMode(),
+		QueuePolicy:       req.GetQueuePolicy(),
+	}
+	for _, reference := range req.GetReferencedConversations() {
+		body.ReferencedConversations = append(
+			body.ReferencedConversations,
+			handler.ChatConversationReferenceBody{
+				ID:        reference.GetId(),
+				Title:     reference.GetTitle(),
+				Cwd:       reference.GetCwd(),
+				UpdatedAt: reference.GetUpdatedAt(),
+			},
+		)
 	}
 	if selected := req.GetSelectedModel(); selected != nil {
 		body.SelectedModel = &handler.ChatSelectedModelBody{

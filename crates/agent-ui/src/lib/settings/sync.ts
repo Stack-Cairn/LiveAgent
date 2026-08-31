@@ -1328,6 +1328,11 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
+      // 展示样式是全局偏好，随同步走；老对端的 payload 没有该字段时保留本地值，
+      // 不得被重置回默认。
+      composerContextDisplay:
+        incomingCustomSettings.composerContextDisplay ??
+        current.customSettings.composerContextDisplay,
       // Typography, scale, and transcript width are local UI preferences, never gateway-synced.
       interfaceFontFamily: current.customSettings.interfaceFontFamily,
       chatFontFamily: current.customSettings.chatFontFamily,

@@ -59,16 +59,24 @@ function transcriptTexts(store) {
 
 test("submit inserts the optimistic bubble and resolves the accepted run", async () => {
   const { pipeline, stores } = createHarness();
+  const referencedConversations = [
+    { id: "conversation-source", title: "Source conversation", cwd: "/workspace/source" },
+  ];
   const outcome = await pipeline.submit({
     conversationId: "conv-1",
     clientRequestId: "client-1",
     message: "hello",
+    referencedConversations,
     submit: async () => ({ runId: "run-1", conversationId: "conv-1", acceptedSeq: 2 }),
   });
 
   assert.equal(outcome.kind, "accepted");
   assert.equal(outcome.accepted.runId, "run-1");
   assert.deepEqual(tailTexts(stores.get("conv-1")), ["hello"]);
+  assert.deepEqual(
+    stores.get("conv-1").getSnapshot().rows[0].referencedConversations,
+    referencedConversations,
+  );
   assert.equal(pipeline.hasPending("conv-1"), true);
 
   // The stream's run signal settles the pending spinner.

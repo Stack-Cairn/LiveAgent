@@ -302,6 +302,34 @@ test("resolveEffectiveActiveTabId resolves persisted ids against visible tabs", 
   assert.equal(resolve(undefined, [], true), null);
 });
 
+test("a leased file tree leaves the dock without clearing its persisted tool state", () => {
+  const projectState = {
+    activeTabId: RIGHT_DOCK_TAB_IDS.fileTree,
+    tabOrder: [RIGHT_DOCK_TAB_IDS.fileTree, RIGHT_DOCK_TAB_IDS.gitReview],
+    tools: { fileTree: { openedAt: 2 }, gitReview: { openedAt: 1 } },
+  };
+  const options = {
+    backgroundTasksVisible: false,
+    localSessions: [],
+    projectPathKey: "/workspace/app",
+    projectState,
+    tunnelAvailable: true,
+  };
+
+  const leased = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: true });
+  assert.deepEqual(
+    leased.map((tab) => tab.kind),
+    ["gitReview"],
+  );
+  assert.deepEqual(Object.keys(projectState.tools), ["fileTree", "gitReview"]);
+
+  const released = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: false });
+  assert.deepEqual(
+    released.map((tab) => tab.kind),
+    ["fileTree", "gitReview"],
+  );
+});
+
 test("closeRightDockToolTabState removes the tool and reassigns activeTabId only when needed", () => {
   const state = {
     activeTabId: RIGHT_DOCK_TAB_IDS.gitReview,
@@ -624,6 +652,78 @@ describe("file tree model", () => {
     );
     assert.deepEqual(third[""].children, ["a.ts"]);
     assert.equal(third.src, undefined);
+  });
+
+  test("attached workspace roots survive primary-root refreshes and are removed with their grant", () => {
+    const base = {
+      "": dirNode("", ["src"], { loaded: true }),
+      src: dirNode("src", []),
+    };
+    const root = { id: "root-1", name: "Shared docs", cwd: "C:/shared/docs" };
+    const externalPath = fileTreeModel.externalRootPath(root.id);
+    assert.equal(fileTreeModel.externalRootPathInfo("__liveagent_external_root__/root-1"), null);
+    const mounted = fileTreeModel.applyFileTreeExternalRoots(base, [root]);
+    assert.deepEqual(mounted[""].children, ["src", externalPath]);
+    assert.equal(mounted[externalPath].name, "Shared docs");
+    assert.deepEqual(fileTreeModel.externalRootPathInfo(`${externalPath}/guide/readme.md`), {
+      rootId: "root-1",
+      relativePath: "guide/readme.md",
+    });
+
+    const withLoadedChild = {
+      ...mounted,
+      [externalPath]: dirNode(externalPath, [`${externalPath}/guide`], { name: "Shared docs" }),
+      [`${externalPath}/guide`]: dirNode(`${externalPath}/guide`, []),
+    };
+    const refreshed = fileTreeModel.applyFileTreeListResponse(
+      withLoadedChild,
+      "",
+      "/workspace/project",
+      [{ path: "src", kind: "dir" }],
+      undefined,
+    );
+    const restored = fileTreeModel.applyFileTreeExternalRoots(refreshed, [root]);
+    assert.deepEqual(restored[""].children, ["src", externalPath]);
+    assert.deepEqual(restored[externalPath].children, [`${externalPath}/guide`]);
+
+    const revoked = fileTreeModel.applyFileTreeExternalRoots(restored, []);
+    assert.deepEqual(revoked[""].children, ["src"]);
+    assert.equal(revoked[externalPath], undefined);
+    assert.equal(revoked[`${externalPath}/guide`], undefined);
+  });
+
+  test("external-root refresh prunes deleted subtrees so recreated directories reload", () => {
+    const root = { id: "root-1", name: "Shared docs", cwd: "C:/shared/docs" };
+    const externalPath = fileTreeModel.externalRootPath(root.id);
+    const removedPath = `${externalPath}/build`;
+    const removedChildPath = `${removedPath}/artifact.js`;
+    const nodes = {
+      "": dirNode("", [externalPath], { loaded: true }),
+      [externalPath]: dirNode(externalPath, [removedPath], { loaded: true, name: root.name }),
+      [removedPath]: dirNode(removedPath, [removedChildPath], { loaded: true }),
+      [removedChildPath]: fileNode(removedChildPath),
+    };
+
+    const refreshed = fileTreeModel.applyFileTreeListResponse(
+      nodes,
+      externalPath,
+      root.cwd,
+      [],
+      undefined,
+    );
+    assert.deepEqual(refreshed[externalPath].children, []);
+    assert.equal(refreshed[removedPath], undefined);
+    assert.equal(refreshed[removedChildPath], undefined);
+
+    const recreated = fileTreeModel.applyFileTreeListResponse(
+      refreshed,
+      externalPath,
+      root.cwd,
+      [{ path: removedPath, kind: "dir" }],
+      undefined,
+    );
+    assert.equal(recreated[removedPath].loaded, false);
+    assert.deepEqual(recreated[removedPath].children, []);
   });
 
   test("invalidation reducer accumulates changed paths and escalates correctly", () => {

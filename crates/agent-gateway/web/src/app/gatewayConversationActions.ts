@@ -3,6 +3,8 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
+import { createTextComposerDraft } from "@liveagent/ui/lib/chat/composerDraft";
+import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
@@ -194,6 +196,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     messageRef: HistoryMessageRef,
     text: string,
     uploadedFiles: PendingUploadedFile[],
+    referencedConversations: ConversationMentionReference[],
   ) => {
     const activeConversationId = options.conversationIdRef.current.trim();
     if (
@@ -210,9 +213,11 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     options.composerRef.current?.clear();
     options.setPendingUploadsForConversation(activeConversationId, []);
     try {
+      const editedDraft = createTextComposerDraft(normalized, referencedConversations);
       await options.sendChatRef.current?.(normalized, {
         conversationId: activeConversationId,
         uploadedFiles,
+        referencedConversations: editedDraft.conversationMentions,
         editMessageRef: messageRef,
       });
     } catch (error) {

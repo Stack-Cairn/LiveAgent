@@ -23,6 +23,7 @@ type UseUploadZoneDropParams = {
   addNotify: (type: "success" | "warning" | "error", message: string) => void;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   t: (key: string) => string;
+  onWorkspaceDirectoriesMounted?: () => void;
 };
 
 /**
@@ -40,6 +41,7 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
     addNotify,
     setErrorMessage,
     t,
+    onWorkspaceDirectoriesMounted,
   } = params;
 
   const mountDroppedFolders = useCallback(
@@ -75,12 +77,13 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
       }
       if (result.addedPaths.length === 0) return;
       await desktopWorkspaceProjectRootClient.save(project, result.drafts);
+      onWorkspaceDirectoriesMounted?.();
       addNotify(
         "success",
         t("chat.workspaceMountDropSuccess").replace("{count}", String(result.addedPaths.length)),
       );
     },
-    [activeWorkspaceProject, addNotify, t],
+    [activeWorkspaceProject, addNotify, onWorkspaceDirectoriesMounted, t],
   );
 
   const importUploadZonePaths = useCallback(

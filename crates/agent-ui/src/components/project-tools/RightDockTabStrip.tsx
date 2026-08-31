@@ -1,5 +1,5 @@
 import type { RightDockTabKind } from "@liveagent/app/lib/settings";
-import { Check, Columns2, Cpu, Terminal, X } from "@liveagent/ui/components/IconSet";
+import { Check, Columns2, Cpu, GripVertical, Terminal, X } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CSSProperties, ReactNode } from "react";
 import { useState } from "react";
@@ -31,20 +31,27 @@ type RightDockTabStripProps = {
   onCloseTerminalRequest: (session: TerminalSession) => void;
   /**
    * Provided when terminal tabs can be dragged out of the dock (workbench
-   * hosts). The tab body then arms the drag-out gesture instead of tab
-   * reorder; reorder stays available from the grip handle. Click activation
-   * is unaffected — the drag session suppresses the click only after its
-   * movement threshold.
+   * hosts). The grip and the tab body both arm the drag-out gesture; in-dock
+   * reorder yields because the visible handle is the extract affordance.
+   * Click activation is unaffected — the drag session suppresses the click
+   * only after its movement threshold.
    */
   onTerminalTabDragStart?: (
     session: TerminalSession,
-    event: { pointerId: number; clientX: number; clientY: number },
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
   ) => void;
   /**
    * Keyboard/pointer alternative to dragging a terminal tab out: docks the
    * session beside the focused workbench pane. Enables the tab context menu.
    */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
+  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
+  onOpenFileTreeInWorkbench?: () => void;
 };
 
 // One descriptor per tab regardless of kind, so every tab shares a single
@@ -97,6 +104,8 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     onCloseTerminalRequest,
     onTerminalTabDragStart,
     onOpenTerminalInWorkbench,
+    onFileTreeTabDragStart,
+    onOpenFileTreeInWorkbench,
   } = props;
   const { t } = useLocale();
   // One open menu at a time, keyed by tab id — the strip is a single row, so a
@@ -151,7 +160,29 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
               : undefined
           }
         />
-        {renderTabDragHandle(tab.id, tab.label)}
+        {tab.dragProps ? (
+          <button
+            type="button"
+            data-project-tools-tab-action="drag"
+            aria-label={t("workbench.dragPane")}
+            title={t("workbench.dragPane")}
+            className={cn(
+              "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "cursor-grab touch-none hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing",
+            )}
+            onPointerDown={(event) => {
+              // The reorder handle sits above the tab body and used to
+              // stopPropagation into beginTabDrag, so grabbing the only
+              // visible grip never extracted the session onto the canvas.
+              event.stopPropagation();
+              tab.dragProps?.onPointerDown(event);
+            }}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          renderTabDragHandle(tab.id, tab.label)
+        )}
         <div
           aria-hidden="true"
           className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-1.5 text-left text-inherit"
@@ -239,6 +270,14 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           const definition = getRightDockToolDefinition(tab.kind);
           if (!definition) return null;
           const closeLabel = t(definition.closeKey);
+          const isFileTree = tab.kind === "fileTree";
+          const menuItems =
+            isFileTree && onOpenFileTreeInWorkbench ? (
+              <DropdownMenuItem onSelect={onOpenFileTreeInWorkbench} className="gap-2 text-xs">
+                <Columns2 className="h-3.5 w-3.5" />
+                {t("workbench.openInSplit")}
+              </DropdownMenuItem>
+            ) : null;
           return renderDockTab({
             id: tab.id,
             label: t(definition.titleKey),
@@ -246,6 +285,20 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             isActive: currentActiveTab === tab.kind,
             closeLabel,
             closeTitle: closeLabel,
+            menuItems,
+            dragProps:
+              isFileTree && onFileTreeTabDragStart
+                ? {
+                    onPointerDown: (event) => {
+                      if (event.button !== 0 || event.pointerType === "touch") return;
+                      onFileTreeTabDragStart({
+                        pointerId: event.pointerId,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                    },
+                  }
+                : undefined,
             onActivate: () => onActivateTab(tab.id),
             onClose: () => onCloseToolTab(tab.kind),
           });
@@ -291,6 +344,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
                     pointerId: event.pointerId,
                     clientX: event.clientX,
                     clientY: event.clientY,
+                    currentTarget: event.currentTarget,
                   });
                 },
               }

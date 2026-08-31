@@ -181,7 +181,8 @@ export function DetailsResizeHandle(props: {
       onLostPointerCapture={() => finishDrag()}
       onKeyDown={handleKeyDown}
       onDoubleClick={() => commitWidth(DEFAULT_TRAJECTORY_DETAILS_WIDTH)}
-      className="group absolute inset-y-0 left-0 z-30 flex w-3 touch-none cursor-col-resize items-center justify-start border-0 bg-transparent p-0 focus-visible:outline-none"
+      // 水平拖拽只在左右分栏下有意义；窄容器上下排布时隐藏。
+      className="group absolute inset-y-0 left-0 z-30 flex w-3 touch-none cursor-col-resize items-center justify-start border-0 bg-transparent p-0 focus-visible:outline-none @max-[640px]:hidden"
     >
       <span
         aria-hidden="true"

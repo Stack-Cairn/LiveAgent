@@ -2,6 +2,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState, useSyncExternalStore } from "react";
 import {
+  CONTEXT_USAGE_WARN_RATIO,
   canManualCompact,
   contextUsageLevel,
   contextUsageRatio,
@@ -64,8 +65,15 @@ export function ContextUsageRing(props: {
   disabled?: boolean;
   onConfirm?: (() => void) | (() => Promise<unknown>);
   className?: string;
+  /**
+   * 占用低于警戒线（50%，即手动压缩尚不可用）时整枚环不渲染。展示样式改为
+   * 三档后 composer 仍不传此项——"ring" / "both" 模式环都必须 0% 起常显
+   * （docs/design/composer-context-stats-bar.md §4.7）。保留为共享环的通用显示
+   * 选项，供未来低占用需让位的挂载点使用。
+   */
+  hideBelowWarn?: boolean;
 }) {
-  const { totalTokens, contextWindow, disabled, onConfirm, className } = props;
+  const { totalTokens, contextWindow, disabled, onConfirm, className, hideBelowWarn } = props;
   const { t, locale } = useLocale();
   const isCoarsePointer = useSyncExternalStore(
     subscribeCoarsePointer,
@@ -84,9 +92,17 @@ export function ContextUsageRing(props: {
   if (!compactAvailable && confirmOpen) {
     setConfirmOpen(false);
   }
+  // 低占用隐藏：环整枚不渲染，但组件仍挂载着 tooltipOpen。残留 true 会让占用
+  // 回到警戒线以上时 tooltip 无悬停自动弹开——与上面 confirmOpen 同一类问题，
+  // 同样在渲染期归位。
+  const hiddenByLowUsage = hideBelowWarn === true && ratio < CONTEXT_USAGE_WARN_RATIO;
+  if (hiddenByLowUsage && tooltipOpen) {
+    setTooltipOpen(false);
+  }
   if (typeof contextWindow !== "number" || !Number.isFinite(contextWindow) || contextWindow <= 0) {
     return null;
   }
+  if (hiddenByLowUsage) return null;
 
   // 只保留两个口径：展示值（取整、封顶 999）与画环/量度值（0-100 钳制，
   // 二者共用避免 a11y 量度与弧线漂移）。contextUsageRatio 不会返回负数。

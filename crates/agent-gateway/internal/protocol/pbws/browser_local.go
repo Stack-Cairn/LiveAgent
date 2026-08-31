@@ -153,6 +153,14 @@ func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv
 		_ = c.sendLocalError(requestID, "agent offline")
 		return
 	}
+	if len(body.ReferencedConversations) > 0 &&
+		!c.sm.SupportsCapability(agentID, gatewayv2.ConversationReferencesV1Capability) {
+		_ = c.sendLocalError(
+			requestID,
+			session.ErrConversationReferencesProtocolIncompatible.Error(),
+		)
+		return
+	}
 	probeCtx, probeCancel := context.WithTimeout(
 		context.Background(), chatcmd.PrepareTimeout(c.cfg),
 	)

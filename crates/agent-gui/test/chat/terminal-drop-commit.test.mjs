@@ -78,6 +78,7 @@ test("dropping a dock session binds it and opens a pane at the target", () => {
     surfaceId: "surface-1",
   });
   assert.equal(deps.bindings.get("surface-1"), "session-1");
+  assert.equal(deps.lease.paneIdFor("session-1"), "pane-for-surface-1");
   assert.equal(calls.open.length, 1);
   const surface = calls.open[0].surface;
   assert.equal(surface.kind, "localTerminal");

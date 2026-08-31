@@ -1060,6 +1060,7 @@ pub async fn handle_upload_readable_files(
             .map(|file| proto::ChatUploadedFile {
                 relative_path: file.relative_path,
                 absolute_path: file.absolute_path,
+                dedupe_key: file.dedupe_key.unwrap_or_default(),
                 file_name: file.file_name,
                 kind: file.kind,
                 size_bytes: i64::try_from(file.size_bytes).unwrap_or(i64::MAX),
@@ -1434,6 +1435,7 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "McpManager"
             | "MemoryManager"
             | "Read"
+            | "ReadConversation"
             | "ReadTerminal"
             | "SendMessage"
             | "SkillsManager"

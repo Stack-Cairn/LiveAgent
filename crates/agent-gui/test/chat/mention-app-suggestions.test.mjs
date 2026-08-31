@@ -92,17 +92,21 @@ test("app suggestions ride the @ trigger and are host-gated by the mentionApps p
   assert.match(composer, /insertAppMentionChip\(mentionCtx, suggestion\.app\)/);
 });
 
-test("the popup renders apps and files as two labelled sections with real app icons", () => {
-  // 应用在前、文件在后，各自独立封顶——应用分组只留一小撮（3 条），
-  // 既保证 @ 首先看到应用，又不把文件结果推出视野。分组标题按第一条
-  // 文件行的边界插入（仅当上方有应用行）。
-  const appsLoopFirst =
-    composer.indexOf("of orderedApps") < composer.indexOf("of mentionSessionSearchIndex");
-  assert.ok(appsLoopFirst, "app suggestions must precede file suggestions");
-  assert.match(model, /MAX_APP_SUGGESTIONS = 3/);
-  assert.match(composer, /appCount >= MAX_APP_SUGGESTIONS/);
-  assert.match(overlays, /firstFileIndex/);
-  assert.match(overlays, /i === firstFileIndex && hasAppRows/);
+test("the root popup folds available installed apps into a dedicated submenu", () => {
+  // 根级只呈现类别入口；应用候选和文件、会话候选一样，进入二级菜单后
+  // 才生成。应用子菜单沿用统一的 30 项上限，不再为根级混排而裁到 3 项。
+  assert.match(model, /category: "apps" \| "files" \| "conversations"/);
+  assert.match(model, /MentionMenuMode = "root" \| "apps" \| "files" \| "conversations"/);
+  assert.match(composer, /\{ type: "category", category: "apps" \}/);
+  assert.match(composer, /if \(mentionMenuMode === "apps"\)/);
+  assert.match(
+    composer,
+    /sortAppsByMentionRecency\(availableMentionApps, readAppMentionRecents\(\)\)/,
+  );
+  assert.match(composer, /if \(next\.length >= MAX_SUGGESTIONS\) break/);
+  assert.doesNotMatch(composer, /MAX_APP_SUGGESTIONS/);
+  assert.match(overlays, /mode === "apps"/);
+  assert.match(overlays, /category === "apps"/);
   // 应用行优先渲染宿主提供的真实图标（data URL），缺失时回退占位图标。
   assert.match(overlays, /app\?\.iconDataUrl \?/);
   assert.match(overlays, /img src=\{app\.iconDataUrl\}/);
@@ -113,7 +117,10 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
   // 选中即落榜单（localStorage 版本化键），下次 @ 会话开启时重读并把
   // 最近使用的应用排到分组最前；未上榜的保持宿主的字母序。
   assert.match(composer, /recordAppMentionUse\(suggestion\.app\)/);
-  assert.match(composer, /sortAppsByMentionRecency\(mentionApps, readAppMentionRecents\(\)\)/);
+  assert.match(
+    composer,
+    /sortAppsByMentionRecency\(availableMentionApps, readAppMentionRecents\(\)\)/,
+  );
   const recency = source(agentUiRoot, "lib/chat/appMentionRecency.ts");
   assert.match(recency, /"liveagent\.app-mention-recents\.v1"/);
   // 身份键必须复用图标注册表的同一份裁决（bundle id > path > name），
@@ -172,6 +179,15 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
     apps.map((app) => app.name),
     ["Arc", "Mail", "Safari", "Terminal"],
   );
+});
+
+test("an app already mentioned is excluded and cannot be inserted again", () => {
+  assert.match(composer, /const selectedAppMentionKeys = useMemo/);
+  assert.match(composer, /const availableMentionApps = useMemo/);
+  assert.match(composer, /availableMentionApps\.length > 0/);
+  assert.match(composer, /collectAppMentionKeys\(editor\)\.includes\(key\)/);
+  assert.match(composer, /sanitizeAppMentionSegments\(/);
+  assert.match(composer, /enforceUniqueAppMentionsInEditor\(el\)/);
 });
 
 test("the chip shows the real app logo via the icon registry, never via DOM attributes", () => {

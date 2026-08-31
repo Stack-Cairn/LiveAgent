@@ -22,11 +22,56 @@ export type FileTreeNode = {
 
 export type FileTreeNodes = Record<string, FileTreeNode>;
 
+// An attached workspace directory has its own filesystem root, while the
+// existing tree stores all paths relative to the primary project root. Keep
+// its paths in a private namespace so entries from different roots cannot
+// collide in the flat node map or persisted expansion state.
+const EXTERNAL_ROOT_PATH_PREFIX = "\u0000liveagent_external_root/";
+
+export type FileTreeExternalRoot = {
+  id: string;
+  name: string;
+  cwd: string;
+};
+
 export type FileTreeRowModel =
   | { type: "node"; key: string; path: string; depth: number }
   | { type: "error"; key: string; path: string; depth: number; message: string };
 
 export const ROOT_PATH = "";
+
+export function externalRootPath(rootId: string) {
+  return `${EXTERNAL_ROOT_PATH_PREFIX}${encodeURIComponent(rootId)}`;
+}
+
+export function externalRootChildPath(rootId: string, relativePath: string) {
+  const rootPath = externalRootPath(rootId);
+  const normalized = normalizeFileTreeRelativePath(relativePath);
+  return normalized ? `${rootPath}/${normalized}` : rootPath;
+}
+
+export function externalRootPathInfo(
+  path: string,
+): { rootId: string; relativePath: string } | null {
+  if (!path.startsWith(EXTERNAL_ROOT_PATH_PREFIX)) return null;
+  const remainder = path.slice(EXTERNAL_ROOT_PATH_PREFIX.length);
+  const separator = remainder.indexOf("/");
+  const encodedRootId = separator < 0 ? remainder : remainder.slice(0, separator);
+  if (!encodedRootId) return null;
+  try {
+    return {
+      rootId: decodeURIComponent(encodedRootId),
+      relativePath:
+        separator < 0 ? "" : normalizeFileTreeRelativePath(remainder.slice(separator + 1)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function isExternalRootPath(path: string) {
+  return externalRootPathInfo(path) !== null;
+}
 
 // Desktop-only OS integration (`fs_open_workspace_path`) exists only behind
 // the Tauri bridge; the gateway web shim has no equivalent command. Probing
@@ -92,6 +137,82 @@ export function createRootNode(cwd: string): FileTreeNode {
     loaded: false,
     loading: false,
   };
+}
+
+function createExternalRootNode(root: FileTreeExternalRoot): FileTreeNode {
+  return {
+    path: externalRootPath(root.id),
+    name: root.name,
+    kind: "dir",
+    hidden: false,
+    children: [],
+    loaded: false,
+    loading: false,
+  };
+}
+
+// Adds each active attached directory as a child of the primary workspace
+// root. The primary root remains the source of truth for its own fs_list
+// response; this helper preserves external children across those refreshes.
+export function applyFileTreeExternalRoots(
+  nodes: FileTreeNodes,
+  roots: readonly FileTreeExternalRoot[],
+): FileTreeNodes {
+  const normalizedRoots: FileTreeExternalRoot[] = [];
+  const seen = new Set<string>();
+  for (const root of roots) {
+    const id = root.id.trim();
+    const cwd = root.cwd.trim();
+    if (!id || !cwd || seen.has(id)) continue;
+    seen.add(id);
+    normalizedRoots.push({ id, cwd, name: root.name.trim() || basename(cwd) || cwd });
+  }
+  const activeIds = new Set(normalizedRoots.map((root) => root.id));
+  let next = nodes;
+  let changed = false;
+  const mutable = () => {
+    if (!changed) {
+      next = { ...nodes };
+      changed = true;
+    }
+    return next;
+  };
+
+  // A revoked, missing, or renamed root must not leave stale nodes behind in
+  // an LRU project bucket.
+  for (const path of Object.keys(nodes)) {
+    const info = externalRootPathInfo(path);
+    if (info && !activeIds.has(info.rootId)) {
+      delete mutable()[path];
+    }
+  }
+
+  const primaryRoot = next[ROOT_PATH];
+  if (!primaryRoot) return next;
+  const externalPaths = normalizedRoots.map((root) => externalRootPath(root.id));
+  const primaryChildren = primaryRoot.children.filter((path) => !isExternalRootPath(path));
+  const nextChildren = [...primaryChildren, ...externalPaths];
+  if (!sameStringArray(primaryRoot.children, nextChildren)) {
+    mutable()[ROOT_PATH] = { ...primaryRoot, children: nextChildren };
+  }
+
+  for (const root of normalizedRoots) {
+    const path = externalRootPath(root.id);
+    const existing = next[path];
+    if (existing && existing.kind === "dir" && existing.name === root.name && !existing.hidden) {
+      continue;
+    }
+    const initial = createExternalRootNode(root);
+    mutable()[path] =
+      existing?.kind === "dir"
+        ? {
+            ...existing,
+            name: root.name,
+            hidden: false,
+          }
+        : initial;
+  }
+  return next;
 }
 
 export function sortFileTreeEntries(entries: FileTreeEntry[]): FileTreeEntry[] {
@@ -191,7 +312,13 @@ export function applyFileTreeListResponse(
   // without bound across refreshes.
   const kept = new Set(childPaths);
   for (const previousChild of parent.children) {
-    if (kept.has(previousChild) || next[previousChild] === undefined) continue;
+    if (
+      kept.has(previousChild) ||
+      (path === ROOT_PATH && isExternalRootPath(previousChild)) ||
+      next[previousChild] === undefined
+    ) {
+      continue;
+    }
     for (const key of Object.keys(next)) {
       if (key === previousChild || key.startsWith(`${previousChild}/`)) {
         delete next[key];

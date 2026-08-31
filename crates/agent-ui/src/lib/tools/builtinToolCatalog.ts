@@ -203,6 +203,15 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     runtimeScopes: CHAT_AND_CRON,
   },
   {
+    id: "read_conversation",
+    toolName: "ReadConversation",
+    icon: "messageSquare",
+    categoryId: "intelligence",
+    isReadOnly: true,
+    runtimeScopes: CHAT_ONLY,
+    conditional: true,
+  },
+  {
     id: "agent",
     toolName: "Agent",
     icon: "bot",

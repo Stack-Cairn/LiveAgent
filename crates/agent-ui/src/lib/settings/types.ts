@@ -153,6 +153,14 @@ export type ChatTranscriptSettings = {
   width: number;
 };
 
+/**
+ * Composer 上下文占用的三档展示样式（docs/design/composer-context-stats-bar.md §4.7）：
+ * "statsBar" 只显示卡片下方的会话统计状态栏（含占用读数），用量环不渲染；
+ * "both" 状态栏与常显用量环同时显示；
+ * "ring" 只显示常显用量环（0% 起），状态栏不渲染。三档都保留 ≥50% 的手动压缩入口。
+ */
+export type ComposerContextDisplayMode = "statsBar" | "both" | "ring";
+
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
   // AI commit-message generation in the Git review dock. Unset means "follow
@@ -162,6 +170,7 @@ export type CustomSettings = {
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
+  composerContextDisplay: ComposerContextDisplayMode;
   // Empty strings select the built-in stacks for each typography role.
   interfaceFontFamily: string;
   chatFontFamily: string;
@@ -408,6 +417,18 @@ export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" |
  */
 export type ModelLimitsSource = "catalog" | "provider" | "fallback" | "user";
 
+/** 模型输入模态的合法值全集（运行时校验与类型的单一来源）。 */
+export const MODEL_INPUT_MODALITIES = ["text", "image"] as const;
+
+/** 模型输入模态；缺省时按 provider 内置规则推断。 */
+export type ModelInputModality = (typeof MODEL_INPUT_MODALITIES)[number];
+
+/**
+ * 归一化后的输入模态覆盖的规范形态：聊天协议始终发送文本，
+ * 因此 "text" 恒在首位；normalizer 只会产出这两种形状。
+ */
+export type ModelInputModalitiesOverride = ["text"] | ["text", "image"];
+
 export type ProviderModelConfig = {
   id: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
@@ -417,6 +438,15 @@ export type ProviderModelConfig = {
   limitsSource?: ModelLimitsSource;
   /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
   promptCacheHintMode?: PromptCacheHintMode;
+  /**
+   * 用户手动的输入模态覆盖（如 ["text","image"] 强制开启图片输入）。
+   * 缺失时按 provider 内置启发式推断（白名单/官方已知模型目录）。
+   * 生效范围：仅 codex/xai/gemini provider（这些路径的附件发送受
+   * model.input 门控）；deepseek wire 层硬拒绝图片、anthropic 附件
+   * 路径不读 model.input，这两类 provider 上本字段不起作用。
+   * 读取前须经 normalizeInputModalities 归一化。
+   */
+  inputModalities?: ModelInputModalitiesOverride;
 };
 
 export type ChatRuntimeControls = {

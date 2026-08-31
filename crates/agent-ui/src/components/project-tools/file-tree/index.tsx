@@ -4,7 +4,11 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
-import type { RightDockFileTreeStatePatch } from "@liveagent/app/lib/settings";
+import type {
+  RightDockFileTreeState,
+  RightDockFileTreeStatePatch,
+  WorkspaceProject,
+} from "@liveagent/app/lib/settings";
 import {
   Check,
   FolderOpen,
@@ -14,9 +18,11 @@ import {
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
+import type { WorkspaceProjectRootClient } from "@liveagent/ui/contracts/workspaceProjectRoots";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -24,7 +30,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  finishWorkspacePathDrag,
+  writeWorkspacePathDragPayload,
+} from "../../../lib/chat/workspacePathDrag";
 import { cn } from "../../../lib/shared/utils";
+import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { Button } from "../../ui/button";
 import { useConfirmDialog } from "../../ui/confirm-dialog";
@@ -37,7 +48,9 @@ import {
   ancestorDirsOfPath,
   basename,
   dirname,
+  FILE_TREE_HAS_OS_INTEGRATION,
   FILE_TREE_ROW_HEIGHT,
+  type FileTreeExternalRoot,
   type FileTreeKind,
   flattenFileTreeRows,
   ROOT_PATH,
@@ -47,8 +60,10 @@ import {
 } from "./model";
 import { FileTreeErrorRow, FileTreeRow } from "./Row";
 import { useFileTreeData } from "./useFileTreeData";
+import { useFileTreeExternalRoots } from "./useFileTreeExternalRoots";
 
 const FILE_TREE_QUERY_SYNC_DEBOUNCE_MS = 180;
+const NO_EXTERNAL_FILE_TREE_ROOTS: readonly FileTreeExternalRoot[] = [];
 
 type PendingAction = "file" | "folder" | "rename" | null;
 
@@ -59,11 +74,87 @@ type ContextMenuState = {
 };
 
 export function FileTreePanel(props: { active: boolean }) {
-  const { active } = props;
   const context = useRightDockToolContext();
-  const { projectPathKey, cwd, fileTree } = context;
-  const syncState = fileTree.state;
-  const initialized = fileTree.initialized;
+  return (
+    <FileTreeSurface
+      active={props.active}
+      projectPathKey={context.projectPathKey}
+      cwd={context.cwd}
+      state={context.fileTree.state}
+      initialized={context.fileTree.initialized}
+      externalRoots={context.fileTree.externalRoots}
+      workspaceActivityClient={context.clients.workspaceActivity ?? null}
+      onInitializedChange={context.fileTree.onInitializedChange}
+      onRefreshExternalRoots={context.fileTree.refreshExternalRoots}
+      onStateChange={context.fileTree.onStateChange}
+      onInsertFileMention={context.fileTree.onInsertFileMention}
+      onOpenFile={context.fileTree.onOpenFile}
+    />
+  );
+}
+
+export type FileTreeSurfaceProps = {
+  active: boolean;
+  projectPathKey: string;
+  cwd: string;
+  state: RightDockFileTreeState;
+  initialized?: boolean;
+  externalRoots?: readonly FileTreeExternalRoot[];
+  workspaceActivityClient?: WorkspaceActivityClient | null;
+  onInitializedChange?: (initialized: boolean) => void;
+  onRefreshExternalRoots?: () => Promise<void>;
+  onStateChange: (patch: RightDockFileTreeStatePatch) => void;
+  onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
+  onOpenFile?: (path: string, imagePaths?: string[]) => void;
+};
+
+export type FileTreePaneSurfaceProps = Omit<
+  FileTreeSurfaceProps,
+  "externalRoots" | "onRefreshExternalRoots"
+> & {
+  workspaceProject?: WorkspaceProject;
+  workspaceProjectRootClient?: WorkspaceProjectRootClient;
+  workspaceRootRevision?: number;
+};
+
+/**
+ * Workbench pane host for the file tree. The Right Dock fetches external
+ * (multi-root) grants itself and injects them through context; a pane has no
+ * dock context, so this wrapper owns the same fetch and keeps both hosts
+ * rendering identical roots.
+ */
+export function FileTreePaneSurface(props: FileTreePaneSurfaceProps) {
+  const { workspaceProject, workspaceProjectRootClient, workspaceRootRevision, ...surfaceProps } =
+    props;
+  const { externalRoots, refreshExternalRoots } = useFileTreeExternalRoots({
+    workspaceProject,
+    workspaceProjectRootClient,
+    workspaceRootRevision,
+  });
+  return (
+    <FileTreeSurface
+      {...surfaceProps}
+      externalRoots={externalRoots}
+      onRefreshExternalRoots={refreshExternalRoots}
+    />
+  );
+}
+
+export function FileTreeSurface(props: FileTreeSurfaceProps) {
+  const {
+    active,
+    projectPathKey,
+    cwd,
+    state: syncState,
+    initialized = true,
+    externalRoots = NO_EXTERNAL_FILE_TREE_ROOTS,
+    workspaceActivityClient,
+    onInitializedChange,
+    onRefreshExternalRoots,
+    onStateChange,
+    onInsertFileMention,
+    onOpenFile,
+  } = props;
   const { t } = useLocale();
 
   const [query, setQuery] = useState(syncState.query);
@@ -87,13 +178,16 @@ export function FileTreePanel(props: { active: boolean }) {
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    isExternalPath,
+    getDisplayPath,
     search,
   } = useFileTreeData({
     projectPathKey,
     cwd,
+    externalRoots,
     active,
     initialized,
-    workspaceActivityClient: context.clients.workspaceActivity ?? null,
+    workspaceActivityClient: workspaceActivityClient ?? null,
     expandedPaths: syncState.expandedPaths,
     query,
     showHidden: syncState.showHidden,
@@ -104,10 +198,10 @@ export function FileTreePanel(props: { active: boolean }) {
     nodesRef.current = nodes;
   }, [nodes]);
 
-  const onStateChangeRef = useRef(fileTree.onStateChange);
+  const onStateChangeRef = useRef(onStateChange);
   useEffect(() => {
-    onStateChangeRef.current = fileTree.onStateChange;
-  }, [fileTree.onStateChange]);
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
   const emitState = useCallback((patch: RightDockFileTreeStatePatch) => {
     onStateChangeRef.current(patch);
   }, []);
@@ -252,26 +346,63 @@ export function FileTreePanel(props: { active: boolean }) {
     return siblingPaths.includes(targetPath) ? siblingPaths : [targetPath];
   }, []);
 
-  const onOpenFileRef = useRef(fileTree.onOpenFile);
+  const onOpenFileRef = useRef(onOpenFile);
   useEffect(() => {
-    onOpenFileRef.current = fileTree.onOpenFile;
-  }, [fileTree.onOpenFile]);
+    onOpenFileRef.current = onOpenFile;
+  }, [onOpenFile]);
   const handleOpenFile = useCallback(
     (path: string) => {
+      if (isExternalPath(path)) {
+        if (!FILE_TREE_HAS_OS_INTEGRATION) return;
+        setActionError(null);
+        void openWorkspacePath(path, "open").catch((error: unknown) => {
+          setActionError(error instanceof Error ? error.message : String(error));
+        });
+        return;
+      }
       onOpenFileRef.current?.(path, getSiblingImagePaths(path));
     },
-    [getSiblingImagePaths],
+    [getSiblingImagePaths, isExternalPath, openWorkspacePath],
   );
 
-  const onInsertFileMentionRef = useRef(fileTree.onInsertFileMention);
+  const onInsertFileMentionRef = useRef(onInsertFileMention);
   useEffect(() => {
-    onInsertFileMentionRef.current = fileTree.onInsertFileMention;
-  }, [fileTree.onInsertFileMention]);
-  const handleInsertMention = useCallback((path: string) => {
-    const node = nodesRef.current[path];
-    if (!path || !node) return;
-    onInsertFileMentionRef.current?.(path, node.kind);
-  }, []);
+    onInsertFileMentionRef.current = onInsertFileMention;
+  }, [onInsertFileMention]);
+  const handleInsertMention = useCallback(
+    (path: string) => {
+      const node = nodesRef.current[path];
+      if (!path || !node || isExternalPath(path)) return;
+      onInsertFileMentionRef.current?.(path, node.kind);
+    },
+    [isExternalPath],
+  );
+
+  const handleWorkspacePathDragStart = useCallback(
+    (event: ReactDragEvent, path: string, kind: FileTreeKind) => {
+      const node = nodesRef.current[path];
+      // External roots live outside the project cwd, so they have no
+      // project-relative payload; the payload validator would reject their
+      // sentinel prefix anyway, but refuse the drag explicitly.
+      if (!node || !path || isExternalPath(path)) {
+        event.preventDefault();
+        return;
+      }
+      if (
+        !writeWorkspacePathDragPayload(event.dataTransfer, {
+          kind: "workspacePath",
+          projectPathKey,
+          cwd,
+          relativePath: path,
+          entryKind: kind,
+          label: node.name,
+        })
+      ) {
+        event.preventDefault();
+      }
+    },
+    [cwd, isExternalPath, projectPathKey],
+  );
 
   const openContextMenu = useCallback(
     (event: ReactMouseEvent, path: string) => {
@@ -444,7 +575,7 @@ export function FileTreePanel(props: { active: boolean }) {
         <Button
           size="sm"
           onClick={() => {
-            fileTree.onInitializedChange(true);
+            onInitializedChange?.(true);
             void loadChildren(ROOT_PATH, { force: true });
           }}
         >
@@ -473,7 +604,10 @@ export function FileTreePanel(props: { active: boolean }) {
           size="icon"
           className="h-8 w-8 rounded-lg"
           title={t("projectTools.fileTree.refresh")}
-          onClick={() => refreshVisible()}
+          onClick={() => {
+            void onRefreshExternalRoots?.();
+            refreshVisible();
+          }}
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -553,6 +687,7 @@ export function FileTreePanel(props: { active: boolean }) {
                 <button
                   key={`${entry.kind}:${entry.path}`}
                   type="button"
+                  draggable
                   className={cn(
                     "flex w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
                     entry.hidden && "opacity-60 hover:opacity-80",
@@ -560,6 +695,10 @@ export function FileTreePanel(props: { active: boolean }) {
                   style={{ minHeight: FILE_TREE_ROW_HEIGHT }}
                   title={entry.path}
                   onClick={() => void revealPath(entry.path, entry.kind)}
+                  onDragStart={(event) =>
+                    handleWorkspacePathDragStart(event, entry.path, entry.kind)
+                  }
+                  onDragEnd={finishWorkspacePathDrag}
                 >
                   <TypeIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 truncate">{entry.path}</span>
@@ -617,11 +756,13 @@ export function FileTreePanel(props: { active: boolean }) {
                   expanded={expandedSet.has(row.path)}
                   selected={selectedPath === row.path}
                   loading={node.loading}
-                  title={row.path || cwd}
+                  title={getDisplayPath(row.path)}
                   onToggle={toggleDirectory}
                   onSelect={selectPath}
                   onOpen={handleOpenFile}
                   onContextMenu={openContextMenu}
+                  onDragStart={handleWorkspacePathDragStart}
+                  onDragEnd={finishWorkspacePathDrag}
                 />
               </div>
             );
@@ -635,10 +776,13 @@ export function FileTreePanel(props: { active: boolean }) {
           anchor={{ x: contextMenu.x, y: contextMenu.y }}
           containerRef={panelRef}
           path={contextNode.path}
+          displayPath={
+            isExternalPath(contextNode.path) ? getDisplayPath(contextNode.path) : undefined
+          }
           kind={contextNode.kind}
-          canMutate={canMutate}
-          canOpenFile={Boolean(fileTree.onOpenFile)}
-          canInsertMention={Boolean(fileTree.onInsertFileMention)}
+          canMutate={canMutate && !isExternalPath(contextNode.path)}
+          canOpenFile={Boolean(onOpenFile) && !isExternalPath(contextNode.path)}
+          canInsertMention={Boolean(onInsertFileMention) && !isExternalPath(contextNode.path)}
           showHidden={syncState.showHidden}
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}

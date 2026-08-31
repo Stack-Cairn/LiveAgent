@@ -105,14 +105,15 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
     /duplicate question id/,
   );
 
-  // 同一轮各题选项数必须一致。
-  assert.throws(
-    () =>
-      shared.parseAskUserQuestionItems([
-        { prompt: "三个选项", options: [{ label: "a" }, { label: "b" }, { label: "c" }] },
-        { prompt: "两个选项", options: [{ label: "x" }, { label: "y" }] },
-      ]),
-    /same number of options/,
+  // 同一轮各题的选项数可以不同：卡片一次只渲染一题，高度本就随 prompt 与
+  // description 变化，强行对齐换不来布局稳定，只会白白拒掉合法提问。
+  const mixed = shared.parseAskUserQuestionItems([
+    { prompt: "三个选项", options: [{ label: "a" }, { label: "b" }, { label: "c" }] },
+    { prompt: "两个选项", options: [{ label: "x" }, { label: "y" }] },
+  ]);
+  assert.deepEqual(
+    mixed.map((question) => question.options.length),
+    [3, 2],
   );
 
   const parsed = shared.parseAskUserQuestionItems(buildQuestionsArgs().questions);

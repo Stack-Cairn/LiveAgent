@@ -201,6 +201,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       conversationId: nextIdentity.conversationId,
       entry: nextEntry,
     });
+    return nextIdentity.conversationId;
   }
 
   async function openInitial(id: string): Promise<"cache-hit" | "painted"> {

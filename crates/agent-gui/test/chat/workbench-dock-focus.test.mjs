@@ -8,10 +8,9 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // Dock 位于 Canvas 之外,只做会话列表/工具面板;它既不持有布局命令通路
 // (源码层断言),reducer 也只在显式 FOCUS/OPEN 上改焦点(模型层断言)。
 //
-// 被 Pane 租用的会话从 dock 的终端 tab 中整体隐藏(终端任一时刻只出现在一个
-// 宿主里),因此本地终端路径不再有任何 Pane 焦点入口。唯一保留的白名单是
-// SSH overlay 的 `onSshTerminalFocusLeasedSession`(overlay 的 shell tab 仍以
-// 占位互斥),它同样是页面注入的回调,dock/overlay 侧只调用不构造布局命令。
+// 被 Pane 租用的终端与文件树都从 dock 整体隐藏(任一时刻只出现在一个宿主里),
+// 因此 dock 不保留 Pane 焦点入口。SSH overlay 的 shell tab 是唯一例外:它是
+// 连接管理入口,保留由页面注入的占位跳转回调。
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -27,8 +26,14 @@ const DOCK_SOURCES = {
   "RightDockContent.tsx": readSource(
     "../../../agent-ui/src/components/project-tools/RightDockContent.tsx",
   ),
+  "RightDockLauncher.tsx": readSource(
+    "../../../agent-ui/src/components/project-tools/RightDockLauncher.tsx",
+  ),
   "useRightDockSessions.ts": readSource(
     "../../../agent-ui/src/components/project-tools/useRightDockSessions.ts",
+  ),
+  "useRightDockProjectTabs.ts": readSource(
+    "../../../agent-ui/src/components/project-tools/useRightDockProjectTabs.ts",
   ),
 };
 
@@ -88,6 +93,23 @@ test("leased sessions are hidden from dock terminal tabs, leaving no focus affor
   );
 });
 
+test("a leased file tree leaves the dock tab, content, and launcher", () => {
+  assert.match(
+    DOCK_SOURCES["useRightDockProjectTabs.ts"],
+    /getRightDockVisibleTabs\(\{[\s\S]*fileTreeLeased/,
+  );
+  assert.match(
+    DOCK_SOURCES["RightDockContent.tsx"],
+    /definition\.kind === "fileTree" && fileTreeLeased\) return null/,
+  );
+  assert.match(
+    DOCK_SOURCES["RightDockLauncher.tsx"],
+    /definition\.kind !== "fileTree" \|\| !fileTreeLeased/,
+  );
+  assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("openInWorkbenchHint"), false);
+  assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("onFocusFileTreePane"), false);
+});
+
 test("dock tab selection routes through dock-local state, never through pane focus", () => {
   const sessions = DOCK_SOURCES["useRightDockSessions.ts"];
   // 选中一个终端标签只写 dock 自己的 activeTabId(项目状态),不碰布局。
@@ -96,15 +118,12 @@ test("dock tab selection routes through dock-local state, never through pane foc
   assert.equal(sessions.includes("paneId"), false);
 });
 
-test("ChatPage wires no pane-focus handler into the dock", () => {
+test("ChatPage passes only file-tree lease state into the dock", () => {
   const dockProps = extractJsxProps(chatPageSource, "RightDockPanel");
-  // handleWorkbenchFocusPane 是 Canvas 的焦点通路;它不得出现在 dock 属性区。
-  assert.equal(
-    dockProps.includes("handleWorkbenchFocusPane"),
-    false,
-    "RightDockPanel receives the canvas focus handler",
-  );
-  // 本地终端的 leased 会话已从 dock 隐藏,不再存在任何 Pane 焦点 prop。
+  // Dock 只需要知道是否隐藏 File Tree，不应获得任何 Pane 聚焦能力。
+  assert.match(dockProps, /fileTreeLeased=\{Boolean\(/);
+  assert.match(dockProps, /`fileTree:\$\{terminalProjectPathKey\}`/);
+  assert.equal(dockProps.includes("onFocusFileTreePane"), false);
   // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点
   // 无关,故按 "Pane" 过滤。)
   const paneFocusProps = [...dockProps.matchAll(/\bon[A-Za-z]*Focus[A-Za-z]*Pane[A-Za-z]*=/g)].map(

@@ -6,11 +6,16 @@ import type {
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
+  type ConversationMentionReference,
   escapeMarkdownReferenceLabel,
   formatAppMentionToken,
   formatCodeMentionToken,
+  formatConversationMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
+  MARKDOWN_REFERENCE_PATTERN,
+  normalizeConversationMentionReferences,
+  parseMarkdownConversationMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
   type PendingUploadedFile,
@@ -58,6 +63,9 @@ export function buildTextFromComposerDraft(
         if (segment.type === "appMention") return formatAppMentionToken(segment.app);
         if (segment.type === "commitMention") return formatComposerCommitMention(segment.commit);
         if (segment.type === "gitFileMention") return formatComposerGitFileMention(segment.file);
+        if (segment.type === "conversationMention") {
+          return formatConversationMentionToken(segment.conversation);
+        }
         if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
         const file = pastedFileById?.get(segment.paste.id);
         return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
@@ -95,10 +103,43 @@ export function validateImportedPastedTextFiles(
   return mapImportedPastedTextFiles(pastes, importedFiles);
 }
 
-export function createTextComposerDraft(text: string): MentionComposerDraft {
+export function createTextComposerDraft(
+  text: string,
+  referencedConversations?: readonly ConversationMentionReference[],
+): MentionComposerDraft {
   const normalizedText = normalizeLogicalLineEndings(text);
+  const allowed = new Map(
+    normalizeConversationMentionReferences(referencedConversations).map((reference) => [
+      reference.id,
+      reference,
+    ]),
+  );
+  const segments: MentionComposerDraft["segments"] = [];
+  const conversationMentions: ConversationMentionReference[] = [];
+  let cursor = 0;
+  if (allowed.size > 0) {
+    for (const match of normalizedText.matchAll(MARKDOWN_REFERENCE_PATTERN)) {
+      const raw = match[0];
+      const start = match.index ?? cursor;
+      const parsed = parseMarkdownConversationMentionReference(match[1] ?? "", match[2] ?? "");
+      const reference = parsed ? allowed.get(parsed.id) : undefined;
+      // The structured reference is the authorization source. The markdown
+      // token only proves that the same conversation id is still present in
+      // the edited text; its display title may have been normalized by another
+      // transport implementation and must not revoke that authorization.
+      if (!reference) continue;
+      if (start > cursor)
+        segments.push({ type: "text", text: normalizedText.slice(cursor, start) });
+      segments.push({ type: "conversationMention", conversation: reference });
+      conversationMentions.push(reference);
+      cursor = start + raw.length;
+    }
+  }
+  if (cursor < normalizedText.length) {
+    segments.push({ type: "text", text: normalizedText.slice(cursor) });
+  }
   return {
-    segments: normalizedText ? [{ type: "text", text: normalizedText }] : [],
+    segments,
     text: normalizedText,
     textWithoutLargePastes: normalizedText,
     largePastes: [],
@@ -106,6 +147,7 @@ export function createTextComposerDraft(text: string): MentionComposerDraft {
     appMentions: [],
     commitMentions: [],
     gitFileMentions: [],
+    conversationMentions,
     codeMentions: [],
     isEmpty: normalizedText.trim().length === 0,
   };

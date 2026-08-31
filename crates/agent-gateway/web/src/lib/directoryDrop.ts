@@ -49,6 +49,48 @@ export function hasDirectoryEntry(entries: readonly FileSystemEntry[]) {
   return entries.some((entry) => entry.isDirectory);
 }
 
+/**
+ * Reconstruct directories selected through an `<input webkitdirectory>`.
+ * `webkitRelativePath` includes the selected top-level folder, while the
+ * directory import API expects file paths relative to that folder.
+ */
+export function collectSelectedDirectoryFiles(files: readonly File[]): DroppedDirectory[] {
+  const directories = new Map<string, { files: DroppedDirectoryFile[]; totalBytes: number }>();
+
+  for (const file of files) {
+    const segments = file.webkitRelativePath
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    if (segments.length < 2) continue;
+
+    const [name, ...relativeSegments] = segments;
+    const fileName = relativeSegments.at(-1);
+    const parentDirectories = relativeSegments.slice(0, -1);
+    if (
+      !name ||
+      !fileName ||
+      isExcludedFileName(fileName) ||
+      parentDirectories.some(isExcludedDirectoryName)
+    ) {
+      continue;
+    }
+
+    const directory = directories.get(name) ?? { files: [], totalBytes: 0 };
+    if (directory.files.length >= MAX_DIRECTORY_UPLOAD_FILES) {
+      throw new Error(`TOO_MANY_FILES:${MAX_DIRECTORY_UPLOAD_FILES}`);
+    }
+    directory.totalBytes += file.size;
+    if (directory.totalBytes > MAX_DIRECTORY_UPLOAD_BYTES) {
+      throw new Error(`TOO_LARGE:${MAX_DIRECTORY_UPLOAD_BYTES}`);
+    }
+    directory.files.push({ relativePath: relativeSegments.join("/"), file });
+    directories.set(name, directory);
+  }
+
+  return Array.from(directories, ([name, directory]) => ({ name, files: directory.files }));
+}
+
 function readAllDirectoryEntries(directory: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
   const reader = directory.createReader();
   return new Promise((resolve, reject) => {

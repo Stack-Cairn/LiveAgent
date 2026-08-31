@@ -21,6 +21,7 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
     "chat.runtime.protocolIncompatiblePlaceholder": "请先更新 LiveAgent 桌面端",
     "chat.queue.moveDown": "下移",
     "chat.upload.maxFilesIgnored": "最多上传 {max} 个文件，已忽略 {count} 个额外文件",
+    "chat.upload.duplicatesMerged": "已合并 {count} 个重复文件",
     "projectTools.sshLocalForwardHelp":
       "仅监听桌面端本机 127.0.0.1；本地端口留空或填 0 自动分配，远端主机留空默认 SSH 服务器自身的 127.0.0.1",
     "projectTools.sshLocalForwardListening": "正在监听（仅桌面端本机）",
@@ -117,6 +118,7 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
     "chat.runtime.protocolIncompatiblePlaceholder": "Update LiveAgent desktop to continue",
     "chat.queue.moveDown": "Move down",
     "chat.upload.maxFilesIgnored": "Upload up to {max} files; {count} extra files were ignored",
+    "chat.upload.duplicatesMerged": "Merged {count} duplicate files",
     "projectTools.sshLocalForwardHelp":
       "Listens on the desktop machine's 127.0.0.1 only. Leave the local port empty or 0 for auto-assign; leave the remote host empty for 127.0.0.1 on the SSH server.",
     "projectTools.sshLocalForwardListening": "Listening on the desktop machine only",

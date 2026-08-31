@@ -5,7 +5,7 @@ import type { TerminalClient, TerminalSession } from "../../../lib/terminal/type
 import { XTermViewport } from "../../project-tools/XTermViewport";
 import { Button } from "../../ui/button";
 
-export type TerminalPaneSurfacePhase = "connecting" | "ready" | "exited" | "error";
+export type TerminalPaneSurfacePhase = "dormant" | "connecting" | "ready" | "exited" | "error";
 
 export type LocalTerminalPaneSurfaceProps = {
   paneId: string;
@@ -94,13 +94,19 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
           <div className={cn(phase === "error" && "text-destructive")}>
             {phase === "connecting"
               ? t("workbench.terminalConnecting")
-              : phase === "exited"
-                ? t("workbench.terminalExited")
-                : errorMessage || t("workbench.terminalError")}
+              : phase === "dormant"
+                ? t("workbench.terminalRestoreRequired")
+                : phase === "exited"
+                  ? t("workbench.terminalExited")
+                  : errorMessage || t("workbench.terminalError")}
           </div>
           {phase !== "connecting" && onRetry ? (
             <Button variant="outline" size="sm" onClick={onRetry}>
-              {phase === "exited" ? t("workbench.terminalRestart") : t("workbench.terminalRetry")}
+              {phase === "dormant"
+                ? t("workbench.terminalRestore")
+                : phase === "exited"
+                  ? t("workbench.terminalRestart")
+                  : t("workbench.terminalRetry")}
             </Button>
           ) : null}
         </div>
