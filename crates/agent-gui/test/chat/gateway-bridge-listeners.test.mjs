@@ -174,8 +174,12 @@ test("gateway bridge listener keeps one worker across renders and handles native
       invokeCalls.some((call) => call.command === "gateway_chat_claim_next"),
       "the inbox must drain before async listen registration resolves",
     );
-    assert.equal(registrations.length, 4);
+    assert.equal(registrations.length, 5);
     assert.ok(registrations.some((entry) => entry.name === "gateway:chat-runtime-wake"));
+    assert.ok(
+      registrations.some((entry) => entry.name === "gateway:clarify-turn-requested"),
+      "the clarify turn listener must be registered",
+    );
 
     for (const registration of registrations) {
       registration.resolve(() => {
@@ -205,7 +209,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
       }),
     );
 
-    assert.equal(registrations.length, 4, "callback identity changes must not remount listeners");
+    assert.equal(registrations.length, 5, "callback identity changes must not remount listeners");
     assert.ok(registrations.every((entry) => entry.disposed === false));
 
     const claimsBeforeWake = invokeCalls.filter(
