@@ -11,6 +11,7 @@ import {
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  appMentionRecencyKey,
   readAppMentionRecents,
   recordAppMentionUse,
   sortAppsByMentionRecency,
@@ -51,6 +52,7 @@ import {
   CommitMentionTooltip,
   type ComposerContextMenuState,
   clampComposerContextMenuPosition,
+  collectAppMentionKeys,
   commitMentionFromElement,
   countLargePasteLines,
   createAppMentionChip,
@@ -71,6 +73,7 @@ import {
   editorTextIsEmpty,
   ejectCaretFromChip,
   enforceConversationMentionConstraintsInEditor,
+  enforceUniqueAppMentionsInEditor,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
   formatCommitMentionToken,
@@ -125,6 +128,7 @@ import {
   removeStaleCaretAnchorsAroundSelection,
   resolveComposerSelection,
   resolveComposerSelectionText,
+  sanitizeAppMentionSegments,
   sanitizeConversationMentionSegments,
   scheduleComposerSelectionScroll,
   selectComposerContents,
@@ -518,6 +522,20 @@ export const MentionComposer = memo(
     );
     const conversationMentionLimitReached =
       selectedConversationIds.size >= MAX_CONVERSATION_MENTIONS;
+    const selectedAppMentionKey = collectAppMentionKeys(editorRef.current).sort().join("\n");
+    const selectedAppMentionKeys = useMemo(
+      () => new Set(selectedAppMentionKey ? selectedAppMentionKey.split("\n") : []),
+      [selectedAppMentionKey],
+    );
+    const availableMentionApps = useMemo(() => {
+      const seen = new Set(selectedAppMentionKeys);
+      return mentionApps.filter((app) => {
+        const key = appMentionRecencyKey(app);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }, [mentionApps, selectedAppMentionKeys]);
     const suggestions = useMemo<MentionSuggestion[]>(() => {
       if (mentionCtx === null) {
         return [];
@@ -541,7 +559,7 @@ export const MentionComposer = memo(
       if (mentionMenuMode === "root") {
         // 根级只展示引用类别，候选实体全部收进各自的二级菜单。
         const categories: MentionSuggestion[] = [
-          ...(mentionApps.length > 0
+          ...(availableMentionApps.length > 0
             ? ([{ type: "category", category: "apps" }] satisfies MentionSuggestion[])
             : []),
           { type: "category", category: "files" },
@@ -567,7 +585,7 @@ export const MentionComposer = memo(
 
       if (mentionMenuMode === "apps") {
         const next: MentionSuggestion[] = [];
-        const orderedApps = sortAppsByMentionRecency(mentionApps, readAppMentionRecents());
+        const orderedApps = sortAppsByMentionRecency(availableMentionApps, readAppMentionRecents());
         for (const app of orderedApps) {
           const haystack = `${app.name}\n${app.bundleId ?? ""}\n${app.path}`.toLowerCase();
           if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) continue;
@@ -624,7 +642,7 @@ export const MentionComposer = memo(
       conversationMentionsEnabled,
       conversationSearchResults,
       enabledSkills,
-      mentionApps,
+      availableMentionApps,
       mentionCtx,
       mentionMenuMode,
       mentionSessionSearchIndex,
@@ -980,11 +998,15 @@ export const MentionComposer = memo(
           closeCommitTooltip();
           closeComposerContextMenu();
 
-          const sanitizedSegments = sanitizeConversationMentionSegments(el, draft.segments, {
-            currentConversationId,
-            conversationMentionsEnabled,
-            includeExistingChips: false,
-          });
+          const sanitizedSegments = sanitizeAppMentionSegments(
+            el,
+            sanitizeConversationMentionSegments(el, draft.segments, {
+              currentConversationId,
+              conversationMentionsEnabled,
+              includeExistingChips: false,
+            }),
+            { includeExistingChips: false },
+          );
           for (const segment of sanitizedSegments) {
             if (segment.type === "largePaste") {
               largePastesRef.current.set(segment.paste.id, segment.paste);
@@ -1331,6 +1353,11 @@ export const MentionComposer = memo(
           }
           insertConversationMentionChip(mentionCtx, suggestion.conversation);
         } else if (suggestion.type === "app") {
+          const editor = editorRef.current;
+          const key = appMentionRecencyKey(suggestion.app);
+          if (!editor || !key || collectAppMentionKeys(editor).includes(key)) {
+            return;
+          }
           insertAppMentionChip(mentionCtx, suggestion.app);
           // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
           recordAppMentionUse(suggestion.app);
@@ -1440,6 +1467,7 @@ export const MentionComposer = memo(
           currentConversationId,
           conversationMentionsEnabled,
         });
+        enforceUniqueAppMentionsInEditor(el);
         closeMentionSession();
         refreshEmptyState();
         refreshMention();
@@ -1464,10 +1492,13 @@ export const MentionComposer = memo(
         serializedSegments &&
         insertComposerSegmentsAtSelection(
           el,
-          sanitizeConversationMentionSegments(el, serializedSegments, {
-            currentConversationId,
-            conversationMentionsEnabled,
-          }),
+          sanitizeAppMentionSegments(
+            el,
+            sanitizeConversationMentionSegments(el, serializedSegments, {
+              currentConversationId,
+              conversationMentionsEnabled,
+            }),
+          ),
           largePastesRef.current,
         )
       ) {
@@ -2015,10 +2046,13 @@ export const MentionComposer = memo(
           if (editor) {
             insertComposerSegmentsAtSelection(
               editor,
-              sanitizeConversationMentionSegments(editor, restoredSegments, {
-                currentConversationId,
-                conversationMentionsEnabled,
-              }),
+              sanitizeAppMentionSegments(
+                editor,
+                sanitizeConversationMentionSegments(editor, restoredSegments, {
+                  currentConversationId,
+                  conversationMentionsEnabled,
+                }),
+              ),
               largePastesRef.current,
             );
           }
@@ -2046,10 +2080,13 @@ export const MentionComposer = memo(
           editor &&
           insertComposerSegmentsAtSelection(
             editor,
-            sanitizeConversationMentionSegments(editor, serializedSegments, {
-              currentConversationId,
-              conversationMentionsEnabled,
-            }),
+            sanitizeAppMentionSegments(
+              editor,
+              sanitizeConversationMentionSegments(editor, serializedSegments, {
+                currentConversationId,
+                conversationMentionsEnabled,
+              }),
+            ),
             largePastesRef.current,
           )
         ) {
