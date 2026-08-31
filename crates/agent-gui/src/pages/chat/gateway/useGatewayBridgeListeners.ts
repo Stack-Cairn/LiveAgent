@@ -38,15 +38,10 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   requestConversationStop: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
-  /** 执行一次澄清补全（Web 下发模型选择）。返回 assistant 全文文本。 */
+  /** 执行一次澄清补全（Web 下发模型选择，桌面端按 providerId 查表重建 runtime）。返回 assistant 全文文本。 */
   runGatewayClarifyTurn: (
     messages: ClarifyMessage[],
-    selection: {
-      providerId: string;
-      providerType: string;
-      model: string;
-      requestFormat: string;
-    },
+    selection: { providerId: string; model: string },
     runtimeControls: ChatRuntimeControls,
   ) => Promise<string>;
 };
@@ -742,12 +737,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           : undefined;
         finalText = await latestParamsRef.current.runGatewayClarifyTurn(
           messages,
-          {
-            providerId: event.payload.providerId,
-            providerType: event.payload.providerId,
-            model: event.payload.model,
-            requestFormat: event.payload.requestFormat,
-          },
+          { providerId: event.payload.providerId, model: event.payload.model },
           normalizeChatRuntimeControls(runtimeControls),
         );
       } catch (error) {

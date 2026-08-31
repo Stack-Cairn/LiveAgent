@@ -173,17 +173,14 @@ message ChatRuntimeControls {
 }
 
 // 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
-// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），避免为
-// 澄清会话引入新的一等消息类型；provider/model/runtime 由 Web 当前选中下发，
-// 桌面端按此构造 provider runtime。
+// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），system
+// 提示词（含工作区上下文）已在 Web 侧拼入 messages，无需单独字段；provider/
+// model/runtime 由 Web 当前选中下发，桌面端按 provider_id 查本地配置构造 runtime。
 message ClarifyTurnRequest {
   string messages_json = 1;
   string provider_id = 2;
   string model = 3;
-  string request_format = 4;
-  ChatRuntimeControls runtime_controls = 5;
-  string workdir = 6;
-  string git_branch = 7;
+  ChatRuntimeControls runtime_controls = 4;
 }
 
 message ClarifyTurnResponse {

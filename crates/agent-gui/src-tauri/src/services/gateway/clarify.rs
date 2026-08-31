@@ -28,10 +28,7 @@ pub struct GatewayClarifyTurnRequestEvent {
     pub messages_json: String,
     pub provider_id: String,
     pub model: String,
-    pub request_format: String,
     pub runtime_controls_json: String,
-    pub workdir: String,
-    pub git_branch: String,
 }
 
 /// TS 侧经 invoke gateway_clarify_respond 回传的结果。
@@ -63,11 +60,17 @@ impl GatewayClarifyTurnRequestEvent {
             messages_json: request.messages_json,
             provider_id: request.provider_id,
             model: request.model,
-            request_format: request.request_format,
             runtime_controls_json,
-            workdir: request.workdir,
-            git_branch: request.git_branch,
         }
+    }
+}
+
+/// 三个失败出口（emit 失败/发送端悬垂/超时）共用的错误响应。
+fn clarify_error_response(code: &str, message: String) -> ClarifyTurnResponse {
+    ClarifyTurnResponse {
+        final_text: String::new(),
+        error_code: code.to_string(),
+        error_message: message,
     }
 }
 
@@ -106,32 +109,26 @@ impl GatewayController {
             return self
                 .send_clarify_turn_response(
                     request_id,
-                    ClarifyTurnResponse {
-                        final_text: String::new(),
-                        error_code: "emit_failed".to_string(),
-                        error_message: format!("emit gateway clarify turn failed: {error}"),
-                    },
+                    clarify_error_response(
+                        "emit_failed",
+                        format!("emit gateway clarify turn failed: {error}"),
+                    ),
                 )
                 .await;
         }
 
         let response = match tokio::time::timeout(Duration::from_secs(120), rx).await {
             Ok(Ok(response)) => response,
-            Ok(Err(_)) => ClarifyTurnResponse {
-                final_text: String::new(),
-                error_code: "response_dropped".to_string(),
-                error_message: "clarify turn response dropped".to_string(),
-            },
+            Ok(Err(_)) => clarify_error_response(
+                "response_dropped",
+                "clarify turn response dropped".to_string(),
+            ),
             Err(_) => {
                 let _ = self
                     .pending_clarify_turns
                     .lock()
                     .map(|mut pending| pending.remove(&request_id));
-                ClarifyTurnResponse {
-                    final_text: String::new(),
-                    error_code: "timeout".to_string(),
-                    error_message: "clarify turn timed out".to_string(),
-                }
+                clarify_error_response("timeout", "clarify turn timed out".to_string())
             }
         };
 

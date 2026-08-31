@@ -264,13 +264,13 @@ test("workbench pane composer wires the clarify runner (web default path)", () =
     path.join(webRoot, "src/app/workbench/GatewayConversationPaneHost.tsx"),
     "utf8",
   );
-  assert.match(paneHostSource, /context\.api\.clarifyPromptTurn\(/);
+  assert.match(paneHostSource, /executeClarifyPromptTurn\(\s*context\.api,\s*context\.settings,/);
   // 总开关（settings.customSettings.promptClarifyEnabled）关闭时不传执行器，
-  // ChatComposerBar 随之隐藏澄清按钮；模型覆盖走两端共用的 resolvePromptClarifyModel。
+  // ChatComposerBar 随之隐藏澄清按钮；模型覆盖/回退收敛在两宿主共用的
+  // executeClarifyPromptTurn（内部走 resolvePromptClarifyModel）。
   assert.match(
     paneHostSource,
     /context\.settings\.customSettings\.promptClarifyEnabled \? runClarifyTurn : undefined/,
   );
-  assert.match(paneHostSource, /resolvePromptClarifyModel\(context\.settings\)/);
   assert.match(paneHostSource, /clarifyContext=\{clarifyContext\}/);
 });

@@ -127,6 +127,13 @@ const LEGACY_SETTINGS_CHANGED_MESSAGE = "SSH 设置已在另一端更新，已�
 
 export type GatewaySettingsUpdateErrorCode = "settings_changed";
 
+/** clarify.prompt_turn 的响应形态（snake_case 对齐 envelope 映射）。 */
+export type ClarifyTurnResult = {
+  final_text: string;
+  error_code?: string;
+  error_message?: string;
+};
+
 export class GatewaySettingsUpdateError extends Error {
   readonly code: GatewaySettingsUpdateErrorCode;
   readonly responseMessage: string;
@@ -489,26 +496,14 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     messages: ClarifyMessage[];
     providerId: string;
     model: string;
-    requestFormat: string;
     runtimeControls?: ChatRuntimeControls;
-    workdir: string;
-    gitBranch?: string;
-  }): Promise<{
-    final_text: string;
-    error_code?: string;
-    error_message?: string;
-  }> {
-    return this.request<{
-      final_text: string;
-      error_code?: string;
-      error_message?: string;
-    }>(
+  }): Promise<ClarifyTurnResult> {
+    return this.request<ClarifyTurnResult>(
       "clarify.prompt_turn",
       {
         messages: input.messages,
         provider_id: input.providerId,
         model: input.model,
-        request_format: input.requestFormat,
         runtime_controls: input.runtimeControls
           ? {
               thinking_enabled: input.runtimeControls.thinkingEnabled,
@@ -517,8 +512,6 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
               plan_mode_enabled: input.runtimeControls.planModeEnabled === true,
             }
           : undefined,
-        workdir: input.workdir,
-        git_branch: input.gitBranch ?? "",
       },
       // The desktop bridge reserves up to 120s for slow clarifications
       // (final drafts / complex follow-ups); match that window instead of

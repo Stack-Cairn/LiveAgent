@@ -115,12 +115,7 @@ import {
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
-import {
-  assistantMessageToText,
-  createProviderRuntimeConfig,
-  streamAssistantMessage,
-  toModelValue,
-} from "../lib/providers/llm";
+import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
@@ -203,7 +198,7 @@ import {
   pruneIdleConversationRuntimeCaches,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
-import { buildClarifyCallContext, createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
+import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
 import {
   resolveActiveModelSelection,
   resolveEffectiveChatModelSelection,
@@ -1494,23 +1489,18 @@ export function ChatPage(props: ChatPageProps) {
       if (!provider) {
         throw new Error(`clarify provider not found: ${selection.providerId}`);
       }
-      const runtime = createProviderRuntimeConfig(provider, selection.model, runtimeControls);
-      const assistant = await streamAssistantMessage({
+      // 与本地澄清共用 createGuiClarifyRunner：调用参数（cacheRetention/
+      // nativeWebSearch/context 拼装）单一来源，桥接路径不再手写一份。
+      const guiSelection = {
+        selectedModel: { customProviderId: provider.id, model: selection.model },
+        provider,
         providerId: provider.type,
         model: selection.model,
-        runtime,
-        signal: new AbortController().signal,
-        cacheRetention: "none",
-        nativeWebSearch: false,
-        context: buildClarifyCallContext(messages, {
-          selectedModel: { customProviderId: provider.id, model: selection.model },
-          provider,
-          providerId: provider.type,
-          model: selection.model,
-        }),
-        onTextDelta: () => undefined,
-      });
-      return assistantMessageToText(assistant);
+      };
+      return createGuiClarifyRunner(
+        () => guiSelection,
+        () => createProviderRuntimeConfig(provider, selection.model, runtimeControls),
+      )(messages, new AbortController().signal);
     },
   });
 

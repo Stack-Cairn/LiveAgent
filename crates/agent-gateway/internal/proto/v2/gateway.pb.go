@@ -2604,18 +2604,15 @@ func (x *ChatRuntimeControls) GetPlanModeEnabled() bool {
 }
 
 // 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
-// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），避免为
-// 澄清会话引入新的一等消息类型；provider/model/runtime 由 Web 当前选中下发，
-// 桌面端按此构造 provider runtime。
+// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），system
+// 提示词（含工作区上下文）已在 Web 侧拼入 messages，无需单独字段；provider/
+// model/runtime 由 Web 当前选中下发，桌面端按 provider_id 查本地配置构造 runtime。
 type ClarifyTurnRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	MessagesJson    string                 `protobuf:"bytes,1,opt,name=messages_json,json=messagesJson,proto3" json:"messages_json,omitempty"`
 	ProviderId      string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
 	Model           string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	RequestFormat   string                 `protobuf:"bytes,4,opt,name=request_format,json=requestFormat,proto3" json:"request_format,omitempty"`
-	RuntimeControls *ChatRuntimeControls   `protobuf:"bytes,5,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
-	Workdir         string                 `protobuf:"bytes,6,opt,name=workdir,proto3" json:"workdir,omitempty"`
-	GitBranch       string                 `protobuf:"bytes,7,opt,name=git_branch,json=gitBranch,proto3" json:"git_branch,omitempty"`
+	RuntimeControls *ChatRuntimeControls   `protobuf:"bytes,4,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2671,32 +2668,11 @@ func (x *ClarifyTurnRequest) GetModel() string {
 	return ""
 }
 
-func (x *ClarifyTurnRequest) GetRequestFormat() string {
-	if x != nil {
-		return x.RequestFormat
-	}
-	return ""
-}
-
 func (x *ClarifyTurnRequest) GetRuntimeControls() *ChatRuntimeControls {
 	if x != nil {
 		return x.RuntimeControls
 	}
 	return nil
-}
-
-func (x *ClarifyTurnRequest) GetWorkdir() string {
-	if x != nil {
-		return x.Workdir
-	}
-	return ""
-}
-
-func (x *ClarifyTurnRequest) GetGitBranch() string {
-	if x != nil {
-		return x.GitBranch
-	}
-	return ""
 }
 
 type ClarifyTurnResponse struct {
@@ -14627,17 +14603,13 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x10thinking_enabled\x18\x01 \x01(\bR\x0fthinkingEnabled\x129\n" +
 	"\x19native_web_search_enabled\x18\x02 \x01(\bR\x16nativeWebSearchEnabled\x12\x1c\n" +
 	"\treasoning\x18\x03 \x01(\tR\treasoning\x12*\n" +
-	"\x11plan_mode_enabled\x18\x04 \x01(\bR\x0fplanModeEnabled\"\xa6\x02\n" +
+	"\x11plan_mode_enabled\x18\x04 \x01(\bR\x0fplanModeEnabled\"\xc6\x01\n" +
 	"\x12ClarifyTurnRequest\x12#\n" +
 	"\rmessages_json\x18\x01 \x01(\tR\fmessagesJson\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
 	"providerId\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\x12%\n" +
-	"\x0erequest_format\x18\x04 \x01(\tR\rrequestFormat\x12T\n" +
-	"\x10runtime_controls\x18\x05 \x01(\v2).liveagent.gateway.v2.ChatRuntimeControlsR\x0fruntimeControls\x12\x18\n" +
-	"\aworkdir\x18\x06 \x01(\tR\aworkdir\x12\x1d\n" +
-	"\n" +
-	"git_branch\x18\a \x01(\tR\tgitBranch\"x\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x12T\n" +
+	"\x10runtime_controls\x18\x04 \x01(\v2).liveagent.gateway.v2.ChatRuntimeControlsR\x0fruntimeControls\"x\n" +
 	"\x13ClarifyTurnResponse\x12\x1d\n" +
 	"\n" +
 	"final_text\x18\x01 \x01(\tR\tfinalText\x12\x1d\n" +

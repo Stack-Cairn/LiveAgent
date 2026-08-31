@@ -61,6 +61,7 @@ import {
 } from "react";
 import type { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
 import { trimLeadingHeadlessEntries } from "@/lib/chat/historyWindow";
 import type { TranscriptStoreRegistry } from "@/lib/chat/stream/useConversationChat";
 import { submitToolApprovalDecision } from "@/lib/chat/toolApprovalBridge";
@@ -73,7 +74,6 @@ import {
   getChatRuntimeReasoningLevelsForProvider,
   isThinkingAlwaysOnForModel,
   normalizeChatRuntimeControlsForProvider,
-  resolvePromptClarifyModel,
   type SelectedModel,
 } from "@/lib/settings";
 import {
@@ -485,39 +485,21 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [selectedProvider?.type, selection?.model],
   );
 
-  // 提示词澄清执行器（桌面端背景 Pane 口径）：设置里的「澄清对话模型」优先，
-  // 未选或失效时按本 Pane 会话解析供应商/模型；经 gateway 中继到桌面宿主跑
-  // 一轮纯文本补全。Web 端无轻量 git 分支状态，gitBranch 留空（spec 允许只
-  // 喂 workdir）。runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换
-  // 身份不打断会话。
+  // 提示词澄清执行器（桌面端背景 Pane 口径）：模型覆盖/回退/错误拍平在
+  // executeClarifyPromptTurn（两宿主共用），fallback 按本 Pane 会话解析。
+  // runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换身份不打断会话。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
-    async (messages, _signal) => {
-      const override = resolvePromptClarifyModel(context.settings);
-      const provider = override?.provider ?? selectedProvider;
-      const model = override?.model ?? selection?.model;
-      if (!provider || !model) {
-        throw new Error("no active model selected");
-      }
-      const result = await context.api.clarifyPromptTurn({
+    (messages) =>
+      executeClarifyPromptTurn(
+        context.api,
+        context.settings,
+        {
+          provider: selectedProvider,
+          model: selection?.model,
+          runtimeControls: paneRuntimeControls,
+        },
         messages,
-        providerId: provider.id,
-        model,
-        requestFormat: provider.requestFormat ?? "",
-        runtimeControls: override
-          ? normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
-              providerId: provider.type,
-              requestFormat: provider.requestFormat,
-              modelId: model,
-            })
-          : paneRuntimeControls,
-        workdir: workdirRef.current,
-        gitBranch: "",
-      });
-      if (result.error_code) {
-        throw new Error(result.error_message || result.error_code);
-      }
-      return result.final_text;
-    },
+      ),
     [context, selection, selectedProvider, paneRuntimeControls],
   );
   // 与桌面端口径一致：会话无 workdir 时不传空串，避免系统提示词带噪音。

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import {
   buildClarifyMessages,
-  buildForceFinalInstruction,
+  CLARIFY_FORCE_FINAL_INSTRUCTION,
   CLARIFY_MAX_QUESTIONS,
   parseClarifyTurn,
 } from "./clarifyProtocol";
@@ -11,13 +11,7 @@ import type { ClarifyContext, ClarifyMessage, RunClarifyTurn } from "./clarifyTy
 // 测试经本模块读取上限常量（单一事实来源仍在 clarifyProtocol）。
 export { CLARIFY_MAX_QUESTIONS };
 
-export type ClarifySessionStatus =
-  | "idle"
-  | "asking"
-  | "awaitingInput"
-  | "synthesizing"
-  | "done"
-  | "error";
+export type ClarifySessionStatus = "idle" | "asking" | "awaitingInput" | "done" | "error";
 
 export type ClarifySessionState = {
   status: ClarifySessionStatus;
@@ -122,10 +116,10 @@ export function createClarifySessionCore(
     if (epoch !== currentEpoch) return;
     const parsed = parseClarifyTurn(raw);
     if (parsed.kind === "final") {
-      setState({ status: "synthesizing", streamingText: "" });
       sessionMessages.push({ role: "assistant", content: raw });
       setState({
         status: "done",
+        streamingText: "",
         finalText: parsed.text,
         visibleMessages: sessionMessages.slice(),
       });
@@ -171,14 +165,14 @@ export function createClarifySessionCore(
       setState({ visibleMessages: sessionMessages.slice() });
       if (questionCount >= CLARIFY_MAX_QUESTIONS) {
         // 硬上限：不再放行提问，直接注入终稿指令（设计文档「错误处理」）。
-        return ask({ role: "user", content: buildForceFinalInstruction() });
+        return ask({ role: "user", content: CLARIFY_FORCE_FINAL_INSTRUCTION });
       }
       return ask();
     },
     forceFinal() {
       // done 之后强制终稿是空操作：终稿已落定，不重开轮次。
       if (state.status === "done") return Promise.resolve();
-      return ask({ role: "user", content: buildForceFinalInstruction() });
+      return ask({ role: "user", content: CLARIFY_FORCE_FINAL_INSTRUCTION });
     },
     retry() {
       // 仅 error 态可重试：失败的轮次里 sessionMessages 尾部正是那轮的

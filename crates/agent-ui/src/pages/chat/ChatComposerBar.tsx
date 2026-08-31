@@ -898,7 +898,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     { onFinal: applyClarifyFinal },
   );
   const clarifyEnabled = Boolean(runClarifyTurn) && hasModels;
-  const clarifyButtonDisabled = !clarifyEnabled || composerIsEmpty || !composerHasClarifiableText;
+  // composerHasClarifiableText 在空态翻转时已被同步置 false，无需再叠 composerIsEmpty。
+  const clarifyButtonDisabled = !clarifyEnabled || !composerHasClarifiableText;
   const handleClarifyToggle = useCallback(() => {
     if (!clarifyEnabled) return;
     if (clarifyOpen) {
@@ -1436,10 +1437,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           {clarifyOpen && runClarifyTurn ? (
             <ClarifyPanel
               state={clarifySession.state}
-              busy={
-                clarifySession.state.status === "asking" ||
-                clarifySession.state.status === "synthesizing"
-              }
+              busy={clarifySession.state.status === "asking"}
               onSubmitAnswer={clarifySession.submitAnswer}
               onForceFinal={clarifySession.forceFinal}
               onRetry={clarifySession.retry}
@@ -1627,12 +1625,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               ) : null}
 
               {clarifyEnabled ? (
-                <RuntimeControlTooltip label={t("chat.clarify.buttonTitle")}>
+                <RuntimeControlTooltip label={t("chat.clarify.title")}>
                   <button
                     type="button"
                     disabled={clarifyButtonDisabled}
                     onClick={handleClarifyToggle}
-                    aria-label={t("chat.clarify.buttonTitle")}
+                    aria-label={t("chat.clarify.title")}
                     aria-pressed={clarifyOpen}
                     title={clarifyButtonDisabled ? t("chat.clarify.buttonDisabled") : undefined}
                     className={cn(

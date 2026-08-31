@@ -8,13 +8,15 @@ export const CLARIFY_MAX_QUESTIONS = 5;
 
 export type ParsedClarifyTurn = { kind: "question" | "final"; text: string };
 
+const CLARIFY_MARKERS = [
+  [CLARIFY_FINAL_MARKER, "final"],
+  [CLARIFY_QUESTION_MARKER, "question"],
+] as const;
+
 /** 完整回复解析：识别首行标记；无标记整体当 question 兜底。 */
 export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
   const value = raw ?? "";
-  for (const [marker, kind] of [
-    [CLARIFY_FINAL_MARKER, "final"],
-    [CLARIFY_QUESTION_MARKER, "question"],
-  ] as const) {
+  for (const [marker, kind] of CLARIFY_MARKERS) {
     if (value.startsWith(marker)) {
       return { kind, text: value.slice(marker.length).trim() };
     }
@@ -29,11 +31,10 @@ export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
  */
 export function stripLeadingMarker(partial: string): string {
   const value = partial ?? "";
-  if (value.startsWith(CLARIFY_FINAL_MARKER)) {
-    return value.slice(CLARIFY_FINAL_MARKER.length).replace(/^\s+/, "");
-  }
-  if (value.startsWith(CLARIFY_QUESTION_MARKER)) {
-    return value.slice(CLARIFY_QUESTION_MARKER.length).replace(/^\s+/, "");
+  for (const [marker] of CLARIFY_MARKERS) {
+    if (value.startsWith(marker)) {
+      return value.slice(marker.length).replace(/^\s+/, "");
+    }
   }
   // 尚未排除标记可能性：标记最长 CLARIFY_QUESTION_MARKER.length（18）字符，
   // 前缀不足该长度且每个字符都与某一标记前缀一致时先隐藏，避免标记碎片闪现在气泡里。
@@ -71,9 +72,7 @@ export function buildClarifySystemPrompt(context?: ClarifyContext): string {
 }
 
 /** 「直接生成」/轮数超限时注入的用户指令：绕过剩余提问直接出终稿。 */
-export function buildForceFinalInstruction(): string {
-  return "直接给出最终优化后的提示词（以 " + CLARIFY_FINAL_MARKER + " 开头），不要再提问。";
-}
+export const CLARIFY_FORCE_FINAL_INSTRUCTION = `直接给出最终优化后的提示词（以 ${CLARIFY_FINAL_MARKER} 开头），不要再提问。`;
 
 /** 完整 LLM 输入：system 前置 + 会话消息。 */
 export function buildClarifyMessages(

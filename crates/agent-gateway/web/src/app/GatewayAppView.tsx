@@ -62,12 +62,11 @@ import {
 } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
+import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
 import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   getRightDockFileTreeState,
-  normalizeChatRuntimeControlsForProvider,
-  resolvePromptClarifyModel,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
   updateSystem,
@@ -465,44 +464,25 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     [addNotify, settings.locale],
   );
-  // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本补全。
-  // Web 端无轻量 git 分支状态，gitBranch 传空串（spec 允许只喂 workdir 的轻量上下文）。
+  // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本
+  // 补全；模型覆盖/回退/错误拍平在 executeClarifyPromptTurn（两宿主共用）。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
-    async (messages, _signal) => {
-      // 设置里的「澄清对话模型」优先；未选或失效时回退当前对话模型。覆盖
-      // 生效时 runtime controls 按覆盖供应商/模型重新归一化。
-      const override = resolvePromptClarifyModel(settings);
-      const provider = override?.provider ?? currentChatProvider;
-      const model = override?.model ?? activeSelectedModel?.model;
-      if (!provider || !model) {
-        throw new Error("no active model selected");
-      }
-      const result = await api.clarifyPromptTurn({
+    (messages) =>
+      executeClarifyPromptTurn(
+        api,
+        settings,
+        {
+          provider: currentChatProvider,
+          model: activeSelectedModel?.model,
+          runtimeControls: chatRuntimeControlsForCurrentProvider,
+        },
         messages,
-        providerId: provider.id,
-        model,
-        requestFormat: provider.requestFormat ?? "",
-        runtimeControls: override
-          ? normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
-              providerId: provider.type,
-              requestFormat: provider.requestFormat,
-              modelId: model,
-            })
-          : chatRuntimeControlsForCurrentProvider,
-        workdir: displayedConversationWorkdir,
-        gitBranch: "",
-      });
-      if (result.error_code) {
-        throw new Error(result.error_message || result.error_code);
-      }
-      return result.final_text;
-    },
+      ),
     [
       settings,
       activeSelectedModel,
       currentChatProvider,
       chatRuntimeControlsForCurrentProvider,
-      displayedConversationWorkdir,
       api,
     ],
   );

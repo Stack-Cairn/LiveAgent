@@ -643,9 +643,12 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
     messages: [{ role: "user", content: "帮我做一个网站" }],
     providerId: "builtin-gemini",
     model: "gemini-2.0-flash",
-    requestFormat: "google",
-    workdir: "/repo/x",
-    gitBranch: "main",
+    runtimeControls: {
+      thinkingEnabled: true,
+      nativeWebSearchEnabled: false,
+      reasoning: "low",
+      planModeEnabled: false,
+    },
   });
   const socket = await connectAndAuth(codec);
   await waitFor(() => findAgentRequest(codec, socket, "clarify_turn"), "clarify frame");
@@ -655,8 +658,8 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
   ]);
   assert.equal(request.json.agent_request.clarify_turn.provider_id, "builtin-gemini");
   assert.equal(request.json.agent_request.clarify_turn.model, "gemini-2.0-flash");
-  assert.equal(request.json.agent_request.clarify_turn.workdir, "/repo/x");
-  assert.equal(request.json.agent_request.clarify_turn.git_branch, "main");
+  assert.equal(request.json.agent_request.clarify_turn.runtime_controls.thinking_enabled, true);
+  assert.equal(request.json.agent_request.clarify_turn.runtime_controls.reasoning, "low");
 
   socket.receiveBinary(
     codec.encodeServerFrame({

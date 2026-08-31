@@ -327,7 +327,6 @@ function webFrame(requestId: string, frameCase: WebFrameCase, value: unknown): W
 function buildChatCommand(body: J) {
   const inner = rec(body.payload);
   const selectedModel = rec(inner.selected_model);
-  const runtimeControls = rec(inner.runtime_controls);
   const uploadedFiles = Array.isArray(inner.uploaded_files) ? inner.uploaded_files : [];
   const referencedConversations = Array.isArray(inner.referenced_conversations)
     ? inner.referenced_conversations
@@ -367,19 +366,24 @@ function buildChatCommand(body: J) {
         });
       }),
       clientRequestId: str(inner.client_request_id),
-      runtimeControls: inner.runtime_controls
-        ? create(ChatRuntimeControlsSchema, {
-            thinkingEnabled: bool(runtimeControls.thinking_enabled),
-            nativeWebSearchEnabled: bool(runtimeControls.native_web_search_enabled),
-            reasoning: str(runtimeControls.reasoning),
-            planModeEnabled: bool(runtimeControls.plan_mode_enabled),
-          })
-        : undefined,
+      runtimeControls: buildRuntimeControls(inner.runtime_controls),
       queuePolicy: str(inner.queue_policy),
     }),
     baseMessageRef: inner.base_message_ref
       ? buildMessageRef(rec(inner.base_message_ref))
       : undefined,
+  });
+}
+
+/** snake_case 载荷 → ChatRuntimeControls 消息（chat 与 clarify 请求共用）。 */
+function buildRuntimeControls(raw: unknown) {
+  if (!raw) return undefined;
+  const controls = rec(raw);
+  return create(ChatRuntimeControlsSchema, {
+    thinkingEnabled: bool(controls.thinking_enabled),
+    nativeWebSearchEnabled: bool(controls.native_web_search_enabled),
+    reasoning: str(controls.reasoning),
+    planModeEnabled: bool(controls.plan_mode_enabled),
   });
 }
 
@@ -887,17 +891,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
             typeof body.messages === "string" ? body.messages : JSON.stringify(body.messages ?? []),
           providerId: trimStr(body.provider_id),
           model: trimStr(body.model),
-          requestFormat: trimStr(body.request_format),
-          runtimeControls: body.runtime_controls
-            ? create(ChatRuntimeControlsSchema, {
-                thinkingEnabled: bool(rec(body.runtime_controls).thinking_enabled),
-                nativeWebSearchEnabled: bool(rec(body.runtime_controls).native_web_search_enabled),
-                reasoning: str(rec(body.runtime_controls).reasoning),
-                planModeEnabled: bool(rec(body.runtime_controls).plan_mode_enabled),
-              })
-            : undefined,
-          workdir: trimStr(body.workdir),
-          gitBranch: trimStr(body.git_branch),
+          runtimeControls: buildRuntimeControls(body.runtime_controls),
         }),
       };
     default:
