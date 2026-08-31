@@ -176,6 +176,7 @@ message ChatUploadedFile {
   string file_name = 3;
   string kind = 4;
   int64 size_bytes = 5;
+  string dedupe_key = 6;
 }
 
 message UploadReadableFile {

@@ -66,6 +66,10 @@ function normalizeUploadedFile(value: unknown): PendingUploadedFile | null {
       typeof record.absolutePath === "string" && record.absolutePath.trim()
         ? record.absolutePath.trim()
         : undefined,
+    dedupeKey:
+      typeof record.dedupeKey === "string" && record.dedupeKey.trim()
+        ? record.dedupeKey.trim()
+        : undefined,
     fileName,
     kind: kind as PendingUploadedFile["kind"],
     sizeBytes,

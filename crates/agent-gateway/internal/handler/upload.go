@@ -122,6 +122,7 @@ func ImportReadableFiles(
 			files = append(files, map[string]any{
 				"relativePath": file.GetRelativePath(),
 				"absolutePath": file.GetAbsolutePath(),
+				"dedupeKey":    file.GetDedupeKey(),
 				"fileName":     file.GetFileName(),
 				"kind":         file.GetKind(),
 				"sizeBytes":    file.GetSizeBytes(),

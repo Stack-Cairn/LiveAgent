@@ -2,7 +2,7 @@ import type { MentionComposerHandle } from "@liveagent/ui/components/chat/Mentio
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
-import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { mergePendingUploadedFilesWithStats } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { registerLocalUploadedImagePreviews } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { type DragEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -260,19 +260,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
       const currentUploads = getPendingUploadsForConversation(targetConversationId);
       setPendingUploadsForConversation(targetConversationId, currentUploads);
-      const remainingFileSlots = Math.max(0, MAX_UPLOAD_FILES - currentUploads.length);
-      if (remainingFileSlots === 0) {
-        addNotify(
-          "warning",
-          formatTranslation(translate("chat.upload.maxFilesIgnored", locale), {
-            max: MAX_UPLOAD_FILES,
-            count: filesToImport.length,
-          }),
-        );
-        return;
-      }
-
-      const importBatch = filesToImport.slice(0, remainingFileSlots);
+      const importBatch = filesToImport.slice(0, MAX_UPLOAD_FILES);
       const ignoredForLimit = filesToImport.length - importBatch.length;
       setUploadingFiles(true, targetConversationId);
       try {
@@ -297,9 +285,26 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         });
 
         if (result.files.length > 0) {
-          updatePendingUploadsForConversation(targetConversationId, (current) =>
-            mergePendingUploadedFiles(current, result.files).slice(0, MAX_UPLOAD_FILES),
-          );
+          let duplicateCount = 0;
+          let overflowCount = 0;
+          updatePendingUploadsForConversation(targetConversationId, (current) => {
+            const merged = mergePendingUploadedFilesWithStats(current, result.files);
+            duplicateCount = merged.duplicateCount;
+            overflowCount = Math.max(0, merged.files.length - MAX_UPLOAD_FILES);
+            return merged.files.slice(0, MAX_UPLOAD_FILES);
+          });
+          if (duplicateCount > 0) {
+            addNotify("warning", `已合并 ${duplicateCount} 个重复文件`);
+          }
+          if (overflowCount > 0) {
+            addNotify(
+              "warning",
+              formatTranslation(translate("chat.upload.maxFilesIgnored", locale), {
+                max: MAX_UPLOAD_FILES,
+                count: overflowCount,
+              }),
+            );
+          }
           if (isDisplayedConversation(targetConversationId)) {
             composerRef.current?.focus();
           }

@@ -240,6 +240,36 @@ test("uploaded file helpers preserve display text and strip model-hidden metadat
   assert.deepEqual(uploadedFiles.getUserMessageReferencedConversations(stripped), []);
 });
 
+test("uploaded file merge prefers stable dedupe keys over staging paths", () => {
+  const current = {
+    ...fileC,
+    relativePath: "uploads/first/report.docx",
+    dedupeKey: "content:report.docx:abc",
+  };
+  const replacement = {
+    ...fileC,
+    relativePath: "uploads/second/report.docx",
+    absolutePath: "/Users/me/.liveagent/uploads/2/report.docx",
+    dedupeKey: "content:report.docx:abc",
+  };
+  const differentContent = {
+    ...replacement,
+    relativePath: "uploads/third/report.docx",
+    dedupeKey: "content:report.docx:def",
+  };
+
+  const merged = uploadedFiles.mergePendingUploadedFilesWithStats(
+    [current],
+    [replacement, differentContent],
+  );
+
+  assert.equal(merged.duplicateCount, 1);
+  assert.deepEqual(
+    merged.files.map((file) => file.relativePath),
+    ["uploads/second/report.docx", "uploads/third/report.docx"],
+  );
+});
+
 test("request context can preserve uploaded file metadata for native provider adapters", () => {
   const message = uploadedFiles.createUserMessageWithUploads(" Please review ", [fileA], 1234);
   const state = {

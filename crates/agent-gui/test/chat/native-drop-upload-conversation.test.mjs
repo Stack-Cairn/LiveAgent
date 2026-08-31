@@ -262,11 +262,12 @@ test("without an explicit paste target clipboard files still land in the focused
   );
 });
 
-test("the per-conversation upload cap is measured on the drop target, not the focused pane", async () => {
+test("a full target conversation still imports so duplicates can be merged", async () => {
   const { hook, uploadStore, notifications, invokeCalls } = mountPendingUploads({
     invokeImpl: () => ({ files: [], skipped: [] }),
   });
-  // 落点会话已满 9 个;焦点会话为空。必须拒绝导入而不是借焦点会话的余量。
+  // 落点会话已满 9 个时仍需交给导入层识别重复；合并后保持 9 个，
+  // 而不是在拿到稳定 dedupeKey 前提前拒绝。
   uploadStore.set(
     "conv-b",
     Array.from({ length: 9 }, (_, index) => uploadedFile(`existing-${index}.txt`)),
@@ -277,8 +278,9 @@ test("the per-conversation upload cap is measured on the drop target, not the fo
     workdir: "/ws/b",
   });
 
-  assert.equal(invokeCalls.length, 0);
-  assert.equal(notifications.some((item) => item.type === "warning"), true);
+  assert.equal(invokeCalls.length, 1);
+  assert.equal(invokeCalls[0].args.maxFiles, 9);
+  assert.equal(notifications.some((item) => item.type === "warning"), false);
 });
 
 // ---------------------------------------------------------------------------

@@ -2578,6 +2578,7 @@ type ChatUploadedFile struct {
 	FileName      string                 `protobuf:"bytes,3,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
 	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
 	SizeBytes     int64                  `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	DedupeKey     string                 `protobuf:"bytes,6,opt,name=dedupe_key,json=dedupeKey,proto3" json:"dedupe_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2645,6 +2646,13 @@ func (x *ChatUploadedFile) GetSizeBytes() int64 {
 		return x.SizeBytes
 	}
 	return 0
+}
+
+func (x *ChatUploadedFile) GetDedupeKey() string {
+	if x != nil {
+		return x.DedupeKey
+	}
+	return ""
 }
 
 type UploadReadableFile struct {
@@ -14429,14 +14437,16 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x10thinking_enabled\x18\x01 \x01(\bR\x0fthinkingEnabled\x129\n" +
 	"\x19native_web_search_enabled\x18\x02 \x01(\bR\x16nativeWebSearchEnabled\x12\x1c\n" +
 	"\treasoning\x18\x03 \x01(\tR\treasoning\x12*\n" +
-	"\x11plan_mode_enabled\x18\x04 \x01(\bR\x0fplanModeEnabled\"\xac\x01\n" +
+	"\x11plan_mode_enabled\x18\x04 \x01(\bR\x0fplanModeEnabled\"\xcb\x01\n" +
 	"\x10ChatUploadedFile\x12#\n" +
 	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12#\n" +
 	"\rabsolute_path\x18\x02 \x01(\tR\fabsolutePath\x12\x1b\n" +
 	"\tfile_name\x18\x03 \x01(\tR\bfileName\x12\x12\n" +
 	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\"h\n" +
+	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12\x1d\n" +
+	"\n" +
+	"dedupe_key\x18\x06 \x01(\tR\tdedupeKey\"h\n" +
 	"\x12UploadReadableFile\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12\x1b\n" +
 	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x18\n" +
