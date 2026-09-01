@@ -1314,8 +1314,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           <ClarifyPanel
             state={clarifySession.state}
             busy={clarifySession.state.status === "asking"}
-            onSubmitAnswer={clarifySession.submitAnswer}
-            onForceFinal={clarifySession.forceFinal}
+            onSubmitAnswers={clarifySession.submitAnswers}
+            onGenerateNow={clarifySession.generateNow}
             onRetry={clarifySession.retry}
             onClose={() => {
               clarifySession.close();
