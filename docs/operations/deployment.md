@@ -142,6 +142,8 @@ Keychain 中必须是带私钥的 `Developer ID Application` identity。若 macO
 | Windows x64 | `windows-latest` | `LiveAgent-vX.Y.Z-Windows-x64.msi`、`LiveAgent-vX.Y.Z-Windows-x64-Setup.exe`，以及 updater 使用的 `.zip` / `.sig`。 |
 | Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`，以及 updater 使用的 `.tar.gz` / `.sig`。 |
 
+macOS DMG 的安装窗口布局（背景图、窗口尺寸、图标位置）由 `tauri.conf.json > bundle > macOS > dmg` 配置，tauri-bundler 通过 AppleScript 驱动 Finder 写入 DMG 根目录的 `.DS_Store` 来落盘。tauri-bundler 只要检测到 `CI=true` 就会跳过这一步，产出没有任何布局的白底 DMG；GitHub 托管的 macOS runner 实际具备 GUI 会话，因此 `make desktop-build-macos-release` 固定设置 `TAURI_BUNDLER_DMG_IGNORE_CI=true` 让布局在 CI 中照常生效，并在签名、公证之前用 `scripts/release/verify-macos-dmg-layout.sh` 挂载 DMG 校验 `.DS_Store`、`.background/`、`LiveAgent.app` 与 `Applications` 链接是否齐全，缺失即中止发布。本地排查时可以直接对任意 DMG 运行该脚本。
+
 发布 job 会在上传平台产物后生成并上传 `latest.json`。桌面端「设置 -> 关于」会根据用户是否允许预发布，从 GitHub Releases 中筛选带 `latest.json` 的正式 / 预发布版本；未允许预发布时只检查正式 Release。
 
 ## 桌面版本号来源
