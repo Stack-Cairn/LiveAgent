@@ -230,7 +230,9 @@ export function ContextUsageRing(props: {
             onClick={open}
             aria-label={t("chat.manualCompactTitle")}
             className={cn(
-              "inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full outline-hidden transition-[background-color,opacity] hover:bg-muted/60 focus-visible:bg-muted/60",
+              // 悬停底色画在 inset-0.5 的伪元素上（28px），与环外径及 composer 右列
+              // 其余按钮的可见圆等大；不能改用 padding 收缩——内部 32px 的环会被挤偏。
+              "relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full outline-hidden before:absolute before:inset-0.5 before:rounded-full before:transition-colors hover:before:bg-muted/60 focus-visible:before:bg-muted/60",
               className,
             )}
           >
