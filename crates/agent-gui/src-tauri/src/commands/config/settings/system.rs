@@ -244,7 +244,20 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
             .get("updatedAt")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        let project_prompt = entry
+            .get("projectPrompt")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        let project_prompt_strategy = match entry
+            .get("projectPromptStrategy")
+            .and_then(Value::as_str)
+        {
+            Some("replace") => "replace",
+            _ => "append",
+        };
         if mode == "inherit"
+            && project_prompt.is_empty()
             && updated_at > 0
             && now.saturating_sub(updated_at) > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
         {
@@ -264,6 +277,8 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
                 } else {
                     Value::Array(Vec::new())
                 },
+                "projectPrompt": project_prompt,
+                "projectPromptStrategy": project_prompt_strategy,
                 "stateVersion": state_version,
                 "writerId": writer_id,
                 "updatedAt": updated_at,
@@ -272,8 +287,14 @@ fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
     }
     let mut normalized_entries = normalized_by_path.into_iter().collect::<Vec<_>>();
     normalized_entries.sort_by(|(path_a, entry_a), (path_b, entry_b)| {
-        let active_a = entry_a["mode"] != "inherit";
-        let active_b = entry_b["mode"] != "inherit";
+        let entry_active = |entry: &Value| {
+            entry["mode"] != "inherit"
+                || entry["projectPrompt"]
+                    .as_str()
+                    .is_some_and(|prompt| !prompt.is_empty())
+        };
+        let active_a = entry_active(entry_a);
+        let active_b = entry_active(entry_b);
         active_b
             .cmp(&active_a)
             .then_with(|| {

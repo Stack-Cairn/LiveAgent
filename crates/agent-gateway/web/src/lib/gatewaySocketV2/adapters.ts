@@ -72,6 +72,8 @@ import {
   InstalledAppsListRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  ProviderCustomHeaderSchema,
+  ProviderCustomHeadersSchema,
   ProviderListRequestSchema,
   ProviderModelsRequestSchema,
   ProviderUsageRequestSchema,
@@ -621,6 +623,18 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           modelsUrl: trimStr(body.models_url),
           providerId: trimStr(body.provider_id),
           isFullUrl: typeof body.is_full_url === "boolean" ? body.is_full_url : undefined,
+          // 字段存在性即语义：调用方没带 custom_headers 才回落到落库配置，带了空
+          // 数组表示草稿把头清空了，桌面端必须按空集发。
+          customHeaders: Array.isArray(body.custom_headers)
+            ? create(ProviderCustomHeadersSchema, {
+                headers: body.custom_headers.map((header) =>
+                  create(ProviderCustomHeaderSchema, {
+                    name: trimStr((header as { key?: unknown } | null)?.key),
+                    value: str((header as { value?: unknown } | null)?.value),
+                  }),
+                ),
+              })
+            : undefined,
         }),
       };
     case "provider.usage.query":

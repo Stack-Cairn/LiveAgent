@@ -1323,6 +1323,8 @@ mod tests {
                         "mode": "custom",
                         "skillNames": ["review", "review", ""],
                         "mcpServerIds": ["github", "github", 42],
+                        "projectPrompt": " Review this project. ",
+                        "projectPromptStrategy": "replace",
                         "stateVersion": 3,
                         "writerId": " client-a ",
                         "updatedAt": 100
@@ -1331,6 +1333,8 @@ mod tests {
                         "mode": "inherit",
                         "skillNames": ["ignored"],
                         "mcpServerIds": ["ignored"],
+                        "projectPrompt": 42,
+                        "projectPromptStrategy": "invalid",
                         "stateVersion": 4,
                         "writerId": "client-b",
                         "updatedAt": now
@@ -1351,6 +1355,8 @@ mod tests {
                     "mode": "custom",
                     "skillNames": ["review"],
                     "mcpServerIds": ["github"],
+                    "projectPrompt": "Review this project.",
+                    "projectPromptStrategy": "replace",
                     "stateVersion": 3,
                     "writerId": "client-a",
                     "updatedAt": 100
@@ -1359,6 +1365,8 @@ mod tests {
                     "mode": "inherit",
                     "skillNames": [],
                     "mcpServerIds": [],
+                    "projectPrompt": "",
+                    "projectPromptStrategy": "append",
                     "stateVersion": 4,
                     "writerId": "client-b",
                     "updatedAt": now
@@ -1421,6 +1429,13 @@ mod tests {
                 "mode": "inherit",
                 "stateVersion": 1,
                 "updatedAt": now
+            },
+            "/tmp/project-prompt": {
+                "mode": "inherit",
+                "projectPrompt": " Keep project context ",
+                "projectPromptStrategy": "replace",
+                "stateVersion": 1,
+                "updatedAt": old
             }
         })));
         let normalized = normalized.as_object().expect("normalized workspace resources");
@@ -1428,6 +1443,14 @@ mod tests {
         assert_eq!(normalized["/tmp/custom"]["mode"], "custom");
         assert_eq!(normalized["/tmp/off"]["mode"], "off");
         assert_eq!(normalized["/tmp/recent-tombstone"]["mode"], "inherit");
+        assert_eq!(
+            normalized["/tmp/project-prompt"]["projectPrompt"],
+            "Keep project context"
+        );
+        assert_eq!(
+            normalized["/tmp/project-prompt"]["projectPromptStrategy"],
+            "replace"
+        );
     }
 
     #[test]
@@ -1458,14 +1481,25 @@ mod tests {
                 }),
             );
         }
+        entries.insert(
+            "/tmp/project-prompt".to_string(),
+            json!({
+                "mode": "inherit",
+                "projectPrompt": "Keep project context",
+                "projectPromptStrategy": "append",
+                "stateVersion": 1,
+                "updatedAt": 1
+            }),
+        );
         let normalized = normalize_workspace_resource_settings(Some(&Value::Object(entries)));
         let normalized = normalized.as_object().expect("normalized workspace resources");
         assert_eq!(normalized.len(), MAX_WORKSPACE_RESOURCE_SETTINGS);
         for index in 0..20 {
             assert!(normalized.contains_key(&format!("/tmp/custom-{index:02}")));
         }
-        assert!(normalized.contains_key("/tmp/tombstone-235"));
-        assert!(!normalized.contains_key("/tmp/tombstone-236"));
+        assert!(normalized.contains_key("/tmp/project-prompt"));
+        assert!(normalized.contains_key("/tmp/tombstone-234"));
+        assert!(!normalized.contains_key("/tmp/tombstone-235"));
     }
 
     #[test]

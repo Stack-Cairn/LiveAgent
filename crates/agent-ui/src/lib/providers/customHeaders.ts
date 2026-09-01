@@ -49,6 +49,12 @@ export class CustomHeaderImportError extends Error {
   }
 }
 
+// Claude Code CLI 的 SDK 指纹头，取值与 CPA/CLIProxyAPI 的 claudeDeviceProfile
+// 默认档（helps/claude_device_profile.go:22-31）逐字对齐，配套的 UA 见
+// CLI_IDENTITY_USER_AGENTS.claude_code——版本号必须成套，SDK 版本和 UA 里的 CLI
+// 版本对不上本身就是破绽。
+// anthropic-beta 不在这里：它按请求内容逐次计算，写死一个值反而失真，因此列进
+// RESERVED_CUSTOM_HEADER_KEYS 由发请求那侧生成。
 export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "x-app": "cli",
   "Content-Type": "application/json",
@@ -59,8 +65,8 @@ export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "X-Stainless-Runtime": "node",
   "X-Stainless-Timeout": "600",
   "x-stainless-retry-count": "0",
-  "X-Stainless-Package-Version": "0.74.0",
-  "X-Stainless-Runtime-Version": "v22.19.0",
+  "X-Stainless-Package-Version": "0.94.0",
+  "X-Stainless-Runtime-Version": "v26.3.0",
   "anthropic-dangerous-direct-browser-access": "true",
 } as const;
 
@@ -102,6 +108,42 @@ export function getCustomHeaderKeyPresets(providerId: CustomProvider["type"]): r
 
 export function isAnthropicOAuthApiKey(apiKey: string | undefined): boolean {
   return Boolean(apiKey?.includes("sk-ant-oat"));
+}
+
+// 「模拟 CLI」按钮写入的身份 UA。claude_code 一项与 CPA/CLIProxyAPI 的
+// defaultClaudeFingerprintUserAgent（helps/claude_device_profile.go:23）逐字一致；
+// codex / xai 用当前发行版本号。这些值只在用户点按钮时写进自定义请求头，
+// 发请求那侧不含任何内置伪装。
+export const CLI_IDENTITY_USER_AGENTS = {
+  claude_code: "claude-cli/2.1.186 (external, cli)",
+  codex: "codex_cli_rs/0.151.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
+  xai: "grok-shell/1.0.13 (linux; x86_64)",
+} as const;
+
+export type CliIdentityProviderId = keyof typeof CLI_IDENTITY_USER_AGENTS;
+
+export const CLI_IDENTITY_PROVIDER_IDS = Object.keys(
+  CLI_IDENTITY_USER_AGENTS,
+) as CliIdentityProviderId[];
+
+export function isCliIdentityProviderId(value: string): value is CliIdentityProviderId {
+  return Object.hasOwn(CLI_IDENTITY_USER_AGENTS, value);
+}
+
+// 一键模拟按钮写入的整套 CLI 身份头。Content-Type 由发请求那一侧按 body 决定，
+// 不进用户可编辑列表；session_id/conversation_id 是每会话随机值，冒充成固定串反而
+// 比不带更可疑，留给用户自己填。
+export function buildCliIdentityHeaders(type: CliIdentityProviderId): CustomHeader[] {
+  const headers: CustomHeader[] = [
+    { key: "User-Agent", value: CLI_IDENTITY_USER_AGENTS[type] },
+  ];
+  if (type === "claude_code") {
+    for (const [key, value] of Object.entries(ANTHROPIC_DEFAULT_REQUEST_HEADERS)) {
+      if (key.toLowerCase() === "content-type") continue;
+      headers.push({ key, value });
+    }
+  }
+  return headers;
 }
 
 function findHeaderKey(
@@ -337,7 +379,7 @@ export function mergeImportedCustomHeaders(
 }
 export function mergeCustomHeaders(
   base: Record<string, string>,
-  customHeaders?: CustomProvider["customHeaders"],
+  customHeaders?: readonly CustomHeader[],
 ): Record<string, string> {
   const merged = { ...base };
 

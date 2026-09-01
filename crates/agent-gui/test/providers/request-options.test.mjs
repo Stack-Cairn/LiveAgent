@@ -139,8 +139,8 @@ test("provider request helpers normalize auth, metadata, errors, and model value
       "X-Stainless-Runtime": "node",
       "X-Stainless-Timeout": "600",
       "x-stainless-retry-count": "0",
-      "X-Stainless-Package-Version": "0.74.0",
-      "X-Stainless-Runtime-Version": "v22.19.0",
+      "X-Stainless-Package-Version": "0.94.0",
+      "X-Stainless-Runtime-Version": "v26.3.0",
       "anthropic-dangerous-direct-browser-access": "true",
     },
   );

@@ -7,12 +7,16 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import {
+  AudioLines,
   Check,
   ClipboardPaste,
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
+  Fingerprint,
   Globe,
+  ImageIcon,
   Key,
   Link2,
   List,
@@ -22,6 +26,7 @@ import {
   Search,
   Settings,
   Trash2,
+  Video,
   Waypoints,
   X,
   Zap,
@@ -36,6 +41,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -47,6 +59,14 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
+import {
+  type CatalogInputModality,
+  resolveModelInputModalities,
+} from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  CLI_IDENTITY_PROVIDER_IDS,
+  CLI_IDENTITY_USER_AGENTS,
+} from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   applyUsageQueryModePreset,
@@ -66,6 +86,15 @@ import {
   UsagePlanLine,
 } from "./ProviderPresentation";
 
+// 模型行右侧的输入模态图标：text 是所有模型的公共能力不单独标注，只展示
+// 额外的模态（图片/音频/视频/PDF），按目录的规范顺序排列。
+const MODEL_MODALITY_ICONS = [
+  { modality: "image", Icon: ImageIcon, labelKey: "settings.modelModalityImage" },
+  { modality: "audio", Icon: AudioLines, labelKey: "settings.modelModalityAudio" },
+  { modality: "video", Icon: Video, labelKey: "settings.modelModalityVideo" },
+  { modality: "pdf", Icon: FileText, labelKey: "settings.modelModalityPdf" },
+] as const;
+
 export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewModel }) {
   const {
     activeCodingPlanProvider,
@@ -78,6 +107,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     apiKeyForRequest,
     apiKeyIsRedactedDisplay,
     applyHeaderSuggestion,
+    applyCliIdentityHeaders,
     applyModelBulkState,
     baseUrl,
     canOverrideModelInputModalities,
@@ -553,6 +583,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       visibleModels.map((model) => {
                         const isEditingModel = editingModel?.model.id === model.id;
                         const newModelPhase = newModelPhases.get(model.id);
+                        // 用户覆盖（仅表达 text/image 门控、仅部分供应商生效）优先于
+                        // 目录快照：覆盖存在时图标要跟随覆盖，避免与编辑面板矛盾。
+                        const inputModalities: readonly CatalogInputModality[] | undefined =
+                          (canOverrideModelInputModalities ? model.inputModalities : undefined) ??
+                          resolveModelInputModalities(providerType, model.id);
+                        const modalityIcons = MODEL_MODALITY_ICONS.filter(({ modality }) =>
+                          inputModalities?.includes(modality),
+                        );
                         return (
                           // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useAriaPropsSupportedByRole: The row becomes an accessible checkbox only while bulk mode is active.
                           <div
@@ -641,9 +679,26 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   ) : null}
                                 </div>
                               </div>
-                              <div className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
-                                {formatTokenCount(model.contextWindow)} ctx ·{" "}
-                                {formatTokenCount(model.maxOutputToken)} out
+                              <div className="flex shrink-0 items-center whitespace-nowrap text-[11px] tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
+                                {modalityIcons.length > 0 ? (
+                                  <span className="mr-1.5 flex items-center gap-1">
+                                    {modalityIcons.map(({ modality, Icon, labelKey }) => (
+                                      <span
+                                        key={modality}
+                                        role="img"
+                                        title={t(labelKey)}
+                                        aria-label={t(labelKey)}
+                                        className="flex items-center"
+                                      >
+                                        <Icon className="h-3.5 w-3.5" />
+                                      </span>
+                                    ))}
+                                  </span>
+                                ) : null}
+                                <span>
+                                  {formatTokenCount(model.contextWindow)} ctx ·{" "}
+                                  {formatTokenCount(model.maxOutputToken)} out
+                                </span>
                                 {model.limitsSource === "fallback" ? (
                                   <span className="ml-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
                                     {t("settings.estimatedLimitsBadge")}
@@ -1057,6 +1112,40 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-2 max-[720px]:w-full">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 gap-1.5 max-[720px]:h-11 max-[720px]:flex-1"
+                          />
+                        }
+                      >
+                        <Fingerprint className="h-3.5 w-3.5" />
+                        {t("settings.cliIdentityHeaders")}
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                          {t("settings.cliIdentityHeadersHint")}
+                        </DropdownMenuLabel>
+                        {CLI_IDENTITY_PROVIDER_IDS.map((identity) => (
+                          <DropdownMenuItem
+                            key={identity}
+                            className="items-center gap-2 rounded-md py-1.5 text-xs"
+                            onSelect={() => applyCliIdentityHeaders(identity)}
+                          >
+                            <span className="font-medium leading-5">
+                              {t(`settings.cliIdentity.${identity}`)}
+                            </span>
+                            <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                              {CLI_IDENTITY_USER_AGENTS[identity].split(" ")[0]}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button
                       type="button"
                       variant="outline"

@@ -1379,6 +1379,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     modelsUrl = "",
     providerId = "",
     isFullUrl?: boolean,
+    customHeaders?: readonly { key: string; value: string }[],
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
@@ -1388,6 +1389,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       models_url: modelsUrl,
       provider_id: providerId,
       is_full_url: isFullUrl,
+      custom_headers: customHeaders,
     });
   }
 

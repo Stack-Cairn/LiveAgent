@@ -442,6 +442,7 @@ export function ProviderSettingsExtension(props: {
               useSystemProxy: provider.useSystemProxy,
               isFullUrl: provider.isFullUrl,
               modelsUrl: provider.modelsUrl,
+              customHeaders: provider.customHeaders,
             },
           );
           return { id: provider.id, models, ok: true };

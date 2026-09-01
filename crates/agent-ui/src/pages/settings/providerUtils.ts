@@ -12,6 +12,10 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import {
+  type CustomHeader,
+  mergeCustomHeaders,
+} from "../../lib/providers/customHeaders";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
@@ -393,6 +397,13 @@ export function buildProviderModelsUrl(
 
 // 首次尝试统一 /v1/models + Authorization Bearer；失败后回退到各家官方形式
 // （gemini v1beta + x-goog-api-key、claude_code x-api-key）。每次请求仍只带单一鉴权头。
+//
+// 这里只产出发请求必需的头，不含任何客户端身份伪装：伪装一律由用户在设置里显式
+// 开启（「模拟 CLI」按钮把整套头写进自定义请求头），再经 mergeCustomHeaders 落到
+// 请求上。不开启就照实发，不冒充任何官方 CLI——与 CPA 的 preserveCallerFingerprint
+// 同一取向。
+// KEEP IN SYNC: crates/agent-gui/src-tauri/src/services/provider_models.rs 的
+// build_provider_models_headers。
 function buildModelsHeaders(
   type: ProviderId,
   apiKey: string,
@@ -422,10 +433,17 @@ function buildModelsHeaders(
 export function buildProviderModelsAttempts(
   type: ProviderId,
   apiKey: string,
+  customHeaders?: readonly CustomHeader[],
 ): ProviderModelsAttempt[] {
   const attempts: ProviderModelsAttempt[] = [
-    { kind: "default", headers: buildModelsHeaders(type, apiKey, "default") },
-    { kind: "official", headers: buildModelsHeaders(type, apiKey, "official") },
+    {
+      kind: "default",
+      headers: mergeCustomHeaders(buildModelsHeaders(type, apiKey, "default"), customHeaders),
+    },
+    {
+      kind: "official",
+      headers: mergeCustomHeaders(buildModelsHeaders(type, apiKey, "official"), customHeaders),
+    },
   ];
   // codex/xai/deepseek 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
   // 必不同），重复请求同一端点没有意义，收敛为一次。
@@ -483,6 +501,7 @@ async function fetchModelsThroughGateway(
   modelsUrl: string,
   providerId: string,
   isFullUrl: boolean,
+  customHeaders?: readonly CustomHeader[],
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -500,6 +519,8 @@ async function fetchModelsThroughGateway(
     models_url: modelsUrl,
     provider_id: providerId,
     is_full_url: isFullUrl,
+    // 恒传（哪怕空数组）：草稿里清空请求头也得让桌面端按空集发，不能回落到落库配置。
+    custom_headers: (customHeaders ?? []).map((header) => ({ ...header })),
   });
 
   const items = extractModelListItems(data);
@@ -687,10 +708,16 @@ export function buildProviderModelsFetchKey(
   useSystemProxy: boolean,
   isFullUrl = false,
   modelsUrl = "",
+  customHeaders?: readonly CustomHeader[],
 ): string {
   const routing = useSystemProxy ? "proxy" : "direct";
   const override = modelsUrl.trim();
-  return `${baseUrl.trim()}||${apiKey.trim()}||${routing}${isFullUrl ? "||full-url" : ""}${override ? `||models:${override}` : ""}`;
+  // 请求头进 key：这些头参与上游鉴权，改完不重新拉一次的话，用户看到的仍是上一套
+  // 头留下的失败结果，与「改了没生效」无法区分。
+  const headers = (customHeaders ?? []).length
+    ? JSON.stringify((customHeaders ?? []).map((header) => [header.key, header.value]))
+    : "";
+  return `${baseUrl.trim()}||${apiKey.trim()}||${routing}${isFullUrl ? "||full-url" : ""}${override ? `||models:${override}` : ""}${headers ? `||headers:${headers}` : ""}`;
 }
 
 export async function fetchModelsFromApi(
@@ -702,6 +729,7 @@ export async function fetchModelsFromApi(
     isFullUrl?: boolean;
     modelsUrl?: string;
     providerId?: string;
+    customHeaders?: readonly CustomHeader[];
   },
 ): Promise<ProviderModelConfig[]> {
   const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
@@ -715,11 +743,12 @@ export async function fetchModelsFromApi(
       modelsUrlOverride,
       options?.providerId?.trim() ?? "",
       options?.isFullUrl === true,
+      options?.customHeaders,
     );
   }
 
   const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
-  const attempts = buildProviderModelsAttempts(type, normalizedApiKey);
+  const attempts = buildProviderModelsAttempts(type, normalizedApiKey, options?.customHeaders);
   const failures: ProviderModelsFailure[] = [];
   let emptyResult: ProviderModelConfig[] | null = null;
 
