@@ -42,6 +42,28 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		}
 	}()
 
+	if env.GetClarifyTurn() != nil {
+		unwatch := c.sm.WatchClarifyDeltas(agentRequestID, func(delta *gatewayv2.ClarifyTurnDelta) {
+			if delta == nil {
+				return
+			}
+			_ = c.send(wscore.FrameResponse, "agent_response", &gatewayv2.WebServerFrame{
+				RequestId: requestID,
+				AgentId:   agentID,
+				Payload: &gatewayv2.WebServerFrame_AgentResponse{
+					AgentResponse: &gatewayv2.AgentEnvelope{
+						RequestId: requestID,
+						Timestamp: time.Now().Unix(),
+						Payload: &gatewayv2.AgentEnvelope_ClarifyTurnDelta{
+							ClarifyTurnDelta: delta,
+						},
+					},
+				},
+			})
+		})
+		defer unwatch()
+	}
+
 	response, err := c.sm.AwaitUnaryResponse(ctx, agentID, agentRequestID, env)
 	if err != nil {
 		_ = c.sendLocalError(requestID, errorMessage(err))

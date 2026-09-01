@@ -943,7 +943,14 @@ export type DecodedServerFrame =
   | { kind: "ping"; timestamp: number }
   | { kind: "response"; requestId: string; agentId: string; payload: unknown }
   | { kind: "error"; requestId: string; agentId: string; message: string }
-  | { kind: "event"; type: string; agentId: string; payload: unknown };
+  | { kind: "event"; type: string; agentId: string; payload: unknown }
+  | {
+      kind: "progress";
+      requestId: string;
+      agentId: string;
+      type: "clarify.turn_delta";
+      payload: { text: string };
+    };
 
 export function decodeServerFrameBinary(data: ArrayBuffer | Uint8Array): WebServerFrame {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -979,7 +986,16 @@ export function decodeServerFrame(
         agentId,
         message: payload.value.message || "Request failed",
       };
-    case "agentResponse":
+    case "agentResponse": {
+      if (payload.value.payload.case === "clarifyTurnDelta") {
+        return {
+          kind: "progress",
+          requestId,
+          agentId,
+          type: "clarify.turn_delta",
+          payload: { text: payload.value.payload.value.text ?? "" },
+        };
+      }
       try {
         return {
           kind: "response",
@@ -995,6 +1011,7 @@ export function decodeServerFrame(
           message: error instanceof Error ? error.message : "Request failed",
         };
       }
+    }
     case "status":
       // status 臂身兼二职：带 request_id 是 status.get/chat.prepare 响应，空则为 status.event 广播。
       return requestId

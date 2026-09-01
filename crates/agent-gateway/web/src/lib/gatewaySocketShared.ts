@@ -62,10 +62,12 @@ export type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
   timeoutId: number;
+  onDelta?: (delta: string) => void;
 };
 
 export type GatewayRequestOptions = {
   timeoutMs?: number;
+  onDelta?: (delta: string) => void;
 };
 
 export type GatewayChatSystemSettings = {

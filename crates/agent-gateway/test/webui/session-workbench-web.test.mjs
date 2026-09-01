@@ -265,6 +265,8 @@ test("workbench pane composer wires the clarify runner (web default path)", () =
     "utf8",
   );
   assert.match(paneHostSource, /executeClarifyPromptTurn\(\s*context\.api,\s*context\.settings,/);
+  assert.match(paneHostSource, /\(messages, _signal, onTextDelta\) =>/);
+  assert.match(paneHostSource, /onTextDelta,/);
   // 总开关（settings.customSettings.promptClarifyEnabled）关闭时不传执行器，
   // ChatComposerBar 随之隐藏澄清按钮；模型覆盖/回退收敛在两宿主共用的
   // executeClarifyPromptTurn（内部走 resolvePromptClarifyModel）。

@@ -489,7 +489,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   // executeClarifyPromptTurn（两宿主共用），fallback 按本 Pane 会话解析。
   // runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换身份不打断会话。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
-    (messages) =>
+    (messages, _signal, onTextDelta) =>
       executeClarifyPromptTurn(
         context.api,
         context.settings,
@@ -499,6 +499,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           runtimeControls: paneRuntimeControls,
         },
         messages,
+        onTextDelta,
       ),
     [context, selection, selectedProvider, paneRuntimeControls],
   );

@@ -151,6 +151,7 @@ message AgentEnvelope {
     InstalledAppsListResponse installed_apps_list_resp = 105;
     ClarifyTurnResponse clarify_turn_resp = 106;
     CuaDriverResponse cua_driver_resp = 107;
+    ClarifyTurnDelta clarify_turn_delta = 108;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -189,6 +190,12 @@ message ClarifyTurnResponse {
   string final_text = 1;
   string error_code = 2;
   string error_message = 3;
+}
+
+// 澄清轮次流式增量。与 ClarifyTurnRequest 共用 request_id，但不结束 unary
+// 等待：gateway 拦截后转给发起该轮的浏览器，最终仍以 clarify_turn_resp 收束。
+message ClarifyTurnDelta {
+  string text = 1;
 }
 
 message ChatUploadedFile {

@@ -1308,6 +1308,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         ) : null}
 
         {approvalBar}
+        {/* 澄清面板浮在输入卡片正上方（原先是卡片内嵌段）：与队列面板同级，
+            直接顶在卡片上缘。审批面板接管输入区时同样让位。 */}
+        {clarifyOpen && runClarifyTurn && approvalBar == null ? (
+          <ClarifyPanel
+            state={clarifySession.state}
+            busy={clarifySession.state.status === "asking"}
+            onSubmitAnswers={clarifySession.submitAnswers}
+            onGenerateNow={clarifySession.generateNow}
+            onRetry={clarifySession.retry}
+            onClose={() => {
+              clarifySession.close();
+              setClarifyOpen(false);
+            }}
+          />
+        ) : null}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
           hidden={approvalBar != null}
@@ -1432,20 +1447,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 onConfirm={onManualCompactConfirm}
               />
             </div>
-          ) : null}
-
-          {clarifyOpen && runClarifyTurn ? (
-            <ClarifyPanel
-              state={clarifySession.state}
-              busy={clarifySession.state.status === "asking"}
-              onSubmitAnswer={clarifySession.submitAnswer}
-              onForceFinal={clarifySession.forceFinal}
-              onRetry={clarifySession.retry}
-              onClose={() => {
-                clarifySession.close();
-                setClarifyOpen(false);
-              }}
-            />
           ) : null}
 
           {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能

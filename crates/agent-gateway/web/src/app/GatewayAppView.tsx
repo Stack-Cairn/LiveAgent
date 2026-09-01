@@ -467,7 +467,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本
   // 补全；模型覆盖/回退/错误拍平在 executeClarifyPromptTurn（两宿主共用）。
   const runClarifyTurn = useCallback<RunClarifyTurn>(
-    (messages) =>
+    (messages, _signal, onTextDelta) =>
       executeClarifyPromptTurn(
         api,
         settings,
@@ -477,6 +477,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           runtimeControls: chatRuntimeControlsForCurrentProvider,
         },
         messages,
+        onTextDelta,
       ),
     [
       settings,

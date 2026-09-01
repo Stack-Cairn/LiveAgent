@@ -108,6 +108,11 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 		return
 	}
 
+	if delta := env.GetClarifyTurnDelta(); delta != nil {
+		m.forwardClarifyTurnDelta(env.GetRequestId(), delta)
+		return
+	}
+
 	if terminalEvent := env.GetTerminalEvent(); terminalEvent != nil {
 		m.broadcastTerminalEvent(agentID, terminalEvent)
 		return

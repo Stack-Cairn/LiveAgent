@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { type ChatRuntimeControls, normalizeChatRuntimeControls } from "../../../lib/settings";
 import { createTextComposerDraft } from "../composer/composerDraftText";
+import { createClarifyDeltaForwarder } from "./clarifyDeltaForwarder";
 import {
   type ActiveGatewayBridgeRequest,
   type GatewayBridgeRuntimeRefs,
@@ -43,6 +44,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
     messages: ClarifyMessage[],
     selection: { providerId: string; model: string },
     runtimeControls: ChatRuntimeControls,
+    onTextDelta?: (delta: string) => void,
   ) => Promise<string>;
 };
 
@@ -739,6 +741,10 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           messages,
           { providerId: event.payload.providerId, model: event.payload.model },
           normalizeChatRuntimeControls(runtimeControls),
+          createClarifyDeltaForwarder(
+            (text) => invoke<unknown>("gateway_clarify_delta", { input: { requestId, text } }),
+            (error) => console.warn("gateway_clarify_delta failed", error),
+          ),
         );
       } catch (error) {
         errorCode = "execution_error";

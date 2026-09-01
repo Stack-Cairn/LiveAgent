@@ -1484,7 +1484,7 @@ export function ChatPage(props: ChatPageProps) {
     requestConversationStop,
     requestActiveConversationStop,
     consumeConversationStop,
-    runGatewayClarifyTurn: async (messages, selection, runtimeControls) => {
+    runGatewayClarifyTurn: async (messages, selection, runtimeControls, onTextDelta) => {
       const provider = settings.customProviders.find((p) => p.id === selection.providerId);
       if (!provider) {
         throw new Error(`clarify provider not found: ${selection.providerId}`);
@@ -1500,7 +1500,7 @@ export function ChatPage(props: ChatPageProps) {
       return createGuiClarifyRunner(
         () => guiSelection,
         () => createProviderRuntimeConfig(provider, selection.model, runtimeControls),
-      )(messages, new AbortController().signal);
+      )(messages, new AbortController().signal, onTextDelta);
     },
   });
 

@@ -752,6 +752,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
     minmax(0, min(var(--gateway-chat-column-width, 768px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
+  max-height: 100%;
   padding-bottom: var(--gateway-chat-composer-bottom, 16px);
 }
 
@@ -761,6 +762,16 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-composer-layer > .gateway-chat-column {
   grid-column: 2;
+  display: flex;
+  min-height: 0;
+  max-height: 100%;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.gateway-composer-layer [data-clarify-panel] {
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .gateway-transcript-scroll [data-scroll-viewport] > div {

@@ -676,6 +676,49 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient surfaces clarify turn deltas before the final response", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const deltas = [];
+  const clarifyPromise = client.clarifyPromptTurn(
+    {
+      messages: [{ role: "user", content: "帮我做一个网站" }],
+      providerId: "builtin-gemini",
+      model: "gemini-2.0-flash",
+    },
+    { onDelta: (text) => deltas.push(text) },
+  );
+  const socket = await connectAndAuth(codec);
+  await waitFor(() => findAgentRequest(codec, socket, "clarify_turn"), "clarify frame");
+  const request = findAgentRequest(codec, socket, "clarify_turn");
+
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: { clarify_turn_delta: { text: "[CLARIFY" } },
+    }),
+  );
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: { clarify_turn_delta: { text: "_QUESTION]" } },
+    }),
+  );
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: { clarify_turn_resp: { final_text: "[CLARIFY_QUESTION]\n要做什么？" } },
+    }),
+  );
+
+  assert.deepEqual(await clarifyPromise, { final_text: "[CLARIFY_QUESTION]\n要做什么？" });
+  assert.deepEqual(deltas, ["[CLARIFY", "_QUESTION]"]);
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient retries recoverable memory manage commands after a clean disconnect", async () => {
   installBrowser();
   const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();

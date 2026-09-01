@@ -1,9 +1,10 @@
-//! 澄清轮次 unary 桥（Web 计划 2）。
+//! 澄清轮次 unary 桥（Web 计划 2）+ 流式增量。
 //!
 //! Web 端经 gateway 转发 `ClarifyTurnRequest` 到桌面 agent。Rust 收到后把请求
-//! 以 `gateway:clarify-turn-requested` 事件发到 TS 运行时执行 LLM 补全，再经
-//! `gateway_clarify_respond` invoke 回传结果，最终回 `ClarifyTurnResp` 信封给
-//! gateway。模式与 `chat.rs` 的 oneshot-pending-emit-timeout-send 完全一致。
+//! 以 `gateway:clarify-turn-requested` 事件发到 TS 运行时执行 LLM 补全；流式
+//! 增量经 `gateway_clarify_delta` 以同 request_id 的 `ClarifyTurnDelta` 回推，
+//! 终稿经 `gateway_clarify_respond` 回 `ClarifyTurnResp`。delta 不得占用 unary
+//! 等待的首条关联响应。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,7 +15,9 @@ use tokio::sync::oneshot;
 
 use super::GatewayChatRuntimeControlsEvent;
 use super::GatewayController;
-use super::proto::{agent_envelope, AgentEnvelope, ClarifyTurnRequest, ClarifyTurnResponse};
+use super::proto::{
+    agent_envelope, AgentEnvelope, ClarifyTurnDelta, ClarifyTurnRequest, ClarifyTurnResponse,
+};
 use super::util::now_unix_seconds;
 
 pub(crate) const GATEWAY_CLARIFY_TURN_REQUESTED_EVENT: &str = "gateway:clarify-turn-requested";
@@ -39,6 +42,14 @@ pub struct GatewayClarifyRespondInput {
     pub final_text: Option<String>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+}
+
+/// TS 侧经 invoke gateway_clarify_delta 回传的流式增量。
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayClarifyDeltaInput {
+    pub request_id: String,
+    pub text: String,
 }
 
 impl GatewayClarifyTurnRequestEvent {
@@ -144,6 +155,29 @@ impl GatewayController {
             request_id,
             timestamp: now_unix_seconds(),
             payload: Some(agent_envelope::Payload::ClarifyTurnResp(response)),
+        })
+        .await
+    }
+
+    pub(crate) async fn send_clarify_turn_delta(
+        &self,
+        request_id: String,
+        text: String,
+    ) -> Result<(), String> {
+        let pending = self
+            .pending_clarify_turns
+            .lock()
+            .map_err(|_| "gateway clarify turn lock poisoned".to_string())?
+            .contains_key(&request_id);
+        if !pending {
+            return Ok(());
+        }
+        self.send_agent_envelope(AgentEnvelope {
+            request_id,
+            timestamp: now_unix_seconds(),
+            payload: Some(agent_envelope::Payload::ClarifyTurnDelta(ClarifyTurnDelta {
+                text,
+            })),
         })
         .await
     }

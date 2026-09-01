@@ -901,6 +901,7 @@ export class GatewayWebSocketTransport {
         resolve: (value) => resolve(value as T),
         reject,
         timeoutId,
+        onDelta: options?.onDelta,
       });
 
       try {
@@ -1139,6 +1140,14 @@ export class GatewayWebSocketTransport {
         return;
       }
       this.handleEvent(decoded.type, decoded.payload);
+      return;
+    }
+
+    if (decoded.kind === "progress") {
+      const pendingProgress = decoded.requestId ? this.pending.get(decoded.requestId) : null;
+      if (decoded.type === "clarify.turn_delta" && decoded.payload.text) {
+        pendingProgress?.onDelta?.(decoded.payload.text);
+      }
       return;
     }
 

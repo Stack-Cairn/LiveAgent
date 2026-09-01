@@ -54,6 +54,24 @@ test("gateway shows the conversation view switcher in chrome only after an assis
   );
 });
 
+test("web composer column clamps the clarify panel so new turns scroll inside it", () => {
+  // 输入层 absolute 贴底、聊天区 overflow-hidden：面板 max-h-[40vh] 在矮 Pane
+  // 里可能还没触顶就被外层裁掉，内部 overflow-y-auto 永不生效。列必须是
+  // 有上限的 flex 列，并允许 [data-clarify-panel] 收缩。
+  assert.match(
+    baseChatStyles,
+    /\.gateway-composer-layer \{[\s\S]*?max-height: 100%;/,
+  );
+  assert.match(
+    baseChatStyles,
+    /\.gateway-composer-layer > \.gateway-chat-column \{[\s\S]*?display: flex;[\s\S]*?min-height: 0;[\s\S]*?max-height: 100%;[\s\S]*?flex-direction: column;[\s\S]*?justify-content: flex-end;/,
+  );
+  assert.match(
+    baseChatStyles,
+    /\.gateway-composer-layer \[data-clarify-panel\] \{[\s\S]*?flex-shrink: 1;[\s\S]*?min-height: 0;/,
+  );
+});
+
 test("mobile sidebar stays above the interactive workbench header", () => {
   assert.match(
     responsiveStyles,

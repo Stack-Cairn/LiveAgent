@@ -37,6 +37,7 @@ type Manager struct {
 	workspaceHub     *workspaceActivityHub
 	managedProcesses *managedProcessHub
 	statusSubs       *statusSubscriberHub
+	clarifyDeltas    *clarifyDeltaHub
 	sttSettingsSync  func(context.Context, json.RawMessage) (any, error)
 }
 
@@ -89,6 +90,7 @@ func NewManager() *Manager {
 		workspaceHub:     newWorkspaceActivityHub(),
 		managedProcesses: newManagedProcessHub(),
 		statusSubs:       newStatusSubscriberHub(),
+		clarifyDeltas:    newClarifyDeltaHub(),
 	}
 	m.convStreams = newConversationStreamStore(m.IsOnline)
 	go m.tunnelExpirySweepLoop()
