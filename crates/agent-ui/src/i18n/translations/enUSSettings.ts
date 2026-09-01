@@ -646,6 +646,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesTextImage": "Text and images",
   "settings.modelInputModalitiesHint":
     "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
+  "settings.modelModalityImage": "Supports image input",
+  "settings.modelModalityAudio": "Supports audio input",
+  "settings.modelModalityVideo": "Supports video input",
+  "settings.modelModalityPdf": "Supports PDF input",
   "settings.positiveIntegerRequired": "Please enter a positive integer",
   "settings.add": "Add",
   "settings.cancel": "Cancel",

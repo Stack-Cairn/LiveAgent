@@ -1,4 +1,9 @@
-import { type CatalogModelEntry, type CatalogProviderId, MODEL_CATALOG } from "./catalog.generated";
+import {
+  type CatalogInputModality,
+  type CatalogModelEntry,
+  type CatalogProviderId,
+  MODEL_CATALOG,
+} from "./catalog.generated";
 
 // ---------------------------------------------------------------------------
 // 模型元信息目录（限额的单一真源）
@@ -7,10 +12,10 @@ import { type CatalogModelEntry, type CatalogProviderId, MODEL_CATALOG } from ".
 // 对 OpenAI 采用 Codex models.json 优先、models.dev 补充，其余供应商来自
 // models.dev；由 update-model-catalog.yml 定时刷新）。本文件与生成文件均由共享包提供。
 // 思考档位/API 选择/compat 等请求路径行为不归这里管——那些是流式运行时
-// （pi-ai）的领域；这里只回答"这个模型的窗口和输出上限是多少"。
+// （pi-ai）的领域；这里只回答"这个模型的窗口/输出上限与输入模态是什么"。
 
 export { MODEL_CATALOG, MODEL_CATALOG_SNAPSHOT_DATE } from "./catalog.generated";
-export type { CatalogModelEntry, CatalogProviderId };
+export type { CatalogInputModality, CatalogModelEntry, CatalogProviderId };
 
 // 与 settings 的 ProviderId 结构相同；本模块不 import settings（避免环）。
 export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai" | "deepseek";
@@ -139,6 +144,18 @@ export function findCatalogModelAcrossProviders(
     }
   }
   return undefined;
+}
+
+// 展示用的输入模态查询：先按供应商作用域查，未命中再跨供应商回查（与限额
+// 解析同一回查策略——中转聚合常把别家模型挂在本供应商类型下）。返回目录
+// 快照数据；用户的 inputModalities 覆盖是否优先由调用方决定（覆盖只表达
+// text/image 门控，与目录的完整模态集合语义不同）。
+export function resolveModelInputModalities(
+  providerId: CatalogAppProviderId,
+  modelId: string | undefined,
+): readonly CatalogInputModality[] | undefined {
+  const entry = findCatalogModel(providerId, modelId) ?? findCatalogModelAcrossProviders(modelId);
+  return entry?.inputModalities;
 }
 
 export function resolveModelLimitsAcrossProviders(

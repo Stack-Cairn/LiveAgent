@@ -620,6 +620,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesTextImage": "文本与图片",
   "settings.modelInputModalitiesHint":
     "默认按模型名称和内置目录推断；仅在供应商能力与推断不一致时手动覆盖。",
+  "settings.modelModalityImage": "支持图片输入",
+  "settings.modelModalityAudio": "支持音频输入",
+  "settings.modelModalityVideo": "支持视频输入",
+  "settings.modelModalityPdf": "支持 PDF 输入",
   "settings.positiveIntegerRequired": "请输入大于 0 的整数",
   "settings.add": "添加",
   "settings.cancel": "取消",
