@@ -64,7 +64,7 @@ function SelectionIndicator({ selected, multiple }: { selected: boolean; multipl
     <span
       className={cn(
         "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center border transition-colors",
-        multiple ? "rounded-[4px]" : "rounded-full",
+        multiple ? "rounded-sm" : "rounded-full",
         selected
           ? "border-primary bg-primary text-primary-foreground"
           : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
@@ -223,7 +223,7 @@ function SettledRoundSummary({
           return (
             <div key={question.id} className="flex flex-col gap-1">
               <div className="flex items-start gap-1.5">
-                <span className="mt-[1px] inline-flex h-4 shrink-0 items-center justify-center rounded-[5px] bg-foreground/[0.05] px-1 text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]">
+                <span className="mt-[1px] inline-flex h-4 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] px-1 text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]">
                   Q{index + 1}
                 </span>
                 <span className="min-w-0 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground">
