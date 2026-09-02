@@ -592,9 +592,16 @@ TerminalPaneSurface
 5. Local Terminal cwd 必须在所属主项目允许范围。
 6. SSH Prompt 通过 `operationToken + paneId + promptId` 绑定。
 7. 恢复只显示 stale 启动规格；用户显式点击才启动/重连。
-8. 关闭采用 Detach-first：Pane 的 × 是默认且安全的动作，静默 Detach 视图并把 Session 交回 Right Dock，进程与连接不受影响。
-9. Pane 内不叠加文字终止控件；终止进程/断开连接统一在 Right Dock 的会话管理入口完成。
-10. 裁决理由：关闭视图远比终止进程高频，默认确认会训练用户盲点头并误杀长任务；终端进程的生命周期与视图解耦后，Detach 可随时从 dock 找回或重新拖入，破坏性动作集中在会话管理入口。
+8. 关闭 = 终止（2026-09-02 改判，替代此前的 Detach-first）：Pane 的 × 与 `Meta/Ctrl+Alt+W`
+   关闭该终端。运行中的会话先在 Pane 内顶部弹出红色确认条（与 Right Dock 的
+   "关闭正在运行的终端「…」？" 同款），确认后 `client.close`；已退出的会话直接 close；
+   无会话的休眠/占位 Pane 直接关视图。实现：`lib/workbench/terminalPaneClose.ts`
+   （`useTerminalPaneCloseFlow` / `resolveTerminalPaneCloseAction`）。
+9. Pane 不会在 close 之前先消失：Pane 由页面的 `closed` 事件联动收掉（事件丢失时在
+   会话确认离开列表后兜底），租约因此一直握到进程结束，Session 不会在 Right Dock
+   的 tab / 右上角计数徽标里闪现。
+10. 改判理由：Detach 回 dock 让 Session 在右上角"忽闪"，且用户预期关闭即结束；
+    危险动作靠 Pane 内就地确认兜住，Right Dock 的会话管理入口仍可终止/断开。
 
 ## 16. File Tree Surface 与 Right Dock 边界
 
@@ -612,6 +619,10 @@ File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 Pane
   `RightDockContext`；Right Dock 与 Pane Host 只是不同适配层。
 - 文件树 Surface 关闭只关闭视图，不修改项目、会话或文件。
 
+> 2026-09-02 起，Git 审查、内网穿透、SSH 连接与后台任务也按同一套单例 + 租约语义进入
+> PaneTree（`ProjectToolWorkbenchSurface`），Right Dock 只保留终端会话列表作为必留入口。
+> 设计与落地见 [workbench-project-tool-panes.md](workbench-project-tool-panes.md)。
+
 运行终端列表是 Detach 后的找回入口，必须保留；持有 Workbench Lease 的 Session 从 dock 的终端 tab 中整体隐藏（终端在任一时刻只出现在一个宿主里），Pane Detach 释放租约后自动回归 dock。SSH overlay 的 shell tab 保持「占位 + 聚焦 Pane」互斥（overlay 是 SSH 连接管理入口，tab 需持续可见）。
 
 ## 17. 生命周期与关闭语义
@@ -620,14 +631,15 @@ File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 Pane
 |---|---|---|
 | Conversation | 关闭视图 | 不删除历史；运行/队列按后台策略继续 |
 | File Tree | 关闭视图并回到 Right Dock 入口 | 不修改项目或文件；项目级 UI 状态保留 |
-| 运行 Local Terminal | Detach 视图并回 Right Dock | 进程树继续运行，Session 保留，可再次拖入 |
-| 已退出 Local Terminal | 关闭视图 | 保留历史按现有策略清理 |
-| 已连接 SSH Terminal | Detach 视图并回 Right Dock | 连接保持，Session 保留，可再次拖入 |
+| 运行 Local Terminal | Pane 内红条确认后终止 | 进程树结束，Session 移除，Pane 随 `closed` 事件关闭 |
+| 已退出 Local Terminal | 关闭视图并回收 Session | 保留历史按现有策略清理 |
+| 已连接 SSH Terminal | Pane 内红条确认后断开 | 连接断开，Session 移除，Pane 随 `closed` 事件关闭 |
 | stale Terminal | 关闭视图 | 无 Runtime |
 
-终止进程树和断开 SSH 不在 Pane 关闭路径上：两者统一从 Right Dock 的终端会话管理入口执行，Pane 内不再叠加文字按钮。
+Pane 的关闭路径即终止路径（§15 第 8 条）；Right Dock 的终端会话管理入口仍可终止/断开
+dock 内的会话。
 
-反向联动（dock → Pane）：Right Dock 关闭一个被 Pane 租用的 Session 意味着终止进程 **并连带关闭该 Pane**（`closed` 事件驱动，按 Runtime Binding 而非 Lease 查找，覆盖宿主尚未取得租约的 connecting 窗口）。宿主对「本次挂载见过、随后从会话列表消失」的绑定停在 `session-closed` 占位（可显式重启），绝不自行复活。应用重启后的恢复 Surface 也没有自动启动授权，统一停在 dormant 占位；用户点击恢复后，才按 launchSpec 创建本地或 SSH 会话。应用退出的 `close_all` 经退出护栏豁免 closed 联动，布局拓扑仍可落盘。
+联动（Session → Pane）：任何来源（Pane 的 ×、Right Dock、close_project）关闭一个被 Pane 租用的 Session 都 **连带关闭该 Pane**（`closed` 事件驱动，按 Runtime Binding 而非 Lease 查找，覆盖宿主尚未取得租约的 connecting 窗口）。宿主对「本次挂载见过、随后从会话列表消失」的绑定停在 `session-closed` 占位（可显式重启），绝不自行复活。应用重启后的恢复 Surface 也没有自动启动授权，统一停在 dormant 占位；用户点击恢复后，才按 launchSpec 创建本地或 SSH 会话。应用退出的 `close_all` 经退出护栏豁免 closed 联动，布局拓扑仍可落盘。
 
 关闭 Conversation Pane 绝不等于删除会话。会话仍在左侧，可再次拖入复用；后台运行状态继续显示。删除会话时若 Pane 可见，必须确认并原子关闭 View/Runtime，再删除历史。
 
