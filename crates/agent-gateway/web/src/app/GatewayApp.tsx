@@ -9,6 +9,7 @@ import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import {
   type ConversationOpenState,
   createConversationOpenController,
@@ -20,6 +21,7 @@ import {
   terminalSessionBelongsToProject,
 } from "@liveagent/ui/lib/terminal/sessionStore";
 import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProjectRemoval";
+import { projectToolSurfaceTitleKey } from "@liveagent/ui/lib/workbench/projectToolSurfaces";
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1691,6 +1693,7 @@ function useGatewayAppController() {
     terminalSessions,
     terminalProjectPath,
     newTerminalTitle: translate("projectTools.newTerminal", settings.locale),
+    projectToolTitle: (tool) => translate(projectToolSurfaceTitleKey(tool), settings.locale),
     selectConversation: handleSidebarSelectConversation,
     startConversationForProject: handleNewConversationForProject,
     conversationWorkdirFor: (conversationId) =>
@@ -1708,6 +1711,9 @@ function useGatewayAppController() {
       ),
     onConversationAlreadyOpen: () =>
       addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
+    onProjectToolPaneClosed: (tool, projectPathKey) =>
+      setSettings((prev) => releaseProjectToolFromDock(prev, tool, projectPathKey)),
+    onTerminalCloseFailed: (message) => addNotify("error", message),
   });
   workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
   workbenchClearRef.current = workbenchController.clearWorkbench;

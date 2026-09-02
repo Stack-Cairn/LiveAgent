@@ -10,6 +10,8 @@ import {
   TerminalPaneSshPromptError,
 } from "../../lib/workbench/terminalPaneRuntime";
 import type { TerminalWorkbenchSurface } from "../../lib/workbench/types";
+import { formatTerminalSessionTitle } from "../project-tools/rightDockModel";
+import { Button } from "../ui/button";
 import {
   LocalTerminalPaneSurface,
   type TerminalPaneSurfacePhase,
@@ -40,6 +42,16 @@ export type TerminalPaneHostProps = {
    * 重试按钮变为按 launchSpec 重启,而不是对着死会话无限重连。
    */
   onSessionGhost?: (sessionId: string) => void;
+  /**
+   * In-pane close confirmation for a running session (the pane × terminates
+   * the terminal; it never detaches back to the dock). Rendered as a red bar
+   * above the viewport so the prompt appears where the user clicked.
+   */
+  closeRequest?: {
+    busy?: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+  };
 };
 
 type TerminalPaneErrorState =
@@ -71,6 +83,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     sessions,
     sessionsLoaded,
     onSessionGhost,
+    closeRequest,
   } = props;
   const { t } = useLocale();
 
@@ -109,6 +122,13 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   useEffect(() => {
     if (liveSession && createdSession) setCreatedSession(null);
   }, [createdSession, liveSession]);
+
+  // 会话"消失"后又回到权威列表(网关切换到另一个桌面实例后再切回、一次
+  // 失败的 list() 被后续事件纠正):停驻的"会话已不存在"占位自行解除,
+  // 不需要用户点"重试"(那会终止并按 launchSpec 新建一个 PTY)。
+  useEffect(() => {
+    if (liveSession && errorState?.kind === "session-closed") setErrorState(null);
+  }, [errorState, liveSession]);
 
   useEffect(() => {
     if (session || errorState) return;
@@ -323,16 +343,56 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     onRetry,
     onError: handleViewportError,
   };
-  if (surface.kind === "sshTerminal") {
-    return (
-      <SshTerminalPaneSurface
-        {...commonProps}
-        onReconnect={renderSession ? reconnectSsh : undefined}
-        isReconnecting={reconnectPending}
-        latencyMs={latencyMs}
-        isCompact={isCompact}
-      />
-    );
-  }
-  return <LocalTerminalPaneSurface {...commonProps} />;
+  const closeConfirmBar =
+    closeRequest && session ? (
+      <div
+        data-terminal-pane-close-confirm={paneId}
+        className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {t("projectTools.closeRunningTerminal").replace(
+            "{title}",
+            formatTerminalSessionTitle(session.title, t("projectTools.terminalTitle")),
+          )}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 px-2.5 text-xs"
+          disabled={closeRequest.busy}
+          onClick={closeRequest.onCancel}
+        >
+          {t("settings.cancel")}
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          className="h-7 shrink-0 px-2.5 text-xs"
+          disabled={closeRequest.busy}
+          onClick={closeRequest.onConfirm}
+        >
+          {t("projectTools.close")}
+        </Button>
+      </div>
+    ) : null;
+  // The wrapper is always present so toggling the confirm bar never remounts
+  // the viewport (xterm keeps its buffer and attach stream).
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {closeConfirmBar}
+      {surface.kind === "sshTerminal" ? (
+        <SshTerminalPaneSurface
+          {...commonProps}
+          onReconnect={renderSession ? reconnectSsh : undefined}
+          isReconnecting={reconnectPending}
+          latencyMs={latencyMs}
+          isCompact={isCompact}
+        />
+      ) : (
+        <LocalTerminalPaneSurface {...commonProps} />
+      )}
+    </div>
+  );
 }

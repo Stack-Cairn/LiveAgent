@@ -1,3 +1,4 @@
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
@@ -9,11 +10,14 @@ import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
-import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
+import {
+  type ProjectToolPaneEnvironment,
+  ProjectToolPaneHost,
+} from "@liveagent/ui/components/workbench/ProjectToolPaneHost";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
 import {
   WORKBENCH_CANVAS_DIVIDER_SIZE,
@@ -36,6 +40,7 @@ import {
 } from "@liveagent/ui/lib/chat/useComposerActions";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
   type ConversationOpenState,
@@ -51,7 +56,12 @@ import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
-import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
+import {
+  mergeTerminalSession,
+  reconcileSshTerminalSessions,
+  removeTerminalSession,
+  terminalSessionBelongsToProject,
+} from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
   toTrajectoryLiveAssistantMessage,
@@ -60,20 +70,27 @@ import {
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
 import {
+  commitProjectToolDrop,
   commitWorkspaceDropConversation,
   findAdjacentPaneId,
-  findPaneIdBySurfaceKey,
   findParentSplitId,
   hitTestWorkbenchDrop,
+  leasedProjectToolKinds,
+  openProjectToolInSplit,
   type PendingWorkspaceDropOperation,
+  projectToolSurfaceTitleKey,
   shouldDeferWorkspaceDropConversationSync,
   type WorkbenchCommandError,
   type WorkbenchGeometry,
 } from "@liveagent/ui/lib/workbench/index";
+import { useTerminalPaneCloseFlow } from "@liveagent/ui/lib/workbench/terminalPaneClose";
 import {
   type ConversationWorkbenchSurface,
+  isProjectToolSurface,
   type PaneRecord,
+  PROJECT_TOOL_SURFACE_KINDS,
   type ProjectRef,
+  type ProjectToolSurfaceKind,
   surfaceIdentityKey,
   surfaceProjectRef,
 } from "@liveagent/ui/lib/workbench/types";
@@ -120,6 +137,7 @@ import {
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   getRightDockFileTreeState,
+  getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
   isThinkingAlwaysOnForModel,
@@ -131,6 +149,7 @@ import {
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
+  updateSshProjectHostIds,
   updateSystem,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
@@ -2428,11 +2447,22 @@ export function ChatPage(props: ChatPageProps) {
       if (pane?.surface.kind === "conversation" && !workbench.layoutRef.current.panes[paneId]) {
         setConversationView(pane.surface.conversationId, "conversation");
       }
-      // 终端 Pane 的关闭是 Detach:进程保留,租约随宿主卸载释放,会话回到
-      // Right Dock;绑定一并回收,再次拖入走全新 surface 身份。先关 Pane 再删
-      // 绑定,同一事件批处理内宿主已卸载,不会把空绑定误判为待新建。
+      // 终端 Pane 的关闭 = 终止终端(不再 Detach 回 Right Dock):进程由
+      // terminalPaneClose 先关,这里在布局移除后回收绑定,再次拖入走全新
+      // surface 身份。先关 Pane 再删绑定,同一事件批处理内宿主已卸载,不会
+      // 把空绑定误判为待新建。
       if (pane?.surface.kind === "localTerminal" || pane?.surface.kind === "sshTerminal") {
         terminalPaneBindings.delete(pane.surface.surfaceId);
+      }
+      // 项目工具 Pane 的关闭同时关闭 dock 里的该工具:租约释放后 dock 不再把
+      // tab 弹回来。只在布局确认移除后写设置,失败的关闭不动 dock 状态。
+      if (
+        pane &&
+        isProjectToolSurface(pane.surface) &&
+        !workbench.layoutRef.current.panes[paneId]
+      ) {
+        const { kind, project } = pane.surface;
+        setSettings((prev) => releaseProjectToolFromDock(prev, kind, project.projectPathKey));
       }
       if (result.closedFocused && result.nextConversationId) {
         const nextPaneId = workbench.paneIdForConversation(result.nextConversationId);
@@ -2443,8 +2473,20 @@ export function ChatPage(props: ChatPageProps) {
         );
       }
     },
-    [selectWorkbenchConversation, setConversationView, workbench],
+    [selectWorkbenchConversation, setConversationView, setSettings, workbench],
   );
+
+  // Pane 的 × / Meta+Alt+W:终端 Pane 先终止终端(运行中的会话在 Pane 内红条
+  // 确认),由 closed 事件联动收 Pane;其它 Pane 直接关闭。
+  const terminalPaneClose = useTerminalPaneCloseFlow({
+    client: tauriTerminalClient,
+    sessionsRef: terminalSessionsRef,
+    bindings: terminalPaneBindings,
+    layoutRef: workbench.layoutRef,
+    closePane: handleWorkbenchClosePane,
+    onError: (message) => addNotify("error", message),
+  });
+  const requestWorkbenchClosePane = terminalPaneClose.requestClosePane;
 
   const workbenchProjectForConversation = useCallback(
     (item: SidebarConversation): ProjectRef => {
@@ -2595,20 +2637,13 @@ export function ChatPage(props: ChatPageProps) {
         });
         return;
       }
-      if (payload.kind === "fileTree") {
-        const surfaceKey = `fileTree:${payload.project.projectPathKey}`;
-        const existingPaneId = findPaneIdBySurfaceKey(workbench.layoutRef.current, surfaceKey);
-        if (target.kind === "pane-center") {
-          if (existingPaneId && target.paneId === existingPaneId) {
-            handleWorkbenchFocusPane(existingPaneId);
-          }
-          return;
-        }
-        if (existingPaneId) {
-          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
-          return;
-        }
-        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+      if (payload.kind === "projectTool") {
+        commitProjectToolDrop(payload, target, {
+          layout: workbench.layoutRef.current,
+          openProjectToolSurface: workbench.openProjectToolSurface,
+          movePane: workbench.movePane,
+          focusPane: handleWorkbenchFocusPane,
+        });
         return;
       }
       // Moving an existing pane by its chrome drag handle.
@@ -2748,7 +2783,9 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, t, terminalProjectPath, terminalProjectPathKey, workspaceProjects],
   );
 
-  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+  // Right Dock 的当前项目:项目工具(文件树/审查/内网穿透/SSH/后台任务)
+  // 拖出或"在分屏中打开"时,Pane 绑定的就是这个 ProjectRef。
+  const dockToolProjectRef = useCallback((): ProjectRef | null => {
     if (!terminalProjectPathKey) return null;
     const project = workspaceProjects.find(
       (entry) => workspaceProjectPathKey(entry.path) === terminalProjectPathKey,
@@ -2759,16 +2796,24 @@ export function ChatPage(props: ChatPageProps) {
     };
   }, [terminalProjectPathKey, workspaceProjects]);
 
-  const handleFileTreeTabWorkbenchDragIntent = useCallback(
-    (event: { pointerId: number; clientX: number; clientY: number }) => {
-      const project = fileTreeProjectRef();
+  const handleToolWorkbenchDragIntent = useCallback(
+    (
+      tool: ProjectToolSurfaceKind,
+      event: {
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        currentTarget?: EventTarget | null;
+      },
+    ) => {
+      const project = dockToolProjectRef();
       if (!project) return;
       beginWorkbenchDrag(
-        { kind: "fileTree", project, title: t("projectTools.fileTreeTitle") },
+        { kind: "projectTool", tool, project, title: t(projectToolSurfaceTitleKey(tool)) },
         event,
       );
     },
-    [beginWorkbenchDrag, fileTreeProjectRef, t],
+    [beginWorkbenchDrag, dockToolProjectRef, t],
   );
 
   // 画板 Pane 持有租约的会话:overlay/占位的"前往 Pane"聚焦通路。
@@ -2782,8 +2827,8 @@ export function ChatPage(props: ChatPageProps) {
     [handleWorkbenchFocusPane, workbench],
   );
 
-  // Right Dock 是终止进程的唯一入口(Detach-first 裁决):会话被显式关闭
-  // (`closed` 事件)时,持有它的 Pane 一并关闭。缺了这一环,宿主会把
+  // 会话被关闭(`closed` 事件:Pane 的 × 终止、dock 关闭或 close_project)时,
+  // 持有它的 Pane 一并关闭。缺了这一环,宿主会把
   // "绑定的会话消失"当作恢复期陈旧绑定,按 launchSpec 复活一个新 PTY,
   // 表现为 dock 上的终端"关不掉"。按绑定而非租约查找,覆盖宿主取得租约
   // 前的 connecting 窗口。
@@ -2929,31 +2974,27 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  const handleOpenFileTreeInWorkbenchSplit = useCallback(() => {
-    const project = fileTreeProjectRef();
-    if (!project) return;
-    const existingPaneId = findPaneIdBySurfaceKey(
-      workbench.layoutRef.current,
-      `fileTree:${project.projectPathKey}`,
-    );
-    if (existingPaneId) {
-      handleWorkbenchFocusPane(existingPaneId);
-      return;
-    }
-    const target = resolveWorkbenchAutoDockTarget();
-    if (!target) {
-      addNotify("error", t("workbench.noSpaceForSplit"));
-      return;
-    }
-    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
-  }, [
-    addNotify,
-    fileTreeProjectRef,
-    handleWorkbenchFocusPane,
-    resolveWorkbenchAutoDockTarget,
-    t,
-    workbench,
-  ]);
+  const handleOpenToolInWorkbenchSplit = useCallback(
+    (tool: ProjectToolSurfaceKind) => {
+      const project = dockToolProjectRef();
+      if (!project) return;
+      openProjectToolInSplit(tool, project, {
+        layout: workbench.layoutRef.current,
+        openProjectToolSurface: workbench.openProjectToolSurface,
+        focusPane: handleWorkbenchFocusPane,
+        resolveAutoDockTarget: resolveWorkbenchAutoDockTarget,
+        onNoSpace: () => addNotify("error", t("workbench.noSpaceForSplit")),
+      });
+    },
+    [
+      addNotify,
+      dockToolProjectRef,
+      handleWorkbenchFocusPane,
+      resolveWorkbenchAutoDockTarget,
+      t,
+      workbench,
+    ],
+  );
 
   const handleOpenNewTerminalInWorkbenchSplit = useCallback(() => {
     const target = resolveWorkbenchAutoDockTarget();
@@ -3134,7 +3175,7 @@ export function ChatPage(props: ChatPageProps) {
       if (event.shiftKey) return;
       if (event.key === "w" || event.key === "W") {
         event.preventDefault();
-        handleWorkbenchClosePane(focusedPaneId);
+        requestWorkbenchClosePane(focusedPaneId);
         return;
       }
       if (event.key === "=" || event.key === "+") {
@@ -3146,7 +3187,7 @@ export function ChatPage(props: ChatPageProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleWorkbenchClosePane, handleWorkbenchFocusPane, workbench]);
+  }, [handleWorkbenchFocusPane, requestWorkbenchClosePane, workbench]);
 
   // Background pane controllers (conversations visible in unfocused panes).
   const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
@@ -3485,7 +3526,11 @@ export function ChatPage(props: ChatPageProps) {
       case "conversation":
         return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
       case "fileTree":
-        return t("projectTools.fileTreeTitle");
+      case "gitReview":
+      case "tunnel":
+      case "sshTunnel":
+      case "backgroundTasks":
+        return t(projectToolSurfaceTitleKey(surface.kind));
       case "localTerminal":
         return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
       case "sshTerminal":
@@ -3505,8 +3550,8 @@ export function ChatPage(props: ChatPageProps) {
     if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
       return t("workbench.paneRegionTerminal").replace("{title}", title);
     }
-    if (surface.kind === "fileTree") {
-      return t("projectTools.fileTreeTitle");
+    if (isProjectToolSurface(surface)) {
+      return t("workbench.paneRegionTool").replace("{title}", title);
     }
     if (!title) return t("workbench.paneRegion");
     const workspaceName = workspaceProjects
@@ -3544,7 +3589,7 @@ export function ChatPage(props: ChatPageProps) {
         isCompact={context.isCompact}
         dragHandleLabel={t("workbench.dragPane")}
         closeLabel={t("workbench.closePane")}
-        onClose={() => handleWorkbenchClosePane(pane.paneId)}
+        onClose={() => requestWorkbenchClosePane(pane.paneId)}
         trajectoryToggle={
           surface.kind === "conversation"
             ? {
@@ -3578,6 +3623,112 @@ export function ChatPage(props: ChatPageProps) {
     );
   };
 
+  // 项目工具 Pane 的运行环境:与 RightDockPanel 拿到的是同一批 client/回调,
+  // 只是按 Pane 自己的 ProjectRef 解析项目(见 ProjectToolPaneHost)。
+  const projectToolPaneEnvironment = useMemo<ProjectToolPaneEnvironment>(
+    () => ({
+      theme: effectiveTheme,
+      fontScale: settings.customSettings.fontScale.rightDock,
+      workspaceProjects,
+      activeProjectPathKey: terminalProjectPathKey,
+      clients: {
+        terminal: tauriTerminalClient,
+        git: tauriGitClient,
+        textGeneration: projectToolTextGenerationClient,
+        tunnel: isAgentMode ? tauriTunnelClient : null,
+        workspaceActivity: tauriWorkspaceActivityClient,
+      },
+      capabilities: {
+        disabledMessage: terminalDisabledMessage,
+        terminalDisabledMessage,
+        gitWriteEnabled: true,
+        tunnelEnabled,
+        tunnelDisabledMessage,
+        tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),
+      },
+      workspaceProjectRootClient: desktopWorkspaceProjectRootClient,
+      workspaceRootRevision,
+      fileTree: {
+        getState: (projectPathKey) =>
+          getRightDockFileTreeState(settings.customSettings, projectPathKey),
+        onStateChange: (projectPathKey, patch) =>
+          setSettings((current) => updateRightDockFileTreeState(current, projectPathKey, patch)),
+        onInsertFileMention: handleRightDockInsertFileMention,
+        onOpenFile: (request) => {
+          if (isWorkspacePreviewPath(request.path)) {
+            openWorkspaceFilePreview(request);
+          } else {
+            openWorkspaceEditorFile(request);
+          }
+        },
+        onRevealInFileTree: (projectPathKey, path) => {
+          if (projectPathKey === terminalProjectPathKey) handleChangedFileReveal(path);
+        },
+      },
+      git: {
+        onInsertCodeReviewSkill: codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined,
+        onInsertCommitMention: handleRightDockInsertCommitMention,
+        onInsertGitFileMention: handleRightDockInsertGitFileMention,
+        focusRequest: gitReviewFocusRequest,
+        onFocusRequestHandled: handleGitReviewFocusRequestHandled,
+      },
+      ssh: {
+        hosts: settings.ssh.hosts,
+        getAssociatedHostIds: (projectPathKey) =>
+          getSshProjectHostIds(settings.ssh, projectPathKey),
+        onAssociatedHostIdsChange: (projectPathKey, hostIds) =>
+          setSettings((prev) => updateSshProjectHostIds(prev, projectPathKey, hostIds)),
+        sessions: terminalSessions,
+        onSessionSnapshot: (snapshot) =>
+          setTerminalSessions((current) => mergeTerminalSession(current, snapshot.session)),
+        onSessionClosed: (sessionId) =>
+          setTerminalSessions((current) => removeTerminalSession(current, sessionId)),
+        onSessionsReconcile: (sessions) =>
+          setTerminalSessions((current) => reconcileSshTerminalSessions(current, sessions)),
+        onOpenSession: handleOpenSshTerminal,
+      },
+      openExternal: (url) => {
+        void openUrl(url);
+      },
+    }),
+    [
+      codeReviewSkill,
+      effectiveTheme,
+      gitReviewFocusRequest,
+      handleChangedFileReveal,
+      handleGitReviewFocusRequestHandled,
+      handleOpenSshTerminal,
+      handleRightDockInsertCodeReviewSkill,
+      handleRightDockInsertCommitMention,
+      handleRightDockInsertFileMention,
+      handleRightDockInsertGitFileMention,
+      isAgentMode,
+      openWorkspaceEditorFile,
+      openWorkspaceFilePreview,
+      projectToolTextGenerationClient,
+      setSettings,
+      setTerminalSessions,
+      settings.customSettings,
+      settings.remote.gatewayUrl,
+      settings.ssh,
+      tauriTunnelClient,
+      terminalDisabledMessage,
+      terminalProjectPathKey,
+      terminalSessions,
+      tunnelDisabledMessage,
+      tunnelEnabled,
+      workspaceProjects,
+      workspaceRootRevision,
+    ],
+  );
+
+  // 被画板 Pane 租用的项目工具:dock 隐藏对应 tab/内容/入口(与终端租约同口径)。
+  const leasedDockTools = useMemo(
+    () =>
+      leasedProjectToolKinds(workbench.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS),
+    [terminalProjectPathKey, workbench.layout],
+  );
+
   const chatContent = sessionWorkbench.enabled ? (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
       <WorkbenchCanvas
@@ -3599,54 +3750,24 @@ export function ChatPage(props: ChatPageProps) {
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
                 onSessionGhost={verifyTerminalSessionAlive}
+                closeRequest={
+                  terminalPaneClose.pendingClose?.paneId === pane.paneId
+                    ? {
+                        busy: terminalPaneClose.pendingClose.busy,
+                        onConfirm: terminalPaneClose.confirmClose,
+                        onCancel: terminalPaneClose.cancelClose,
+                      }
+                    : undefined
+                }
               />
             );
           }
-          if (surface.kind === "fileTree") {
-            const project = workspaceProjects.find(
-              (entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey,
-            );
-            if (!project) {
-              return (
-                <UnsupportedPaneSurface paneId={pane.paneId} originalKind="fileTree:missing" />
-              );
-            }
+          if (isProjectToolSurface(surface)) {
             return (
-              <FileTreePaneSurface
-                active
-                projectPathKey={surface.project.projectPathKey}
-                cwd={project.path}
-                state={getRightDockFileTreeState(
-                  settings.customSettings,
-                  surface.project.projectPathKey,
-                )}
-                workspaceProject={project}
-                workspaceProjectRootClient={desktopWorkspaceProjectRootClient}
-                workspaceRootRevision={workspaceRootRevision}
-                workspaceActivityClient={tauriWorkspaceActivityClient}
-                onStateChange={(patch) =>
-                  setSettings((current) =>
-                    updateRightDockFileTreeState(current, surface.project.projectPathKey, patch),
-                  )
-                }
-                onInsertFileMention={
-                  surface.project.projectPathKey === terminalProjectPathKey
-                    ? handleRightDockInsertFileMention
-                    : undefined
-                }
-                onOpenFile={(path, imagePaths) => {
-                  const request = {
-                    projectPathKey: surface.project.projectPathKey,
-                    workdir: project.path,
-                    path,
-                    imagePaths,
-                  };
-                  if (isWorkspacePreviewPath(path)) {
-                    openWorkspaceFilePreview(request);
-                  } else {
-                    openWorkspaceEditorFile(request);
-                  }
-                }}
+              <ProjectToolPaneHost
+                paneId={pane.paneId}
+                surface={surface}
+                environment={projectToolPaneEnvironment}
               />
             );
           }
@@ -3988,9 +4109,7 @@ export function ChatPage(props: ChatPageProps) {
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}
         leasedSessionIds={leasedDockSessionIds}
-        fileTreeLeased={Boolean(
-          findPaneIdBySurfaceKey(workbench.layout, `fileTree:${terminalProjectPathKey}`),
-        )}
+        leasedTools={leasedDockTools}
         width={settings.customSettings.rightDock.width}
         theme={effectiveTheme}
         disabledMessage={terminalDisabledMessage}
@@ -4022,11 +4141,15 @@ export function ChatPage(props: ChatPageProps) {
         onOpenTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
         }
-        onFileTreeTabDragStart={
-          sessionWorkbench.enabled ? handleFileTreeTabWorkbenchDragIntent : undefined
+        onToolDragStart={
+          sessionWorkbench.enabled && terminalProjectPathKey
+            ? handleToolWorkbenchDragIntent
+            : undefined
         }
-        onOpenFileTreeInWorkbench={
-          sessionWorkbench.enabled ? handleOpenFileTreeInWorkbenchSplit : undefined
+        onOpenToolInWorkbench={
+          sessionWorkbench.enabled && terminalProjectPathKey
+            ? handleOpenToolInWorkbenchSplit
+            : undefined
         }
         onOpenNewTerminalInWorkbench={
           sessionWorkbench.enabled ? handleOpenNewTerminalInWorkbenchSplit : undefined
