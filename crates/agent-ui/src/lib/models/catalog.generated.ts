@@ -26,11 +26,12 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-01";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-02";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
     { id: "claude-fable-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
+    { id: "claude-fable-5-1", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-haiku-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-haiku-4-5-20251001", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-opus-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high"], off: true } },
