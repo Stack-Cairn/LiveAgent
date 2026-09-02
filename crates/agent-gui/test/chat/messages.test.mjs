@@ -226,6 +226,23 @@ test("uploaded file helpers preserve display text and strip model-hidden metadat
   ]);
   assert.match(message.content, /The user attached the files below/);
   assert.match(message.content, /Use Read with these exact paths/);
+  assert.match(message.content, /keep paging/);
+  assert.match(message.content, /\/workspace\/src\/App\.tsx \(text, 2 KB\)/);
+  assert.equal(
+    uploadedFiles.formatUploadedFileInstructionLine(fileA),
+    "- /workspace/src/App.tsx (text, 2 KB)",
+  );
+  assert.equal(
+    uploadedFiles.matchesUploadedFileInstructionLine(
+      "- /workspace/src/App.tsx (text, 2 KB)",
+      fileA,
+    ),
+    true,
+  );
+  assert.equal(
+    uploadedFiles.matchesUploadedFileInstructionLine("- /workspace/src/App.tsx (text)", fileA),
+    true,
+  );
 
   const projected = conversationState.createConversationStateFromContext({
     messages: [message],
@@ -319,9 +336,9 @@ test("uploaded file helpers preserve office and archive attachment kinds", () =>
     },
   ]);
   assert.ok(message);
-  assert.match(message.content, /\/\.liveagent\/uploads\/1\/report\.docx \(word\)/);
-  assert.match(message.content, /\/\.liveagent\/uploads\/1\/workbook\.xlsx \(spreadsheet\)/);
-  assert.match(message.content, /\/\.liveagent\/uploads\/1\/assets\.zip \(archive\)/);
+  assert.match(message.content, /\/\.liveagent\/uploads\/1\/report\.docx \(word, 4 KB\)/);
+  assert.match(message.content, /\/\.liveagent\/uploads\/1\/workbook\.xlsx \(spreadsheet, 8 KB\)/);
+  assert.match(message.content, /\/\.liveagent\/uploads\/1\/assets\.zip \(archive, 16 KB\)/);
   assert.deepEqual(
     uploadedFiles.getUserMessageAttachments(message).map((file) => file.kind),
     ["word", "spreadsheet", "archive"],

@@ -1,7 +1,10 @@
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import {
   getUserMessageAttachments,
+  matchesUploadedFileInstructionLine,
   type PendingUploadedFile,
+  UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS,
+  UPLOADED_FILES_READ_PAGING_HINT,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -48,17 +51,11 @@ type AnthropicNativeAttachmentContentPart =
     }
   | {
       type: "document";
-      source:
-        | {
-            type: "base64";
-            media_type: string;
-            data: string;
-          }
-        | {
-            type: "text";
-            media_type: "text/plain";
-            data: string;
-          };
+      source: {
+        type: "base64";
+        media_type: string;
+        data: string;
+      };
       title?: string;
     };
 
@@ -74,30 +71,45 @@ type GeminiNativeAttachmentCandidate = {
   requestBytes: number;
 };
 
-const WORKSPACE_UPLOAD_INSTRUCTION = [
-  "The user attached the files below to this message.",
-  "Use Read with these exact paths before analyzing or modifying them:",
-].join("\n");
+/**
+ * 原生内联策略（按附件 kind 分层，五家 provider 统一）：
+ *
+ * - image：各家都是标准 block（input_image / image_url / image / inlineData），
+ *   兼容中转也认，零往返成本，保留原生内联。codex / gemini 分支沿用原有的
+ *   model.input 含 "image" 门控；anthropic 分支按 modelFactory 的约定不读
+ *   model.input（见 buildAnthropicNativeAttachmentContentPart）。
+ * - pdf：document / input_file / inlineData 都是各家专有结构，第三方
+ *   Anthropic/OpenAI/Gemini 兼容中转普遍不认（Kimi Coding、z.ai 等直接 400
+ *   "Invalid request"），只在各家官方端点内联；其余端点退回 Read（lopdf 抽文本）。
+ * - text / word / spreadsheet / notebook / archive：一律不内联，走 Read。
+ *   这正是在兼容中转上出错的类型，而 Read 对它们的结果与内联等价。
+ *
+ * 用户消息里原本的两行 Read 指令头（uploadedFiles.ts）在至少一个附件被内联时
+ * 换成下面的版本，并给被内联的附件行加 "inlined" 标注，让模型明确知道哪些
+ * 已经在请求里、哪些必须 Read。
+ */
+function buildNativeUploadInstruction(requestLabel: string, inputLabel: string) {
+  return [
+    `Attachments marked "inlined" below are included in this ${requestLabel} request as native ${inputLabel} inputs; analyze those directly. Every other listed file is only available through Read.`,
+    `Use Read with the exact paths for files that are not inlined before analyzing or modifying them. ${UPLOADED_FILES_READ_PAGING_HINT}`,
+  ].join("\n");
+}
 
-const NATIVE_UPLOAD_INSTRUCTION = [
-  "The attached files are inlined into this OpenAI Responses request as native inputs when supported, and are also readable at the exact paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
-].join("\n");
+const NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction("OpenAI Responses", "input");
 
-const OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION = [
-  "The attached images are inlined into this OpenAI Chat Completions request as native image inputs when supported, and are also readable at the exact paths below.",
-  "Analyze the native image attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
-].join("\n");
+const OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction(
+  "OpenAI Chat Completions",
+  "image",
+);
 
-const ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION = [
-  "The attached files are inlined into this Anthropic Messages request as native image/document inputs when supported, and are also readable at the exact paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
-].join("\n");
+const ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction(
+  "Anthropic Messages",
+  "image/document",
+);
 
-const GEMINI_NATIVE_UPLOAD_INSTRUCTION = [
-  "The attached files are inlined into this Gemini request as native inlineData inputs when supported, and are also readable at the exact paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
-].join("\n");
+const GEMINI_NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction("Gemini", "inlineData");
+
+const INLINED_ATTACHMENT_LINE_SUFFIX = "; inlined";
 
 const GEMINI_INLINE_NATIVE_ATTACHMENT_MAX_REQUEST_BYTES = 20 * 1024 * 1024;
 const GEMINI_INLINE_NATIVE_ATTACHMENT_REQUEST_RESERVE_BYTES = 256 * 1024;
@@ -107,22 +119,12 @@ const GEMINI_INLINE_NATIVE_ATTACHMENT_DATA_BUDGET_BYTES =
 
 const NATIVE_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-const NATIVE_INPUT_FILE_KINDS = new Set<PendingUploadedFile["kind"]>([
-  "text",
-  "pdf",
-  "notebook",
-  "word",
-  "spreadsheet",
-]);
-
 const ANTHROPIC_NATIVE_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
 ]);
-
-const ANTHROPIC_NATIVE_DOCUMENT_MIME_TYPES = new Set(["application/pdf", "text/plain"]);
 
 const GEMINI_NATIVE_IMAGE_MIME_TYPES = new Set([
   "image/png",
@@ -132,14 +134,55 @@ const GEMINI_NATIVE_IMAGE_MIME_TYPES = new Set([
   "image/heif",
 ]);
 
-const GEMINI_NATIVE_DOCUMENT_MIME_TYPES = new Set([
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-  "text/html",
-  "text/xml",
-  "application/json",
-]);
+const PDF_MIME_TYPE = "application/pdf";
+
+function parseHostname(baseUrl: string | undefined) {
+  if (!baseUrl?.trim()) return undefined;
+  try {
+    return new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * PDF 只在各家官方端点原生内联。判断依据是请求 baseUrl 的主机名，而不是
+ * provider 类型——`claude_code` / `codex` / `gemini` 类型同样用于第三方兼容
+ * 中转（Kimi Coding、z.ai、各类 new-api 等），它们不接受专有 document 结构。
+ */
+function supportsNativePdfInline(model: Model<Api>, baseUrl: string | undefined) {
+  const hostname = parseHostname(baseUrl);
+  if (!hostname) return false;
+  switch (model.api) {
+    case "openai-responses":
+      return (
+        hostname === "api.openai.com" ||
+        hostname.endsWith(".api.openai.com") ||
+        hostname === "chatgpt.com" ||
+        hostname === "api.x.ai"
+      );
+    case "anthropic-messages":
+      return hostname === "api.anthropic.com";
+    case "google-generative-ai":
+      return hostname === "generativelanguage.googleapis.com";
+    default:
+      return false;
+  }
+}
+
+/**
+ * 附件 kind 是否进入原生内联候选。image 总是候选（MIME 与模型图片能力沿用各
+ * adapter 原有的筛法），pdf 仅官方端点，其余 kind 一律交给 Read。
+ */
+function isNativeInlineCandidate(
+  file: PendingUploadedFile,
+  model: Model<Api>,
+  baseUrl: string | undefined,
+) {
+  if (file.kind === "image") return true;
+  if (file.kind === "pdf") return supportsNativePdfInline(model, baseUrl);
+  return false;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
@@ -183,15 +226,6 @@ function buildDataUrl(mimeType: string, data: string) {
   return `data:${mimeType};base64,${data}`;
 }
 
-function decodeBase64Utf8(data: string) {
-  const binary = atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new TextDecoder().decode(bytes);
-}
-
 function estimateJsonRequestBytes(value: unknown) {
   try {
     return new TextEncoder().encode(JSON.stringify(value)).byteLength;
@@ -232,12 +266,12 @@ async function readNativeAttachment(params: {
 async function buildNativeAttachmentContentPart(params: {
   workdir: string;
   model: Model<Api>;
+  baseUrl?: string;
   file: PendingUploadedFile;
 }): Promise<NativeAttachmentContentPart | null> {
-  const { file, model, workdir } = params;
-  if (file.kind === "archive") return null;
+  const { file, model, workdir, baseUrl } = params;
+  if (!isNativeInlineCandidate(file, model, baseUrl)) return null;
   if (file.kind === "image" && !modelSupportsImageInput(model)) return null;
-  if (file.kind !== "image" && !NATIVE_INPUT_FILE_KINDS.has(file.kind)) return null;
 
   const attachment = await readNativeAttachment({ workdir, file });
   const mimeType = normalizeMimeType(attachment.mimeType);
@@ -252,6 +286,7 @@ async function buildNativeAttachmentContentPart(params: {
     };
   }
 
+  if (mimeType !== PDF_MIME_TYPE) return null;
   return {
     type: "input_file",
     filename: file.fileName || file.relativePath.split("/").pop() || "attachment",
@@ -282,28 +317,77 @@ async function buildOpenAIChatCompletionsNativeAttachmentContentPart(params: {
   };
 }
 
+function replaceUploadInstructionHeader(text: string, nativeInstruction: string) {
+  for (const header of UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS) {
+    if (text.includes(header)) {
+      return text.replace(header, nativeInstruction);
+    }
+  }
+  return `${text}\n\n${nativeInstruction}`;
+}
+
+function annotateInlinedAttachmentLines(text: string, inlinedFiles: PendingUploadedFile[]) {
+  if (inlinedFiles.length === 0) return text;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (inlinedFiles.some((file) => matchesUploadedFileInstructionLine(line, file))) {
+        return `${line}${INLINED_ATTACHMENT_LINE_SUFFIX}`;
+      }
+      return line;
+    })
+    .join("\n");
+}
+
+function rewriteNativeUploadInstructionText(params: {
+  text: string;
+  nativeInstruction: string;
+  inlinedFiles: PendingUploadedFile[];
+}) {
+  return annotateInlinedAttachmentLines(
+    replaceUploadInstructionHeader(params.text, params.nativeInstruction),
+    params.inlinedFiles,
+  );
+}
+
+function applyTypedNativeUploadInstruction(params: {
+  content: unknown[];
+  type: string;
+  nativeInstruction: string;
+  inlinedFiles: PendingUploadedFile[];
+}) {
+  const next = params.content.slice();
+  for (let index = 0; index < next.length; index += 1) {
+    const part = next[index];
+    if (!isRecord(part) || part.type !== params.type || typeof part.text !== "string") {
+      continue;
+    }
+    next[index] = {
+      ...part,
+      text: rewriteNativeUploadInstructionText({
+        text: part.text,
+        nativeInstruction: params.nativeInstruction,
+        inlinedFiles: params.inlinedFiles,
+      }),
+    };
+    return next;
+  }
+  return [{ type: params.type, text: params.nativeInstruction }, ...next];
+}
+
 function normalizeUserContent(content: unknown): unknown[] {
   if (Array.isArray(content)) return content.slice();
   if (typeof content === "string") return [{ type: "input_text", text: content }];
   return [];
 }
 
-function applyNativeUploadInstruction(content: unknown[]) {
-  const next = content.slice();
-  for (let index = 0; index < next.length; index += 1) {
-    const part = next[index];
-    if (!isRecord(part) || part.type !== "input_text" || typeof part.text !== "string") {
-      continue;
-    }
-    next[index] = {
-      ...part,
-      text: part.text.includes(WORKSPACE_UPLOAD_INSTRUCTION)
-        ? part.text.replace(WORKSPACE_UPLOAD_INSTRUCTION, NATIVE_UPLOAD_INSTRUCTION)
-        : `${part.text}\n\n${NATIVE_UPLOAD_INSTRUCTION}`,
-    };
-    return next;
-  }
-  return [{ type: "input_text", text: NATIVE_UPLOAD_INSTRUCTION }, ...next];
+function applyNativeUploadInstruction(content: unknown[], inlinedFiles: PendingUploadedFile[]) {
+  return applyTypedNativeUploadInstruction({
+    content,
+    type: "input_text",
+    nativeInstruction: NATIVE_UPLOAD_INSTRUCTION,
+    inlinedFiles,
+  });
 }
 
 function normalizeOpenAIChatCompletionsUserContent(content: unknown): unknown[] {
@@ -312,25 +396,16 @@ function normalizeOpenAIChatCompletionsUserContent(content: unknown): unknown[] 
   return [];
 }
 
-function applyOpenAIChatCompletionsNativeUploadInstruction(content: unknown[]) {
-  const next = content.slice();
-  for (let index = 0; index < next.length; index += 1) {
-    const part = next[index];
-    if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") {
-      continue;
-    }
-    next[index] = {
-      ...part,
-      text: part.text.includes(WORKSPACE_UPLOAD_INSTRUCTION)
-        ? part.text.replace(
-            WORKSPACE_UPLOAD_INSTRUCTION,
-            OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION,
-          )
-        : `${part.text}\n\n${OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION}`,
-    };
-    return next;
-  }
-  return [{ type: "text", text: OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION }, ...next];
+function applyOpenAIChatCompletionsNativeUploadInstruction(
+  content: unknown[],
+  inlinedFiles: PendingUploadedFile[],
+) {
+  return applyTypedNativeUploadInstruction({
+    content,
+    type: "text",
+    nativeInstruction: OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION,
+    inlinedFiles,
+  });
 }
 
 function normalizeAnthropicUserContent(content: unknown): unknown[] {
@@ -339,22 +414,16 @@ function normalizeAnthropicUserContent(content: unknown): unknown[] {
   return [];
 }
 
-function applyAnthropicNativeUploadInstruction(content: unknown[]) {
-  const next = content.slice();
-  for (let index = 0; index < next.length; index += 1) {
-    const part = next[index];
-    if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") {
-      continue;
-    }
-    next[index] = {
-      ...part,
-      text: part.text.includes(WORKSPACE_UPLOAD_INSTRUCTION)
-        ? part.text.replace(WORKSPACE_UPLOAD_INSTRUCTION, ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION)
-        : `${part.text}\n\n${ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION}`,
-    };
-    return next;
-  }
-  return [{ type: "text", text: ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION }, ...next];
+function applyAnthropicNativeUploadInstruction(
+  content: unknown[],
+  inlinedFiles: PendingUploadedFile[],
+) {
+  return applyTypedNativeUploadInstruction({
+    content,
+    type: "text",
+    nativeInstruction: ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION,
+    inlinedFiles,
+  });
 }
 
 function normalizeGeminiUserParts(parts: unknown): unknown[] {
@@ -363,7 +432,7 @@ function normalizeGeminiUserParts(parts: unknown): unknown[] {
   return [];
 }
 
-function applyGeminiNativeUploadInstruction(parts: unknown[]) {
+function applyGeminiNativeUploadInstruction(parts: unknown[], inlinedFiles: PendingUploadedFile[]) {
   const next = parts.slice();
   for (let index = 0; index < next.length; index += 1) {
     const part = next[index];
@@ -372,9 +441,11 @@ function applyGeminiNativeUploadInstruction(parts: unknown[]) {
     }
     next[index] = {
       ...part,
-      text: part.text.includes(WORKSPACE_UPLOAD_INSTRUCTION)
-        ? part.text.replace(WORKSPACE_UPLOAD_INSTRUCTION, GEMINI_NATIVE_UPLOAD_INSTRUCTION)
-        : `${part.text}\n\n${GEMINI_NATIVE_UPLOAD_INSTRUCTION}`,
+      text: rewriteNativeUploadInstructionText({
+        text: part.text,
+        nativeInstruction: GEMINI_NATIVE_UPLOAD_INSTRUCTION,
+        inlinedFiles,
+      }),
     };
     return next;
   }
@@ -417,17 +488,23 @@ function isAnthropicToolResultTurn(message: Record<string, unknown>) {
 async function buildNativeContentParts(params: {
   workdir: string;
   model: Model<Api>;
+  baseUrl?: string;
   files: PendingUploadedFile[];
 }) {
   const parts: NativeAttachmentContentPart[] = [];
+  const inlinedFiles: PendingUploadedFile[] = [];
   for (const file of params.files) {
     try {
       const part = await buildNativeAttachmentContentPart({
         workdir: params.workdir,
         model: params.model,
+        baseUrl: params.baseUrl,
         file,
       });
-      if (part) parts.push(part);
+      if (part) {
+        parts.push(part);
+        inlinedFiles.push(file);
+      }
     } catch (error) {
       console.warn(
         `[native-responses-attachments] skipped ${file.relativePath}:`,
@@ -435,7 +512,7 @@ async function buildNativeContentParts(params: {
       );
     }
   }
-  return parts;
+  return { parts, inlinedFiles };
 }
 
 async function buildOpenAIChatCompletionsNativeContentParts(params: {
@@ -444,6 +521,7 @@ async function buildOpenAIChatCompletionsNativeContentParts(params: {
   files: PendingUploadedFile[];
 }) {
   const parts: OpenAIChatCompletionsNativeAttachmentContentPart[] = [];
+  const inlinedFiles: PendingUploadedFile[] = [];
   for (const file of params.files) {
     try {
       const part = await buildOpenAIChatCompletionsNativeAttachmentContentPart({
@@ -451,7 +529,10 @@ async function buildOpenAIChatCompletionsNativeContentParts(params: {
         model: params.model,
         file,
       });
-      if (part) parts.push(part);
+      if (part) {
+        parts.push(part);
+        inlinedFiles.push(file);
+      }
     } catch (error) {
       console.warn(
         `[openai-chat-completions-native-attachments] skipped ${file.relativePath}:`,
@@ -459,17 +540,20 @@ async function buildOpenAIChatCompletionsNativeContentParts(params: {
       );
     }
   }
-  return parts;
+  return { parts, inlinedFiles };
 }
 
 async function buildAnthropicNativeAttachmentContentPart(params: {
   workdir: string;
+  model: Model<Api>;
+  baseUrl?: string;
   file: PendingUploadedFile;
 }): Promise<AnthropicNativeAttachmentContentPart | null> {
-  const { file, workdir } = params;
-  if (file.kind !== "image" && file.kind !== "pdf" && file.kind !== "text") {
-    return null;
-  }
+  const { file, model, workdir, baseUrl } = params;
+  if (!isNativeInlineCandidate(file, model, baseUrl)) return null;
+  // Anthropic 分支不读 model.input：modelFactory 给所有自定义 Anthropic 模型
+  // 硬编码 input: ["text"]，且用户 inputModalities 覆盖也不作用于此处。
+  // 若在这里加图片门控，k3 / glm 等一切非目录模型的图片内联都会失效。
 
   const attachment = await readNativeAttachment({ workdir, file });
   const mimeType = normalizeMimeType(attachment.mimeType);
@@ -487,18 +571,7 @@ async function buildAnthropicNativeAttachmentContentPart(params: {
     };
   }
 
-  if (!ANTHROPIC_NATIVE_DOCUMENT_MIME_TYPES.has(mimeType)) return null;
-  if (file.kind === "text") {
-    return {
-      type: "document",
-      source: {
-        type: "text",
-        media_type: "text/plain",
-        data: decodeBase64Utf8(attachment.data),
-      },
-      title: file.fileName || file.relativePath.split("/").pop() || undefined,
-    };
-  }
+  if (mimeType !== PDF_MIME_TYPE) return null;
   return {
     type: "document",
     source: {
@@ -512,16 +585,24 @@ async function buildAnthropicNativeAttachmentContentPart(params: {
 
 async function buildAnthropicNativeContentParts(params: {
   workdir: string;
+  model: Model<Api>;
+  baseUrl?: string;
   files: PendingUploadedFile[];
 }) {
   const parts: AnthropicNativeAttachmentContentPart[] = [];
+  const inlinedFiles: PendingUploadedFile[] = [];
   for (const file of params.files) {
     try {
       const part = await buildAnthropicNativeAttachmentContentPart({
         workdir: params.workdir,
+        model: params.model,
+        baseUrl: params.baseUrl,
         file,
       });
-      if (part) parts.push(part);
+      if (part) {
+        parts.push(part);
+        inlinedFiles.push(file);
+      }
     } catch (error) {
       console.warn(
         `[anthropic-native-attachments] skipped ${file.relativePath}:`,
@@ -529,18 +610,17 @@ async function buildAnthropicNativeContentParts(params: {
       );
     }
   }
-  return parts;
+  return { parts, inlinedFiles };
 }
 
 async function buildGeminiNativeAttachmentContentPart(params: {
   workdir: string;
   model: Model<Api>;
+  baseUrl?: string;
   file: PendingUploadedFile;
 }): Promise<GeminiNativeAttachmentCandidate | null> {
-  const { file, model, workdir } = params;
-  if (file.kind === "archive" || file.kind === "word" || file.kind === "spreadsheet") {
-    return null;
-  }
+  const { file, model, workdir, baseUrl } = params;
+  if (!isNativeInlineCandidate(file, model, baseUrl)) return null;
   if ((file.kind === "image" || file.kind === "pdf") && !modelSupportsImageInput(model)) {
     return null;
   }
@@ -554,7 +634,7 @@ async function buildGeminiNativeAttachmentContentPart(params: {
 
   if (file.kind === "image") {
     if (!GEMINI_NATIVE_IMAGE_MIME_TYPES.has(mimeType)) return null;
-  } else if (!GEMINI_NATIVE_DOCUMENT_MIME_TYPES.has(mimeType)) {
+  } else if (mimeType !== PDF_MIME_TYPE) {
     return null;
   }
 
@@ -572,19 +652,22 @@ async function buildGeminiNativeAttachmentContentPart(params: {
 async function buildGeminiNativeContentParts(params: {
   workdir: string;
   model: Model<Api>;
+  baseUrl?: string;
   files: PendingUploadedFile[];
   availableRequestBytes: number;
 }) {
   const parts: GeminiNativeAttachmentContentPart[] = [];
+  const inlinedFiles: PendingUploadedFile[] = [];
   let usedRequestBytes = 0;
   if (params.availableRequestBytes <= 0) {
-    return { parts, usedRequestBytes };
+    return { parts, inlinedFiles, usedRequestBytes };
   }
   for (const file of params.files) {
     try {
       const candidate = await buildGeminiNativeAttachmentContentPart({
         workdir: params.workdir,
         model: params.model,
+        baseUrl: params.baseUrl,
         file,
       });
       if (!candidate) continue;
@@ -592,6 +675,7 @@ async function buildGeminiNativeContentParts(params: {
         continue;
       }
       parts.push(candidate.part);
+      inlinedFiles.push(file);
       usedRequestBytes += candidate.requestBytes;
     } catch (error) {
       console.warn(
@@ -600,7 +684,7 @@ async function buildGeminiNativeContentParts(params: {
       );
     }
   }
-  return { parts, usedRequestBytes };
+  return { parts, inlinedFiles, usedRequestBytes };
 }
 
 function isGeminiFunctionResponseTurn(item: Record<string, unknown>) {
@@ -629,6 +713,7 @@ async function applyNativeAttachmentsToResponsesPayload(params: {
   context: Context;
   model: Model<Api>;
   workdir: string;
+  baseUrl?: string;
 }) {
   const payload = params.payload;
   if (!isRecord(payload) || !Array.isArray(payload.input)) return payload;
@@ -653,12 +738,13 @@ async function applyNativeAttachmentsToResponsesPayload(params: {
       continue;
     }
 
-    const nativeParts = await buildNativeContentParts({
+    const nativeContent = await buildNativeContentParts({
       workdir: params.workdir,
       model: params.model,
+      baseUrl: params.baseUrl,
       files,
     });
-    if (nativeParts.length === 0) {
+    if (nativeContent.parts.length === 0) {
       nextInput.push(item);
       continue;
     }
@@ -666,8 +752,11 @@ async function applyNativeAttachmentsToResponsesPayload(params: {
     nextInput.push({
       ...item,
       content: [
-        ...applyNativeUploadInstruction(normalizeUserContent(item.content)),
-        ...nativeParts,
+        ...applyNativeUploadInstruction(
+          normalizeUserContent(item.content),
+          nativeContent.inlinedFiles,
+        ),
+        ...nativeContent.parts,
       ],
     });
     changed = true;
@@ -709,12 +798,12 @@ async function applyNativeAttachmentsToOpenAICompletionsPayload(params: {
       continue;
     }
 
-    const nativeParts = await buildOpenAIChatCompletionsNativeContentParts({
+    const nativeContent = await buildOpenAIChatCompletionsNativeContentParts({
       workdir: params.workdir,
       model: params.model,
       files,
     });
-    if (nativeParts.length === 0) {
+    if (nativeContent.parts.length === 0) {
       nextMessages.push(message);
       continue;
     }
@@ -724,8 +813,9 @@ async function applyNativeAttachmentsToOpenAICompletionsPayload(params: {
       content: [
         ...applyOpenAIChatCompletionsNativeUploadInstruction(
           normalizeOpenAIChatCompletionsUserContent(message.content),
+          nativeContent.inlinedFiles,
         ),
-        ...nativeParts,
+        ...nativeContent.parts,
       ],
     });
     changed = true;
@@ -739,6 +829,7 @@ async function applyNativeAttachmentsToAnthropicPayload(params: {
   context: Context;
   model: Model<Api>;
   workdir: string;
+  baseUrl?: string;
 }) {
   const payload = params.payload;
   if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
@@ -763,11 +854,13 @@ async function applyNativeAttachmentsToAnthropicPayload(params: {
       continue;
     }
 
-    const nativeParts = await buildAnthropicNativeContentParts({
+    const nativeContent = await buildAnthropicNativeContentParts({
       workdir: params.workdir,
+      model: params.model,
+      baseUrl: params.baseUrl,
       files,
     });
-    if (nativeParts.length === 0) {
+    if (nativeContent.parts.length === 0) {
       nextMessages.push(message);
       continue;
     }
@@ -775,8 +868,11 @@ async function applyNativeAttachmentsToAnthropicPayload(params: {
     nextMessages.push({
       ...message,
       content: [
-        ...applyAnthropicNativeUploadInstruction(normalizeAnthropicUserContent(message.content)),
-        ...nativeParts,
+        ...applyAnthropicNativeUploadInstruction(
+          normalizeAnthropicUserContent(message.content),
+          nativeContent.inlinedFiles,
+        ),
+        ...nativeContent.parts,
       ],
     });
     changed = true;
@@ -790,6 +886,7 @@ async function applyNativeAttachmentsToGeminiPayload(params: {
   context: Context;
   model: Model<Api>;
   workdir: string;
+  baseUrl?: string;
 }) {
   const payload = params.payload;
   if (!isRecord(payload) || !Array.isArray(payload.contents)) return payload;
@@ -824,11 +921,11 @@ async function applyNativeAttachmentsToGeminiPayload(params: {
     const nativeContent = await buildGeminiNativeContentParts({
       workdir: params.workdir,
       model: params.model,
+      baseUrl: params.baseUrl,
       files,
       availableRequestBytes: remainingNativeRequestBytes,
     });
-    const nativeParts = nativeContent.parts;
-    if (nativeParts.length === 0) {
+    if (nativeContent.parts.length === 0) {
       nextContents.push(item);
       continue;
     }
@@ -837,8 +934,11 @@ async function applyNativeAttachmentsToGeminiPayload(params: {
     nextContents.push({
       ...item,
       parts: [
-        ...nativeParts,
-        ...applyGeminiNativeUploadInstruction(normalizeGeminiUserParts(item.parts)),
+        ...nativeContent.parts,
+        ...applyGeminiNativeUploadInstruction(
+          normalizeGeminiUserParts(item.parts),
+          nativeContent.inlinedFiles,
+        ),
       ],
     });
     changed = true;
@@ -856,6 +956,7 @@ export function attachOpenAIResponsesNativeAttachments<
     model: Model<Api>;
     providerId: string;
     workdir?: string;
+    baseUrl?: string;
   },
 ): TOptions {
   if (
@@ -883,6 +984,7 @@ export function attachOpenAIResponsesNativeAttachments<
         context: params.context as Context,
         model,
         workdir: params.workdir ?? "",
+        baseUrl: params.baseUrl,
       });
     },
   };
@@ -897,6 +999,7 @@ export function attachOpenAICompletionsNativeAttachments<
     model: Model<Api>;
     providerId: string;
     workdir?: string;
+    baseUrl?: string;
   },
 ): TOptions {
   if (
@@ -938,6 +1041,7 @@ export function attachAnthropicMessagesNativeAttachments<
     model: Model<Api>;
     providerId: string;
     workdir?: string;
+    baseUrl?: string;
   },
 ): TOptions {
   if (
@@ -965,6 +1069,7 @@ export function attachAnthropicMessagesNativeAttachments<
         context: params.context as Context,
         model,
         workdir: params.workdir ?? "",
+        baseUrl: params.baseUrl,
       });
     },
   };
@@ -979,6 +1084,7 @@ export function attachGeminiGenerativeAINativeAttachments<
     model: Model<Api>;
     providerId: string;
     workdir?: string;
+    baseUrl?: string;
   },
 ): TOptions {
   if (
@@ -1006,19 +1112,21 @@ export function attachGeminiGenerativeAINativeAttachments<
         context: params.context as Context,
         model,
         workdir: params.workdir ?? "",
+        baseUrl: params.baseUrl,
       });
     },
   };
 }
 
 export const __nativeResponsesAttachmentsTest = {
-  WORKSPACE_UPLOAD_INSTRUCTION,
   NATIVE_UPLOAD_INSTRUCTION,
   OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION,
   ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION,
   GEMINI_NATIVE_UPLOAD_INSTRUCTION,
+  INLINED_ATTACHMENT_LINE_SUFFIX,
   applyNativeAttachmentsToResponsesPayload,
   applyNativeAttachmentsToOpenAICompletionsPayload,
   applyNativeAttachmentsToAnthropicPayload,
   applyNativeAttachmentsToGeminiPayload,
+  supportsNativePdfInline,
 };

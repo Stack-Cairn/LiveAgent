@@ -104,11 +104,11 @@ test("DeepSeek inlines multiple large pastes while preserving ordinary Read atta
   assert.match(content, /first pasted body\n第二行/);
   assert.match(content, /second pasted body/);
   assert.doesNotMatch(content, /\[Pasted text/);
-  assert.doesNotMatch(content, /paste-1\.txt \(text\)/);
-  assert.doesNotMatch(content, /paste-2\.txt \(text\)/);
+  assert.doesNotMatch(content, /paste-1\.txt \(text/);
+  assert.doesNotMatch(content, /paste-2\.txt \(text/);
   assert.match(content, /Use Read with these exact paths/);
-  assert.match(content, /\/workspace\/docs\/report\.pdf \(pdf\)/);
-  assert.match(content, /\/workspace\/docs\/notes\.txt \(text\)/);
+  assert.match(content, /\/workspace\/docs\/report\.pdf \(pdf, 100 B\)/);
+  assert.match(content, /\/workspace\/docs\/notes\.txt \(text, 30 B\)/);
 
   const wire = JSON.stringify(context);
   assert.doesNotMatch(wire, /input_file/);
