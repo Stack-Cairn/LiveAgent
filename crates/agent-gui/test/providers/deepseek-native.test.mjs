@@ -691,3 +691,75 @@ test("DeepSeek rejects image input before sending a request", async () => {
   assert.equal(result.stopReason, "error");
   assert.match(result.errorMessage, /does not support image input/);
 });
+
+test("DeepSeek degrades image tool results to text instead of failing the request", async () => {
+  // Regression: a Browser screenshot (or Read on an image) used to throw
+  // "does not support image tool results" before fetch, and since the tool
+  // result stays in history every later turn failed the same way.
+  const screenshotBase64 = "/9j/4AAQSkZJRgABAQAAAQABAAD".repeat(64);
+  const calls = [];
+  const context = createContext({
+    messages: [
+      { role: "user", content: "screenshot the page", timestamp: 1 },
+      assistant({
+        content: [
+          {
+            type: "toolCall",
+            id: "call_shot|browser-1",
+            name: "Browser",
+            arguments: { action: "screenshot" },
+          },
+        ],
+        stopReason: "toolUse",
+      }),
+      {
+        role: "toolResult",
+        toolCallId: "call_shot|browser-1",
+        toolName: "Browser",
+        content: [
+          { type: "text", text: "Page: http://127.0.0.1:8899/\nScreenshot captured (see image below)." },
+          { type: "image", data: screenshotBase64, mimeType: "image/jpeg" },
+        ],
+        details: { kind: "browser", action: "screenshot", hasScreenshot: true },
+        isError: false,
+        timestamp: 3,
+      },
+      { role: "user", content: "skip the failing item and continue", timestamp: 4 },
+    ],
+    tools: [
+      {
+        name: "Browser",
+        description: "browser",
+        parameters: { type: "object", properties: {}, additionalProperties: true },
+      },
+    ],
+  });
+  const stream = deepseek.streamDeepSeekResponses(createModel(), context, {
+    apiKey: "sk-test",
+    streamRetry: { disabled: true },
+    fetch: async (_url, init) => {
+      calls.push(JSON.parse(String(init.body)));
+      return responseFromEvents(
+        completedSearchResponseEvents({ includeFunctionCall: false }).events,
+      );
+    },
+  });
+  const { result } = await consume(stream);
+
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+  assert.equal(calls.length, 1);
+  const wire = JSON.stringify(calls[0]);
+  assert.ok(!wire.includes(screenshotBase64), "screenshot bytes must not reach the wire");
+  assert.ok(!wire.includes("input_image"), "no image parts may reach the wire");
+
+  const toolOutput = calls[0].input.find((item) => item.type === "function_call_output");
+  assert.ok(toolOutput, "tool result must still be sent");
+  assert.equal(toolOutput.call_id, "call_shot");
+  assert.equal(typeof toolOutput.output, "string");
+  assert.match(toolOutput.output, /Screenshot captured/);
+  assert.match(toolOutput.output, /1 image omitted from this tool result/);
+  assert.match(toolOutput.output, /deepseek-v4-flash.*does not accept image input/);
+
+  // The caller's context is not mutated: the UI keeps rendering the image.
+  assert.equal(context.messages[2].content[1].type, "image");
+});
