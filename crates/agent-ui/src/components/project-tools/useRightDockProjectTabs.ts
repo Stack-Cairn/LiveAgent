@@ -11,6 +11,7 @@ import {
   getCurrentRightDockActiveTab,
   getRightDockVisibleTabs,
   orderRightDockVisibleTabs,
+  type RightDockLeasedToolKind,
   type RightDockSingletonTabKind,
   resolveEffectiveActiveTabId,
   rightDockNeighborTabId,
@@ -20,7 +21,7 @@ import {
 
 type UseRightDockProjectTabsOptions = {
   backgroundTasksVisible: boolean;
-  fileTreeLeased?: boolean;
+  leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
   projectPathKey: string;
   projectState: RightDockProjectState;
@@ -34,7 +35,7 @@ type UseRightDockProjectTabsOptions = {
 export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions) {
   const {
     backgroundTasksVisible,
-    fileTreeLeased,
+    leasedTools,
     localSessions,
     onProjectStateChange,
     projectPathKey,
@@ -51,7 +52,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
     () =>
       getRightDockVisibleTabs({
         backgroundTasksVisible,
-        fileTreeLeased,
+        leasedTools,
         localSessions,
         projectPathKey,
         projectState,
@@ -59,7 +60,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
       }),
     [
       backgroundTasksVisible,
-      fileTreeLeased,
+      leasedTools,
       localSessions,
       projectPathKey,
       projectState,

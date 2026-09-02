@@ -21,9 +21,9 @@ import {
 } from "./layoutStorage";
 import {
   createEmptyWorkbenchLayout,
-  type FileTreeWorkbenchSurface,
   type PaneRecord,
   type ProjectRef,
+  type ProjectToolWorkbenchSurface,
   surfaceIdentityKey,
   type TerminalWorkbenchSurface,
   WORKBENCH_LAYOUT_SCHEMA_VERSION,
@@ -159,9 +159,12 @@ export type WindowWorkbench = {
     surface: TerminalWorkbenchSurface,
     target: WorkbenchOpenTarget,
   ): { paneId: string } | null;
-  /** Open the project's singleton file tree surface. */
-  openFileTreeSurface(
-    surface: FileTreeWorkbenchSurface,
+  /**
+   * Open a singleton project tool surface (file tree, git review, tunnel,
+   * SSH, background tasks), focusing its existing pane when already placed.
+   */
+  openProjectToolSurface(
+    surface: ProjectToolWorkbenchSurface,
     target: WorkbenchOpenTarget,
   ): { paneId: string } | null;
   movePane(paneId: string, target: WorkbenchMoveTarget): boolean;
@@ -355,8 +358,11 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
     [dispatchCurrent],
   );
 
-  const openFileTreeSurface = useCallback(
-    (surface: FileTreeWorkbenchSurface, target: WorkbenchOpenTarget): { paneId: string } | null => {
+  const openProjectToolSurface = useCallback(
+    (
+      surface: ProjectToolWorkbenchSurface,
+      target: WorkbenchOpenTarget,
+    ): { paneId: string } | null => {
       const existingPaneId = findPaneIdBySurfaceKey(layoutRef.current, surfaceIdentityKey(surface));
       if (existingPaneId) {
         dispatchCurrent({ type: "FOCUS_PANE", paneId: existingPaneId });
@@ -513,7 +519,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       focusPane,
       openConversation,
       openTerminalSurface,
-      openFileTreeSurface,
+      openProjectToolSurface,
       movePane,
       renameConversation,
       clear,
@@ -529,7 +535,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       focusPane,
       openConversation,
       openTerminalSurface,
-      openFileTreeSurface,
+      openProjectToolSurface,
       movePane,
       renameConversation,
       clear,

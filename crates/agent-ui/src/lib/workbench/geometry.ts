@@ -46,6 +46,18 @@ export const MIN_TERMINAL_PANE_WIDTH = 220;
 export const MIN_TERMINAL_PANE_HEIGHT = 140;
 export const MIN_FILE_TREE_PANE_WIDTH = 240;
 export const MIN_FILE_TREE_PANE_HEIGHT = 180;
+// Git review keeps its toolbar + change list readable; the diff/list split
+// only engages above 500px and is handled inside the panel.
+export const MIN_GIT_REVIEW_PANE_WIDTH = 320;
+export const MIN_GIT_REVIEW_PANE_HEIGHT = 220;
+// Tunnel / SSH panels are forms + row lists: one row of controls plus a few
+// rows of content stays usable at this size.
+export const MIN_TUNNEL_PANE_WIDTH = 280;
+export const MIN_TUNNEL_PANE_HEIGHT = 200;
+export const MIN_SSH_TUNNEL_PANE_WIDTH = 280;
+export const MIN_SSH_TUNNEL_PANE_HEIGHT = 200;
+export const MIN_BACKGROUND_TASKS_PANE_WIDTH = 260;
+export const MIN_BACKGROUND_TASKS_PANE_HEIGHT = 180;
 // Unsupported placeholders only show a short message; keep them small enough
 // to never block a restore.
 export const MIN_UNSUPPORTED_PANE_WIDTH = 160;
@@ -60,6 +72,17 @@ export function surfaceMinSize(surface: WorkbenchSurfaceSpec): SurfaceMinSize {
   switch (surface.kind) {
     case "fileTree":
       return { minWidth: MIN_FILE_TREE_PANE_WIDTH, minHeight: MIN_FILE_TREE_PANE_HEIGHT };
+    case "gitReview":
+      return { minWidth: MIN_GIT_REVIEW_PANE_WIDTH, minHeight: MIN_GIT_REVIEW_PANE_HEIGHT };
+    case "tunnel":
+      return { minWidth: MIN_TUNNEL_PANE_WIDTH, minHeight: MIN_TUNNEL_PANE_HEIGHT };
+    case "sshTunnel":
+      return { minWidth: MIN_SSH_TUNNEL_PANE_WIDTH, minHeight: MIN_SSH_TUNNEL_PANE_HEIGHT };
+    case "backgroundTasks":
+      return {
+        minWidth: MIN_BACKGROUND_TASKS_PANE_WIDTH,
+        minHeight: MIN_BACKGROUND_TASKS_PANE_HEIGHT,
+      };
     case "localTerminal":
     case "sshTerminal":
       return { minWidth: MIN_TERMINAL_PANE_WIDTH, minHeight: MIN_TERMINAL_PANE_HEIGHT };

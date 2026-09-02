@@ -1434,6 +1434,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "workbench.paneRegionConversation": "会话面板：{title}",
   "workbench.paneRegionConversationInWorkspace": "会话面板：{workspace} 的 {title}",
   "workbench.paneRegionTerminal": "终端面板：{title}",
+  "workbench.paneRegionTool": "工具面板：{title}",
   "workbench.paneRegionUnsupported": "不支持的面板",
   "workbench.resizeDivider": "调整分栏大小",
   "workbench.emptyTitle": "暂无会话面板",

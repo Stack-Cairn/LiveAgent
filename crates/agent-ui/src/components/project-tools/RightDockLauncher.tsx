@@ -13,10 +13,19 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { NO_LEASED_RIGHT_DOCK_TOOLS, type RightDockLeasedToolKind } from "./rightDockModel";
 import { RIGHT_DOCK_TOOL_DEFINITIONS, type RightDockSingletonTabKind } from "./rightDockRegistry";
 
+export type RightDockToolDragStartEvent = {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  currentTarget?: EventTarget | null;
+};
+
 type RightDockLauncherActions = {
-  fileTreeLeased?: boolean;
+  /** Tools whose surface lives in a workbench pane: no launcher entry for them. */
+  leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   onCreateTerminal: (shell?: string) => void;
   onOpenNewTerminalInWorkbench?: () => void;
   onStartTool: (kind: RightDockSingletonTabKind) => void;
@@ -49,17 +58,17 @@ type RightDockChooserProps = RightDockLauncherActions & {
    * 存在时"新建终端"入口可拖出到工作台画板(拖到落点新建终端 Pane);
    * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
    */
-  onNewTerminalDragStart?: (event: {
-    pointerId: number;
-    clientX: number;
-    clientY: number;
-    currentTarget?: EventTarget | null;
-  }) => void;
+  onNewTerminalDragStart?: (event: RightDockToolDragStartEvent) => void;
+  /**
+   * 存在时每个工具入口(文件树/审查/内网穿透/SSH/后台任务)可拖出到工作台
+   * 画板,在落点直接打开该工具 Pane;点击行为不变(在 dock 内打开)。
+   */
+  onToolDragStart?: (kind: RightDockLeasedToolKind, event: RightDockToolDragStartEvent) => void;
 };
 
 export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
   const {
-    fileTreeLeased,
+    leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     open,
     onOpenChange,
     shellOptions,
@@ -137,23 +146,25 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
             {t("workbench.openNewTerminalInSplit")}
           </DropdownMenuItem>
         ) : null}
-        {RIGHT_DOCK_TOOL_DEFINITIONS.filter(
-          (definition) => definition.kind !== "fileTree" || !fileTreeLeased,
-        ).map((definition) => (
-          <DropdownMenuItem
-            key={definition.kind}
-            onSelect={() => onStartTool(definition.kind)}
-            disabled={definition.projectRequired ? !projectReady : !tunnelAvailable}
-            className="gap-2 text-xs"
-          >
-            {definition.icon("h-3.5 w-3.5")}
-            {t(definition.createTitleKey)}
+        {RIGHT_DOCK_TOOL_DEFINITIONS.filter((definition) => !leasedTools.has(definition.kind)).map(
+          (definition) => (
+            <DropdownMenuItem
+              key={definition.kind}
+              onSelect={() => onStartTool(definition.kind)}
+              disabled={definition.projectRequired ? !projectReady : !tunnelAvailable}
+              className="gap-2 text-xs"
+            >
+              {definition.icon("h-3.5 w-3.5")}
+              {t(definition.createTitleKey)}
+            </DropdownMenuItem>
+          ),
+        )}
+        {leasedTools.has("backgroundTasks") ? null : (
+          <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2 text-xs">
+            <Cpu className="h-3.5 w-3.5" />
+            {t("projectTools.backgroundTasksTitle")}
           </DropdownMenuItem>
-        ))}
-        <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2 text-xs">
-          <Cpu className="h-3.5 w-3.5" />
-          {t("projectTools.backgroundTasksTitle")}
-        </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -161,7 +172,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
 
 export function RightDockChooser(props: RightDockChooserProps) {
   const {
-    fileTreeLeased,
+    leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     terminalReady,
     terminalDisabledMessage,
     disabledMessage,
@@ -174,9 +185,24 @@ export function RightDockChooser(props: RightDockChooserProps) {
     onStartTool,
     onOpenBackgroundTasks,
     onNewTerminalDragStart,
+    onToolDragStart,
   } = props;
   const { t } = useLocale();
   const terminalTileDisabled = !terminalReady || creating;
+  // Drag-out arms on primary-button mouse/pen only; touch keeps scrolling the
+  // chooser (same rule as the terminal tile and dock tab drag-out).
+  const toolDragHandler = (kind: RightDockLeasedToolKind, disabled: boolean) =>
+    onToolDragStart && !disabled
+      ? (event: ReactPointerEvent<HTMLButtonElement>) => {
+          if (event.button !== 0 || event.pointerType === "touch") return;
+          onToolDragStart(kind, {
+            pointerId: event.pointerId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            currentTarget: event.currentTarget,
+          });
+        }
+      : undefined;
   const tools = [
     {
       key: "terminal",
@@ -199,28 +225,35 @@ export function RightDockChooser(props: RightDockChooserProps) {
             }
           : undefined,
     },
-    ...RIGHT_DOCK_TOOL_DEFINITIONS.filter(
-      (definition) => definition.kind !== "fileTree" || !fileTreeLeased,
-    ).map((definition) => ({
-      key: definition.kind,
-      title: t(definition.createTitleKey),
-      description: t(definition.descriptionKey),
-      icon: definition.icon("h-4.5 w-4.5"),
-      disabled: definition.projectRequired ? !projectReady : !tunnelAvailable,
-      titleAttr: definition.projectRequired ? disabledMessage : undefined,
-      onClick: () => onStartTool(definition.kind),
-      onPointerDown: undefined,
-    })),
-    {
-      key: "backgroundTasks",
-      title: t("projectTools.backgroundTasksTitle"),
-      description: t("projectTools.backgroundTasksDescription"),
-      icon: <Cpu className="h-4.5 w-4.5" />,
-      disabled: false,
-      titleAttr: undefined,
-      onClick: onOpenBackgroundTasks,
-      onPointerDown: undefined,
-    },
+    ...RIGHT_DOCK_TOOL_DEFINITIONS.filter((definition) => !leasedTools.has(definition.kind)).map(
+      (definition) => {
+        const disabled = definition.projectRequired ? !projectReady : !tunnelAvailable;
+        return {
+          key: definition.kind,
+          title: t(definition.createTitleKey),
+          description: t(definition.descriptionKey),
+          icon: definition.icon("h-4.5 w-4.5"),
+          disabled,
+          titleAttr: definition.projectRequired ? disabledMessage : undefined,
+          onClick: () => onStartTool(definition.kind),
+          onPointerDown: toolDragHandler(definition.kind, disabled),
+        };
+      },
+    ),
+    ...(leasedTools.has("backgroundTasks")
+      ? []
+      : [
+          {
+            key: "backgroundTasks",
+            title: t("projectTools.backgroundTasksTitle"),
+            description: t("projectTools.backgroundTasksDescription"),
+            icon: <Cpu className="h-4.5 w-4.5" />,
+            disabled: false,
+            titleAttr: undefined,
+            onClick: onOpenBackgroundTasks,
+            onPointerDown: toolDragHandler("backgroundTasks", false),
+          },
+        ]),
   ];
 
   return (

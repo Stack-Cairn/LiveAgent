@@ -61,3 +61,30 @@ export function applyTerminalEventToSessions(
 
   return sortTerminalSessions(current);
 }
+
+/** Upsert one authoritative session record (create/attach snapshot). */
+export function mergeTerminalSession(
+  current: readonly TerminalSession[],
+  session: TerminalSession,
+) {
+  return sortTerminalSessions([...current.filter((item) => item.id !== session.id), session]);
+}
+
+export function removeTerminalSession(current: readonly TerminalSession[], sessionId: string) {
+  return sortTerminalSessions(current.filter((session) => session.id !== sessionId));
+}
+
+/**
+ * Replace the SSH subset with an authoritative SSH list while leaving local
+ * sessions untouched (the SSH panel reconciles only its own kind).
+ */
+export function reconcileSshTerminalSessions(
+  current: readonly TerminalSession[],
+  sshSessions: readonly TerminalSession[],
+) {
+  const normalized = sshSessions.filter((session) => session.kind === "ssh" && session.id);
+  return sortTerminalSessions([
+    ...current.filter((session) => session.kind !== "ssh"),
+    ...normalized,
+  ]);
+}
