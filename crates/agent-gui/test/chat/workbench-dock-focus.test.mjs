@@ -93,21 +93,20 @@ test("leased sessions are hidden from dock terminal tabs, leaving no focus affor
   );
 });
 
-test("a leased file tree leaves the dock tab, content, and launcher", () => {
+test("a leased project tool leaves the dock tab, content, and launcher", () => {
+  // 文件树/审查/内网穿透/SSH/后台任务共用同一套租约:布局里有该工具的 Pane,
+  // dock 就不再挂 tab、内容与新建入口。
   assert.match(
     DOCK_SOURCES["useRightDockProjectTabs.ts"],
-    /getRightDockVisibleTabs\(\{[\s\S]*fileTreeLeased/,
+    /getRightDockVisibleTabs\(\{[\s\S]*leasedTools/,
   );
-  assert.match(
-    DOCK_SOURCES["RightDockContent.tsx"],
-    /definition\.kind === "fileTree" && fileTreeLeased\) return null/,
-  );
-  assert.match(
-    DOCK_SOURCES["RightDockLauncher.tsx"],
-    /definition\.kind !== "fileTree" \|\| !fileTreeLeased/,
-  );
+  assert.match(DOCK_SOURCES["RightDockContent.tsx"], /leasedTools\.has\(definition\.kind\)\) return null/);
+  assert.match(DOCK_SOURCES["RightDockContent.tsx"], /!leasedTools\.has\("backgroundTasks"\)/);
+  assert.match(DOCK_SOURCES["RightDockLauncher.tsx"], /!leasedTools\.has\(definition\.kind\)/);
+  assert.match(DOCK_SOURCES["RightDockLauncher.tsx"], /leasedTools\.has\("backgroundTasks"\)/);
   assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("openInWorkbenchHint"), false);
   assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("onFocusFileTreePane"), false);
+  assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("fileTreeLeased"), false);
 });
 
 test("dock tab selection routes through dock-local state, never through pane focus", () => {
@@ -118,11 +117,14 @@ test("dock tab selection routes through dock-local state, never through pane foc
   assert.equal(sessions.includes("paneId"), false);
 });
 
-test("ChatPage passes only file-tree lease state into the dock", () => {
+test("ChatPage passes only tool lease state into the dock", () => {
   const dockProps = extractJsxProps(chatPageSource, "RightDockPanel");
-  // Dock 只需要知道是否隐藏 File Tree，不应获得任何 Pane 聚焦能力。
-  assert.match(dockProps, /fileTreeLeased=\{Boolean\(/);
-  assert.match(dockProps, /`fileTree:\$\{terminalProjectPathKey\}`/);
+  // Dock 只需要知道哪些工具被 Pane 租用,不应获得任何 Pane 聚焦能力。
+  assert.match(dockProps, /leasedTools=\{leasedDockTools\}/);
+  assert.match(
+    chatPageSource,
+    /leasedProjectToolKinds\(workbench\.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS\)/,
+  );
   assert.equal(dockProps.includes("onFocusFileTreePane"), false);
   // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点
   // 无关,故按 "Pane" 过滤。)

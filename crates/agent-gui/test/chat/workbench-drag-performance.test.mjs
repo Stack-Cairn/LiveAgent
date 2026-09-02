@@ -98,7 +98,8 @@ test("workbench pointer moves coalesce per frame and stable targets do not reren
   act(() => {
     controller.beginDrag(
       {
-        kind: "fileTree",
+        kind: "projectTool",
+        tool: "fileTree",
         project: { projectId: "project-a", projectPathKey: "/workspace/a" },
         title: "File Tree",
       },
