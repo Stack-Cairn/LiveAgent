@@ -1505,6 +1505,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "workbench.paneRegionConversation": "Conversation pane: {title}",
   "workbench.paneRegionConversationInWorkspace": "Conversation pane: {title} in {workspace}",
   "workbench.paneRegionTerminal": "Terminal pane: {title}",
+  "workbench.paneRegionTool": "Tool pane: {title}",
   "workbench.paneRegionUnsupported": "Unsupported pane",
   "workbench.resizeDivider": "Resize split",
   "workbench.emptyTitle": "No conversation panes",

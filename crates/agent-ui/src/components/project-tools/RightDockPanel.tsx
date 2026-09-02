@@ -50,6 +50,8 @@ import {
   dirname,
   expandedPathsForFileTreePath,
   formatTerminalSessionTitle,
+  NO_LEASED_RIGHT_DOCK_TOOLS,
+  type RightDockLeasedToolKind,
   type RightDockSingletonTabKind,
   rightDockTabRequiresProject,
 } from "./rightDockModel";
@@ -74,7 +76,11 @@ type RightDockPanelProps = {
    * 视口互斥(绝不同时挂两个 XTermViewport)是这里唯一的硬不变量。
    */
   leasedSessionIds?: ReadonlySet<string>;
-  fileTreeLeased?: boolean;
+  /**
+   * 被工作台 Pane 租用的项目工具(文件树/审查/内网穿透/SSH/后台任务):
+   * dock 不再挂其 tab、内容与新建入口;Pane 关闭后自动回归。
+   */
+  leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
@@ -120,10 +126,18 @@ type RightDockPanelProps = {
   }) => void;
   /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
-  /** File Tree 单例 tab 拖出到 Workbench。 */
-  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
-  /** File Tree 菜单式“在分屏中打开”。 */
-  onOpenFileTreeInWorkbench?: () => void;
+  /** 项目工具 tab / 空态入口拖出到 Workbench(落点打开该工具 Pane)。 */
+  onToolDragStart?: (
+    kind: RightDockLeasedToolKind,
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
+  ) => void;
+  /** 项目工具 tab 菜单式“在分屏中打开”。 */
+  onOpenToolInWorkbench?: (kind: RightDockLeasedToolKind) => void;
   /** 新建菜单「在分屏中新建终端」;与拖拽 newTerminal 走同一提交语义。 */
   onOpenNewTerminalInWorkbench?: () => void;
   /**
@@ -391,7 +405,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     sessions: externalSessions,
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
-    fileTreeLeased,
+    leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     width,
     theme,
     disabledMessage,
@@ -419,8 +433,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onTerminalTabDragStart,
     onNewTerminalDragStart,
     onOpenTerminalInWorkbench,
-    onFileTreeTabDragStart,
-    onOpenFileTreeInWorkbench,
+    onToolDragStart,
+    onOpenToolInWorkbench,
     onOpenNewTerminalInWorkbench,
     onSessionGhost,
     onInsertFileMention,
@@ -580,7 +594,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     tunnelInitialized,
   } = useRightDockProjectTabs({
     backgroundTasksVisible,
-    fileTreeLeased,
+    leasedTools,
     localSessions,
     onProjectStateChange,
     projectPathKey,
@@ -672,7 +686,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
 
   const startToolTab = useCallback(
     (kind: RightDockSingletonTabKind) => {
-      if (kind === "fileTree" && fileTreeLeased) return;
+      if (leasedTools.has(kind)) return;
       if (rightDockTabRequiresProject(kind)) {
         if (!projectReady) return;
       } else if (!tunnelClient) {
@@ -680,7 +694,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       }
       openSingletonTab(kind);
     },
-    [fileTreeLeased, openSingletonTab, projectReady, tunnelClient],
+    [leasedTools, openSingletonTab, projectReady, tunnelClient],
   );
 
   const setFileTreeInitialized = useCallback(
@@ -905,14 +919,14 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                       onCloseTerminalRequest={handleCloseRequest}
                       onTerminalTabDragStart={onTerminalTabDragStart}
                       onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
-                      onFileTreeTabDragStart={onFileTreeTabDragStart}
-                      onOpenFileTreeInWorkbench={onOpenFileTreeInWorkbench}
+                      onToolTabDragStart={onToolDragStart}
+                      onOpenToolInWorkbench={onOpenToolInWorkbench}
                     />
                   </div>
                   <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
                 </div>
                 <RightDockCreateMenu
-                  fileTreeLeased={fileTreeLeased}
+                  leasedTools={leasedTools}
                   open={createMenuOpen}
                   onOpenChange={setCreateMenuOpen}
                   shellOptions={shellOptions}
@@ -978,7 +992,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                 </div>
               ) : showRightDockChooser ? (
                 <RightDockChooser
-                  fileTreeLeased={fileTreeLeased}
+                  leasedTools={leasedTools}
                   terminalReady={terminalReady}
                   terminalDisabledMessage={terminalDisabledMessage}
                   disabledMessage={disabledMessage}
@@ -991,6 +1005,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onStartTool={startToolTab}
                   onOpenBackgroundTasks={openBackgroundTasks}
                   onNewTerminalDragStart={onNewTerminalDragStart}
+                  onToolDragStart={onToolDragStart}
                 />
               ) : (
                 <RightDockContent
@@ -1005,7 +1020,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   onTerminalError={handleTerminalError}
                   onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
                   onCreateTerminal={handleCreate}
-                  fileTreeLeased={fileTreeLeased}
+                  leasedTools={leasedTools}
                 />
               )}
             </>

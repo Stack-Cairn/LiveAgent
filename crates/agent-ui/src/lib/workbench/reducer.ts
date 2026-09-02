@@ -391,11 +391,15 @@ function validatePaneRecord(pane: PaneRecord): PaneRecordIssue | null {
       }
       return null;
     }
-    case "fileTree": {
+    case "fileTree":
+    case "gitReview":
+    case "tunnel":
+    case "sshTunnel":
+    case "backgroundTasks": {
       if (!surface.project.projectId.trim() || !surface.project.projectPathKey.trim()) {
         return {
           code: "invalid-layout",
-          message: "File tree surfaces require a complete project reference.",
+          message: `${surface.kind} surfaces require a complete project reference.`,
         };
       }
       return null;

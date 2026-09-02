@@ -1426,7 +1426,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             title={toggleComposerExpandTooltip}
             aria-label={toggleComposerExpandTooltip}
             aria-expanded={isComposerExpanded}
-            className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/70 outline-hidden transition-[background-color,color,scale] hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60"
+            className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-clip-content p-0.5 text-muted-foreground/70 outline-hidden transition-[background-color,color,scale] hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60"
           >
             {isComposerExpanded ? (
               <Minimize2 className="h-4 w-4" />
@@ -1744,7 +1744,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       : undefined
                 }
                 className={cn(
-                  "h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-all",
+                  // 点击区保持 32px 与右侧控制列对齐；背景经 p-0.5 + bg-clip-content
+                  // 只涂 28px 内圆，与用量环外径、展开按钮悬停圆等大，避免实心圆盘显大。
+                  "h-8 w-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all",
                   canQueueDraftWhileSending
                     ? "hover:brightness-105 active:scale-95"
                     : isSending

@@ -16,12 +16,15 @@ import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceClon
 import { WorkspaceCloneTaskOverlay } from "@liveagent/ui/components/chat/WorkspaceCloneTaskOverlay";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
-import { FileTreePaneSurface } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
+import {
+  type ProjectToolPaneEnvironment,
+  ProjectToolPaneHost,
+} from "@liveagent/ui/components/workbench/ProjectToolPaneHost";
 import { UnsupportedPaneSurface } from "@liveagent/ui/components/workbench/surfaces/UnsupportedPaneSurface";
 import { WorkbenchCanvas } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
 import { WorkbenchEmptyState } from "@liveagent/ui/components/workbench/WorkbenchEmptyState";
@@ -38,10 +41,23 @@ import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
+import {
+  mergeTerminalSession,
+  reconcileSshTerminalSessions,
+  removeTerminalSession,
+} from "@liveagent/ui/lib/terminal/sessionStore";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import { useConversationViewState } from "@liveagent/ui/lib/trajectory/useConversationViewState";
-import { findPaneIdBySurfaceKey, hitTestWorkbenchDrop } from "@liveagent/ui/lib/workbench/index";
-import type { PaneRecord } from "@liveagent/ui/lib/workbench/types";
+import {
+  hitTestWorkbenchDrop,
+  leasedProjectToolKinds,
+  projectToolSurfaceTitleKey,
+} from "@liveagent/ui/lib/workbench/index";
+import {
+  isProjectToolSurface,
+  type PaneRecord,
+  PROJECT_TOOL_SURFACE_KINDS,
+} from "@liveagent/ui/lib/workbench/types";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import {
@@ -67,8 +83,10 @@ import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   getRightDockFileTreeState,
+  getSshProjectHostIds,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
+  updateSshProjectHostIds,
   updateSystem,
   updateWorkspaceResourceSettings,
   workspaceProjectPathKey,
@@ -81,6 +99,7 @@ import {
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
+import { openUrl } from "@/shims/tauriOpener";
 import { AgentSelector } from "./AgentSelector";
 import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
@@ -204,6 +223,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleOpenWorkspaceFolder,
     handleOpenWorktree,
     handleProjectTerminalSessionsChange,
+    updateProjectTerminalSessions,
     handleRefreshSharedHistoryStatuses,
     handleRemoveWorkspaceProject,
     handleRenameWorkspaceGroup,
@@ -504,7 +524,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         case "conversation":
           return sidebarConversationsById.get(surface.conversationId)?.title?.trim() || "";
         case "fileTree":
-          return translate("projectTools.fileTreeTitle", settings.locale);
+        case "gitReview":
+        case "tunnel":
+        case "sshTunnel":
+        case "backgroundTasks":
+          return translate(projectToolSurfaceTitleKey(surface.kind), settings.locale);
         case "localTerminal":
           return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
         case "sshTerminal":
@@ -880,6 +904,130 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   // 口径):焦点只换 primary 绑定,绝不把页面舞台注入聚焦 Pane,也不按
   // conversationId 做 key(会在焦点切换时拆掉宿主)。终端 / unsupported 走
   // 各自的自包含表面。
+  // 项目工具 Pane 的运行环境:与 RightDockPanel 同一批网关 client/回调,按
+  // Pane 自己的 ProjectRef 解析项目(见 ProjectToolPaneHost)。终端 client 未
+  // 连接时(网关离线)工具 Pane 与终端 Pane 一样不渲染。
+  const projectToolPaneEnvironment = useMemo<ProjectToolPaneEnvironment | null>(() => {
+    if (!terminalClient) return null;
+    return {
+      theme: effectiveTheme,
+      fontScale: settings.customSettings.fontScale.rightDock,
+      workspaceProjects,
+      activeProjectPathKey: terminalProjectPathKey,
+      clients: {
+        terminal: terminalClient,
+        git: gitClient,
+        tunnel: isAgentMode ? api : null,
+        workspaceActivity: workspaceActivityClient,
+      },
+      capabilities: {
+        disabledMessage: projectToolsDisabledMessage,
+        terminalDisabledMessage,
+        gitWriteEnabled: settings.remote.enableWebGit,
+        gitDisabledMessage,
+        tunnelEnabled,
+        tunnelDisabledMessage,
+        tunnelPublicBaseUrl: window.location.origin,
+      },
+      workspaceProjectRootClient,
+      workspaceRootRevision,
+      fileTree: {
+        getState: (projectPathKey) =>
+          getRightDockFileTreeState(settings.customSettings, projectPathKey),
+        onStateChange: (projectPathKey, patch) =>
+          setSettings((current) => updateRightDockFileTreeState(current, projectPathKey, patch)),
+        onInsertFileMention: handleRightDockInsertFileMention,
+        onOpenFile: (request) => {
+          if (isWorkspacePreviewPath(request.path)) {
+            openWorkspaceFilePreview(request);
+          } else {
+            openWorkspaceEditorFile(request);
+          }
+        },
+        onRevealInFileTree: (projectPathKey, path) => {
+          if (projectPathKey === terminalProjectPathKey) {
+            changedFilesActions.onRevealInFileTree?.(path);
+          }
+        },
+      },
+      git: {
+        onInsertCodeReviewSkill: codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined,
+        onInsertCommitMention: handleRightDockInsertCommitMention,
+        onInsertGitFileMention: handleRightDockInsertGitFileMention,
+        focusRequest: gitReviewFocusRequest,
+        onFocusRequestHandled: handleGitReviewFocusRequestHandled,
+      },
+      ssh: {
+        hosts: settings.ssh.hosts,
+        getAssociatedHostIds: (projectPathKey) =>
+          getSshProjectHostIds(settings.ssh, projectPathKey),
+        onAssociatedHostIdsChange: (projectPathKey, hostIds) =>
+          setSettings((prev) => updateSshProjectHostIds(prev, projectPathKey, hostIds)),
+        sessions: terminalSessions,
+        // 按 React 当前值函数式合并(与 dock 侧 sessionsRef.current 同口径),
+        // 避免一次重渲染之间连续到达的 snapshot / reconcile 互相覆盖。
+        onSessionSnapshot: (snapshot) =>
+          updateProjectTerminalSessions((current) =>
+            mergeTerminalSession(current, snapshot.session),
+          ),
+        onSessionClosed: (sessionId) =>
+          updateProjectTerminalSessions((current) => removeTerminalSession(current, sessionId)),
+        onSessionsReconcile: (sessions) =>
+          updateProjectTerminalSessions((current) =>
+            reconcileSshTerminalSessions(current, sessions),
+          ),
+        onOpenSession: handleOpenSshTerminal,
+      },
+      openExternal: (url) => {
+        void openUrl(url);
+      },
+    };
+  }, [
+    api,
+    changedFilesActions,
+    codeReviewSkill,
+    effectiveTheme,
+    gitClient,
+    gitDisabledMessage,
+    gitReviewFocusRequest,
+    handleGitReviewFocusRequestHandled,
+    handleOpenSshTerminal,
+    handleRightDockInsertCodeReviewSkill,
+    handleRightDockInsertCommitMention,
+    handleRightDockInsertFileMention,
+    handleRightDockInsertGitFileMention,
+    isAgentMode,
+    openWorkspaceEditorFile,
+    openWorkspaceFilePreview,
+    projectToolsDisabledMessage,
+    setSettings,
+    settings.customSettings,
+    settings.remote.enableWebGit,
+    settings.ssh,
+    terminalClient,
+    terminalDisabledMessage,
+    terminalProjectPathKey,
+    terminalSessions,
+    tunnelDisabledMessage,
+    tunnelEnabled,
+    updateProjectTerminalSessions,
+    workspaceActivityClient,
+    workspaceProjectRootClient,
+    workspaceProjects,
+    workspaceRootRevision,
+  ]);
+
+  // 被画板 Pane 租用的项目工具:dock 隐藏对应 tab/内容/入口(与终端租约同口径)。
+  const leasedDockTools = useMemo(
+    () =>
+      leasedProjectToolKinds(
+        workbenchController.workbench.layout,
+        terminalProjectPathKey,
+        PROJECT_TOOL_SURFACE_KINDS,
+      ),
+    [terminalProjectPathKey, workbenchController.workbench.layout],
+  );
+
   const renderConversationWorkbench = (): ReactNode => {
     const { workbench, dragState } = workbenchController;
     return (
@@ -894,6 +1042,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             const title = workbenchPaneTitle(surface);
             if (surface.kind === "localTerminal" || surface.kind === "sshTerminal") {
               return translate("workbench.paneRegionTerminal", settings.locale).replace(
+                "{title}",
+                title,
+              );
+            }
+            if (isProjectToolSurface(surface)) {
+              return translate("workbench.paneRegionTool", settings.locale).replace(
                 "{title}",
                 title,
               );
@@ -935,54 +1089,25 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 sessions={terminalSessions}
                 sessionsLoaded={terminalSessionsLoaded}
                 onSessionGhost={verifyTerminalSessionAlive}
+                closeRequest={
+                  workbenchController.terminalPaneCloseRequest?.paneId === pane.paneId
+                    ? {
+                        busy: workbenchController.terminalPaneCloseRequest.busy,
+                        onConfirm: workbenchController.confirmTerminalPaneClose,
+                        onCancel: workbenchController.cancelTerminalPaneClose,
+                      }
+                    : undefined
+                }
               />
             );
           }
-          if (surface.kind === "fileTree") {
-            const project = workspaceProjects.find(
-              (entry) => workspaceProjectPathKey(entry.path) === surface.project.projectPathKey,
-            );
-            if (!project) {
-              return (
-                <UnsupportedPaneSurface paneId={pane.paneId} originalKind="fileTree:missing" />
-              );
-            }
+          if (isProjectToolSurface(surface)) {
+            if (!projectToolPaneEnvironment) return null;
             return (
-              <FileTreePaneSurface
-                active
-                projectPathKey={surface.project.projectPathKey}
-                cwd={project.path}
-                state={getRightDockFileTreeState(
-                  settings.customSettings,
-                  surface.project.projectPathKey,
-                )}
-                workspaceProject={project}
-                workspaceProjectRootClient={workspaceProjectRootClient}
-                workspaceRootRevision={workspaceRootRevision}
-                workspaceActivityClient={workspaceActivityClient}
-                onStateChange={(patch) =>
-                  setSettings((current) =>
-                    updateRightDockFileTreeState(current, surface.project.projectPathKey, patch),
-                  )
-                }
-                onInsertFileMention={
-                  surface.project.projectPathKey === terminalProjectPathKey
-                    ? handleRightDockInsertFileMention
-                    : undefined
-                }
-                onOpenFile={(path, imagePaths) => {
-                  const request = {
-                    projectPathKey: surface.project.projectPathKey,
-                    workdir: project.path,
-                    path,
-                    imagePaths,
-                  };
-                  if (isWorkspacePreviewPath(path)) {
-                    openWorkspaceFilePreview(request);
-                  } else {
-                    openWorkspaceEditorFile(request);
-                  }
-                }}
+              <ProjectToolPaneHost
+                paneId={pane.paneId}
+                surface={surface}
+                environment={projectToolPaneEnvironment}
               />
             );
           }
@@ -1029,7 +1154,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               isCompact={context.isCompact}
               dragHandleLabel={translate("workbench.dragPane", settings.locale)}
               closeLabel={translate("workbench.closePane", settings.locale)}
-              onClose={() => workbenchController.handleClosePane(pane.paneId)}
+              onClose={() => workbenchController.requestClosePane(pane.paneId)}
               trajectoryToggle={
                 surface.kind === "conversation"
                   ? {
@@ -1776,12 +1901,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               sessions={terminalSessions}
               sessionsLoaded={terminalSessionsLoaded}
               leasedSessionIds={workbenchLeasedDockSessionIds}
-              fileTreeLeased={Boolean(
-                findPaneIdBySurfaceKey(
-                  workbenchController.workbench.layout,
-                  `fileTree:${terminalProjectPathKey}`,
-                ),
-              )}
+              leasedTools={leasedDockTools}
               width={settings.customSettings.rightDock.width}
               theme={effectiveTheme}
               disabledMessage={projectToolsDisabledMessage}
@@ -1818,13 +1938,15 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onOpenTerminalInWorkbench={
                 sessionWorkbench.enabled ? workbenchController.handleOpenTerminalInSplit : undefined
               }
-              onFileTreeTabDragStart={
-                sessionWorkbench.enabled
-                  ? workbenchController.handleFileTreeTabDragIntent
+              onToolDragStart={
+                sessionWorkbench.enabled && terminalProjectPath.trim()
+                  ? workbenchController.handleToolDragIntent
                   : undefined
               }
-              onOpenFileTreeInWorkbench={
-                sessionWorkbench.enabled ? workbenchController.handleOpenFileTreeInSplit : undefined
+              onOpenToolInWorkbench={
+                sessionWorkbench.enabled && terminalProjectPath.trim()
+                  ? workbenchController.handleOpenToolInSplit
+                  : undefined
               }
               onOpenNewTerminalInWorkbench={
                 sessionWorkbench.enabled

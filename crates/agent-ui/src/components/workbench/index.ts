@@ -3,6 +3,7 @@ export * from "./DockIntentOverlay";
 export * from "./PaneChrome";
 export * from "./PaneFrame";
 export * from "./PaneSurfaceLayer";
+export * from "./ProjectToolPaneHost";
 export * from "./surfaces/LocalTerminalPaneSurface";
 export * from "./surfaces/SshTerminalPaneSurface";
 export * from "./surfaces/UnsupportedPaneSurface";

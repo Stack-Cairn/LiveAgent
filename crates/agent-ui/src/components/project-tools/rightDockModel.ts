@@ -19,6 +19,7 @@ import {
   reorderIdsByKeyboard,
 } from "../../lib/reorder/reorderModel";
 import type { TerminalSession } from "../../lib/terminal/types";
+import type { ProjectToolSurfaceKind } from "../../lib/workbench/types";
 
 export const MIN_RIGHT_DOCK_PANEL_WIDTH = 320;
 export const DEFAULT_RIGHT_DOCK_MAX_PANEL_WIDTH = 720;
@@ -37,6 +38,15 @@ export const BACKGROUND_TASKS_TAB_ID = RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID;
 export const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 
 export type RightDockSingletonTabKind = RightDockToolKind;
+
+/**
+ * Dock tools a workbench pane can lease (every singleton tool plus the
+ * derived background-tasks tab). While leased, the dock hides the tool's
+ * tab, content and launcher tile so the interactive view exists once.
+ */
+export type RightDockLeasedToolKind = ProjectToolSurfaceKind;
+
+export const NO_LEASED_RIGHT_DOCK_TOOLS: ReadonlySet<RightDockLeasedToolKind> = new Set();
 
 export const RIGHT_DOCK_SINGLETON_TAB_KINDS: readonly RightDockSingletonTabKind[] =
   RIGHT_DOCK_TOOL_KINDS;
@@ -123,7 +133,8 @@ export function rightDockTabRequiresProject(kind: RightDockSingletonTabKind) {
 
 export function getRightDockVisibleTabs(options: {
   backgroundTasksVisible: boolean;
-  fileTreeLeased?: boolean;
+  /** Tools whose surface lives in a workbench pane: no dock tab for them. */
+  leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
   projectPathKey: string;
   projectState: RightDockProjectState;
@@ -131,7 +142,7 @@ export function getRightDockVisibleTabs(options: {
 }) {
   const {
     backgroundTasksVisible,
-    fileTreeLeased,
+    leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     localSessions,
     projectPathKey,
     projectState,
@@ -143,13 +154,13 @@ export function getRightDockVisibleTabs(options: {
     session,
   }));
   for (const kind of RIGHT_DOCK_SINGLETON_TAB_KINDS) {
-    if (kind === "fileTree" && fileTreeLeased) continue;
+    if (leasedTools.has(kind)) continue;
     if (!projectState.tools[kind]) continue;
     if (kind === "tunnel" && !tunnelAvailable) continue;
     if (rightDockTabRequiresProject(kind) && !projectPathKey) continue;
     nextTabs.push({ id: rightDockSingletonTabId(kind), kind });
   }
-  if (backgroundTasksVisible) {
+  if (backgroundTasksVisible && !leasedTools.has("backgroundTasks")) {
     nextTabs.push({ id: BACKGROUND_TASKS_TAB_ID, kind: "backgroundTasks" });
   }
   return nextTabs;

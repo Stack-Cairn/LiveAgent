@@ -165,18 +165,88 @@ export function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], tex
   };
 }
 
+/**
+ * 附件指令的两行固定头。provider 原生内联适配器（nativeResponsesAttachments）
+ * 按整段精确匹配把它替换成"部分附件已内联"的版本；DeepSeek 大段粘贴内联
+ * （deepSeekAttachments）按整段精确匹配在所有附件行都被移除后删掉它。
+ * 改文案必须保持这两处仍能命中，所以只在这里定义一次。
+ *
+ * 第二行顺带告诉模型 Read 是分窗口返回的：Read 每次只给一段（文本默认 200
+ * 行、PDF 默认 5 页、notebook 默认 20 cell），并在结果里报告总量；这里提前
+ * 提醒它翻到底，避免模型只读了第一窗就开始总结。这段提示单独导出，供
+ * nativeResponsesAttachments 拼"部分附件已内联"版本的指令头时复用。
+ */
+export const UPLOADED_FILES_READ_PAGING_HINT =
+  "Read returns a bounded window per call and reports the total size, so keep paging (start_line/limit, page_start/page_limit, or cell_start/cell_limit) until you have read each file completely:";
+
+export const UPLOADED_FILES_INSTRUCTION_HEADER_LINES = [
+  "The user attached the files below to this message.",
+  `Use Read with these exact paths before analyzing or modifying them. ${UPLOADED_FILES_READ_PAGING_HINT}`,
+] as const;
+
+/** 改文案前落库的历史消息仍带这版头；匹配时两版都认。 */
+const LEGACY_UPLOADED_FILES_INSTRUCTION_HEADER_LINES = [
+  "The user attached the files below to this message.",
+  "Use Read with these exact paths before analyzing or modifying them:",
+] as const;
+
+const UPLOADED_FILES_INSTRUCTION_HEADER_VARIANTS: readonly (readonly string[])[] = [
+  UPLOADED_FILES_INSTRUCTION_HEADER_LINES,
+  LEGACY_UPLOADED_FILES_INSTRUCTION_HEADER_LINES,
+];
+
+/** 当前与历史两版附件指令头的整段文本，供按字符串替换的调用方使用。 */
+export const UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS: readonly string[] =
+  UPLOADED_FILES_INSTRUCTION_HEADER_VARIANTS.map((lines) => lines.join("\n"));
+
+/**
+ * 在按行拆开的消息里定位附件指令头（当前或历史格式）。返回头的起始下标
+ * 与行数；找不到返回 null。
+ */
+export function locateUploadedFilesInstructionHeader(lines: readonly string[]) {
+  for (let index = 0; index < lines.length; index += 1) {
+    for (const header of UPLOADED_FILES_INSTRUCTION_HEADER_VARIANTS) {
+      if (header.every((line, offset) => lines[index + offset] === line)) {
+        return { index, length: header.length };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 单个附件在指令里的一行。格式是跨模块契约：deepSeekAttachments 按整行精确
+ * 匹配删除已内联的粘贴行，nativeResponsesAttachments 给原生内联的附件加标注。
+ * 带上体积让模型对"一窗读不完"有预期。
+ */
+export function formatUploadedFileInstructionLine(file: PendingUploadedFile) {
+  const absolutePath = typeof file.absolutePath === "string" ? file.absolutePath.trim() : "";
+  if (!absolutePath) return "";
+  const size =
+    Number.isFinite(file.sizeBytes) && file.sizeBytes >= 0
+      ? `, ${formatUploadedFileSize(Math.floor(file.sizeBytes))}`
+      : "";
+  return `- ${absolutePath} (${file.kind}${size})`;
+}
+
+/**
+ * 判断指令里的某一行是否就是该附件。除当前格式外也接受不带体积的旧格式
+ * `- <absolutePath> (<kind>)`，让已落库的历史会话继续能被精确匹配。
+ */
+export function matchesUploadedFileInstructionLine(line: string, file: PendingUploadedFile) {
+  const current = formatUploadedFileInstructionLine(file);
+  if (!current) return false;
+  if (line === current) return true;
+  const absolutePath = typeof file.absolutePath === "string" ? file.absolutePath.trim() : "";
+  return line === `- ${absolutePath} (${file.kind})`;
+}
+
 export function buildUploadedFilesInstruction(files: PendingUploadedFile[]) {
   // 模型读取路径只认导入时返回的绝对路径（工作区内原地引用、工作区外落
   // 暂存区）。旧版本仅持久化相对路径的附件不再列出——新方案下无法定位。
-  const lines = files
-    .filter((file) => typeof file.absolutePath === "string" && file.absolutePath.trim())
-    .map((file) => `- ${file.absolutePath} (${file.kind})`);
+  const lines = files.map(formatUploadedFileInstructionLine).filter((line) => line.length > 0);
   if (lines.length === 0) return "";
-  return [
-    "The user attached the files below to this message.",
-    "Use Read with these exact paths before analyzing or modifying them:",
-    ...lines,
-  ].join("\n");
+  return [...UPLOADED_FILES_INSTRUCTION_HEADER_LINES, ...lines].join("\n");
 }
 
 export function buildUserMessageContentWithUploads(userText: string, files: PendingUploadedFile[]) {

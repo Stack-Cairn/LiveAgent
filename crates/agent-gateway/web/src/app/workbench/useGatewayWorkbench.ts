@@ -9,12 +9,13 @@ import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
+  commitProjectToolDrop,
   commitWorkspaceDropConversation,
   findAdjacentPaneId,
-  findPaneIdBySurfaceKey,
   findParentSplitId,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
+  openProjectToolInSplit,
   type PendingWorkspaceDropOperation,
   shouldDeferWorkspaceDropConversationSync,
   type WorkbenchEdge,
@@ -23,14 +24,20 @@ import {
   type WorkbenchRect,
 } from "@liveagent/ui/lib/workbench/index";
 import { commitTerminalDrop } from "@liveagent/ui/lib/workbench/terminalDropCommit";
+import {
+  type TerminalPaneCloseRequest,
+  useTerminalPaneCloseFlow,
+} from "@liveagent/ui/lib/workbench/terminalPaneClose";
 import { releaseOrphanTerminalPaneLeases } from "@liveagent/ui/lib/workbench/terminalPaneLeaseStore";
 import {
   createTerminalSurfaceId,
   findTerminalPaneForSession,
 } from "@liveagent/ui/lib/workbench/terminalPaneRuntime";
 import {
+  isProjectToolSurface,
   type PaneRecord,
   type ProjectRef,
+  type ProjectToolSurfaceKind,
   surfaceIdentityKey,
   surfaceProjectRef,
 } from "@liveagent/ui/lib/workbench/types";
@@ -100,6 +107,8 @@ export type UseGatewayWorkbenchParams = {
   terminalProjectPath: string;
   /** 拖拽幽灵上「新建终端」的标题文案（已本地化）。 */
   newTerminalTitle: string;
+  /** 项目工具(文件树/审查/内网穿透/SSH/后台任务)拖拽幽灵标题(已本地化)。 */
+  projectToolTitle: (tool: ProjectToolSurfaceKind) => string;
   /** 把页面当前会话切换到指定会话（走既有的侧栏选择通路）。 */
   selectConversation: (conversationId: string) => void;
   /** workspace 拖拽落点：走既有「项目新建会话」通路（目录检查 + 新草稿）。 */
@@ -114,6 +123,10 @@ export type UseGatewayWorkbenchParams = {
   onWorkspaceDropFailed: (error: unknown) => void;
   /** 已在 Pane 中的会话再次从侧栏拖入时，明确说明聚焦语义。 */
   onConversationAlreadyOpen: () => void;
+  /** 项目工具 Pane 关闭:同时关闭 dock 里的该工具(释放租约后不再弹回 tab)。 */
+  onProjectToolPaneClosed?: (tool: ProjectToolSurfaceKind, projectPathKey: string) => void;
+  /** 终端 Pane 关闭时后端 close 失败(会话仍存活)。 */
+  onTerminalCloseFailed?: (message: string) => void;
 };
 
 export type GatewayWorkbenchController = {
@@ -122,11 +135,20 @@ export type GatewayWorkbenchController = {
   handleGeometryChange: (geometry: WorkbenchGeometry) => void;
   handleFocusPane: (paneId: string) => void;
   handleClosePane: (paneId: string) => void;
+  /**
+   * Pane 的 × / Meta+Alt+W 入口:终端 Pane 先终止终端(运行中在 Pane 内红条
+   * 确认,closed 事件联动收 Pane),其它 Pane 直接 handleClosePane。
+   */
+  requestClosePane: (paneId: string) => void;
+  terminalPaneCloseRequest: TerminalPaneCloseRequest | null;
+  confirmTerminalPaneClose: () => void;
+  cancelTerminalPaneClose: () => void;
   /** 侧栏菜单「在分屏中打开」：聚焦既有 Pane，否则贴着聚焦 Pane 自动停靠。 */
   handleOpenConversationInSplit: (item: SidebarConversation) => boolean;
   /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
-  handleOpenFileTreeInSplit: () => void;
+  /** Right Dock 工具 tab 菜单「在分屏中打开」:聚焦既有 Pane,否则自动停靠。 */
+  handleOpenToolInSplit: (tool: ProjectToolSurfaceKind) => void;
   /** Right Dock 新建菜单「在分屏中新建终端」。 */
   handleOpenNewTerminalInSplit: () => void;
   /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
@@ -188,12 +210,16 @@ export type GatewayWorkbenchController = {
     clientY: number;
     currentTarget?: EventTarget | null;
   }) => void;
-  handleFileTreeTabDragIntent: (event: {
-    pointerId: number;
-    clientX: number;
-    clientY: number;
-    currentTarget?: EventTarget | null;
-  }) => void;
+  /** Right Dock 工具 tab / 空态入口拖拽发起(落点打开该工具 Pane)。 */
+  handleToolDragIntent: (
+    tool: ProjectToolSurfaceKind,
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
+  ) => void;
   /** 被画布 Pane 租用的会话（Right Dock 终端 tab 互斥隐藏用）。 */
   leasedDockSessionIds: readonly string[];
 };
@@ -211,6 +237,9 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     terminalSessions,
     terminalProjectPath,
     newTerminalTitle,
+    projectToolTitle,
+    onProjectToolPaneClosed,
+    onTerminalCloseFailed,
     selectConversation,
     startConversationForProject,
     conversationWorkdirFor,
@@ -360,10 +389,18 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     (paneId: string) => {
       const pane = workbench.layoutRef.current.panes[paneId];
       const result = workbench.closePane(paneId);
-      // 终端 Pane 的关闭是 Detach:进程保留,租约随宿主卸载释放,会话回到
-      // Right Dock;绑定一并回收,再次拖入走全新 surface 身份。
+      // 终端 Pane 的关闭 = 终止终端:terminalPaneClose 先关闭会话,这里在
+      // closed 事件确认后回收绑定,再次拖入走全新 surface 身份。
       if (pane?.surface.kind === "localTerminal" || pane?.surface.kind === "sshTerminal") {
         gatewayTerminalPaneBindings.delete(pane.surface.surfaceId);
+      }
+      // 项目工具 Pane 关闭 = 工具整体关闭:布局确认移除后通知页面收掉 dock 状态。
+      if (
+        pane &&
+        isProjectToolSurface(pane.surface) &&
+        !workbench.layoutRef.current.panes[paneId]
+      ) {
+        onProjectToolPaneClosed?.(pane.surface.kind, pane.surface.project.projectPathKey);
       }
       if (
         result.closedFocused &&
@@ -373,15 +410,24 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         selectWorkbenchConversation(result.nextConversationId);
       }
     },
-    [displayedConversationId, selectWorkbenchConversation, workbench],
+    [displayedConversationId, onProjectToolPaneClosed, selectWorkbenchConversation, workbench],
   );
 
   const handleClosePaneRef = useRef(handleClosePane);
   handleClosePaneRef.current = handleClosePane;
 
-  // Right Dock 是终止进程的唯一入口(Detach-first 裁决):会话被显式关闭
-  // (`closed` 事件)时,持有它的 Pane 一并关闭。按绑定而非租约查找,覆盖
-  // 宿主取得租约前的 connecting 窗口。
+  const terminalPaneClose = useTerminalPaneCloseFlow({
+    client: terminalClient,
+    sessions: terminalSessions,
+    bindings: gatewayTerminalPaneBindings,
+    layout: workbench.layout,
+    closePane: handleClosePane,
+    onError: onTerminalCloseFailed,
+  });
+  const requestClosePane = terminalPaneClose.requestClosePane;
+
+  // 会话被关闭(`closed` 事件:Pane 的 × 终止、dock 关闭等)时,持有它的
+  // Pane 一并关闭。按绑定而非租约查找,覆盖宿主取得租约前的 connecting 窗口。
   useEffect(() => {
     if (!enabled || !terminalClient) return;
     return terminalClient.subscribe((event) => {
@@ -437,7 +483,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       if (event.shiftKey) return;
       if (event.key === "w" || event.key === "W") {
         event.preventDefault();
-        handleClosePane(focusedPaneId);
+        requestClosePane(focusedPaneId);
         return;
       }
       if (event.key === "=" || event.key === "+") {
@@ -449,7 +495,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, handleClosePane, handleFocusPane, workbench]);
+  }, [enabled, handleFocusPane, requestClosePane, workbench]);
 
   // 与桌面端 resolveWorkbenchAutoDockTarget 同口径：优先右侧（窄画布优先
   // 下方），两个方向都放不下时明确拒绝。
@@ -630,20 +676,13 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         commitTerminalDrop(payload, target, terminalDropDeps());
         return;
       }
-      if (payload.kind === "fileTree") {
-        const existingPaneId = findPaneIdBySurfaceKey(
-          workbench.layoutRef.current,
-          `fileTree:${payload.project.projectPathKey}`,
-        );
-        if (target.kind === "pane-center") {
-          if (existingPaneId && target.paneId === existingPaneId) handleFocusPane(existingPaneId);
-          return;
-        }
-        if (existingPaneId) {
-          if (target.kind !== "canvas-empty") workbench.movePane(existingPaneId, target);
-          return;
-        }
-        workbench.openFileTreeSurface({ kind: "fileTree", project: payload.project }, target);
+      if (payload.kind === "projectTool") {
+        commitProjectToolDrop(payload, target, {
+          layout: workbench.layoutRef.current,
+          openProjectToolSurface: workbench.openProjectToolSurface,
+          movePane: workbench.movePane,
+          focusPane: handleFocusPane,
+        });
         return;
       }
       // Pane 头部拖动重排。
@@ -817,7 +856,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag, newTerminalTitle, terminalProjectPath],
   );
 
-  const fileTreeProjectRef = useCallback((): ProjectRef | null => {
+  // Right Dock 的当前项目:项目工具拖出 / 在分屏中打开时 Pane 绑定的 ProjectRef。
+  const dockToolProjectRef = useCallback((): ProjectRef | null => {
     const path = terminalProjectPath.trim();
     if (!path) return null;
     const projectPathKey = workspaceProjectPathKey(path);
@@ -830,18 +870,21 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     };
   }, [terminalProjectPath]);
 
-  const handleFileTreeTabDragIntent = useCallback(
-    (event: {
-      pointerId: number;
-      clientX: number;
-      clientY: number;
-      currentTarget?: EventTarget | null;
-    }) => {
-      const project = fileTreeProjectRef();
+  const handleToolDragIntent = useCallback(
+    (
+      tool: ProjectToolSurfaceKind,
+      event: {
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        currentTarget?: EventTarget | null;
+      },
+    ) => {
+      const project = dockToolProjectRef();
       if (!project) return;
-      beginDrag({ kind: "fileTree", project, title: "File Tree" }, event);
+      beginDrag({ kind: "projectTool", tool, project, title: projectToolTitle(tool) }, event);
     },
-    [beginDrag, fileTreeProjectRef],
+    [beginDrag, dockToolProjectRef, projectToolTitle],
   );
 
   // 同一提交通路的菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
@@ -874,24 +917,20 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [onNoSpaceForSplit, resolveAutoDockTarget, terminalDropDeps],
   );
 
-  const handleOpenFileTreeInSplit = useCallback(() => {
-    const project = fileTreeProjectRef();
-    if (!project) return;
-    const existingPaneId = findPaneIdBySurfaceKey(
-      workbench.layoutRef.current,
-      `fileTree:${project.projectPathKey}`,
-    );
-    if (existingPaneId) {
-      handleFocusPane(existingPaneId);
-      return;
-    }
-    const target = resolveAutoDockTarget();
-    if (!target) {
-      onNoSpaceForSplit();
-      return;
-    }
-    workbench.openFileTreeSurface({ kind: "fileTree", project }, target);
-  }, [fileTreeProjectRef, handleFocusPane, onNoSpaceForSplit, resolveAutoDockTarget, workbench]);
+  const handleOpenToolInSplit = useCallback(
+    (tool: ProjectToolSurfaceKind) => {
+      const project = dockToolProjectRef();
+      if (!project) return;
+      openProjectToolInSplit(tool, project, {
+        layout: workbench.layoutRef.current,
+        openProjectToolSurface: workbench.openProjectToolSurface,
+        focusPane: handleFocusPane,
+        resolveAutoDockTarget,
+        onNoSpace: onNoSpaceForSplit,
+      });
+    },
+    [dockToolProjectRef, handleFocusPane, onNoSpaceForSplit, resolveAutoDockTarget, workbench],
+  );
 
   const handleOpenNewTerminalInSplit = useCallback(() => {
     const target = resolveAutoDockTarget();
@@ -978,9 +1017,13 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleGeometryChange,
       handleFocusPane,
       handleClosePane,
+      requestClosePane,
+      terminalPaneCloseRequest: terminalPaneClose.pendingClose,
+      confirmTerminalPaneClose: terminalPaneClose.confirmClose,
+      cancelTerminalPaneClose: terminalPaneClose.cancelClose,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
-      handleOpenFileTreeInSplit,
+      handleOpenToolInSplit,
       handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
@@ -993,7 +1036,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
-      handleFileTreeTabDragIntent,
+      handleToolDragIntent,
       leasedDockSessionIds,
     }),
     [
@@ -1001,9 +1044,13 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleGeometryChange,
       handleFocusPane,
       handleClosePane,
+      requestClosePane,
+      terminalPaneClose.pendingClose,
+      terminalPaneClose.confirmClose,
+      terminalPaneClose.cancelClose,
       handleOpenConversationInSplit,
       handleOpenTerminalInSplit,
-      handleOpenFileTreeInSplit,
+      handleOpenToolInSplit,
       handleOpenNewTerminalInSplit,
       focusTerminalPaneForSession,
       closePanesForRemovedConversations,
@@ -1016,7 +1063,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       handleProjectDragIntent,
       handleTerminalTabDragIntent,
       handleNewTerminalDragIntent,
-      handleFileTreeTabDragIntent,
+      handleToolDragIntent,
       leasedDockSessionIds,
     ],
   );
