@@ -72,6 +72,10 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	serveIndex := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// 防点击劫持:WebUI token 持久化在 localStorage 且页面加载即自动登录,
+		// 第三方站点 iframe 嵌入会渲染完整聊天/终端界面;禁 frame 内嵌。
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(indexHTML))
 	}
 
