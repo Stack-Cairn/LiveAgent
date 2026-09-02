@@ -152,8 +152,14 @@ export function ProjectToolPaneHost(props: ProjectToolPaneHostProps) {
           fileTree.onOpenFile({ projectPathKey, workdir: cwd, path, imagePaths }),
         onRevealInFileTree: (path) => fileTree.onRevealInFileTree?.(projectPathKey, path),
       },
+      // Composer insertion targets the Right Dock's current project only, so
+      // every git → composer bridge is gated the same way as the file tree's
+      // onInsertFileMention; GitReviewPanel disables its buttons when absent.
       git: {
         ...git,
+        onInsertCodeReviewSkill: isActiveProject ? git.onInsertCodeReviewSkill : undefined,
+        onInsertCommitMention: isActiveProject ? git.onInsertCommitMention : undefined,
+        onInsertGitFileMention: isActiveProject ? git.onInsertGitFileMention : undefined,
         focusRequest: isActiveProject ? git.focusRequest : null,
       },
       ssh: {

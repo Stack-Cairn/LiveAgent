@@ -418,9 +418,9 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
 
   const terminalPaneClose = useTerminalPaneCloseFlow({
     client: terminalClient,
-    sessionsRef: terminalSessionsRef,
+    sessions: terminalSessions,
     bindings: gatewayTerminalPaneBindings,
-    layoutRef: workbench.layoutRef,
+    layout: workbench.layout,
     closePane: handleClosePane,
     onError: onTerminalCloseFailed,
   });

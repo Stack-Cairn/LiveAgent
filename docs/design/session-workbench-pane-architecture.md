@@ -614,10 +614,14 @@ File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 Pane
 - Right Dock 可调宽；Canvas 狭窄时 Overlay 打开，不永久压缩全部 Pane。
 - 同一项目只挂一个交互式 File Tree 视图；Surface 在 Workbench 时，Right Dock
   隐藏对应标签、内容和新建入口，避免重复数据请求、workspace activity 订阅和
-  状态竞争；关闭 Pane 释放租约后，Dock 直接复用项目级状态恢复树。
+  状态竞争。Pane 的 × 关闭整个工具（`releaseProjectToolFromDock`）：dock tab 与
+  持久化的 `tools.fileTree` 一并移除，租约释放后 tab 不会弹回；只有 Pane 因布局
+  清空等非显式关闭而消失时，Dock 才复用项目级状态恢复树。
 - `FileTreeSurface` 通过显式 project/state/client/action props 挂载，不依赖
   `RightDockContext`；Right Dock 与 Pane Host 只是不同适配层。
-- 文件树 Surface 关闭只关闭视图，不修改项目、会话或文件。
+- 文件树 Pane 关闭 = 关闭文件树工具（2026-09-02 起与其它项目工具同口径，见 §17）：
+  `tools.fileTree` 连同其中的展开 / 选择 / 搜索 UI 状态一并移除，再次从「开始使用」
+  打开以默认状态重建；不修改项目、会话或文件。
 
 > 2026-09-02 起，Git 审查、内网穿透、SSH 连接与后台任务也按同一套单例 + 租约语义进入
 > PaneTree（`ProjectToolWorkbenchSurface`），Right Dock 只保留终端会话列表作为必留入口。
@@ -630,7 +634,7 @@ File Tree 已从 Right Dock 专用面板解耦为共享 Surface，并进入 Pane
 | Surface | 主关闭动作 | 运行对象结果 |
 |---|---|---|
 | Conversation | 关闭视图 | 不删除历史；运行/队列按后台策略继续 |
-| File Tree | 关闭视图并回到 Right Dock 入口 | 不修改项目或文件；项目级 UI 状态保留 |
+| File Tree / Git 审查 / 内网穿透 / SSH 连接 / 后台任务 | 关闭 Pane = 关闭工具（`releaseProjectToolFromDock`） | 不修改项目、文件、隧道、SSH 会话或后台进程；dock tab 与 `tools[kind]`（文件树含 UI 状态）一并移除，不弹回 dock；后台任务快照当前进程 id 后隐藏 |
 | 运行 Local Terminal | Pane 内红条确认后终止 | 进程树结束，Session 移除，Pane 随 `closed` 事件关闭 |
 | 已退出 Local Terminal | 关闭视图并回收 Session | 保留历史按现有策略清理 |
 | 已连接 SSH Terminal | Pane 内红条确认后断开 | 连接断开，Session 移除，Pane 随 `closed` 事件关闭 |

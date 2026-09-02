@@ -34,7 +34,6 @@ const {
   openProjectToolInSplit,
   PROJECT_TOOL_SURFACE_KINDS,
   projectToolSurfaceIdentityKey,
-  projectToolSurfaceRequiresProject,
   projectToolSurfaceTitleKey,
   surfaceIdentityKey,
   surfaceMinSize,
@@ -107,9 +106,6 @@ test("every project tool has a stable per-scope identity and label key", () => {
     projectToolSurfaceIdentityKey("gitReview", PROJECT.projectPathKey),
     projectToolSurfaceIdentityKey("gitReview", OTHER_PROJECT.projectPathKey),
   );
-  assert.equal(projectToolSurfaceRequiresProject("gitReview"), true);
-  assert.equal(projectToolSurfaceRequiresProject("tunnel"), false);
-  assert.equal(projectToolSurfaceRequiresProject("backgroundTasks"), false);
   assert.equal(isProjectToolSurface({ kind: "unsupported", originalKind: "x", raw: {} }), false);
 });
 

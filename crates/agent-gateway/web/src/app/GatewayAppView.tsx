@@ -223,6 +223,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleOpenWorkspaceFolder,
     handleOpenWorktree,
     handleProjectTerminalSessionsChange,
+    updateProjectTerminalSessions,
     handleRefreshSharedHistoryStatuses,
     handleRemoveWorkspaceProject,
     handleRenameWorkspaceGroup,
@@ -963,17 +964,17 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         onAssociatedHostIdsChange: (projectPathKey, hostIds) =>
           setSettings((prev) => updateSshProjectHostIds(prev, projectPathKey, hostIds)),
         sessions: terminalSessions,
-        // 网关端页面只暴露整表提交;按当前列表合并后回写(与 dock 的
-        // onSessionsChange 同一通路)。
+        // 按 React 当前值函数式合并(与 dock 侧 sessionsRef.current 同口径),
+        // 避免一次重渲染之间连续到达的 snapshot / reconcile 互相覆盖。
         onSessionSnapshot: (snapshot) =>
-          handleProjectTerminalSessionsChange(
-            mergeTerminalSession(terminalSessions, snapshot.session),
+          updateProjectTerminalSessions((current) =>
+            mergeTerminalSession(current, snapshot.session),
           ),
         onSessionClosed: (sessionId) =>
-          handleProjectTerminalSessionsChange(removeTerminalSession(terminalSessions, sessionId)),
+          updateProjectTerminalSessions((current) => removeTerminalSession(current, sessionId)),
         onSessionsReconcile: (sessions) =>
-          handleProjectTerminalSessionsChange(
-            reconcileSshTerminalSessions(terminalSessions, sessions),
+          updateProjectTerminalSessions((current) =>
+            reconcileSshTerminalSessions(current, sessions),
           ),
         onOpenSession: handleOpenSshTerminal,
       },
@@ -991,7 +992,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     gitReviewFocusRequest,
     handleGitReviewFocusRequestHandled,
     handleOpenSshTerminal,
-    handleProjectTerminalSessionsChange,
     handleRightDockInsertCodeReviewSkill,
     handleRightDockInsertCommitMention,
     handleRightDockInsertFileMention,
@@ -1010,6 +1010,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     terminalSessions,
     tunnelDisabledMessage,
     tunnelEnabled,
+    updateProjectTerminalSessions,
     workspaceActivityClient,
     workspaceProjectRootClient,
     workspaceProjects,

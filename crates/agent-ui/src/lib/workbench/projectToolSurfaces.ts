@@ -17,13 +17,4 @@ export function projectToolSurfaceTitleKey(kind: ProjectToolSurfaceKind): string
   return PROJECT_TOOL_SURFACE_TITLE_KEYS[kind];
 }
 
-/**
- * Tools whose surface needs a real workspace project (cwd, git repo, SSH host
- * association). The tunnel panel scopes itself by projectPathKey but works
- * without one, and background tasks mirror a window-global registry.
- */
-export function projectToolSurfaceRequiresProject(kind: ProjectToolSurfaceKind): boolean {
-  return kind === "fileTree" || kind === "gitReview" || kind === "sshTunnel";
-}
-
 export { PROJECT_TOOL_SURFACE_KINDS };

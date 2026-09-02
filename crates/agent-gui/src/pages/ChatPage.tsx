@@ -2480,9 +2480,9 @@ export function ChatPage(props: ChatPageProps) {
   // 确认),由 closed 事件联动收 Pane;其它 Pane 直接关闭。
   const terminalPaneClose = useTerminalPaneCloseFlow({
     client: tauriTerminalClient,
-    sessionsRef: terminalSessionsRef,
+    sessions: terminalSessions,
     bindings: terminalPaneBindings,
-    layoutRef: workbench.layoutRef,
+    layout: workbench.layout,
     closePane: handleWorkbenchClosePane,
     onError: (message) => addNotify("error", message),
   });

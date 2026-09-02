@@ -193,8 +193,9 @@ Pane 内工具永远 `active`（没有 tab 遮挡），字体缩放沿用 dock �
   `releaseProjectToolFromDock`。
 - `GatewayAppView.tsx`：`projectToolPaneEnvironment`（终端 client 未连接时为 null，
   工具 Pane 与终端 Pane 同样不渲染）、`leasedDockTools`、`ProjectToolPaneHost`。
-- 会话桥接：Web 页面只暴露整表提交 `handleProjectTerminalSessionsChange`，宿主按当前
-  列表合并后回写。
+- 会话桥接：`useProjectToolsRuntime.updateProjectTerminalSessions(updater)` 按 React
+  当前值函数式合并（与 dock 侧 `sessionsRef.current` 同口径），避免 SSH 面板的
+  snapshot / reconcile 在一次重渲染之间连续到达时互相覆盖。
 
 ## 7. 持久化与恢复
 

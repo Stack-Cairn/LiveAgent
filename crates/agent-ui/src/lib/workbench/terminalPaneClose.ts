@@ -41,9 +41,11 @@ export type TerminalPaneCloseRequest = {
 
 export type UseTerminalPaneCloseFlowParams = {
   client: TerminalClient | null;
-  sessionsRef: { readonly current: readonly TerminalSession[] };
+  /** Authoritative session list as rendered; the hook keeps its own ref. */
+  sessions: readonly TerminalSession[];
   bindings: Pick<TerminalPaneBindingStore, "get">;
-  layoutRef: { readonly current: WorkbenchLayout };
+  /** Current layout as rendered; the hook keeps its own ref. */
+  layout: WorkbenchLayout;
   /** The host's pane close (bindings cleanup, focus hand-off). */
   closePane: (paneId: string) => void;
   onError?: (message: string) => void;
@@ -63,8 +65,14 @@ const CLOSED_EVENT_FALLBACK_MS = 1500;
  * flashes through the dock between "pane gone" and "process gone".
  */
 export function useTerminalPaneCloseFlow(params: UseTerminalPaneCloseFlowParams) {
-  const { client, sessionsRef, bindings, layoutRef, closePane, onError } = params;
+  const { client, sessions, bindings, layout, closePane, onError } = params;
   const [pendingClose, setPendingClose] = useState<TerminalPaneCloseRequest | null>(null);
+  // Values drive the effect below; refs give the async close() continuation
+  // the latest snapshot without depending on the host's own ref plumbing.
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   const closePaneRef = useRef(closePane);
   closePaneRef.current = closePane;
   const onErrorRef = useRef(onError);
@@ -104,7 +112,7 @@ export function useTerminalPaneCloseFlow(params: UseTerminalPaneCloseFlowParams)
           onErrorRef.current?.(error instanceof Error ? error.message : String(error));
         });
     },
-    [client, layoutRef, sessionsRef],
+    [client],
   );
 
   const requestClosePane = useCallback(
@@ -124,7 +132,7 @@ export function useTerminalPaneCloseFlow(params: UseTerminalPaneCloseFlowParams)
       }
       setPendingClose({ paneId, sessionId: action.session.id, busy: false });
     },
-    [bindings, layoutRef, sessionsRef, terminate],
+    [bindings, terminate],
   );
 
   const confirmClose = useCallback(() => {
@@ -136,7 +144,7 @@ export function useTerminalPaneCloseFlow(params: UseTerminalPaneCloseFlowParams)
       return;
     }
     terminate(pendingClose.paneId, session);
-  }, [pendingClose, sessionsRef, terminate]);
+  }, [pendingClose, terminate]);
 
   const cancelClose = useCallback(() => {
     setPendingClose((current) => (current?.busy ? current : null));
@@ -144,8 +152,6 @@ export function useTerminalPaneCloseFlow(params: UseTerminalPaneCloseFlowParams)
 
   // The confirmation belongs to one pane/session pair: it disappears when
   // the pane is closed by other means or the session vanishes from the list.
-  const layout = layoutRef.current;
-  const sessions = sessionsRef.current;
   useEffect(() => {
     if (!pendingClose) return;
     if (!layout.panes[pendingClose.paneId]) {
