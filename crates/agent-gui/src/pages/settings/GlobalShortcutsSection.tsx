@@ -2,6 +2,7 @@ import {
   Keyboard,
   MonitorSmartphone,
   Pin,
+  Search,
   SquarePen,
   X,
   Zap,
@@ -25,6 +26,8 @@ import {
   type GlobalShortcutAction,
   type GlobalShortcutBindings,
   type GlobalShortcutFailure,
+  globalShortcutDisplayToken,
+  globalShortcutKeyDisplayLabel,
   isShortcutModifierToken,
   modifierFromEventCode,
   readGlobalShortcutBindings,
@@ -220,76 +223,8 @@ const NATURAL_WIDTH: Record<KeyboardLayoutId, number> = {
   "104": MAIN_WIDTH + BLOCK_GAP + NAV_WIDTH + BLOCK_GAP + NUM_WIDTH + BOARD_PAD * 2,
 };
 
-/* ============================== 展示辅助 ============================== */
-
-const CODE_DISPLAY: Record<string, string> = {
-  Space: "Space",
-  Tab: "Tab",
-  CapsLock: "Caps",
-  Backspace: "⌫",
-  Backquote: "`",
-  Minus: "-",
-  Equal: "=",
-  BracketLeft: "[",
-  BracketRight: "]",
-  Backslash: "\\",
-  Semicolon: ";",
-  Quote: "'",
-  Comma: ",",
-  Period: ".",
-  Slash: "/",
-  ArrowUp: "↑",
-  ArrowDown: "↓",
-  ArrowLeft: "←",
-  ArrowRight: "→",
-  Insert: "Ins",
-  Delete: "Del",
-  Home: "Home",
-  End: "End",
-  PageUp: "PgUp",
-  PageDown: "PgDn",
-  PrintScreen: "PrtSc",
-  ScrollLock: "ScrLk",
-  Pause: "Pause",
-  ContextMenu: "Menu",
-  NumLock: "NumLock",
-  NumpadDivide: "Num /",
-  NumpadMultiply: "Num *",
-  NumpadSubtract: "Num -",
-  NumpadAdd: "Num +",
-  NumpadDecimal: "Num .",
-  Numpad0: "Num 0",
-  Numpad1: "Num 1",
-  Numpad2: "Num 2",
-  Numpad3: "Num 3",
-  Numpad4: "Num 4",
-  Numpad5: "Num 5",
-  Numpad6: "Num 6",
-  Numpad7: "Num 7",
-  Numpad8: "Num 8",
-  Numpad9: "Num 9",
-};
-
-function keyDisplayLabel(code: string): string {
-  if (code.startsWith("Key") && code.length === 4) return code.slice(3);
-  if (code.startsWith("Digit") && code.length === 6) return code.slice(5);
-  return CODE_DISPLAY[code] ?? code;
-}
-
-/** macOS 上修饰键按系统惯例显示为符号（⌃⇧⌥⌘），其余平台沿用文本。 */
-const MAC_MODIFIER_DISPLAY: Record<ShortcutModifier, string> = {
-  Ctrl: "⌃",
-  Shift: "⇧",
-  Alt: "⌥",
-  Super: "⌘",
-};
-
 function displayToken(token: string): string {
-  if (isShortcutModifierToken(token)) {
-    if (IS_MAC) return MAC_MODIFIER_DISPLAY[token];
-    return token === "Super" ? "Win" : token;
-  }
-  return keyDisplayLabel(token);
+  return globalShortcutDisplayToken(token, IS_MAC);
 }
 
 const MODIFIER_KEY_CODES: Record<ShortcutModifier, string[]> = {
@@ -455,6 +390,12 @@ export function GlobalShortcutsSection() {
       icon: <Pin className="h-4.5 w-4.5" />,
       label: t("settings.shortcutPin"),
       desc: t("settings.shortcutPinDesc"),
+    },
+    {
+      id: "searchConversations",
+      icon: <Search className="h-4.5 w-4.5" />,
+      label: t("settings.shortcutSearchConversations"),
+      desc: t("settings.shortcutSearchConversationsDesc"),
     },
   ];
 
@@ -657,7 +598,7 @@ export function GlobalShortcutsSection() {
 
   const draftTokens = useMemo(() => {
     const tokens = draft.mods.map((mod) => displayToken(mod));
-    if (draft.main) tokens.push(keyDisplayLabel(draft.main));
+    if (draft.main) tokens.push(globalShortcutKeyDisplayLabel(draft.main));
     return tokens;
   }, [draft]);
 
@@ -668,6 +609,7 @@ export function GlobalShortcutsSection() {
     summon: t("settings.shortcutSummon"),
     toggle: t("settings.shortcutToggle"),
     newChat: t("settings.shortcutNewChat"),
+    searchConversations: t("settings.shortcutSearchConversations"),
     pin: t("settings.shortcutPin"),
   };
   const boundEntries: BoundShortcutEntry[] = [];

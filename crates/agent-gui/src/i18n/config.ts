@@ -200,6 +200,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.shortcutToggleDesc": "在前台与隐藏之间切换主窗口",
     "settings.shortcutNewChat": "新建对话",
     "settings.shortcutNewChatDesc": "唤起窗口并立即开始一个全新会话",
+    "settings.shortcutSearchConversations": "搜索会话",
+    "settings.shortcutSearchConversationsDesc": "唤起窗口并搜索已保存的历史会话",
     "settings.shortcutPin": "窗口置顶",
     "settings.shortcutPinDesc": "切换主窗口置顶，让 LiveAgent 浮在其他应用上方",
     "settings.shortcutNotSet": "未设置，点击录制",
@@ -470,6 +472,9 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.shortcutToggleDesc": "Toggle the main window between foreground and hidden",
     "settings.shortcutNewChat": "New Chat",
     "settings.shortcutNewChatDesc": "Bring up the window and start a fresh conversation right away",
+    "settings.shortcutSearchConversations": "Search Conversations",
+    "settings.shortcutSearchConversationsDesc":
+      "Bring up the window and search saved conversation history",
     "settings.shortcutPin": "Pin Window",
     "settings.shortcutPinDesc": "Toggle always-on-top so LiveAgent floats above other apps",
     "settings.shortcutNotSet": "Not set — click to record",
