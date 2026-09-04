@@ -1,9 +1,6 @@
-import { HubTitleBar, usesOverlayTitleBar } from "@liveagent/adapters/hubChrome";
-import { PanelLeft } from "@liveagent/ui/components/IconSet";
+import { HubTitleBar } from "@liveagent/adapters/hubChrome";
 import type { ReactNode } from "react";
-import { useLocale } from "../../i18n";
 import { cn } from "../../lib/shared/utils";
-import { Button } from "../ui/button";
 
 export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
   const { tone = "neutral" } = props;
@@ -32,6 +29,9 @@ export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
   );
 }
 
+// 侧栏开关不在这里渲染：AppWorkbenchChrome(ChatHeader)常驻于所有视图之上，
+// 侧栏收起时已经提供了同一个按钮。Hub 自己再画一个就会在窄屏上叠出两枚
+// PanelLeft(#501 之前 Hub 页面没有顶栏，才需要自带一枚)。
 export function HubHeader(props: {
   icon?: ReactNode;
   title: string;
@@ -39,12 +39,8 @@ export function HubHeader(props: {
   tone?: "amber" | "violet" | "neutral";
   actions?: ReactNode;
   prominent?: boolean;
-  sidebarOpen: boolean;
-  onOpenSidebar: () => void;
 }) {
-  const { icon, title, subtitle, actions, prominent = false, sidebarOpen, onOpenSidebar } = props;
-  const { t } = useLocale();
-  const showSidebarButton = !sidebarOpen && !usesOverlayTitleBar;
+  const { icon, title, subtitle, actions, prominent = false } = props;
   return (
     <>
       <HubTitleBar />
@@ -54,23 +50,10 @@ export function HubHeader(props: {
           prominent ? "pb-5 pt-8" : "pb-3 pt-6",
         )}
       >
-        {showSidebarButton ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onOpenSidebar}
-            title={t("tooltip.openSidebar")}
-            className="absolute left-3 top-5 h-9 w-9 rounded-lg text-muted-foreground hover:bg-background/70 hover:text-foreground"
-          >
-            <PanelLeft className="h-4.5 w-4.5" />
-          </Button>
-        ) : null}
         <div
           className={cn(
             "mx-auto flex w-full max-w-[1320px] gap-4",
             prominent ? "items-end" : "items-center",
-            showSidebarButton && "pl-11 lg:pl-0",
           )}
         >
           {icon ? (

@@ -1443,8 +1443,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 settings={settings}
                 setSettings={setSettings}
                 isAgentMode={isAgentMode}
-                sidebarOpen={sidebarOpen}
-                onOpenSidebar={() => setSidebarOpen(true)}
                 initialSkills={availableSkills}
                 initialSkillsRootDir={skillsRootDir}
                 className="contents"

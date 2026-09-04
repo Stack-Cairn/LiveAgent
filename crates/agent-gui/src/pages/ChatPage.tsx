@@ -4082,8 +4082,6 @@ export function ChatPage(props: ChatPageProps) {
           settings={settings}
           setSettings={setSettings}
           isAgentMode={isAgentMode}
-          sidebarOpen={sidebarOpen}
-          onOpenSidebar={handleOpenSidebar}
           initialSkills={availableSkills}
           initialSkillsRootDir={skillsRootDir}
           className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
