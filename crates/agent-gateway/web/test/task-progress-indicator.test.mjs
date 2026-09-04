@@ -15,6 +15,9 @@ const localeContextPath = fileURLToPath(
 const taskProgressIndicatorPath = fileURLToPath(
   new URL("../../../agent-ui/src/components/chat/TaskProgressIndicator.tsx", import.meta.url),
 );
+const tooltipPath = fileURLToPath(
+  new URL("../../../agent-ui/src/components/ui/tooltip.tsx", import.meta.url),
+);
 
 const labels = {
   title: "Task progress",
@@ -24,65 +27,63 @@ const labels = {
   pending: "Pending",
   paused: "Paused",
   completed: "All completed",
+  taskPaused: "Paused",
+  taskCompleted: "Completed",
 };
 
 function createHookHarness() {
-  const states = [];
-  const refs = [];
-  let stateIndex = 0;
-  let refIndex = 0;
   let idIndex = 0;
   const react = {
-    useState(initialValue) {
-      const index = stateIndex++;
-      if (!(index in states)) {
-        states[index] = typeof initialValue === "function" ? initialValue() : initialValue;
-      }
-      return [
-        states[index],
-        (next) => {
-          states[index] = typeof next === "function" ? next(states[index]) : next;
-        },
-      ];
-    },
-    useRef(initialValue) {
-      const index = refIndex++;
-      if (!(index in refs)) refs[index] = { current: initialValue };
-      return refs[index];
-    },
     useId() {
       return `task-progress-panel-${idIndex++}`;
     },
-    useEffect() {},
+    useState(initial) {
+      return [typeof initial === "function" ? initial() : initial, () => {}];
+    },
   };
   return {
     react,
-    refs,
     render(run) {
-      stateIndex = 0;
-      refIndex = 0;
       idIndex = 0;
       return run();
     },
   };
 }
 
+function createTooltipMock() {
+  let handleIndex = 0;
+  return {
+    createTooltipHandle: () => ({
+      kind: "tooltip-handle",
+      id: handleIndex++,
+      isOpen: false,
+      closeCalls: 0,
+      close() {
+        this.closeCalls += 1;
+      },
+    }),
+    Tooltip: (props) => ({ type: "Tooltip", props }),
+    TooltipTrigger: (props) => ({ type: "TooltipTrigger", props }),
+    TooltipContent: (props) => ({ type: "TooltipContent", props }),
+  };
+}
+
 function createIndicatorHarness() {
   const hooks = createHookHarness();
+  const tooltip = createTooltipMock();
   const loader = createWebModuleLoader({
     rootDir,
     mocks: {
       react: hooks.react,
       [iconsPath]: {
-        CheckCircle2: (props) => ({ type: "CheckCircle2", props }),
-        Circle: (props) => ({ type: "Circle", props }),
-        Loader2: (props) => ({ type: "Loader2", props }),
+        Check: (props) => ({ type: "Check", props }),
       },
       [utilsPath]: {
         cn(...values) {
           return values.filter(Boolean).join(" ");
         },
       },
+      [tooltipPath]: tooltip,
     },
   });
   const { TaskProgressIndicator } = loader.loadModule(
@@ -159,193 +160,229 @@ function treeText(node) {
   return treeText(node.props?.children);
 }
 
+function componentsNamed(node, name) {
+  return findAll(node, (child) => typeof child.type === "function" && child.type.name === name);
+}
+
+function statusIcons(node) {
+  return componentsNamed(node, "TaskStatusIcon");
+}
+
 function readIndicator(tree) {
+  const allButtons = findAll(tree, (node) => node.type === "button");
+  const trigger = allButtons.find((button) => button.props?.["data-task-progress-toggle"] === "");
   return {
     root: tree,
-    button: findAll(tree, (node) => node.type === "button")[0],
+    trigger,
+    otherButtons: allButtons.filter((button) => button !== trigger),
+    panel: findAll(tree, (node) => node.props?.["data-task-progress-panel"] === "")[0],
+    list: findAll(tree, (node) => node.type === "ul")[0],
     progress: findAll(tree, (node) => node.props?.role === "progressbar")[0],
-    panel: findAll(tree, (node) => node.type === "section")[0],
+    rows: findAll(tree, (node) => typeof node.props?.["data-task-status"] === "string"),
+    subjectTriggers: componentsNamed(tree, "TooltipTrigger"),
+    tooltip: componentsNamed(tree, "Tooltip")[0],
   };
 }
 
-function installFakeWindow() {
-  const previousWindow = globalThis.window;
-  const timers = new Map();
-  const delays = [];
-  let nextId = 1;
-  globalThis.window = {
-    setTimeout(callback, delay) {
-      const id = nextId++;
-      timers.set(id, callback);
-      delays.push(delay);
-      return id;
-    },
-    clearTimeout(id) {
-      timers.delete(id);
-    },
-  };
-  return {
-    delays,
-    runTimers() {
-      const callbacks = Array.from(timers.values());
-      timers.clear();
-      for (const callback of callbacks) callback();
-    },
-    restore() {
-      if (previousWindow === undefined) delete globalThis.window;
-      else globalThis.window = previousWindow;
-    },
-  };
-}
+test("web renders a compact trigger whose task list never occupies layout space", () => {
+  const { root, trigger, otherButtons, panel, progress, rows } = readIndicator(
+    createIndicatorHarness().render(),
+  );
 
-test("web renders props-only copy, progress semantics, and an absolute reduced-motion panel", () => {
-  const indicator = createIndicatorHarness();
-  const { root, button, progress, panel } = readIndicator(indicator.render());
+  assert.equal(root.type, "div");
+  assert.equal(root.props["data-task-progress-root"], "");
+  // 药丸按内容收缩，不再撑成固定宽度的常驻卡片。
+  assert.match(root.props.className, /\binline-flex\b/);
+  assert.match(root.props.className, /group\/task-progress/);
+  assert.doesNotMatch(root.props.className, /max-w-\[440px\]/);
+  assert.doesNotMatch(root.props.className, /\bmb-4\b/);
 
-  assert.equal(root.type, "fieldset");
-  assert.match(root.props.className, /\bmb-3\b/);
-  assert.equal(button.props["aria-expanded"], false);
-  assert.equal(button.props["aria-controls"], panel.props.id);
-  assert.equal(button.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");
+  // 触发器只留状态图标与步进文案。
+  assert.equal(treeText(trigger), "Step 2 of 3");
+  assert.equal(trigger.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");
+  assert.equal(trigger.props["aria-describedby"], panel.props.id);
+  assert.equal(trigger.props.onClick, undefined);
+  assert.equal(otherButtons.length, 0);
+  assert.equal(statusIcons(trigger)[0].props.state, "running");
+
+  // 浮层绝对定位在触发器之上，默认透明且不吃指针，hover / 键盘聚焦才显形。
+  assert.equal(panel.props.role, "tooltip");
+  assert.match(panel.props.className, /\babsolute\b/);
+  assert.match(panel.props.className, /\bbottom-full\b/);
+  assert.match(panel.props.className, /\bpointer-events-none\b/);
+  assert.match(panel.props.className, /\bopacity-0\b/);
+  assert.match(panel.props.className, /group-hover\/task-progress:opacity-100/);
+  assert.match(panel.props.className, /group-hover\/task-progress:pointer-events-auto/);
+  assert.match(panel.props.className, /group-focus-within\/task-progress:opacity-100/);
+  assert.match(panel.props.className, /motion-reduce:transition-none/);
+  assert.equal(panel.props.hidden, undefined);
+
+  assert.equal(progress.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");
   assert.deepEqual(
     [progress.props["aria-valuemin"], progress.props["aria-valuenow"], progress.props["aria-valuemax"]],
     [0, 1, 3],
   );
-  assert.equal(panel.props["aria-hidden"], true);
-  assert.match(panel.props.className, /\babsolute\b/);
-  assert.match(panel.props.className, /motion-reduce:transition-none/);
-  assert.match(button.props.className, /motion-reduce:transition-none/);
-  const completedCount = findAll(button, (node) => treeText(node) === labels.completedCount).at(-1);
-  assert.ok(completedCount);
-  assert.doesNotMatch(completedCount.props.className, /\bhidden\b/);
-  assert.match(completedCount.props.className, /\bshrink-0\b/);
-  assert.match(treeText(root), /Task progress/);
-  assert.match(treeText(root), /Implement/);
-  assert.doesNotMatch(treeText(root), /Implementing/);
+
+  assert.equal(rows.length, 3);
+  assert.match(treeText(panel), /Inspect/);
+  assert.match(treeText(panel), /Implement/);
+  assert.match(treeText(panel), /Verify/);
 });
 
-test("web keeps task labels stable and scopes transition motion to the changed row status", () => {
-  const indicator = createIndicatorHarness();
-  const runningSnapshot = createSnapshot({
-    tasks: [
-      {
-        id: "stable",
-        subject: "Stable task",
-        description: "Stable completion criteria",
-        status: "in_progress",
-        activeForm: "Changing label",
-      },
-    ],
-    completedCount: 0,
-    totalCount: 1,
-    currentStep: 1,
-    state: "in_progress",
-  });
-  const runningTree = indicator.render({ snapshot: runningSnapshot });
-  const runningRow = findAll(runningTree, (node) => node.type === "li")[0];
-  const statusVisual = findAll(
-    runningRow,
-    (node) => typeof node.props?.className === "string" && node.props.className.includes("animate-in"),
-  )[0];
+test("web lists task subjects only, dropping descriptions and per-row disclosure", () => {
+  const { panel, rows } = readIndicator(createIndicatorHarness().render());
 
-  assert.equal(treeText(runningRow), "Stable task");
+  assert.deepEqual(
+    rows.map((row) => row.type),
+    ["li", "li", "li"],
+  );
+  assert.doesNotMatch(treeText(panel), /completion criteria/);
+  assert.doesNotMatch(treeText(panel), /Inspecting|Implementing|Verifying/);
+  for (const row of rows) {
+    assert.equal(row.props["aria-expanded"], undefined);
+    assert.equal(row.props["aria-controls"], undefined);
+  }
+});
+
+test("web clamps long subjects to two lines and reveals the full text through one shared tooltip", async () => {
+  const { list, rows, subjectTriggers, tooltip } = readIndicator(
+    createIndicatorHarness().render(),
+  );
+
+  // 列表容器本身永不出现横向滚动条：无空格长串在行内折行，其余溢出一律裁掉。
+  assert.match(list.props.className, /\boverflow-x-hidden\b/);
+  assert.match(list.props.className, /\boverflow-y-auto\b/);
+
+  // 每一行都是同一个 tooltip 的分离式触发器，payload 携带完整标题。
+  assert.equal(subjectTriggers.length, rows.length);
+  const handle = tooltip.props.handle;
+  assert.equal(handle.kind, "tooltip-handle");
+  const subjects = ["Inspect", "Implement", "Verify"];
+  for (const [index, subjectTrigger] of subjectTriggers.entries()) {
+    assert.equal(subjectTrigger.props.handle, handle);
+    assert.equal(subjectTrigger.props.payload, subjects[index]);
+    assert.equal(subjectTrigger.props.children, subjects[index]);
+    assert.equal(subjectTrigger.props.closeOnClick, false);
+    assert.equal(subjectTrigger.props.render.type, "span");
+    const textClass = subjectTrigger.props.render.props.className;
+    assert.match(textClass, /\bline-clamp-2\b/);
+    assert.match(textClass, /\bbreak-words\b/);
+    assert.match(textClass, /\bmin-w-0\b/);
+    assert.match(textClass, /\bflex-1\b/);
+  }
+  // 运行中的行加粗、已完成的行降为次要色，与之前的行样式一致。
+  assert.match(subjectTriggers[0].props.render.props.className, /text-muted-foreground/);
+  assert.match(subjectTriggers[1].props.render.props.className, /font-medium/);
+
+  // 只有真被 line-clamp 截断的行才允许弹出；完整可见的行取消这次打开。
+  assert.equal(tooltip.props.disableHoverablePopup, true);
+  const attemptOpen = (open, trigger) => {
+    let canceled = false;
+    tooltip.props.onOpenChange(open, {
+      trigger,
+      cancel() {
+        canceled = true;
+      },
+    });
+    return canceled;
+  };
+  assert.equal(attemptOpen(true, { scrollHeight: 60, clientHeight: 40 }), false);
+  assert.equal(attemptOpen(true, { scrollHeight: 40, clientHeight: 40 }), true);
+  // 亚像素舍入带来的 1px 差值不算截断。
+  assert.equal(attemptOpen(true, { scrollHeight: 41, clientHeight: 40 }), true);
+  assert.equal(attemptOpen(true, undefined), true);
+  // 关闭请求从不拦截，否则弹层会卡在打开态。
+  assert.equal(attemptOpen(false, undefined), false);
+  // 弹层本就没开时，否决不会多余地触发一次关闭。
+  await Promise.resolve();
+  assert.equal(handle.closeCalls, 0);
+
+  // 弹层还挂在上一条被截断的行上、指针直接滑进相邻完整行：hover 逻辑把它当作
+  // "换触发器"而不主动收起，这里否决新行的同时必须把旧弹层关掉，否则会卡住不动。
+  handle.isOpen = true;
+  assert.equal(attemptOpen(true, { scrollHeight: 20, clientHeight: 20 }), true);
+  await Promise.resolve();
+  assert.equal(handle.closeCalls, 1);
+  // 换到另一条同样被截断的行则交给 tooltip 自己迁移锚点，不能误关。
+  assert.equal(attemptOpen(true, { scrollHeight: 60, clientHeight: 40 }), false);
+  await Promise.resolve();
+  assert.equal(handle.closeCalls, 1);
+
+  // 弹层内容就是当前触发行的完整标题，且不吃指针，避免盖住上一行时把外层 hover 面板打断。
+  const content = tooltip.props.children({ payload: "Implement completion criteria" });
+  assert.equal(content.type.name, "TooltipContent");
+  assert.equal(content.props.children, "Implement completion criteria");
+  assert.equal(content.props.side, "top");
+  assert.match(content.props.className, /\bpointer-events-none\b/);
+  assert.match(content.props.className, /\bbreak-words\b/);
+});
+
+test("web keeps task labels stable and scopes the spinning ring to the running row", () => {
+  const indicator = createIndicatorHarness();
+  const runningRow = readIndicator(
+    indicator.render({
+      snapshot: createSnapshot({
+        tasks: [
+          {
+            id: "stable",
+            subject: "Stable task",
+            description: "Stable completion criteria",
+            status: "in_progress",
+            activeForm: "Changing label",
+          },
+        ],
+        completedCount: 0,
+        totalCount: 1,
+        currentStep: 1,
+        state: "in_progress",
+      }),
+    }),
+  ).rows[0];
+
+  assert.match(treeText(runningRow), /Stable task/);
+  assert.doesNotMatch(treeText(runningRow), /Changing label/);
   assert.equal(runningRow.props["data-task-status"], "in_progress");
   assert.equal(runningRow.props["aria-current"], "step");
-  assert.match(runningRow.props.className, /transition-colors/);
-  assert.match(statusVisual.props.className, /motion-reduce:animate-none/);
+  assert.equal(statusIcons(runningRow)[0].props.state, "running");
 
-  const completedTree = indicator.render({
-    snapshot: createSnapshot({
-      tasks: [
-        {
-          id: "stable",
-          subject: "Stable task",
-          description: "Stable completion criteria",
-          status: "completed",
-          activeForm: "Changed again",
-        },
-      ],
-      completedCount: 1,
-      totalCount: 1,
-      currentStep: 1,
-      state: "completed",
+  const completedRow = readIndicator(
+    indicator.render({
+      snapshot: createSnapshot({
+        tasks: [
+          {
+            id: "stable",
+            subject: "Stable task",
+            description: "Stable completion criteria",
+            status: "completed",
+            activeForm: "Changed again",
+          },
+        ],
+        completedCount: 1,
+        totalCount: 1,
+        currentStep: 1,
+        state: "completed",
+      }),
     }),
-  });
-  const completedRow = findAll(completedTree, (node) => node.type === "li")[0];
-  assert.equal(treeText(completedRow), "Stable task");
+  ).rows[0];
+
+  assert.match(treeText(completedRow), /Stable task/);
+  assert.doesNotMatch(treeText(completedRow), /Changed again/);
   assert.equal(completedRow.props["data-task-status"], "completed");
   assert.equal(completedRow.props["aria-current"], undefined);
+  assert.equal(statusIcons(completedRow)[0].props.state, "completed");
 });
 
-test("web hover and keyboard focus expand, then collapse only after the close delay", () => {
-  const fakeWindow = installFakeWindow();
-  const previousHTMLElement = globalThis.HTMLElement;
-  globalThis.HTMLElement = class TestHTMLElement {
-    constructor(focusVisible) {
-      this.focusVisible = focusVisible;
-    }
-    matches(selector) {
-      return selector === ":focus-visible" && this.focusVisible;
-    }
-  };
-  try {
-    const indicator = createIndicatorHarness();
-    let view = readIndicator(indicator.render());
-    view.root.props.onPointerEnter({ pointerType: "mouse" });
-    view = readIndicator(indicator.render());
-    assert.equal(view.button.props["aria-expanded"], true);
-
-    view.root.props.onPointerLeave({ pointerType: "mouse" });
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], true);
-    assert.equal(fakeWindow.delays.at(-1), 140);
-    fakeWindow.runTimers();
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], false);
-
-    view = readIndicator(indicator.render());
-    view.root.props.onFocusCapture({ target: new globalThis.HTMLElement(true) });
-    view = readIndicator(indicator.render());
-    assert.equal(view.button.props["aria-expanded"], true);
-    view.root.props.onBlurCapture({
-      currentTarget: { contains: () => false },
-      relatedTarget: null,
-    });
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], true);
-    assert.equal(fakeWindow.delays.at(-1), 140);
-    fakeWindow.runTimers();
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], false);
-  } finally {
-    fakeWindow.restore();
-    if (previousHTMLElement === undefined) delete globalThis.HTMLElement;
-    else globalThis.HTMLElement = previousHTMLElement;
-  }
-});
-
-test("web Escape closes while touch clicks toggle", () => {
-  const fakeWindow = installFakeWindow();
-  try {
-    const indicator = createIndicatorHarness();
-    let view = readIndicator(indicator.render());
-    view.button.props.onPointerDown({ pointerType: "touch" });
-    view.button.props.onClick();
-    view = readIndicator(indicator.render());
-    assert.equal(view.button.props["aria-expanded"], true);
-
-    view.root.props.onKeyDown({ key: "Escape" });
-    view = readIndicator(indicator.render());
-    assert.equal(view.button.props["aria-expanded"], false);
-
-    view.button.props.onPointerDown({ pointerType: "touch" });
-    view.button.props.onClick();
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], true);
-    readIndicator(indicator.render()).button.props.onClick();
-    assert.equal(readIndicator(indicator.render()).button.props["aria-expanded"], false);
-  } finally {
-    fakeWindow.restore();
-  }
-});
-
-test("web shows pending, paused, and completed states without auto-dismissing completion", () => {
+test("web reflects pending, paused, and completed states in the trigger and rows", () => {
   const indicator = createIndicatorHarness();
+
+  const paused = readIndicator(indicator.render({ isConversationRunning: false }));
+  assert.equal(statusIcons(paused.trigger)[0].props.state, "paused");
+  assert.equal(statusIcons(paused.rows[0])[0].props.state, "completed");
+  assert.equal(statusIcons(paused.rows[1])[0].props.state, "paused");
+  assert.equal(statusIcons(paused.rows[2])[0].props.state, "pending");
+  assert.match(paused.progress.props["aria-label"], /Paused/);
+  assert.match(treeText(paused.panel), /Paused/);
+
   const pending = createSnapshot({
     tasks: [
       {
@@ -361,30 +398,23 @@ test("web shows pending, paused, and completed states without auto-dismissing co
     currentStep: 1,
     state: "pending",
   });
-  assert.match(treeText(indicator.render({ snapshot: pending })), /Pending/);
-  assert.match(
-    treeText(indicator.render({ snapshot: pending, isConversationRunning: false })),
-    /Paused/,
-  );
+  const pendingView = readIndicator(indicator.render({ snapshot: pending }));
+  assert.equal(statusIcons(pendingView.trigger)[0].props.state, "pending");
+  assert.equal(treeText(pendingView.trigger), "Step 2 of 3");
+  assert.match(treeText(pendingView.panel), /Pending/);
 
-  const completedTasks = [
-    {
-      id: "done",
-      subject: "Done",
-      description: "Done completion criteria",
-      status: "completed",
-      activeForm: "Finishing",
-    },
-  ];
   const completed = createSnapshot({
-    tasks: completedTasks,
-    completedCount: 1,
-    totalCount: 1,
-    currentStep: 1,
+    tasks: createSnapshot().tasks.map((task) => ({ ...task, status: "completed" })),
+    completedCount: 3,
+    currentStep: 3,
     state: "completed",
   });
-  assert.match(treeText(indicator.render({ snapshot: completed })), /All completed/);
-  assert.match(treeText(indicator.render({ snapshot: completed })), /All completed/);
+  const completedView = readIndicator(indicator.render({ snapshot: completed }));
+  assert.equal(statusIcons(completedView.trigger)[0].props.state, "completed");
+  // 计划跑完后药丸改用汇总文案，步进数字已无信息量。
+  assert.equal(treeText(completedView.trigger), "All completed");
+  assert.match(completedView.progress.props["aria-label"], /All completed/);
+  assert.equal(completedView.rows.length, 3);
 });
 
 test("web uses the shared localized task progress bar", () => {
@@ -397,6 +427,8 @@ test("web uses the shared localized task progress bar", () => {
     "chat.taskProgress.pending": "Pending",
     "chat.taskProgress.paused": "Paused",
     "chat.taskProgress.completed": "All completed",
+    "chat.taskProgress.taskPaused": "Paused",
+    "chat.taskProgress.taskCompleted": "Completed",
   };
   const loader = createWebModuleLoader({
     rootDir,

@@ -24,6 +24,26 @@ test("desktop transcript root is a container for pane-relative degradation", () 
   assert.match(rootClass[1], /(^| )@container( |$)/);
 });
 
+test("composer derives its body-aligned width from the live transcript width", () => {
+  const surfaceSource = read("../../src/pages/chat/surfaces/ConversationSurface.tsx");
+  const paneHostSource = read("../../src/pages/chat/surfaces/ConversationPaneHost.tsx");
+  const widthControlsSource = read(
+    "../../../agent-ui/src/pages/chat/transcript/TranscriptWidthControls.tsx",
+  );
+  const composerSource = read("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx");
+
+  assert.match(surfaceSource, /data-chat-width-owner=""/);
+  assert.match(surfaceSource, /\[CHAT_TRANSCRIPT_WIDTH_CSS_VAR\]: `\$\{contentWidth\}px`/);
+  assert.match(paneHostSource, /contentWidth=\{transcript\.contentWidth\}/);
+  assert.match(widthControlsSource, /closest<HTMLElement>\("\[data-chat-width-owner\]"\)/);
+  assert.match(
+    composerSource,
+    /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-4\.75rem\)\]/,
+  );
+  assert.match(composerSource, /w-\[calc\(100%-2\.25rem\)\]/);
+  assert.match(composerSource, /translate-x-\[18px\]/);
+});
+
 test("FloorNavRail clamps its panel to the container, not the viewport", () => {
   const source = read("../../../agent-ui/src/pages/chat/transcript/FloorNavRail.tsx");
   assert.match(source, /max-w-\[calc\(100cqw-2rem\)\]/);

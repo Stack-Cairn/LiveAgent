@@ -8,7 +8,6 @@ import {
 } from "@liveagent/app/lib/settings";
 import {
   AudioLines,
-  Check,
   ClipboardPaste,
   ExternalLink,
   Eye,
@@ -64,8 +63,9 @@ import {
   resolveModelInputModalities,
 } from "@liveagent/ui/lib/models/modelCatalog";
 import {
-  CLI_IDENTITY_PROVIDER_IDS,
   CLI_IDENTITY_USER_AGENTS,
+  isCliIdentityProviderId,
+  listCliIdentityProviderIds,
 } from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -102,13 +102,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     activePanel,
     addCustomHeader,
     addingModel,
-    allVisibleModelsSelected,
+    allVisibleModelsActive,
     apiKey,
     apiKeyForRequest,
     apiKeyIsRedactedDisplay,
     applyHeaderSuggestion,
     applyCliIdentityHeaders,
-    applyModelBulkState,
     baseUrl,
     canOverrideModelInputModalities,
     canSaveEditingModel,
@@ -120,7 +119,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     editingModelContextWindow,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
-    exitModelBulkMode,
     fetchError,
     fetchingModels,
     focusCustomHeader,
@@ -146,10 +144,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     isFullUrl,
     isGatewayWebui,
     matchedBalanceProviders,
-    modelBulkDisableCount,
-    modelBulkEnableCount,
-    modelBulkMode,
-    modelBulkSelection,
     modelListRef,
     modelScrollContainerRef,
     modelSearch,
@@ -173,7 +167,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     requestClose,
     requestFormat,
     saveInlineModelSettings,
-    selectVisibleModels,
     setActivePanel,
     setAddingModel,
     setApiKey,
@@ -187,7 +180,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setHeaderSuggest,
     setHeaderSuggestActive,
     setIsFullUrl,
-    setModelBulkSelection,
     setModelSearch,
     setModelsUrl,
     setName,
@@ -210,8 +202,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     commitStreamRetryCountInput,
     t,
     toggleModel,
-    toggleModelBulkMode,
-    toggleModelBulkSelection,
+    toggleVisibleModelsActive,
     typeLabel,
     updateCustomHeader,
     usageQuery,
@@ -221,6 +212,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     usageVariableApiKey,
     usageVariableBaseUrl,
     useSystemProxy,
+    visibleActiveCount,
     visibleModels,
   } = viewModel;
   return (
@@ -279,7 +271,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 activePanel === "request" && "bg-primary/10 font-medium text-primary",
               )}
               onClick={() => {
-                exitModelBulkMode();
                 setActivePanel("request");
               }}
               aria-current={activePanel === "request" ? "page" : undefined}
@@ -306,7 +297,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 activePanel === "usage" && "bg-primary/10 font-medium text-primary",
               )}
               onClick={() => {
-                exitModelBulkMode();
                 setActivePanel("usage");
               }}
               aria-current={activePanel === "usage" ? "page" : undefined}
@@ -472,24 +462,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </div>
                     <Button
                       type="button"
-                      variant={modelBulkMode ? "secondary" : "outline"}
-                      size="sm"
-                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
-                      aria-pressed={modelBulkMode}
-                      title={
-                        modelBulkMode
-                          ? t("settings.skillsBulkDone")
-                          : t("settings.skillsBulkSelect")
-                      }
-                      onClick={toggleModelBulkMode}
-                    >
-                      <List className="h-3.5 w-3.5" />
-                      {modelBulkMode
-                        ? t("settings.skillsBulkDone")
-                        : t("settings.skillsBulkSelect")}
-                    </Button>
-                    <Button
-                      type="button"
                       variant="outline"
                       size="sm"
                       className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
@@ -511,28 +483,30 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </Button>
                   </div>
 
-                  {modelBulkMode ? (
-                    <div className="flex flex-wrap items-center justify-end gap-1.5 border-b bg-background px-2.5 py-2 dark:bg-popover">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2.5 text-xs"
-                        disabled={visibleModels.length === 0 || allVisibleModelsSelected}
-                        onClick={selectVisibleModels}
-                      >
-                        {t("settings.skillsBulkSelectAll")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2.5 text-xs"
-                        disabled={modelBulkSelection.size === 0}
-                        onClick={() => setModelBulkSelection(new Set())}
-                      >
-                        {t("settings.skillsBulkClear")}
-                      </Button>
+                  {visibleModels.length > 0 ? (
+                    <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-1">
+                      <div className="flex shrink-0 items-center gap-1">
+                        {/* w-5 占位与行内拖拽把手同宽，保证总开关和每行开关纵向对齐。 */}
+                        <span className="w-5 shrink-0" aria-hidden="true" />
+                        <DialogSwitch
+                          checked={allVisibleModelsActive}
+                          onCheckedChange={toggleVisibleModelsActive}
+                          ariaLabel={
+                            allVisibleModelsActive
+                              ? t("settings.disableAllModels")
+                              : t("settings.enableAllModels")
+                          }
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {modelSearchQuery
+                          ? t("settings.matchedModelsEnabledCount")
+                              .replace("{enabled}", String(visibleActiveCount))
+                              .replace("{total}", String(visibleModels.length))
+                          : t("settings.modelsEnabledCount")
+                              .replace("{enabled}", String(visibleActiveCount))
+                              .replace("{total}", String(visibleModels.length))}
+                      </span>
                     </div>
                   ) : null}
 
@@ -592,7 +566,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           inputModalities?.includes(modality),
                         );
                         return (
-                          // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useAriaPropsSupportedByRole: The row becomes an accessible checkbox only while bulk mode is active.
                           <div
                             key={model.id}
                             {...getModelReorderProps(model.id)}
@@ -600,69 +573,18 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             className={cn(
                               "settings-model-row group transition-colors duration-500 hover:bg-accent/30",
                               draggingModelId === model.id && "bg-accent shadow-lg",
-                              modelBulkMode && "cursor-pointer",
-                              modelBulkSelection.has(model.id) && "bg-primary/5",
                               newModelPhase === "visible" && "bg-primary/10 hover:bg-primary/15",
                               newModelPhase === "fading" && "bg-primary/[0.04]",
                             )}
-                            role={modelBulkMode ? "checkbox" : undefined}
-                            aria-checked={
-                              modelBulkMode ? modelBulkSelection.has(model.id) : undefined
-                            }
-                            tabIndex={modelBulkMode ? 0 : undefined}
-                            onClick={() => {
-                              if (modelBulkMode) toggleModelBulkSelection(model.id);
-                            }}
-                            onKeyDown={(event) => {
-                              if (
-                                !modelBulkMode ||
-                                event.target !== event.currentTarget ||
-                                (event.key !== "Enter" && event.key !== " ")
-                              ) {
-                                return;
-                              }
-                              event.preventDefault();
-                              toggleModelBulkSelection(model.id);
-                            }}
                           >
                             <div className="flex items-center gap-2 px-3 py-2 max-[720px]:grid max-[720px]:grid-cols-[auto_minmax(0,1fr)_2.5rem_2.5rem]">
                               <div className="flex shrink-0 items-center gap-1">
                                 {renderModelDragHandle(model.id, model.id)}
-                                {modelBulkMode ? (
-                                  <label
-                                    className="relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
-                                    title={t("settings.skillsHubBulkSelectLabel")}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onKeyDown={(event) => event.stopPropagation()}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      className="peer sr-only"
-                                      checked={modelBulkSelection.has(model.id)}
-                                      aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${model.id}`}
-                                      onChange={() => toggleModelBulkSelection(model.id)}
-                                    />
-                                    <span
-                                      aria-hidden="true"
-                                      className={cn(
-                                        "pointer-events-none flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
-                                        modelBulkSelection.has(model.id)
-                                          ? "border-primary bg-primary text-primary-foreground"
-                                          : "border-border bg-background group-hover:border-foreground/40",
-                                      )}
-                                    >
-                                      {modelBulkSelection.has(model.id) ? (
-                                        <Check className="h-3 w-3" />
-                                      ) : null}
-                                    </span>
-                                  </label>
-                                ) : (
-                                  <DialogSwitch
-                                    checked={activeModels.has(model.id)}
-                                    onCheckedChange={() => toggleModel(model.id)}
-                                    ariaLabel={model.id}
-                                  />
-                                )}
+                                <DialogSwitch
+                                  checked={activeModels.has(model.id)}
+                                  onCheckedChange={() => toggleModel(model.id)}
+                                  ariaLabel={model.id}
+                                />
                               </div>
                               <div className="min-w-0 flex-1 max-[720px]:col-[2/5] max-[720px]:row-start-1">
                                 <div className="flex min-w-0 items-center gap-2">
@@ -713,7 +635,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   "h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground max-[720px]:col-start-3 max-[720px]:row-start-2",
                                   isEditingModel && "bg-primary/10 text-primary",
                                 )}
-                                disabled={modelBulkMode}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   openModelSettings(model.id);
@@ -728,7 +649,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 variant="ghost"
                                 size="icon"
                                 className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-[720px]:col-start-4 max-[720px]:row-start-2"
-                                disabled={modelBulkMode}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   removeModel(model.id);
@@ -1126,20 +1046,25 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         <Fingerprint className="h-3.5 w-3.5" />
                         {t("settings.cliIdentityHeaders")}
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuContent align="end" className="w-64">
                         <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
                           {t("settings.cliIdentityHeadersHint")}
                         </DropdownMenuLabel>
-                        {CLI_IDENTITY_PROVIDER_IDS.map((identity) => (
+                        {listCliIdentityProviderIds(providerType).map((identity) => (
                           <DropdownMenuItem
                             key={identity}
                             className="items-center gap-2 rounded-md py-1.5 text-xs"
                             onSelect={() => applyCliIdentityHeaders(identity)}
                           >
-                            <span className="font-medium leading-5">
+                            <span className="shrink-0 whitespace-nowrap font-medium leading-5">
                               {t(`settings.cliIdentity.${identity}`)}
                             </span>
-                            <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                            {isCliIdentityProviderId(providerType) && identity === providerType ? (
+                              <span className="shrink-0 whitespace-nowrap rounded bg-primary/10 px-1 py-px text-[10px] font-medium text-primary">
+                                {t("settings.cliIdentityRecommended")}
+                              </span>
+                            ) : null}
+                            <span className="ml-auto min-w-0 truncate font-mono text-[10px] text-muted-foreground">
                               {CLI_IDENTITY_USER_AGENTS[identity].split(" ")[0]}
                             </span>
                           </DropdownMenuItem>
@@ -2010,56 +1935,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             )}
           </DialogBody>
         </div>
-
-        {modelBulkMode && activePanel === "general" ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t bg-background px-4 py-2 text-xs dark:bg-popover max-[420px]:gap-1 max-[420px]:px-2.5">
-            <span className="whitespace-nowrap text-foreground/85">
-              {t("settings.skillsBulkSelectedCount").replace(
-                "{count}",
-                String(modelBulkSelection.size),
-              )}
-            </span>
-            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
-              ·
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2.5 text-xs max-[420px]:px-2"
-              disabled={modelBulkEnableCount === 0}
-              onClick={() => applyModelBulkState(true)}
-            >
-              {`${t("settings.skillsBulkEnable")} (${modelBulkEnableCount})`}
-            </Button>
-            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
-              ·
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2.5 text-xs max-[420px]:px-2"
-              disabled={modelBulkDisableCount === 0}
-              onClick={() => applyModelBulkState(false)}
-            >
-              {`${t("settings.skillsBulkDisable")} (${modelBulkDisableCount})`}
-            </Button>
-            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
-              ·
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-7 gap-1 px-2.5 text-xs max-[420px]:px-2"
-              onClick={exitModelBulkMode}
-            >
-              <X className="h-3.5 w-3.5" />
-              {t("settings.skillsBulkDone")}
-            </Button>
-          </div>
-        ) : null}
 
         <DialogFooter className="bg-muted/20 py-3.5">
           <DialogActions>

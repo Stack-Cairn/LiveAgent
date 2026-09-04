@@ -52,6 +52,10 @@ export type ChatHistorySidebarProps = {
   renameDraft: string;
   isOpen: boolean;
   fontScale?: number;
+  /** Incremented by the desktop host when its configured search shortcut fires. */
+  conversationSearchRequestKey?: number;
+  /** Display label for the enabled desktop shortcut (for example, ⌘⇧K). */
+  conversationSearchShortcutLabel?: string;
   activeView?: "chat" | "skills-hub" | "mcp-hub";
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -198,6 +202,8 @@ export type ChatHistorySidebarContainerSource = Required<
     | "currentConversationId"
     | "isOpen"
     | "fontScale"
+    | "conversationSearchRequestKey"
+    | "conversationSearchShortcutLabel"
     | "onNewConversation"
     | "onSelectConversation"
     | "canShareConversations"
@@ -263,7 +269,12 @@ type ChatHistorySidebarBaseState = Pick<
 export function buildChatHistorySidebarBaseProps(
   source: Pick<
     ChatHistorySidebarContainerSource,
-    "currentConversationId" | "isOpen" | "fontScale" | "activeView"
+    | "currentConversationId"
+    | "isOpen"
+    | "fontScale"
+    | "conversationSearchRequestKey"
+    | "conversationSearchShortcutLabel"
+    | "activeView"
   >,
   state: ChatHistorySidebarBaseState,
 ) {
@@ -285,6 +296,8 @@ export function buildChatHistorySidebarBaseProps(
     renameDraft: state.renameDraft,
     isOpen: source.isOpen,
     fontScale: source.fontScale,
+    conversationSearchRequestKey: source.conversationSearchRequestKey,
+    conversationSearchShortcutLabel: source.conversationSearchShortcutLabel,
     activeView: source.activeView,
   };
 }

@@ -18,6 +18,8 @@ export function createTaskProgressIndicatorLabels(
     pending: translate("chat.taskProgress.pending"),
     paused: translate("chat.taskProgress.paused"),
     completed: translate("chat.taskProgress.completed"),
+    taskPaused: translate("chat.taskProgress.taskPaused"),
+    taskCompleted: translate("chat.taskProgress.taskCompleted"),
   };
 }
 

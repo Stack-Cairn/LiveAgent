@@ -21,6 +21,23 @@ import {
   type MentionSuggestion,
 } from "./MentionComposerModel";
 
+export const MENTION_POPUP_MAX_LIST_HEIGHT = 240;
+export const MENTION_POPUP_MIN_LIST_HEIGHT = 76;
+
+const MENTION_POPUP_VIEWPORT_MARGIN = 8;
+const MENTION_POPUP_GAP = 8;
+const MENTION_POPUP_HEADER_HEIGHT = 38;
+
+export function resolveMentionPopupListMaxHeight(anchorTop: number) {
+  const availableAbove = Math.floor(
+    anchorTop - MENTION_POPUP_VIEWPORT_MARGIN - MENTION_POPUP_GAP - MENTION_POPUP_HEADER_HEIGHT,
+  );
+  return Math.max(
+    MENTION_POPUP_MIN_LIST_HEIGHT,
+    Math.min(MENTION_POPUP_MAX_LIST_HEIGHT, availableAbove),
+  );
+}
+
 function conversationUpdatedAtLabel(value: number | undefined, locale: string) {
   if (!value) return "";
   const date = new Date(value);
@@ -82,8 +99,15 @@ export function Popup({
       const rect = inputSurface.getBoundingClientRect();
       const horizontal = resolveMentionPopupHorizontalLayout(rect, window.innerWidth);
       popup.style.left = `${horizontal.left}px`;
-      popup.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 8)}px`;
+      popup.style.bottom = `${Math.max(
+        MENTION_POPUP_VIEWPORT_MARGIN,
+        window.innerHeight - rect.top + MENTION_POPUP_GAP,
+      )}px`;
       popup.style.width = `${horizontal.width}px`;
+      const list = listRef.current;
+      if (list) {
+        list.style.maxHeight = `${resolveMentionPopupListMaxHeight(rect.top)}px`;
+      }
     };
 
     update();
@@ -159,7 +183,7 @@ export function Popup({
                   ? t("chat.composer.filesAndFolders")
                   : t("chat.composer.conversations")
         }
-        className="mention-popup-scroll relative flex max-h-[320px] flex-col overflow-y-auto px-2 pb-2"
+        className="mention-popup-scroll relative flex flex-col overflow-y-auto px-2 pb-2"
       >
         {isLoading && (
           <div className="px-2 py-2 text-xs text-muted-foreground">
@@ -230,7 +254,11 @@ export function Popup({
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
-                "mention-popup-item group flex min-h-11 shrink-0 cursor-pointer items-center justify-start gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
+                // Rows are 38px hitboxes with 2px transparent borders so the
+                // visual 34px row keeps the 4px gap while clicks in the gap
+                // still land on a row instead of a dead strip. shrink-0 stops
+                // the max-h flex column from compressing rows before it scrolls.
+                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
                 i === highlightIndex
                   ? "bg-foreground/[0.07] text-foreground"
                   : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",

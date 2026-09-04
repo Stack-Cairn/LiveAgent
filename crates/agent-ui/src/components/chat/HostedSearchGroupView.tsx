@@ -1,9 +1,7 @@
-import { ChevronRight, Globe } from "@liveagent/ui/components/IconSet";
+import { ChevronDown, Globe, Link2, Search } from "@liveagent/ui/components/IconSet";
 import { useMemo, useState } from "react";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
-import { AssistantStatus } from "./AssistantStatus";
-import { LazyCollapse } from "./LazyCollapse";
 
 export type HostedSearchBlockView = {
   status: "searching" | "completed" | "failed";
@@ -11,10 +9,22 @@ export type HostedSearchBlockView = {
   sources: Array<{ url: string; title?: string }>;
 };
 
-function getStatusLabel(t: (key: string) => string, status: HostedSearchBlockView["status"]) {
-  if (status === "failed") return t("chat.search.failed");
-  if (status === "completed") return t("chat.search.completed");
-  return t("chat.search.searching");
+const COLLAPSED_SOURCE_COUNT = 5;
+
+function getGroupStatus(items: HostedSearchBlockView[]): HostedSearchBlockView["status"] {
+  if (items.some((item) => item.status === "searching")) return "searching";
+  if (items.every((item) => item.status === "failed")) return "failed";
+  return "completed";
+}
+
+function safeWebUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function getSourceHost(url: string) {
@@ -25,166 +35,203 @@ function getSourceHost(url: string) {
   }
 }
 
-function getGroupStatus(items: HostedSearchBlockView[]): HostedSearchBlockView["status"] {
-  if (items.some((item) => item.status === "searching")) return "searching";
-  if (items.every((item) => item.status === "failed")) return "failed";
-  return "completed";
-}
-
 function getUniqueQueries(items: HostedSearchBlockView[]) {
-  const queries: string[] = [];
+  const queries = new Set<string>();
   for (const item of items) {
     for (const query of item.queries) {
       const text = query.trim();
-      if (text && !queries.includes(text)) queries.push(text);
+      if (text) queries.add(text);
     }
   }
-  return queries;
+  return [...queries];
 }
 
 function getUniqueSources(items: HostedSearchBlockView[]) {
   const sources = new Map<string, HostedSearchBlockView["sources"][number]>();
   for (const item of items) {
     for (const source of item.sources) {
-      if (source.url && !sources.has(source.url)) sources.set(source.url, source);
+      const url = safeWebUrl(source.url);
+      if (url && !sources.has(url)) sources.set(url, { ...source, url });
     }
   }
   return [...sources.values()];
 }
 
-function getLatestTitle(
-  items: HostedSearchBlockView[],
-  t: (key: string) => string,
-  status: HostedSearchBlockView["status"],
-) {
-  for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
-    const item = items[itemIndex];
-    for (let queryIndex = item.queries.length - 1; queryIndex >= 0; queryIndex -= 1) {
-      const query = item.queries[queryIndex]?.trim();
-      if (query) return query;
-    }
-    const source = item.sources[item.sources.length - 1];
-    if (source?.title) return source.title;
-    if (source?.url) return getSourceHost(source.url);
+function faviconUrls(sourceUrl: string) {
+  try {
+    const url = new URL(sourceUrl);
+    const remoteFallback = `https://a.favicon.im/${encodeURIComponent(url.hostname)}?larger=true`;
+    return url.protocol === "https:"
+      ? [`${url.origin}/favicon.ico`, remoteFallback]
+      : [remoteFallback];
+  } catch {
+    return [];
   }
-  return status === "searching" ? t("chat.search.noQuery") : getStatusLabel(t, status);
+}
+
+function SourceFavicon({ url }: { url: string }) {
+  const candidates = useMemo(() => faviconUrls(url), [url]);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const candidate = candidates[candidateIndex];
+
+  if (!candidate) {
+    return (
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Link2 className="h-2.5 w-2.5" />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className="h-3.5 w-3.5 shrink-0 rounded-xs bg-muted object-contain"
+      decoding="async"
+      loading="lazy"
+      onError={() => setCandidateIndex((current) => current + 1)}
+      referrerPolicy="no-referrer"
+      src={candidate}
+    />
+  );
+}
+
+function completedLabel(locale: "zh-CN" | "en-US", searchCount: number, sourceCount: number) {
+  if (locale === "en-US") {
+    if (searchCount === 0) {
+      return sourceCount > 0 ? `Search complete · ${sourceCount} sources` : "Search complete";
+    }
+    return `Searched ${searchCount} ${searchCount === 1 ? "time" : "times"}${sourceCount > 0 ? ` · ${sourceCount} sources` : ""}`;
+  }
+  if (searchCount === 0) {
+    return sourceCount > 0 ? `联网搜索完成 · ${sourceCount} 个来源` : "联网搜索完成";
+  }
+  return `已搜索 ${searchCount} 次${sourceCount > 0 ? ` · ${sourceCount} 个来源` : ""}`;
 }
 
 export function HostedSearchGroupView({
   items,
   isLive = false,
-  readOnly = false,
 }: {
   items: HostedSearchBlockView[];
   isLive?: boolean;
   readOnly?: boolean;
 }) {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
+  const { locale, t } = useLocale();
+  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const queries = useMemo(() => getUniqueQueries(items), [items]);
-  const sources = useMemo(() => getUniqueSources(items).slice(0, 10), [items]);
+  const sources = useMemo(() => getUniqueSources(items), [items]);
   const status = getGroupStatus(items);
-  const statusLabel = getStatusLabel(t, status);
-  const latestTitle = getLatestTitle(items, t, status);
-  const hasDetails = queries.length > 0 || sources.length > 0;
+  const active = isLive && status === "searching";
+  const failedCount = items.filter((item) => item.status === "failed").length;
+  const visibleSources = showAll ? sources : sources.slice(0, COLLAPSED_SOURCE_COUNT);
+  const hiddenSourceCount = sources.length - visibleSources.length;
+  const hasDetails = queries.length > 0 || sources.length > 0 || failedCount > 0;
+  const label = active
+    ? locale === "en-US"
+      ? "Searching the web"
+      : "正在联网搜索"
+    : status === "failed"
+      ? locale === "en-US"
+        ? "Web search failed"
+        : "联网搜索失败"
+      : completedLabel(locale, items.length, sources.length);
 
   return (
-    <div className="min-w-0 max-w-full">
+    <section
+      className="group/search-trace max-w-2xl text-foreground/60"
+      aria-busy={active}
+      data-hosted-search-trace=""
+    >
       <button
         type="button"
-        aria-expanded={open}
-        aria-label={open ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
-        className={cn(
-          "group/search flex w-full select-none items-center justify-between gap-3 py-1.5 text-left",
-          !readOnly && "cursor-pointer",
-        )}
-        onClick={() => setOpen((previous) => !previous)}
+        aria-expanded={expanded}
+        aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
+        className="-ml-1 flex h-auto max-w-full items-center gap-2 rounded-md px-1 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors hover:bg-foreground/[0.035] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setExpanded((current) => !current)}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 group-hover/search:text-foreground/75" />
-          <div
-            className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/55"
-            title={latestTitle}
-          >
-            <span className="font-sans text-[calc(13px*var(--zone-font-scale,1))] text-muted-foreground/80 group-hover/search:text-foreground">
-              {t("chat.search.webSearch")}
-            </span>
-            <span className="ml-2">
-              {items.length <= 1
-                ? t("chat.search.oneSearch")
-                : `${items.length} ${t("chat.search.searches")}`}
-            </span>
-            <span className="ml-2">{latestTitle}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {status === "searching" ? (
-            <AssistantStatus
-              className="min-h-0 gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/60"
-              iconClassName="h-3 w-3"
-            >
-              {statusLabel}
-            </AssistantStatus>
-          ) : (
-            <span className="text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/60">
-              {statusLabel}
-            </span>
+        <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          <Globe className="h-3 w-3 text-foreground/45" />
+        </span>
+        <span
+          className={cn(
+            "min-w-0 truncate",
+            active && "shimmer",
+            status === "failed" && "text-destructive",
           )}
-          <ChevronRight
-            className={cn(
-              "h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out",
-              open && "rotate-90",
-            )}
-          />
-        </div>
+        >
+          {label}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
+            expanded && "rotate-180",
+          )}
+        />
       </button>
-      {hasDetails ? (
-        <LazyCollapse open={open} retainWhileClosed={isLive && status === "searching"}>
-          {() => (
-            <div className="space-y-2 pb-2 pt-1.5">
-              {queries.length > 0 ? (
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {queries.map((query) => (
-                    <span
-                      key={query}
-                      className="min-w-0 max-w-full truncate text-[calc(12px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/75"
-                      title={query}
-                    >
-                      {query}
-                    </span>
-                  ))}
+
+      {hasDetails && expanded ? (
+        <div className="mt-1 ml-[7px] border-l border-border py-1 pl-[23px]">
+          <section
+            aria-label={locale === "en-US" ? "Web search activity" : "联网搜索过程"}
+            className="max-h-64 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+          >
+            <div className="flex flex-col gap-1">
+              {queries.map((query) => (
+                <div
+                  className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5"
+                  key={query}
+                >
+                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] text-foreground">
+                    {query}
+                  </span>
                 </div>
+              ))}
+
+              {visibleSources.map((source) => (
+                <a
+                  className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  href={source.url}
+                  key={source.url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <SourceFavicon url={source.url} />
+                  <span className="min-w-0 flex-1 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-medium text-foreground">
+                    {source.title || getSourceHost(source.url)}
+                  </span>
+                  <span className="max-w-40 shrink-0 truncate text-[calc(11.5px*var(--zone-font-scale,1))] text-muted-foreground">
+                    {getSourceHost(source.url)}
+                  </span>
+                </a>
+              ))}
+
+              {failedCount > 0 ? (
+                <p className="px-1.5 py-1 text-xs leading-5 text-destructive">
+                  {locale === "en-US"
+                    ? `${failedCount} ${failedCount === 1 ? "search" : "searches"} failed`
+                    : `${failedCount} 次搜索失败`}
+                </p>
               ) : null}
-              {sources.length > 0 ? (
-                <div className="space-y-1.5">
-                  <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-normal text-muted-foreground/70">
-                    {t("chat.search.sources")}
-                  </div>
-                  <div className="grid gap-1 sm:grid-cols-2">
-                    {sources.map((source) => (
-                      <a
-                        key={source.url}
-                        href={source.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block min-w-0 max-w-full py-0.5 text-[calc(12px*var(--zone-font-scale,1))] hover:text-foreground"
-                        title={source.url}
-                      >
-                        <span className="block truncate font-medium text-foreground/85">
-                          {source.title || getSourceHost(source.url)}
-                        </span>
-                        <span className="block truncate text-muted-foreground">
-                          {getSourceHost(source.url)}
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
+
+              {hiddenSourceCount > 0 ? (
+                <button
+                  className="ml-1 w-fit rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                  onClick={() => setShowAll(true)}
+                  type="button"
+                >
+                  {locale === "en-US"
+                    ? `Show ${hiddenSourceCount} more sources`
+                    : `查看其余 ${hiddenSourceCount} 个来源`}
+                </button>
               ) : null}
             </div>
-          )}
-        </LazyCollapse>
+          </section>
+        </div>
       ) : null}
-    </div>
+    </section>
   );
 }

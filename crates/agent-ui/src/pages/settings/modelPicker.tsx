@@ -1,15 +1,6 @@
 import type { ProviderId } from "@liveagent/app/lib/settings/index";
-import {
-  Check,
-  ChevronDown,
-  ClaudeIcon,
-  DeepseekIcon,
-  GeminiIcon,
-  GrokIcon,
-  OpenaiChatgptIcon,
-  Search,
-  Sparkles,
-} from "@liveagent/ui/components/IconSet";
+import { Check, ChevronDown, Search, Sparkles } from "@liveagent/ui/components/IconSet";
+import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,15 +24,6 @@ export type ModelPickerOption = {
   providerId?: string;
   providerType?: ProviderId;
 };
-
-function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?: string }) {
-  const cls = cn("h-4 w-4 shrink-0", className);
-  if (type === "claude_code") return <ClaudeIcon className={cls} />;
-  if (type === "gemini") return <GeminiIcon className={cls} />;
-  if (type === "xai") return <GrokIcon className={cls} />;
-  if (type === "deepseek") return <DeepseekIcon className={cls} />;
-  return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
-}
 
 type ModelGroup = {
   id: string;

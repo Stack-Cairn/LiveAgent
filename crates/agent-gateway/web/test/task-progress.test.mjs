@@ -90,13 +90,13 @@ test("WebUI hides all task tool blocks while preserving ordinary tools", () => {
   const source = readFileSync(
     fileURLToPath(
       new URL(
-        "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
+        "../../../agent-ui/src/components/chat/assistant-bubble/assistantBubbleUtils.ts",
         import.meta.url,
       ),
     ),
     "utf8",
   );
-  assert.match(source, /groupedBlocks\.filter\(\(block\) => !isTaskToolBlock\(block\)\)/);
+  assert.match(source, /return !isTaskToolBlock\(block\);/);
 });
 
 test("WebUI app selects a snapshot directly without a sequencing compatibility layer", () => {

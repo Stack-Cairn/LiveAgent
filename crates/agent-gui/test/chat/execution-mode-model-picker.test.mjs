@@ -58,7 +58,8 @@ test("execution mode switchers expose a native radio group", () => {
   for (const source of pickerSources) {
     assert.match(source, /role="radiogroup"/);
     assert.match(source, /aria-label=\{t\("settings\.executionMode"\)\}/);
-    assert.equal((source.match(/type="radio"/g) ?? []).length, 2);
+    assert.match(source, /value="text"/);
+    assert.match(source, /value="tools"/);
     assert.match(source, /checked=\{!isAgent\}/);
     assert.match(source, /checked=\{isAgent\}/);
     assert.match(source, /onChange=\{\(\) => onSelectExecutionMode\("text"\)\}/);
@@ -94,15 +95,16 @@ test("model pickers search models and providers", () => {
   }
 });
 
-test("provider groups reveal the edit affordance before the count on hover", () => {
+test("provider groups reserve a stable edit affordance before the count", () => {
   for (const source of pickerSources) {
     assert.match(source, /\bPencil\b/);
     assert.match(source, /t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{`\$\{t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{\s*expanded \? t\("chat\.collapseProvider"\)/);
-    assert.match(source, /pointer-events-none flex w-7 max-w-0/);
-    assert.match(source, /group-hover:max-w-7/);
-    assert.match(source, /group-focus-within:max-w-7/);
+    assert.match(source, /pointer-events-none flex w-7 shrink-0/);
+    assert.match(source, /group-hover:pointer-events-auto group-hover:opacity-100/);
+    assert.match(source, /group-focus-within:pointer-events-auto group-focus-within:opacity-100/);
+    assert.doesNotMatch(source, /max-w-0|group-hover:max-w-7|group-focus-within:max-w-7/);
     assert.ok(source.indexOf("<Pencil") < source.indexOf("{group.opts.length}"));
     assert.match(
       source,
@@ -144,8 +146,10 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
     assert.match(source, /thinkingEnabled: true, reasoning: level/);
     assert.match(source, /thinkingEnabled: false/);
-    assert.match(source, /type="range"/);
     assert.match(source, /model-runtime-effort/);
+    assert.match(source, /type="range"/);
+    assert.match(source, /aria-valuetext=\{formatLevel\(value\)\}/);
+    assert.doesNotMatch(source, /role="radio"/);
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/select"/);
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/switch"/);
   }
@@ -166,6 +170,21 @@ test("compact composer controls remain equal-width centered icon buttons", () =>
   assert.match(composerControlStylesSource, /@max-\[480px\]:gap-0/);
   assert.match(composerControlStylesSource, /@max-\[480px\]:px-0/);
   assert.match(composerControlStylesSource, /@max-\[480px\]:hidden/);
+});
+
+test("composer separates input actions from the stacked runtime control deck", () => {
+  assert.match(composerSource, /composer-input-surface/);
+  assert.match(composerSource, /composer-control-deck/);
+  assert.ok(
+    composerSource.indexOf("composer-input-surface") <
+      composerSource.indexOf("composer-control-deck"),
+  );
+  assert.ok(
+    composerSource.indexOf("composer-control-deck") <
+      composerSource.indexOf("<CommandSafetyModeSelector"),
+  );
+  assert.match(composerSource, /<ArrowUp className="h-4 w-4"/);
+  assert.doesNotMatch(composerSource, /<Send className=/);
 });
 
 test("composer dropdown portals stay above the composer surface", () => {

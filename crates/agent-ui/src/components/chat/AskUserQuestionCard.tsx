@@ -1,11 +1,11 @@
-// AskUserQuestion 的聊天卡片：顶部 tabs 切换多个问题，每题单选、推荐项
-// 排在首位；纯展示组件，提交动作由调用方注入（GUI 直连工具挂起表，WebUI 走网关）。
+// AskUserQuestion 的聊天卡片：逐题切换、每题单选，推荐项排在首位；
+// 纯展示组件，提交动作由调用方注入（GUI 直连工具挂起表，WebUI 走网关）。
 // 两端直接复用本组件，端差异一律留在各端的 ToolCallItem。
 
-import { Check, Sparkles } from "@liveagent/ui/components/IconSet";
+import { Check, ChevronDown, ChevronUp, Sparkles } from "@liveagent/ui/components/IconSet";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ASK_USER_QUESTION_CUSTOM_MAX_LENGTH,
   ASK_USER_QUESTION_TIMEOUT_MS,
@@ -16,11 +16,93 @@ import { cn } from "../../lib/shared/utils";
 
 export type AskUserQuestionSubmitOutcome = { ok: boolean; message?: string };
 
+const QUESTION_SLIDE = "360ms cubic-bezier(0.22, 1, 0.36, 1)";
+const COUNTER_ROLL_MS = 400;
+
 function formatCountdown(remainingMs: number) {
   const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function RollingDigits({ value }: { value: string }) {
+  const previousValueRef = useRef(value);
+  const [previousValue, setPreviousValue] = useState(value);
+  const [nextValue, setNextValue] = useState(value);
+  const [rolling, setRolling] = useState(false);
+  const [shifted, setShifted] = useState(false);
+  const [direction, setDirection] = useState<"up" | "down">("up");
+
+  useEffect(() => {
+    if (previousValueRef.current === value) return;
+    const from = previousValueRef.current;
+    previousValueRef.current = value;
+    const fromNumber = Number.parseInt(from, 10);
+    const toNumber = Number.parseInt(value, 10);
+    setDirection(
+      Number.isFinite(fromNumber) && Number.isFinite(toNumber) && toNumber < fromNumber
+        ? "down"
+        : "up",
+    );
+    setPreviousValue(from);
+    setNextValue(value);
+    setRolling(true);
+    setShifted(false);
+
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setShifted(true));
+    });
+    const done = window.setTimeout(() => {
+      setRolling(false);
+      setPreviousValue(value);
+      setShifted(false);
+    }, COUNTER_ROLL_MS);
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+      window.clearTimeout(done);
+    };
+  }, [value]);
+
+  const visibleValue = rolling ? nextValue : previousValue;
+
+  return (
+    <>
+      {Array.from({ length: visibleValue.length }, (_, index) => {
+        const previousCharacter = previousValue[index] ?? "";
+        const nextCharacter = visibleValue[index] ?? "";
+        if (!rolling || previousCharacter === nextCharacter) {
+          // biome-ignore lint/suspicious/noArrayIndexKey: Counter glyphs are positional animation cells.
+          return <span key={`${index}-${nextCharacter}`}>{nextCharacter}</span>;
+        }
+        const top = direction === "down" ? nextCharacter : previousCharacter;
+        const bottom = direction === "down" ? previousCharacter : nextCharacter;
+        const restingOffset = direction === "down" ? "0" : "-1em";
+        const startingOffset = direction === "down" ? "-1em" : "0";
+        return (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: Counter glyphs are positional animation cells.
+            key={`${index}-${previousCharacter}-${nextCharacter}-${direction}`}
+            className="relative inline-block h-[1em] overflow-hidden align-[-0.05em] leading-[1em]"
+          >
+            <span
+              className="flex flex-col"
+              style={{
+                transition: "transform 350ms cubic-bezier(0.4, 0, 0.2, 1)",
+                transform: `translateY(${shifted ? restingOffset : startingOffset})`,
+              }}
+            >
+              <span className="h-[1em] leading-[1em]">{top}</span>
+              <span className="h-[1em] leading-[1em]">{bottom}</span>
+            </span>
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 /**
@@ -114,6 +196,36 @@ export function AskUserQuestionCard({
   const remainingMs = useAnswerCountdown(countdownActive, deadlineAt);
   const countdownExpired = countdownActive && remainingMs <= 0;
   const canInteract = countdownActive && remainingMs > 0 && !submitting;
+  const safeActiveIndex = Math.min(activeIndex, Math.max(questions.length - 1, 0));
+
+  const questionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const measuredRef = useRef(false);
+  const [viewportHeight, setViewportHeight] = useState<number | undefined>();
+  const [trackOffset, setTrackOffset] = useState(0);
+  const [animateQuestionChange, setAnimateQuestionChange] = useState(false);
+  const [sliderReady, setSliderReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const activeItem = questionRefs.current[safeActiveIndex];
+    if (!activeItem) return;
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const updateMeasurements = () => {
+      setViewportHeight(activeItem.offsetHeight);
+      setTrackOffset(activeItem.offsetTop);
+    };
+
+    updateMeasurements();
+    setAnimateQuestionChange(measuredRef.current && !reducedMotion);
+    measuredRef.current = true;
+    setSliderReady(true);
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateMeasurements);
+    observer.observe(activeItem);
+    return () => observer.disconnect();
+  }, [safeActiveIndex]);
 
   // 该题是否已作答：普通选项已选，或“其他”选中且文本非空。
   const isQuestionAnswered = (questionId: string) => {
@@ -124,19 +236,10 @@ export function AskUserQuestionCard({
 
   if (questions.length === 0) return null;
 
-  const safeActiveIndex = Math.min(activeIndex, questions.length - 1);
   const activeQuestion = questions[safeActiveIndex];
   const answeredCount = questions.filter((question) => isQuestionAnswered(question.id)).length;
   const allAnswered = answeredCount === questions.length;
-  // 当前题“其他”行的选中态与文本：落定后以应答里的 custom 标记与原文为准。
-  const activeCustomSelected = isSettled
-    ? Boolean(settledCustom[activeQuestion.id])
-    : Boolean(customSelected[activeQuestion.id]);
-  const activeCustomText = isSettled
-    ? (settledSelections[activeQuestion.id] ?? "")
-    : (customTexts[activeQuestion.id] ?? "");
-
-  // 带方向切题：内容区按 question.id 重挂载并向对应方向滑入。
+  // 带方向切题：内容轨道纵向滑动，当前题再附一层轻量方向过渡。
   const goToQuestion = (index: number) => {
     if (index === safeActiveIndex || index < 0 || index >= questions.length) return;
     setSwitchDirection(index > safeActiveIndex ? "forward" : "backward");
@@ -217,227 +320,322 @@ export function AskUserQuestionCard({
   };
 
   return (
-    <div className="tool-expand overflow-hidden rounded-xl border border-border/45 bg-background/70 dark:border-white/[0.08] dark:bg-white/[0.03]">
-      {questions.length > 1 ? (
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border/35 px-1.5 py-1.5 dark:border-white/[0.05]">
-          {questions.map((question, index) => {
-            const isActive = index === safeActiveIndex;
-            const isAnswered = isQuestionAnswered(question.id);
-            return (
-              <button
-                key={question.id}
-                type="button"
-                onClick={() => goToQuestion(index)}
-                className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-none transition-colors",
-                  isActive
-                    ? "bg-foreground/[0.07] text-foreground dark:bg-white/[0.09]"
-                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/80",
-                )}
-              >
-                {isAnswered ? <Check className="h-3 w-3 text-emerald-500" /> : null}
-                {question.header || `${t("chat.askUser.tabFallback")} ${index + 1}`}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-2 px-3 py-2.5">
-        {/* key 触发重挂载，切题时按方向播放轻量滑入动画。 */}
-        <div
-          key={activeQuestion.id}
-          className={cn(
-            "flex flex-col gap-2",
-            switchDirection === "forward" ? "ask-question-enter-forward" : "",
-            switchDirection === "backward" ? "ask-question-enter-backward" : "",
-          )}
-        >
-          <div className="text-[calc(12.5px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/90">
-            {activeQuestion.prompt}
-          </div>
-
-          <fieldset
-            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；子项 role="radio" 需要 radiogroup 上下文。
-            role="radiogroup"
-            className="flex min-w-0 flex-col gap-1.5 border-0 p-0"
-            aria-label={activeQuestion.prompt}
+    <div className="tool-expand w-full max-w-[min(100%,36rem)]">
+      <div className="overflow-hidden rounded-2xl border border-black/[0.055] bg-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl backdrop-saturate-150 dark:border-white/[0.09] dark:bg-white/[0.045] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+        <div className="px-4 pb-3 pt-4">
+          <div
+            aria-live="polite"
+            className="overflow-hidden"
+            style={{
+              height: viewportHeight,
+              transition: animateQuestionChange ? `height ${QUESTION_SLIDE}` : undefined,
+            }}
           >
-            {activeQuestion.options.map((option) => {
-              const isSelected =
-                !activeCustomSelected && selections[activeQuestion.id] === option.label;
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: Card options use the ARIA radio pattern so their rich description/recommended content remains one focusable choice.
-                <button
-                  key={option.label}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  disabled={!canInteract}
-                  onClick={() => selectOption(activeQuestion.id, option.label)}
-                  className={cn(
-                    "group/option flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
-                    isSelected
-                      ? "border-primary/45 bg-primary/[0.06] dark:border-primary/40 dark:bg-primary/[0.1]"
-                      : "border-border/40 dark:border-white/[0.07]",
-                    canInteract && !isSelected
-                      ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
-                      : "",
-                    !canInteract && !isSelected && (isSettled || cancelled || countdownExpired)
-                      ? "opacity-55"
-                      : "",
-                    canInteract ? "cursor-pointer" : "cursor-default",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
-                    )}
-                  >
-                    {isSelected ? <Check className="h-2.5 w-2.5" /> : null}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
-                        {option.label}
-                      </span>
-                      {option.recommended ? (
-                        <RecommendedTag label={t("chat.askUser.recommended")} />
-                      ) : null}
-                    </span>
-                    {option.description ? (
-                      <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-muted-foreground/80">
-                        {option.description}
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-
-            {/* UI 合成的“其他（自行输入）”行：固定在选项最底部，不属于模型给出的
-                options；选中后展开单行输入框，键入文本即该题应答。选项行是
-                button 而 input 不能嵌套其中，故此行用 div role="radio"。 */}
-            {/* biome-ignore lint/a11y/useSemanticElements: This composite radio contains the custom text input, so a native radio/input or button would create invalid nested label/interactive markup. */}
             <div
-              role="radio"
-              aria-checked={activeCustomSelected}
-              aria-disabled={!canInteract}
-              tabIndex={canInteract ? 0 : -1}
-              onClick={() => selectCustom(activeQuestion.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  selectCustom(activeQuestion.id);
-                }
+              className="flex flex-col gap-6"
+              style={{
+                transform: `translate3d(0, ${-trackOffset}px, 0)`,
+                transition: animateQuestionChange ? `transform ${QUESTION_SLIDE}` : undefined,
+                willChange: "transform",
               }}
-              className={cn(
-                "group/option flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
-                activeCustomSelected
-                  ? "border-primary/45 bg-primary/[0.06] dark:border-primary/40 dark:bg-primary/[0.1]"
-                  : "border-border/40 dark:border-white/[0.07]",
-                canInteract && !activeCustomSelected
-                  ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
-                  : "",
-                !canInteract &&
-                  !activeCustomSelected &&
-                  (isSettled || cancelled || countdownExpired)
-                  ? "opacity-55"
-                  : "",
-                canInteract ? "cursor-pointer" : "cursor-default",
-              )}
             >
-              <span
-                className={cn(
-                  "mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                  activeCustomSelected
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
-                )}
-              >
-                {activeCustomSelected ? <Check className="h-2.5 w-2.5" /> : null}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
-                  {t("chat.askUser.customOption")}
-                </span>
-                {activeCustomSelected && !isSettled && !cancelled && interactive ? (
-                  <input
-                    autoFocus
-                    value={activeCustomText}
-                    disabled={!canInteract}
-                    maxLength={ASK_USER_QUESTION_CUSTOM_MAX_LENGTH}
-                    placeholder={t("chat.askUser.customPlaceholder")}
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => {
-                      event.stopPropagation();
-                      if (event.key === "Enter" && allAnswered) {
-                        event.preventDefault();
-                        void submit();
-                      }
+              {questions.map((question, questionIndex) => {
+                const active = questionIndex === safeActiveIndex;
+                if (!sliderReady && !active) return null;
+                const questionCustomSelected = isSettled
+                  ? Boolean(settledCustom[question.id])
+                  : Boolean(customSelected[question.id]);
+                const questionCustomText = isSettled
+                  ? (settledSelections[question.id] ?? "")
+                  : (customTexts[question.id] ?? "");
+                const questionStyle: CSSProperties = {
+                  opacity: active ? 1 : 0,
+                  pointerEvents: active ? undefined : "none",
+                  transition: animateQuestionChange ? `opacity ${QUESTION_SLIDE}` : undefined,
+                };
+
+                return (
+                  <div
+                    key={question.id}
+                    ref={(element) => {
+                      questionRefs.current[questionIndex] = element;
                     }}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setErrorText("");
-                      setCustomTexts((current) => ({
-                        ...current,
-                        [activeQuestion.id]: value,
-                      }));
-                    }}
-                    className="ask-custom-input-enter mt-0.5 h-8 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2.5 text-[calc(12px*var(--zone-font-scale,1))] text-foreground shadow-[inset_0_1px_2px_rgba(0,0,0,0.04),0_1px_0_rgba(255,255,255,0.55)] outline-none backdrop-blur-md backdrop-saturate-150 transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 focus:ring-[2.5px] focus:ring-primary/[0.13] dark:border-white/[0.1] dark:bg-white/[0.05] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
-                  />
-                ) : activeCustomSelected && activeCustomText ? (
-                  <span className="break-words text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-muted-foreground/80">
-                    {activeCustomText}
-                  </span>
-                ) : null}
-              </span>
+                    aria-hidden={active ? undefined : true}
+                    className={cn(
+                      active && switchDirection === "forward" ? "ask-question-enter-forward" : "",
+                      active && switchDirection === "backward" ? "ask-question-enter-backward" : "",
+                    )}
+                    style={questionStyle}
+                  >
+                    <div className="text-[calc(13.5px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/92">
+                      {question.prompt}
+                    </div>
+
+                    <fieldset
+                      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA permits fieldset as the radiogroup context for rich radio rows.
+                      role="radiogroup"
+                      aria-label={question.prompt}
+                      className="mt-2.5 flex min-w-0 flex-col gap-1 border-0 p-0"
+                    >
+                      {question.options.map((option) => {
+                        const selected =
+                          !questionCustomSelected && selections[question.id] === option.label;
+                        const disabled = !active || !canInteract;
+                        return (
+                          // biome-ignore lint/a11y/useSemanticElements: Rich option content uses the ARIA radio pattern as one focusable choice.
+                          <button
+                            key={option.label}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={disabled}
+                            tabIndex={active ? 0 : -1}
+                            onClick={() => selectOption(question.id, option.label)}
+                            className={cn(
+                              "group/option relative flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors duration-150",
+                              selected
+                                ? "bg-foreground/[0.065] dark:bg-white/[0.085]"
+                                : active && canInteract
+                                  ? "hover:bg-foreground/[0.035] dark:hover:bg-white/[0.055]"
+                                  : "",
+                              !selected && (isSettled || cancelled || countdownExpired)
+                                ? "opacity-50"
+                                : "",
+                              active && canInteract ? "cursor-pointer" : "cursor-default",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-[background-color,box-shadow] duration-200",
+                                selected
+                                  ? "bg-foreground text-background"
+                                  : "shadow-[inset_0_0_0_1.5px_hsl(var(--muted-foreground)/0.4)] group-hover/option:shadow-[inset_0_0_0_1.5px_hsl(var(--muted-foreground)/0.7)]",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full bg-background transition-transform duration-200",
+                                  selected ? "scale-100" : "scale-0",
+                                )}
+                              />
+                            </span>
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    "text-[calc(12.5px*var(--zone-font-scale,1))] leading-[1.45]",
+                                    selected ? "font-medium text-foreground" : "text-foreground/78",
+                                  )}
+                                >
+                                  {option.label}
+                                </span>
+                                {option.recommended ? (
+                                  <RecommendedTag label={t("chat.askUser.recommended")} />
+                                ) : null}
+                              </span>
+                              {option.description ? (
+                                <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground/72">
+                                  {option.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+
+                      {/* biome-ignore lint/a11y/useSemanticElements: This composite radio owns a nested custom text field and cannot be represented by a native radio. */}
+                      <div
+                        role="radio"
+                        aria-checked={questionCustomSelected}
+                        aria-disabled={!active || !canInteract}
+                        tabIndex={active && canInteract ? 0 : -1}
+                        onClick={() => selectCustom(question.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            selectCustom(question.id);
+                          }
+                        }}
+                        className={cn(
+                          "group/option relative flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors duration-150",
+                          questionCustomSelected
+                            ? "bg-foreground/[0.065] dark:bg-white/[0.085]"
+                            : active && canInteract
+                              ? "hover:bg-foreground/[0.035] dark:hover:bg-white/[0.055]"
+                              : "",
+                          !questionCustomSelected && (isSettled || cancelled || countdownExpired)
+                            ? "opacity-50"
+                            : "",
+                          active && canInteract ? "cursor-pointer" : "cursor-default",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-[background-color,box-shadow] duration-200",
+                            questionCustomSelected
+                              ? "bg-foreground text-background"
+                              : "shadow-[inset_0_0_0_1.5px_hsl(var(--muted-foreground)/0.4)] group-hover/option:shadow-[inset_0_0_0_1.5px_hsl(var(--muted-foreground)/0.7)]",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full bg-background transition-transform duration-200",
+                              questionCustomSelected ? "scale-100" : "scale-0",
+                            )}
+                          />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span
+                            className={cn(
+                              "text-[calc(12.5px*var(--zone-font-scale,1))] leading-[1.45]",
+                              questionCustomSelected
+                                ? "font-medium text-foreground"
+                                : "text-foreground/78",
+                            )}
+                          >
+                            {t("chat.askUser.customOption")}
+                          </span>
+                          {active &&
+                          questionCustomSelected &&
+                          !isSettled &&
+                          !cancelled &&
+                          interactive ? (
+                            <input
+                              autoFocus
+                              value={questionCustomText}
+                              disabled={!canInteract}
+                              maxLength={ASK_USER_QUESTION_CUSTOM_MAX_LENGTH}
+                              placeholder={t("chat.askUser.customPlaceholder")}
+                              aria-label={t("chat.askUser.customPlaceholder")}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                event.stopPropagation();
+                                if (event.key === "Enter" && allAnswered) {
+                                  event.preventDefault();
+                                  void submit();
+                                }
+                              }}
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
+                                setErrorText("");
+                                setCustomTexts((current) => ({
+                                  ...current,
+                                  [question.id]: value,
+                                }));
+                              }}
+                              className="ask-custom-input-enter mt-0.5 h-8 w-full rounded-lg border border-black/[0.075] bg-white/65 px-2.5 text-[calc(12px*var(--zone-font-scale,1))] text-foreground shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none backdrop-blur-md transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground/45 focus:border-foreground/25 focus:bg-white/85 focus:ring-[2.5px] focus:ring-foreground/[0.08] dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-white/[0.18] dark:focus:bg-white/[0.08]"
+                            />
+                          ) : questionCustomSelected && questionCustomText ? (
+                            <span className="break-words text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground/75">
+                              {questionCustomText}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    </fieldset>
+                  </div>
+                );
+              })}
             </div>
-          </fieldset>
+          </div>
+
+          {errorText ? (
+            <div
+              role="alert"
+              className="mt-2 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-red-500"
+            >
+              {errorText}
+            </div>
+          ) : null}
         </div>
 
-        {cancelled ? (
-          <div className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground/70">
-            {t("chat.askUser.cancelled")}
-          </div>
-        ) : isSettled ? (
-          timedOut ? (
-            <div className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-amber-600 dark:text-amber-400">
-              {t("chat.askUser.timedOut")}
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-none text-emerald-600 dark:text-emerald-400">
-              <Check className="h-3 w-3" />
-              {t("chat.askUser.answered")}
-            </div>
-          )
-        ) : interactive ? (
-          <div className="flex items-center justify-between gap-2 pt-0.5">
-            <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] tabular-nums leading-none text-muted-foreground/70">
-              {answeredCount}/{questions.length} {t("chat.askUser.progress")}
-              <span className="ml-2 text-muted-foreground/55">
+        <div className="flex min-h-11 items-center justify-between gap-3 border-t border-black/[0.055] px-3 py-2 dark:border-white/[0.07]">
+          <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground/70">
+            {questions.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  aria-label={t("chat.askUser.previousQuestion")}
+                  disabled={safeActiveIndex === 0}
+                  onClick={() => goToQuestion(safeActiveIndex - 1)}
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <span className="inline-flex items-center text-[calc(11px*var(--zone-font-scale,1))] font-medium tabular-nums leading-none">
+                  <RollingDigits value={`${safeActiveIndex + 1} / ${questions.length}`} />
+                </span>
+                <button
+                  type="button"
+                  aria-label={t("chat.askUser.nextQuestion")}
+                  disabled={safeActiveIndex === questions.length - 1}
+                  onClick={() => goToQuestion(safeActiveIndex + 1)}
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </>
+            ) : null}
+            {interactive && !isSettled && !cancelled ? (
+              <span
+                role="timer"
+                className="truncate text-[calc(10.5px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/60"
+              >
+                {questions.length > 1 ? "· " : null}
                 {formatCountdown(remainingMs)} {t("chat.askUser.timeoutHint")}
               </span>
-            </span>
-            <button
-              type="button"
-              disabled={!allAnswered || !canInteract}
-              onClick={() => void submit()}
-              className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-none text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
-            >
-              {submitting ? t("chat.askUser.submitting") : t("chat.askUser.submit")}
-            </button>
+            ) : null}
           </div>
-        ) : null}
 
-        {errorText ? (
-          <div className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-red-500">
-            {errorText}
-          </div>
-        ) : null}
+          {cancelled ? (
+            <span className="text-right text-[calc(10.5px*var(--zone-font-scale,1))] leading-[1.35] text-muted-foreground/70">
+              {t("chat.askUser.cancelled")}
+            </span>
+          ) : isSettled ? (
+            timedOut ? (
+              <span className="text-right text-[calc(10.5px*var(--zone-font-scale,1))] leading-[1.35] text-amber-600 dark:text-amber-400">
+                {t("chat.askUser.timedOut")}
+              </span>
+            ) : (
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/[0.1] px-2 py-1 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium leading-none text-emerald-600 dark:bg-emerald-400/[0.1] dark:text-emerald-400">
+                <Check className="h-3 w-3" />
+                {t("chat.askUser.answered")}
+              </span>
+            )
+          ) : interactive ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {questions.length > 1 && safeActiveIndex < questions.length - 1 ? (
+                <button
+                  type="button"
+                  disabled={!canInteract}
+                  onClick={() => goToQuestion(safeActiveIndex + 1)}
+                  className="h-7 rounded-full px-3 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.045] hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {t("chat.askUser.skip")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={
+                  safeActiveIndex === questions.length - 1
+                    ? !allAnswered || !canInteract
+                    : !isQuestionAnswered(activeQuestion.id) || !canInteract
+                }
+                onClick={() => {
+                  if (safeActiveIndex === questions.length - 1) void submit();
+                  else goToQuestion(safeActiveIndex + 1);
+                }}
+                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-full bg-foreground px-3.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-background transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-35"
+              >
+                {submitting
+                  ? t("chat.askUser.submitting")
+                  : safeActiveIndex === questions.length - 1
+                    ? t("chat.askUser.submit")
+                    : t("chat.askUser.continue")}
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

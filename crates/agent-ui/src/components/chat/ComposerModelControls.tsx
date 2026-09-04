@@ -10,22 +10,19 @@ import {
 } from "@liveagent/app/lib/settings";
 import {
   ArrowDownAZ,
+  Brain,
   Check,
   ChevronDown,
-  ClaudeIcon,
-  DeepseekIcon,
-  GeminiIcon,
   Globe,
   GlobeOff,
-  GrokIcon,
   Layers,
   Lightbulb,
   LightbulbOff,
-  OpenaiChatgptIcon,
   Pencil,
   Search,
   Sparkle,
 } from "@liveagent/ui/components/IconSet";
+import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@liveagent/ui/components/ui/popover";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -66,15 +63,6 @@ const REASONING_COMPACT_I18N_KEYS: Record<ReasoningLevel, string> = {
   max: "chat.runtime.reasoningCompact.max",
 };
 
-function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: string }) {
-  const cls = cn("h-4 w-4 shrink-0", className);
-  if (type === "claude_code") return <ClaudeIcon className={cls} />;
-  if (type === "gemini") return <GeminiIcon className={cls} />;
-  if (type === "xai") return <GrokIcon className={cls} />;
-  if (type === "deepseek") return <DeepseekIcon className={cls} />;
-  return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
-}
-
 function RuntimeToggleChip(props: {
   pressed: boolean;
   disabled?: boolean;
@@ -106,12 +94,10 @@ function RuntimeToggleChip(props: {
   );
 }
 
-// The visible thumb of the native range input is 12px wide, so its center
-// travels across [6px, width - 6px]. The visual layer (track, step dots,
-// fill, thumb marker) is drawn inside a band inset by 6px on each side and
-// positions everything with plain percentages of that band. This keeps every
-// element pixel-aligned regardless of how a browser renders native thumbs.
-const EFFORT_THUMB_INSET_CLASS = "right-[6px] left-[6px]";
+// The visible range thumb is 16px wide, so the custom track is inset by 8px.
+// Keeping the track and thumb on the same geometry avoids browser-specific
+// range alignment drift while preserving native keyboard and pointer behavior.
+const EFFORT_THUMB_INSET_CLASS = "right-2 left-2";
 
 function ReasoningEffortSlider(props: {
   choices: ReasoningLevel[];
@@ -138,46 +124,42 @@ function ReasoningEffortSlider(props: {
   return (
     <div
       title={`${label}: ${formatLevel(value)}`}
-      className={cn("flex min-w-0 flex-1 items-center gap-2", disabled && "opacity-50")}
+      className={cn(
+        "model-runtime-effort flex min-w-0 flex-1 items-center gap-2",
+        disabled && "opacity-50",
+      )}
     >
-      <Sparkle
-        className={cn(
-          "h-3.5 w-3.5 shrink-0 transition-colors",
-          isOff ? "text-muted-foreground/60" : "text-violet-500 dark:text-violet-400",
-        )}
-      />
+      <Brain className="size-4 shrink-0 text-foreground/60 dark:text-foreground/70" />
       <div className="group relative flex h-8 min-w-0 flex-1 items-center">
         <div
+          aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute top-1/2 -translate-y-1/2",
+            "pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 overflow-visible rounded-full bg-foreground/[0.10] shadow-[inset_0_1px_1px_rgba(15,23,42,0.08)] dark:bg-white/[0.12] dark:shadow-[inset_0_1px_1px_rgba(0,0,0,0.35)]",
             EFFORT_THUMB_INSET_CLASS,
           )}
         >
-          <div className="absolute top-1/2 left-0 h-[3px] w-full -translate-y-1/2 rounded-full bg-muted-foreground/20" />
           <div
-            className={cn(
-              "absolute top-1/2 left-0 h-[3px] -translate-y-1/2 rounded-full transition-[width,background-color] duration-150 ease-out",
-              isOff ? "bg-muted-foreground/30" : "bg-violet-500",
-            )}
+            className="absolute inset-y-0 left-0 rounded-full bg-foreground/65 transition-[width] duration-150 ease-out dark:bg-white/65"
             style={{ width: `${percent}%` }}
           />
           {choices.map((level, stopIndex) => (
             <span
               key={level}
               className={cn(
-                "absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors",
-                stopIndex <= index && !isOff ? "bg-violet-500" : "bg-muted-foreground/30",
+                "absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 rounded-full",
+                stopIndex <= index
+                  ? "bg-background/75 dark:bg-background/80"
+                  : "bg-foreground/20 dark:bg-white/25",
               )}
               style={{ left: `${(stopIndex / max) * 100}%` }}
             />
           ))}
           <span
-            className={cn(
-              "absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ring-2 ring-background transition-[left,background-color] duration-150 ease-out group-hover:scale-110",
-              isOff ? "bg-muted-foreground" : "bg-violet-500",
-            )}
+            className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-foreground/20 bg-background shadow-[0_1px_4px_rgba(15,23,42,0.22),0_0_0_1px_rgba(255,255,255,0.45)] transition-[left,transform] duration-150 ease-out group-hover:scale-105 dark:border-white/25 dark:shadow-[0_1px_5px_rgba(0,0,0,0.55)]"
             style={{ left: `${percent}%` }}
-          />
+          >
+            <span className="size-1.5 rounded-full bg-foreground/70 dark:bg-white/75" />
+          </span>
         </div>
         <input
           type="range"
@@ -188,7 +170,7 @@ function ReasoningEffortSlider(props: {
           disabled={disabled}
           aria-label={label}
           aria-valuetext={formatLevel(value)}
-          className="model-runtime-effort relative z-10 h-8 w-full min-w-0 cursor-pointer appearance-none rounded-full bg-transparent outline-hidden disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary/35 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-[3px] [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-8 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:opacity-0"
+          className="relative z-10 h-8 w-full min-w-0 cursor-pointer appearance-none rounded-full bg-transparent outline-hidden disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-foreground/20 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-8 [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-8 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:opacity-0"
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => {
             const next = choices[Number(event.target.value)];
@@ -198,10 +180,8 @@ function ReasoningEffortSlider(props: {
       </div>
       <span
         className={cn(
-          "w-10 shrink-0 rounded-md py-1 text-center text-[11px] font-medium leading-none transition-colors",
-          isOff
-            ? "bg-muted text-muted-foreground"
-            : "bg-violet-500/10 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
+          "min-w-9 shrink-0 rounded-lg border border-border/45 bg-background/65 px-1.5 py-1.5 text-center text-[10.5px] font-semibold leading-none text-foreground/75 shadow-sm dark:bg-background/35 dark:text-foreground/80",
+          isOff && "text-muted-foreground shadow-none",
         )}
       >
         {formatLevelCompact(value)}
@@ -344,8 +324,8 @@ export const ComposerModelControls = memo(function ComposerModelControls(
           <Button
             variant="ghost"
             disabled={disabled || !hasModels}
-            title={currentModelLabel}
-            aria-label={`${t("chat.selectModel")}: ${currentModelLabel}`}
+            title={triggerLabel}
+            aria-label={`${t("chat.selectModel")}: ${triggerLabel}`}
             className={cn(COMPOSER_CONTROL_TRIGGER_CLASS, isModelPickerOpen && "bg-muted/60")}
           />
         }
@@ -365,29 +345,46 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         ref={popoverContentRef}
         side="top"
         align="start"
+        alignOffset={-48}
         sideOffset={8}
         collisionPadding={8}
         initialFocus={resolveModelPickerInitialFocus}
         aria-label={t("chat.selectModel")}
-        className="model-selector-dropdown flex max-h-[min(30rem,var(--available-height,30rem))] w-[min(19rem,calc(100vw-1rem))] flex-col overflow-hidden p-0 text-xs"
+        className="model-selector-dropdown flex max-h-[min(32rem,var(--available-height,32rem))] w-[min(21rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border-black/[0.07] bg-popover/96 p-0 text-xs shadow-[0_1px_2px_rgba(15,23,42,0.08),0_18px_56px_-20px_rgba(15,23,42,0.42)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/[0.12] dark:bg-popover/94 dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),0_20px_60px_-20px_rgba(0,0,0,0.82)]"
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="px-2 pt-2">
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1.5">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {t("settings.executionMode")}
-              </span>
+          <div className="shrink-0 border-b border-border/45 bg-muted/[0.12] px-2.5 pb-2.5 pt-2.5">
+            <div className="flex items-center justify-between gap-3 px-0.5 pb-2">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-foreground">
+                  {t("chat.selectModel")}
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                  {selectedOption ? (
+                    <ProviderBrandIcon
+                      type={selectedOption.providerType}
+                      className="h-3 w-3 opacity-75"
+                    />
+                  ) : null}
+                  <span className="truncate">
+                    {selectedOption
+                      ? `${selectedOption.providerName} · ${selectedOption.model}`
+                      : currentModelLabel}
+                  </span>
+                </div>
+              </div>
               <div
                 role="radiogroup"
                 aria-label={t("settings.executionMode")}
-                className="flex rounded-md bg-background/80 p-0.5 shadow-sm ring-1 ring-border/40"
+                title={t("settings.executionMode")}
+                className="flex shrink-0 rounded-lg bg-muted/55 p-0.5 ring-1 ring-border/45"
               >
                 <label
                   className={cn(
-                    "relative cursor-pointer rounded-sm px-2.5 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
+                    "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
                       ? "text-muted-foreground hover:text-foreground"
-                      : "bg-foreground/[0.07] text-foreground",
+                      : "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]",
                   )}
                 >
                   <input
@@ -402,9 +399,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
                 <label
                   className={cn(
-                    "relative cursor-pointer rounded-sm px-2.5 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
+                    "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
-                      ? "bg-foreground/[0.07] text-foreground"
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -420,12 +417,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
               </div>
             </div>
-          </div>
-
-          <div className="px-2 py-1.5">
             <div className="flex items-center gap-1.5">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
-                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+              <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/55 bg-background/78 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] transition-[border-color,background-color,box-shadow] focus-within:border-ring/30 focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/15 dark:shadow-none">
+                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
                 <input
                   ref={searchInputRef}
                   value={modelSearch}
@@ -440,7 +434,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 onClick={toggleProviderSortMode}
                 title={sortToggleTitle}
                 aria-label={sortToggleTitle}
-                className="flex w-7 shrink-0 cursor-pointer items-center justify-center self-stretch rounded-md border border-border/50 bg-muted/40 text-muted-foreground/70 transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border/55 bg-background/78 text-muted-foreground/70 transition-[border-color,background-color,color] hover:border-border hover:bg-muted/65 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {nextProviderSortMode === "alpha" ? (
                   <ArrowDownAZ className="h-3.5 w-3.5" />
@@ -451,7 +445,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
             </div>
           </div>
 
-          <div className="min-h-24 flex-1 overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+          <div className="min-h-24 flex-1 space-y-1 overflow-y-auto overscroll-contain px-1.5 py-1.5 [scrollbar-gutter:stable]">
             {(() => {
               const filteredGroups = normalizedSearch
                 ? groups
@@ -474,17 +468,37 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 );
               }
 
-              return filteredGroups.map((group, groupIndex) => {
+              return filteredGroups.map((group) => {
                 const expanded = isGroupExpanded(group.id);
+                const isSelectedGroup = selectedGroupId === group.id;
                 return (
-                  <div key={group.id} className="flex flex-col gap-0.5">
-                    {groupIndex > 0 ? <hr className="my-1 h-px border-0 bg-border/30" /> : null}
-                    <div className="group sticky top-0 z-10 flex h-[30px] shrink-0 items-stretch rounded-md bg-popover/60 backdrop-blur-xl transition-colors hover:bg-muted/40 focus-within:bg-muted/40 supports-[backdrop-filter]:bg-popover/40">
+                  <div
+                    key={group.id}
+                    className={cn(
+                      "flex flex-col gap-0.5 rounded-xl border p-0.5 transition-[border-color,background-color]",
+                      expanded
+                        ? "border-border/50 bg-muted/[0.14]"
+                        : isSelectedGroup
+                          ? "border-border/35 bg-muted/[0.08]"
+                          : "border-transparent",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "group sticky top-0 z-10 flex h-8 shrink-0 items-stretch rounded-lg bg-popover/95 backdrop-blur-xl transition-colors hover:bg-muted/55 focus-within:bg-muted/55 supports-[backdrop-filter]:bg-popover/85",
+                        isSelectedGroup && "text-foreground",
+                      )}
+                    >
                       <button
                         type="button"
                         onClick={() => toggleGroup(group.id)}
                         aria-expanded={expanded}
-                        className="model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-l-md px-2 py-0 text-left text-xs font-medium text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white/80"
+                        className={cn(
+                          "model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                          isSelectedGroup
+                            ? "text-foreground"
+                            : "text-muted-foreground/85 dark:text-white/80",
+                        )}
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
@@ -499,7 +513,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                           onOpenSettings("providers", group.id);
                         }}
                         aria-label={`${t("settings.editProvider")}: ${group.name}`}
-                        className="pointer-events-none flex w-7 max-w-0 shrink-0 cursor-pointer items-center justify-center overflow-hidden text-muted-foreground/70 opacity-0 transition-[max-width,opacity,color,background-color] duration-150 group-hover:max-w-7 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:max-w-7 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:bg-muted/60 hover:text-foreground focus-visible:max-w-7 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="pointer-events-none flex w-7 shrink-0 cursor-pointer items-center justify-center text-muted-foreground/65 opacity-0 transition-[opacity,color,background-color] duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:bg-muted/65 hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -510,9 +524,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         aria-label={`${
                           expanded ? t("chat.collapseProvider") : t("chat.expandProvider")
                         }: ${group.name}`}
-                        className="model-selector-group-label flex shrink-0 cursor-pointer items-center gap-1.5 rounded-r-md px-2 py-0 text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white/80"
+                        className="model-selector-group-label flex shrink-0 cursor-pointer items-center gap-1.5 rounded-r-lg px-2 py-0 text-muted-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white/75"
                       >
-                        <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums">
+                        <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-muted/65 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums ring-1 ring-border/30">
                           {group.opts.length}
                         </span>
                         <ChevronDown
@@ -538,9 +552,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 setIsModelPickerOpen(false);
                               }}
                               className={cn(
-                                "model-selector-item flex h-[30px] w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-md py-0 pl-6 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-none hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white",
+                                "model-selector-item flex h-8 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg py-0 pl-7 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
                                 isSelected &&
-                                  "bg-foreground/[0.07] font-medium hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]",
+                                  "bg-background font-medium shadow-sm ring-1 ring-border/45 hover:bg-background focus-visible:bg-background",
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-2">
@@ -551,7 +565,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 <span className="min-w-0 truncate">{option.model}</span>
                               </span>
                               {isSelected ? (
-                                <Check className="h-4 w-4 shrink-0 text-primary" />
+                                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-sm">
+                                  <Check className="size-3" strokeWidth={3} />
+                                </span>
                               ) : null}
                             </button>
                           );
@@ -566,7 +582,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
 
         <fieldset
           aria-label={t("chat.runtime.controls")}
-          className="model-runtime-controls flex shrink-0 items-center gap-1.5 border-t border-border/50 bg-muted/20 px-2 py-1.5"
+          className="model-runtime-controls flex shrink-0 items-center gap-2 border-t border-border/45 bg-muted/[0.16] px-2.5 py-2"
         >
           <RuntimeToggleChip
             pressed={chatRuntimeControls.nativeWebSearchEnabled}

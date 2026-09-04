@@ -2,6 +2,7 @@ import {
   TranscriptAssistantMessageActions,
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
+import type { UsageDetailEntry } from "@liveagent/ui/components/chat/UsagePanel";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -15,6 +16,8 @@ import { useCopiedFlag } from "./useCopiedFlag";
 export type AssistantRowFooterProps = {
   timestamp?: number;
   replyText: string;
+  usageEntries?: readonly UsageDetailEntry[];
+  usageContextWindow?: number;
   retryTarget: RenderUserMessage | null;
   onResendFromEdit: (
     messageRef: HistoryMessageRef,
@@ -26,7 +29,15 @@ export type AssistantRowFooterProps = {
 };
 
 export function AssistantRowFooter(props: AssistantRowFooterProps) {
-  const { timestamp, replyText, retryTarget, onResendFromEdit, onBranchConversation } = props;
+  const {
+    timestamp,
+    replyText,
+    usageEntries,
+    usageContextWindow,
+    retryTarget,
+    onResendFromEdit,
+    onBranchConversation,
+  } = props;
   const { t } = useLocale();
   const { copied, markCopied } = useCopiedFlag();
   const { isSending, branchPendingMessageId } = useRowInteraction();
@@ -44,6 +55,8 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
         void navigator.clipboard.writeText(replyText);
         markCopied();
       }}
+      usageEntries={usageEntries}
+      usageContextWindow={usageContextWindow}
       retryDisabled={isSending || !retryMessageRef}
       retryTitle={retryMessageRef ? t("chat.retry") : "旧历史缺少稳定消息标识，无法重试"}
       onRetry={() => {

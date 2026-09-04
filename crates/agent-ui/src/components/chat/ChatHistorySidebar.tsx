@@ -13,6 +13,7 @@ import {
   Loader2,
   PanelLeftClose,
   Plus,
+  Search,
   Settings,
   Share2,
   Trash2,
@@ -61,6 +62,7 @@ import type {
   ChatHistorySidebarProps,
   WorkspaceProjectRemoveOptions,
 } from "./ChatHistorySidebarTypes";
+import { ConversationSearchDialog } from "./ConversationSearchDialog";
 
 export type {
   ChatHistorySidebarContainerSource,
@@ -181,6 +183,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     renameDraft,
     isOpen,
     fontScale = 1,
+    conversationSearchRequestKey,
+    conversationSearchShortcutLabel,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -239,6 +243,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   } = props;
   const { t } = useLocale();
 
+  const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
+  const lastConversationSearchRequestKeyRef = useRef(conversationSearchRequestKey);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedConversationIds, setSelectedConversationIds] = useState<ReadonlySet<string>>(
@@ -262,6 +268,29 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     handleHeight: 0,
     projectsContentHeight: 0,
   });
+
+  const currentConversationWorkdir = useMemo(
+    () => items.find((item) => item.id === currentConversationId)?.cwd,
+    [currentConversationId, items],
+  );
+
+  useEffect(() => {
+    if (!sectionsDisabled) return;
+    setConversationSearchOpen(false);
+  }, [sectionsDisabled]);
+
+  useEffect(() => {
+    if (
+      conversationSearchRequestKey === undefined ||
+      conversationSearchRequestKey === lastConversationSearchRequestKeyRef.current
+    ) {
+      return;
+    }
+    lastConversationSearchRequestKeyRef.current = conversationSearchRequestKey;
+    if (!sectionsDisabled) {
+      setConversationSearchOpen(true);
+    }
+  }, [conversationSearchRequestKey, sectionsDisabled]);
   const sidebarSectionsRef = useRef<HTMLDivElement | null>(null);
   const projectsHeaderRef = useRef<HTMLDivElement | null>(null);
   const recentHeaderRef = useRef<HTMLDivElement | null>(null);
@@ -1261,6 +1290,28 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <Button
               type="button"
               variant="ghost"
+              disabled={sectionsDisabled}
+              onClick={() => setConversationSearchOpen(true)}
+              className="chat-history-search-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
+              title={
+                conversationSearchShortcutLabel
+                  ? `${t("chat.searchConversations")} (${conversationSearchShortcutLabel})`
+                  : t("chat.searchConversations")
+              }
+            >
+              <Search className="h-4 w-4 shrink-0 text-foreground/85" />
+              <span className="min-w-0 flex-1 truncate text-left">
+                {t("chat.searchConversations")}
+              </span>
+              {conversationSearchShortcutLabel ? (
+                <kbd className="hidden rounded border border-border/50 bg-background/40 px-1 py-px text-[9px] font-medium leading-4 text-muted-foreground/70 min-[220px]:inline-flex">
+                  {conversationSearchShortcutLabel}
+                </kbd>
+              ) : null}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               onClick={() => onOpenSkillsHub?.()}
               className={cn(
                 "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
@@ -1991,6 +2042,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       </div>
       {bulkDeleteDialog}
       {groupDeleteDialog}
+      <ConversationSearchDialog
+        open={conversationSearchOpen}
+        onOpenChange={setConversationSearchOpen}
+        conversations={items}
+        currentWorkdir={currentConversationWorkdir}
+        onSelectConversation={handleSelectConversation}
+      />
     </aside>
   );
 });

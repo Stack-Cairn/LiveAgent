@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Compaction seam preview</title>
+    <style>
+      body { margin: 0; padding: 24px; background: hsl(var(--background)); }
+      .frame { width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+      .label { font: 500 11px/1 ui-sans-serif, system-ui; letter-spacing: .08em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <section>
+        <div class="label" id="label-settled">Settled · history</div>
+        <div id="settled"></div>
+      </section>
+      <section>
+        <div class="label">Streaming · compacting right now</div>
+        <div id="compacting"></div>
+      </section>
+      <section>
+        <div class="label">Streaming · continuation after compaction</div>
+        <div id="live"></div>
+      </section>
+    </div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import "/src/index.css";
+      import { AssistantBubble } from "@liveagent/ui/components/chat/AssistantBubble.tsx";
+      import { createCompactionSeamRound } from "@liveagent/ui/lib/chat/replyContinuity.ts";
+
+      const seam = {
+        key: "summary-seg-1",
+        summaryId: "sum-1",
+        content:
+          "## 已完成\n- 第 1～3 轮内置工具回归全部通过（Read/Write/Edit/Glob/Grep/Bash）。\n- 临时产物位于 `tool-test-round3/`，待清理。\n\n## 待办\n- 清理临时目录并写入记忆。",
+        coveredMessageCount: 94,
+        generatedBy: { providerId: "deepseek", model: "deepseek-v4-flash" },
+        contextUsageTokens: 18_400,
+      };
+
+      const write = (id, path, content, extra = {}) => ({
+        kind: "tool",
+        item: {
+          toolCall: { type: "toolCall", id, name: "Write", arguments: { path, content } },
+          toolResult: {
+            role: "toolResult",
+            toolCallId: id,
+            isError: false,
+            content: [{ type: "text", text: "ok" }],
+            details: { kind: "write", path, displayPath: path, ...extra },
+          },
+        },
+      });
+      const bash = (id, command) => ({
+        kind: "tool",
+        item: {
+          toolCall: { type: "toolCall", id, name: "Bash", arguments: { command } },
+          toolResult: {
+            role: "toolResult",
+            toolCallId: id,
+            isError: false,
+            content: [{ type: "text", text: "done" }],
+          },
+        },
+      });
+      const thinking = (id, text) => ({ kind: "thinking", id, text });
+
+      const firstHalf = [
+        {
+          round: 1,
+          key: "r1",
+          blocks: [
+            thinking("th-1", "先确认工作区里有哪些内置工具可以测。"),
+            write("w1", "tool-test-round3/data.json", '{\n  "ok": true,\n  "round": 3\n}\n'),
+            write("w2", "tool-test-round3/notes.md", "# notes\n\n- a\n- b\n- c\n"),
+            bash("b1", "ls -la tool-test-round3"),
+          ],
+          meta: { stopReason: "toolUse" },
+        },
+      ];
+      const secondHalfSettled = [
+        {
+          round: 1,
+          key: "p1:r1",
+          blocks: [
+            thinking("th-2", "上下文已压缩，继续把剩下的两个文件写完并清理。"),
+            write("w3", "tool-test-round3/sub/nested.txt", "nested\n"),
+            write("w4", "tool-test-round3/test-image.svg", "<svg/>\n"),
+          ],
+          meta: { stopReason: "toolUse" },
+        },
+        {
+          round: 2,
+          key: "p1:r2",
+          blocks: [
+            {
+              kind: "text",
+              id: "text-1",
+              text: "第 3 轮内置系统工具回归测试已全部完成（6 项任务全数 completed），临时产物已清理，结论已写入记忆。\n\n### 总体结论\n\n| 维度 | 结果 |\n| --- | --- |\n| 文件读写 | ✅ |\n| 命令执行 | ✅ |",
+            },
+          ],
+          meta: { stopReason: "stop" },
+        },
+      ];
+
+      const settledRounds = [...firstHalf, createCompactionSeamRound(seam), ...secondHalfSettled];
+      createRoot(document.querySelector("#settled")).render(
+        React.createElement(AssistantBubble, {
+          rounds: settledRounds,
+          isLive: false,
+          isStreaming: false,
+          renderMode: "static",
+          durationMs: 6 * 60_000 + 41_000,
+          workdir: "/tmp/ws",
+        }),
+      );
+
+      const liveRounds = [
+        ...firstHalf,
+        createCompactionSeamRound(seam),
+        {
+          round: 1,
+          key: "p1:r1",
+          blocks: [
+            thinking("th-2", "上下文已压缩，继续把剩下的两个文件写完并清理。"),
+            {
+              kind: "tool",
+              item: {
+                toolCall: {
+                  type: "toolCall",
+                  id: "w3",
+                  name: "Write",
+                  arguments: { path: "tool-test-round3/sub/nested.txt", content: "nested\n" },
+                },
+              },
+            },
+          ],
+          runningToolCallIds: ["w3"],
+          thinkingOpen: false,
+        },
+      ];
+      createRoot(document.querySelector("#live")).render(
+        React.createElement(AssistantBubble, {
+          rounds: liveRounds,
+          isLive: true,
+          isStreaming: true,
+          renderMode: "streaming",
+          workdir: "/tmp/ws",
+        }),
+      );
+
+      createRoot(document.querySelector("#compacting")).render(
+        React.createElement(AssistantBubble, {
+          rounds: firstHalf.map((round) => ({ ...round, runningToolCallIds: [], thinkingOpen: false })),
+          isLive: true,
+          isStreaming: true,
+          renderMode: "streaming",
+          toolStatus: "正在压缩上下文",
+          toolStatusVariant: "compaction",
+          workdir: "/tmp/ws",
+        }),
+      );
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -143,6 +143,41 @@
   }
 }
 
+@keyframes chat-work-pixel {
+  0%,
+  55%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.8);
+  }
+
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chat-work-pixel {
+  opacity: 0.15;
+  animation: chat-work-pixel 650ms ease-in-out var(--chat-work-delay) infinite;
+}
+
+/* Frozen while the turn waits on the user: still legible as an indicator,
+   but visibly not cycling. */
+.chat-work-pixel[data-paused] {
+  opacity: 0.45;
+  transform: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-work-pixel {
+    opacity: 0.15;
+    transform: none;
+    animation: none;
+  }
+}
+
 /*
  * Route Tailwind's mono theme font through the user-configurable code font.
  * A hand-written `.font-mono` override only covers bare class usage — variant

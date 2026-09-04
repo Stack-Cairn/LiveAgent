@@ -3,9 +3,15 @@ import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
 
-export function Tooltip(props: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Root>) {
+export function Tooltip<Payload = unknown>(props: TooltipPrimitive.Root.Props<Payload>) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
+
+/**
+ * 分离式触发器：多个 TooltipTrigger 通过同一个 handle 共享一个 Tooltip 实例，
+ * 列表类场景不必为每一行各挂一份弹层。
+ */
+export const createTooltipHandle = TooltipPrimitive.createHandle;
 
 export function TooltipTrigger(
   props: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>,

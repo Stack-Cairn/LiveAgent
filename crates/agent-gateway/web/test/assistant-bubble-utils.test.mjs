@@ -7,9 +7,8 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const loader = createWebModuleLoader({ rootDir });
 const { BUILTIN_TOOL_CATALOG } = loader.loadModule("@liveagent/ui/lib/tools/builtinToolCatalog.ts");
-const { groupRoundBlocks, isBuiltinShareToolName } = loader.loadModule(
-  "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
-);
+const { groupRoundBlocks, isBuiltinShareToolName, resolveAssistantTurnLayout } =
+  loader.loadModule("@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts");
 
 test("shared history recognizes every catalog tool as builtin", () => {
   for (const entry of BUILTIN_TOOL_CATALOG) {
@@ -100,4 +99,77 @@ test("task tools stay standalone so transcript filtering cannot hide ordinary to
     grouped[1].items.map((item) => item.toolCall.name),
     ["Read", "Read"],
   );
+});
+
+test("final native images and hosted search results stay in the answer layer", () => {
+  const displayImageTool = {
+    kind: "tool",
+    item: {
+      toolCall: { type: "toolCall", id: "image-1", name: "Image", arguments: {} },
+      toolResult: {
+        role: "toolResult",
+        toolCallId: "image-1",
+        content: [],
+        isError: false,
+        details: {
+          kind: "display_image",
+          images: [{ path: "/workspace/icon.png", mimeType: "image/png" }],
+          loadMode: "inline",
+        },
+      },
+    },
+  };
+  const text = (id, value) => ({ kind: "text", id, text: value });
+  const terminalMeta = { stopReason: "stop" };
+
+  const textThenImage = resolveAssistantTurnLayout(
+    [
+      {
+        round: 1,
+        meta: terminalMeta,
+        blocks: [text("intro", "图像开始"), displayImageTool],
+      },
+    ],
+    { live: false },
+  );
+  assert.deepEqual(
+    textThenImage.answer.map((entry) => entry.block.kind),
+    ["text", "tool"],
+  );
+  assert.deepEqual(textThenImage.work, []);
+
+  const imageThenText = resolveAssistantTurnLayout(
+    [
+      {
+        round: 1,
+        meta: terminalMeta,
+        blocks: [displayImageTool, text("done", "图像测试完成")],
+      },
+    ],
+    { live: false },
+  );
+  assert.deepEqual(
+    imageThenText.answer.map((entry) => entry.block.kind),
+    ["tool", "text"],
+  );
+  assert.deepEqual(imageThenText.work, []);
+
+  const textThenSearch = resolveAssistantTurnLayout(
+    [
+      {
+        round: 1,
+        meta: terminalMeta,
+        blocks: [
+          text("summary", "搜索完成"),
+          { kind: "hostedSearch", item: { id: "search-1", query: "OpenAI" } },
+        ],
+      },
+    ],
+    { live: false },
+  );
+  assert.deepEqual(
+    textThenSearch.answer.map((entry) => entry.block.kind),
+    ["text", "hostedSearchGroup"],
+  );
+  assert.deepEqual(textThenSearch.work, []);
 });

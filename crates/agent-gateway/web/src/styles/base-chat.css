@@ -933,10 +933,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   html[data-liveagent-webui="gateway"] .changed-file-row-action {
     display: none;
   }
-  .chat-user-bubble-actions,
-  .chat-assistant-actions {
-    opacity: 1;
-  }
 
   .chat-user-bubble-action,
   .chat-assistant-action {
@@ -946,6 +942,15 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
+  }
+}
+
+/* Only force the action row visible when *no* hover-capable pointer exists.
+ * `(pointer: coarse)` alone matches many desktop 2-in-1s that still have a mouse. */
+@media (any-hover: none) {
+  .chat-user-bubble-actions,
+  .chat-assistant-actions {
+    opacity: 1;
   }
 }
 

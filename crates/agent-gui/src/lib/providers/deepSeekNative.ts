@@ -15,6 +15,7 @@ import { createParser } from "eventsource-parser";
 import { inlineDeepSeekLargePastes } from "./deepSeekAttachments";
 import { resolveMaxTokens } from "./runtime/common";
 import { clampOpenAIReasoningEffort } from "./runtime/thinkingLevels";
+import { omitToolResultImages } from "./runtime/toolResultImageFallback";
 import type { StreamOptionsEx, ToolChoice } from "./runtime/types";
 
 export const DEEPSEEK_RESPONSES_API = "deepseek-responses";
@@ -94,15 +95,22 @@ function mapToolChoice(
   return { type: "function", name: toolChoice.name };
 }
 
-function assertTextOnlyContext(context: Context) {
+/**
+ * User-attached images are rejected up front: pi-ai forwards them as
+ * input_image unconditionally and DeepSeek's wire never accepts them.
+ *
+ * Tool-result images are deliberately NOT rejected here. They originate from
+ * tools (Browser screenshot, Read on an image file) rather than the user, and
+ * a thrown error would fail every later turn of the conversation because the
+ * tool result stays in history. They are degraded to a text notice instead
+ * (see omitToolResultImages).
+ */
+function assertNoUserImageInput(context: Context) {
   for (const message of context.messages) {
     if (message.role === "user" && Array.isArray(message.content)) {
       if (message.content.some((block) => block.type === "image")) {
         throw new Error("DeepSeek Responses does not support image input.");
       }
-    }
-    if (message.role === "toolResult" && message.content.some((block) => block.type === "image")) {
-      throw new Error("DeepSeek Responses does not support image tool results.");
     }
   }
 }
@@ -253,8 +261,11 @@ export function streamDeepSeekResponses(
 
   void (async () => {
     try {
-      assertTextOnlyContext(context);
-      const preparedContext = await inlineDeepSeekLargePastes(context, options.workdir);
+      assertNoUserImageInput(context);
+      // Forced (not gated on model.input): the DeepSeek wire never accepts
+      // image tool results, whatever capabilities the model object declares.
+      const textOnlyContext = omitToolResultImages(context, model.id);
+      const preparedContext = await inlineDeepSeekLargePastes(textOnlyContext, options.workdir);
       const responseCapture: DeepSeekResponseCapture = { outputByIndex: new Map() };
       const captureTasks: Promise<void>[] = [];
       const baseFetch = options.fetch ?? globalThis.fetch;

@@ -1,4 +1,5 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { formatTokenCount } from "@liveagent/ui/lib/chat/formatTokenCount";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState, useSyncExternalStore } from "react";
 import {
@@ -16,18 +17,6 @@ const RING_STROKE_BY_LEVEL = {
   warn: "stroke-amber-500 dark:stroke-amber-400",
   danger: "stroke-red-500 dark:stroke-red-400",
 } as const;
-
-// Intl.NumberFormat 构造含 locale 数据解析，环随流式读数逐帧重渲染，
-// 必须按 locale 复用实例。
-const tokenFormatterByLocale = new Map<string, Intl.NumberFormat>();
-
-function getTokenFormatter(locale: string): Intl.NumberFormat {
-  const cached = tokenFormatterByLocale.get(locale);
-  if (cached) return cached;
-  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
-  tokenFormatterByLocale.set(locale, formatter);
-  return formatter;
-}
 
 const COARSE_POINTER_QUERY = "(hover: none), (pointer: coarse)";
 
@@ -108,11 +97,11 @@ export function ContextUsageRing(props: {
   // 二者共用避免 a11y 量度与弧线漂移）。contextUsageRatio 不会返回负数。
   const displayedPercentage = Math.min(999, Math.round(ratio * 100));
   const clampedPercentage = Math.min(100, ratio * 100);
-  const formatTokens = getTokenFormatter(locale);
-  const usageLine = `${displayedPercentage}% · ${t("chat.usageTotal")} ${formatTokens.format(
-    Math.max(0, Math.floor(totalTokens ?? 0)),
+  const usageLine = `${displayedPercentage}% · ${t("chat.usageTotal")} ${formatTokenCount(
+    totalTokens ?? 0,
+    locale,
   )}`;
-  const windowLine = `${t("chat.contextWindow")} ${formatTokens.format(contextWindow)}`;
+  const windowLine = `${t("chat.contextWindow")} ${formatTokenCount(contextWindow, locale)}`;
   // a11y 量度/无障碍标签仍是单行字符串；tooltip 视觉上分两行（百分比+总计 /
   // 上下文窗口），窄屏不再挤成一长条折行。
   const usageLabel = `${usageLine} · ${windowLine}`;

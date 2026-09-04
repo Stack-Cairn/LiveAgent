@@ -56,6 +56,7 @@ import {
 } from "react";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import { isKnownProviderId, ProviderBrandIcon } from "../ProviderBrandIcon";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -126,6 +127,8 @@ function areRenderedHistoryItemsEqual(previous: SidebarConversation, next: Sideb
   return (
     previous.id === next.id &&
     previous.title === next.title &&
+    previous.providerId === next.providerId &&
+    previous.model === next.model &&
     previous.cwd === next.cwd &&
     previous.isPinned === next.isPinned &&
     previous.isShared === next.isShared &&
@@ -698,6 +701,15 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     )}
                   >
                     {isSelected ? <Check className="h-3 w-3" /> : null}
+                  </span>
+                ) : null}
+                {!isSelectionMode && isKnownProviderId(item.providerId) ? (
+                  <span
+                    aria-hidden="true"
+                    title={item.model || undefined}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center"
+                  >
+                    <ProviderBrandIcon type={item.providerId} />
                   </span>
                 ) : null}
                 <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">

@@ -27,12 +27,12 @@ import {
 
 export const CHAT_TRANSCRIPT_WIDTH_CSS_VAR = "--chat-transcript-content-width";
 
-// Who writes CHAT_TRANSCRIPT_WIDTH_CSS_VAR: the host element's own inline
-// style carries the *preferred* (persisted) width, so a fresh mount already
-// paints at the user's width. This component then narrows that to what the
-// stage can host — from a layout effect, before paint. A passive effect lands
-// after paint and would flash the unclamped width for a frame whenever a
-// commit has to be clamped.
+// Who writes CHAT_TRANSCRIPT_WIDTH_CSS_VAR: the nearest shared width owner
+// carries the *preferred* (persisted) width, so transcript and composer paint
+// at one width on the first frame. This component then narrows that owner to
+// what the stage can host — from a layout effect, before paint. A passive
+// effect would flash the unclamped width for a frame whenever a commit has to
+// be clamped.
 
 type TranscriptWidthControlsProps = {
   hostRef: RefObject<HTMLElement | null>;
@@ -60,8 +60,15 @@ function measureStageMaxWidth(host: HTMLElement | null) {
   return resolveStageMaxWidth(host?.getBoundingClientRect().width ?? null);
 }
 
+function resolveWidthOwner(host: HTMLElement | null): HTMLElement | null {
+  return host?.closest<HTMLElement>("[data-chat-width-owner]") ?? host;
+}
+
 function applyWidth(host: HTMLElement | null, width: number) {
-  host?.style.setProperty(CHAT_TRANSCRIPT_WIDTH_CSS_VAR, `${Math.round(width)}px`);
+  resolveWidthOwner(host)?.style.setProperty(
+    CHAT_TRANSCRIPT_WIDTH_CSS_VAR,
+    `${Math.round(width)}px`,
+  );
 }
 
 export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {

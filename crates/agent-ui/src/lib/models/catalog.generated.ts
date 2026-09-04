@@ -26,11 +26,12 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-01";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-04";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
     { id: "claude-fable-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
+    { id: "claude-fable-5-1", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-haiku-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-haiku-4-5-20251001", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-opus-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high"], off: true } },
@@ -68,6 +69,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "gemini-3.5-live-translate-preview", contextWindow: 16384, maxOutputToken: 4096, inputModalities: ["audio"] },
     { id: "gemini-3.6-flash", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: false } },
     { id: "gemini-3.7-flash", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
+    { id: "gemini-3.8-flash", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
     { id: "gemini-embedding-001", contextWindow: 2048, maxOutputToken: 1, inputModalities: ["text"] },
     { id: "gemini-embedding-2", contextWindow: 8192, maxOutputToken: 1, inputModalities: ["text", "image", "audio", "video", "pdf"] },
     { id: "gemini-flash-latest", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },

@@ -124,6 +124,15 @@ jobs:
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --validate
 
+      - name: Install deterministic DMG builder
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/dmgbuild-venv"
+          "$RUNNER_TEMP/dmgbuild-venv/bin/python" -m pip install \
+            --disable-pip-version-check \
+            "dmgbuild==1.6.5"
+          echo "$RUNNER_TEMP/dmgbuild-venv/bin" >> "$GITHUB_PATH"
+
       - name: Build signed and notarized DMG
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -234,7 +243,10 @@ jobs:
 
   linux:
     name: Linux x64
-    runs-on: ubuntu-latest
+    # 必须在 Ubuntu 22.04 (glibc 2.35) 上构建,产物才符合 README 承诺的 Ubuntu 22.04+ / Debian 12+。
+    # 若用 ubuntu-latest(24.04, glibc 2.39)构建,二进制会引用 GLIBC_2.38/2.39,在 22.04 上启动即退出 (#714)。
+    # 该 runner 与 Ubuntu 22.04 LTS 标准支持同在 2027-04 前退役;届时需迁移到 ubuntu:22.04 容器构建。
+    runs-on: ubuntu-22.04
     needs: release-metadata
     env:
       LIVEAGENT_APP_VERSION: ${{ needs.release-metadata.outputs.app_version }}
@@ -290,6 +302,9 @@ jobs:
           LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
         run: pnpm tauri build --config src-tauri/tauri.linux.release.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
+
+      - name: Verify glibc baseline
+        run: bash scripts/release/verify-linux-glibc-baseline.sh
 
       - name: Strip bundled Wayland libraries and re-sign AppImage
         env:

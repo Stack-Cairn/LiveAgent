@@ -25,6 +25,13 @@ export function createHarness(options = {}) {
     rafQueue: new Map(),
     rafSeq: 0,
     scrollCb: null,
+    // The DOM sizer height as the browser sees it. Like a real consumer, it
+    // only follows getTotalSize() when the virtualizer notifies a render —
+    // never by itself — so scrollTo writes clamp against the sizer as it
+    // stands at write time, exactly as in the browser.
+    domSizerHeight: count * estimate,
+    sizerFollowsLayout: true,
+    notifies: [],
   };
 
   const fakeWindow = {
@@ -50,7 +57,7 @@ export function createHarness(options = {}) {
       return state.realScrollTop;
     },
     get scrollHeight() {
-      return virtualizer.getTotalSize();
+      return state.domSizerHeight;
     },
     clientHeight: viewport,
   };
@@ -60,13 +67,17 @@ export function createHarness(options = {}) {
     getScrollElement: () => fakeElement,
     estimateSize: () => estimate,
     getItemKey: options.getItemKey ?? ((index) => `row-${index}`),
+    onChange: (instance, sync) => {
+      state.notifies.push({ sync, totalSize: instance.getTotalSize() });
+      if (state.sizerFollowsLayout) state.domSizerHeight = instance.getTotalSize();
+    },
     scrollToFn: (offset, { adjustments }) => {
       const target = offset + (adjustments ?? 0);
       if (state.swallowWrites) {
         state.writes.push({ target, swallowed: true });
         return;
       }
-      const max = Math.max(0, virtualizer.getTotalSize() - viewport);
+      const max = Math.max(0, state.domSizerHeight - viewport);
       state.realScrollTop = Math.max(0, Math.min(max, target));
       state.writes.push({ target, swallowed: false, landed: state.realScrollTop });
     },
@@ -99,8 +110,23 @@ export function createHarness(options = {}) {
     get writes() {
       return state.writes;
     },
+    get notifies() {
+      return state.notifies;
+    },
+    get domSizerHeight() {
+      return state.domSizerHeight;
+    },
     setSwallowWrites(value) {
       state.swallowWrites = value;
+    },
+    // A consumer whose render is not synchronous with the notify (no
+    // flushSync, no direct DOM styles): the sizer keeps its stale height
+    // until syncSizer() stands in for the late render.
+    setSizerFollowsLayout(value) {
+      state.sizerFollowsLayout = value;
+    },
+    syncSizer() {
+      state.domSizerHeight = virtualizer.getTotalSize();
     },
     // The user (or compositor) moved the viewport and the browser reported it.
     emitScroll(offset, isScrolling = true) {

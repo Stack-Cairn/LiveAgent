@@ -34,6 +34,7 @@ import {
   toolResultMessageToText,
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
@@ -75,6 +76,10 @@ type ShellSessionResultDetails = {
   shell?: string;
   timeout_ms?: number | null;
   output_truncated?: boolean;
+  output?: Array<{
+    stream?: string;
+    text?: string;
+  }>;
 };
 
 function isShellResultDetails(value: unknown): value is ShellResultDetails {
@@ -100,12 +105,6 @@ function isShellSessionResultDetails(value: unknown): value is ShellSessionResul
     typeof candidate.status === "string" &&
     typeof candidate.duration_ms === "number"
   );
-}
-
-function summarizeShellStream(text: string, truncated: boolean) {
-  const length = text.length;
-  if (length === 0) return "empty";
-  return truncated ? `${length} chars, truncated` : `${length} chars`;
 }
 
 function buildPagedResultTags(params: {
@@ -410,6 +409,79 @@ function extractResultText(result?: ToolResultMessage) {
   return result ? toolResultMessageToText(result) : "";
 }
 
+function stripShellSessionEnvelope(text: string) {
+  const outputMarker = /\n(?:stdout|stderr|output)(?: \(truncated\))?:\n/g;
+  const firstMarker = outputMarker.exec(text);
+  if (!firstMarker) {
+    return text.trimStart().startsWith("# Shell Session") ? "" : text.trimEnd();
+  }
+
+  return text
+    .slice(firstMarker.index + firstMarker[0].length)
+    .replace(/\n(?:stdout|stderr|output)(?: \(truncated\))?:\n/g, "\n")
+    .replace(/\n\n(?:Command is still running\.|More buffered output is available\.)[\s\S]*$/, "")
+    .trimEnd();
+}
+
+export function getShellDisplayOutput(result?: ToolResultMessage) {
+  if (!result) return "";
+
+  if (isShellSessionResultDetails(result.details) && Array.isArray(result.details.output)) {
+    return result.details.output
+      .map((chunk) => (typeof chunk?.text === "string" ? chunk.text : ""))
+      .join("")
+      .trimEnd();
+  }
+
+  if (isShellResultDetails(result.details)) {
+    return [result.details.stdout, result.details.stderr].filter(Boolean).join("\n").trimEnd();
+  }
+
+  return stripShellSessionEnvelope(extractResultText(result));
+}
+
+export function ShellToolDisplay({
+  item,
+  result,
+}: {
+  item: ToolTraceItem;
+  result: ToolResultMessage | undefined;
+}) {
+  const command =
+    item.toolCall.name === "Bash" && typeof item.toolCall.arguments?.command === "string"
+      ? item.toolCall.arguments.command.trim()
+      : "";
+  const output = getShellDisplayOutput(result);
+  if (!command && !output) return null;
+
+  return (
+    <section
+      className="overflow-hidden rounded-xl border border-border/75 bg-foreground/[0.025] dark:bg-white/[0.035]"
+      aria-label="Shell"
+      data-shell-tool-display=""
+    >
+      <div className="px-3 pb-0.5 pt-2.5 text-[calc(12px*var(--zone-font-scale,1))] font-medium text-muted-foreground/75">
+        Shell
+      </div>
+      <ToolScrollablePre
+        className={cn(
+          "max-h-72 rounded-none bg-transparent px-3 pb-3 pt-1.5 text-foreground/78",
+          result?.isError && "text-red-700/90 dark:text-red-300/90",
+        )}
+      >
+        {command ? (
+          <>
+            <span className="select-none text-muted-foreground/45">$ </span>
+            {command}
+            {output ? "\n" : null}
+          </>
+        ) : null}
+        {output ? previewText(output, 6000) : null}
+      </ToolScrollablePre>
+    </section>
+  );
+}
+
 function extractReadBody(text: string) {
   const marker = text.indexOf("\n\n");
   return marker >= 0 ? text.slice(marker + 2) : text;
@@ -458,71 +530,12 @@ export function ToolResultDisplay({
   const kind = getBuiltinResultKind(result);
   const text = extractResultText(result);
   const images = getToolResultImages(result);
-  const shellDetails = isShellResultDetails(result.details) ? result.details : null;
-  const shellSessionDetails = isShellSessionResultDetails(result.details) ? result.details : null;
   const isShellSessionTool =
     item.toolCall.name === "Bash" ||
     item.toolCall.name === "ProcessWait" ||
     item.toolCall.name === "ProcessStop";
 
-  if (isShellSessionTool && shellSessionDetails) {
-    return (
-      <ToolSurface>
-        <MetaTags
-          tags={[
-            { label: "session", value: shellSessionDetails.session_id },
-            { label: "status", value: shellSessionDetails.status },
-            ...(typeof shellSessionDetails.cursor === "number"
-              ? [{ label: "cursor", value: String(shellSessionDetails.cursor) }]
-              : []),
-            ...(shellSessionDetails.has_more ? [{ label: "more", value: "true" }] : []),
-            ...(typeof shellSessionDetails.exit_code === "number"
-              ? [{ label: "exit", value: String(shellSessionDetails.exit_code) }]
-              : []),
-            { label: "session duration", value: `${shellSessionDetails.duration_ms} ms` },
-            ...(shellSessionDetails.shell
-              ? [{ label: "shell", value: shellSessionDetails.shell }]
-              : []),
-            ...(typeof shellSessionDetails.timeout_ms === "number"
-              ? [{ label: "timeout_ms", value: String(shellSessionDetails.timeout_ms) }]
-              : []),
-            ...(shellSessionDetails.output_truncated
-              ? [{ label: "session output", value: "truncated" }]
-              : []),
-          ]}
-        />
-      </ToolSurface>
-    );
-  }
-
-  if (item.toolCall.name === "Bash") {
-    if (!shellDetails) return null;
-
-    return (
-      <ToolSurface>
-        <MetaTags
-          tags={[
-            { label: "shell", value: shellDetails.shell || "unknown" },
-            { label: "exit", value: String(shellDetails.exit_code) },
-            { label: "duration", value: `${shellDetails.duration_ms} ms` },
-            ...(typeof shellDetails.effective_timeout_ms === "number"
-              ? [{ label: "timeout_ms", value: `${shellDetails.effective_timeout_ms}` }]
-              : []),
-            {
-              label: "stdout",
-              value: summarizeShellStream(shellDetails.stdout, shellDetails.stdout_truncated),
-            },
-            {
-              label: "stderr",
-              value: summarizeShellStream(shellDetails.stderr, shellDetails.stderr_truncated),
-            },
-            ...(shellDetails.timed_out ? [{ label: "timeout", value: "true" }] : []),
-            ...(shellDetails.cancelled ? [{ label: "cancelled", value: "true" }] : []),
-          ]}
-        />
-      </ToolSurface>
-    );
-  }
+  if (isShellSessionTool) return null;
 
   if (kind === "read_text") {
     const details = result.details as ReadTextResultDetails;

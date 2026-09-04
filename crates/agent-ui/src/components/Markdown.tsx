@@ -310,7 +310,7 @@ export function MarkdownFileLink(props: MarkdownFileLinkProps) {
   return (
     <button
       type="button"
-      className="inline max-w-full cursor-pointer appearance-none whitespace-normal rounded-sm border-0 bg-transparent p-0 text-left font-medium text-primary underline decoration-primary/35 underline-offset-4 outline-none [overflow-wrap:anywhere] hover:decoration-primary focus-visible:ring-2 focus-visible:ring-ring/35"
+      className="inline max-w-full cursor-pointer appearance-none whitespace-normal rounded-sm border-0 bg-transparent p-0 text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2 outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-2 focus-visible:ring-ring/35 dark:text-sky-400"
       data-liveagent-file-link="true"
       title={label}
       onClick={() => onOpenFileLink(parsed)}
@@ -354,7 +354,7 @@ function MarkdownReadOnlyLink(props: MarkdownAnchorFallbackProps) {
         ? href.trim()
         : undefined;
   return (
-    <span className="text-primary underline decoration-primary/35 underline-offset-4" title={label}>
+    <span className="text-sky-600 no-underline dark:text-sky-400" title={label}>
       {children}
     </span>
   );
@@ -376,7 +376,7 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
       <button
         type="button"
         className={cn(
-          "inline max-w-full cursor-pointer appearance-none whitespace-normal border-0 bg-transparent p-0 text-left font-medium text-primary underline [overflow-wrap:anywhere]",
+          "inline max-w-full cursor-pointer appearance-none whitespace-normal border-0 bg-transparent p-0 text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2 [overflow-wrap:anywhere] hover:underline dark:text-sky-400",
           className,
         )}
         data-incomplete={incomplete}
@@ -431,7 +431,7 @@ function CodeBlockActions({ code }: { code: string }) {
 
   return (
     <div className="pointer-events-none absolute right-0 top-0 z-20 flex h-8 items-center justify-end">
-      <div className="pointer-events-auto flex shrink-0 items-center rounded-md bg-background/95 px-1.5 py-1">
+      <div className="pointer-events-auto flex shrink-0 items-center rounded-md bg-transparent px-1.5 py-1">
         <CopyButton
           value={code}
           label={t("chat.markdown.copyCode")}
@@ -657,13 +657,13 @@ const MARKDOWN_EMBED_CLASSNAME = cn(
   "[&_td]:border-0 [&_td]:px-0 [&_td]:py-1 [&_td]:pr-8 [&_td]:align-middle [&_td]:leading-8 [&_td]:text-foreground/90",
   "[&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_table_*]:outline-none [&_table_*]:ring-0",
   "[&_div:has(>table)]:rounded-none [&_div:has(>table)]:border-0 [&_div:has(>table)]:bg-transparent [&_div:has(>table)]:shadow-none [&_div:has(>table)]:outline-none [&_div:has(>table)]:ring-0",
-  "[&_code:not(pre_code)]:whitespace-pre-wrap [&_code:not(pre_code)]:break-words [&_code:not(pre_code)]:rounded-md [&_code:not(pre_code)]:bg-foreground/[0.05] [&_code:not(pre_code)]:px-1.5 [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:font-mono [&_code:not(pre_code)]:text-[0.92em] [&_code:not(pre_code)]:text-foreground [&_code:not(pre_code)]:[overflow-wrap:anywhere]",
+  "[&_code:not(pre_code)]:whitespace-pre-wrap [&_code:not(pre_code)]:break-words [&_code:not(pre_code)]:rounded-xs [&_code:not(pre_code)]:bg-foreground/[0.085] [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-px [&_code:not(pre_code)]:font-mono [&_code:not(pre_code)]:text-[0.92em] [&_code:not(pre_code)]:text-foreground/95 [&_code:not(pre_code)]:[overflow-wrap:anywhere]",
   "[&_[data-streamdown='code-block']]:my-4 [&_[data-streamdown='code-block']]:!w-full [&_[data-streamdown='code-block']]:min-w-0 [&_[data-streamdown='code-block']]:gap-0 [&_[data-streamdown='code-block']]:rounded-none [&_[data-streamdown='code-block']]:border-0 [&_[data-streamdown='code-block']]:bg-transparent [&_[data-streamdown='code-block']]:p-0 [&_[data-streamdown='code-block']]:shadow-none [&_[data-streamdown='code-block']]:outline-none [&_[data-streamdown='code-block']]:ring-0",
-  "[&_[data-streamdown='code-block']>div:first-child]:mt-2 [&_[data-streamdown='code-block']>div:first-child]:min-h-0 [&_[data-streamdown='code-block']>div:first-child]:justify-between [&_[data-streamdown='code-block']>div:first-child]:gap-2 [&_[data-streamdown='code-block']>div:first-child]:border-0 [&_[data-streamdown='code-block']>div:first-child]:bg-transparent [&_[data-streamdown='code-block']>div:first-child]:pb-6 [&_[data-streamdown='code-block']>div:first-child]:text-[11px] [&_[data-streamdown='code-block']>div:first-child]:font-medium [&_[data-streamdown='code-block']>div:first-child]:tracking-[0.06em] [&_[data-streamdown='code-block']>div:first-child]:text-muted-foreground/85 [&_[data-streamdown='code-block']>div:first-child]:shadow-none",
+  "[&_[data-streamdown='code-block']>div:first-child]:min-h-0 [&_[data-streamdown='code-block']>div:first-child]:justify-between [&_[data-streamdown='code-block']>div:first-child]:gap-2 [&_[data-streamdown='code-block']>div:first-child]:bg-transparent [&_[data-streamdown='code-block']>div:first-child]:shadow-none",
   "[&_[data-streamdown='code-block']>div:last-child]:!w-full [&_[data-streamdown='code-block']>div:last-child]:min-w-0 [&_[data-streamdown='code-block']>div:last-child]:rounded-none [&_[data-streamdown='code-block']>div:last-child]:border-0 [&_[data-streamdown='code-block']>div:last-child]:bg-transparent [&_[data-streamdown='code-block']>div:last-child]:p-0 [&_[data-streamdown='code-block']>div:last-child]:shadow-none",
-  "[&_[data-streamdown='code-block-body']]:!rounded-xl [&_[data-streamdown='code-block-body']]:!bg-muted/40",
-  "[&_pre]:my-0 [&_pre]:block [&_pre]:!w-full [&_pre]:!min-w-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:overflow-y-hidden [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:px-0 [&_pre]:pb-2 [&_pre]:pt-0 [&_pre]:shadow-none [&_pre]:outline-none [&_pre]:ring-0",
-  "[&_pre>code]:block [&_pre>code]:w-max [&_pre>code]:min-w-full [&_pre>code]:max-w-none [&_pre>code]:border-0 [&_pre>code]:bg-transparent [&_pre>code]:py-4 [&_pre>code]:font-mono [&_pre>code]:text-[13px] [&_pre>code]:leading-5 [&_pre>code]:text-foreground/92 [&_pre>code]:shadow-none [&_pre>code]:outline-none [&_pre>code]:ring-0",
+  "[&_[data-streamdown='code-block-body']]:!rounded-none [&_[data-streamdown='code-block-body']]:!bg-transparent",
+  "[&_pre]:my-0 [&_pre]:block [&_pre]:!w-full [&_pre]:!min-w-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:overflow-y-hidden [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:shadow-none [&_pre]:outline-none [&_pre]:ring-0",
+  "[&_pre>code]:block [&_pre>code]:w-max [&_pre>code]:min-w-full [&_pre>code]:max-w-none [&_pre>code]:border-0 [&_pre>code]:bg-transparent [&_pre>code]:px-4 [&_pre>code]:py-3.5 [&_pre>code]:font-mono [&_pre>code]:text-[13px] [&_pre>code]:leading-[22px] [&_pre>code]:text-foreground/92 [&_pre>code]:shadow-none [&_pre>code]:outline-none [&_pre>code]:ring-0",
   "[&_strong]:font-medium [&_[data-streamdown='strong']]:font-medium",
 );
 

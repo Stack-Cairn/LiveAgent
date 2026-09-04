@@ -139,6 +139,11 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
     "anthropic-dangerous-direct-browser-access",
     "session_id",
     "conversation_id",
+    "session-id",
+    "thread-id",
+    "x-client-request-id",
+    "x-claude-code-session-id",
+    "x-grok-client-identifier",
   ];
   for (const [type, attempts] of attemptsByProvider) {
     for (const attempt of attempts) {
@@ -461,7 +466,7 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
         isFullUrl: true,
         modelsUrl: "https://catalog.example.com/models?api-version=2026-01",
         providerId: "provider-codex",
-        customHeaders: [{ key: "User-Agent", value: "claude-cli/2.1.186 (external, cli)" }],
+        customHeaders: [{ key: "User-Agent", value: "claude-cli/2.1.88 (external, cli)" }],
       },
     );
     assert.deepEqual(
@@ -479,7 +484,7 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
         is_full_url: true,
         // WebView 的 fetch() 会静默丢掉 User-Agent，Gateway 路径必须把用户配的头
         // 原样交给桌面端去落地，否则改了头也到不了上游。
-        custom_headers: [{ key: "User-Agent", value: "claude-cli/2.1.186 (external, cli)" }],
+        custom_headers: [{ key: "User-Agent", value: "claude-cli/2.1.88 (external, cli)" }],
       },
     ]);
   } finally {
@@ -616,20 +621,16 @@ test("mergeFetchedModels never overwrites a user-edited stored value with a fres
   assert.equal(model.limitsSource, "user");
 });
 
-test("model bulk helpers count and apply only selected active states", () => {
+test("applyModelsActiveState applies enable/disable to target models only", () => {
   const activeModels = new Set(["enabled-model", "untouched-model"]);
-  const selectedModels = new Set(["enabled-model", "disabled-model"]);
+  const targetModels = ["enabled-model", "disabled-model"];
 
-  assert.deepEqual(providerUtils.getModelBulkActionCounts(selectedModels, activeModels), {
-    enableCount: 1,
-    disableCount: 1,
-  });
   assert.deepEqual(
-    [...providerUtils.applyModelBulkActiveState(activeModels, selectedModels, true)].sort(),
+    [...providerUtils.applyModelsActiveState(activeModels, targetModels, true)].sort(),
     ["disabled-model", "enabled-model", "untouched-model"],
   );
   assert.deepEqual(
-    [...providerUtils.applyModelBulkActiveState(activeModels, selectedModels, false)].sort(),
+    [...providerUtils.applyModelsActiveState(activeModels, targetModels, false)].sort(),
     ["untouched-model"],
   );
   assert.deepEqual([...activeModels].sort(), ["enabled-model", "untouched-model"]);

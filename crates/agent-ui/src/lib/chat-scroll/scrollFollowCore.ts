@@ -1,6 +1,6 @@
 // Scroll-follow core for bottom-pinned live views: the chat transcript
-// viewport and the thinking-block <pre> both run on this reducer via
-// useScrollFollow.
+// viewport and the streaming thinking-block scroller both run on this reducer
+// via useScrollFollow.
 //
 // This replaces the 2026-07 scrollFollowPolicy after four rounds of
 // device-specific patches. Instead of refining the "was that scroll the user

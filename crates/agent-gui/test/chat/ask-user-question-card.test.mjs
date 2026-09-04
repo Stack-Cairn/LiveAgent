@@ -55,6 +55,10 @@ function createHookHarness(initialState = {}) {
       return factory();
     },
     useEffect() {},
+    useLayoutEffect() {},
+    useRef(initialValue) {
+      return { current: initialValue };
+    },
   };
 
   return {
@@ -79,6 +83,8 @@ function createCardHarness(initialState = {}) {
       },
       "@liveagent/ui/components/IconSet": {
         Check: (props) => ({ type: "Check", props }),
+        ChevronDown: (props) => ({ type: "ChevronDown", props }),
+        ChevronUp: (props) => ({ type: "ChevronUp", props }),
         Sparkles: (props) => ({ type: "Sparkles", props }),
       },
       "@liveagent/ui/lib/shared/utils": {
@@ -140,6 +146,23 @@ function deferred() {
   return { promise, resolve };
 }
 
+test("card surface avoids an outer shadow that the collapse viewport would clip", () => {
+  const card = createCardHarness();
+  const tree = card.render({ deadlineAt: Date.now() + 60_000 });
+  const surface = findAll(
+    tree,
+    (node) =>
+      node.type === "div" &&
+      typeof node.props?.className === "string" &&
+      node.props.className.includes("rounded-2xl") &&
+      node.props.className.includes("backdrop-blur-xl"),
+  )[0];
+
+  assert.ok(surface);
+  assert.match(surface.props.className, /shadow-\[inset_/);
+  assert.doesNotMatch(surface.props.className, /0_12px_40px|0_2px_6px/);
+});
+
 async function flushPromises() {
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
@@ -167,7 +190,7 @@ test("expired countdown disables options, custom input, and submit before tool_r
   );
   assert.equal(optionButtons.length, 2);
   assert.equal(optionButtons.every((button) => button.props.disabled === true), true);
-  assert.equal(optionButtons.every((button) => button.props.className.includes("opacity-55")), true);
+  assert.equal(optionButtons.every((button) => button.props.className.includes("opacity-50")), true);
 
   const customOption = findAll(
     tree,
@@ -316,9 +339,12 @@ test("multi-question selection auto-advances and preserves a mixed custom payloa
     findAll(
       tree,
       (node) =>
-        node.type === "button" && ["One", "Two", "Three"].includes(treeText(node)),
+        node.type === "button" &&
+        ["chat.askUser.previousQuestion", "chat.askUser.nextQuestion"].includes(
+          node.props?.["aria-label"],
+        ),
     ).length,
-    3,
+    2,
   );
   findAll(tree, (node) => node.type === "button" && node.props?.role === "radio")[1].props.onClick();
 

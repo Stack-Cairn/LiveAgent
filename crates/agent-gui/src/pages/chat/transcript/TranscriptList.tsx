@@ -20,6 +20,7 @@ import {
   type MutableRefObject,
   memo,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -34,6 +35,10 @@ import type {
   RenderTimelineItem,
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import {
+  getPendingToolApprovalsSnapshot,
+  subscribeToolApprovalsForConversation,
+} from "../../../lib/tools/toolApproval";
 import { AssistantActivityRow } from "./AssistantActivityRow";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
@@ -45,6 +50,13 @@ const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-activity-v2";
 function buildVersionedTranscriptLayoutKey(viewportWidth: number, contentWidth: number) {
   const layoutKey = buildTranscriptLayoutKey(viewportWidth, contentWidth);
   return layoutKey ? `${layoutKey}:${TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION}` : "";
+}
+
+function assistantReplyKeyFromEventTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return null;
+  return (
+    target.closest<HTMLElement>("[data-assistant-reply-key]")?.dataset.assistantReplyKey ?? null
+  );
 }
 
 // Measured row heights survive conversation switches: saved on unmount,
@@ -72,9 +84,16 @@ const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }
 
 export type TranscriptNavHandle = TranscriptNavigationHandle;
 
+// Distance from the top of the loaded history (in settled scroll
+// coordinates) under which the next earlier page is requested.
+const LOAD_EARLIER_THRESHOLD_PX = 480;
+
 export type TranscriptListProps = {
   conversationId: string;
   historyItems: RenderTimelineItem[];
+  hasMoreHistory: boolean;
+  onLoadEarlierHistory: () => Promise<void>;
+  isHistorySwitching: boolean;
   liveTranscriptStore: LiveTranscriptStore;
   scrollViewport: HTMLDivElement | null;
   layoutWidth: number;
@@ -83,7 +102,6 @@ export type TranscriptListProps = {
   isViewportFollowing?: () => boolean;
   viewportFollowing: boolean;
   isSending: boolean;
-  isAgentMode: boolean;
   isCompactionRunning: boolean;
   showUsage: boolean;
   usageContextWindow?: number;
@@ -115,13 +133,15 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   const {
     conversationId,
     historyItems,
+    hasMoreHistory,
+    onLoadEarlierHistory,
+    isHistorySwitching,
     liveTranscriptStore,
     scrollViewport,
     layoutWidth,
     isViewportFollowing,
     viewportFollowing,
     isSending,
-    isAgentMode,
     isCompactionRunning,
     showUsage,
     usageContextWindow,
@@ -140,6 +160,19 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     liveTranscriptStore.getSnapshot,
     liveTranscriptStore.getSnapshot,
   );
+
+  // 审批门在工具执行「之前」挂起，转录里看不出运行中的工具；活跃回合据此把
+  // 进度指示冻结成静态（同一份 pending 表也驱动输入框上方的审批栏）。
+  const subscribeApprovals = useCallback(
+    (listener: () => void) => subscribeToolApprovalsForConversation(conversationId, listener),
+    [conversationId],
+  );
+  const getApprovalsSnapshot = useCallback(
+    () => getPendingToolApprovalsSnapshot(conversationId),
+    [conversationId],
+  );
+  const hasPendingToolApproval =
+    useSyncExternalStore(subscribeApprovals, getApprovalsSnapshot, getApprovalsSnapshot).length > 0;
 
   // The component remounts per conversation (keyed by ChatTranscript), so
   // per-conversation state initializes once per mount — no reset effects.
@@ -176,6 +209,17 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   );
 
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(null);
+  const [hoveredAssistantReplyKey, setHoveredAssistantReplyKey] = useState<string | null>(null);
+
+  const handleTranscriptPointerOver = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const nextReplyKey = assistantReplyKeyFromEventTarget(event.target);
+    setHoveredAssistantReplyKey((currentReplyKey) =>
+      currentReplyKey === nextReplyKey ? currentReplyKey : nextReplyKey,
+    );
+  }, []);
+  const handleTranscriptPointerLeave = useCallback(() => {
+    setHoveredAssistantReplyKey(null);
+  }, []);
 
   useEffect(() => {
     if (!editingMessageKey) {
@@ -250,6 +294,47 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     getLiveStartIndex: () => liveStartIndexRef.current,
     isFollowing: () => isViewportFollowing?.() ?? false,
   });
+
+  // Earlier-history paging. The prepended page is anchored by the
+  // virtualizer itself ('origin' anchoring keeps the row under the viewport
+  // in place and settles the sizer/scrollTop in one verified pass), so this
+  // only decides *when* to ask for more. It reads the settled offset, not
+  // DOM scrollTop: while the page is anchored through the origin scrollTop
+  // stays parked near the top, and a raw scrollTop check would re-arm on
+  // every wheel tick and stack page after page before the first one settled.
+  //
+  // The hard top (DOM scrollTop 0) is a trigger of its own: WebKit defers the
+  // origin rebase until the gesture settles, so a fling can pin the viewport
+  // at 0 with unsettled debt still above it — the reader is pushing against
+  // the top and cannot scroll into that debt until the rebase lands. Ask for
+  // the page right there (it lands anchored through the origin, so nothing
+  // moves), once per visit: rubber-band scroll events at 0 must not re-fire.
+  const loadingEarlierRef = useRef(false);
+  const hardTopLatchedRef = useRef(false);
+  useEffect(() => {
+    if (!scrollViewport || !hasMoreHistory || isHistorySwitching) return;
+    const loadAtTop = () => {
+      const atHardTop = scrollViewport.scrollTop <= 1;
+      if (!atHardTop) hardTopLatchedRef.current = false;
+      if (loadingEarlierRef.current) return;
+      const nearSettledTop = virtualizer.getSettledScrollOffset() <= LOAD_EARLIER_THRESHOLD_PX;
+      if (!nearSettledTop && (!atHardTop || hardTopLatchedRef.current)) return;
+      if (atHardTop) hardTopLatchedRef.current = true;
+      loadingEarlierRef.current = true;
+      void onLoadEarlierHistory()
+        .catch(() => undefined)
+        .finally(() => {
+          // Release once the page has had a frame to render: the settled
+          // offset now includes it, so the trigger re-arms only when the
+          // user actually scrolls up into the new rows.
+          requestAnimationFrame(() => {
+            loadingEarlierRef.current = false;
+          });
+        });
+    };
+    scrollViewport.addEventListener("scroll", loadAtTop, { passive: true });
+    return () => scrollViewport.removeEventListener("scroll", loadAtTop);
+  }, [hasMoreHistory, isHistorySwitching, onLoadEarlierHistory, scrollViewport, virtualizer]);
 
   // Every mounted row is already tracked by the virtualizer's ResizeObserver,
   // which updates its measured height as the centered transcript reflows.
@@ -344,10 +429,19 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   useEffect(() => () => saveMeasurementsRef.current(), []);
 
   return (
-    <div ref={virtualizer.containerRef} className="relative">
+    <div
+      ref={virtualizer.containerRef}
+      className="relative"
+      onPointerOver={handleTranscriptPointerOver}
+      onPointerLeave={handleTranscriptPointerLeave}
+    >
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index];
         if (!row) return null;
+        const assistantReplyKey =
+          row.kind === "assistant-unit" || row.kind === "assistant-activity" ? row.replyKey : null;
+        const actionsVisible =
+          assistantReplyKey !== null && assistantReplyKey === hoveredAssistantReplyKey;
 
         let body: ReactNode;
         if (row.kind === "summary") {
@@ -374,9 +468,10 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                 row={row}
                 showUsage={showUsage}
                 usageContextWindow={usageContextWindow}
-                isAgentMode={isAgentMode}
                 isCompactionRunning={isCompactionRunning}
+                hasPendingToolApproval={hasPendingToolApproval}
                 toolStatus={displayedToolStatus}
+                actionsVisible={actionsVisible}
                 retryAttempts={liveState.retryAttempts}
                 workdir={workspaceRoot}
                 onOpenFileLink={onOpenFileLink}
@@ -392,9 +487,9 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                 row={row}
                 showUsage={showUsage}
                 usageContextWindow={usageContextWindow}
-                isAgentMode={isAgentMode}
                 isCompactionRunning={row.mutable ? isCompactionRunning : false}
                 toolStatus={row.mutable ? displayedToolStatus : null}
+                actionsVisible={actionsVisible}
                 retryAttempts={row.mutable ? liveState.retryAttempts : undefined}
                 workdir={workspaceRoot}
                 onOpenFileLink={onOpenFileLink}
@@ -409,6 +504,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
           <div
             key={virtualRow.key}
             data-row-key={row.key}
+            data-assistant-reply-key={assistantReplyKey ?? undefined}
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
             className="absolute left-0 right-0 top-0"

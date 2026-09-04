@@ -629,6 +629,11 @@ mod tests {
                     "anthropic-dangerous-direct-browser-access",
                     "session_id",
                     "conversation_id",
+                    "session-id",
+                    "thread-id",
+                    "x-client-request-id",
+                    "x-claude-code-session-id",
+                    "x-grok-client-identifier",
                 ] {
                     assert!(!names.iter().any(|name| name == forbidden), "{forbidden}");
                 }

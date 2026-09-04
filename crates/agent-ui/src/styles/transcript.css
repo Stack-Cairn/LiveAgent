@@ -9,3 +9,59 @@
 .chat-user-trailing-newline-anchor::before {
   content: "\200b";
 }
+
+/*
+ * 消息操作条（复制/编辑/时间戳）：只要设备上有任意可悬停指针
+ * （含触屏笔记本外接鼠标），就默认隐藏、真正 :hover / :focus-within 再显示。
+ * Tailwind 的 group-hover 被关在主指针 `hover: hover` 里，触屏主指针的
+ * 笔记本即使用着鼠标也不会触发，所以这里用 any-hover + 原生 :hover。
+ * 纯触屏（any-hover: none）保持常显。规则放在 @layer 外，才能压过 utilities。
+ */
+.chat-row-hover-chrome {
+  transition-property: opacity;
+  transition-duration: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-row-hover-chrome {
+    transition: none;
+  }
+}
+
+@media (any-hover: hover) {
+  .chat-row-hover-chrome {
+    opacity: 0;
+  }
+
+  .chat-user-bubble-wrap:hover .chat-row-hover-chrome,
+  .chat-user-bubble-wrap:focus-within .chat-row-hover-chrome,
+  .group\/assistant:hover .chat-row-hover-chrome,
+  .group\/assistant:focus-within .chat-row-hover-chrome,
+  .group\/assistant[data-actions-visible="true"] .chat-row-hover-chrome {
+    opacity: 1;
+  }
+
+  .chat-user-bubble-wrap:hover .chat-row-hover-chrome--actions,
+  .chat-user-bubble-wrap:focus-within .chat-row-hover-chrome--actions,
+  .group\/assistant:hover .chat-row-hover-chrome--actions,
+  .group\/assistant:focus-within .chat-row-hover-chrome--actions,
+  .group\/assistant[data-actions-visible="true"] .chat-row-hover-chrome--actions {
+    pointer-events: auto;
+  }
+}
+
+@media (any-hover: none) {
+  .chat-row-hover-chrome {
+    opacity: 1;
+  }
+
+  .chat-row-hover-chrome--actions {
+    pointer-events: auto;
+  }
+}
+
+.chat-row-hover-chrome[data-force-visible="true"],
+.chat-assistant-actions:has(.settings-confirm-popover) .chat-row-hover-chrome {
+  opacity: 1;
+  pointer-events: auto;
+}

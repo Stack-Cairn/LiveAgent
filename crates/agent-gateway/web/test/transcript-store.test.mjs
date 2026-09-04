@@ -2697,3 +2697,91 @@ test("manual compaction checkpoint stays a single card after the next exchange's
     assertUniqueKeys(snapshot);
   }
 });
+
+test("a compaction inside a streaming reply renders one assistant row with an inline seam", () => {
+  const { parseHistoryMessagesJson } = loader.loadModule("src/lib/chatUi.ts");
+  const store = createTranscriptStore();
+
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(userMessage("run-1", 2, "do a lot", { message_id: "user-1" }));
+  store.applyEvent(token("run-1", 3, "first half"));
+  store.flush();
+  const before = store.getSnapshot();
+  const liveRowBefore = allRows(before).at(-1);
+  assert.equal(liveRowBefore.kind, "assistant");
+
+  // 运行中压缩：checkpoint token 落在同一 run 内，之后继续流式。
+  store.applyEvent({
+    type: "token",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 4,
+    text: "summary body",
+    provider: "liveagent",
+    model: "summary",
+    api: "liveagent-compaction",
+    checkpoint: {
+      summaryId: "sum-mid",
+      segmentIndex: 1,
+      coveredMessageCount: 9,
+      timestamp: 1000,
+      generatedBy: { providerId: "anthropic", model: "claude", promptVersion: "v1" },
+      contextUsageTokens: 4321,
+    },
+  });
+  store.applyEvent(token("run-1", 5, "second half", { round: 2 }));
+  store.flush();
+
+  const mid = store.getSnapshot();
+  const midRows = allRows(mid);
+  assert.deepEqual(
+    midRows.map((row) => row.kind),
+    ["user", "assistant"],
+    "no standalone checkpoint card and no second assistant row mid-run",
+  );
+  const liveRow = midRows[1];
+  assert.equal(liveRow.key, liveRowBefore.key, "the live assistant row keeps its identity");
+  assert.deepEqual(
+    liveRow.rounds.map((round) => Boolean(round.checkpoint)),
+    [false, true, false],
+  );
+  assert.equal(liveRow.rounds[1].checkpoint.summaryId, "sum-mid");
+  assert.equal(liveRow.rounds[1].checkpoint.contextUsageTokens, 4321);
+  assertUniqueKeys(mid);
+
+  store.applyEvent(runFinished("run-1", 6));
+  store.flush();
+
+  // 历史刷新后的形态：assistant → summary → assistant，同样缝合成一条。
+  const historyEntries = parseHistoryMessagesJson(
+    JSON.stringify([
+      { role: "user", id: "user-1", content: "do a lot", timestamp: 500 },
+      { role: "assistant", content: "first half", timestamp: 900 },
+      {
+        role: "summary",
+        id: "sum-mid",
+        content: "summary body",
+        timestamp: 1000,
+        summaryMeta: {
+          coveredMessageCount: 9,
+          generatedBy: { providerId: "anthropic", model: "claude", promptVersion: "v1" },
+          stats: { sourceMessageCount: 9, contextTokensAfter: 4321 },
+        },
+      },
+      { role: "assistant", content: "second half", timestamp: 1100 },
+    ]),
+  );
+  store.applyHistorySnapshot(historyEntries, { mode: "replace" });
+  store.flush();
+  const settled = store.getSnapshot();
+  const settledRows = allRows(settled);
+  assert.deepEqual(
+    settledRows.map((row) => row.kind),
+    ["user", "assistant"],
+  );
+  assert.deepEqual(
+    settledRows[1].rounds.map((round) => Boolean(round.checkpoint)),
+    [false, true, false],
+  );
+  assertUniqueKeys(settled);
+});

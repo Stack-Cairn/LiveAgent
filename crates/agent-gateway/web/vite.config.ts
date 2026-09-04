@@ -33,6 +33,15 @@ export default defineConfig(() => ({
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
     },
   },
+  optimizeDeps: {
+    // @tanstack/react-virtual imports the vendored @tanstack/virtual-core
+    // fork (crates/virtual-core, via the root pnpm override). Pre-bundling
+    // the adapter inlines the fork's source into node_modules/.vite, where
+    // it is keyed on the lockfile/config only — edits to the fork would
+    // silently keep running the stale copy until a `--force`. Serve it as
+    // source instead so the fork is always live (and HMR-able) in dev.
+    exclude: ["@tanstack/react-virtual"],
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

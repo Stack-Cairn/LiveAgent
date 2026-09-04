@@ -138,10 +138,11 @@ test("provider request helpers normalize auth, metadata, errors, and model value
       "anthropic-version": "2023-06-01",
       "X-Stainless-Runtime": "node",
       "X-Stainless-Timeout": "600",
-      "x-stainless-retry-count": "0",
-      "X-Stainless-Package-Version": "0.94.0",
+      "X-Stainless-Retry-Count": "0",
+      "X-Stainless-Package-Version": "0.74.0",
       "X-Stainless-Runtime-Version": "v26.3.0",
       "anthropic-dangerous-direct-browser-access": "true",
+      "X-Claude-Code-Session-Id": "conversation-1",
     },
   );
   assert.deepEqual(
@@ -150,6 +151,9 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   );
   assert.deepEqual(providers.buildProviderRequestHeaders("codex", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
+    "session-id": "conversation-1",
+    "thread-id": "conversation-1",
+    "x-client-request-id": "conversation-1",
     session_id: "conversation-1",
     conversation_id: "conversation-1",
   });
@@ -158,6 +162,9 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     providers.buildProviderRequestHeaders("codex", "secret", "conversation-1", "openai-responses"),
     {
       Authorization: "Bearer secret",
+      "session-id": "conversation-1",
+      "thread-id": "conversation-1",
+      "x-client-request-id": "conversation-1",
       session_id: "conversation-1",
       conversation_id: "conversation-1",
     },
@@ -185,6 +192,9 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   const generatedCodexHeaders = providers.buildProviderRequestHeaders("codex", "secret");
   assert.match(generatedCodexHeaders.session_id, /^[0-9a-f-]{36}$/i);
   assert.equal(generatedCodexHeaders.conversation_id, generatedCodexHeaders.session_id);
+  assert.equal(generatedCodexHeaders["session-id"], generatedCodexHeaders.session_id);
+  assert.equal(generatedCodexHeaders["thread-id"], generatedCodexHeaders.session_id);
+  assert.equal(generatedCodexHeaders["x-client-request-id"], generatedCodexHeaders.session_id);
   assert.equal(providers.toSimpleStreamReasoning("off"), undefined);
   assert.equal(providers.toSimpleStreamReasoning("high"), "high");
   assert.equal(providers.toSimpleStreamReasoning("max"), "max");
@@ -256,17 +266,27 @@ test("provider-specific custom header suggestions include standard model headers
   assert.ok(anthropicPresets.includes("anthropic-version"));
   assert.ok(anthropicPresets.includes("X-Stainless-Runtime-Version"));
   assert.ok(anthropicPresets.includes("anthropic-dangerous-direct-browser-access"));
+  assert.ok(anthropicPresets.includes("X-Claude-Code-Session-Id"));
+  assert.ok(anthropicPresets.includes("x-client-request-id"));
   assert.ok(!anthropicPresets.includes("anthropic-beta"));
   assert.ok(!anthropicPresets.includes("session_id"));
 
   const codexPresets = customHeaderHelpers.getCustomHeaderKeyPresets("codex");
   assert.ok(!codexPresets.includes("User-Agent"));
+  assert.ok(codexPresets.includes("originator"));
+  assert.ok(codexPresets.includes("version"));
+  assert.ok(codexPresets.includes("session-id"));
+  assert.ok(codexPresets.includes("thread-id"));
+  assert.ok(codexPresets.includes("x-client-request-id"));
   assert.ok(codexPresets.includes("session_id"));
   assert.ok(codexPresets.includes("conversation_id"));
   assert.ok(!codexPresets.includes("anthropic-version"));
 
   const xaiPresets = customHeaderHelpers.getCustomHeaderKeyPresets("xai");
   assert.ok(!xaiPresets.includes("User-Agent"));
+  assert.ok(xaiPresets.includes("x-grok-client-identifier"));
+  assert.ok(xaiPresets.includes("x-grok-conv-id"));
+  assert.ok(xaiPresets.includes("x-grok-session-id"));
   assert.ok(!xaiPresets.includes("session_id"));
   assert.ok(!xaiPresets.includes("anthropic-version"));
 });

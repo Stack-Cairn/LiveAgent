@@ -8,12 +8,20 @@ function normalizePreview(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-export async function searchMentionConversations(params: {
+export type PersistedConversationSearchResult = {
+  id: string;
+  title: string;
+  cwd?: string;
+  updatedAt?: number;
+  searchPreview?: string;
+};
+
+export async function searchPersistedConversations(params: {
   query: string;
-  currentConversationId: string;
   currentWorkdir?: string;
+  excludeConversationId?: string;
   limit?: number;
-}): Promise<MentionComposerConversation[]> {
+}): Promise<PersistedConversationSearchResult[]> {
   const query = params.query.trim();
   if (!query) return [];
 
@@ -22,11 +30,12 @@ export async function searchMentionConversations(params: {
     includeHistory: true,
     limit: HISTORY_SEARCH_FETCH_LIMIT,
   });
-  const byConversation = new Map<string, MentionComposerConversation & { score: number }>();
+  const excludedId = params.excludeConversationId?.trim();
+  const byConversation = new Map<string, PersistedConversationSearchResult & { score: number }>();
   for (const match of response.historyMatches ?? []) {
     const id = match.conversationId.trim();
     const title = match.title.trim();
-    if (!id || !title || id === params.currentConversationId) continue;
+    if (!id || !title || id === excludedId) continue;
     const existing = byConversation.get(id);
     const score = Number.isFinite(match.score) ? match.score : 0;
     if (existing && existing.score >= score) continue;
@@ -51,4 +60,18 @@ export async function searchMentionConversations(params: {
     })
     .slice(0, Math.max(1, params.limit ?? HISTORY_SEARCH_RESULT_LIMIT))
     .map(({ score: _score, ...conversation }) => conversation);
+}
+
+export async function searchMentionConversations(params: {
+  query: string;
+  currentConversationId: string;
+  currentWorkdir?: string;
+  limit?: number;
+}): Promise<MentionComposerConversation[]> {
+  return searchPersistedConversations({
+    query: params.query,
+    currentWorkdir: params.currentWorkdir,
+    excludeConversationId: params.currentConversationId,
+    limit: params.limit,
+  });
 }

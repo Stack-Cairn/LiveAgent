@@ -14,7 +14,7 @@ import {
 import { UserAttachmentCards } from "@liveagent/ui/components/chat/UserAttachmentCards";
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
-import { normalizeLiveToolStatus, VIBING_STATUS } from "@liveagent/ui/lib/chat/assistantStatus";
+import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import {
@@ -158,15 +158,6 @@ type GatewayTranscriptVirtualItem =
 
 function resolveNearestScrollViewport(element: HTMLElement | null) {
   return element?.closest("[data-scroll-viewport]") as HTMLDivElement | null;
-}
-
-function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {
-  const { status, isCompaction = false } = props;
-  return (
-    <div className="gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1">
-      <LiveAssistantStatus status={status} isCompaction={isCompaction} className="w-full" />
-    </div>
-  );
 }
 
 function HistoryLoadingState(props: { title?: string }) {
@@ -345,8 +336,6 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   );
 });
 
-// Retry actions render only for mounted assistant rows. Resolve their prompt
-// locally instead of rebuilding an all-history map on every streamed token.
 function findRetryTarget(rows: readonly TranscriptRow[], assistantIndex: number) {
   for (let index = assistantIndex - 1; index >= 0; index -= 1) {
     const row = rows[index];
@@ -355,14 +344,14 @@ function findRetryTarget(rows: readonly TranscriptRow[], assistantIndex: number)
   return null;
 }
 
-// Shared assistant-row hover actions (copy / retry). Retry re-sends the
-// nearest preceding user prompt through the edit-resend pipeline: this reply
-// and everything after it are discarded, same as editing that prompt
-// unchanged. Both transcript regions render it below the bubble.
+// Compact assistant footer: primary reply actions stay one click away while
+// detailed usage remains behind the info popover.
 const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActions(props: {
   row: Extract<TranscriptRow, { kind: "assistant" }>;
   retryTarget: Extract<TranscriptRow, { kind: "user" }> | null;
   isStreaming: boolean;
+  showUsage?: boolean;
+  usageContextWindow?: number;
   isCopied: boolean;
   setCopiedMessageId: Dispatch<SetStateAction<string | null>>;
   onResendFromEdit?: (
@@ -378,6 +367,8 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     row,
     retryTarget,
     isStreaming,
+    showUsage,
+    usageContextWindow,
     isCopied,
     setCopiedMessageId,
     onResendFromEdit,
@@ -389,6 +380,15 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     .map((round) => getRoundText(round).trim())
     .filter((text) => text.length > 0)
     .join("\n\n");
+  const usageEntries = useMemo(
+    () =>
+      showUsage
+        ? row.rounds.flatMap((round) =>
+            round.meta?.usage ? [{ key: `round-${round.round}`, usage: round.meta.usage }] : [],
+          )
+        : undefined,
+    [row.rounds, showUsage],
+  );
   const retryMessageRef = retryTarget?.messageRef;
   const retryDisabled = isStreaming || !onResendFromEdit || !retryMessageRef;
   const retryTitle = retryMessageRef
@@ -415,6 +415,8 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
           }, 1500);
         });
       }}
+      usageEntries={usageEntries}
+      usageContextWindow={showUsage ? usageContextWindow : undefined}
       retryDisabled={retryDisabled}
       retryTitle={retryTitle}
       onRetry={() => {
@@ -761,21 +763,36 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   // further back keeps paging one request at a time: readers load exactly as
   // far as they scroll, servers transfer only the pages actually walked to,
   // and a failed fetch retries only on the next user scroll (no hammering).
+  // The distance is read from the virtualizer's settled offset, not DOM
+  // scrollTop: a page anchored through the 'origin' keeps scrollTop parked
+  // near the top until the rebase lands, and a raw scrollTop check would
+  // re-arm on every wheel tick and stack page after page. The hard top (DOM
+  // scrollTop 0) is a trigger of its own: WebKit defers the rebase until the
+  // gesture settles, so a fling can pin the viewport at 0 with unsettled
+  // debt still above it — the reader is pushing against the top and cannot
+  // scroll into that debt until the rebase lands. Fire once per visit there;
+  // rubber-band scroll events at 0 must not re-fire it.
   const autoLoadEarlierInFlightRef = useRef(false);
+  const hardTopLatchedRef = useRef(false);
   const maybeAutoLoadEarlierRef = useRef(() => {});
   maybeAutoLoadEarlierRef.current = () => {
+    if (!scrollViewport) return;
+    const atHardTop = scrollViewport.scrollTop <= 1;
+    if (!atHardTop) hardTopLatchedRef.current = false;
     if (
       readOnly ||
       isStreaming ||
       !hasMoreHistory ||
       !onLoadEarlierHistory ||
       isLoadingMoreHistory ||
-      autoLoadEarlierInFlightRef.current ||
-      !scrollViewport ||
-      scrollViewport.scrollTop > scrollViewport.clientHeight
+      autoLoadEarlierInFlightRef.current
     ) {
       return;
     }
+    const nearSettledTop =
+      transcriptVirtualizer.getSettledScrollOffset() <= scrollViewport.clientHeight;
+    if (!nearSettledTop && (!atHardTop || hardTopLatchedRef.current)) return;
+    if (atHardTop) hardTopLatchedRef.current = true;
     autoLoadEarlierInFlightRef.current = true;
     onLoadEarlierHistory();
   };
@@ -870,10 +887,11 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               <div className="flex w-full max-w-full items-start gap-3">
                 <AssistantAvatar />
                 <div className="min-w-0 flex-1 space-y-2 pt-1">
-                  <div className="flex items-center py-1">
+                  <div className="flex w-full items-center py-1">
                     <LiveAssistantStatus
                       status={displayedToolStatus}
                       isCompaction={displayedToolStatusIsCompaction}
+                      className={displayedToolStatusIsCompaction ? "w-full" : undefined}
                     />
                   </div>
                   {retryAttempts && retryAttempts.length > 0 ? (
@@ -916,6 +934,11 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
           const rowIndex = virtualRow.index - leadingOffset;
           const isLatestLiveAssistant = rowIndex === liveAssistantIndex;
           const isLatestLiveStreaming = isStreaming && isLatestLiveAssistant;
+          const retryTarget = findRetryTarget(rows, rowIndex);
+          const durationMs =
+            row.timestamp !== undefined && retryTarget?.timestamp !== undefined
+              ? Math.max(0, row.timestamp - retryTarget.timestamp)
+              : undefined;
           return (
             <article
               key={virtualRow.key}
@@ -928,22 +951,17 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               <div className="group/assistant min-w-0 w-full max-w-full space-y-1">
                 <AssistantBubble
                   rounds={row.rounds}
-                  showUsage={showUsage}
-                  usageContextWindow={usageContextWindow}
                   isLive={isLatestLiveAssistant}
                   isStreaming={isLatestLiveStreaming}
                   renderMode={rowRenderMode(row)}
+                  toolStatus={isLatestLiveStreaming ? displayedToolStatus : null}
+                  toolStatusVariant={displayedToolStatusIsCompaction ? "compaction" : "default"}
+                  durationMs={durationMs}
                   readOnly={readOnly}
                   redactToolContent={redactToolContent}
                   workdir={workspaceRoot}
                   onOpenFileLink={onOpenFileLink}
                 />
-                {isLatestLiveStreaming ? (
-                  <LiveStatusFooter
-                    status={displayedToolStatus ?? VIBING_STATUS}
-                    isCompaction={displayedToolStatusIsCompaction}
-                  />
-                ) : null}
                 {isLatestLiveStreaming &&
                 !shouldShowPendingLiveBubble &&
                 retryAttempts &&
@@ -955,8 +973,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 {!readOnly && !isLatestLiveStreaming ? (
                   <GatewayAssistantMessageActions
                     row={row}
-                    retryTarget={findRetryTarget(rows, rowIndex)}
+                    retryTarget={retryTarget}
                     isStreaming={isStreaming}
+                    showUsage={showUsage}
+                    usageContextWindow={usageContextWindow}
                     isCopied={copiedMessageId === row.key}
                     setCopiedMessageId={setCopiedMessageId}
                     onResendFromEdit={onResendFromEdit}

@@ -348,7 +348,9 @@ test("historical and streaming assistant rows share the explicit file-open prop 
   );
   assert.match(roundContent, /export const RoundBlockContent/);
   assert.match(roundContent, /renderMode=\{renderMode\}/);
-  assert.ok((roundContent.match(/onOpenFileLink=\{onOpenFileLink\}/g) ?? []).length >= 2);
+  // Markdown plus direct and grouped file tools must all reach the same
+  // host-aware IDE navigation callback.
+  assert.ok((roundContent.match(/onOpenFileLink=\{onOpenFileLink\}/g) ?? []).length >= 4);
   assert.ok((roundContent.match(/workdir=\{workdir\}/g) ?? []).length >= 2);
 
   const transcriptList = fs.readFileSync(

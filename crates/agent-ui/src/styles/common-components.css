@@ -14,215 +14,250 @@
     --text-xl: calc(1.25rem * var(--zone-font-scale, 1));
     --text-2xl: calc(1.5rem * var(--zone-font-scale, 1));
   }
+}
 
-  .chat-markdown {
-    @apply text-[calc(15px*var(--zone-font-scale,1))] leading-8 text-foreground;
-  }
+/* Streamdown ships element-level Tailwind utilities. Keep the chat profile
+ * unlayered and scoped so these product overrides win without !important.
+ * Structural changes still belong in Markdown.tsx component overrides.
+ * Reading rhythm: body 14/22, H1 22/30, H2 17/26, H3 14/22. */
+.chat-markdown {
+  @apply text-[calc(14px*var(--zone-font-scale,1))] leading-[calc(22px*var(--zone-font-scale,1))] tracking-[0] text-foreground;
+  font-weight: 450;
+}
 
-  .chat-markdown p {
-    @apply my-2 min-w-0 max-w-full break-words text-[calc(15px*var(--zone-font-scale,1))] leading-8 text-foreground [overflow-wrap:anywhere];
-  }
+.chat-markdown p {
+  @apply my-0 min-w-0 max-w-full break-words text-[calc(14px*var(--zone-font-scale,1))] leading-[calc(22px*var(--zone-font-scale,1))] tracking-[0] text-foreground [overflow-wrap:anywhere];
+  font-weight: 450;
+}
 
-  .chat-markdown strong,
-  .chat-markdown [data-streamdown="strong"] {
-    @apply font-medium text-foreground;
-  }
+.chat-markdown p + p {
+  @apply mt-2.5;
+}
 
-  .chat-markdown em {
-    @apply text-foreground/90;
-  }
+.chat-markdown strong,
+.chat-markdown [data-streamdown="strong"] {
+  @apply font-medium text-foreground;
+}
 
-  /* Hide the retained Streamdown caret without removing its inline slot. */
-  .chat-markdown--caret-off > *:last-child::after {
-    opacity: 0;
-  }
+.chat-markdown em {
+  @apply text-foreground/90;
+}
 
-  /* Headings */
-  .chat-markdown [data-streamdown="heading-1"] {
-    @apply mb-2 mt-6 text-xl font-semibold tracking-tight text-foreground;
-  }
-  .chat-markdown [data-streamdown="heading-2"] {
-    @apply mb-2 mt-5 text-lg font-semibold tracking-tight text-foreground;
-  }
-  .chat-markdown [data-streamdown="heading-3"] {
-    @apply mb-1.5 mt-4 text-base font-semibold tracking-tight text-foreground;
-  }
-  .chat-markdown [data-streamdown="heading-4"],
-  .chat-markdown [data-streamdown="heading-5"] {
-    @apply mb-1 mt-4 text-sm font-semibold tracking-tight text-foreground;
-  }
-  .chat-markdown [data-streamdown="heading-6"] {
-    @apply mb-1 mt-4 text-xs font-semibold tracking-wide text-muted-foreground;
-  }
+/* Hide the retained Streamdown caret without removing its inline slot. */
+.chat-markdown--caret-off > *:last-child::after {
+  opacity: 0;
+}
 
-  /* Links */
-  .chat-markdown [data-streamdown="link"] {
-    @apply rounded-xs font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary/70;
-  }
+/* Headings */
+.chat-markdown [data-streamdown="heading-1"] {
+  @apply mb-2.5 mt-7 text-[calc(22px*var(--zone-font-scale,1))] font-semibold leading-[calc(30px*var(--zone-font-scale,1))] tracking-[-0.018em] text-foreground;
+}
+.chat-markdown [data-streamdown="heading-2"] {
+  @apply mb-2 mt-6 text-[calc(17px*var(--zone-font-scale,1))] font-semibold leading-[calc(26px*var(--zone-font-scale,1))] tracking-[-0.012em] text-foreground;
+}
+.chat-markdown [data-streamdown="heading-3"] {
+  @apply mb-1.5 mt-5 text-[calc(14px*var(--zone-font-scale,1))] font-semibold leading-[calc(22px*var(--zone-font-scale,1))] tracking-[-0.006em] text-foreground;
+}
+.chat-markdown [data-streamdown="heading-4"],
+.chat-markdown [data-streamdown="heading-5"] {
+  @apply mb-1 mt-4 text-[calc(14px*var(--zone-font-scale,1))] font-semibold leading-[calc(22px*var(--zone-font-scale,1))] tracking-[0] text-foreground;
+}
+.chat-markdown [data-streamdown="heading-6"] {
+  @apply mb-1 mt-4 text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[calc(20px*var(--zone-font-scale,1))] tracking-wide text-muted-foreground;
+}
+.chat-markdown [data-streamdown="heading-1"]:first-child,
+.chat-markdown [data-streamdown="heading-2"]:first-child,
+.chat-markdown [data-streamdown="heading-3"]:first-child {
+  @apply mt-0;
+}
 
-  /* Inline code */
-  .chat-markdown [data-streamdown="inline-code"] {
-    @apply whitespace-pre-wrap break-words rounded-md border-0 bg-foreground/[0.05] px-1.5 py-0.5 font-mono text-[0.92em] font-normal text-foreground [overflow-wrap:anywhere];
-  }
+/* Links */
+.chat-markdown [data-streamdown="link"] {
+  @apply rounded-xs font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2 transition-colors hover:underline dark:text-sky-400;
+}
 
-  /* Code blocks — container, header, body (safe in components layer) */
-  .chat-markdown [data-streamdown="code-block"] {
-    @apply relative my-4 w-full min-w-0 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
-  }
-  .chat-markdown [data-streamdown="code-block-header"] {
-    @apply h-8 border-0 bg-transparent px-2 py-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium tracking-[0.06em] text-muted-foreground/85 shadow-none;
-  }
-  .chat-markdown [data-streamdown="code-block-header"] > span {
-    @apply ml-0 font-mono tracking-[0.06em];
-  }
-  .chat-markdown [data-streamdown="code-block-body"] {
-    @apply w-full min-w-0 overflow-x-auto rounded-xl border-0 bg-muted/40 p-4 text-[calc(13px*var(--zone-font-scale,1))] shadow-none outline-none ring-0;
-  }
-  .chat-markdown [data-streamdown="code-block-body"] pre {
-    @apply leading-6;
-  }
-  .chat-markdown--streaming [data-streamdown="code-block"][data-incomplete="true"] {
-    @apply relative border-0 bg-transparent;
-  }
-  .chat-markdown--streaming [data-streamdown="code-block"][data-incomplete="true"]::after {
-    display: none;
-  }
-  .chat-markdown--streaming
-    [data-streamdown="code-block"][data-incomplete="true"]
-    [data-streamdown="code-block-header"] {
-    @apply border-0 bg-transparent text-muted-foreground/85;
-  }
+/* Inline code */
+.chat-markdown [data-streamdown="inline-code"] {
+  @apply whitespace-pre-wrap break-words rounded-xs border-0 bg-foreground/[0.085] px-[5px] py-px font-mono text-[0.92em] font-normal leading-[1.45] text-foreground/95 [overflow-wrap:anywhere];
+}
 
-  /* Blockquotes */
-  .chat-markdown [data-streamdown="blockquote"] {
-    @apply my-3 min-w-0 max-w-full border-l-2 border-border/70 pl-4 italic text-muted-foreground [overflow-wrap:anywhere];
-  }
-  .chat-markdown [data-streamdown="blockquote"] p {
-    @apply my-0;
-  }
+/* Code blocks — container, header, body */
+.chat-markdown [data-streamdown="code-block"] {
+  @apply relative my-4 w-full min-w-0 overflow-hidden rounded-lg border-0 bg-foreground/[0.045] p-0 shadow-none outline-none ring-0;
+}
+.chat-markdown [data-streamdown="code-block-header"] {
+  @apply h-8 border-0 border-b border-border/45 bg-transparent px-3 py-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium tracking-[0] text-muted-foreground/85 shadow-none;
+}
+.chat-markdown [data-streamdown="code-block-header"] > span {
+  @apply ml-0 font-sans tracking-[0] normal-case;
+}
+.chat-markdown [data-streamdown="code-block-body"] {
+  @apply w-full min-w-0 overflow-x-auto rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] shadow-none outline-none ring-0;
+}
+.chat-markdown [data-streamdown="code-block-body"] pre {
+  @apply leading-[calc(22px*var(--zone-font-scale,1))];
+}
+.chat-markdown [data-streamdown="code-block-body"] pre code > span::before {
+  display: none;
+  width: 0;
+  margin: 0;
+  content: none;
+}
+.chat-markdown--streaming [data-streamdown="code-block"][data-incomplete="true"] {
+  @apply relative border-0 bg-transparent;
+}
+.chat-markdown--streaming [data-streamdown="code-block"][data-incomplete="true"]::after {
+  display: none;
+}
+.chat-markdown--streaming
+  [data-streamdown="code-block"][data-incomplete="true"]
+  [data-streamdown="code-block-header"] {
+  @apply border-0 bg-transparent text-muted-foreground/85;
+}
 
-  /* Lists */
-  .chat-markdown [data-streamdown="unordered-list"] {
-    @apply my-2 ml-1 list-disc space-y-0.5 pl-5;
-  }
-  .chat-markdown [data-streamdown="ordered-list"] {
-    @apply my-2 ml-1 list-decimal space-y-0.5 pl-5;
-  }
-  .chat-markdown [data-streamdown="list-item"] {
-    @apply min-w-0 max-w-full break-words pl-1 text-[calc(15px*var(--zone-font-scale,1))] leading-8 [overflow-wrap:anywhere];
-  }
-  .chat-markdown .contains-task-list {
-    @apply list-none pl-0;
-  }
-  .chat-markdown .task-list-item {
-    @apply flex items-start gap-2 pl-0;
-  }
-  .chat-markdown .task-list-item input[type="checkbox"] {
-    @apply mt-[0.45rem] h-3.5 w-3.5 rounded border border-border align-middle accent-emerald-500;
-  }
+/* Blockquotes */
+.chat-markdown [data-streamdown="blockquote"] {
+  @apply my-4 min-w-0 max-w-full border-l-2 border-border/75 pl-3.5 not-italic text-foreground/82 [overflow-wrap:anywhere];
+}
+.chat-markdown [data-streamdown="blockquote"] p {
+  @apply my-0 text-[calc(14px*var(--zone-font-scale,1))] leading-[calc(22px*var(--zone-font-scale,1))] text-foreground/82;
+}
 
-  /* Tables */
-  .chat-markdown [data-streamdown="table-wrapper"] {
-    @apply my-4 w-full min-w-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
-  }
-  .chat-markdown [data-streamdown="table-wrapper"] > div:first-child {
-    @apply justify-end gap-1 px-0 pt-0;
-  }
-  .chat-markdown [data-streamdown="table-wrapper"] > div:last-child {
-    @apply w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
-  }
-  .chat-markdown [data-streamdown="table-wrapper"] button {
-    @apply rounded-md border-0 bg-transparent shadow-none transition-colors hover:bg-foreground/[0.04] hover:text-foreground;
-  }
-  .chat-markdown [data-streamdown="table"] {
-    @apply my-2 w-full min-w-full table-auto border-collapse border-0 bg-transparent text-sm shadow-none outline-none ring-0;
-  }
-  .chat-markdown [data-streamdown="table-header"] {
-    @apply bg-transparent;
-  }
-  .chat-markdown [data-streamdown="table-header-cell"] {
-    @apply border-0 border-b border-border/50 px-0 py-2 pr-8 text-left align-bottom text-sm font-semibold tracking-tight text-foreground;
-  }
-  .chat-markdown [data-streamdown="table-cell"] {
-    @apply border-0 border-b border-border/30 px-0 py-1 pr-8 text-left align-middle leading-8 text-foreground/90;
-  }
-  .chat-markdown [data-streamdown="table-body"] [data-streamdown="table-row"]:nth-child(even) {
-    @apply bg-transparent;
-  }
-  .chat-markdown [data-streamdown="table-header-cell"]:last-child,
-  .chat-markdown [data-streamdown="table-cell"]:last-child {
-    @apply pr-0;
-  }
-  .chat-markdown [data-streamdown="table-row"]:last-child [data-streamdown="table-cell"] {
-    @apply border-b-0;
-  }
+/* Lists */
+.chat-markdown [data-streamdown="unordered-list"] {
+  @apply my-2 ml-0 list-outside list-disc space-y-1 pl-5;
+}
+.chat-markdown [data-streamdown="ordered-list"] {
+  @apply my-2 ml-0 list-outside list-decimal space-y-1 pl-5;
+}
+.chat-markdown [data-streamdown="list-item"] {
+  @apply min-w-0 max-w-full break-words py-0 pl-0 text-[calc(14px*var(--zone-font-scale,1))] leading-[calc(22px*var(--zone-font-scale,1))] [overflow-wrap:anywhere];
+  font-weight: 450;
+}
+.chat-markdown .contains-task-list {
+  @apply list-none pl-0;
+}
+.chat-markdown .task-list-item {
+  @apply flex items-start gap-2 pl-0;
+}
+.chat-markdown .task-list-item input[type="checkbox"] {
+  @apply mt-[0.28rem] h-3.5 w-3.5 rounded border border-border align-middle accent-emerald-500;
+}
 
-  /* Mermaid */
-  .chat-markdown [data-streamdown="mermaid-block"] {
-    @apply my-4 flex w-full min-w-0 gap-2 rounded-none border-0 bg-transparent p-0 shadow-none;
-  }
-  .chat-markdown [data-streamdown="mermaid-block"] > div:last-child,
-  .chat-markdown [data-streamdown="mermaid"] {
-    @apply w-full min-w-0 rounded-none border-0 bg-transparent p-0 shadow-none;
-  }
-  .chat-markdown [data-streamdown="mermaid"] {
-    @apply my-0 block max-h-[280px] overflow-hidden;
-  }
-  .chat-markdown [data-streamdown="mermaid"] svg {
-    @apply mx-auto block h-auto max-h-[280px] max-w-full bg-transparent;
-  }
-  .chat-markdown [data-streamdown="mermaid-block-actions"] {
-    @apply gap-2 rounded-none border-0 bg-transparent p-0 shadow-none backdrop-blur-none;
-  }
+/* Tables */
+.chat-markdown [data-streamdown="table-wrapper"] {
+  @apply my-4 w-full min-w-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
+}
+.chat-markdown [data-streamdown="table-wrapper"] > div:first-child {
+  @apply justify-end gap-1 px-0 pt-0;
+}
+.chat-markdown [data-streamdown="table-wrapper"] > div:last-child {
+  @apply w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
+}
+.chat-markdown [data-streamdown="table-wrapper"] button {
+  @apply rounded-md border-0 bg-transparent shadow-none transition-colors hover:bg-foreground/[0.04] hover:text-foreground;
+}
+.chat-markdown [data-streamdown="table"] {
+  @apply my-0 w-full min-w-full table-auto border-collapse border-0 bg-transparent text-[calc(14px*var(--zone-font-scale,1))] shadow-none outline-none ring-0;
+}
+.chat-markdown [data-streamdown="table-header"] {
+  @apply bg-transparent;
+}
+.chat-markdown [data-streamdown="table-header-cell"] {
+  @apply border-0 border-b border-border/55 px-0 py-2 pr-8 text-left align-bottom text-[calc(14px*var(--zone-font-scale,1))] font-semibold leading-[calc(22px*var(--zone-font-scale,1))] tracking-[0] text-foreground;
+}
+.chat-markdown [data-streamdown="table-cell"] {
+  @apply border-0 border-b border-border/35 px-0 py-2 pr-8 text-left align-middle text-[calc(14px*var(--zone-font-scale,1))] leading-[calc(22px*var(--zone-font-scale,1))] text-foreground/88;
+  font-weight: 450;
+}
+.chat-markdown [data-streamdown="table-body"] [data-streamdown="table-row"]:nth-child(even) {
+  @apply bg-transparent;
+}
+.chat-markdown [data-streamdown="table-header-cell"]:last-child,
+.chat-markdown [data-streamdown="table-cell"]:last-child {
+  @apply pr-0;
+}
+.chat-markdown [data-streamdown="table-row"]:last-child [data-streamdown="table-cell"] {
+  @apply border-b-0;
+}
 
-  /* Math */
-  .chat-markdown .katex {
-    @apply text-[1.04em];
-  }
-  .chat-markdown .katex-display {
-    @apply my-3.5 block max-w-full overflow-x-auto overflow-y-hidden px-1 py-1.5 text-center;
-  }
+/* Mermaid */
+.chat-markdown [data-streamdown="mermaid-block"] {
+  @apply my-4 flex w-full min-w-0 gap-2 rounded-none border-0 bg-transparent p-0 shadow-none;
+}
+.chat-markdown [data-streamdown="mermaid-block"] > div:last-child,
+.chat-markdown [data-streamdown="mermaid"] {
+  @apply w-full min-w-0 rounded-none border-0 bg-transparent p-0 shadow-none;
+}
+.chat-markdown [data-streamdown="mermaid"] {
+  @apply my-0 block max-h-[280px] overflow-hidden;
+}
+.chat-markdown [data-streamdown="mermaid"] svg {
+  @apply mx-auto block h-auto max-h-[280px] max-w-full bg-transparent;
+}
+.chat-markdown [data-streamdown="mermaid-block-actions"] {
+  @apply gap-2 rounded-none border-0 bg-transparent p-0 shadow-none backdrop-blur-none;
+}
 
-  /* Thinking markdown */
-  .chat-markdown.thinking-markdown {
-    @apply text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
-  }
-  .chat-markdown.thinking-markdown p {
-    @apply my-1 text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown^="heading-"] {
-    @apply mb-0 mt-1 text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-6 tracking-normal text-muted-foreground/90;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown="unordered-list"],
-  .chat-markdown.thinking-markdown [data-streamdown="ordered-list"] {
-    @apply my-1 pl-4;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown="list-item"] {
-    @apply text-[calc(12px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/80;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown="blockquote"] {
-    @apply my-1 border-l-0 pl-0 not-italic text-muted-foreground/75;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown="inline-code"] {
-    @apply bg-foreground/[0.03] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/90;
-  }
-  .chat-markdown.thinking-markdown [data-streamdown="code-block-body"] {
-    @apply bg-muted/20 p-3 text-[calc(11px*var(--zone-font-scale,1))];
-  }
+/* Math */
+.chat-markdown .katex {
+  @apply text-[1.04em];
+}
+.chat-markdown .katex-display {
+  @apply my-3.5 block max-w-full overflow-x-auto overflow-y-hidden px-1 py-1.5 text-center;
+}
 
-  /* Images */
-  .chat-markdown [data-streamdown="image-wrapper"] {
-    @apply my-4 overflow-visible rounded-none border-0 bg-transparent shadow-none;
-  }
-  .chat-markdown [data-streamdown="image"] {
-    @apply block max-h-[34rem] max-w-full rounded-xl border border-border/60 bg-muted/10 object-contain;
-  }
+/* Thinking markdown — reasoning disclosures reuse chat structure but read
+ * visually recessed: smaller, muted ink and regular weight. The base chat
+ * rules re-assert 450/strong-at-full-foreground per element, so weight and
+ * emphasis must be overridden here too or reasoning looks bold all over. */
+.chat-markdown.thinking-markdown {
+  @apply text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
+  font-weight: 400;
+}
+.chat-markdown.thinking-markdown p {
+  @apply my-1 text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
+  font-weight: 400;
+}
+.chat-markdown.thinking-markdown strong,
+.chat-markdown.thinking-markdown [data-streamdown="strong"] {
+  @apply font-medium text-muted-foreground/95;
+}
+.chat-markdown.thinking-markdown [data-streamdown^="heading-"] {
+  @apply mb-0 mt-1 text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-6 tracking-normal text-muted-foreground/90;
+}
+.chat-markdown.thinking-markdown [data-streamdown="unordered-list"],
+.chat-markdown.thinking-markdown [data-streamdown="ordered-list"] {
+  @apply my-1 pl-4;
+}
+.chat-markdown.thinking-markdown [data-streamdown="list-item"] {
+  @apply text-[calc(12px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/80;
+  font-weight: 400;
+}
+.chat-markdown.thinking-markdown [data-streamdown="blockquote"] {
+  @apply my-1 border-l-0 pl-0 not-italic text-muted-foreground/75;
+}
+.chat-markdown.thinking-markdown [data-streamdown="inline-code"] {
+  @apply bg-foreground/[0.03] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/90;
+}
+.chat-markdown.thinking-markdown [data-streamdown="code-block-body"] {
+  @apply bg-muted/20 p-3 text-[calc(11px*var(--zone-font-scale,1))];
+}
 
-  /* Horizontal rule */
-  .chat-markdown [data-streamdown="horizontal-rule"] {
-    @apply my-5 border-border/45;
-  }
+/* Images */
+.chat-markdown [data-streamdown="image-wrapper"] {
+  @apply my-4 overflow-visible rounded-none border-0 bg-transparent shadow-none;
+}
+.chat-markdown [data-streamdown="image"] {
+  @apply block max-h-[34rem] max-w-full rounded-xl border border-border/60 bg-muted/10 object-contain;
+}
 
+/* Horizontal rule */
+.chat-markdown [data-streamdown="horizontal-rule"] {
+  @apply my-6 border-border/45;
+}
+
+@layer components {
   /* Long-form files and documentation use a calmer, denser reading rhythm
    * than conversational Markdown. This profile is shared by Skill and
    * workspace file previews; chat typography remains unchanged. */
@@ -442,6 +477,63 @@
     animation: checkpointShimmer 2.5s ease-in-out infinite;
   }
 
+  /* Compaction band — shared chrome for the live "compressing context"
+     status and the settled in-reply seam. The active band carries a sweeping
+     progress line along its bottom edge and a breathing icon tile; the
+     settled band is static so history stays calm. */
+  @keyframes compactionBandSweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+
+  @keyframes compactionBandBreathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  }
+
+  .compaction-band-progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: 34%;
+    border-radius: 9999px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(270 80% 62% / 0.75) 50%,
+      transparent 100%
+    );
+    animation: compactionBandSweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    pointer-events: none;
+  }
+
+  .compaction-band-icon-active {
+    animation: compactionBandBreathe 1.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .compaction-band-progress,
+    .compaction-band-icon-active {
+      animation: none;
+    }
+    .compaction-band-progress {
+      width: 100%;
+      opacity: 0.5;
+    }
+  }
+
   /* Tool card animations & micro-interactions */
   @keyframes toolExpandIn {
     from {
@@ -454,8 +546,7 @@
     }
   }
 
-  .tool-expand,
-  .lazy-collapse-reveal {
+  .tool-expand {
     animation: toolExpandIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -509,7 +600,6 @@
   /* Respect reduced motion */
   @media (prefers-reduced-motion: reduce) {
     .tool-expand,
-    .lazy-collapse-reveal,
     .ask-question-enter-forward,
     .ask-question-enter-backward,
     .ask-custom-input-enter,

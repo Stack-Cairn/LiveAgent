@@ -20,6 +20,8 @@ LiveAgent 的任务清单必须属于当前 Agent Run，而不是属于前端进
 
 GUI 与 Gateway WebUI 只读取成功 `TaskCreate`、`TaskUpdate`、`TaskList` 结果中的完整 canonical snapshot。投影不读取流式参数，不按文案或位置猜测身份，也不做延时序列兼容。任务工具块在 transcript 中保持 standalone 并统一隐藏，输入框上方的进度指示器以 `task.id` 作为 React key。
 
+指示器只常驻一个按内容收缩的步进药丸；任务清单是绝对定位的 hover 浮层，指针移开或焦点离开即收起，因此任何状态下都不占据 transcript 的布局高度，也不参与 composer 的高度预留。
+
 ## 不变量
 
 | 不变量 | 保证方式 |

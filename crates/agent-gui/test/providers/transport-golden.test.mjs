@@ -81,6 +81,7 @@ test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 
   assert.deepEqual(headers, {
     "x-api-key": "sk-ant-test",
     ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
+    "X-Claude-Code-Session-Id": SESSION_ID,
     "X-Relay-Channel": "vip",
     Cookie: "session=abc",
     "x-liveagent-upstream-origin": "https://api.anthropic.com",
@@ -90,6 +91,7 @@ test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 
   // 覆盖包 = 内置默认头 + 自定义头；鉴权头（x-api-key）按排除集绝不进包。
   assert.deepEqual(overrides, {
     ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
+    "X-Claude-Code-Session-Id": SESSION_ID,
     "X-Relay-Channel": "vip",
     Cookie: "session=abc",
   });
@@ -108,12 +110,18 @@ test("golden/transport: codex Responses 链路带 session/conversation 头；直
     Authorization: "Bearer sk-codex-test",
     session_id: SESSION_ID,
     conversation_id: SESSION_ID,
+    "session-id": SESSION_ID,
+    "thread-id": SESSION_ID,
+    "x-client-request-id": SESSION_ID,
     "x-liveagent-upstream-origin": "https://chatgpt.com",
     "x-liveagent-proxy-token": "proxy-token",
   });
   assert.deepEqual(overrides, {
     session_id: SESSION_ID,
     conversation_id: SESSION_ID,
+    "session-id": SESSION_ID,
+    "thread-id": SESSION_ID,
+    "x-client-request-id": SESSION_ID,
   });
 });
 

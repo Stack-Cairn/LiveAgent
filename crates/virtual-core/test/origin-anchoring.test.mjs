@@ -77,6 +77,221 @@ test("prepends anchor through the origin with zero writes (anchorTo end)", () =>
   assert.equal(h.blankBandAtViewportTop(), 0);
 });
 
+// Prepend a page of `pages` estimated rows above the loaded window, the way
+// a history "load earlier" lands: same tail keys, shifted indexes, larger
+// count. Returns the key of the row that was first before the prepend.
+function prependPage(h, pages, previousCount = 200) {
+  h.virtualizer.setOptions({
+    ...h.virtualizer.options,
+    count: previousCount + pages,
+    getItemKey: (index) => (index < pages ? `new-${index}` : `row-${index - pages}`),
+  });
+  h.virtualizer._willUpdate();
+}
+
+test("a history page prepended onto an idle viewport settles on the next frame, with no jump", () => {
+  // The reader sits near the top of the loaded window (the load-earlier
+  // trigger fired) and has stopped scrolling. Before this fix the debt sat
+  // until the next scroll event; then the write landed before the sizer had
+  // grown and was clamped, and the layout — already shifted by the whole
+  // page — tore off the viewport by ~one viewport height.
+  const h = originHarness({ initialOffset: 300 });
+  h.emitScroll(300, true);
+  h.emitScroll(300, false);
+  h.writes.length = 0;
+
+  const relativeBefore = h.itemByKey("row-0").start - h.realScrollTop;
+  const sizerBefore = h.domSizerHeight;
+
+  // A page as tall as the whole loaded window: 200 rows x 100 px.
+  prependPage(h, 200);
+  assert.equal(h.writes.length, 0, "the prepend itself must not write scrollTop");
+  assert.equal(h.itemByKey("row-0").start - h.realScrollTop, relativeBefore);
+  // Distance from the true top of the content, for paging triggers.
+  assert.equal(h.virtualizer.getSettledScrollOffset(), 300 + 200 * 100);
+  assert.equal(h.virtualizer.scrollOffset, 300, "DOM scrollTop is still parked");
+
+  // Next frame: the idle rebase publishes the grown layout, then writes.
+  h.runRafs();
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.length, 1);
+  const write = h.writes[0];
+  assert.equal(write.swallowed, false);
+  assert.equal(write.landed, write.target, "the write must not be clamped");
+  assert.equal(h.realScrollTop, 300 + 200 * 100);
+  assert.equal(h.domSizerHeight, sizerBefore + 200 * 100, "the sizer grew before the write");
+  assert.equal(
+    h.itemByKey("row-0").start - h.realScrollTop,
+    relativeBefore,
+    "the row under the viewport must not move",
+  );
+  assert.equal(h.blankBandAtViewportTop(), 0);
+  assert.equal(h.virtualizer.getSettledScrollOffset(), h.realScrollTop);
+
+  // The echo confirms the landing; nothing else is written.
+  h.emitEcho(true);
+  h.emitScroll(h.realScrollTop, false);
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.originOffset(), 0);
+});
+
+test("a rebase write clamped by a lagging sizer returns its remainder to the origin on the echo", () => {
+  // A consumer that renders the published layout late (no synchronous
+  // sizer growth): the write clamps at the old scrollable ceiling. The echo
+  // arrives exactly on that ceiling — the signature of a clamp, not of user
+  // movement — and the unconfirmed remainder must go back into the origin
+  // so the layout re-attaches to where the viewport really is.
+  const h = originHarness({ initialOffset: 300 });
+  h.emitScroll(300, true);
+  h.emitScroll(300, false);
+  h.writes.length = 0;
+  h.setSizerFollowsLayout(false);
+
+  const relativeBefore = h.itemByKey("row-0").start - h.realScrollTop;
+  prependPage(h, 200);
+  h.runRafs();
+
+  const write = h.writes[0];
+  assert.equal(write.target, 300 + 200 * 100);
+  assert.equal(write.landed, 200 * 100 - 600, "clamped at the stale ceiling");
+  assert.notEqual(
+    h.itemByKey("row-0").start - h.realScrollTop,
+    relativeBefore,
+    "between write and echo the layout is ahead of the viewport",
+  );
+
+  h.emitEcho(true);
+  assert.equal(h.virtualizer.scrollOffset, h.realScrollTop);
+  assert.equal(h.originOffset(), -(write.target - write.landed), "the residual is back in the origin");
+  assert.equal(
+    h.itemByKey("row-0").start - h.realScrollTop,
+    relativeBefore,
+    "the echo must re-attach the layout to the viewport",
+  );
+  assert.equal(h.blankBandAtViewportTop(), 0);
+
+  // The late render lands; the next idle moment settles the remainder.
+  h.syncSizer();
+  h.emitScroll(h.realScrollTop, false);
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.at(-1).landed, h.writes.at(-1).target);
+  assert.equal(h.itemByKey("row-0").start - h.realScrollTop, relativeBefore);
+  assert.equal(h.blankBandAtViewportTop(), 0);
+});
+
+test("a clamped rebase write with no echo is rolled back by the verify frame", () => {
+  const h = originHarness({ initialOffset: 300 });
+  h.emitScroll(300, true);
+  h.emitScroll(300, false);
+  h.writes.length = 0;
+  h.setSizerFollowsLayout(false);
+
+  const relativeBefore = h.itemByKey("row-0").start - h.realScrollTop;
+  prependPage(h, 200);
+  h.runRafs(); // idle rebase: publish, clamped write, verify frame queued
+  assert.notEqual(h.writes[0].landed, h.writes[0].target);
+
+  h.runRafs(); // verify frame
+  assert.equal(h.virtualizer.scrollOffset, h.realScrollTop);
+  assert.equal(h.itemByKey("row-0").start - h.realScrollTop, relativeBefore);
+  assert.equal(h.blankBandAtViewportTop(), 0);
+});
+
+test("an echo that carries user movement still settles the rebase as landed", () => {
+  // The user kept scrolling on an engine that honors mid-gesture writes:
+  // the echo misses the intent but is nowhere near a clamp bound. Rolling
+  // back would freeze content for a frame; the movement is the user's.
+  const h = originHarness();
+  h.emitScroll(9880, true);
+  const firstVisible = h.virtualizer.getVirtualItems()[0];
+  h.virtualizer.resizeItem(firstVisible.index, ACTUAL);
+  const debt = h.originOffset();
+  assert.ok(debt < 0);
+
+  h.emitScroll(9760, false); // idle rebase
+  assert.equal(h.originOffset(), 0);
+  const write = h.writes.at(-1);
+  assert.equal(write.landed, write.target);
+
+  h.emitScroll(write.target - 40, true); // echo + a wheel tick in one event
+  assert.equal(h.originOffset(), 0, "user movement must not be mistaken for a clamp");
+  assert.equal(h.virtualizer.scrollOffset, write.target - 40);
+});
+
+test("a rebase from inside the blank band at the top closes the band instead of retrying forever", () => {
+  // Rows above measured smaller than estimated shift the layout down: a blank
+  // band opens at the top (positive debt). When the rebase runs only after the
+  // viewport has entered the band, it can bring the viewport no further than
+  // 0 — the layout must still close the whole band, and the part the viewport
+  // cannot follow is a one-time shift, not residual to roll back (rolling it
+  // back would re-open the band and clamp again on every attempt).
+  const h = originHarness({ initialOffset: 600 });
+  h.emitScroll(600, true);
+  for (let index = 0; index < 5; index += 1) {
+    h.virtualizer.resizeItem(index, 20);
+  }
+  assert.equal(h.originOffset(), 5 * (100 - 20));
+  assert.equal(h.itemByKey("row-0").start, 400, "the band sits above the first row");
+
+  // The viewport lands inside the band; near the top the rebase is forced.
+  h.emitScroll(300, true);
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.writes[0].target, 0, "the write asks for the reachable offset");
+  assert.equal(h.realScrollTop, 0);
+  assert.equal(h.itemByKey("row-0").start, 0, "the band is closed");
+  assert.equal(h.blankBandAtViewportTop(), 0);
+
+  // Echo and verify frame both confirm the landing; nothing is rolled back.
+  h.emitEcho(true);
+  assert.equal(h.originOffset(), 0);
+  h.runRafs();
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.itemByKey("row-0").start, 0);
+  h.emitScroll(0, false);
+  assert.equal(h.writes.length, 1, "no retry loop");
+  assert.equal(h.blankBandAtViewportTop(), 0);
+});
+
+test("measurement debt absorbed while idle settles on the next frame", () => {
+  // No scroll event is coming to settle debt created by an idle re-measure
+  // (an image loading above the viewport); the idle frame must do it.
+  const h = originHarness();
+  h.emitScroll(9880, true);
+  h.emitScroll(9880, false);
+  h.writes.length = 0;
+
+  const firstVisible = h.virtualizer.getVirtualItems()[0];
+  const anchor = h.virtualizer.getVirtualItems()[1];
+  const relativeBefore = h.itemByKey(anchor.key).start - h.realScrollTop;
+  h.virtualizer.resizeItem(firstVisible.index - 1, ACTUAL);
+  assert.ok(h.originOffset() < 0);
+  assert.equal(h.writes.length, 0);
+
+  h.runRafs();
+  assert.equal(h.originOffset(), 0);
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.writes[0].landed, h.writes[0].target);
+  assert.equal(h.itemByKey(anchor.key).start - h.realScrollTop, relativeBefore);
+  assert.equal(h.blankBandAtViewportTop(), 0);
+});
+
+test("the rebase publishes the grown layout synchronously before it writes", () => {
+  const h = originHarness({ initialOffset: 300 });
+  h.emitScroll(300, true);
+  h.emitScroll(300, false);
+  h.writes.length = 0;
+  h.notifies.length = 0;
+
+  prependPage(h, 200);
+  const notifiesBeforeRebase = h.notifies.length;
+  h.runRafs();
+  const rebaseNotify = h.notifies[notifiesBeforeRebase];
+  assert.ok(rebaseNotify, "the rebase must notify");
+  assert.equal(rebaseNotify.sync, true, "the publish must be synchronous (flushSync-able)");
+  assert.equal(rebaseNotify.totalSize, 400 * 100);
+});
+
 test("idle away from the edges settles the debt with one verified write", () => {
   const h = originHarness();
   h.emitScroll(9880, true);

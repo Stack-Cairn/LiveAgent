@@ -11,24 +11,32 @@ import { useLocale } from "../../i18n/index";
 import { useCheckpointRewindAction } from "../../lib/chat/checkpointRewind";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
+import { type UsageDetailEntry, UsageInfoPopover } from "./UsagePanel";
 
-export function formatTranscriptMessageTimestamp(timestamp: number | undefined, now = new Date()) {
+export function formatTranscriptMessageTimestamp(timestamp: number | undefined) {
   if (!timestamp || !Number.isFinite(timestamp)) return "";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
   const pad = (value: number) => String(value).padStart(2, "0");
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return time;
-  }
-  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  return date.getFullYear() === now.getFullYear()
-    ? `${monthDay} ${time}`
-    : `${date.getFullYear()}-${monthDay} ${time}`;
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Keep the clock inside the action-button chrome so hover show/hide cannot
+// desync. Use a color token (not `text-muted-foreground/70`) so a /opacity
+// modifier cannot override the parent chrome's `opacity: 0`.
+function TranscriptTimestampLabel(props: { timestamp?: number; className?: string }) {
+  const label = formatTranscriptMessageTimestamp(props.timestamp);
+  if (!label) return null;
+  return (
+    <span
+      className={cn(
+        "select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
+        props.className,
+      )}
+    >
+      {label}
+    </span>
+  );
 }
 
 type SharedActionProps = {
@@ -68,54 +76,54 @@ export function TranscriptUserMessageActions(
 
   return (
     <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
-      {!readOnly ? (
-        <div
-          className={cn(
-            "flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-            alwaysShowActions && "[@media(hover:none)]:opacity-100",
-          )}
-        >
-          <button
-            type="button"
-            className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            title={t("chat.copy")}
-            aria-label={t("chat.copy")}
-            disabled={copyDisabled}
-            onClick={onCopy}
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            title={editTitle}
-            aria-label={editTitle}
-            disabled={editDisabled}
-            onClick={onEdit}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          {rewind ? (
+      <div
+        className={cn(
+          "chat-row-hover-chrome chat-row-hover-chrome--actions flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+          alwaysShowActions && "[@media(any-hover:none)]:opacity-100",
+        )}
+      >
+        {!readOnly ? (
+          <div className="flex gap-0.5">
             <button
               type="button"
               className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title={rewindTitle}
-              aria-label={rewindTitle}
-              disabled={rewind.disabled}
-              onClick={rewind.onRewind}
+              title={t("chat.copy")}
+              aria-label={t("chat.copy")}
+              disabled={copyDisabled}
+              onClick={onCopy}
             >
-              {rewind.pending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Undo2 className="h-3.5 w-3.5" />
-              )}
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
-          ) : null}
-        </div>
-      ) : null}
-      <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-        {formatTranscriptMessageTimestamp(timestamp)}
-      </span>
+            <button
+              type="button"
+              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title={editTitle}
+              aria-label={editTitle}
+              disabled={editDisabled}
+              onClick={onEdit}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            {rewind ? (
+              <button
+                type="button"
+                className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                title={rewindTitle}
+                aria-label={rewindTitle}
+                disabled={rewind.disabled}
+                onClick={rewind.onRewind}
+              >
+                {rewind.pending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Undo2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <TranscriptTimestampLabel timestamp={timestamp} />
+      </div>
     </div>
   );
 }
@@ -123,6 +131,8 @@ export function TranscriptUserMessageActions(
 export function TranscriptAssistantMessageActions(
   props: SharedActionProps & {
     timestamp?: number;
+    usageEntries?: readonly UsageDetailEntry[];
+    usageContextWindow?: number;
     retryDisabled: boolean;
     retryTitle: string;
     onRetry: () => void;
@@ -139,6 +149,8 @@ export function TranscriptAssistantMessageActions(
     onCopy,
     alwaysShowActions = false,
     timestamp,
+    usageEntries,
+    usageContextWindow,
     retryDisabled,
     retryTitle,
     onRetry,
@@ -152,23 +164,22 @@ export function TranscriptAssistantMessageActions(
   const actions = (
     <div
       className={cn(
-        "flex min-w-0 flex-1 items-center justify-start gap-1.5",
+        "flex min-w-0 flex-1 items-center justify-start gap-0.5",
         !withAvatarSpacer && "pl-10",
       )}
     >
-      <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-        {formatTranscriptMessageTimestamp(timestamp)}
-      </span>
       <div
         className={cn(
-          "flex gap-0.5 opacity-0 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100",
-          alwaysShowActions && "[@media(hover:none)]:opacity-100",
-          branchPending && "opacity-100",
+          "chat-row-hover-chrome chat-row-hover-chrome--actions pointer-events-none flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-data-[actions-visible=true]/assistant:pointer-events-auto group-data-[actions-visible=true]/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 motion-reduce:transition-none",
+          alwaysShowActions &&
+            "[@media(any-hover:none)]:pointer-events-auto [@media(any-hover:none)]:opacity-100",
+          branchPending && "pointer-events-auto opacity-100",
         )}
+        data-force-visible={branchPending ? "true" : undefined}
       >
         <button
           type="button"
-          className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           title={t("chat.copy")}
           aria-label={t("chat.copy")}
           disabled={copyDisabled}
@@ -187,7 +198,7 @@ export function TranscriptAssistantMessageActions(
           {(open) => (
             <button
               type="button"
-              className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               title={retryTitle}
               aria-label={retryTitle}
               disabled={retryDisabled}
@@ -209,10 +220,7 @@ export function TranscriptAssistantMessageActions(
           {(open) => (
             <button
               type="button"
-              className={cn(
-                "chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed",
-                !branchPending && "disabled:opacity-40",
-              )}
+              className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               title={branchTitle}
               aria-label={branchTitle}
               disabled={branchDisabled}
@@ -226,15 +234,21 @@ export function TranscriptAssistantMessageActions(
             </button>
           )}
         </ConfirmActionPopover>
+        <UsageInfoPopover entries={usageEntries} contextWindow={usageContextWindow} />
+        <TranscriptTimestampLabel timestamp={timestamp} className="ml-1" />
       </div>
     </div>
   );
 
   if (!withAvatarSpacer) {
-    return <div className="mt-1 flex items-center justify-start gap-1.5">{actions}</div>;
+    return (
+      <div className="chat-assistant-actions mt-1 flex items-center justify-start gap-1.5">
+        {actions}
+      </div>
+    );
   }
   return (
-    <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
+    <div className="chat-assistant-actions assistant-bubble-shell flex w-full max-w-full items-start gap-3">
       <div className="assistant-bubble-avatar w-7 shrink-0" aria-hidden="true" />
       {actions}
     </div>

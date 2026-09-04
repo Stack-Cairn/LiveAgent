@@ -85,3 +85,43 @@ test("conversation mention search skips the backend for an empty query", async (
   );
   assert.equal(calls, 0);
 });
+
+test("sidebar conversation search includes the current conversation and returns content previews", async () => {
+  const { searchPersistedConversations } = createTsModuleLoader({
+    mocks: {
+      "@liveagent/ui/lib/memory/api": {
+        async memorySearch(args) {
+          assert.deepEqual(args, { query: "release notes", includeHistory: true, limit: 80 });
+          return {
+            matches: [],
+            historyMatches: [
+              {
+                conversationId: "current",
+                title: "Release planning",
+                cwd: "/repo/a",
+                snippet: "assistant: [release notes] are ready",
+                score: 4,
+                updatedAt: 50,
+              },
+            ],
+          };
+        },
+      },
+    },
+  }).loadModule("@liveagent/ui/lib/chat/conversationSearch");
+
+  const results = await searchPersistedConversations({
+    query: "release notes",
+    currentWorkdir: "/repo/a",
+  });
+
+  assert.deepEqual(results, [
+    {
+      id: "current",
+      title: "Release planning",
+      cwd: "/repo/a",
+      updatedAt: 50,
+      searchPreview: "assistant: [release notes] are ready",
+    },
+  ]);
+});

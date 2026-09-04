@@ -86,6 +86,7 @@ test("readGlobalShortcutBindings keeps enabled flags and drops invalid entries",
       summon: { accelerator: "Ctrl+KeyA", enabled: false },
       toggle: { accelerator: "Alt+KeyT" },
       newChat: { accelerator: "   ", enabled: true },
+      searchConversations: { accelerator: "Super+Shift+KeyK", enabled: true },
       pin: { accelerator: 42, enabled: true },
       unknownAction: { accelerator: "Ctrl+KeyU", enabled: true },
     }),
@@ -96,6 +97,7 @@ test("readGlobalShortcutBindings keeps enabled flags and drops invalid entries",
       summon: { accelerator: "Ctrl+KeyA", enabled: false },
       // enabled 缺省视为启用（legacy 对象无该字段）。
       toggle: { accelerator: "Alt+KeyT", enabled: true },
+      searchConversations: { accelerator: "Super+Shift+KeyK", enabled: true },
     });
   });
 });
@@ -113,6 +115,25 @@ test("writeGlobalShortcutBindings round-trips through readGlobalShortcutBindings
   });
 });
 
+test("writeGlobalShortcutBindings announces same-window binding changes", async () => {
+  const storage = createMemoryLocalStorage();
+  const eventTarget = new EventTarget();
+  eventTarget.localStorage = storage;
+  let changeCount = 0;
+  eventTarget.addEventListener("liveagent:global-shortcut-bindings-changed", () => {
+    changeCount += 1;
+  });
+  await withWindow(eventTarget.localStorage, async () => {
+    // withWindow installs a plain object; expose the EventTarget methods used by the module.
+    globalThis.window.dispatchEvent = eventTarget.dispatchEvent.bind(eventTarget);
+    const { writeGlobalShortcutBindings } = loadGlobalShortcuts();
+    writeGlobalShortcutBindings({
+      searchConversations: { accelerator: "Super+KeyK", enabled: true },
+    });
+  });
+  assert.equal(changeCount, 1);
+});
+
 test("applyGlobalShortcuts registers only enabled bindings with non-empty accelerators", async () => {
   const calls = [];
   const { applyGlobalShortcuts } = loadGlobalShortcuts({
@@ -125,14 +146,26 @@ test("applyGlobalShortcuts registers only enabled bindings with non-empty accele
     summon: { accelerator: "Ctrl+KeyA", enabled: true },
     toggle: { accelerator: "Alt+KeyT", enabled: false },
     newChat: { accelerator: "   ", enabled: true },
+    searchConversations: { accelerator: "Super+Shift+KeyK", enabled: true },
   });
   assert.deepEqual(calls, [
     {
       command: "app_set_global_shortcuts",
-      args: { bindings: [{ action: "summon", accelerator: "Ctrl+KeyA" }] },
+      args: {
+        bindings: [
+          { action: "summon", accelerator: "Ctrl+KeyA" },
+          { action: "searchConversations", accelerator: "Super+Shift+KeyK" },
+        ],
+      },
     },
   ]);
   assert.deepEqual(failures, [{ action: "summon", accelerator: "Ctrl+KeyA", error: "taken" }]);
+});
+
+test("formatGlobalShortcutAccelerator follows the settings keyboard labels", () => {
+  const { formatGlobalShortcutAccelerator } = loadGlobalShortcuts();
+  assert.equal(formatGlobalShortcutAccelerator("Super+Shift+KeyK", true), "⌘⇧K");
+  assert.equal(formatGlobalShortcutAccelerator("Ctrl+ArrowUp", false), "Ctrl ↑");
 });
 
 test("applyGlobalShortcuts tolerates non-Tauri environments and bad responses", async () => {

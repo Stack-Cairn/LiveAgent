@@ -6,12 +6,8 @@ import { BOTTOM_REATTACH_ZONE_PX } from "@liveagent/ui/lib/chat-scroll/scrollFol
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
+import { TranscriptWidthControls } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import {
-  CHAT_TRANSCRIPT_WIDTH_CSS_VAR,
-  TranscriptWidthControls,
-} from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
-import {
-  type CSSProperties,
   memo,
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -52,12 +48,13 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     onLoadEarlierHistory,
     isHistorySwitching,
     isSending,
-    isAgentMode,
     showUsage,
     usageContextWindow,
     liveTranscriptStore,
     isCompactionRunning,
     bottomReservePx = 0,
+    floatingOverhangPx = 0,
+    composerCenterOffsetPx = 0,
     contentWidth,
     onContentWidthChange,
     onOpenFileLink,
@@ -99,47 +96,11 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     config: { reattachZonePx: BOTTOM_REATTACH_ZONE_PX },
   });
 
-  const prependAnchorRef = useRef<{
-    firstItemKey: string | undefined;
-    scrollHeight: number;
-    scrollTop: number;
-  } | null>(null);
-  const loadingEarlierRef = useRef(false);
-  const firstHistoryItemKey = historyItems[0]?.key;
-
-  useLayoutEffect(() => {
-    const anchor = prependAnchorRef.current;
-    if (!anchor || !scrollViewport || anchor.firstItemKey === firstHistoryItemKey) return;
-    scrollViewport.scrollTop =
-      anchor.scrollTop + Math.max(0, scrollViewport.scrollHeight - anchor.scrollHeight);
-    prependAnchorRef.current = null;
-  }, [firstHistoryItemKey, scrollViewport]);
-
-  useEffect(() => {
-    if (!scrollViewport || !hasMoreHistory || isHistorySwitching) return;
-    const loadAtTop = () => {
-      if (scrollViewport.scrollTop > 480 || loadingEarlierRef.current) return;
-      loadingEarlierRef.current = true;
-      prependAnchorRef.current = {
-        firstItemKey: historyItems[0]?.key,
-        scrollHeight: scrollViewport.scrollHeight,
-        scrollTop: scrollViewport.scrollTop,
-      };
-      void onLoadEarlierHistory()
-        .catch(() => undefined)
-        .finally(() => {
-          loadingEarlierRef.current = false;
-          requestAnimationFrame(() => {
-            const anchor = prependAnchorRef.current;
-            if (anchor?.firstItemKey === historyItems[0]?.key) {
-              prependAnchorRef.current = null;
-            }
-          });
-        });
-    };
-    scrollViewport.addEventListener("scroll", loadAtTop, { passive: true });
-    return () => scrollViewport.removeEventListener("scroll", loadAtTop);
-  }, [hasMoreHistory, historyItems, isHistorySwitching, onLoadEarlierHistory, scrollViewport]);
+  // Earlier-history paging lives in TranscriptList next to the virtualizer:
+  // a prepended page is anchored by the virtualizer's origin (the row under
+  // the viewport keeps its position with no scrollTop write from here), and
+  // the "near the top" trigger has to read the virtualizer's settled offset
+  // rather than the parked DOM scrollTop.
 
   // 楼层导航：从时间线派生用户消息楼层；当前楼层由 TranscriptList 上报。
   // 不在此处按 conversationId 重置——TranscriptList 按会话重挂载后其挂载
@@ -287,24 +248,16 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
       // pane, not the viewport — a narrow pane in a wide split window must
       // degrade like a narrow window.
       className="@container relative min-h-0 flex-1"
-      // Preferred (persisted) width, so a fresh mount paints at the user's
-      // width instead of the default. TranscriptWidthControls narrows this
-      // same variable to the stage in a layout effect — see its header.
-      style={
-        {
-          [CHAT_TRANSCRIPT_WIDTH_CSS_VAR]: `${contentWidth}px`,
-        } as CSSProperties
-      }
       onContextMenu={handleTranscriptContextMenu}
     >
       <div
         ref={setScrollViewport}
         data-scroll-viewport
-        className="h-full w-full overflow-y-auto [overflow-anchor:none]"
+        className="h-full w-full overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]"
       >
         <div
           className={cn(
-            "mx-auto w-full max-w-[var(--chat-transcript-content-width)] px-5 py-4 [overflow-anchor:none]",
+            "mx-auto w-full max-w-(--chat-transcript-content-width) px-5 py-4 [overflow-anchor:none]",
             // Empty states center against the scroll viewport (the pane), not
             // the window: a viewport-height min-height overflows half-height
             // panes in vertical splits and shifts the hero content.
@@ -327,7 +280,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
 
           <div
             className={cn(
-              "select-text transition-opacity duration-150",
+              "select-text transition-opacity duration-150 motion-reduce:transition-none",
               isTranscriptSettling ? "opacity-0" : "opacity-100",
             )}
           >
@@ -340,13 +293,15 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 key={conversationId}
                 conversationId={conversationId}
                 historyItems={historyItems}
+                hasMoreHistory={hasMoreHistory}
+                onLoadEarlierHistory={onLoadEarlierHistory}
+                isHistorySwitching={isHistorySwitching}
                 liveTranscriptStore={liveTranscriptStore}
                 scrollViewport={scrollViewport}
                 layoutWidth={contentWidth}
                 isViewportFollowing={scrollFollowHandle.isFollowing}
                 viewportFollowing={following}
                 isSending={isSending}
-                isAgentMode={isAgentMode}
                 isCompactionRunning={isCompactionRunning}
                 showUsage={showUsage}
                 usageContextWindow={usageContextWindow}
@@ -390,8 +345,14 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           aria-label={jumpToBottomLabel}
           title={jumpToBottomLabel}
           onClick={() => scrollFollowHandle.jumpToBottom()}
-          className="chat-jump-to-bottom absolute left-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
-          style={{ bottom: Math.ceil(bottomReservePx) + 16 }}
+          className="chat-jump-to-bottom absolute z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+          // Centered on the composer card (not the pane) and stacked above
+          // the task-progress pill / queue panel: the composer layer paints
+          // over the transcript, so any overlap would hide the button.
+          style={{
+            left: `calc(50% + ${Math.round(composerCenterOffsetPx)}px)`,
+            bottom: Math.ceil(bottomReservePx) + Math.ceil(floatingOverhangPx) + 16,
+          }}
         >
           <ChevronDown className="h-4 w-4" />
         </button>
@@ -402,7 +363,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
               ref={transcriptContextMenuRef}
               role="menu"
               className={cn(
-                "editor-context-menu layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
+                "editor-context-menu layer-popover fixed w-max min-w-38 max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
                 isContextMenuExiting && "editor-context-menu-exit",
               )}
               style={{

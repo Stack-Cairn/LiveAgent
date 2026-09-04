@@ -33,9 +33,7 @@ const realAdapterFunctions = {
   safeStringify: uiMessages.safeStringify,
   summarizeToolCall: uiMessages.summarizeToolCall,
   toolCallArgsForDisplay: uiMessages.toolCallArgsForDisplay,
-  toolResultMessageToText() {
-    return "";
-  },
+  toolResultMessageToText: uiMessages.toolResultMessageToText,
 };
 
 function createToolArgsRenderer() {
@@ -117,7 +115,7 @@ function createToolArgsRenderer() {
     },
   });
 
-  const { ToolArgsDisplay, ToolResultDisplay } = loader.loadModule(
+  const { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } = loader.loadModule(
     "@liveagent/ui/components/chat/assistant-bubble/ToolResultDisplay.tsx",
   );
 
@@ -135,6 +133,13 @@ function createToolArgsRenderer() {
           details,
           isError: false,
         },
+      }),
+    );
+  renderToolArgs.renderShell = (toolCall, result) =>
+    renderToStaticMarkup(
+      jsxRuntime.jsx(ShellToolDisplay, {
+        item: { toolCall, toolResult: result },
+        result,
       }),
     );
   return renderToolArgs;
@@ -233,8 +238,42 @@ function createToolCallItemRenderer() {
         areStableValuesEqual(left, right) {
           return JSON.stringify(left) === JSON.stringify(right);
         },
+        getToolActivityCategory(name) {
+          if (["Bash", "ManagedProcess", "ProcessWait", "ProcessStop"].includes(name)) {
+            return "command";
+          }
+          return "other";
+        },
         getBuiltinResultKind() {
           return null;
+        },
+        getFileOperationDisplay(item) {
+          if (!["Read", "Write", "Edit", "Delete"].includes(item.toolCall.name)) return null;
+          const details = item.toolResult?.details ?? {};
+          const filePath =
+            details.displayPath ||
+            details.relativePath ||
+            details.path ||
+            item.toolCall.arguments?.path;
+          if (typeof filePath !== "string" || !filePath.trim()) return null;
+          const normalized = filePath.replaceAll("\\", "/");
+          const kind =
+            item.toolCall.name === "Read"
+              ? "read"
+              : item.toolCall.name === "Delete"
+                ? "delete"
+                : item.toolCall.name === "Write" && details.existedBefore !== true
+                  ? "create"
+                  : "edit";
+          return {
+            kind,
+            path: filePath,
+            fileName: normalized.slice(normalized.lastIndexOf("/") + 1),
+            link: {
+              path: details.absolutePath || filePath,
+              source: details.absolutePath ? "absolute" : "relative",
+            },
+          };
         },
         getShellSessionDisplayDetails(result) {
           const details = result?.details;
@@ -264,6 +303,7 @@ function createToolCallItemRenderer() {
         },
       },
       "./ToolResultDisplay": {
+        ShellToolDisplay: NullComponent,
         ToolArgsDisplay: NullComponent,
         ToolResultDisplay: NullComponent,
       },
@@ -279,6 +319,7 @@ function createToolCallItemRenderer() {
       jsxRuntime.jsx(MemoToolCallItem, {
         item: options.result ? { toolCall, toolResult: options.result } : { toolCall },
         isRunning: options.isRunning,
+        onOpenFileLink: options.onOpenFileLink,
       }),
     );
 }
@@ -480,7 +521,7 @@ test("ProcessWait and ProcessStop summaries expose their session cursor", () => 
   );
 });
 
-test("all shell session tools render the same session result metadata", () => {
+test("shell session metadata is omitted from generic tool result details", () => {
   const renderToolDisplay = createToolArgsRenderer();
   const details = {
     session_id: "session-1",
@@ -498,14 +539,85 @@ test("all shell session tools render the same session result metadata", () => {
       { type: "toolCall", id: `call-${name}`, name, arguments: {} },
       details,
     );
-    assert.match(html, /session=session-1/, name);
-    assert.match(html, /status=running/, name);
-    assert.match(html, /cursor=128/, name);
-    assert.match(html, /more=true/, name);
-    assert.match(html, /session duration=30000 ms/, name);
-    assert.match(html, /shell=bash/, name);
-    assert.match(html, /session output=truncated/, name);
+    assert.equal(html, "", name);
   }
+});
+
+test("shell display combines command and output without runtime session metadata", () => {
+  const renderToolDisplay = createToolArgsRenderer();
+  const toolCall = {
+    type: "toolCall",
+    id: "bash-clean-shell",
+    name: "Bash",
+    arguments: { command: "git diff --stat" },
+  };
+  const result = {
+    role: "toolResult",
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    content: [
+      {
+        type: "text",
+        text: "# Shell Session\nstatus: completed\nsession_id: bash-private\ncursor: 1125\nshell: zsh\n\nstdout:\nM src/App.tsx",
+      },
+    ],
+    details: {
+      session_id: "bash-private",
+      status: "completed",
+      cursor: 1125,
+      exit_code: 0,
+      duration_ms: 2600,
+      shell: "zsh",
+      output: [{ stream: "stdout", text: "M src/App.tsx\n" }],
+    },
+    isError: false,
+  };
+  const html = renderToolDisplay.renderShell(toolCall, result);
+
+  assert.match(html, /data-shell-tool-display=""/);
+  assert.match(html, />Shell</);
+  assert.match(html, /\$ /);
+  assert.match(html, /git diff --stat/);
+  assert.match(html, /M src\/App\.tsx/);
+  assert.doesNotMatch(html, /bash-private|session_id|status:|cursor:|duration_ms|shell: zsh/);
+});
+
+test("historical shell envelopes fall back to clean stdout and stderr only", () => {
+  const renderToolDisplay = createToolArgsRenderer();
+  const toolCall = {
+    type: "toolCall",
+    id: "bash-history-shell",
+    name: "ProcessWait",
+    arguments: { session_id: "private-session", cursor: 10 },
+  };
+  const result = {
+    role: "toolResult",
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    content: [
+      {
+        type: "text",
+        text: [
+          "# Shell Session",
+          "status: completed",
+          "session_id: private-session",
+          "cursor: 22",
+          "shell: zsh",
+          "",
+          "stdout:",
+          "line one",
+          "stderr:",
+          "line two",
+        ].join("\n"),
+      },
+    ],
+    details: {},
+    isError: false,
+  };
+  const html = renderToolDisplay.renderShell(toolCall, result);
+
+  assert.match(html, /line one\nline two/);
+  assert.doesNotMatch(html, /private-session|session_id|status:|cursor:|shell: zsh/);
 });
 
 test("shell session snapshots show status without a permanent spinner", () => {
@@ -558,9 +670,12 @@ test("shell session snapshots show status without a permanent spinner", () => {
 
   assert.match(running, /chat\.tool\.running/);
   assert.doesNotMatch(running, /data-running="true"/);
+  assert.doesNotMatch(running, /session-1|cursor=|session=/);
   assert.match(stopped, /chat\.tool\.stopped/);
   assert.doesNotMatch(stopped, /data-running="true"/);
+  assert.doesNotMatch(stopped, /session-1|cursor=|session=/);
   assert.match(pending, /data-running="true"/);
+  assert.doesNotMatch(pending, /session-1|cursor=|session=/);
 });
 
 test("Bash collapsed summary keeps the full first line in DOM and title instead of a 48-char cut", () => {
@@ -575,6 +690,7 @@ test("Bash collapsed summary keeps the full first line in DOM and title instead 
 
   // Once in the hover title, once in the visible summary text.
   assert.equal(html.split(command).length - 1, 2);
+  assert.ok(!html.includes(`$ ${command}`));
   assert.ok(!html.includes("…"));
 });
 
@@ -604,4 +720,93 @@ test("Bash collapsed title carries the full multi-line command while the summary
   assert.ok(html.includes("line-one-alpha"));
   // The second line is reachable only through the hover title.
   assert.ok(html.includes("line-two-beta"));
+});
+
+test("successful file operations render concise IDE links without disclosures", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const html = renderToolCallItem(
+    {
+      type: "toolCall",
+      id: "read-file-link",
+      name: "Read",
+      arguments: { path: "src/pages/chat/ChatPage.tsx", start_line: 12 },
+    },
+    {
+      result: {
+        role: "toolResult",
+        toolCallId: "read-file-link",
+        toolName: "Read",
+        content: [],
+        details: {
+          kind: "read_text",
+          absolutePath: "/workspace/src/pages/chat/ChatPage.tsx",
+          displayPath: "src/pages/chat/ChatPage.tsx",
+        },
+        isError: false,
+      },
+      onOpenFileLink() {},
+    },
+  );
+
+  assert.match(html, /chat\.tool\.file\.read\.completed/);
+  assert.match(html, /data-chat-file-link=""/);
+  assert.match(html, />ChatPage\.tsx<\/button>/);
+  assert.doesNotMatch(html, /aria-expanded=/);
+  assert.doesNotMatch(html, /path=src\/pages\/chat\/ChatPage\.tsx/);
+});
+
+test("file action labels distinguish create, overwrite, edit, and delete", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const result = (id, name, details) => ({
+    role: "toolResult",
+    toolCallId: id,
+    toolName: name,
+    content: [],
+    details,
+    isError: false,
+  });
+  const created = renderToolCallItem(
+    { type: "toolCall", id: "write-new", name: "Write", arguments: { path: "new.ts" } },
+    { result: result("write-new", "Write", { displayPath: "new.ts", existedBefore: false }) },
+  );
+  const overwritten = renderToolCallItem(
+    { type: "toolCall", id: "write-old", name: "Write", arguments: { path: "old.ts" } },
+    { result: result("write-old", "Write", { displayPath: "old.ts", existedBefore: true }) },
+  );
+  const edited = renderToolCallItem(
+    { type: "toolCall", id: "edit", name: "Edit", arguments: { path: "edit.ts" } },
+    { result: result("edit", "Edit", { displayPath: "edit.ts" }) },
+  );
+  const deleted = renderToolCallItem(
+    { type: "toolCall", id: "delete", name: "Delete", arguments: { path: "gone.ts" } },
+    { result: result("delete", "Delete", { displayPath: "gone.ts" }), onOpenFileLink() {} },
+  );
+
+  assert.match(created, /chat\.tool\.file\.create\.completed/);
+  assert.match(overwritten, /chat\.tool\.file\.edit\.completed/);
+  assert.match(edited, /chat\.tool\.file\.edit\.completed/);
+  assert.match(deleted, /chat\.tool\.file\.delete\.completed/);
+  assert.doesNotMatch(deleted, /data-chat-file-link/);
+});
+
+test("failed file operations keep an expandable error disclosure", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const html = renderToolCallItem(
+    { type: "toolCall", id: "edit-failed", name: "Edit", arguments: { path: "src/App.tsx" } },
+    {
+      result: {
+        role: "toolResult",
+        toolCallId: "edit-failed",
+        toolName: "Edit",
+        content: [{ type: "text", text: "replacement did not match" }],
+        details: {},
+        isError: true,
+      },
+      onOpenFileLink() {},
+    },
+  );
+
+  assert.match(html, /chat\.tool\.file\.edit\.failed/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.doesNotMatch(html, /data-chat-file-link/);
 });

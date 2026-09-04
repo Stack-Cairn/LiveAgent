@@ -12,6 +12,7 @@ import {
   normalizeHostedSearchBlock,
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import type { CompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
@@ -31,6 +32,11 @@ export type GatewayTranscriptRound = UiRound & {
   key: string;
   runningToolCallIds: string[];
   thinkingOpen?: boolean;
+  /**
+   * Set on the zero-block seam round that stands in for a context
+   * compaction inside a stitched reply (see lib/chat/replyContinuity).
+   */
+  checkpoint?: CompactionSeam;
 };
 
 type SharedGatewayChatEntry = SharedChatEntry<

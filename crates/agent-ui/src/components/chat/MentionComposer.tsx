@@ -2293,7 +2293,7 @@ export const MentionComposer = memo(
           onCompositionEnd={handleCompositionEnd}
           onBlur={handleBlur}
           className={cn(
-            "mention-composer min-h-[70px] max-h-[160px] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
+            "mention-composer min-h-10 max-h-[160px] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
             "text-sm",
             isDomEmpty && "is-empty",
             disabled && "cursor-not-allowed opacity-60",

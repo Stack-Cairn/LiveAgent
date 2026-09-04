@@ -118,6 +118,8 @@ export function getProviderLabel(type: ProviderId) {
   return PROVIDER_LABELS[type];
 }
 
+// TODO: converge with components/ProviderBrandIcon.tsx — this variant keeps the
+// settings-page sizing contract (height="1em" scales with surrounding text).
 export function ProviderBrandIcon({ type }: { type: ProviderId }) {
   if (type === "claude_code") return <ClaudeIcon height="1em" />;
   if (type === "gemini") return <GeminiIcon height="1em" />;
