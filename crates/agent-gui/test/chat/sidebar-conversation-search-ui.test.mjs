@@ -43,7 +43,7 @@ test("conversation search uses the configurable desktop shortcut action end to e
 
 test("conversation search opens history directly instead of creating a composer reference", () => {
   assert.match(dialogSource, /searchPersistedConversations/);
-  assert.match(dialogSource, /onSelectConversation\(id\)/);
+  assert.match(dialogSource, /source: "search"/);
   assert.match(dialogSource, /chat\.pinnedConversations/);
   assert.match(dialogSource, /chat\.recentConversation/);
   assert.match(dialogSource, /item\.searchPreview/);

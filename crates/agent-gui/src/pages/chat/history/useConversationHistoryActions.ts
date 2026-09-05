@@ -1,4 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
+import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
 import {
@@ -204,9 +205,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     return nextIdentity.conversationId;
   }
 
-  async function openInitial(id: string): Promise<"cache-hit" | "painted"> {
+  async function openInitial(
+    id: string,
+    request?: ConversationOpenRequest,
+  ): Promise<"cache-hit" | "painted"> {
+    const fromSearch = request?.source === "search";
     const loadSequence = conversationLoadSequenceRef.current + 1;
     conversationLoadSequenceRef.current = loadSequence;
+    const isStale = () =>
+      conversationLoadSequenceRef.current !== loadSequence || request?.isCurrent() === false;
     // Bucketed per conversation: hydrating replaces this id's stale fail mark
     // and never touches another conversation's phase.
     hydration.markHydrating(id);
@@ -219,7 +226,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       } catch {
         hydration.markHydrating(id);
       }
-      if (conversationLoadSequenceRef.current !== loadSequence) {
+      if (isStale()) {
         return "painted";
       }
     }
@@ -230,7 +237,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       visibleConversationId,
       buildRuntimeEntryFromVisibleState(),
     );
-    resetVisibleTransientState();
+    if (!fromSearch) resetVisibleTransientState();
 
     const prefetched = backgroundHydrationRef.current.get(id);
     if (prefetched) {
@@ -239,14 +246,14 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       } catch {
         hydration.markHydrating(id);
       }
-      if (conversationLoadSequenceRef.current !== loadSequence) {
+      if (isStale()) {
         hydration.clearHydrating(id);
         return "painted";
       }
     }
 
     const cached = conversationRuntimeCacheRef.current.get(id);
-    if (cached) {
+    if (cached && !fromSearch) {
       const historyItem = sidebarStore.peek(id);
       const isPendingHistoryItem = historyItem?.isPending === true;
       // A conversation the sidebar store has never seen is an unpersisted
@@ -276,33 +283,47 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
         includeActiveSegment: true,
       });
-      if (conversationLoadSequenceRef.current !== loadSequence) {
+      if (isStale()) {
         hydration.clearHydrating(id);
         return "painted";
       }
 
       if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
       const state = buildConversationStateFromWindow(record);
-      const entry = createConversationRuntimeEntry({
-        state,
-        sessionId: record.conversation.sessionId ?? record.conversation.id,
-        createdAt: record.conversation.createdAt,
-        workdir: record.conversation.cwd,
-        selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
-      });
+      // Runtime may have advanced while metadata was loading (including streaming turns).
+      const latestCached = fromSearch ? conversationRuntimeCacheRef.current.get(id) : undefined;
+      const reuseCached =
+        latestCached &&
+        (latestCached.isSending || conversationPersistenceCursorRef.current.has(id));
+      const entry = reuseCached
+        ? { ...latestCached, workdir: record.conversation.cwd }
+        : createConversationRuntimeEntry({
+            state,
+            sessionId: record.conversation.sessionId ?? record.conversation.id,
+            createdAt: record.conversation.createdAt,
+            workdir: record.conversation.cwd,
+            selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+          });
+      if (fromSearch) {
+        request?.beforeCommit?.(record.conversation);
+        resetVisibleTransientState();
+      }
       activateConversation({
         conversationId: record.conversation.id,
         entry,
-        persistenceCursor: {
-          activeSegmentIndex: record.activeSegment.segmentIndex,
-          activeSegmentId: record.activeSegment.segmentId,
-        },
+        persistenceCursor: reuseCached
+          ? conversationPersistenceCursorRef.current.get(id)
+          : {
+              activeSegmentIndex: record.activeSegment.segmentIndex,
+              activeSegmentId: record.activeSegment.segmentId,
+            },
         clearError: true,
       });
       hydration.clearHydrating(id);
+      request?.afterCommit?.();
       return "painted";
     } catch (err) {
-      if (conversationLoadSequenceRef.current === loadSequence) {
+      if (!isStale()) {
         const msg = err instanceof Error ? err.message : String(err);
         // Failure is scoped to this conversation: another pane's concurrent
         // success or failure cannot clear or overwrite it.

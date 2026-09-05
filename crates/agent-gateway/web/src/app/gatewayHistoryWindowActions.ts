@@ -1,3 +1,4 @@
+import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import {
   adoptHistoryWindowState,
@@ -12,6 +13,7 @@ import type { ChatEntry } from "@/lib/chatUi";
 import type { GatewayWebSocketClient } from "@/lib/gatewaySocket";
 import type { HistoryDetail } from "@/lib/gatewayTypes";
 import { parseHistoryMessagesJsonAsync } from "@/lib/historyParser";
+import { normalizeGatewayConversationSummary } from "@/lib/sidebar/webSidebarBackend";
 import { asErrorMessage } from "./chatEventUtils";
 import { HISTORY_DETAIL_INITIAL_MAX_MESSAGES } from "./constants";
 import { resolveVisibleConversationId } from "./historyUtils";
@@ -150,29 +152,37 @@ type OpenConversationInitialOptions = {
 };
 
 export function createOpenConversationInitial(options: OpenConversationInitialOptions) {
-  return async (conversationId: string): Promise<"cache-hit" | "painted"> => {
+  return async (
+    conversationId: string,
+    request?: ConversationOpenRequest,
+  ): Promise<"cache-hit" | "painted"> => {
+    const fromSearch = request?.source === "search";
     const currentApi = options.api;
     if (!currentApi) throw new Error("Gateway client is not ready.");
     const loadSequence = options.invalidateHistoryLoad();
     const selectionRevision = options.markVisibleConversationRevision();
     const isStale = () =>
       options.historyLoadSequenceRef.current !== loadSequence ||
-      options.visibleConversationRevisionRef.current !== selectionRevision;
+      options.visibleConversationRevisionRef.current !== selectionRevision ||
+      request?.isCurrent() === false;
     const previousId = options.getDisplayedConversationId();
     const isChanging = previousId !== conversationId;
-    options.pendingDisplayedConversationAutoBottomRef.current = conversationId;
-    if (isChanging && previousId) {
-      options.transcriptStoreRegistry.peek(previousId)?.foldSettledTurns();
-    }
-    options.protectedConversationRef.current = conversationId;
-    options.conversationIdRef.current = conversationId;
-    options.selectedHistoryIdRef.current = conversationId;
-    options.setConversationId(conversationId);
-    options.setSelectedHistoryId(conversationId);
-    if (isChanging) {
-      options.setChatError(null);
-      options.setSelectedHistory(null);
-    }
+    const selectConversation = () => {
+      options.pendingDisplayedConversationAutoBottomRef.current = conversationId;
+      if (isChanging && previousId) {
+        options.transcriptStoreRegistry.peek(previousId)?.foldSettledTurns();
+      }
+      options.protectedConversationRef.current = conversationId;
+      options.conversationIdRef.current = conversationId;
+      options.selectedHistoryIdRef.current = conversationId;
+      options.setConversationId(conversationId);
+      options.setSelectedHistoryId(conversationId);
+      if (isChanging) {
+        options.setChatError(null);
+        options.setSelectedHistory(null);
+      }
+    };
+    if (!fromSearch) selectConversation();
     try {
       const planned = planHistoryWindowRequest(
         options.historyWindowStatesRef.current.get(conversationId),
@@ -192,21 +202,30 @@ export function createOpenConversationInitial(options: OpenConversationInitialOp
       const parsed = await parseHistoryMessagesJsonAsync(detail.messages_json);
       const entries = detail.has_more === true ? trimLeadingHeadlessEntries(parsed) : parsed;
       if (isStale()) return "painted";
+      if (fromSearch) {
+        if (!detail.conversation || detail.conversation.id !== conversationId) {
+          throw new Error("History response is missing the requested conversation.");
+        }
+        request?.beforeCommit?.(normalizeGatewayConversationSummary(detail.conversation));
+        selectConversation();
+      }
       options.setSelectedHistory(detail);
       options.transcriptStoreRegistry
         .get(conversationId)
         .applyHistorySnapshot(entries, { mode: "replace" });
       const detailWorkdir = detail.conversation?.cwd?.trim();
-      if (detailWorkdir) options.conversationWorkdirsRef.current.set(conversationId, detailWorkdir);
+      options.conversationWorkdirsRef.current.set(conversationId, detailWorkdir ?? "");
+      request?.afterCommit?.();
       return "painted";
     } catch (error) {
       if (!isStale()) {
         const message = asErrorMessage(error, options.localeErrorMessage);
-        options.setSelectedHistory({
-          conversation_id: conversationId,
-          messages_json: message,
-          has_more: false,
-        });
+        if (!fromSearch)
+          options.setSelectedHistory({
+            conversation_id: conversationId,
+            messages_json: message,
+            has_more: false,
+          });
         options.setChatError(message);
       }
       throw error;

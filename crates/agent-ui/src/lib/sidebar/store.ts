@@ -81,7 +81,7 @@ export type SidebarStore = {
   setCwd(id: string, cwd: string): Promise<boolean>;
   remove(id: string): Promise<boolean>;
   clearMutationError(id: string): void;
-  upsertLocal(conversation: SidebarConversation): void;
+  upsertLocal(conversation: SidebarConversation, options?: { reveal?: boolean }): void;
   removeLocal(conversationId: string): void;
   applyRunningPatch(patch: {
     conversationId: string;
@@ -188,8 +188,11 @@ export function createSidebarStore(
     return ids;
   };
 
+  let revealedConversationId: string | null = null;
+
   const retainedConversationIds = () => {
     const ids = new Set<string>(snapshot.mutations.keys());
+    if (revealedConversationId) ids.add(revealedConversationId);
     for (const id of backend.getProtectedConversationIds?.() ?? []) {
       const trimmed = id.trim();
       if (trimmed) ids.add(trimmed);
@@ -830,8 +833,13 @@ export function createSidebarStore(
       commit({ mutationErrors });
     },
 
-    upsertLocal: (conversation) => {
-      const merged = mergeSidebarConversation(byId.get(conversation.id), conversation);
+    upsertLocal: (conversation, options) => {
+      if (options?.reveal) revealedConversationId = conversation.id;
+      const existing = byId.get(conversation.id);
+      const merged = mergeSidebarConversation(
+        options?.reveal && existing ? { ...existing, cwd: conversation.cwd } : existing,
+        conversation,
+      );
       byId = new Map(byId);
       byId.set(merged.id, merged);
       const inScope = conversationMatchesScope(merged, scope);

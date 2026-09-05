@@ -4,6 +4,7 @@ import type {
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
@@ -95,7 +96,7 @@ export type ChatHistorySidebarProps = {
   // collapsed group at the end of the list.
   archivedProjectPathKeys?: ReadonlySet<string>;
   onNewConversation: () => void;
-  onSelectConversation: (id: string) => void;
+  onSelectConversation: (id: string, options?: ConversationOpenOptions) => void;
   /** Workbench drag intent from a conversation row title (desktop pointer). */
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,

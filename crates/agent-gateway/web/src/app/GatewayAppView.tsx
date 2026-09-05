@@ -1276,7 +1276,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               showProjects={isAgentMode && status?.online === true}
               projects={workspaceProjects}
               workspaceProjectGroups={settings.system.workspaceProjectGroups}
-              activeProjectId={activeWorkspaceProject?.id}
+              activeProjectId={activeWorkspaceProject?.id ?? ""}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
               workspaceFolderDropActive={workspaceFolderDropActive}

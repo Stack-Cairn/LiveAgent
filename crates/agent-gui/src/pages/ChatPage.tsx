@@ -42,6 +42,10 @@ import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
+import type {
+  ConversationOpenOptions,
+  ConversationOpenRequest,
+} from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
   createConversationOpenController,
@@ -366,6 +370,9 @@ export function ChatPage(props: ChatPageProps) {
     sidebarScope,
     historyScopeKey,
     activateWorkspaceProject,
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
+    searchConversationWorkdir,
     handleSelectWorkspaceProject,
     handleNewConversationForProject,
     handleBrowseWorkspaceProjectInFileTree,
@@ -532,16 +539,17 @@ export function ChatPage(props: ChatPageProps) {
   const currentConversationHistoryUpdatedAtRef = useRef<number | null>(null);
   const locallySyncedHistoryUpdatedAtRef = useRef(new Map<string, number>());
   const gatewayBridgeHistorySummaryRef = useRef(new Map<string, ChatHistorySummary>());
-  const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
-    async () => "painted",
-  );
+  const openInitialActionRef = useRef<
+    (id: string, request?: ConversationOpenRequest) => Promise<"cache-hit" | "painted">
+  >(async () => "painted");
   const hydrateConversationActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const loadEarlierHistoryActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const cleanupDeletedConversationActionRef = useRef<(id: string) => void>(() => undefined);
   const openController = useMemo(
     () =>
       createConversationOpenController({
-        openInitial: (conversationId) => openInitialActionRef.current(conversationId),
+        openInitial: (conversationId, request) =>
+          openInitialActionRef.current(conversationId, request),
         onStateChange: setConversationOpenState,
       }),
     [],
@@ -729,7 +737,11 @@ export function ChatPage(props: ChatPageProps) {
   const displayedConversationWorkdir =
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
-    (isAgentMode ? activeWorkspaceProjectPath || workdir : "");
+    (searchConversationWorkdir === ""
+      ? ""
+      : isAgentMode
+        ? activeWorkspaceProjectPath || workdir
+        : "");
   const searchMentionableConversations = useCallback(
     (query: string) =>
       searchMentionConversations({
@@ -1777,6 +1789,7 @@ export function ChatPage(props: ChatPageProps) {
   }, []);
 
   const handleNewConversation = useCallback(() => {
+    if (!isAgentMode || activeWorkspaceProjectPath) clearSearchConversationWorkspace();
     openController.cancel();
     prepareComposerForConversationChange();
     startNewConversationActionRef.current({
@@ -1784,6 +1797,7 @@ export function ChatPage(props: ChatPageProps) {
     });
   }, [
     activeWorkspaceProjectPath,
+    clearSearchConversationWorkspace,
     isAgentMode,
     openController,
     prepareComposerForConversationChange,
@@ -1799,15 +1813,32 @@ export function ChatPage(props: ChatPageProps) {
   isDraftConversationRef.current = isDraftConversation;
 
   const handleSelectConversation = useCallback(
-    (id: string) => {
+    (id: string, options?: ConversationOpenOptions) => {
       const targetConversationId = id.trim();
       if (!targetConversationId) {
         return;
       }
-      prepareComposerForConversationChange();
-      openController.open(targetConversationId);
+      if (options?.source === "search") {
+        openController.open(targetConversationId, {
+          source: "search",
+          afterCommit: options.afterCommit,
+          beforeCommit: (conversation) => {
+            activateSearchConversationWorkspace(conversation.cwd);
+            sidebarStore.upsertLocal(conversation, { reveal: true });
+            prepareComposerForConversationChange();
+          },
+        });
+      } else {
+        prepareComposerForConversationChange();
+        openController.open(targetConversationId);
+      }
     },
-    [openController, prepareComposerForConversationChange],
+    [
+      activateSearchConversationWorkspace,
+      openController,
+      prepareComposerForConversationChange,
+      sidebarStore,
+    ],
   );
 
   // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
@@ -2254,7 +2285,7 @@ export function ChatPage(props: ChatPageProps) {
     controller: conversationSurfaceController,
     changedFilesActions,
     checkpointRewind: {
-      project: activeWorkspaceProject,
+      project: activeWorkspaceProject ?? null,
       disabled: !currentConversationId || isSending,
       onRewound: (info) => {
         // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
@@ -3931,7 +3962,7 @@ export function ChatPage(props: ChatPageProps) {
         showProjects={isAgentMode}
         projects={workspaceProjects}
         workspaceProjectGroups={workspaceProjectGroups}
-        activeProjectId={activeWorkspaceProject?.id}
+        activeProjectId={activeWorkspaceProject?.id ?? ""}
         missingProjectPathKeys={missingWorkspaceProjectPathKeys}
         projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
         workspaceFolderDropActive={isWorkspaceFolderDropActive}
@@ -3961,9 +3992,9 @@ export function ChatPage(props: ChatPageProps) {
           }
           handleNewConversation();
         }}
-        onSelectConversation={(id) => {
+        onSelectConversation={(id, options) => {
           setActiveView("chat");
-          handleSelectConversation(id);
+          handleSelectConversation(id, options);
         }}
         onConversationDeleted={handleConversationDeleted}
         onConversationCwdChanged={handleConversationCwdChanged}

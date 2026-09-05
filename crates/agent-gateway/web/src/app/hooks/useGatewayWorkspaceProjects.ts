@@ -61,9 +61,24 @@ export function useGatewayWorkspaceProjects({
 }: UseGatewayWorkspaceProjectsOptions) {
   const [workspaceCloneTasks, setWorkspaceCloneTasks] = useState<WorkspaceCloneTask[]>([]);
   const dismissedWorkspaceCloneTaskIds = useRef(new Set<string>());
-  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
+  const [searchNavigation, setSearchNavigation] = useState<{
+    mode: typeof settings.system.executionMode;
+    cwd: string;
+  } | null>(null);
+  const clearSearchConversationWorkspace = useCallback(() => setSearchNavigation(null), []);
+  const searchCwd =
+    searchNavigation?.mode === settings.system.executionMode ? searchNavigation.cwd : undefined;
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectIdState] = useState<string>(
     () => settings.system.activeWorkspaceProjectId?.trim() || DEFAULT_WORKSPACE_PROJECT_ID,
   );
+  const setActiveWorkspaceProjectId = useCallback<Dispatch<SetStateAction<string>>>((id) => {
+    setSearchNavigation(null);
+    setActiveWorkspaceProjectIdState(id);
+  }, []);
+  useEffect(() => {
+    if (searchNavigation && searchNavigation.mode !== settings.system.executionMode)
+      setSearchNavigation(null);
+  }, [searchNavigation, settings.system.executionMode]);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
 
@@ -86,8 +101,11 @@ export function useGatewayWorkspaceProjects({
     return active.length > 0 ? active : workspaceProjects;
   }, [archivedWorkspaceProjectPathKeys, workspaceProjects]);
   const activeWorkspaceProject = useMemo(
-    () => findWorkspaceProject(selectableWorkspaceProjects, activeWorkspaceProjectId),
-    [activeWorkspaceProjectId, selectableWorkspaceProjects],
+    () =>
+      searchCwd === ""
+        ? undefined
+        : findWorkspaceProject(selectableWorkspaceProjects, activeWorkspaceProjectId),
+    [activeWorkspaceProjectId, selectableWorkspaceProjects, searchCwd],
   );
   const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
 
@@ -95,17 +113,21 @@ export function useGatewayWorkspaceProjects({
     if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
       setActiveWorkspaceProjectId(activeWorkspaceProject.id);
     }
-  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
+  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId, setActiveWorkspaceProjectId]);
 
   useEffect(() => {
     sidebarStore.setScope(
-      settings.system.executionMode !== "text"
-        ? activeWorkspaceProjectPath
-          ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
-          : { kind: "none" }
-        : { kind: "unscoped" },
+      searchCwd !== undefined
+        ? searchCwd
+          ? { kind: "workdir", cwd: searchCwd }
+          : { kind: "unscoped" }
+        : settings.system.executionMode !== "text"
+          ? activeWorkspaceProjectPath
+            ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+            : { kind: "none" }
+          : { kind: "unscoped" },
     );
-  }, [activeWorkspaceProjectPath, settings.system.executionMode, sidebarStore]);
+  }, [activeWorkspaceProjectPath, settings.system.executionMode, sidebarStore, searchCwd]);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
     (project: WorkspaceProject, missing: boolean) => {
@@ -157,7 +179,11 @@ export function useGatewayWorkspaceProjects({
   );
 
   const activateWorkspaceProject = useCallback(
-    (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
+    (
+      project: WorkspaceProject,
+      options?: { startConversation?: boolean; preserveMissing?: boolean },
+    ) => {
+      setSearchNavigation(null);
       const pathKey = project.path.trim();
       if (!pathKey) return null;
       const normalizedPathKey = workspaceProjectPathKey(pathKey);
@@ -207,9 +233,11 @@ export function useGatewayWorkspaceProjects({
               hiddenWorkspaceProjectPaths: prev.system.hiddenWorkspaceProjectPaths.filter(
                 (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
               ),
-              missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
-                (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
-              ),
+              missingWorkspaceProjectPaths: options?.preserveMissing
+                ? prev.system.missingWorkspaceProjectPaths
+                : prev.system.missingWorkspaceProjectPaths.filter(
+                    (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+                  ),
               archivedWorkspaceProjectPaths: prev.system.archivedWorkspaceProjectPaths.filter(
                 (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
               ),
@@ -227,7 +255,39 @@ export function useGatewayWorkspaceProjects({
       }
       return null;
     },
-    [setActiveView, setSettings, startNewConversationRef, workspaceProjects],
+    [
+      setActiveView,
+      setSettings,
+      startNewConversationRef,
+      workspaceProjects,
+      setActiveWorkspaceProjectId,
+    ],
+  );
+
+  // Reading persisted history does not require the original directory to exist.
+  const activateSearchConversationWorkspace = useCallback(
+    (cwd?: string) => {
+      const path = cwd?.trim() ?? "";
+      if (
+        path &&
+        workspaceProjectPathKey(path) !== workspaceProjectPathKey(activeWorkspaceProjectPath)
+      ) {
+        const project =
+          workspaceProjects.find(
+            (item) => workspaceProjectPathKey(item.path) === workspaceProjectPathKey(path),
+          ) ?? createWorkspaceProjectFromPath(path, "history");
+        activateWorkspaceProject(project, { preserveMissing: true });
+      }
+      setSearchNavigation({ mode: settings.system.executionMode, cwd: path });
+      sidebarStore.setScope(path ? { kind: "workdir", cwd: path } : { kind: "unscoped" });
+    },
+    [
+      activeWorkspaceProjectPath,
+      workspaceProjects,
+      activateWorkspaceProject,
+      settings.system.executionMode,
+      sidebarStore,
+    ],
   );
 
   const handleSelectWorkspaceProject = useCallback(
@@ -571,6 +631,9 @@ export function useGatewayWorkspaceProjects({
 
   return {
     activateWorkspaceProject,
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
+    searchConversationWorkdir: searchCwd,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
     archivedWorkspaceProjectPathKeys,
