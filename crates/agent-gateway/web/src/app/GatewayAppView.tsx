@@ -856,6 +856,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             settings.locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度"
           }
           resetLabel={settings.locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度"}
+          // The history overlay below is a blocking panel layer above the
+          // handles; suspend them for exactly as long as it is mounted (#749).
+          suspended={conversationOpenState.showOverlay}
         />
         {displayedTranscriptRowCount > 0 && !conversationOpenState.showOverlay ? (
           <FloorNavRail
@@ -1573,6 +1576,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                     ? "Double-click to reset"
                                     : "双击恢复默认宽度"
                                 }
+                                suspended={conversationOpenState.showOverlay}
                               />
                               {displayedTranscriptRowCount > 0 &&
                               !conversationOpenState.showOverlay ? (

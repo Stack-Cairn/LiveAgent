@@ -46,18 +46,20 @@ test("keyboard width controls do not detach transcript scroll follow", () => {
   assert.ok(transcriptWidthControlsSource.includes(SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE));
 });
 
-test("width handle hit targets stay localized around the visible grip", () => {
+test("width handle hit targets span the full transcript height", () => {
+  // #749 follow-up: the 96px-tall, 12px-wide grips were hard to acquire, so
+  // the transparent hit area now spans the whole column edge at 17px wide.
+  // Only the hit target grew — the visible pill stays small.
   const handleClass = transcriptWidthControlsSource.match(
     /group pointer-events-auto absolute ([^"]+) touch-none cursor-col-resize/,
   );
   assert.ok(handleClass, "transcript width handle class not found");
-  assert.match(handleClass[1], /top-1\/2/);
-  assert.match(handleClass[1], /h-24/);
-  assert.match(handleClass[1], /-translate-y-1\/2/);
+  assert.match(handleClass[1], /inset-y-0/);
+  assert.match(handleClass[1], /w-\[17px\]/);
   assert.equal(
-    handleClass[1].includes("inset-y-0"),
+    handleClass[1].includes("h-24"),
     false,
-    "a transparent width handle must not intercept the full transcript height",
+    "the old localized-height classes must not come back alongside inset-y-0",
   );
 });
 

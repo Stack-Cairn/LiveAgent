@@ -140,6 +140,12 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     shouldReserveTranscriptBottomSpace &&
     shouldDeferTranscriptReveal &&
     settledConversationId !== conversationId;
+  // Loading overlays own the stage while mounted. The width handles suspend
+  // behind them (an opaque skeleton leaves nothing to grab, and a focusable
+  // separator must not hide under a blocking layer) and come back in the very
+  // commit the overlay leaves, re-measured against the pane as it is then —
+  // no unrelated layout change is needed to wake them (#749).
+  const isTranscriptBusy = isHistorySwitching || isTranscriptSettling;
 
   useLayoutEffect(() => {
     followRef.current = scrollFollowHandle;
@@ -328,6 +334,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
         onWidthChange={onContentWidthChange}
         resizeLabel={resizeTranscriptLabel}
         resetLabel={resetTranscriptWidthLabel}
+        suspended={isTranscriptBusy}
       />
       {!showNoModelsState && !showStartChatState && !isTranscriptSettling ? (
         <FloorNavRail
@@ -390,7 +397,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             document.body,
           )
         : null}
-      {isHistorySwitching || isTranscriptSettling ? <HistorySwitchLoadingOverlay /> : null}
+      {isTranscriptBusy ? <HistorySwitchLoadingOverlay /> : null}
     </div>
   );
 });
