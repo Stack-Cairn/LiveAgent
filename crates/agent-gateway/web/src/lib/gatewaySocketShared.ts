@@ -882,6 +882,7 @@ export function isUnsupportedChatPrepareError(error: unknown) {
 }
 
 export const RECOVERABLE_MEMORY_MANAGE_COMMANDS = new Set([
+  "chat_history_search",
   "memory_list",
   "memory_read",
   "memory_search",
