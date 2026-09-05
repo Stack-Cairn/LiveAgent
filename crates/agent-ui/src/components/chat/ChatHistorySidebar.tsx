@@ -184,7 +184,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     isOpen,
     fontScale = 1,
     conversationSearchRequestKey,
-    conversationSearchShortcutLabel,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -1293,21 +1292,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               disabled={sectionsDisabled}
               onClick={() => setConversationSearchOpen(true)}
               className="chat-history-search-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-              title={
-                conversationSearchShortcutLabel
-                  ? `${t("chat.searchConversations")} (${conversationSearchShortcutLabel})`
-                  : t("chat.searchConversations")
-              }
+              title={t("chat.searchConversations")}
             >
               <Search className="h-4 w-4 shrink-0 text-foreground/85" />
               <span className="min-w-0 flex-1 truncate text-left">
                 {t("chat.searchConversations")}
               </span>
-              {conversationSearchShortcutLabel ? (
-                <kbd className="hidden rounded border border-border/50 bg-background/40 px-1 py-px text-[9px] font-medium leading-4 text-muted-foreground/70 min-[220px]:inline-flex">
-                  {conversationSearchShortcutLabel}
-                </kbd>
-              ) : null}
             </Button>
             <Button
               type="button"

@@ -110,6 +110,14 @@ export interface GuardEventSource {
   ): void;
 }
 
+// 只记录由导航守卫取消的默认行为，让应用快捷键仍可处理这些事件。
+// WeakSet 不修改原生事件，也不会在按键处理结束后保留事件引用。
+const browserDefaultBlockedEvents = new WeakSet<Event>();
+
+export function wasBrowserKeyDefaultBlocked(event: Event): boolean {
+  return browserDefaultBlockedEvents.has(event);
+}
+
 let uninstallCurrent: (() => void) | null = null;
 
 /**
@@ -130,7 +138,10 @@ export function installWebviewNavigationGuard(
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (shouldBlockBrowserKeyDefault(event, keyOptions)) event.preventDefault();
+    if (!event.defaultPrevented && shouldBlockBrowserKeyDefault(event, keyOptions)) {
+      event.preventDefault();
+      browserDefaultBlockedEvents.add(event);
+    }
   };
 
   // 鼠标侧键（button 3/4）在 Chromium/WebView2 上触发历史前进/后退；
