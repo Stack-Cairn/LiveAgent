@@ -12,6 +12,7 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
+  useId,
   useMemo,
   useState,
 } from "react";
@@ -32,6 +33,10 @@ import {
   parseChatFileLink,
 } from "../lib/chat/chatFileLinks";
 import {
+  rememberExternalLinkConfirmation,
+  shouldSkipExternalLinkConfirmation,
+} from "../lib/externalLinkPreference";
+import {
   getCollapsedCodeBlockPreview,
   resolveCodeBlockRenderPolicy,
 } from "../lib/markdownCodeBlockPolicy";
@@ -39,6 +44,7 @@ import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
 import { MermaidFullscreenButton } from "./MarkdownMermaidFullscreen";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { CopyButton } from "./ui/copy-button";
 import {
   Dialog,
@@ -341,6 +347,7 @@ function MarkdownImageFallback(props: MarkdownImageFallbackProps) {
 }
 
 export const markdownComponents: Components = {
+  a: MarkdownExternalLink,
   img: MarkdownImageFallback,
   pre: CollapsibleCodePre,
 };
@@ -383,7 +390,12 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
         data-streamdown="link"
         title={title}
         onClick={() => {
-          if (!incomplete) setModalOpen(true);
+          if (incomplete) return;
+          if (shouldSkipExternalLinkConfirmation()) {
+            void openExternalLink(href, () => window.open(href, "_blank", "noreferrer"));
+          } else {
+            setModalOpen(true);
+          }
         }}
       >
         {children}
@@ -559,10 +571,25 @@ const streamdownTranslations = {
   viewFullscreen: "全屏查看",
 } satisfies Partial<StreamdownTranslations>;
 
+async function openExternalLink(url: string, fallback: () => void) {
+  try {
+    await openUrl(url);
+  } catch (error) {
+    console.error("Failed to open external link via opener", error);
+    fallback();
+  }
+}
+
 export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
   if (!isOpen || typeof document === "undefined") {
     return null;
   }
+  return <ExternalLinkDialog key={url} onClose={onClose} onConfirm={onConfirm} url={url} />;
+}
+
+function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalProps, "isOpen">) {
+  const [dontRemind, setDontRemind] = useState(false);
+  const checkboxId = useId();
 
   const handleCopyLink = async () => {
     try {
@@ -573,18 +600,16 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
   };
 
   const handleOpenLink = async () => {
+    if (dontRemind) rememberExternalLinkConfirmation();
     try {
-      await openUrl(url);
-    } catch (error) {
-      console.error("Failed to open external link via opener", error);
-      onConfirm();
+      await openExternalLink(url, onConfirm);
     } finally {
       onClose();
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-md p-0"
         closeLabel={streamdownTranslations.close}
@@ -613,7 +638,14 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
               {url}
             </p>
           </div>
-          <DialogActions className="mt-4">
+          <DialogActions className="mt-4 max-sm:flex max-sm:flex-wrap max-sm:[&>button]:w-auto">
+            <label
+              htmlFor={checkboxId}
+              className="mr-auto flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+            >
+              <Checkbox id={checkboxId} checked={dontRemind} onCheckedChange={setDontRemind} />
+              <span>不再提醒</span>
+            </label>
             <Button
               type="button"
               variant="ghost"
