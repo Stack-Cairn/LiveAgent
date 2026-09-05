@@ -1442,9 +1442,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 data-workspace-folder-drop-zone=""
                 {...workspaceFolderDropHandlers}
                 className={cn(
-                  "mx-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl border-x border-b border-dashed border-transparent transition-[opacity,background-color,border-color] duration-300 ease-out motion-reduce:transition-none",
+                  // Keep the padding/scrollbar geometry identical to the recent
+                  // conversation list below: the scroll container spans the full
+                  // sidebar width so its scrollbar sits flush against the edge,
+                  // and rows are inset by the inner `px-2`. The drop affordance
+                  // uses an inset ring instead of a border so it never shifts
+                  // that geometry.
+                  "min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
                   projectsCollapsed ? "opacity-0" : "opacity-100",
-                  workspaceFolderDropActive && "border-primary/40 bg-primary/[0.045]",
+                  workspaceFolderDropActive &&
+                    "bg-primary/[0.045] ring-1 ring-primary/40 ring-inset",
                 )}
               >
                 <div ref={projectsBodyRef} className="space-y-0.5 px-2 pb-0.5">
@@ -1827,7 +1834,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         <DropdownMenuItem
                           key={workspace.id}
                           onSelect={() => void handleBulkMove(workspace.path)}
-                          className="gap-2"
+                          className="text-xs gap-2"
                         >
                           <FolderClosed className="h-3.5 w-3.5 shrink-0" />
                           <span className="truncate">{workspace.path}</span>

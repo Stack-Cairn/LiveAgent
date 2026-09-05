@@ -322,7 +322,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
           </div>
         </DialogHeader>
 
-        <DialogBody className="py-5">
+        <DialogBody>
           {filteredConversations.length === 0 ? (
             <EmptyState isFiltered={conversations.length > 0 && Boolean(normalizedQuery)} />
           ) : (

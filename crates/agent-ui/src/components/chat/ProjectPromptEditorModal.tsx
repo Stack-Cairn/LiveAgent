@@ -126,7 +126,7 @@ export function ProjectPromptEditorModal(props: {
         layout="fullscreen-mobile"
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3.5 px-6 py-5">
+        <DialogHeader className="flex-row items-center gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300">
             <BookOpen className="h-5 w-5" />
           </div>
@@ -150,7 +150,7 @@ export function ProjectPromptEditorModal(props: {
           {error ? <p className="px-6 pb-4 text-xs text-destructive">{error}</p> : null}
         </DialogBody>
 
-        <DialogFooter className="px-6">
+        <DialogFooter>
           <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={saving}>
               {t("chat.cancel")}

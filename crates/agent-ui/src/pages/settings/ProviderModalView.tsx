@@ -308,7 +308,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
           <DialogBody
             ref={modelScrollContainerRef}
-            className="min-w-0 [overflow-anchor:none] px-6 py-5"
+            className="min-w-0 [overflow-anchor:none]"
             onScroll={() => setHeaderSuggest(null)}
           >
             {activePanel === "general" ? (
@@ -1936,7 +1936,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
           </DialogBody>
         </div>
 
-        <DialogFooter className="bg-muted/20 py-3.5">
+        <DialogFooter className="bg-muted/20">
           <DialogActions>
             <Button
               variant="outline"

@@ -464,7 +464,7 @@ export function WorkspaceProjectSettingsModal(props: {
           </main>
         </DialogBody>
 
-        <DialogFooter className="bg-muted/20 py-3.5 min-[821px]:justify-between">
+        <DialogFooter className="bg-muted/20 min-[821px]:justify-between">
           <div
             className={cn(
               "min-w-0 truncate text-xs text-muted-foreground max-[520px]:hidden",
