@@ -1510,6 +1510,62 @@ mod tests {
     }
 
     #[test]
+    fn chat_history_search_spans_all_workdirs_and_chat_mode() {
+        let conn = open_test_db().expect("open test db");
+        for (index, (id, cwd)) in [
+            ("project-a", Some("/tmp/project-a")),
+            ("project-b", Some("/tmp/project-b")),
+            ("chat-mode", None),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut conversation = sample_conversation();
+            conversation.id = id.to_string();
+            conversation.title = format!("Global search {id}");
+            conversation.cwd = cwd.map(str::to_string);
+            conversation.updated_at += index as i64;
+            upsert_chat_history_header(&conn, &conversation).expect("upsert global search header");
+            upsert_single_segment(
+                &conn,
+                id,
+                &ChatHistorySegmentInput {
+                    segment_index: 0,
+                    segment_id: format!("segment-{id}"),
+                    summary_json: None,
+                    messages_json: format!(
+                        r#"[{{"id":"message-{id}","role":"user","content":"global-session-marker","timestamp":1700000000001}}]"#
+                    ),
+                    message_count: 1,
+                    start_message_id: Some(format!("message-{id}")),
+                    end_message_id: Some(format!("message-{id}")),
+                    created_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_001 + index as i64,
+                },
+            )
+            .expect("upsert global search segment");
+        }
+
+        let matches = search_chat_history_fts_with_refresh(
+            &conn,
+            "global-session-marker",
+            MAX_HISTORY_SEARCH_LIMIT,
+            &default_history_search_filter(),
+        )
+        .expect("search global history");
+        let conversation_ids = matches
+            .iter()
+            .map(|item| item.conversation_id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(
+            conversation_ids,
+            std::collections::HashSet::from(["project-a", "project-b", "chat-mode"]),
+            "global search must not inherit the active workdir filter"
+        );
+    }
+
+    #[test]
     fn resolve_share_allows_empty_persisted_history() {
         let conn = open_test_db().expect("open test db");
         let conversation = sample_conversation();

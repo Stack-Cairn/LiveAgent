@@ -1244,6 +1244,13 @@ fn handle_memory_manage_sync(
                 chat_history::search_chat_history_for_memory_sync(&history_args)?;
             serde_json::to_value(response)
         }
+        "chat_history_search" => {
+            let args = parse_memory_args::<chat_history::ChatHistorySearchArgs>(
+                &request.args_json,
+                command,
+            )?;
+            serde_json::to_value(chat_history::search_chat_history_sync(args)?)
+        }
         "memory_write" => {
             let args = parse_memory_args::<MemoryWriteArgs>(&request.args_json, command)?;
             serde_json::to_value(memory_store.write(args)?)

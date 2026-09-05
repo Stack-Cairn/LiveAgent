@@ -19,6 +19,14 @@ const rustAppSource = readFileSync(
   new URL("../../src-tauri/src/lib.rs", import.meta.url),
   "utf8",
 );
+const gatewayShimSource = readFileSync(
+  new URL("../../../agent-gateway/web/src/shims/tauriCore.ts", import.meta.url),
+  "utf8",
+);
+const gatewayBridgeSource = readFileSync(
+  new URL("../../src-tauri/src/services/gateway_bridge.rs", import.meta.url),
+  "utf8",
+);
 
 test("sidebar exposes a Codex-style conversation search entry", () => {
   assert.match(sidebarSource, /chat-history-search-button/);
@@ -48,4 +56,11 @@ test("conversation search opens history directly instead of creating a composer 
   assert.match(dialogSource, /chat\.recentConversation/);
   assert.match(dialogSource, /item\.searchPreview/);
   assert.doesNotMatch(dialogSource, /conversationMention|ReadConversation|MentionComposer/);
+});
+
+test("global conversation search is routed by both Desktop and Gateway", () => {
+  assert.match(dialogSource, /searchPersistedConversations/);
+  assert.match(gatewayShimSource, /case "chat_history_search"/);
+  assert.match(gatewayBridgeSource, /"chat_history_search" =>/);
+  assert.match(gatewayBridgeSource, /search_chat_history_sync/);
 });
