@@ -291,9 +291,19 @@ export default function App() {
 
   // 启动时恢复本机保存的全局快捷键（桌面端专属，非 Tauri 环境内部自动忽略）。
   useEffect(() => {
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
     void import("./lib/shortcuts/globalShortcuts")
-      .then(({ applyStoredGlobalShortcuts }) => applyStoredGlobalShortcuts())
+      .then(({ applyStoredGlobalShortcuts, installAppShortcutListener }) => {
+        if (disposed) return;
+        cleanup = installAppShortcutListener();
+        return applyStoredGlobalShortcuts();
+      })
       .catch(() => {});
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
   }, []);
 
   // 窗口置顶状态：Rust 侧是唯一事实源（快捷键或指示器切换都经它广播），

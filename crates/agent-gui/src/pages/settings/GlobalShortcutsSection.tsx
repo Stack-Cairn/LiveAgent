@@ -3,11 +3,17 @@ import {
   MonitorSmartphone,
   Pin,
   Search,
+  Send,
   SquarePen,
   X,
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  readSendShortcut,
+  type SendShortcut,
+  writeSendShortcut,
+} from "@liveagent/ui/lib/chat/sendShortcut";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import {
@@ -33,6 +39,8 @@ import {
   readGlobalShortcutBindings,
   SHORTCUT_MODIFIER_ORDER,
   type ShortcutModifier,
+  type ShortcutScope,
+  setShortcutsSuspended,
   writeGlobalShortcutBindings,
 } from "../../lib/shortcuts/globalShortcuts";
 
@@ -343,11 +351,188 @@ function KeyCap(props: {
   );
 }
 
+const SHORTCUT_KEY_BUTTON_CLASS =
+  "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** 发送键和应用快捷键共用行结构，保持图标、文字、键帽与编辑状态一致。 */
+function ShortcutRow({
+  id,
+  icon,
+  label,
+  description,
+  editing = false,
+  onEdit,
+  children,
+}: {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  description: string;
+  editing?: boolean;
+  onEdit?: () => void;
+  children: ReactNode;
+}) {
+  const Label = onEdit ? "button" : "div";
+  return (
+    <div
+      data-ghk-row={id}
+      className={cn(
+        "flex w-full items-center gap-1.5 rounded-xl border pr-2.5 transition-all",
+        editing
+          ? "border-primary/40 bg-muted/35"
+          : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35",
+      )}
+    >
+      <Label
+        type={onEdit ? "button" : undefined}
+        onClick={onEdit}
+        className="group flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-xl"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
+              editing
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground group-hover:bg-accent/80",
+            )}
+          >
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">{label}</div>
+            <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              {description}
+            </div>
+          </div>
+        </div>
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function ShortcutKeys({ tokens }: { tokens: string[] }) {
+  return tokens.map((token, index) => (
+    <span key={token} className="flex items-center gap-1.5">
+      {index > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
+      <span className="ghk-kbd">{token}</span>
+    </span>
+  ));
+}
+
+function ShortcutRecordButton({
+  id,
+  label,
+  tokens,
+  recording,
+  dimmed = false,
+  confirmationHint,
+  onClick,
+}: {
+  id?: string;
+  label: string;
+  tokens: string[];
+  recording: boolean;
+  dimmed?: boolean;
+  confirmationHint: string;
+  onClick: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <button
+      type="button"
+      id={id}
+      onClick={onClick}
+      aria-label={`${label} · ${t("settings.shortcutClickToRecord")}`}
+      aria-pressed={recording}
+      title={t("settings.shortcutClickToRecord")}
+      className={cn(SHORTCUT_KEY_BUTTON_CLASS, dimmed && "opacity-40")}
+    >
+      {tokens.length > 0 ? (
+        <ShortcutKeys tokens={tokens} />
+      ) : (
+        <span className={cn("text-xs", recording ? "text-primary" : "text-muted-foreground")}>
+          {recording ? t("settings.shortcutRecordingHint") : t("settings.shortcutNotSet")}
+        </span>
+      )}
+      {recording && tokens.length > 0 ? (
+        <span className="ml-1 text-xs font-medium text-primary">{confirmationHint}</span>
+      ) : null}
+    </button>
+  );
+}
+
+function ShortcutChoiceSwitch({
+  checked,
+  leftLabel,
+  rightLabel,
+  label,
+  title,
+  onChange,
+}: {
+  checked: boolean;
+  leftLabel: string;
+  rightLabel: string;
+  label: string;
+  title: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={title}
+      onClick={() => onChange(!checked)}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onChange(event.key === "ArrowRight");
+      }}
+      className="flex h-8 shrink-0 items-center gap-2 rounded-full px-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "min-w-[2em] whitespace-nowrap text-center transition-colors",
+          !checked ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {leftLabel}
+      </span>
+      <span
+        aria-hidden="true"
+        className="relative h-6 w-10 rounded-full border border-border/60 bg-muted/60"
+      >
+        <span
+          className={cn(
+            "absolute left-[3px] top-[3px] h-4 w-4 rounded-full bg-primary shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none",
+            checked ? "translate-x-4" : "translate-x-0",
+          )}
+        />
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "min-w-[2em] whitespace-nowrap text-center transition-colors",
+          checked ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {rightLabel}
+      </span>
+    </button>
+  );
+}
+
 export function GlobalShortcutsSection() {
   const { t } = useLocale();
   const [bindings, setBindings] = useState<GlobalShortcutBindings>(() =>
     readGlobalShortcutBindings(),
   );
+  const [sendShortcut, setSendShortcut] = useState(readSendShortcut);
   const [recording, setRecording] = useState<GlobalShortcutAction | null>(null);
   const [draft, setDraft] = useState<ShortcutDraft>({ mods: [], main: null });
   const [pressedCodes, setPressedCodes] = useState<ReadonlySet<string>>(() => new Set());
@@ -439,6 +624,9 @@ export function GlobalShortcutsSection() {
   }, [formatRegisterFailures]);
 
   const startRecording = useCallback((action: GlobalShortcutAction) => {
+    recordingRef.current = action;
+    draftRef.current = { mods: [], main: null };
+    setShortcutsSuspended(true);
     setRecording(action);
     setDraft({ mods: [], main: null });
     setStatus(null);
@@ -454,7 +642,9 @@ export function GlobalShortcutsSection() {
     (mode: "confirm" | "implicit" | "cancel") => {
       const action = recordingRef.current;
       if (!action) return;
+      setShortcutsSuspended(false);
       setRecording(null);
+      recordingRef.current = null;
       const current = draftRef.current;
       if (mode === "cancel" || (mode === "implicit" && !current.main)) {
         void applyGlobalShortcuts(bindingsRef.current);
@@ -475,7 +665,10 @@ export function GlobalShortcutsSection() {
         return;
       }
       setStatus({ kind: "ok", text: t("settings.shortcutSaved") });
-      commit({ ...bindingsRef.current, [action]: { accelerator, enabled: true } });
+      commit({
+        ...bindingsRef.current,
+        [action]: { ...bindingsRef.current[action], accelerator, enabled: true },
+      });
     },
     [commit, t],
   );
@@ -532,21 +725,21 @@ export function GlobalShortcutsSection() {
     };
   }, []);
 
-  // 录制期间接管键盘输入：Enter 确认（不计入组合），Esc 取消；
-  // 点击录制行以外的任意位置或窗口失焦 → 有主键则视为确认绑定。
+  // 应用快捷键在行内录制：Enter 确认，Esc 取消。
   useEffect(() => {
     if (!recording) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
       event.stopPropagation();
       if (event.repeat) return;
       const code = event.code;
-      if (code === "Enter" || code === "NumpadEnter") {
-        stopRecording("confirm");
-        return;
-      }
       if (code === "Escape") {
         stopRecording("cancel");
+        return;
+      }
+      if (code === "Enter" || code === "NumpadEnter") {
+        stopRecording("confirm");
         return;
       }
       const mods: ShortcutModifier[] = [];
@@ -578,6 +771,7 @@ export function GlobalShortcutsSection() {
   // 卸载时若仍在录制，恢复既有注册。
   useEffect(
     () => () => {
+      setShortcutsSuspended(false);
       if (recordingRef.current) {
         void applyGlobalShortcuts(bindingsRef.current);
       }
@@ -799,6 +993,42 @@ export function GlobalShortcutsSection() {
         </p>
 
         <div className="space-y-2">
+          <ShortcutRow
+            id="sendMessage"
+            icon={<Send className="h-4.5 w-4.5" />}
+            label={t("settings.shortcutSend")}
+            description={t(
+              sendShortcut === "enter"
+                ? "settings.shortcutSendEnterDesc"
+                : "settings.shortcutSendModifiedDesc",
+            )}
+          >
+            <span
+              className="shrink-0 px-1 text-xs text-muted-foreground"
+              title={t("settings.shortcutSendScopeDesc")}
+            >
+              {t("settings.shortcutScopeComposer")}
+            </span>
+            <ShortcutChoiceSwitch
+              checked={sendShortcut === "ctrlEnter"}
+              leftLabel="Enter"
+              rightLabel={`${IS_MAC ? "⌘" : "Ctrl"} + Enter`}
+              label={`${t("settings.shortcutSend")} · ${IS_MAC ? "⌘" : "Ctrl"} + Enter`}
+              title={t("settings.shortcutSendSwitchHint")}
+              onChange={(checked) => {
+                const next: SendShortcut = checked ? "ctrlEnter" : "enter";
+                if (next === sendShortcut) return;
+                try {
+                  writeSendShortcut(next);
+                  setSendShortcut(next);
+                  setStatus({ kind: "ok", text: t("settings.shortcutSaved") });
+                } catch {
+                  setStatus({ kind: "error", text: t("settings.shortcutSaveFailed") });
+                }
+              }}
+            />
+            <span aria-hidden="true" className="w-[66px] shrink-0" />
+          </ShortcutRow>
           {actionMeta.map((action) => {
             const isRecording = recording === action.id;
             const binding = bindings[action.id];
@@ -808,81 +1038,50 @@ export function GlobalShortcutsSection() {
               : binding
                 ? binding.accelerator.split("+").map((token) => displayToken(token))
                 : [];
+            const scope = binding?.scope ?? "global";
+            const changeScope = (nextScope: ShortcutScope) => {
+              if (!binding || nextScope === scope) return;
+              setStatus(null);
+              commit({
+                ...bindingsRef.current,
+                [action.id]: { ...binding, scope: nextScope },
+              });
+            };
+            const toggleRecording = () => {
+              if (isRecording) {
+                stopRecording("implicit");
+              } else {
+                startRecording(action.id);
+              }
+            };
             return (
-              <div
+              <ShortcutRow
                 key={action.id}
-                data-ghk-row={action.id}
-                className={cn(
-                  "flex w-full items-center gap-1.5 rounded-xl border pr-2.5 transition-all",
-                  isRecording
-                    ? "border-primary bg-primary/5 shadow-sm shadow-primary/20"
-                    : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35",
-                )}
+                id={action.id}
+                icon={action.icon}
+                label={action.label}
+                description={action.desc}
+                editing={isRecording}
+                onEdit={toggleRecording}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isRecording) {
-                      // 点击录制中的行 = 隐式确认（有主键保存，否则取消）。
-                      stopRecording("implicit");
-                    } else {
-                      startRecording(action.id);
-                    }
-                  }}
-                  className="group flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-3 text-left"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-                        isRecording
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground group-hover:bg-accent/80",
-                      )}
-                    >
-                      {action.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">{action.label}</div>
-                      <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                        {action.desc}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex shrink-0 items-center gap-1.5",
-                      bindingDisabled ? "opacity-40" : "",
-                    )}
-                  >
-                    {tokens.length > 0 ? (
-                      tokens.map((token, index) => (
-                        <span key={token} className="flex items-center gap-1.5">
-                          {index > 0 ? (
-                            <span className="text-xs text-muted-foreground">+</span>
-                          ) : null}
-                          <span className="ghk-kbd">{token}</span>
-                        </span>
-                      ))
-                    ) : (
-                      <span
-                        className={cn(
-                          "text-xs",
-                          isRecording ? "text-primary" : "text-muted-foreground",
-                        )}
-                      >
-                        {isRecording
-                          ? t("settings.shortcutRecordingHint")
-                          : t("settings.shortcutNotSet")}
-                      </span>
-                    )}
-                    {isRecording && tokens.length > 0 ? (
-                      <span className="ml-1 text-xs font-medium text-primary">
-                        {t("settings.shortcutPressEnter")}
-                      </span>
-                    ) : null}
-                  </div>
-                </button>
+                {!isRecording && binding ? (
+                  <ShortcutChoiceSwitch
+                    checked={scope === "app"}
+                    leftLabel={t("settings.shortcutScopeGlobal")}
+                    rightLabel={t("settings.shortcutScopeApp")}
+                    label={`${action.label} · ${t("settings.shortcutScopeApp")}`}
+                    title={`${t("settings.shortcutScope")}: ${t(scope === "app" ? "settings.shortcutScopeApp" : "settings.shortcutScopeGlobal")} · ${t("settings.shortcutScopeSwitch")}`}
+                    onChange={(checked) => changeScope(checked ? "app" : "global")}
+                  />
+                ) : null}
+                <ShortcutRecordButton
+                  label={action.label}
+                  tokens={tokens}
+                  recording={isRecording}
+                  dimmed={bindingDisabled}
+                  confirmationHint={t("settings.shortcutPressEnter")}
+                  onClick={toggleRecording}
+                />
                 {!isRecording && binding ? (
                   <>
                     <AgentActivationSwitch
@@ -900,7 +1099,7 @@ export function GlobalShortcutsSection() {
                     </button>
                   </>
                 ) : null}
-              </div>
+              </ShortcutRow>
             );
           })}
         </div>

@@ -87,7 +87,7 @@ function withCount(template: string, count: number): string {
 /** 快捷键回显：仅启用中的绑定；格式与 muda accelerator 解析兼容。 */
 function enabledAccelerator(action: "summon" | "newChat"): string | null {
   const binding = readGlobalShortcutBindings()[action];
-  if (!binding || binding.enabled === false) return null;
+  if (!binding || binding.enabled === false || binding.scope === "app") return null;
   const accelerator = binding.accelerator.trim();
   return accelerator ? accelerator : null;
 }

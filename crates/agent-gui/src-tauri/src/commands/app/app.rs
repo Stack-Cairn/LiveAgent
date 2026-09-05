@@ -56,6 +56,14 @@ pub fn app_toggle_window_pin(app: AppHandle) {
     crate::toggle_main_window_pin(&app);
 }
 
+/// 软件内快捷键复用全局快捷键的动作总线，且要求调用窗口当前有焦点。
+#[tauri::command]
+pub fn app_run_shortcut(app: AppHandle, window: tauri::WebviewWindow, action: String) {
+    if window.is_focused().unwrap_or(false) {
+        crate::run_shortcut_action(&app, &action);
+    }
+}
+
 impl GlobalShortcutRegistry {
     pub fn lookup_action(&self, shortcut: &Shortcut) -> Option<String> {
         let entries = self.entries.lock().ok()?;
