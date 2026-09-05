@@ -48,6 +48,7 @@ function createMarkdownModule(expanded) {
         X: "X",
       },
       "./ui/button": { Button: "Button" },
+      "./ui/checkbox": { Checkbox: "Checkbox" },
       "./ui/copy-button": { CopyButton: "CopyButton" },
       "./ui/dialog": {
         Dialog: "Dialog",

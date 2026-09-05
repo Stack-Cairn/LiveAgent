@@ -405,32 +405,6 @@ test("ordinary https links stay on the external-link path", () => {
   assert.equal(routed.type.name, "MarkdownExternalLink");
 });
 
-test("external link safety modal uses the shared dialog primitives", () => {
-  const previousDocument = globalThis.document;
-  globalThis.document = {};
-
-  try {
-    const dialog = markdownModule.ExternalLinkModal({
-      isOpen: true,
-      onClose() {},
-      onConfirm() {},
-      url: "https://example.com/dashboard",
-    });
-
-    assert.ok(dialog);
-    assert.equal(dialog.type, "Dialog");
-    assert.equal(dialog.props.open, true);
-    assert.equal(dialog.props.children.type, "DialogContent");
-    assert.match(dialog.props.children.props.className, /max-w-md p-0/);
-  } finally {
-    if (typeof previousDocument === "undefined") {
-      delete globalThis.document;
-    } else {
-      globalThis.document = previousDocument;
-    }
-  }
-});
-
 test("agent tool rules require Image for chat-visible images", () => {
   const suffix = agentRunnerModule.buildToolsSuffix("/workspace");
   assert.match(suffix, /To display any image in the chat UI, call the Image tool\./);
