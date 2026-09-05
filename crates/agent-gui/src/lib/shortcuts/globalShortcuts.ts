@@ -30,8 +30,7 @@ export interface GlobalShortcutFailure {
   error: string;
 }
 
-export const GLOBAL_SHORTCUT_STORAGE_KEY = "liveagent.globalShortcuts.v1";
-export const GLOBAL_SHORTCUT_BINDINGS_CHANGED_EVENT = "liveagent:global-shortcut-bindings-changed";
+const GLOBAL_SHORTCUT_STORAGE_KEY = "liveagent.globalShortcuts.v1";
 
 export const SHORTCUT_MODIFIER_ORDER = ["Ctrl", "Shift", "Alt", "Super"] as const;
 export type ShortcutModifier = (typeof SHORTCUT_MODIFIER_ORDER)[number];
@@ -111,16 +110,6 @@ export function globalShortcutDisplayToken(token: string, isMac: boolean): strin
   return globalShortcutKeyDisplayLabel(token);
 }
 
-/** 与设置页键帽使用同一套显示规则，供侧栏展示当前实际启用的绑定。 */
-export function formatGlobalShortcutAccelerator(accelerator: string, isMac: boolean): string {
-  const tokens = accelerator
-    .split("+")
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => globalShortcutDisplayToken(token, isMac));
-  return tokens.join(isMac ? "" : " ");
-}
-
 /** KeyboardEvent.code -> 修饰键 token；非修饰键返回 null。 */
 export function modifierFromEventCode(code: string): ShortcutModifier | null {
   switch (code) {
@@ -172,7 +161,6 @@ export function readGlobalShortcutBindings(): GlobalShortcutBindings {
 export function writeGlobalShortcutBindings(bindings: GlobalShortcutBindings): void {
   try {
     window.localStorage.setItem(GLOBAL_SHORTCUT_STORAGE_KEY, JSON.stringify(bindings));
-    window.dispatchEvent(new Event(GLOBAL_SHORTCUT_BINDINGS_CHANGED_EVENT));
   } catch {
     // localStorage 不可用时静默忽略（例如隐私模式）。
   }

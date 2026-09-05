@@ -32,9 +32,9 @@ test("sidebar exposes a Codex-style conversation search entry", () => {
   assert.match(sidebarSource, /chat-history-search-button/);
   assert.match(sidebarSource, /t\("chat\.searchConversations"\)/);
   assert.match(sidebarSource, /conversationSearchRequestKey/);
-  assert.match(sidebarSource, /conversationSearchShortcutLabel/);
   assert.match(sidebarSource, /setConversationSearchOpen\(true\)/);
   assert.match(sidebarSource, /<ConversationSearchDialog/);
+  assert.doesNotMatch(sidebarSource, /conversationSearchShortcutLabel|<kbd/);
   assert.doesNotMatch(sidebarSource, /⌘K \/ Ctrl\+K|event\.key\.toLowerCase\(\) !== "k"/);
 });
 
