@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-04";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-05";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -112,6 +112,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "gpt-5.6-luna", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "gpt-5.6-sol", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "gpt-5.6-terra", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
+    { id: "gpt-6-astra", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
     { id: "gpt-realtime-2.1", contextWindow: 128000, maxOutputToken: 32000, inputModalities: ["text", "image", "audio"], thinking: { levels: ["minimal", "low", "medium", "high", "xhigh"], off: false } },
     { id: "o1", contextWindow: 200000, maxOutputToken: 100000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
     { id: "o1-pro", contextWindow: 200000, maxOutputToken: 100000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high"], off: false } },
