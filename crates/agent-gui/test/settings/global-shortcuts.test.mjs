@@ -162,12 +162,6 @@ test("applyGlobalShortcuts registers only enabled bindings with non-empty accele
   assert.deepEqual(failures, [{ action: "summon", accelerator: "Ctrl+KeyA", error: "taken" }]);
 });
 
-test("formatGlobalShortcutAccelerator follows the settings keyboard labels", () => {
-  const { formatGlobalShortcutAccelerator } = loadGlobalShortcuts();
-  assert.equal(formatGlobalShortcutAccelerator("Super+Shift+KeyK", true), "⌘⇧K");
-  assert.equal(formatGlobalShortcutAccelerator("Ctrl+ArrowUp", false), "Ctrl ↑");
-});
-
 test("applyGlobalShortcuts tolerates non-Tauri environments and bad responses", async () => {
   const { applyGlobalShortcuts: applyWithThrow } = loadGlobalShortcuts({
     invoke: async () => {

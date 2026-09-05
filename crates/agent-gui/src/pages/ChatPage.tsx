@@ -133,7 +133,6 @@ import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
-import { inferRuntimePlatform } from "../lib/runtimePlatform";
 import {
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
@@ -157,12 +156,6 @@ import {
   workspaceProjectPathKey,
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
-import {
-  formatGlobalShortcutAccelerator,
-  GLOBAL_SHORTCUT_BINDINGS_CHANGED_EVENT,
-  GLOBAL_SHORTCUT_STORAGE_KEY,
-  readGlobalShortcutBindings,
-} from "../lib/shortcuts/globalShortcuts";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
@@ -276,16 +269,6 @@ const ConversationPaneHost = lazy(async () => ({
 const RestorableConversationPaneHost = lazy(async () => ({
   default: (await import("./chat/surfaces/ConversationPaneHost")).RestorableConversationPaneHost,
 }));
-
-function readConversationSearchShortcutLabel(): string | undefined {
-  const binding = readGlobalShortcutBindings().searchConversations;
-  if (!binding?.enabled) return undefined;
-  const label = formatGlobalShortcutAccelerator(
-    binding.accelerator,
-    inferRuntimePlatform() === "macos",
-  );
-  return label || undefined;
-}
 
 export function ChatPage(props: ChatPageProps) {
   const {
@@ -416,23 +399,6 @@ export function ChatPage(props: ChatPageProps) {
   }, [sidebarStore]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversationSearchRequestKey, setConversationSearchRequestKey] = useState(0);
-  const [conversationSearchShortcutLabel, setConversationSearchShortcutLabel] = useState<
-    string | undefined
-  >(readConversationSearchShortcutLabel);
-  useEffect(() => {
-    const refreshShortcutLabel = () => {
-      setConversationSearchShortcutLabel(readConversationSearchShortcutLabel());
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === GLOBAL_SHORTCUT_STORAGE_KEY) refreshShortcutLabel();
-    };
-    window.addEventListener(GLOBAL_SHORTCUT_BINDINGS_CHANGED_EVENT, refreshShortcutLabel);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener(GLOBAL_SHORTCUT_BINDINGS_CHANGED_EVENT, refreshShortcutLabel);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
   const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus({
     remote: settings.remote,
   });
@@ -3926,7 +3892,6 @@ export function ChatPage(props: ChatPageProps) {
         isOpen={sidebarOpen}
         fontScale={settings.customSettings.fontScale.sidebar}
         conversationSearchRequestKey={conversationSearchRequestKey}
-        conversationSearchShortcutLabel={conversationSearchShortcutLabel}
         activeView={activeView}
         showProjects={isAgentMode}
         projects={workspaceProjects}

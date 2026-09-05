@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { wasBrowserKeyDefaultBlocked } from "../system/webviewNavigationGuard";
 
 /**
  * 桌面快捷键：系统全局注册与仅软件内的键盘监听共用绑定。
@@ -113,16 +114,6 @@ export function globalShortcutDisplayToken(token: string, isMac: boolean): strin
     return token === "Super" ? "Win" : token;
   }
   return globalShortcutKeyDisplayLabel(token);
-}
-
-/** 与设置页键帽使用同一套显示规则，供侧栏展示当前实际启用的绑定。 */
-export function formatGlobalShortcutAccelerator(accelerator: string, isMac: boolean): string {
-  const tokens = accelerator
-    .split("+")
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => globalShortcutDisplayToken(token, isMac));
-  return tokens.join(isMac ? "" : " ");
 }
 
 /** KeyboardEvent.code -> 修饰键 token；非修饰键返回 null。 */
@@ -254,7 +245,7 @@ export function installAppShortcutListener(): () => void {
   const onKeyDown = (event: KeyboardEvent) => {
     if (
       shortcutsSuspended ||
-      event.defaultPrevented ||
+      (event.defaultPrevented && !wasBrowserKeyDefaultBlocked(event)) ||
       event.isComposing ||
       event.keyCode === 229 ||
       !document.hasFocus()

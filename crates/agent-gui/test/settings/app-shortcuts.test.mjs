@@ -18,6 +18,9 @@ const env = await createDomTestEnv({
 const shortcuts = env.loadModule("src/lib/shortcuts/globalShortcuts.ts");
 let focused = true;
 document.hasFocus = () => focused;
+// Match production ordering: main.tsx installs the guard before App mounts.
+const navigation = env.loadModule("src/lib/system/webviewNavigationGuard.ts");
+const cleanupGuard = navigation.installWebviewNavigationGuard({ isMac: true });
 const cleanup = shortcuts.installAppShortcutListener();
 const input = document.createElement("input");
 document.body.append(input);
@@ -106,7 +109,40 @@ test("unmodified local shortcuts do not steal typing in editors", () => {
   assert.equal(key({ ctrlKey: false }, document.body).defaultPrevented, true);
   assert.deepEqual(calls, [["app_run_shortcut", { action: "newChat" }]]);
 });
+test("browser navigation protection does not swallow configured app shortcuts", () => {
+  for (const accelerator of ["Super+KeyF", "Ctrl+KeyF", "Super+KeyS", "F3", "F5"]) {
+    calls.length = 0;
+    const code = accelerator.split("+").at(-1);
+    shortcuts.writeGlobalShortcutBindings({
+      searchConversations: { accelerator, enabled: true, scope: "app" },
+    });
+    const event = key({
+      key: code.startsWith("Key") ? code.slice(3).toLowerCase() : code,
+      code,
+      ctrlKey: accelerator.includes("Ctrl"),
+      metaKey: accelerator.includes("Super"),
+    });
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(calls, [["app_run_shortcut", { action: "searchConversations" }]], accelerator);
+  }
+});
+test("an event already handled before the navigation guard does not trigger app actions", () => {
+  shortcuts.writeGlobalShortcutBindings({
+    searchConversations: { accelerator: "Super+KeyF", enabled: true, scope: "app" },
+  });
+  const event = new KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "f",
+    code: "KeyF",
+    metaKey: true,
+  });
+  event.preventDefault();
+  input.dispatchEvent(event);
+  assert.equal(calls.length, 0);
+});
 test.after(() => {
+  cleanupGuard();
   cleanup();
   env.cleanup();
 });
