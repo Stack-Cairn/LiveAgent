@@ -7,7 +7,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import { AssistantAvatar, AssistantBubbleUnit } from "../components/AssistantBubble";
+import { AssistantBubbleUnit } from "../components/AssistantBubble";
 import { AssistantRowFooter } from "./RowActions";
 import type { AssistantFooterRenderUnit, AssistantUnitRow } from "./rowModel";
 
@@ -72,19 +72,10 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
     >
       {changedFiles ? (
         <div className="flex w-full max-w-full items-start gap-3">
-          {showAvatar ? (
-            <AssistantAvatar />
-          ) : (
-            <div aria-hidden="true" className="h-7 w-7 shrink-0" />
-          )}
+          <div aria-hidden="true" className="h-7 w-7 shrink-0" />
           <div className={cn("min-w-0 flex-1", showAvatar ? "pt-0.5" : "")}>
             <ChangedFilesCard summary={changedFiles} />
           </div>
-        </div>
-      ) : showAvatar ? (
-        <div className="flex w-full max-w-full items-start gap-3">
-          <AssistantAvatar />
-          <div className="min-w-0 flex-1" />
         </div>
       ) : null}
       <AssistantRowFooter

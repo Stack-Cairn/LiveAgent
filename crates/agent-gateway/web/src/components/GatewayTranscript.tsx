@@ -1,5 +1,4 @@
 import {
-  AssistantAvatar,
   AssistantBubble,
   LiveAssistantStatus,
 } from "@liveagent/ui/components/chat/AssistantBubble";
@@ -885,7 +884,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <div className="flex w-full max-w-full items-start gap-3">
-                <AssistantAvatar />
+                <div aria-hidden="true" className="h-7 w-7 shrink-0" />
                 <div className="min-w-0 flex-1 space-y-2 pt-1">
                   <div className="flex w-full items-center py-1">
                     <LiveAssistantStatus
