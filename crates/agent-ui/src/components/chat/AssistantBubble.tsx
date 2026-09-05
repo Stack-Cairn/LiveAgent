@@ -2,11 +2,9 @@ import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { memo, useMemo } from "react";
-import { AssistantAvatar } from "./AssistantAvatar";
 import { AssistantTurnContent } from "./assistant-bubble/RoundContent";
 import { ChangedFilesCard } from "./ChangedFilesCard";
 
-export { AssistantAvatar } from "./AssistantAvatar";
 export {
   AssistantStatus,
   CompactingText,
@@ -62,7 +60,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
 
   return (
     <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
-      <AssistantAvatar className="assistant-bubble-avatar" />
+      <div className="assistant-bubble-avatar h-7 w-7 shrink-0" aria-hidden="true" />
       <div className="assistant-bubble-content min-w-0 flex-1 space-y-2 pt-0.5">
         <AssistantTurnContent
           rounds={rounds}

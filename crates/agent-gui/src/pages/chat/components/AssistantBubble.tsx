@@ -1,4 +1,3 @@
-import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import type { AssistantTurnLayoutEntry } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
@@ -13,8 +12,6 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo } from "react";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { AssistantUnitRow } from "../transcript/rowModel";
-
-export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 
 export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;
@@ -63,11 +60,7 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
 
   return (
     <div className="flex w-full max-w-full items-start gap-3">
-      {row.showAvatar ? (
-        <AssistantAvatar />
-      ) : (
-        <div aria-hidden="true" className="h-7 w-7 shrink-0" />
-      )}
+      <div aria-hidden="true" className="h-7 w-7 shrink-0" />
       <div className={cn("min-w-0 flex-1 space-y-2", row.showAvatar ? "pt-0.5" : "")}>
         {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
           <RetryDetailsBlock attempts={retryAttempts} />
