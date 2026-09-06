@@ -27,6 +27,12 @@ import {
 
 export const CHAT_TRANSCRIPT_WIDTH_CSS_VAR = "--chat-transcript-content-width";
 
+// The variable carries the preferred width; every column that paints from it
+// gives back the retired 40px assistant avatar rail (GUI ChatTranscript, the
+// gateway transcript shell and composer layer). The handle rail must subtract
+// the same amount or the handles sit 20px outside the column on each side.
+const RETIRED_AVATAR_RAIL_PX = 40;
+
 // Who writes CHAT_TRANSCRIPT_WIDTH_CSS_VAR: the nearest shared width owner
 // carries the *preferred* (persisted) width, so transcript and composer paint
 // at one width on the first frame. This component then narrows that owner to
@@ -334,7 +340,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       data-transcript-width-max={maxWidth}
       hidden={!handlesVisible}
       style={{
-        width: `var(${CHAT_TRANSCRIPT_WIDTH_CSS_VAR}, ${DEFAULT_CHAT_TRANSCRIPT_WIDTH}px)`,
+        width: `calc(var(${CHAT_TRANSCRIPT_WIDTH_CSS_VAR}, ${DEFAULT_CHAT_TRANSCRIPT_WIDTH}px) - ${RETIRED_AVATAR_RAIL_PX}px)`,
         maxWidth: `calc(100% - ${TRANSCRIPT_HORIZONTAL_SAFE_SPACE}px)`,
       }}
     >

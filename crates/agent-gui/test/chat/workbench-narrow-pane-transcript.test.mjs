@@ -46,6 +46,24 @@ test("composer derives its body-aligned width from the live transcript width", (
   assert.doesNotMatch(composerSource, /translate-x-\[18px\]/);
 });
 
+test("width handles sit on the transcript column, not on the unreduced variable", () => {
+  const transcriptSource = read("../../src/pages/chat/transcript/ChatTranscript.tsx");
+  const widthControlsSource = read(
+    "../../../agent-ui/src/pages/chat/transcript/TranscriptWidthControls.tsx",
+  );
+  // 正文列从变量里扣掉了退役的 40px 头像列；手柄轨道必须扣同样的量，
+  // 否则两侧手柄各悬在正文列外 20px，拖拽读数也比实际列宽大 40。
+  assert.match(
+    transcriptSource,
+    /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-2\.5rem\)\]/,
+  );
+  assert.match(widthControlsSource, /const RETIRED_AVATAR_RAIL_PX = 40;/);
+  assert.match(
+    widthControlsSource,
+    /width: `calc\(var\(\$\{CHAT_TRANSCRIPT_WIDTH_CSS_VAR\}, \$\{DEFAULT_CHAT_TRANSCRIPT_WIDTH\}px\) - \$\{RETIRED_AVATAR_RAIL_PX\}px\)`/,
+  );
+});
+
 test("FloorNavRail clamps its panel to the container, not the viewport", () => {
   const source = read("../../../agent-ui/src/pages/chat/transcript/FloorNavRail.tsx");
   assert.match(source, /max-w-\[calc\(100cqw-2rem\)\]/);
