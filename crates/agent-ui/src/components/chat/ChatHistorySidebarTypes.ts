@@ -5,6 +5,8 @@ import type {
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
+import type { ArchivedSidebarConversation } from "../../lib/sidebar/preferences";
+import type { WorkspaceHistoryState } from "../../lib/sidebar/store";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
@@ -25,6 +27,18 @@ export type WorkspaceFolderDropHandlers = {
 };
 
 export type ChatHistorySidebarProps = {
+  projectOrder?: readonly string[];
+  pinnedOrder?: readonly string[];
+  onReorderPinned?: (orderedKeys: string[]) => void;
+  onReorderProjects?: (orderedPaths: string[]) => void;
+  archivedConversations?: readonly ArchivedSidebarConversation[];
+  onSetConversationArchived?: (item: ArchivedSidebarConversation, archived: boolean) => void;
+  workspaceHistory?: ReadonlyMap<string, WorkspaceHistoryState>;
+  onLoadWorkspaceHistory?: (
+    cwd: string,
+    more?: boolean,
+    excludedIds?: ReadonlySet<string>,
+  ) => Promise<void>;
   items: readonly SidebarConversation[];
   currentConversationId: string;
   // Per-row in-flight mutations: only that row's menu/inputs disable.
@@ -151,6 +165,12 @@ export type ChatHistorySidebarProps = {
 
 export type ChatHistorySidebarWorkspaceSource = Pick<
   ChatHistorySidebarProps,
+  | "pinnedOrder"
+  | "onReorderPinned"
+  | "projectOrder"
+  | "onReorderProjects"
+  | "archivedConversations"
+  | "onSetConversationArchived"
   | "showProjects"
   | "workspaceProjectGroups"
   | "activeProjectId"
@@ -180,6 +200,12 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
 >;
 
 type OptionalWorkspaceSourceKey =
+  | "pinnedOrder"
+  | "onReorderPinned"
+  | "projectOrder"
+  | "onReorderProjects"
+  | "archivedConversations"
+  | "onSetConversationArchived"
   | "workspaceProjectGroups"
   | "workspaceFolderDropActive"
   | "workspaceFolderDropHandlers"
@@ -321,6 +347,12 @@ export function buildChatHistorySidebarWorkspaceProps(
   runningProjectPathKeys: ReadonlySet<string>,
 ) {
   return {
+    pinnedOrder: source.pinnedOrder,
+    onReorderPinned: source.onReorderPinned,
+    projectOrder: source.projectOrder,
+    onReorderProjects: source.onReorderProjects,
+    archivedConversations: source.archivedConversations,
+    onSetConversationArchived: source.onSetConversationArchived,
     showProjects: source.showProjects,
     projects,
     workspaceProjectGroups: source.workspaceProjectGroups,

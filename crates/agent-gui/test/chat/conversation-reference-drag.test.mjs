@@ -78,7 +78,7 @@ test("conversation drag payload rejects malformed data", () => {
 
 test("shared sidebar and composer wire native drag to a structured mention insertion", () => {
   assert.match(sidebarRowsSource, /writeConversationReferenceDragPayload/);
-  assert.match(sidebarRowsSource, /draggable=\{!onWorkbenchDragIntent && !item\.isPending\}/);
+  assert.match(sidebarRowsSource, /draggable=\{!props\.onReorderPointerDown && !onWorkbenchDragIntent && !item\.isPending\}/);
   assert.match(composerBarSource, /data-conversation-reference-drop-zone/);
   assert.match(composerBarSource, /readConversationReferenceDragPayload/);
   assert.match(composerBarSource, /insertConversationMention\(reference\)/);

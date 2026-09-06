@@ -351,6 +351,9 @@ export type SystemSettings = {
   browserAutomationMode: BrowserAutomationMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
+  workspaceProjectOrder?: string[];
+  sidebarPinnedOrder?: string[];
+  archivedConversations?: { id: string; title: string; cwd?: string }[];
   activeWorkspaceProjectId?: string;
   hiddenWorkspaceProjectPaths: string[];
   missingWorkspaceProjectPaths: string[];

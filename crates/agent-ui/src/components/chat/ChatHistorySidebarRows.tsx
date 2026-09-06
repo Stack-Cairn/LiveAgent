@@ -16,11 +16,13 @@ import {
   FolderTree,
   ListChecks,
   Loader2,
+  MessageSquare,
   MoreHorizontal,
   Pin,
   PinOff,
   Settings,
   Share2,
+  SquarePen,
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
@@ -55,8 +57,8 @@ import {
   useState,
 } from "react";
 import type { SidebarConversation } from "../../lib/sidebar/types";
+import type { SidebarReorderPointer } from "../../lib/sidebar/useSidebarReorderDrag";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
-import { isKnownProviderId, ProviderBrandIcon } from "../ProviderBrandIcon";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -73,7 +75,31 @@ const MOBILE_MENU_MOVE_TOLERANCE_PX = 10;
 const PROJECT_ICON_BUTTON_CLASS =
   "h-7 w-7 rounded-lg !bg-transparent text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground active:!bg-transparent focus-visible:!bg-transparent data-[state=open]:!bg-transparent data-[state=open]:text-foreground data-[popup-open]:!bg-transparent data-[popup-open]:text-foreground";
 
+function SidebarDropIndicator({ position }: { position?: "before" | "after" }) {
+  if (!position) return null;
+  return (
+    <span
+      aria-hidden="true"
+      data-sidebar-drop-indicator={position}
+      className={cn(
+        "pointer-events-none absolute inset-x-3 z-20 h-0.5 bg-blue-500",
+        position === "before" ? "-top-px" : "-bottom-px",
+      )}
+    >
+      <span className="absolute left-0 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-500 bg-[hsl(var(--sidebar-bg))]" />
+    </span>
+  );
+}
+
 type HistoryRowProps = {
+  reorderKey?: string;
+  onReorderPointerDown?: (key: string, event: SidebarReorderPointer) => void;
+  isDragging?: boolean;
+  dropPosition?: "before" | "after";
+
+  showIcon?: boolean;
+  isArchived?: boolean;
+  onSetArchived?: (item: SidebarConversation, archived: boolean) => void;
   item: SidebarConversation;
   isActive: boolean;
   isBusy: boolean;
@@ -140,6 +166,13 @@ function areRenderedHistoryItemsEqual(previous: SidebarConversation, next: Sideb
 function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProps) {
   return (
     areRenderedHistoryItemsEqual(previous.item, next.item) &&
+    previous.showIcon === next.showIcon &&
+    previous.reorderKey === next.reorderKey &&
+    previous.onReorderPointerDown === next.onReorderPointerDown &&
+    previous.isDragging === next.isDragging &&
+    previous.dropPosition === next.dropPosition &&
+    previous.isArchived === next.isArchived &&
+    previous.onSetArchived === next.onSetArchived &&
     previous.isActive === next.isActive &&
     previous.isBusy === next.isBusy &&
     previous.isRunning === next.isRunning &&
@@ -389,6 +422,23 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   const handleTitlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (
+        props.onReorderPointerDown &&
+        props.reorderKey &&
+        !event.altKey &&
+        !isMobileMenuLayout &&
+        !isInteractionDisabled &&
+        !isSelectionMode &&
+        !isRenaming &&
+        !isPendingDelete &&
+        !menuOpen &&
+        event.pointerType !== "touch" &&
+        event.button === 0 &&
+        !item.isPending
+      ) {
+        props.onReorderPointerDown(props.reorderKey, event);
+        return;
+      }
       // Desktop: arm a workbench pane drag from the title area. Touch keeps
       // the long-press menu; renaming/selection/menu states never drag.
       if (
@@ -428,6 +478,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       );
     },
     [
+      props.onReorderPointerDown,
+      props.reorderKey,
       clearLongPressTimer,
       isBusy,
       isInteractionDisabled,
@@ -611,8 +663,14 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   return (
     <div
+      data-conversation-id={item.id}
+      data-sidebar-reorder-key={props.reorderKey}
+      // Paint containment normally clips this row. The insertion circle extends
+      // across its edge, so let only the active drop target paint outside it.
+      style={props.dropPosition ? { contain: "layout style", zIndex: 1 } : undefined}
       className={cn(
-        "chat-history-row group/item grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        props.isDragging && "opacity-35",
+        "chat-history-row group/item relative grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
         isSelectionMode && isSelected
           ? "bg-primary/10 text-foreground hover:bg-primary/[0.14]"
           : isActive
@@ -622,6 +680,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
         !isSelectionMode && shouldShowMobilePressFeedback && "bg-foreground/[0.09] text-foreground",
       )}
     >
+      <SidebarDropIndicator position={props.dropPosition} />
       {isRenaming ? (
         <div className="flex h-[30px] min-w-0 items-center px-2">
           <Input
@@ -661,7 +720,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
           {/* biome-ignore lint/complexity/noUselessFragments: DropdownMenu keeps trigger and popup siblings under one provider child */}
           <>
             <div className="relative min-w-0">
-              {isMobileMenuLayout && !isSelectionMode ? (
+              {!isSelectionMode ? (
                 <DropdownMenuTrigger
                   render={
                     <button
@@ -676,7 +735,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
               <button
                 type="button"
-                draggable={!onWorkbenchDragIntent && !item.isPending}
+                draggable={!props.onReorderPointerDown && !onWorkbenchDragIntent && !item.isPending}
                 onDragStart={handleNativeConversationDragStart}
                 onDragEnd={clearActiveConversationReferenceDrag}
                 onClick={handleTitleClick}
@@ -696,6 +755,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 onPointerUp={handleTitlePointerUp}
                 onPointerCancel={handleTitlePointerCancel}
                 onPointerLeave={handleTitlePointerCancel}
+                aria-current={isActive ? "page" : undefined}
                 aria-pressed={isSelectionMode ? isSelected : undefined}
                 disabled={isInteractionDisabled || (isSelectionMode && isSelectionDisabled)}
                 className="chat-history-row-title-button flex h-[30px] w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring"
@@ -714,13 +774,12 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     {isSelected ? <Check className="h-3 w-3" /> : null}
                   </span>
                 ) : null}
-                {!isSelectionMode && isKnownProviderId(item.providerId) ? (
+                {!isSelectionMode && props.showIcon ? (
                   <span
                     aria-hidden="true"
-                    title={item.model || undefined}
                     className="flex h-4 w-4 shrink-0 items-center justify-center"
                   >
-                    <ProviderBrandIcon type={item.providerId} />
+                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
                   </span>
                 ) : null}
                 <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">
@@ -738,7 +797,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               className={cn(
                 "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
                 isSelectionMode && "hidden",
-                showRunningIndicator || item.isPinned
+                showRunningIndicator
                   ? // Mobile rows render no inline action buttons, so this flex
                     // box has zero content width AND zero height — max-w alone
                     // leaves the absolutely-positioned spinner fully clipped by
@@ -768,26 +827,11 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 >
                   <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
                 </span>
-              ) : item.isPinned ? (
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-amber-500/90 transition-opacity duration-200",
-                    isMobileMenuLayout
-                      ? "opacity-100"
-                      : [
-                          "opacity-100 group-hover/item:opacity-0 group-focus-within/item:opacity-0",
-                          menuOpen && "opacity-0",
-                        ],
-                  )}
-                >
-                  <Pin className="h-3 w-3" />
-                </span>
               ) : null}
               <div
                 className={cn(
                   "flex items-center gap-0.5 transition-opacity duration-200",
-                  showRunningIndicator || item.isPinned
+                  showRunningIndicator
                     ? "opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
                     : "opacity-100",
                   menuOpen && "opacity-100",
@@ -815,25 +859,32 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         <Pin className="h-3.5 w-3.5" />
                       )}
                     </Button>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className={PROJECT_ICON_BUTTON_CLASS}
-                          disabled={isInteractionDisabled || isBusy}
-                          title={t("chat.conversationMore")}
-                          aria-label={t("chat.conversationMore")}
-                          onPointerDown={(e: React.PointerEvent<HTMLButtonElement>) =>
-                            e.stopPropagation()
-                          }
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => e.stopPropagation()}
-                        />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={PROJECT_ICON_BUTTON_CLASS}
+                      title={t(
+                        props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive",
+                      )}
+                      aria-label={t(
+                        props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive",
+                      )}
+                      disabled={
+                        isInteractionDisabled ||
+                        isBusy ||
+                        isRunning ||
+                        item.isPending ||
+                        !props.onSetArchived
                       }
+                      onClick={() => props.onSetArchived?.(item, !props.isArchived)}
                     >
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </DropdownMenuTrigger>
+                      {props.isArchived ? (
+                        <ArchiveRestore className="h-3.5 w-3.5" />
+                      ) : (
+                        <Archive className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
                   </>
                 ) : null}
               </div>
@@ -854,7 +905,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 }}
                 className="sidebar-context-menu min-w-[10rem] rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
               >
-                {isMobileMenuLayout && !item.isPending ? (
+                {!item.isPending ? (
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleTogglePinned}
@@ -868,6 +919,20 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     {item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")}
                   </DropdownMenuItem>
                 ) : null}
+                {props.onSetArchived && (
+                  <DropdownMenuItem
+                    disabled={isInteractionDisabled || isBusy || isRunning || item.isPending}
+                    onSelect={() => props.onSetArchived?.(item, !props.isArchived)}
+                    className="gap-2"
+                  >
+                    {props.isArchived ? (
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                    ) : (
+                      <Archive className="h-3.5 w-3.5" />
+                    )}
+                    {t(props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive")}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isRunning || isBusy}
                   onSelect={handleEnterSelectionMode}
@@ -1109,6 +1174,13 @@ export function ProjectGroupHeader(props: {
 }
 
 export const ProjectRow = memo(function ProjectRow(props: {
+  expanded?: boolean;
+  onNewConversation?: (project: WorkspaceProject) => void;
+  reorderKey?: string;
+  onReorderPointerDown?: (key: string, event: SidebarReorderPointer) => void;
+  isDragging?: boolean;
+  dropPosition?: "before" | "after";
+  onToggleExpanded?: (project: WorkspaceProject) => void;
   project: WorkspaceProject;
   isActive: boolean;
   isMissing: boolean;
@@ -1186,7 +1258,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
       (path) => workspaceProjectPathKey(path) === workspaceProjectPathKey(project.path),
     ),
   )?.id;
-  const ProjectFolderIcon = isActive ? FolderOpen : FolderClosed;
+  const ProjectFolderIcon = (props.expanded ?? isActive) ? FolderOpen : FolderClosed;
 
   useEffect(() => {
     if (pendingAction !== "deleteWorktree") {
@@ -1348,10 +1420,15 @@ export const ProjectRow = memo(function ProjectRow(props: {
   }
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: this group contains navigation actions, not form fields.
     <div
       ref={rowRef}
+      role="group"
+      aria-label={project.name}
+      data-sidebar-reorder-key={props.reorderKey}
       className={cn(
-        "group/project grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        props.isDragging && "opacity-35",
+        "group/project relative grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
         indented && "pl-5",
         isMissing
           ? "text-destructive hover:bg-destructive/10"
@@ -1362,14 +1439,18 @@ export const ProjectRow = memo(function ProjectRow(props: {
               : "text-foreground/85 hover:bg-foreground/[0.05] hover:text-foreground",
       )}
     >
-      <Tooltip disabled={isInteractionDisabled}>
+      <SidebarDropIndicator position={props.dropPosition} />
+      <Tooltip disabled={isInteractionDisabled || props.isDragging}>
         <TooltipTrigger
           delay={0}
           closeOnClick
           render={
             <button
               type="button"
+              aria-current={isActive ? "page" : undefined}
               aria-disabled={isArchived || undefined}
+              aria-expanded={props.onToggleExpanded ? props.expanded : undefined}
+              draggable={false}
               className={cn(
                 "flex h-[30px] min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 isMissing
@@ -1382,10 +1463,25 @@ export const ProjectRow = memo(function ProjectRow(props: {
                 // Archived workspaces cannot be selected, so no new
                 // conversations can start in them.
                 if (!isArchived) {
+                  props.onToggleExpanded?.(project);
                   onSelectProject(project);
                 }
               }}
               onPointerDown={(event) => {
+                if (
+                  props.onReorderPointerDown &&
+                  props.reorderKey &&
+                  !event.altKey &&
+                  !isArchived &&
+                  !isInteractionDisabled &&
+                  !menuOpen &&
+                  pendingAction === null &&
+                  event.pointerType !== "touch" &&
+                  event.button === 0
+                ) {
+                  props.onReorderPointerDown(props.reorderKey, event);
+                  return;
+                }
                 if (
                   !onWorkbenchDragIntent ||
                   isArchived ||
@@ -1420,9 +1516,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     ? "text-destructive"
                     : isArchived
                       ? "text-muted-foreground/40"
-                      : isActive
-                        ? "text-amber-500"
-                        : "text-foreground/65",
+                      : "text-foreground/65",
                 )}
               />
               <span
@@ -1451,7 +1545,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
           "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
           isMissing
             ? "max-w-8 opacity-100"
-            : isRunning || (isPinned && !isArchived)
+            : isRunning
               ? "max-w-7 opacity-100 group-hover/project:max-w-16 group-focus-within/project:max-w-16"
               : "max-w-0 opacity-0 group-hover/project:max-w-16 group-hover/project:opacity-100 group-focus-within/project:max-w-16 group-focus-within/project:opacity-100",
           menuOpen && "max-w-16 opacity-100",
@@ -1470,22 +1564,11 @@ export const ProjectRow = memo(function ProjectRow(props: {
           >
             <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
           </span>
-        ) : !isMissing && !isArchived && isPinned ? (
-          <span
-            aria-hidden="true"
-            className={cn(
-              "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-amber-500/80 transition-opacity duration-200",
-              "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
-              menuOpen && "opacity-0",
-            )}
-          >
-            <Pin className="h-3 w-3" />
-          </span>
         ) : null}
         <div
           className={cn(
             "flex items-center gap-0.5 transition-opacity duration-200",
-            (isRunning || (isPinned && !isArchived)) && !isMissing
+            isRunning && !isMissing
               ? "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100"
               : "opacity-100",
             menuOpen && "opacity-100",
@@ -1517,12 +1600,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   variant="ghost"
                   size="icon"
                   className={PROJECT_ICON_BUTTON_CLASS}
-                  title={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
-                  aria-label={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
-                  onClick={handleTogglePinned}
-                  disabled={isInteractionDisabled}
+                  title={t("chat.newConversation")}
+                  aria-label={t("chat.newConversation")}
+                  onClick={() => props.onNewConversation?.(project)}
+                  disabled={isInteractionDisabled || !props.onNewConversation}
                 >
-                  {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  <SquarePen className="h-3.5 w-3.5" />
                 </Button>
               ) : null}
               <DropdownMenu
@@ -1551,6 +1634,20 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   sideOffset={6}
                   className="sidebar-context-menu"
                 >
+                  {!isArchived && (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleTogglePinned}
+                      className="gap-2"
+                    >
+                      {isPinned ? (
+                        <PinOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Pin className="h-3.5 w-3.5" />
+                      )}
+                      {isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
+                    </DropdownMenuItem>
+                  )}
                   {/* 第一组：管理 —— 配置、分组归属、归档状态。 */}
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}

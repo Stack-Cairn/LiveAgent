@@ -20,6 +20,51 @@ mod tests {
     }
 
     #[test]
+    fn save_system_preserves_sidebar_order_across_database_reopen() {
+        let temp = tempfile::tempdir().expect("temp database");
+        let path = temp.path().join("settings.sqlite");
+        let order = json!(["/workspace/b", "/workspace/a"]);
+        let pins = json!([
+            "workspace:/workspace/a",
+            "conversation:one",
+            "workspace:/workspace/b"
+        ]);
+        let archive =
+            json!([{ "id": "archived", "title": "Archived conversation", "cwd": "/workspace/a" }]);
+        {
+            let mut conn = Connection::open(&path).expect("open database");
+            initialize_schema(&conn).expect("initialize database");
+            save_system_with_default_workdir(
+                &mut conn,
+                json!({
+                    "workspaceProjectOrder": order,
+                    "sidebarPinnedOrder": pins,
+                    "archivedConversations": archive,
+                }),
+                "/workspace/default",
+            )
+            .expect("save sidebar preferences");
+        }
+        let mut conn = Connection::open(&path).expect("reopen database");
+        let mut loaded =
+            load_system_with_defaults(&conn, "/workspace/default").expect("load preferences");
+        assert_eq!(loaded.get(SYSTEM_WORKSPACE_PROJECT_ORDER_KEY), Some(&order));
+        assert_eq!(loaded.get(SYSTEM_SIDEBAR_PINNED_ORDER_KEY), Some(&pins));
+        assert_eq!(
+            loaded.get(SYSTEM_ARCHIVED_CONVERSATIONS_KEY),
+            Some(&archive)
+        );
+        loaded["executionMode"] = json!("tools");
+        save_system_with_default_workdir(&mut conn, loaded, "/workspace/default")
+            .expect("save unrelated setting");
+        let loaded = load_system(&conn)
+            .expect("reload preferences")
+            .expect("system settings");
+        assert_eq!(loaded.get(SYSTEM_SIDEBAR_PINNED_ORDER_KEY), Some(&pins));
+        assert_eq!(loaded.get(SYSTEM_WORKSPACE_PROJECT_ORDER_KEY), Some(&order));
+    }
+
+    #[test]
     fn initialize_schema_creates_all_tables() {
         let conn = open_memory_db();
 

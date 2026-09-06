@@ -297,6 +297,7 @@ function trimWorkspaceProjectActivityUpdatedAts(
 export function sortWorkspaceProjectsByActivity(
   projects: readonly WorkspaceProject[],
   options?: {
+    projectOrder?: readonly string[];
     projectActivityUpdatedAts?: ReadonlyMap<string, number>;
     runningProjectPathKeys?: ReadonlySet<string>;
   },
@@ -305,6 +306,9 @@ export function sortWorkspaceProjectsByActivity(
     return [...projects];
   }
 
+  const manualOrder = new Map(
+    options?.projectOrder?.map((path, index) => [workspaceProjectPathKey(path), index]),
+  );
   const projectActivityUpdatedAts =
     options?.projectActivityUpdatedAts ?? EMPTY_PROJECT_ACTIVITY_UPDATED_ATS;
   const runningProjectPathKeys = options?.runningProjectPathKeys ?? EMPTY_RUNNING_PROJECT_PATH_KEYS;
@@ -329,6 +333,12 @@ export function sortWorkspaceProjectsByActivity(
       const rightIsPinned = right.project.isPinned === true;
       if (leftIsPinned !== rightIsPinned) {
         return leftIsPinned ? -1 : 1;
+      }
+      if (manualOrder.size > 0) {
+        const orderDelta =
+          (manualOrder.get(left.pathKey) ?? Number.MAX_SAFE_INTEGER) -
+          (manualOrder.get(right.pathKey) ?? Number.MAX_SAFE_INTEGER);
+        if (orderDelta !== 0) return orderDelta;
       }
       if (leftIsPinned && rightIsPinned) {
         const pinnedDelta = readProjectPinnedAt(right.project) - readProjectPinnedAt(left.project);
