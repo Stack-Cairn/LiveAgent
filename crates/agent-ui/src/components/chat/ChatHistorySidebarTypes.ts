@@ -31,6 +31,8 @@ export type ChatHistorySidebarProps = {
   runningConversationIds: ReadonlySet<string>;
   /** Conversations currently blocked on an explicit tool approval. */
   approvalConversationIds?: ReadonlySet<string>;
+  /** Conversations currently blocked on an unanswered AskUserQuestion card. */
+  questionConversationIds?: ReadonlySet<string>;
   listStatus: ChatHistorySidebarListStatus;
   // Identity of the current list scope (workspace/text mode). A change
   // remounts the list content with a soft enter transition and resets scroll.

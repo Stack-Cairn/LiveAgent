@@ -12,6 +12,10 @@ import {
   createConversationHydrationStore,
 } from "./conversationHydrationStore";
 import {
+  type ConversationQuestionStore,
+  createConversationQuestionStore,
+} from "./conversationQuestionStore";
+import {
   type ConversationQueueStore,
   createConversationQueueStore,
 } from "./conversationQueueStore";
@@ -29,6 +33,7 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
   readonly uploads: ConversationUploadStore;
   readonly queue: ConversationQueueStore;
   readonly approvals: ConversationApprovalStore;
+  readonly questions: ConversationQuestionStore;
   readonly hydration: ConversationHydrationStore;
 
   constructor(
@@ -38,12 +43,14 @@ export class ConversationRuntimeRegistry extends Map<string, ConversationRuntime
     queue = createConversationQueueStore(),
     approvals = createConversationApprovalStore(),
     hydration = createConversationHydrationStore(),
+    questions = createConversationQuestionStore(),
   ) {
     super();
     this.drafts = drafts;
     this.uploads = uploads;
     this.queue = queue;
     this.approvals = approvals;
+    this.questions = questions;
     this.hydration = hydration;
     if (!entries) return;
     for (const [conversationId, entry] of entries) {

@@ -113,7 +113,7 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="composer-safety-dropdown flex w-72 flex-col overflow-hidden p-1"
+        className="composer-safety-dropdown flex w-72 flex-col gap-1 overflow-hidden p-1"
         side="top"
         align="start"
       >

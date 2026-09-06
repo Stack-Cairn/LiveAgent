@@ -79,6 +79,7 @@ type HistoryRowProps = {
   isBusy: boolean;
   isRunning: boolean;
   needsApproval: boolean;
+  hasPendingQuestion: boolean;
   isDeleteDisabled: boolean;
   canShareConversation: boolean;
   isRenaming: boolean;
@@ -143,6 +144,7 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.isBusy === next.isBusy &&
     previous.isRunning === next.isRunning &&
     previous.needsApproval === next.needsApproval &&
+    previous.hasPendingQuestion === next.hasPendingQuestion &&
     previous.isDeleteDisabled === next.isDeleteDisabled &&
     previous.canShareConversation === next.canShareConversation &&
     previous.isRenaming === next.isRenaming &&
@@ -181,6 +183,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     isBusy,
     isRunning,
     needsApproval,
+    hasPendingQuestion,
     isDeleteDisabled,
     canShareConversation,
     isRenaming,
@@ -211,7 +214,15 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     onOpenInWorkbenchSplit,
   } = props;
   const { t } = useLocale();
-  const showRunningIndicator = isRunning && !needsApproval;
+  // Either blocked state replaces the spinner: the turn is suspended on the
+  // user, not working. Approval wins when both are pending — it is the harder
+  // block and the row has room for only one pill.
+  const blockedBadgeLabel = needsApproval
+    ? t("chat.toolApproval.sidebarStatus")
+    : hasPendingQuestion
+      ? t("chat.askUser.sidebarStatus")
+      : null;
+  const showRunningIndicator = isRunning && !blockedBadgeLabel;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Enter/Escape mark the blur as handled so onBlur commits exactly once —
@@ -715,9 +726,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">
                   {item.title}
                 </span>
-                {!isSelectionMode && needsApproval ? (
+                {!isSelectionMode && blockedBadgeLabel ? (
                   <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300">
-                    {t("chat.toolApproval.sidebarStatus")}
+                    {blockedBadgeLabel}
                   </span>
                 ) : null}
               </button>
@@ -965,45 +976,85 @@ export function ProjectGroupHeader(props: {
     onDelete,
   } = props;
   const { t } = useLocale();
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  // Same Base UI return-focus race as the conversation rename input above:
+  // "Rename" unmounts this menu in the commit that mounts the input, and the
+  // trigger takes focus back before the input's ref attaches, so the blur
+  // committed the untouched name. finalFocus consumes the one-shot flag and the
+  // effect below owns focus placement.
+  const suppressMenuReturnFocusRef = useRef(false);
+  const skipNextBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!isRenaming) return;
+    skipNextBlurCommitRef.current = false;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [isRenaming]);
 
   if (isRenaming) {
     return (
-      <div className="flex h-[30px] items-center gap-2 rounded-lg pl-2 pr-1">
-        <Input
-          value={renameDraft}
-          onChange={(event) => onRenameDraftChange(event.currentTarget.value)}
-          onBlur={onCommitRename}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
+      // Same geometry as the non-renaming header below, chevron included, so
+      // the name stays put when the row flips into and out of edit mode.
+      <div className="flex h-[30px] items-center rounded-lg pl-1">
+        <div className="flex h-[30px] min-w-0 flex-1 items-center gap-2 px-2">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                group.collapsed ? "" : "rotate-90",
+              )}
+            />
+          </span>
+          <Input
+            ref={renameInputRef}
+            value={renameDraft}
+            onChange={(event) => onRenameDraftChange(event.currentTarget.value)}
+            onBlur={() => {
+              if (skipNextBlurCommitRef.current) {
+                skipNextBlurCommitRef.current = false;
+                return;
+              }
               onCommitRename();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onCancelRename();
-            }
-          }}
-          className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
-          autoFocus
-        />
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                skipNextBlurCommitRef.current = true;
+                onCommitRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                skipNextBlurCommitRef.current = true;
+                onCancelRename();
+              }
+            }}
+            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="group/project-group flex h-[30px] items-center rounded-lg pl-1 pr-0.5 transition-colors hover:bg-foreground/[0.04]">
+    <div className="group/project-group flex h-[30px] items-center rounded-lg pl-1 transition-colors hover:bg-foreground/[0.04]">
       <button
         type="button"
-        className="flex h-[30px] min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onToggleCollapsed}
         title={t("chat.workspaceGroupToggle")}
       >
-        <ChevronRight
-          aria-hidden="true"
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-            group.collapsed ? "" : "rotate-90",
-          )}
-        />
+        {/* 14px chevron in a 16px slot: the slot has to match ProjectRow's
+            folder icon so group names and workspace names share a left edge. */}
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          <ChevronRight
+            aria-hidden="true"
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              group.collapsed ? "" : "rotate-90",
+            )}
+          />
+        </span>
         <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-5">
           {group.name}
         </span>
@@ -1024,8 +1075,23 @@ export function ProjectGroupHeader(props: {
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-40">
-          <DropdownMenuItem onSelect={onStartRename} className="gap-2 text-xs">
+        <DropdownMenuContent
+          className="min-w-40"
+          finalFocus={() => {
+            if (suppressMenuReturnFocusRef.current) {
+              suppressMenuReturnFocusRef.current = false;
+              return false;
+            }
+            return true;
+          }}
+        >
+          <DropdownMenuItem
+            onSelect={() => {
+              suppressMenuReturnFocusRef.current = true;
+              onStartRename();
+            }}
+            className="gap-2 text-xs"
+          >
             <Edit3 className="h-3.5 w-3.5" />
             <span>{t("chat.workspaceGroupRename")}</span>
           </DropdownMenuItem>

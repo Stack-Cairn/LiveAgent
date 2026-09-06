@@ -28,6 +28,7 @@ import type { AppUpdateController } from "../../../lib/appUpdates";
 import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
 import type { WorkspaceProject, WorkspaceProjectGroup } from "../../../lib/settings";
 import type { ConversationApprovalStore } from "../conversations/conversationApprovalStore";
+import type { ConversationQuestionStore } from "../conversations/conversationQuestionStore";
 import {
   moveConversationsToWorkspace,
   moveConversationToWorkspace,
@@ -36,6 +37,7 @@ import {
 type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   store: SidebarStore;
   approvalStore: ConversationApprovalStore;
+  questionStore: ConversationQuestionStore;
   workspaceProjectGroups: WorkspaceProjectGroup[];
   onCreateWorkspaceGroup: (name: string) => void;
   onRenameWorkspaceGroup: (groupId: string, name: string) => void;
@@ -69,38 +71,52 @@ type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   appUpdate?: AppUpdateController;
 };
 
-function useApprovalConversationIds(
+/** Both the approval and the ask-question registries expose this shape, so one
+ *  hook covers "which visible conversations are blocked on the user". */
+type PendingConversationStore = {
+  getSnapshot: (conversationId: string) => readonly unknown[];
+  subscribe: (conversationId: string, listener: () => void) => () => void;
+};
+
+function useBlockedConversationIds(
   items: readonly SidebarConversation[],
-  approvalStore: ConversationApprovalStore,
+  pendingStore: PendingConversationStore,
 ): ReadonlySet<string> {
   const conversationIds = useMemo(() => items.map((item) => item.id), [items]);
   const readSnapshot = useCallback(() => {
     const result = new Set<string>();
     for (const conversationId of conversationIds) {
-      if (approvalStore.getSnapshot(conversationId).length > 0) result.add(conversationId);
+      if (pendingStore.getSnapshot(conversationId).length > 0) result.add(conversationId);
     }
     return result;
-  }, [approvalStore, conversationIds]);
-  const [approvalConversationIds, setApprovalConversationIds] =
+  }, [pendingStore, conversationIds]);
+  const [blockedConversationIds, setBlockedConversationIds] =
     useState<ReadonlySet<string>>(readSnapshot);
 
   useEffect(() => {
-    const notify = () => setApprovalConversationIds(readSnapshot());
+    const notify = () => setBlockedConversationIds(readSnapshot());
     const unsubscribers = conversationIds.map((conversationId) =>
-      approvalStore.subscribe(conversationId, notify),
+      pendingStore.subscribe(conversationId, notify),
     );
     // Close the small render→subscribe race by re-reading once subscriptions exist.
     notify();
     return () => {
       for (const unsubscribe of unsubscribers) unsubscribe();
     };
-  }, [approvalStore, conversationIds, readSnapshot]);
+  }, [pendingStore, conversationIds, readSnapshot]);
 
-  return approvalConversationIds;
+  return blockedConversationIds;
 }
 
 export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
-  const { store, approvalStore, projects, onConversationDeleted, onConversationCwdChanged } = props;
+  const {
+    store,
+    approvalStore,
+    questionStore,
+    projects,
+    onConversationDeleted,
+    onConversationCwdChanged,
+  } = props;
   const { t } = useLocale();
 
   const {
@@ -115,7 +131,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const approvalConversationIds = useApprovalConversationIds(items, approvalStore);
+  const approvalConversationIds = useBlockedConversationIds(items, approvalStore);
+  const questionConversationIds = useBlockedConversationIds(items, questionStore);
 
   const sortedProjects = useMemo(
     () =>
@@ -240,6 +257,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
         renameDraft,
       })}
       approvalConversationIds={approvalConversationIds}
+      questionConversationIds={questionConversationIds}
       {...buildChatHistorySidebarWorkspaceProps(
         props,
         sortedProjects,

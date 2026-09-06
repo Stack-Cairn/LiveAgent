@@ -247,10 +247,7 @@ const CLI_IDENTITY_HEADER_FAMILIES: Record<CliIdentityProviderId, readonly strin
     CODEX_SESSION_ID_HEADER,
     CODEX_CONVERSATION_ID_HEADER,
   ],
-  xai: [
-    ...buildCliIdentityHeaders("xai").map((header) => header.key),
-    ...GROK_DYNAMIC_HEADER_KEYS,
-  ],
+  xai: [...buildCliIdentityHeaders("xai").map((header) => header.key), ...GROK_DYNAMIC_HEADER_KEYS],
 };
 
 export type CliIdentityApplyResult = {

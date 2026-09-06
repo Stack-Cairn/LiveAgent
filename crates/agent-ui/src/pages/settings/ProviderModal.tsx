@@ -841,8 +841,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     );
   }
   const modelReorderDisabledHint = modelSearchQuery
-      ? t("settings.modelReorderDisabledSearch")
-      : t("settings.reorderNeedsTwoItems");
+    ? t("settings.modelReorderDisabledSearch")
+    : t("settings.reorderNeedsTwoItems");
   const handleModelReorder = useCallback((nextIds: string[]) => {
     if (modelSortTimerRef.current) clearTimeout(modelSortTimerRef.current);
     modelSortTimerRef.current = null;
@@ -900,9 +900,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           " " +
           headerImportSummary.overwrittenCount,
         (headerImportSummary.removedCount ?? 0) > 0
-          ? t("settings.customHeaderImportSummary.removed") +
-            " " +
-            headerImportSummary.removedCount
+          ? t("settings.customHeaderImportSummary.removed") + " " + headerImportSummary.removedCount
           : null,
         headerImportSummary.issues.length > 0
           ? t("settings.customHeaderImportSummary.skipped") +

@@ -12,10 +12,7 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
-import {
-  type CustomHeader,
-  mergeCustomHeaders,
-} from "../../lib/providers/customHeaders";
+import { type CustomHeader, mergeCustomHeaders } from "../../lib/providers/customHeaders";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";

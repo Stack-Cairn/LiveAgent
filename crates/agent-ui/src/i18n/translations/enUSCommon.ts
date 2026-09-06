@@ -170,7 +170,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceOpenFolder": "Open local folder",
   "chat.workspaceOpenFolderDescription": "Add an existing folder as a workspace.",
   "chat.workspaceOpenFolderSubmit": "Select",
-  "chat.workspaceOr": "or",
   "chat.workspaceCloneRepository": "Clone Git repository",
   "chat.workspaceCloneDescription": "The repository opens as a workspace when cloning finishes.",
   "chat.workspaceCloneUrl": "Repository URL",
@@ -460,19 +459,17 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.runtime.reasoningCompact.max": "Max",
   "chat.safety.label": "Command execution mode",
   "chat.safety.ask": "Approve each",
-  "chat.safety.askDesc": "Ask before every command or write; read-only tools run freely",
+  "chat.safety.askDesc": "Confirm each command and write; read-only runs free",
   "chat.safety.auto": "Auto",
-  "chat.safety.autoDesc": "Run directly per the tool permission policies in Settings",
+  "chat.safety.autoDesc": "Run directly per your tool permission policies",
   "chat.safety.sandbox": "Sandbox",
-  "chat.safety.sandboxDesc":
-    "Commands run in an OS sandbox: writes limited to the project folder, sensitive dirs like ~/.ssh unreadable",
+  "chat.safety.sandboxDesc": "OS sandbox: writes fenced, sensitive dirs unreadable",
   // The Windows networked backend (WRITE_RESTRICTED token) fences writes only; reads stay
   // broadly allowed, so this platform must not promise credential read masking. Masking is
   // only real on the offline (AppContainer) backend.
-  "chat.safety.sandboxDescNoReadMask":
-    "Commands run in an OS sandbox: writes limited to the project folder. Reads are not masked on this platform, so ~/.ssh and other sensitive dirs stay readable",
+  "chat.safety.sandboxDescNoReadMask": "OS sandbox: writes fenced only, reads not masked here",
   "chat.safety.sandboxOffline": "Sandbox · offline",
-  "chat.safety.sandboxOfflineDesc": "Sandbox plus no network access for commands",
+  "chat.safety.sandboxOfflineDesc": "Sandbox, plus no network for commands",
   "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",
   "chat.safety.sandboxOfflineUnavailable": "Offline sandbox unavailable on this platform",
   "chat.emptyRound": "(No reply)",
@@ -687,10 +684,12 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.tool.askUserTitle": "Question for you",
   "chat.askUser.preparing": "Preparing questions",
   "chat.askUser.waiting": "Waiting for your choice",
+  // Sidebar row pill, mirroring chat.toolApproval.sidebarStatus. Distinct from
+  // chat.askUser.waiting, which is the in-transcript status label.
+  "chat.askUser.sidebarStatus": "Answer needed",
   "chat.askUser.tabFallback": "Q",
   "chat.askUser.recommended": "Recommended",
-  "chat.askUser.customOption": "Other (type your own)",
-  "chat.askUser.customPlaceholder": "Type your answer…",
+  "chat.askUser.customPlaceholder": "Type a custom answer…",
   "chat.askUser.progress": "selected",
   "chat.askUser.previousQuestion": "Previous question",
   "chat.askUser.nextQuestion": "Next question",

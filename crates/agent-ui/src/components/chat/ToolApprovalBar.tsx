@@ -83,6 +83,19 @@ export function ToolApprovalBar({
 
   useEffect(() => {
     if (!currentToolCallId) return;
+    // Approvals arrive mid-turn, whenever the model happens to call a tool — so
+    // this can land while the user is mid-word in the composer, a rename field,
+    // or the new-group draft. Grabbing focus there drops their keystrokes and,
+    // for the sidebar's blur-to-commit inputs, silently discards the row. The
+    // keyboard shortcuts this focus enables are worth less than not stealing an
+    // active caret; the user can Tab or click into the bar.
+    const active = document.activeElement as HTMLElement | null;
+    if (
+      active &&
+      (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)
+    ) {
+      return;
+    }
     panelRef.current?.focus({ preventScroll: true });
   }, [currentToolCallId]);
 

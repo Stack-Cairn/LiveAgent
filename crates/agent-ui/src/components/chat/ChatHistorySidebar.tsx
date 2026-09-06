@@ -104,6 +104,7 @@ const SIDEBAR_MOBILE_PROJECTS_BODY_DEFAULT_RATIO = 0.4;
 const PROJECT_LIST_COLLAPSED_MAX = 30;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
 const EMPTY_APPROVAL_CONVERSATION_IDS = new Set<string>();
+const EMPTY_QUESTION_CONVERSATION_IDS = new Set<string>();
 const HISTORY_LOADING_SKELETON_ROWS = [
   { title: "w-36", meta: "w-20" },
   { title: "w-44", meta: "w-24" },
@@ -171,6 +172,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     busyConversationIds,
     runningConversationIds,
     approvalConversationIds = EMPTY_APPROVAL_CONVERSATION_IDS,
+    questionConversationIds = EMPTY_QUESTION_CONVERSATION_IDS,
     listStatus,
     scopeKey = "",
     hasMore,
@@ -312,29 +314,41 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const { confirm: requestBulkDeleteConfirm, dialog: bulkDeleteDialog } = useConfirmDialog();
   const orderedConversationIds = useMemo(() => items.map((item) => item.id), [items]);
   const visibleRunningProjectPathKeys = useMemo(() => {
-    if (approvalConversationIds.size === 0) return runningProjectPathKeys;
+    // A conversation waiting on the user — for a tool approval or for an
+    // AskUserQuestion answer — is suspended, not working. Both must drop out of
+    // the workspace's "running" dot the same way, or the two blocked states
+    // would disagree at the project-row level.
+    if (approvalConversationIds.size === 0 && questionConversationIds.size === 0) {
+      return runningProjectPathKeys;
+    }
 
-    const approvalOnlyCandidates = new Set<string>();
+    const blockedOnlyCandidates = new Set<string>();
     const activelyRunningPathKeys = new Set<string>();
     for (const item of items) {
       if (!runningConversationIds.has(item.id)) continue;
       const pathKey = workspaceProjectPathKey(item.cwd ?? "");
       if (!pathKey) continue;
-      if (approvalConversationIds.has(item.id)) {
-        approvalOnlyCandidates.add(pathKey);
+      if (approvalConversationIds.has(item.id) || questionConversationIds.has(item.id)) {
+        blockedOnlyCandidates.add(pathKey);
       } else {
         activelyRunningPathKeys.add(pathKey);
       }
     }
 
     let next: Set<string> | null = null;
-    for (const pathKey of approvalOnlyCandidates) {
+    for (const pathKey of blockedOnlyCandidates) {
       if (activelyRunningPathKeys.has(pathKey) || !runningProjectPathKeys.has(pathKey)) continue;
       next ??= new Set(runningProjectPathKeys);
       next.delete(pathKey);
     }
     return next ?? runningProjectPathKeys;
-  }, [approvalConversationIds, items, runningConversationIds, runningProjectPathKeys]);
+  }, [
+    approvalConversationIds,
+    questionConversationIds,
+    items,
+    runningConversationIds,
+    runningProjectPathKeys,
+  ]);
   const selectableConversationIds = useMemo(
     () =>
       new Set(
@@ -678,6 +692,25 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const [archivedGroupOpen, setArchivedGroupOpen] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
+  // Base UI resolves the "+" menu's return-focus target synchronously while the
+  // menu unmounts — the same commit that mounts the draft input — so the trigger
+  // would take focus straight back and the empty-draft blur would silently close
+  // the row again ("new group does nothing"). The menu's finalFocus consumes this
+  // one-shot flag and the effect below owns focus placement, which is why the
+  // input has no autoFocus. Same failure and same fix as the conversation rename
+  // input in ChatHistorySidebarRows.
+  const suppressAddMenuReturnFocusRef = useRef(false);
+  const groupDraftInputRef = useRef<HTMLInputElement | null>(null);
+  // Enter/Escape mark the blur as handled so onBlur commits exactly once —
+  // without it, committing on Enter unmounts a focused input and the trailing
+  // focusout creates the group a second time.
+  const skipNextGroupBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!creatingGroup) return;
+    skipNextGroupBlurCommitRef.current = false;
+    groupDraftInputRef.current?.focus();
+  }, [creatingGroup]);
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [groupRenameDraft, setGroupRenameDraft] = useState("");
   const { confirm: requestGroupDeleteConfirm, dialog: groupDeleteDialog } = useConfirmDialog();
@@ -1156,6 +1189,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         isBusy={busyConversationIds.has(item.id)}
         isRunning={runningConversationIds.has(item.id)}
         needsApproval={approvalConversationIds.has(item.id)}
+        hasPendingQuestion={questionConversationIds.has(item.id)}
         isDeleteDisabled={runningConversationIds.has(item.id)}
         canShareConversation={canShareConversations}
         isRenaming={renamingId === item.id}
@@ -1208,6 +1242,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       canShareConversations,
       activeProjects,
       approvalConversationIds,
+      questionConversationIds,
       enterSelectionMode,
       isBulkDeleting,
       isBulkMoving,
@@ -1370,7 +1405,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 data-workspace-folder-drop-zone=""
                 {...workspaceFolderDropHandlers}
                 className={cn(
-                  "mx-1 flex items-center justify-between rounded-t-xl border-x border-t border-dashed border-transparent px-1 pb-1 pt-2 transition-colors",
+                  // Content has to land 8px in, matching the recent header and
+                  // both lists. The drop-zone outline eats 1px even while it's
+                  // transparent, so the padding is mx-1 + border + 3px = 8, not
+                  // the px-1 the 8px target would otherwise imply.
+                  "mx-1 flex items-center justify-between rounded-t-xl border-x border-t border-dashed border-transparent px-[3px] pb-1 pt-2 transition-colors",
                   workspaceFolderDropActive && "border-primary/40 bg-primary/[0.08]",
                 )}
               >
@@ -1413,6 +1452,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     align="start"
                     sideOffset={6}
                     className="min-w-44"
+                    finalFocus={() => {
+                      if (suppressAddMenuReturnFocusRef.current) {
+                        suppressAddMenuReturnFocusRef.current = false;
+                        return false;
+                      }
+                      return true;
+                    }}
                   >
                     <DropdownMenuItem
                       disabled={sectionsDisabled || !onCreateProject}
@@ -1425,6 +1471,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     <DropdownMenuItem
                       disabled={sectionsDisabled || !onCreateWorkspaceGroup}
                       onSelect={() => {
+                        // Only this item mounts an input in the same commit that
+                        // unmounts the menu, so only this item opts out of Base
+                        // UI's return-focus. "New workspace" opens a dialog that
+                        // owns its own focus and still wants the trigger back.
+                        suppressAddMenuReturnFocusRef.current = true;
                         setCreatingGroup(true);
                         setGroupDraft("");
                       }}
@@ -1442,13 +1493,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 data-workspace-folder-drop-zone=""
                 {...workspaceFolderDropHandlers}
                 className={cn(
-                  // Keep the padding/scrollbar geometry identical to the recent
+                  // Keep the padding geometry identical to the recent
                   // conversation list below: the scroll container spans the full
-                  // sidebar width so its scrollbar sits flush against the edge,
-                  // and rows are inset by the inner `px-2`. The drop affordance
-                  // uses an inset ring instead of a border so it never shifts
-                  // that geometry.
-                  "min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
+                  // sidebar width and rows are inset by the inner `px-2`. The
+                  // drop affordance uses an inset ring instead of a border so it
+                  // never shifts that geometry. No scrollbar — overflow is
+                  // signalled by the edge fade instead.
+                  "no-scrollbar scroll-fade scroll-fade-8 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
                   projectsCollapsed ? "opacity-0" : "opacity-100",
                   workspaceFolderDropActive &&
                     "bg-primary/[0.045] ring-1 ring-primary/40 ring-inset",
@@ -1466,41 +1517,76 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     </div>
                   ) : null}
                   {creatingGroup ? (
-                    <div className="flex h-[30px] items-center gap-1 rounded-lg pl-2 pr-1">
-                      <Folder className="h-4 w-4 shrink-0 text-foreground/65" />
-                      <Input
-                        value={groupDraft}
-                        onChange={(event) => setGroupDraft(event.currentTarget.value)}
-                        onBlur={commitNewGroup}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
+                    // Same geometry as ProjectGroupHeader and ProjectRow —
+                    // pl-1 + px-2 + a 16px icon slot + gap-2 puts the draft name
+                    // at 36px, the shared left edge for every row in this list.
+                    // Committing the name must not shift it.
+                    <div className="flex h-[30px] items-center rounded-lg pl-1">
+                      <div className="flex h-[30px] min-w-0 flex-1 items-center gap-2 px-2">
+                        <Folder
+                          aria-hidden="true"
+                          className="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                        <Input
+                          ref={groupDraftInputRef}
+                          value={groupDraft}
+                          onChange={(event) => setGroupDraft(event.currentTarget.value)}
+                          onBlur={() => {
+                            if (skipNextGroupBlurCommitRef.current) {
+                              skipNextGroupBlurCommitRef.current = false;
+                              return;
+                            }
                             commitNewGroup();
-                          } else if (event.key === "Escape") {
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              skipNextGroupBlurCommitRef.current = true;
+                              commitNewGroup();
+                            } else if (event.key === "Escape") {
+                              event.preventDefault();
+                              skipNextGroupBlurCommitRef.current = true;
+                              cancelNewGroup();
+                            }
+                          }}
+                          placeholder={t("chat.workspaceGroupNamePlaceholder")}
+                          className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+                        />
+                      </div>
+                      {/* Mirrors ProjectRow's action column: gap-0.5 between
+                          28px hit targets, 14px glyphs, flush to the row's
+                          right edge. Both buttons preventDefault on mousedown so
+                          focus stays in the input — otherwise the blur lands
+                          first, commits the draft, and the row unmounts before
+                          the click reaches its handler (pressing ✕ would create
+                          the group). Arming the skip flag then covers the blur
+                          that the unmount itself dispatches. */}
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
                             event.preventDefault();
-                            cancelNewGroup();
-                          }
-                        }}
-                        placeholder={t("chat.workspaceGroupNamePlaceholder")}
-                        className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={commitNewGroup}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
-                        aria-label={t("chat.workspaceGroupCreate")}
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelNewGroup}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-                        aria-label={t("chat.cancel")}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                            skipNextGroupBlurCommitRef.current = true;
+                          }}
+                          onClick={commitNewGroup}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+                          aria-label={t("chat.workspaceGroupCreate")}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            skipNextGroupBlurCommitRef.current = true;
+                          }}
+                          onClick={cancelNewGroup}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+                          aria-label={t("chat.cancel")}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   {renderedSections.grouped.map((section, sectionIndex) => {
@@ -1979,7 +2065,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <div
               ref={historyScrollRef}
               aria-busy={listStatus === "loading" || listStatus === "syncing" || isLoadingMore}
-              className="chat-history-list min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
+              className="chat-history-list no-scrollbar scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
             >
               {items.length > 0 ? (
                 <div

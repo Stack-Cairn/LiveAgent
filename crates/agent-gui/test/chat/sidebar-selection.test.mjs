@@ -134,20 +134,45 @@ test("conversation rename suppresses the menu's return-focus without changing do
     "utf8",
   );
 
-  // HistoryRow's rename entry arms the one-shot flag. ProjectRow now opens the
-  // project-settings flow instead of owning a second inline rename path.
-  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 1);
+  // Two menus in this file mount an inline input on select and so must arm the
+  // one-shot flag: HistoryRow's conversation rename and ProjectGroupHeader's
+  // group rename. ProjectRow opens the project-settings flow instead of owning
+  // a third inline rename path.
+  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 2);
   assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 1);
   assert.equal((source.match(/onSelect=\{\(\) => onConfigureProject\(project\)\}/g) ?? []).length, 1);
-  // The conversation dropdown consumes the flag declaratively via Base UI's
-  // finalFocus, keeping the default trigger return-focus for every other close.
-  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 1);
+  // Both dropdowns consume the flag declaratively via Base UI's finalFocus,
+  // keeping the default trigger return-focus for every other close.
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 2);
   assert.equal(
     (source.match(/suppressMenuReturnFocusRef\.current = false;\s*return false;/g) ?? []).length,
-    1,
+    2,
   );
   // Double-click rename keeps the plain path, and the retired blur-swallowing
   // guard must not come back — blur either skips once (Enter/Escape) or commits.
   assert.match(source, /onDoubleClick=\{\(event\) => \{[\s\S]*?handleStartRenaming\(\);/);
   assert.doesNotMatch(source, /ignoreMenuCloseBlurRef/);
+});
+
+test("the new-group draft survives the add menu's return-focus and cancels on demand", () => {
+  const source = readFileSync(
+    new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Only the "new group" item mounts an input in the commit that unmounts the
+  // menu, so only it opts out of Base UI's return-focus. "New workspace" opens
+  // a dialog and still wants the trigger back.
+  assert.equal((source.match(/suppressAddMenuReturnFocusRef\.current = true;/g) ?? []).length, 1);
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 1);
+  // An effect owns focus placement; autoFocus loses the race against the
+  // menu's synchronous return-focus resolution.
+  assert.match(source, /groupDraftInputRef\.current\?\.focus\(\);/);
+  assert.doesNotMatch(source, /placeholder=\{t\("chat\.workspaceGroupNamePlaceholder"\)\}[\s\S]{0,400}?autoFocus/);
+  // Enter/Escape and both action buttons mark the blur handled, so the group is
+  // created exactly once no matter how the row is dismissed.
+  assert.equal((source.match(/skipNextGroupBlurCommitRef\.current = true;/g) ?? []).length, 4);
+  // Confirm/cancel must not blur the input first — otherwise onBlur commits the
+  // draft and the row unmounts before the cancel click ever lands.
+  assert.equal((source.match(/onMouseDown=\{\(event\) => \{\s*event\.preventDefault\(\);/g) ?? []).length, 2);
 });
