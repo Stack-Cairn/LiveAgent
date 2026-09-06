@@ -111,6 +111,7 @@ export function WorkspaceResourceSettingsPanel(props: {
           {RESOURCE_MODES.map(({ value, Icon, labelKey, hintKey }) => {
             const isActive = mode === value;
             return (
+              // biome-ignore lint/a11y/useSemanticElements: Mode cards carry an icon, a label and a hint; a native radio cannot render that as one focusable choice.
               <button
                 key={value}
                 type="button"

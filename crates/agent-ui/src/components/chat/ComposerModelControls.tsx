@@ -419,10 +419,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
           {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
               provider·model 副标题：模型名在触发器、副标题、列表勾选处重复
               三次，且 11px 的标题比 12px 的模型行还小，标题反而是面板里最小
-              的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。
-              供应商排序切换已移除：它的图标显示的是「目标模式」而非当前模式、
-              没有 aria-pressed、也没有任何开关态，提示文案还承诺了「按类型
-              分组」这个它并不做的事。 */}
+              的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。 */}
           <div className="shrink-0 px-2 py-2">
             <div className="flex items-center justify-between gap-2 pb-1.5">
               <span className="min-w-0 shrink truncate pl-0.5 text-xs font-semibold text-foreground">
