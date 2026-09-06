@@ -372,9 +372,9 @@ export type ChatComposerBarProps = {
    */
   onFloatingOverhangChange?: (height: number) => void;
   /**
-   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。desktop 卡片为对齐正文
-   * 整体右移，居中锚定在输入区上方的控件要按此平移才能与卡片、药丸对齐。
-   * 仅 desktop 上报。
+   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。卡片列与正文同为居中，
+   * 正常为 0；分屏等场景下仍按实测值平移，使居中锚定在输入区上方的控件与
+   * 卡片、药丸对齐。仅 desktop 上报。
    */
   onCenterOffsetChange?: (offsetPx: number) => void;
   /** 当前会话任务进度（存在时渲染在审批栏和队列面板之上）。 */
@@ -1247,16 +1247,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           style={{ height: "1rem" }}
         />
       ) : null}
-      {/* Desktop aligns to the assistant message body, not the avatar rail:
-          transcript px-5 + 28px avatar + 12px gap + px-5 = 80px removed;
-          the remaining body is right-shifted 20px inside the centered column.
-          The card extends 4px past the body's left edge so scrolling content
-          cannot peek around its rounded lower-left corner. */}
+      {/* Desktop aligns to the assistant message body: transcript px-5 + px-5
+          = 40px removed from the column, and the column itself already gives
+          back the retired 40px avatar rail. The card extends 2px past each
+          edge of the body so scrolling content cannot peek around its rounded
+          lower corners. */}
       <div
         ref={composerColumnRef}
         className={cn(
           surface === "desktop"
-            ? "pointer-events-auto relative w-[calc(100%-2.25rem)] max-w-[calc(var(--chat-transcript-content-width,768px)-4.75rem)] translate-x-[18px]"
+            ? "pointer-events-auto relative w-[calc(100%-2.25rem)] max-w-[calc(var(--chat-transcript-content-width,768px)-4.75rem)]"
             : "gateway-chat-column pointer-events-auto relative",
           // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。
           isComposerExpanded && "flex min-h-0 flex-col justify-end",

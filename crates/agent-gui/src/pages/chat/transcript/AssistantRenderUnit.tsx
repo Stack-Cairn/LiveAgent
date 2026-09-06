@@ -7,7 +7,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import { AssistantAvatar, AssistantBubbleUnit } from "../components/AssistantBubble";
+import { AssistantBubbleUnit } from "../components/AssistantBubble";
 import { AssistantRowFooter } from "./RowActions";
 import type { AssistantFooterRenderUnit, AssistantUnitRow } from "./rowModel";
 
@@ -33,7 +33,6 @@ export type AssistantRenderUnitProps = {
 
 const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
   unit: AssistantFooterRenderUnit;
-  showAvatar: boolean;
   compacted: boolean;
   showUsage?: boolean;
   usageContextWindow?: number;
@@ -43,7 +42,6 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
 }) {
   const {
     unit,
-    showAvatar,
     compacted,
     showUsage,
     usageContextWindow,
@@ -71,20 +69,10 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
       className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}
     >
       {changedFiles ? (
-        <div className="flex w-full max-w-full items-start gap-3">
-          {showAvatar ? (
-            <AssistantAvatar />
-          ) : (
-            <div aria-hidden="true" className="h-7 w-7 shrink-0" />
-          )}
-          <div className={cn("min-w-0 flex-1", showAvatar ? "pt-0.5" : "")}>
+        <div className="w-full max-w-full">
+          <div className="min-w-0">
             <ChangedFilesCard summary={changedFiles} />
           </div>
-        </div>
-      ) : showAvatar ? (
-        <div className="flex w-full max-w-full items-start gap-3">
-          <AssistantAvatar />
-          <div className="min-w-0 flex-1" />
         </div>
       ) : null}
       <AssistantRowFooter
@@ -123,7 +111,6 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
     return (
       <AssistantFooterUnit
         unit={row.unit}
-        showAvatar={row.showAvatar}
         compacted={row.compacted}
         showUsage={showUsage}
         usageContextWindow={usageContextWindow}

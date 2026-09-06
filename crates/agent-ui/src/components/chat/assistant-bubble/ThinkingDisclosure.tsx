@@ -76,7 +76,7 @@ export function ThinkingDisclosure(props: {
 
   return (
     <div
-      className="group/thinking min-w-0 max-w-full pb-1"
+      className="group/thinking min-w-0 max-w-full"
       data-thinking-disclosure=""
       data-thinking-active={active ? "" : undefined}
     >
@@ -84,7 +84,7 @@ export function ThinkingDisclosure(props: {
         type="button"
         aria-expanded={open}
         aria-label={t("chat.thinkingProcess")}
-        className="-mx-1.5 flex w-fit max-w-[calc(100%+0.75rem)] cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.035] hover:text-foreground/75"
+        className="-mx-1.5 flex w-fit max-w-[calc(100%+0.75rem)] cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75"
         onClick={() => {
           userOwnsDisclosureRef.current = true;
           setOpen((prev) => !prev);
@@ -104,13 +104,13 @@ export function ThinkingDisclosure(props: {
 
       <LazyCollapse open={open}>
         {() => (
-          <div className="-mx-1 overflow-hidden px-1.5 pb-1 pt-1">
+          <div className="-mx-3 overflow-hidden px-3 pb-1 pt-1">
             <div
               ref={setScrollViewport}
               data-thinking-scroll=""
               className="max-h-[320px] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
             >
-              <div ref={setScrollContent} className="border-l-2 border-foreground/10 pl-3">
+              <div ref={setScrollContent} className="border-l border-border/55 pl-3">
                 <Markdown
                   content={text}
                   className="font-chat thinking-markdown"

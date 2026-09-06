@@ -296,8 +296,8 @@ function ToolCallItem({
   const summaryClassName = cn(
     "flex select-none items-center gap-1.5 text-left",
     compactChip
-      ? "group/tool -mx-[3px] min-h-7 w-[calc(100%+6px)] rounded-lg px-[3px] py-1 transition-colors duration-150 hover:bg-foreground/[0.04]"
-      : "w-full py-1.5",
+      ? "group/tool -mx-1.5 min-h-7 w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-1 transition-colors duration-150 hover:bg-foreground/[0.04]"
+      : "min-h-7 w-full py-1",
     canExpand ? "cursor-pointer" : "cursor-default",
   );
   const summaryContent = simpleFileOperation ? (
@@ -501,8 +501,8 @@ function ToolCallItem({
           className={cn(
             "pb-2 pt-1",
             compactChip
-              ? "mb-1 ml-2 space-y-1.5 border-l border-border/55 pl-3.5"
-              : "space-y-3 pl-[22px]",
+              ? "mb-1 space-y-1.5 border-l border-border/55 pl-3"
+              : "space-y-3 border-l border-border/55 pl-3",
           )}
         >
           {isShellSessionTool ? <ShellToolDisplay item={item} result={result} /> : null}

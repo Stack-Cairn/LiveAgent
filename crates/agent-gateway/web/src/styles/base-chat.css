@@ -728,9 +728,11 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-transcript-shell {
   display: grid;
+  /* Assistant rows dropped their 40px avatar column, so the transcript column
+     gives that width back rather than widening the reading measure. */
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
-    minmax(0, min(var(--chat-transcript-content-width, 768px), 100%))
+    minmax(0, min(calc(var(--chat-transcript-content-width, 768px) - 40px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
   width: 100%;
   min-width: 0;

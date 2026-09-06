@@ -1,7 +1,8 @@
-import { ChevronDown, Globe, Link2, Search } from "@liveagent/ui/components/IconSet";
+import { ChevronRight, Globe, Link2, Search } from "@liveagent/ui/components/IconSet";
 import { useMemo, useState } from "react";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
+import { LazyCollapse } from "./LazyCollapse";
 
 export type HostedSearchBlockView = {
   status: "searching" | "completed" | "failed";
@@ -140,7 +141,7 @@ export function HostedSearchGroupView({
 
   return (
     <section
-      className="group/search-trace max-w-2xl text-foreground/60"
+      className="group/search-trace min-w-0 max-w-full text-foreground/60"
       aria-busy={active}
       data-hosted-search-trace=""
     >
@@ -148,12 +149,10 @@ export function HostedSearchGroupView({
         type="button"
         aria-expanded={expanded}
         aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
-        className="-ml-1 flex h-auto max-w-full items-center gap-2 rounded-md px-1 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors hover:bg-foreground/[0.035] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="-mx-1.5 flex h-auto max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-lg px-1.5 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setExpanded((current) => !current)}
       >
-        <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-          <Globe className="h-3 w-3 text-foreground/45" />
-        </span>
+        <Globe className="h-3 w-3 shrink-0 text-foreground/45" />
         <span
           className={cn(
             "min-w-0 truncate",
@@ -163,74 +162,78 @@ export function HostedSearchGroupView({
         >
           {label}
         </span>
-        <ChevronDown
+        <ChevronRight
           aria-hidden="true"
           className={cn(
-            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
-            expanded && "rotate-180",
+            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
+            expanded && "rotate-90",
           )}
         />
       </button>
 
-      {hasDetails && expanded ? (
-        <div className="mt-1 ml-[7px] border-l border-border py-1 pl-[23px]">
-          <section
-            aria-label={locale === "en-US" ? "Web search activity" : "联网搜索过程"}
-            className="max-h-64 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
-          >
-            <div className="flex flex-col gap-1">
-              {queries.map((query) => (
-                <div
-                  className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5"
-                  key={query}
-                >
-                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] text-foreground">
-                    {query}
-                  </span>
+      {hasDetails ? (
+        <LazyCollapse open={expanded}>
+          {() => (
+            <div className="mt-1 border-l border-border/55 py-1 pl-3">
+              <section
+                aria-label={locale === "en-US" ? "Web search activity" : "联网搜索过程"}
+                className="max-h-64 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+              >
+                <div className="flex flex-col gap-1">
+                  {queries.map((query) => (
+                    <div
+                      className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5"
+                      key={query}
+                    >
+                      <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] text-foreground">
+                        {query}
+                      </span>
+                    </div>
+                  ))}
+
+                  {visibleSources.map((source) => (
+                    <a
+                      className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      href={source.url}
+                      key={source.url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <SourceFavicon url={source.url} />
+                      <span className="min-w-0 flex-1 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-medium text-foreground">
+                        {source.title || getSourceHost(source.url)}
+                      </span>
+                      <span className="max-w-40 shrink-0 truncate text-[calc(11.5px*var(--zone-font-scale,1))] text-muted-foreground">
+                        {getSourceHost(source.url)}
+                      </span>
+                    </a>
+                  ))}
+
+                  {failedCount > 0 ? (
+                    <p className="px-1.5 py-1 text-xs leading-5 text-destructive">
+                      {locale === "en-US"
+                        ? `${failedCount} ${failedCount === 1 ? "search" : "searches"} failed`
+                        : `${failedCount} 次搜索失败`}
+                    </p>
+                  ) : null}
+
+                  {hiddenSourceCount > 0 ? (
+                    <button
+                      className="ml-1 w-fit rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                      onClick={() => setShowAll(true)}
+                      type="button"
+                    >
+                      {locale === "en-US"
+                        ? `Show ${hiddenSourceCount} more sources`
+                        : `查看其余 ${hiddenSourceCount} 个来源`}
+                    </button>
+                  ) : null}
                 </div>
-              ))}
-
-              {visibleSources.map((source) => (
-                <a
-                  className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  href={source.url}
-                  key={source.url}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <SourceFavicon url={source.url} />
-                  <span className="min-w-0 flex-1 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-medium text-foreground">
-                    {source.title || getSourceHost(source.url)}
-                  </span>
-                  <span className="max-w-40 shrink-0 truncate text-[calc(11.5px*var(--zone-font-scale,1))] text-muted-foreground">
-                    {getSourceHost(source.url)}
-                  </span>
-                </a>
-              ))}
-
-              {failedCount > 0 ? (
-                <p className="px-1.5 py-1 text-xs leading-5 text-destructive">
-                  {locale === "en-US"
-                    ? `${failedCount} ${failedCount === 1 ? "search" : "searches"} failed`
-                    : `${failedCount} 次搜索失败`}
-                </p>
-              ) : null}
-
-              {hiddenSourceCount > 0 ? (
-                <button
-                  className="ml-1 w-fit rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                  onClick={() => setShowAll(true)}
-                  type="button"
-                >
-                  {locale === "en-US"
-                    ? `Show ${hiddenSourceCount} more sources`
-                    : `查看其余 ${hiddenSourceCount} 个来源`}
-                </button>
-              ) : null}
+              </section>
             </div>
-          </section>
-        </div>
+          )}
+        </LazyCollapse>
       ) : null}
     </section>
   );

@@ -170,7 +170,11 @@ export function AssistantWorkTrace({
 
       {hasDetails ? (
         <LazyCollapse className="[contain:layout_paint]" open={expanded}>
-          {() => <div className="mt-1 [scrollbar-gutter:stable]">{children}</div>}
+          {() => (
+            // 行距由本容器统一负责：各行组件不再自带 pb/my，
+            // 否则不同行类型会凑出不同的间隙。
+            <div className="mt-1 space-y-2 [scrollbar-gutter:stable]">{children}</div>
+          )}
         </LazyCollapse>
       ) : null}
       {running && hasDetails && !expanded && collapsedTail ? (

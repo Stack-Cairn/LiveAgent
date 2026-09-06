@@ -15,8 +15,9 @@ export type ComposerOverlayMetrics = {
    */
   floatingOverhangPx: number;
   /**
-   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。desktop 卡片为对齐
-   * 正文会整体右移，居中锚定在输入区上方的控件要跟着平移才能与卡片、药丸对齐。
+   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。卡片列与正文同为居中，
+   * 正常为 0；偏移非零时，居中锚定在输入区上方的控件要跟着平移才能与卡片、
+   * 药丸对齐。
    */
   centerOffsetPx: number;
 };

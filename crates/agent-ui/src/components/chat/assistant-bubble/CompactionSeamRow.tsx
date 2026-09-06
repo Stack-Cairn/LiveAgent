@@ -78,7 +78,7 @@ export function CompactionSeamRow(props: {
       <LazyCollapse open={open}>
         {() => (
           <div className="overflow-hidden px-0.5 pb-1 pt-1.5">
-            <div className="border-l-2 border-violet-500/25 pl-3 dark:border-violet-400/25">
+            <div className="border-l border-violet-500/25 pl-3 dark:border-violet-400/25">
               <div className="mb-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
                 {seam.generatedBy.providerId} · {seam.generatedBy.model}
               </div>

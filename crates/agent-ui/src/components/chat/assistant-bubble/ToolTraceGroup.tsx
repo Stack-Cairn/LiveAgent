@@ -190,12 +190,12 @@ function ToolTraceGroupInner(props: {
     TOOL_BATCH_ICONS[runningActivity?.category ?? batchCounts[0]?.category ?? "other"];
 
   return (
-    <div className="group/tool-trace min-w-0 max-w-full pb-1">
+    <div className="group/tool-trace min-w-0 max-w-full">
       <button
         type="button"
         aria-expanded={open}
         aria-label={open ? t("chat.tool.collapseActivity") : t("chat.tool.expandActivity")}
-        className="-mx-1.5 flex w-fit max-w-[calc(100%+0.75rem)] cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.035] hover:text-foreground/75"
+        className="-mx-1.5 flex w-fit max-w-[calc(100%+0.75rem)] cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75"
         onClick={() => setOpen((prev) => !prev)}
       >
         <BatchIcon className="h-3 w-3 shrink-0 text-foreground/45" />
@@ -221,12 +221,13 @@ function ToolTraceGroupInner(props: {
 
       <LazyCollapse open={open} retainWhileClosed={retainRunningToolContent && counts.running > 0}>
         {() => (
-          // 横向内缩与折叠头按钮同口径（-mx-1.5 / px-1.5），组内每行的图标
-          // 才和组头图标落在同一条竖线上。
-          <div className="-mx-1.5 overflow-hidden px-1.5 pt-0.5">
+          // 横向内缩与折叠头按钮同口径（外扩量恒等于内补量），组内每行的图标
+          // 才和组头图标落在同一条竖线上；12px 的外扩给行内 6px 的悬停底色和
+          // 圆角留出裁剪余量。
+          <div className="-mx-3 overflow-hidden px-3 pt-0.5">
             <div
               data-tool-trace-scroll=""
-              className="flex max-h-[400px] flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
+              className="-mx-3 flex max-h-[400px] flex-col gap-1 overflow-y-auto overscroll-contain px-3 [scrollbar-gutter:stable]"
             >
               {items.map((item, index) => (
                 <MemoToolCallItem

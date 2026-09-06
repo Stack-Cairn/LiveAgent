@@ -162,12 +162,7 @@ export function TranscriptAssistantMessageActions(
   } = props;
   const { t } = useLocale();
   const actions = (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 items-center justify-start gap-0.5",
-        !withAvatarSpacer && "pl-10",
-      )}
-    >
+    <div className="flex min-w-0 flex-1 items-center justify-start gap-0.5">
       <div
         className={cn(
           "chat-row-hover-chrome chat-row-hover-chrome--actions pointer-events-none flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-data-[actions-visible=true]/assistant:pointer-events-auto group-data-[actions-visible=true]/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 motion-reduce:transition-none",
@@ -248,8 +243,7 @@ export function TranscriptAssistantMessageActions(
     );
   }
   return (
-    <div className="chat-assistant-actions assistant-bubble-shell flex w-full max-w-full items-start gap-3">
-      <div className="assistant-bubble-avatar w-7 shrink-0" aria-hidden="true" />
+    <div className="chat-assistant-actions assistant-bubble-shell flex w-full max-w-full items-start">
       {actions}
     </div>
   );

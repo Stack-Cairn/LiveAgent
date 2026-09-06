@@ -1,4 +1,3 @@
-import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import type { AssistantTurnLayoutEntry } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
@@ -9,12 +8,9 @@ import {
 import { RoundBlockContent } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo } from "react";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { AssistantUnitRow } from "../transcript/rowModel";
-
-export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 
 export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;
@@ -62,13 +58,8 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   );
 
   return (
-    <div className="flex w-full max-w-full items-start gap-3">
-      {row.showAvatar ? (
-        <AssistantAvatar />
-      ) : (
-        <div aria-hidden="true" className="h-7 w-7 shrink-0" />
-      )}
-      <div className={cn("min-w-0 flex-1 space-y-2", row.showAvatar ? "pt-0.5" : "")}>
+    <div className="w-full max-w-full">
+      <div className="min-w-0 space-y-2">
         {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
           <RetryDetailsBlock attempts={retryAttempts} />
         ) : null}
@@ -82,7 +73,6 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
             thinkingOpen={unit.thinkingOpen}
             isLatestThinking={unit.isLatestThinking}
             traceKey={row.key}
-            standalone
             workdir={workdir}
             onOpenFileLink={onOpenFileLink}
           />

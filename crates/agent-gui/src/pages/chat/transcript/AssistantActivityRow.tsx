@@ -85,7 +85,7 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
       ))}
       {/* 整个回合存活期间常驻的脉冲星标：工具/思考的空档、压缩总结阶段都
           保持可见，告诉用户对话仍在进行；回合落定（live=false）即消失。 */}
-      {row.live ? <LiveSparkle className="pl-10 pt-1" paused={awaitingDecision} /> : null}
+      {row.live ? <LiveSparkle className="pt-1" paused={awaitingDecision} /> : null}
     </div>
   );
 });
