@@ -180,9 +180,11 @@
 /*
  * Fades the scroll container's own box, so the gradient stays pinned to the
  * viewport edges while content moves under it — no overlay element and no
- * scroll listener. The mask also eats the scrollbar, which is the point here;
- * pair it with `no-scrollbar` so the native bar isn't half-faded on engines
- * that still paint one.
+ * scroll listener. The mask also eats the scrollbar, so the native bar is
+ * hidden alongside it — but only inside the @supports block where the fade is
+ * actually applied. Engines without scroll-driven animations keep their
+ * scrollbar: with neither fade nor bar there would be no overflow affordance
+ * left at all (WKWebView only gained scroll(self y) in Safari 26).
  */
 @utility scroll-fade {
   --_scroll-fade-size: var(--scroll-fade-size, 48px);
@@ -193,9 +195,9 @@
 
      A static fade was tried here first and is wrong: the mask would be applied
      unconditionally, so the top band stays faded at scrollTop 0 and even when
-     the content does not overflow. With `no-scrollbar` on both consumers there
-     is then no overflow affordance left either, and the fade conveys nothing
-     because it never changes. The workspace list uses scroll-fade-8 (32px)
+     the content does not overflow. Hiding the scrollbar there too would leave
+     no overflow affordance at all, and the fade conveys nothing because it
+     never changes. The workspace list uses scroll-fade-8 (32px)
      against 30px rows, so the entire first row would sit inside the band.
      WKWebView (the desktop shell) only gained scroll(self y) in Safari 26, so
      this path is live, not hypothetical. */
@@ -227,6 +229,14 @@
        why the mask is only applied inside this block. */
     -webkit-mask-image: var(--_scroll-fade-mask);
     mask-image: var(--_scroll-fade-mask);
+    /* The mask would paint the native scrollbar half-faded on engines that
+       still draw one; the fade is the overflow signal from here on. */
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
     /* Longhands, not the `animation` shorthand: the shorthand gets expanded
        with `animation-duration: 0s` (CSS Animations 1's initial value), which
        collapses a scroll-driven animation into a hard snap at the range start.
@@ -245,17 +255,6 @@
 @utility scroll-fade-* {
   --scroll-fade-size: calc(var(--spacing) * --value(integer));
   --scroll-fade-size: --value([length], [percentage]);
-}
-
-@utility no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
 }
 
 @keyframes chat-work-pixel {

@@ -1530,9 +1530,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   // conversation list below: the scroll container spans the full
                   // sidebar width and rows are inset by the inner `px-2`. The
                   // drop affordance uses an inset ring instead of a border so it
-                  // never shifts that geometry. No scrollbar — overflow is
-                  // signalled by the edge fade instead.
-                  "no-scrollbar scroll-fade scroll-fade-8 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
+                  // never shifts that geometry. scroll-fade signals overflow by
+                  // the edge fade and hides the native bar only on engines
+                  // where that fade is actually applied.
+                  "scroll-fade scroll-fade-8 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
                   projectsCollapsed ? "opacity-0" : "opacity-100",
                   workspaceFolderDropActive &&
                     "bg-primary/[0.045] ring-1 ring-primary/40 ring-inset",
@@ -2098,7 +2099,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <div
               ref={historyScrollRef}
               aria-busy={listStatus === "loading" || listStatus === "syncing" || isLoadingMore}
-              className="chat-history-list no-scrollbar scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
+              className="chat-history-list scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
             >
               {items.length > 0 ? (
                 <div
