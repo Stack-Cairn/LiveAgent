@@ -220,7 +220,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsResources": "Resources",
   "chat.workspaceSettingsProjectName": "Project name",
   "chat.workspaceSettingsProjectNameRequired": "Project name is required.",
-  "chat.workspaceSettingsProjectNameReadonly": "The default workspace name cannot be changed.",
   "chat.workspaceSettingsProjectType": "Project type",
   "chat.workspaceSettingsKindManaged": "Managed project",
   "chat.workspaceSettingsKindFolder": "Local folder",

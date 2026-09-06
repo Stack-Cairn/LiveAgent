@@ -1,4 +1,3 @@
-import { AlertTriangle } from "@liveagent/ui/components/IconSet";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -35,23 +34,6 @@ type PendingConfirmDialog = ConfirmDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-const toneClassNames: Record<
-  ConfirmDialogTone,
-  {
-    icon: string;
-    panel: string;
-  }
-> = {
-  warning: {
-    icon: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    panel: "border-amber-500/20 bg-amber-500/10",
-  },
-  destructive: {
-    icon: "border-destructive/25 bg-destructive/10 text-destructive",
-    panel: "border-destructive/20 bg-destructive/10",
-  },
-};
-
 function ConfirmDialog(
   props: ConfirmDialogOptions & { onCancel: () => void; onConfirm: () => void },
 ) {
@@ -63,13 +45,11 @@ function ConfirmDialog(
     confirmLabel,
     cancelLabel,
     closeLabel = cancelLabel,
-    tone = "destructive",
     hideCancel = false,
     preferCancel = false,
     onCancel,
     onConfirm,
   } = props;
-  const toneClasses = toneClassNames[tone];
 
   return (
     <AlertDialog
@@ -78,47 +58,28 @@ function ConfirmDialog(
         if (!open) onCancel();
       }}
     >
-      <AlertDialogContent className="max-w-md p-0">
-        <AlertDialogHeader className="flex-row items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div
-              className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
-                toneClasses.icon,
-              )}
-            >
-              <AlertTriangle className="h-5 w-5" />
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader className="pr-14">
+          <AlertDialogTitle className="break-words">{title}</AlertDialogTitle>
+          {subtitle ? (
+            <div className="break-words text-xs leading-relaxed text-muted-foreground">
+              {subtitle}
             </div>
-            <div className="min-w-0">
-              <AlertDialogTitle className="break-words text-base leading-normal">
-                {title}
-              </AlertDialogTitle>
-              {subtitle ? (
-                <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                  {subtitle}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
+          ) : null}
           <AlertDialogCloseButton
             label={closeLabel}
-            className="text-muted-foreground hover:text-foreground"
+            className="absolute right-4 top-4 z-10 text-muted-foreground hover:text-foreground"
           />
         </AlertDialogHeader>
 
         {description || detail ? (
           <AlertDialogBody>
-            <AlertDialogDescription className="space-y-3" render={<div />}>
+            <AlertDialogDescription className="space-y-2.5" render={<div />}>
               {description ? (
-                <div
-                  className={cn("rounded-xl border px-4 py-3 text-sm leading-6", toneClasses.panel)}
-                >
-                  {description}
-                </div>
+                <div className="text-sm leading-relaxed text-foreground">{description}</div>
               ) : null}
               {detail ? (
-                <div className="break-words rounded-xl border border-border/60 bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                <div className="break-all rounded-md bg-muted/50 px-2.5 py-1.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground">
                   {detail}
                 </div>
               ) : null}
@@ -126,12 +87,17 @@ function ConfirmDialog(
           </AlertDialogBody>
         ) : null}
 
-        <AlertDialogFooter className="bg-muted/20">
+        <AlertDialogFooter>
           <AlertDialogActions>
             {hideCancel ? null : (
               <AlertDialogClose
                 render={
-                  <Button type="button" variant={preferCancel ? "default" : "outline"} autoFocus />
+                  <Button
+                    type="button"
+                    variant={preferCancel ? "default" : "outline"}
+                    className="h-8"
+                    autoFocus
+                  />
                 }
               >
                 {cancelLabel}
@@ -141,11 +107,10 @@ function ConfirmDialog(
               type="button"
               variant={preferCancel ? "ghost" : "destructive"}
               onClick={onConfirm}
-              className={
-                preferCancel
-                  ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  : undefined
-              }
+              className={cn(
+                "h-8",
+                preferCancel && "text-destructive hover:bg-destructive/10 hover:text-destructive",
+              )}
             >
               {confirmLabel}
             </Button>

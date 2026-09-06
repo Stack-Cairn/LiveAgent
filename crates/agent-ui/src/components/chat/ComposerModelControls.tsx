@@ -9,13 +9,10 @@ import {
   type SelectedModel,
 } from "@liveagent/app/lib/settings";
 import {
-  ArrowDownAZ,
-  Brain,
   Check,
   ChevronDown,
   Globe,
   GlobeOff,
-  Layers,
   Lightbulb,
   LightbulbOff,
   Pencil,
@@ -35,13 +32,12 @@ import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import {
   groupModelOptionsByProvider,
   type ProviderSortMode,
-  persistProviderSortMode,
   readStoredProviderSortMode,
   sortModelOptionGroups,
 } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   off: "settings.reasoning.off",
@@ -82,10 +78,10 @@ function RuntimeToggleChip(props: {
       title={ariaLabel}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 text-[11px] font-medium outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
         pressed
           ? pressedClassName
-          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+          : "bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground",
       )}
     >
       {icon}
@@ -97,9 +93,11 @@ function RuntimeToggleChip(props: {
 // The visible range thumb is 16px wide, so the custom track is inset by 8px.
 // Keeping the track and thumb on the same geometry avoids browser-specific
 // range alignment drift while preserving native keyboard and pointer behavior.
-const EFFORT_THUMB_INSET_CLASS = "right-2 left-2";
-
-function ReasoningEffortSlider(props: {
+// 推理强度：分段按钮。此前是「脑图标 + 带刻度滑块 + 数值胶囊」——同一个值
+// 的三重渲染，其中只有滑块可交互，胶囊却长得和旁边真正的按钮一样，必然被
+// 误点；且滑块要拖动才能改，看不出总共几档。分段按钮一眼看全、一击直达，
+// 也顺带消除了 indexOf 夹取导致的拇指/数值不同步。
+function ReasoningEffortSegments(props: {
   choices: ReasoningLevel[];
   value: ReasoningLevel;
   disabled?: boolean;
@@ -117,75 +115,108 @@ function ReasoningEffortSlider(props: {
     formatLevelCompact,
     onSelect,
   } = props;
-  const max = Math.max(1, choices.length - 1);
-  const index = Math.max(0, choices.indexOf(value));
-  const percent = (index / max) * 100;
-  const isOff = value === "off";
+  const trackRef = useRef<HTMLDivElement>(null);
+  // 选中指示器单独成层并用 CSS 过渡移动：若把底色挂在各按钮上，切换只能是
+  // 跳变。位置按真实 DOM 量取，因为各段宽度随标签长短而不同。
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+
+  const activeIndex = choices.indexOf(value);
+
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const measure = () => {
+      const segments = track.querySelectorAll<HTMLElement>("[data-effort-segment]");
+      const active = activeIndex >= 0 ? segments[activeIndex] : undefined;
+      setIndicator(active ? { left: active.offsetLeft, width: active.offsetWidth } : null);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    // 字体加载、弹层宽度变化都会改变分段尺寸，指示器要跟着重新量。
+    const observer = new ResizeObserver(measure);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, [activeIndex]);
+
+  // 命中测试按真实 DOM 矩形做，而不是按 index 均分百分比：各段宽度随标签
+  // 长短而不同（flex 项的 min-width:auto 不会让它们收缩到比文字更窄）。
+  const selectAtClientX = (clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const segments = Array.from(track.querySelectorAll<HTMLElement>("[data-effort-segment]"));
+    if (segments.length === 0) return;
+    let hit = segments.findIndex((segment) => {
+      const rect = segment.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right;
+    });
+    // 拖到轨道两端之外时钳到首/末档，避免手指滑出边界后档位不动。
+    if (hit < 0) {
+      const first = segments[0].getBoundingClientRect();
+      hit = clientX < first.left ? 0 : segments.length - 1;
+    }
+    const next = choices[hit];
+    if (next && next !== value) onSelect(next);
+  };
+
   return (
     <div
-      title={`${label}: ${formatLevel(value)}`}
+      ref={trackRef}
+      role="radiogroup"
+      aria-label={label}
+      onPointerDown={(event) => {
+        if (disabled || event.button !== 0) return;
+        // 捕获指针：拖动过程中即使滑出轨道也继续收到 move 事件。
+        event.currentTarget.setPointerCapture(event.pointerId);
+        selectAtClientX(event.clientX);
+      }}
+      onPointerMove={(event) => {
+        if (disabled) return;
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        selectAtClientX(event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }}
       className={cn(
-        "model-runtime-effort flex min-w-0 flex-1 items-center gap-2",
+        "relative flex h-7 min-w-0 flex-1 touch-none select-none items-stretch gap-0.5 rounded-lg bg-muted/60 p-0.5",
         disabled && "opacity-50",
       )}
     >
-      <Brain className="size-4 shrink-0 text-foreground/60 dark:text-foreground/70" />
-      <div className="group relative flex h-8 min-w-0 flex-1 items-center">
-        <div
+      {indicator ? (
+        <span
           aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 overflow-visible rounded-full bg-foreground/[0.10] shadow-[inset_0_1px_1px_rgba(15,23,42,0.08)] dark:bg-white/[0.12] dark:shadow-[inset_0_1px_1px_rgba(0,0,0,0.35)]",
-            EFFORT_THUMB_INSET_CLASS,
-          )}
-        >
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-foreground/65 transition-[width] duration-150 ease-out dark:bg-white/65"
-            style={{ width: `${percent}%` }}
-          />
-          {choices.map((level, stopIndex) => (
-            <span
-              key={level}
-              className={cn(
-                "absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 rounded-full",
-                stopIndex <= index
-                  ? "bg-background/75 dark:bg-background/80"
-                  : "bg-foreground/20 dark:bg-white/25",
-              )}
-              style={{ left: `${(stopIndex / max) * 100}%` }}
-            />
-          ))}
-          <span
-            className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-foreground/20 bg-background shadow-[0_1px_4px_rgba(15,23,42,0.22),0_0_0_1px_rgba(255,255,255,0.45)] transition-[left,transform] duration-150 ease-out group-hover:scale-105 dark:border-white/25 dark:shadow-[0_1px_5px_rgba(0,0,0,0.55)]"
-            style={{ left: `${percent}%` }}
-          >
-            <span className="size-1.5 rounded-full bg-foreground/70 dark:bg-white/75" />
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={max}
-          step={1}
-          value={index}
-          disabled={disabled}
-          aria-label={label}
-          aria-valuetext={formatLevel(value)}
-          className="relative z-10 h-8 w-full min-w-0 cursor-pointer appearance-none rounded-full bg-transparent outline-hidden disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-foreground/20 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-8 [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-8 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:opacity-0"
-          onPointerDown={(event) => event.stopPropagation()}
-          onChange={(event) => {
-            const next = choices[Number(event.target.value)];
-            if (next) onSelect(next);
-          }}
+          style={{ left: indicator.left, width: indicator.width }}
+          className="pointer-events-none absolute bottom-0.5 top-0.5 rounded-md bg-sky-500/15 transition-[left,width] duration-200 ease-out motion-reduce:transition-none"
         />
-      </div>
-      <span
-        className={cn(
-          "min-w-9 shrink-0 rounded-lg border border-border/45 bg-background/65 px-1.5 py-1.5 text-center text-[10.5px] font-semibold leading-none text-foreground/75 shadow-sm dark:bg-background/35 dark:text-foreground/80",
-          isOff && "text-muted-foreground shadow-none",
-        )}
-      >
-        {formatLevelCompact(value)}
-      </span>
+      ) : null}
+      {choices.map((level) => {
+        const isSelected = level === value;
+        return (
+          // biome-ignore lint/a11y/useSemanticElements: Segmented buttons need button semantics for the shared focus/disabled styling; native radios cannot carry it.
+          <button
+            key={level}
+            data-effort-segment=""
+            data-active={isSelected ? "true" : undefined}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            disabled={disabled}
+            title={`${label}: ${formatLevel(level)}`}
+            onClick={() => onSelect(level)}
+            className={cn(
+              "relative z-10 flex flex-1 items-center justify-center whitespace-nowrap rounded-md px-1.5 text-[11px] font-medium transition-colors",
+              isSelected
+                ? "text-sky-700 dark:text-sky-300"
+                : "text-muted-foreground hover:text-foreground",
+              disabled ? "cursor-not-allowed" : "cursor-pointer",
+            )}
+          >
+            {formatLevelCompact(level)}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -228,9 +259,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [expandedGroupId, setExpandedGroupId] = useState<string | null | undefined>(undefined);
-  const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
-    readStoredProviderSortMode(),
-  );
+  // 排序模式仍沿用用户此前持久化的选择；面板内的切换入口已移除（图标显示
+  // 的是目标模式而非当前模式，且没有任何开关态，几乎不可用）。
+  const [providerSortMode] = useState<ProviderSortMode>(() => readStoredProviderSortMode());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popoverContentRef = useRef<HTMLDivElement>(null);
   const executionModeRadioName = useId();
@@ -264,7 +295,6 @@ export const ComposerModelControls = memo(function ComposerModelControls(
 
   const normalizedSearch = modelSearch.trim().toLowerCase();
   const groups = sortModelOptionGroups(groupModelOptionsByProvider(modelOptions), providerSortMode);
-  const nextProviderSortMode: ProviderSortMode = providerSortMode === "type" ? "alpha" : "type";
   const selectedOption = modelOptions.find((option) => option.value === selectedValue);
   const selectedGroupId = selectedOption?.providerId;
   const triggerLabel = selectedOption?.model ?? currentModelLabel;
@@ -284,17 +314,11 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       : ["off", ...reasoningOptions.filter((level) => level !== "off")]
     : [];
   const selectedEffort: ReasoningLevel = thinkingOn ? selectedReasoning : "off";
-  const sortToggleTitle =
-    nextProviderSortMode === "alpha"
-      ? t("chat.sortProvidersByName")
-      : t("chat.sortProvidersByType");
-
-  const toggleProviderSortMode = () => {
-    persistProviderSortMode(nextProviderSortMode);
-    setProviderSortMode(nextProviderSortMode);
-  };
+  // 搜索期间所有分组强制展开：此时折叠切换必须一并禁用，否则点击会静默
+  // 改写 expandedGroupId（画面无变化），且 aria-expanded 会与实际不符。
+  const groupToggleLocked = normalizedSearch.length > 0;
   const isGroupExpanded = (id: string) => {
-    if (normalizedSearch.length > 0) return true;
+    if (groupToggleLocked) return true;
     const activeGroupId = expandedGroupId === undefined ? selectedGroupId : expandedGroupId;
     return activeGroupId === id;
   };
@@ -350,41 +374,33 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         collisionPadding={8}
         initialFocus={resolveModelPickerInitialFocus}
         aria-label={t("chat.selectModel")}
-        className="model-selector-dropdown flex max-h-[min(32rem,var(--available-height,32rem))] w-[min(21rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border-black/[0.07] bg-popover/96 p-0 text-xs shadow-[0_1px_2px_rgba(15,23,42,0.08),0_18px_56px_-20px_rgba(15,23,42,0.42)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/[0.12] dark:bg-popover/94 dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),0_20px_60px_-20px_rgba(0,0,0,0.82)]"
+        className="flex max-h-[min(26rem,var(--available-height,26rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg"
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-border/45 bg-muted/[0.12] px-2.5 pb-2.5 pt-2.5">
-            <div className="flex items-center justify-between gap-3 px-0.5 pb-2">
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-foreground">
-                  {t("chat.selectModel")}
-                </div>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted-foreground">
-                  {selectedOption ? (
-                    <ProviderBrandIcon
-                      type={selectedOption.providerType}
-                      className="h-3 w-3 opacity-75"
-                    />
-                  ) : null}
-                  <span className="truncate">
-                    {selectedOption
-                      ? `${selectedOption.providerName} · ${selectedOption.model}`
-                      : currentModelLabel}
-                  </span>
-                </div>
-              </div>
+          {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
+              provider·model 副标题：模型名在触发器、副标题、列表勾选处重复
+              三次，且 11px 的标题比 12px 的模型行还小，标题反而是面板里最小
+              的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。
+              供应商排序切换已移除：它的图标显示的是「目标模式」而非当前模式、
+              没有 aria-pressed、也没有任何开关态，提示文案还承诺了「按类型
+              分组」这个它并不做的事。 */}
+          <div className="shrink-0 px-2 py-2">
+            <div className="flex items-center justify-between gap-2 pb-1.5">
+              <span className="min-w-0 shrink truncate pl-0.5 text-xs font-semibold text-foreground">
+                {t("chat.selectModel")}
+              </span>
               <div
                 role="radiogroup"
                 aria-label={t("settings.executionMode")}
                 title={t("settings.executionMode")}
-                className="flex shrink-0 rounded-lg bg-muted/55 p-0.5 ring-1 ring-border/45"
+                className="flex shrink-0 rounded-lg bg-muted/60 p-0.5"
               >
                 <label
                   className={cn(
                     "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
                       ? "text-muted-foreground hover:text-foreground"
-                      : "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]",
+                      : "bg-background text-foreground shadow-sm",
                   )}
                 >
                   <input
@@ -401,7 +417,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                   className={cn(
                     "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
-                      ? "bg-background text-foreground shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.08]"
+                      ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -417,35 +433,33 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/55 bg-background/78 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] transition-[border-color,background-color,box-shadow] focus-within:border-ring/30 focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/15 dark:shadow-none">
-                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
-                <input
-                  ref={searchInputRef}
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder={t("chat.searchModel")}
-                  className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
-                  onKeyDown={(event) => event.stopPropagation()}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={toggleProviderSortMode}
-                title={sortToggleTitle}
-                aria-label={sortToggleTitle}
-                className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border/55 bg-background/78 text-muted-foreground/70 transition-[border-color,background-color,color] hover:border-border hover:bg-muted/65 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              >
-                {nextProviderSortMode === "alpha" ? (
-                  <ArrowDownAZ className="h-3.5 w-3.5" />
-                ) : (
-                  <Layers className="h-3.5 w-3.5" />
-                )}
-              </button>
+            <div className="flex h-7 w-full items-center gap-2 rounded-lg bg-muted/60 px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-ring/25">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
+              <input
+                ref={searchInputRef}
+                value={modelSearch}
+                onChange={(event) => setModelSearch(event.target.value)}
+                placeholder={t("chat.searchModel")}
+                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+                onKeyDown={(event) => {
+                  // Escape 必须冒泡给 Popover 关闭，方向键留给列表导航；
+                  // 其余按键才拦下，避免触发编辑器/全局快捷键。
+                  if (
+                    event.key === "Escape" ||
+                    event.key === "ArrowDown" ||
+                    event.key === "ArrowUp" ||
+                    event.key === "Enter"
+                  ) {
+                    return;
+                  }
+                  event.stopPropagation();
+                }}
+              />
             </div>
           </div>
-
-          <div className="min-h-24 flex-1 space-y-1 overflow-y-auto overscroll-contain px-1.5 py-1.5 [scrollbar-gutter:stable]">
+          {/* pt-0：sticky 分组表头贴 top-0，容器顶部若还有内边距，那条带子里的
+              内容会在表头停靠位置之上滚过并露出来。底部留白由 pb 负责。 */}
+          <div className="min-h-20 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-1 [scrollbar-gutter:stable]">
             {(() => {
               const filteredGroups = normalizedSearch
                 ? groups
@@ -472,29 +486,20 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 const expanded = isGroupExpanded(group.id);
                 const isSelectedGroup = selectedGroupId === group.id;
                 return (
-                  <div
-                    key={group.id}
-                    className={cn(
-                      "flex flex-col gap-0.5 rounded-xl border p-0.5 transition-[border-color,background-color]",
-                      expanded
-                        ? "border-border/50 bg-muted/[0.14]"
-                        : isSelectedGroup
-                          ? "border-border/35 bg-muted/[0.08]"
-                          : "border-transparent",
-                    )}
-                  >
+                  <div key={group.id} className={cn("flex flex-col gap-0.5")}>
                     <div
                       className={cn(
-                        "group sticky top-0 z-10 flex h-8 shrink-0 items-stretch rounded-lg bg-popover/95 backdrop-blur-xl transition-colors hover:bg-muted/55 focus-within:bg-muted/55 supports-[backdrop-filter]:bg-popover/85",
+                        "group sticky top-0 z-10 flex h-8 shrink-0 items-stretch rounded-lg bg-popover transition-colors hover:bg-muted/55 focus-within:bg-muted/55",
                         isSelectedGroup && "text-foreground",
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => toggleGroup(group.id)}
+                        disabled={groupToggleLocked}
                         aria-expanded={expanded}
                         className={cn(
-                          "model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                          "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
                           isSelectedGroup
                             ? "text-foreground"
                             : "text-muted-foreground/85 dark:text-white/80",
@@ -513,22 +518,20 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                           onOpenSettings("providers", group.id);
                         }}
                         aria-label={`${t("settings.editProvider")}: ${group.name}`}
-                        className="pointer-events-none flex w-7 shrink-0 cursor-pointer items-center justify-center text-muted-foreground/65 opacity-0 transition-[opacity,color,background-color] duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:bg-muted/65 hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                        className="flex w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/50 opacity-100 transition-colors duration-150 hover:bg-muted/65 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleGroup(group.id)}
+                        disabled={groupToggleLocked}
                         aria-expanded={expanded}
                         aria-label={`${
                           expanded ? t("chat.collapseProvider") : t("chat.expandProvider")
                         }: ${group.name}`}
-                        className="model-selector-group-label flex shrink-0 cursor-pointer items-center gap-1.5 rounded-r-lg px-2 py-0 text-muted-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white/75"
+                        className="flex shrink-0 cursor-pointer items-center rounded-r-lg px-2 py-0 text-muted-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white/75"
                       >
-                        <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-muted/65 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums ring-1 ring-border/30">
-                          {group.opts.length}
-                        </span>
                         <ChevronDown
                           className={cn(
                             "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
@@ -552,22 +555,28 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 setIsModelPickerOpen(false);
                               }}
                               className={cn(
-                                "model-selector-item flex h-8 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg py-0 pl-7 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
+                                "flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-lg py-0 pl-8 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
                                 isSelected &&
-                                  "bg-background font-medium shadow-sm ring-1 ring-border/45 hover:bg-background focus-visible:bg-background",
+                                  "bg-muted/70 font-medium hover:bg-muted/70 focus-visible:bg-muted/70",
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-2">
+                                {/* 12px：比分组表头的 14px 小一档，避免子行图标
+                                    压过父行（改前是 16px，层级是倒的）。 */}
                                 <ProviderBrandIcon
                                   type={option.providerType}
-                                  className={cn("opacity-70", isSelected && "opacity-100")}
+                                  className={cn(
+                                    "h-3 w-3 shrink-0",
+                                    isSelected ? "opacity-80" : "opacity-45",
+                                  )}
                                 />
                                 <span className="min-w-0 truncate">{option.model}</span>
                               </span>
                               {isSelected ? (
-                                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-sm">
-                                  <Check className="size-3" strokeWidth={3} />
-                                </span>
+                                <Check
+                                  className="size-3.5 shrink-0 text-foreground"
+                                  strokeWidth={2.5}
+                                />
                               ) : null}
                             </button>
                           );
@@ -579,10 +588,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
             })()}
           </div>
         </div>
-
         <fieldset
           aria-label={t("chat.runtime.controls")}
-          className="model-runtime-controls flex shrink-0 items-center gap-2 border-t border-border/45 bg-muted/[0.16] px-2.5 py-2"
+          className="flex shrink-0 items-center gap-2 border-t border-border/45 px-2 py-1.5"
         >
           <RuntimeToggleChip
             pressed={chatRuntimeControls.nativeWebSearchEnabled}
@@ -593,7 +601,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 ? t("chat.runtime.webSearchOn")
                 : t("chat.runtime.webSearchOff")
             }
-            pressedClassName="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
+            pressedClassName="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
             icon={
               chatRuntimeControls.nativeWebSearchEnabled ? (
                 <Globe className="h-3.5 w-3.5 shrink-0" />
@@ -611,7 +619,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
           <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border/70" />
 
           {showEffortBar ? (
-            <ReasoningEffortSlider
+            <ReasoningEffortSegments
               choices={effortChoices}
               value={selectedEffort}
               disabled={disabled}
@@ -638,7 +646,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                     ? t("chat.runtime.thinkingOn")
                     : t("chat.runtime.thinkingOff")
               }
-              pressedClassName="border-amber-500/20 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300"
+              pressedClassName="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
               icon={
                 thinkingOn ? (
                   <Lightbulb className="h-3.5 w-3.5 shrink-0" />

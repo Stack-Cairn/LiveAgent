@@ -202,7 +202,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsResources": "资源配置",
   "chat.workspaceSettingsProjectName": "项目名称",
   "chat.workspaceSettingsProjectNameRequired": "项目名称不能为空。",
-  "chat.workspaceSettingsProjectNameReadonly": "默认工作区名称不可修改。",
   "chat.workspaceSettingsProjectType": "项目类型",
   "chat.workspaceSettingsKindManaged": "托管项目",
   "chat.workspaceSettingsKindFolder": "本地文件夹",

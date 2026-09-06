@@ -43,7 +43,7 @@ export function McpImportSourcePicker(props: {
               key={scan.tool}
               value={scan.tool}
               title={isLocalFile ? scan.configPath : undefined}
-              className="group h-7 shrink-0 gap-1.5 rounded-md border border-transparent px-2.5 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
+              className="group shrink-0 gap-1.5 rounded-md border border-transparent px-2.5 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
             >
               <ExternalToolSourceIcon tool={scan.tool} className="h-3.5 w-3.5" />
               <span className="max-w-[10rem] truncate">{toolLabel}</span>

@@ -255,8 +255,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <button
               type="button"
               className={cn(
-                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
-                activePanel === "general" && "bg-primary/10 font-medium text-primary",
+                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                activePanel === "general"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
               onClick={() => setActivePanel("general")}
               aria-current={activePanel === "general" ? "page" : undefined}
@@ -267,8 +269,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <button
               type="button"
               className={cn(
-                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
-                activePanel === "request" && "bg-primary/10 font-medium text-primary",
+                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                activePanel === "request"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
               onClick={() => {
                 setActivePanel("request");
@@ -293,8 +297,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <button
               type="button"
               className={cn(
-                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
-                activePanel === "usage" && "bg-primary/10 font-medium text-primary",
+                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                activePanel === "usage"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
               onClick={() => {
                 setActivePanel("usage");
@@ -315,20 +321,25 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               <section key="general" className="provider-panel-enter">
                 <div className="text-sm font-semibold">{t("settings.basicInformation")}</div>
 
-                <div className="mt-3 space-y-1.5">
-                  <Label htmlFor="modal-name">{t("settings.providerName")}</Label>
+                <div className="mt-3 space-y-2">
+                  <Label htmlFor="modal-name" className="text-muted-foreground">
+                    {t("settings.providerName")}
+                  </Label>
                   <Input
                     id="modal-name"
+                    className="h-8 shadow-none"
                     value={name}
                     onChange={(event) => setName(event.currentTarget.value)}
                   />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className="flex min-h-7 flex-wrap items-center gap-2.5">
-                      <Label htmlFor="modal-baseurl">{t("settings.baseUrl")}</Label>
-                      <div className="flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5">
+                      <Label htmlFor="modal-baseurl" className="text-muted-foreground">
+                        {t("settings.baseUrl")}
+                      </Label>
+                      <div className="ml-auto flex items-center gap-1.5">
                         <Link2
                           className={cn(
                             "h-3.5 w-3.5",
@@ -344,6 +355,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           {t("settings.providerFullUrl")}
                         </span>
                         <Switch
+                          size="sm"
                           checked={isFullUrl}
                           onCheckedChange={setIsFullUrl}
                           aria-label={t("settings.providerFullUrl")}
@@ -353,26 +365,29 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </div>
                     <Input
                       id="modal-baseurl"
+                      className="h-8 shadow-none"
                       value={baseUrl}
                       onChange={(event) => setBaseUrl(event.currentTarget.value)}
                     />
                     {isFullUrl ? (
-                      <p className="text-xs leading-relaxed text-muted-foreground">
+                      <p className="text-xs leading-5 text-muted-foreground">
                         {t("settings.providerFullUrlHint")}
                       </p>
                     ) : null}
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className="flex min-h-7 items-center">
-                      <Label htmlFor="modal-apikey">API Key</Label>
+                      <Label htmlFor="modal-apikey" className="text-muted-foreground">
+                        API Key
+                      </Label>
                     </div>
                     <div className="relative">
                       <Input
                         id="modal-apikey"
                         type={showApiKey ? "text" : "password"}
                         value={apiKey}
-                        className="pr-10"
+                        className="h-8 pr-9 shadow-none"
                         onChange={(event) => setApiKey(event.currentTarget.value)}
                         onFocus={(event) => {
                           if (apiKeyIsRedactedDisplay) event.currentTarget.select();
@@ -382,7 +397,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                        className="absolute right-0 top-0 h-8 w-8 text-muted-foreground hover:bg-transparent hover:text-foreground"
                         onClick={() => setShowApiKey((prev) => !prev)}
                         title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
                         aria-label={
@@ -396,28 +411,31 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 </div>
 
                 {providerType !== "gemini" ? (
-                  <div className="mt-3 space-y-1.5">
-                    <Label htmlFor="modal-models-url">{t("settings.providerModelsUrl")}</Label>
+                  <div className="mt-4 space-y-2">
+                    <Label htmlFor="modal-models-url" className="text-muted-foreground">
+                      {t("settings.providerModelsUrl")}
+                    </Label>
                     <Input
                       id="modal-models-url"
+                      className="h-8 shadow-none"
                       value={modelsUrl}
                       placeholder={t("settings.providerModelsUrlPlaceholder")}
                       onChange={(event) => setModelsUrl(event.currentTarget.value)}
                     />
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                    <p className="text-xs leading-5 text-muted-foreground">
                       {t("settings.providerModelsUrlHint")}
                     </p>
                   </div>
                 ) : null}
 
                 {providerType === "codex" ? (
-                  <div className="mt-4 space-y-1.5">
-                    <Label>{t("settings.requestFormat")}</Label>
+                  <div className="mt-4 space-y-2">
+                    <Label className="text-muted-foreground">{t("settings.requestFormat")}</Label>
                     <Select
                       value={requestFormat}
                       onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="h-8 w-full shadow-none">
                         <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -438,7 +456,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={modelSearch}
-                        className="h-9 pl-9 pr-9 text-xs"
+                        className="h-8 pl-9 pr-9 text-xs shadow-none"
                         placeholder={t("settings.searchModels")}
                         aria-label={t("settings.searchModels")}
                         autoComplete="off"
@@ -451,7 +469,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       {modelSearch ? (
                         <button
                           type="button"
-                          className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                           onClick={() => setModelSearch("")}
                           title={t("settings.clearModelSearch")}
                           aria-label={t("settings.clearModelSearch")}
@@ -464,7 +482,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
+                      className="h-8 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
                       onClick={handleRefresh}
                       disabled={fetchingModels}
                     >
@@ -475,7 +493,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
+                      className="h-8 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
                       onClick={() => setAddingModel(true)}
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -521,7 +539,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <Input
                         autoFocus
                         value={newModelName}
-                        className="h-9 text-sm max-[720px]:h-10 max-[720px]:basis-full"
+                        className="h-8 text-sm shadow-none max-[720px]:h-10 max-[720px]:basis-full"
                         placeholder={t("settings.modelName")}
                         onChange={(event) => setNewModelName(event.currentTarget.value)}
                         onKeyDown={(event) => {
@@ -529,14 +547,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           if (event.key === "Escape") setAddingModel(false);
                         }}
                       />
-                      <Button size="sm" className="h-9" onClick={handleAddModel}>
+                      <Button size="sm" className="h-8 shadow-none" onClick={handleAddModel}>
                         {t("settings.add")}
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-9"
+                        className="h-8 shadow-none"
                         onClick={() => setAddingModel(false)}
                       >
                         {t("settings.cancel")}
@@ -632,7 +650,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                  "h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground max-[720px]:col-start-3 max-[720px]:row-start-2",
+                                  "h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground max-[720px]:col-start-3 max-[720px]:row-start-2",
                                   isEditingModel && "bg-primary/10 text-primary",
                                 )}
                                 onClick={(event) => {
@@ -648,7 +666,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-[720px]:col-start-4 max-[720px]:row-start-2"
+                                className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-[720px]:col-start-4 max-[720px]:row-start-2"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   removeModel(model.id);
@@ -663,14 +681,17 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             {isEditingModel && editingModel ? (
                               <div className="mx-3 mb-3 rounded-lg border bg-muted/20 p-3">
                                 <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                                  <div className="space-y-1.5">
-                                    <Label>{t("settings.contextWindow")}</Label>
+                                  <div className="space-y-2">
+                                    <Label className="text-muted-foreground">
+                                      {t("settings.contextWindow")}
+                                    </Label>
                                     <Input
                                       inputMode="numeric"
                                       aria-invalid={
                                         editingModelContextWindow === null ? true : undefined
                                       }
                                       className={cn(
+                                        "h-8 shadow-none",
                                         editingModelContextWindow === null &&
                                           "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
                                       )}
@@ -683,14 +704,17 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                       }}
                                     />
                                   </div>
-                                  <div className="space-y-1.5">
-                                    <Label>{t("settings.maxOutputToken")}</Label>
+                                  <div className="space-y-2">
+                                    <Label className="text-muted-foreground">
+                                      {t("settings.maxOutputToken")}
+                                    </Label>
                                     <Input
                                       inputMode="numeric"
                                       aria-invalid={
                                         editingModelMaxOutputToken === null ? true : undefined
                                       }
                                       className={cn(
+                                        "h-8 shadow-none",
                                         editingModelMaxOutputToken === null &&
                                           "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
                                       )}
@@ -704,8 +728,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     />
                                   </div>
                                   {canOverrideModelInputModalities ? (
-                                    <div className="col-span-2 space-y-1.5 max-[720px]:col-span-1">
-                                      <Label>{t("settings.modelInputModalities")}</Label>
+                                    <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
+                                      <Label className="text-muted-foreground">
+                                        {t("settings.modelInputModalities")}
+                                      </Label>
                                       <Select
                                         value={editingModelInputModalitiesMode}
                                         onValueChange={(value) => {
@@ -719,6 +745,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                         }}
                                       >
                                         <SelectTrigger
+                                          className="h-8 shadow-none"
                                           aria-label={t("settings.modelInputModalities")}
                                         >
                                           <SelectValue>
@@ -743,14 +770,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                           </SelectItem>
                                         </SelectContent>
                                       </Select>
-                                      <p className="text-xs leading-relaxed text-muted-foreground">
+                                      <p className="text-xs leading-5 text-muted-foreground">
                                         {t("settings.modelInputModalitiesHint")}
                                       </p>
                                     </div>
                                   ) : null}
                                   {providerType === "codex" ? (
-                                    <div className="col-span-2 space-y-1.5 max-[720px]:col-span-1">
-                                      <Label>{t("settings.promptCacheHintModelOverride")}</Label>
+                                    <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
+                                      <Label className="text-muted-foreground">
+                                        {t("settings.promptCacheHintModelOverride")}
+                                      </Label>
                                       <Select
                                         value={editingModel.model.promptCacheHintMode ?? "inherit"}
                                         onValueChange={(value) =>
@@ -770,7 +799,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                           )
                                         }
                                       >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="h-8 shadow-none">
                                           {/* value≠label：闭合态必须显式渲染本地化标签。 */}
                                           <SelectValue>
                                             {t(
@@ -918,7 +947,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         max={10}
                         step={1}
                         inputMode="numeric"
-                        className="h-8 w-20 text-sm"
+                        className="h-8 w-20 text-sm shadow-none"
                         value={streamRetryCountInput}
                         onChange={(event) => setStreamRetryCountInput(event.currentTarget.value)}
                         onBlur={commitStreamRetryCountInput}
@@ -976,7 +1005,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             setPromptCacheHintMode(value as PromptCacheHintMode)
                           }
                         >
-                          <SelectTrigger aria-label={t("settings.promptCacheHintMode")}>
+                          <SelectTrigger
+                            className="h-8 shadow-none"
+                            aria-label={t("settings.promptCacheHintMode")}
+                          >
                             {/* value≠label：闭合态必须显式渲染本地化标签。 */}
                             <SelectValue>
                               {t(PROMPT_CACHE_HINT_LABEL_KEYS[promptCacheHintMode])}
@@ -1144,7 +1176,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-9 max-[720px]:h-11 max-[720px]:flex-1"
+                        className="h-8 max-[720px]:h-11 max-[720px]:flex-1"
                         onClick={cancelCustomHeaderImport}
                       >
                         {t("settings.cancelCustomHeaderImport")}
@@ -1152,7 +1184,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <Button
                         type="button"
                         size="sm"
-                        className="h-9 max-[720px]:h-11 max-[720px]:flex-1"
+                        className="h-8 max-[720px]:h-11 max-[720px]:flex-1"
                         onClick={handleImportCustomHeaders}
                       >
                         {t("settings.parseAndImportCustomHeaders")}
@@ -1187,7 +1219,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </span>
                   </button>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-4 space-y-2">
                     <div
                       className="-m-0.5 max-h-[196px] space-y-2 overflow-y-auto p-0.5 max-[720px]:max-h-[360px]"
                       onScroll={() => setHeaderSuggest(null)}
@@ -1216,7 +1248,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }}
                               value={header.key}
                               className={cn(
-                                "h-10 w-[210px] shrink-0 rounded-none border-0 border-r bg-muted/30 px-3 font-mono text-xs shadow-none focus-visible:ring-0 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:bg-muted/40",
+                                "h-8 w-[210px] shrink-0 rounded-none border-0 border-r bg-muted/30 px-3 font-mono text-xs shadow-none focus-visible:ring-0 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:bg-muted/40",
                                 keyIssue && "text-destructive",
                               )}
                               placeholder={t("settings.customHeaderKeyPlaceholder")}
@@ -1279,7 +1311,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 type="text"
                                 value={header.value}
                                 className={cn(
-                                  "h-10 w-full rounded-none border-0 bg-transparent pl-3 pr-11 font-mono text-xs shadow-none focus-visible:ring-0",
+                                  "h-8 w-full rounded-none border-0 bg-transparent pl-3 pr-11 font-mono text-xs shadow-none focus-visible:ring-0",
                                   valueIssue && "text-destructive",
                                 )}
                                 placeholder={t("settings.customHeaderValue")}
@@ -1303,7 +1335,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  className="h-8 w-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                   onClick={() => removeCustomHeader(index)}
                                   title={t("settings.removeCustomHeader")}
                                   aria-label={t("settings.removeCustomHeader")}
@@ -1395,8 +1427,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-border" />
                     </div>
 
-                    <div className="mt-4 space-y-1.5">
-                      <Label>{t("settings.providerUsageMode")}</Label>
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-muted-foreground">
+                        {t("settings.providerUsageMode")}
+                      </Label>
                       <Select
                         value={usageQuery.mode}
                         onValueChange={(mode) =>
@@ -1405,7 +1439,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           )
                         }
                       >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="h-8 w-full shadow-none">
                           {/* value≠label:闭合态必须显式渲染本地化标签(coding-plan → codingPlan 键)。 */}
                           <SelectValue>
                             {t(
@@ -1464,12 +1498,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     {/* 只有通用模板需要用户自行填写 baseUrl / apiKey 覆盖。 */}
                     {usageQuery.mode === "general" ? (
                       <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="usage-query-base-url">
+                        <div className="space-y-2">
+                          <Label htmlFor="usage-query-base-url" className="text-muted-foreground">
                             {t("settings.providerUsageBaseUrl")}
                           </Label>
                           <Input
                             id="usage-query-base-url"
+                            className="h-8 shadow-none"
                             value={usageQuery.baseUrl}
                             placeholder={baseUrl.trim() || undefined}
                             onChange={(event) => {
@@ -1481,12 +1516,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             }}
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="usage-query-api-key">
+                        <div className="space-y-2">
+                          <Label htmlFor="usage-query-api-key" className="text-muted-foreground">
                             {t("settings.providerUsageApiKey")}
                           </Label>
                           <Input
                             id="usage-query-api-key"
+                            className="h-8 shadow-none"
                             type="password"
                             value={usageQuery.apiKey}
                             autoComplete="off"
@@ -1574,12 +1610,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                     {usageQuery.mode === "newapi" ? (
                       <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="usage-query-access-token">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="usage-query-access-token"
+                            className="text-muted-foreground"
+                          >
                             {t("settings.providerUsageAccessToken")}
                           </Label>
                           <Input
                             id="usage-query-access-token"
+                            className="h-8 shadow-none"
                             type="password"
                             value={usageQuery.accessToken}
                             autoComplete="off"
@@ -1593,12 +1633,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             }}
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="usage-query-user-id">
+                        <div className="space-y-2">
+                          <Label htmlFor="usage-query-user-id" className="text-muted-foreground">
                             {t("settings.providerUsageUserId")}
                           </Label>
                           <Input
                             id="usage-query-user-id"
+                            className="h-8 shadow-none"
                             value={usageQuery.userId}
                             onChange={(event) => {
                               const value = event.currentTarget.value;
@@ -1639,12 +1680,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "zenmux" ? (
                           <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="usage-query-zenmux-base-url">
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor="usage-query-zenmux-base-url"
+                                className="text-muted-foreground"
+                              >
                                 {t("settings.providerUsageBaseUrl")}
                               </Label>
                               <Input
                                 id="usage-query-zenmux-base-url"
+                                className="h-8 shadow-none"
                                 value={usageQuery.baseUrl}
                                 placeholder="https://api.zenmux.com/v1/..."
                                 onChange={(event) => {
@@ -1656,12 +1701,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 }}
                               />
                             </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="usage-query-zenmux-api-key">
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor="usage-query-zenmux-api-key"
+                                className="text-muted-foreground"
+                              >
                                 {t("settings.providerUsageApiKey")}
                               </Label>
                               <Input
                                 id="usage-query-zenmux-api-key"
+                                className="h-8 shadow-none"
                                 type="password"
                                 value={usageQuery.apiKey}
                                 autoComplete="off"
@@ -1694,12 +1743,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               </a>
                             </p>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                              <div className="space-y-1.5">
-                                <Label htmlFor="usage-query-team-organization-id">
+                              <div className="space-y-2">
+                                <Label
+                                  htmlFor="usage-query-team-organization-id"
+                                  className="text-muted-foreground"
+                                >
                                   {t("settings.providerUsageOrganizationId")}
                                 </Label>
                                 <Input
                                   id="usage-query-team-organization-id"
+                                  className="h-8 shadow-none"
                                   value={usageQuery.teamOrganizationId}
                                   placeholder={t("settings.providerUsageOrganizationIdPlaceholder")}
                                   onChange={(event) => {
@@ -1711,12 +1764,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   }}
                                 />
                               </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="usage-query-team-project-id">
+                              <div className="space-y-2">
+                                <Label
+                                  htmlFor="usage-query-team-project-id"
+                                  className="text-muted-foreground"
+                                >
                                   {t("settings.providerUsageProjectId")}
                                 </Label>
                                 <Input
                                   id="usage-query-team-project-id"
+                                  className="h-8 shadow-none"
                                   value={usageQuery.teamProjectId}
                                   placeholder={t("settings.providerUsageProjectIdPlaceholder")}
                                   onChange={(event) => {
@@ -1747,12 +1804,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               </a>
                             </p>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                              <div className="space-y-1.5">
-                                <Label htmlFor="usage-query-access-key-id">
+                              <div className="space-y-2">
+                                <Label
+                                  htmlFor="usage-query-access-key-id"
+                                  className="text-muted-foreground"
+                                >
                                   {t("settings.providerUsageAccessKeyId")}
                                 </Label>
                                 <Input
                                   id="usage-query-access-key-id"
+                                  className="h-8 shadow-none"
                                   value={usageQuery.accessKeyId}
                                   onChange={(event) => {
                                     const value = event.currentTarget.value;
@@ -1763,12 +1824,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   }}
                                 />
                               </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="usage-query-secret-access-key">
+                              <div className="space-y-2">
+                                <Label
+                                  htmlFor="usage-query-secret-access-key"
+                                  className="text-muted-foreground"
+                                >
                                   {t("settings.providerUsageSecretAccessKey")}
                                 </Label>
                                 <Input
                                   id="usage-query-secret-access-key"
+                                  className="h-8 shadow-none"
                                   type="password"
                                   value={usageQuery.secretAccessKey}
                                   autoComplete="off"
@@ -1789,12 +1854,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ) : null}
 
                     <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="usage-query-timeout">
+                      <div className="space-y-2">
+                        <Label htmlFor="usage-query-timeout" className="text-muted-foreground">
                           {t("settings.providerUsageTimeout")}
                         </Label>
                         <Input
                           id="usage-query-timeout"
+                          className="h-8 shadow-none"
                           inputMode="numeric"
                           value={usageTimeoutInput}
                           onChange={(event) => {
@@ -1812,8 +1878,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     {usageQuery.mode === "custom" ||
                     usageQuery.mode === "general" ||
                     usageQuery.mode === "newapi" ? (
-                      <div className="mt-4 space-y-1.5">
-                        <Label htmlFor="usage-query-script">
+                      <div className="mt-4 space-y-2">
+                        <Label htmlFor="usage-query-script" className="text-muted-foreground">
                           {t("settings.providerUsageScript")}
                         </Label>
                         <Textarea
@@ -1837,7 +1903,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-10 shrink-0 gap-1.5"
+                        className="h-8 shrink-0 gap-1.5"
                         disabled={
                           !persistedUsageQueryProviderId || usageQueryTest.status === "running"
                         }
@@ -1941,14 +2007,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <Button
               variant="outline"
               onClick={requestClose}
-              className="max-[720px]:h-10 max-[720px]:flex-1"
+              className="h-8 max-[720px]:h-10 max-[720px]:flex-1"
             >
               {t("settings.cancel")}
             </Button>
             <Button
               onClick={handleSave}
               disabled={!name.trim() || !dialogOpen}
-              className="max-[720px]:h-10 max-[720px]:flex-1"
+              className="h-8 max-[720px]:h-10 max-[720px]:flex-1"
             >
               {t("settings.save")}
             </Button>

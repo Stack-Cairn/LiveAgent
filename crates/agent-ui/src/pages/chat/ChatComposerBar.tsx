@@ -1701,7 +1701,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     onClick={() => onChatRuntimeControlsChange({ planModeEnabled: false })}
                     title={t("chat.runtime.planModeSlashOff")}
                     aria-label={t("chat.runtime.planModeSlashOff")}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 text-[11px] font-medium text-sky-700 outline-hidden transition-colors hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 text-[11px] font-medium text-sky-700 outline-hidden transition-colors hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300"
                   >
                     <Lightbulb className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{t("chat.runtime.planMode")}</span>

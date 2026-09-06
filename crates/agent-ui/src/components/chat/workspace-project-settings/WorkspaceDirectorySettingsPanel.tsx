@@ -73,8 +73,8 @@ export function WorkspaceDirectorySettingsPanel(props: {
   const { t } = useLocale();
 
   return (
-    <section className="mx-auto max-w-[720px] space-y-4 p-6 max-[720px]:p-4">
-      <h3 className="text-base font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
+    <section className="space-y-4 p-6 max-[720px]:p-4">
+      <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
 
       {/* 主目录与附加目录合并为同一张列表卡片，形成统一的目录清单。 */}
       <div className="overflow-hidden rounded-xl border border-border/60">
@@ -215,7 +215,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
         </div>
       ) : null}
 
-      <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground">
+      <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         {t("chat.workspaceSettingsDirectoriesDescription")}
       </p>

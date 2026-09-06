@@ -60,7 +60,7 @@ test("MCP navigation uses the same standard segmented and quiet Tabs as Skills H
   assert.match(pageSource, /<ResourceTabsList/);
   assert.match(resourceTabsSource, /components\/ui\/tabs/);
   assert.match(resourceTabsSource, /<TabsList[\s\S]*<TabsTrigger/);
-  assert.match(resourceTabsSource, /h-9[^"\n]*rounded-lg bg-muted p-1/);
+  assert.match(resourceTabsSource, /h-8[^"\n]*rounded-lg bg-muted p-1/);
   assert.match(resourceTabsSource, /data-\[active\]:bg-background/);
   assert.match(toolbarSource, /border border-transparent/);
   assert.match(importPickerSource, /border border-transparent/);
