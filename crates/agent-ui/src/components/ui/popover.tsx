@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
+import { useZoneFontScaleStyle } from "./zone-font-scale";
 
 export function Popover(props: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -35,28 +36,32 @@ export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentPro
       ...props
     },
     ref,
-  ) => (
-    <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        collisionPadding={collisionPadding}
-        side={side}
-        sideOffset={sideOffset}
-        className="layer-popover isolate"
-      >
-        <PopoverPrimitive.Popup
-          ref={ref}
-          data-slot="popover-content"
-          className={cn(
-            "w-72 origin-(--transform-origin) rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-md outline-none transition-[transform,opacity] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
-            className,
-          )}
-          {...props}
-        />
-      </PopoverPrimitive.Positioner>
-    </PopoverPrimitive.Portal>
-  ),
+  ) => {
+    const zoneStyle = useZoneFontScaleStyle();
+    return (
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Positioner
+          align={align}
+          alignOffset={alignOffset}
+          collisionPadding={collisionPadding}
+          side={side}
+          sideOffset={sideOffset}
+          className="layer-popover isolate"
+          style={zoneStyle}
+        >
+          <PopoverPrimitive.Popup
+            ref={ref}
+            data-slot="popover-content"
+            className={cn(
+              "w-72 origin-(--transform-origin) rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-md outline-none transition-[transform,opacity] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              className,
+            )}
+            {...props}
+          />
+        </PopoverPrimitive.Positioner>
+      </PopoverPrimitive.Portal>
+    );
+  },
 );
 PopoverContent.displayName = "PopoverContent";
 

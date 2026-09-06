@@ -2,6 +2,7 @@ import { Select as SelectPrimitive } from "@base-ui/react";
 import { Check, ChevronDown, ChevronUp } from "@liveagent/ui/components/IconSet";
 import * as React from "react";
 import { cn } from "../../lib/shared/utils";
+import { useZoneFontScaleStyle } from "./zone-font-scale";
 
 type SelectProps = Omit<
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>,
@@ -122,38 +123,42 @@ export const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps
       ...props
     },
     ref,
-  ) => (
-    <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner
-        align={align}
-        collisionPadding={collisionPadding}
-        side={side}
-        sideOffset={sideOffset}
-        alignItemWithTrigger={false}
-        className="layer-popover"
-      >
-        <SelectPrimitive.Popup
-          ref={ref}
-          className={cn(
-            "max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-            className,
-          )}
-          {...props}
+  ) => {
+    const zoneStyle = useZoneFontScaleStyle();
+    return (
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Positioner
+          align={align}
+          collisionPadding={collisionPadding}
+          side={side}
+          sideOffset={sideOffset}
+          alignItemWithTrigger={false}
+          className="layer-popover"
+          style={zoneStyle}
         >
-          <SelectScrollUpButton />
-          <SelectPrimitive.List
+          <SelectPrimitive.Popup
+            ref={ref}
             className={cn(
-              "p-1 max-h-[inherit] overflow-y-auto",
-              position === "popper" && "w-full min-w-(--anchor-width)",
+              "max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              className,
             )}
+            {...props}
           >
-            {children}
-          </SelectPrimitive.List>
-          <SelectScrollDownButton />
-        </SelectPrimitive.Popup>
-      </SelectPrimitive.Positioner>
-    </SelectPrimitive.Portal>
-  ),
+            <SelectScrollUpButton />
+            <SelectPrimitive.List
+              className={cn(
+                "p-1 max-h-[inherit] overflow-y-auto",
+                position === "popper" && "w-full min-w-(--anchor-width)",
+              )}
+            >
+              {children}
+            </SelectPrimitive.List>
+            <SelectScrollDownButton />
+          </SelectPrimitive.Popup>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>
+    );
+  },
 );
 SelectContent.displayName = "SelectContent";
 

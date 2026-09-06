@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
 import { Button } from "./button";
+import { resolveZoneFontScale, ZoneFontScaleContext } from "./zone-font-scale";
 
 export function Dialog(props: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -65,55 +66,64 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
       ...props
     },
     ref,
-  ) => (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogPrimitive.Viewport
-        data-slot="dialog-viewport"
-        data-layout={layout}
-        className={cn(
-          "layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]",
-          layout === "fullscreen-mobile" &&
-            "max-[720px]:items-stretch max-[720px]:overflow-hidden max-[720px]:p-0",
-          layout === "bottom-sheet-mobile" &&
-            "items-stretch justify-end overflow-hidden p-0 sm:items-center sm:justify-start sm:overflow-y-auto sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(1rem,env(safe-area-inset-top))]",
-        )}
-      >
-        <DialogPrimitive.Popup
-          ref={ref}
-          data-slot="dialog-content"
+  ) => {
+    // Popups opened from inside the dialog (Select, Dropdown, Popover) render
+    // through their own portals and would fall back to scale 1.0; the context
+    // carries the dialog's scale — including a call-site `style` override —
+    // across that boundary.
+    const zoneFontScale = resolveZoneFontScale(style, DIALOG_FONT_SCALE);
+    return (
+      <DialogPortal>
+        <DialogOverlay />
+        <DialogPrimitive.Viewport
+          data-slot="dialog-viewport"
           data-layout={layout}
-          data-has-close-button={showCloseButton ? "true" : undefined}
-          style={{
-            ...({ "--zone-font-scale": DIALOG_FONT_SCALE } as React.CSSProperties),
-            ...style,
-          }}
           className={cn(
-            // Dialogs render through a portal, so they sit outside every
-            // `--zone-font-scale` zone (sidebar / chat / right dock) and would
-            // otherwise ignore font scaling entirely. Declare our own zone so
-            // the rem-based text-* utilities inside follow it. Call sites can
-            // override the scale through `style`.
-            "zone-font-scale",
-            // No default padding: the header/body/footer slots own their own
-            // spacing, and every call site was cancelling a `p-6` here.
-            "group/dialog relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+            "layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]",
             layout === "fullscreen-mobile" &&
-              "max-[720px]:my-0 max-[720px]:h-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0",
+              "max-[720px]:items-stretch max-[720px]:overflow-hidden max-[720px]:p-0",
             layout === "bottom-sheet-mobile" &&
-              "my-0 max-w-none rounded-b-none sm:my-auto sm:max-w-2xl sm:rounded-b-2xl",
-            className,
+              "items-stretch justify-end overflow-hidden p-0 sm:items-center sm:justify-start sm:overflow-y-auto sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(1rem,env(safe-area-inset-top))]",
           )}
-          {...props}
         >
-          {children}
-          {showCloseButton ? (
-            <DialogCloseButton disabled={closeDisabled} label={closeLabel} />
-          ) : null}
-        </DialogPrimitive.Popup>
-      </DialogPrimitive.Viewport>
-    </DialogPortal>
-  ),
+          <DialogPrimitive.Popup
+            ref={ref}
+            data-slot="dialog-content"
+            data-layout={layout}
+            data-has-close-button={showCloseButton ? "true" : undefined}
+            style={{
+              ...({ "--zone-font-scale": DIALOG_FONT_SCALE } as React.CSSProperties),
+              ...style,
+            }}
+            className={cn(
+              // Dialogs render through a portal, so they sit outside every
+              // `--zone-font-scale` zone (sidebar / chat / right dock) and would
+              // otherwise ignore font scaling entirely. Declare our own zone so
+              // the rem-based text-* utilities inside follow it. Call sites can
+              // override the scale through `style`.
+              "zone-font-scale",
+              // No default padding: the header/body/footer slots own their own
+              // spacing, and every call site was cancelling a `p-6` here.
+              "group/dialog relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              layout === "fullscreen-mobile" &&
+                "max-[720px]:my-0 max-[720px]:h-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0",
+              layout === "bottom-sheet-mobile" &&
+                "my-0 max-w-none rounded-b-none sm:my-auto sm:max-w-2xl sm:rounded-b-2xl",
+              className,
+            )}
+            {...props}
+          >
+            <ZoneFontScaleContext.Provider value={zoneFontScale}>
+              {children}
+              {showCloseButton ? (
+                <DialogCloseButton disabled={closeDisabled} label={closeLabel} />
+              ) : null}
+            </ZoneFontScaleContext.Provider>
+          </DialogPrimitive.Popup>
+        </DialogPrimitive.Viewport>
+      </DialogPortal>
+    );
+  },
 );
 DialogContent.displayName = "DialogContent";
 

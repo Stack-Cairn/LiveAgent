@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
 import { Button } from "./button";
+import { resolveZoneFontScale, ZoneFontScaleContext } from "./zone-font-scale";
 
 export function AlertDialog(
   props: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Root>,
@@ -68,34 +69,40 @@ const ALERT_DIALOG_FONT_SCALE = 0.9;
 type AlertDialogContentProps = React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Popup>;
 
 export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(
-  ({ className, children, style, ...props }, ref) => (
-    <AlertDialogPortal>
-      <AlertDialogOverlay />
-      <AlertDialogPrimitive.Viewport
-        data-slot="alert-dialog-viewport"
-        className="layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
-      >
-        <AlertDialogPrimitive.Popup
-          ref={ref}
-          data-slot="alert-dialog-content"
-          style={{
-            ...({ "--zone-font-scale": ALERT_DIALOG_FONT_SCALE } as React.CSSProperties),
-            ...style,
-          }}
-          className={cn(
-            // 与 dialog.tsx 同源：弹窗自成一个字号缩放 zone（portal 渲染，
-            // 落在所有 zone 之外），且 padding 由 header/body/footer 各自负责。
-            "zone-font-scale",
-            "relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
-            className,
-          )}
-          {...props}
+  ({ className, children, style, ...props }, ref) => {
+    // 同 dialog.tsx：把缩放档位经 context 带过弹层的 portal 边界。
+    const zoneFontScale = resolveZoneFontScale(style, ALERT_DIALOG_FONT_SCALE);
+    return (
+      <AlertDialogPortal>
+        <AlertDialogOverlay />
+        <AlertDialogPrimitive.Viewport
+          data-slot="alert-dialog-viewport"
+          className="layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
         >
-          {children}
-        </AlertDialogPrimitive.Popup>
-      </AlertDialogPrimitive.Viewport>
-    </AlertDialogPortal>
-  ),
+          <AlertDialogPrimitive.Popup
+            ref={ref}
+            data-slot="alert-dialog-content"
+            style={{
+              ...({ "--zone-font-scale": ALERT_DIALOG_FONT_SCALE } as React.CSSProperties),
+              ...style,
+            }}
+            className={cn(
+              // 与 dialog.tsx 同源：弹窗自成一个字号缩放 zone（portal 渲染，
+              // 落在所有 zone 之外），且 padding 由 header/body/footer 各自负责。
+              "zone-font-scale",
+              "relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              className,
+            )}
+            {...props}
+          >
+            <ZoneFontScaleContext.Provider value={zoneFontScale}>
+              {children}
+            </ZoneFontScaleContext.Provider>
+          </AlertDialogPrimitive.Popup>
+        </AlertDialogPrimitive.Viewport>
+      </AlertDialogPortal>
+    );
+  },
 );
 AlertDialogContent.displayName = "AlertDialogContent";
 

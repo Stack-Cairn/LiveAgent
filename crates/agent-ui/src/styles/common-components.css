@@ -4,8 +4,15 @@
    * every rem-based text-* utility inside the zone follows --zone-font-scale.
    * Hard-coded px sizes opt in via text-[calc(NNpx*var(--zone-font-scale,1))].
    * Line-height variables are unitless ratios, so they scale automatically.
+   *
+   * `.layer-popover` (every portaled popup positioner) is included so a popup
+   * follows the zone of its trigger: the wrapper sets `--zone-font-scale` on
+   * the positioner from React context (see components/ui/zone-font-scale.tsx),
+   * which is the only way the value crosses the portal boundary. Without a
+   * zone the variable is unset and the fallback of 1 leaves popups unchanged.
    */
-  .zone-font-scale {
+  .zone-font-scale,
+  .layer-popover {
     font-size: calc(1rem * var(--zone-font-scale, 1));
     --text-xs: calc(0.75rem * var(--zone-font-scale, 1));
     --text-sm: calc(0.875rem * var(--zone-font-scale, 1));
