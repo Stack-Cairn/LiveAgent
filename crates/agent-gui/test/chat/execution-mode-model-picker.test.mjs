@@ -95,17 +95,20 @@ test("model pickers search models and providers", () => {
   }
 });
 
-test("provider groups reserve a stable edit affordance before the count", () => {
+test("provider groups keep a reachable edit affordance before the chevron", () => {
   for (const source of pickerSources) {
     assert.match(source, /\bPencil\b/);
     assert.match(source, /t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{`\$\{t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{\s*expanded \? t\("chat\.collapseProvider"\)/);
-    assert.match(source, /pointer-events-none flex w-7 shrink-0/);
-    assert.match(source, /group-hover:pointer-events-auto group-hover:opacity-100/);
-    assert.match(source, /group-focus-within:pointer-events-auto group-focus-within:opacity-100/);
+    // 编辑入口常驻可点：此前 pointer-events-none + opacity-0 靠 group-hover
+    // 激活，触屏设备没有 hover，因此永远点不到。
+    assert.match(source, /flex w-7 shrink-0 cursor-pointer/);
+    assert.doesNotMatch(source, /pointer-events-none flex w-7/);
     assert.doesNotMatch(source, /max-w-0|group-hover:max-w-7|group-focus-within:max-w-7/);
-    assert.ok(source.indexOf("<Pencil") < source.indexOf("{group.opts.length}"));
+    // 分组计数已移除；编辑入口仍需排在折叠按钮之前。锚点用折叠按钮独有的
+    // aria-label —— 触发器自身也有 <ChevronDown，按标签名会锚错位置。
+    assert.ok(source.indexOf("<Pencil") < source.indexOf("chat.collapseProvider"));
     assert.match(
       source,
       /setIsModelPickerOpen\(false\);\s+onOpenSettings\("providers", group\.id\);/,
@@ -146,10 +149,19 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
     assert.match(source, /thinkingEnabled: true, reasoning: level/);
     assert.match(source, /thinkingEnabled: false/);
-    assert.match(source, /model-runtime-effort/);
-    assert.match(source, /type="range"/);
-    assert.match(source, /aria-valuetext=\{formatLevel\(value\)\}/);
-    assert.doesNotMatch(source, /role="radio"/);
+    // 推理强度由「脑图标 + 带刻度滑块 + 数值胶囊」三重表示改为分段按钮：
+    // 原实现只有滑块可交互，胶囊却与旁边真正的按钮同款样式，必然被误点。
+    assert.match(source, /function ReasoningEffortSegments/);
+    assert.match(source, /role="radiogroup"/);
+    assert.doesNotMatch(source, /type="range"/);
+    // role="radio" 承诺了 radiogroup 的交互约定：整组一个 Tab 停靠点 +
+    // 方向键改选。原实现是 input[type=range]，两者由浏览器免费提供；
+    // 换成分段按钮后必须自己实现，否则 ARIA 角色与实际行为不符。
+    assert.match(source, /tabIndex=\{isSelected \|\| \(activeIndex < 0 && index === 0\) \? 0 : -1\}/);
+    assert.match(source, /event\.key === "ArrowRight" \|\| event\.key === "ArrowDown"/);
+    assert.match(source, /focus-visible:ring-2 focus-visible:ring-inset/);
+    // role="radio" 现在是分段控件的正确 ARIA 模式（配合 radiogroup），
+    // 不再是「误用原生控件」的信号；仍不应引入 select/switch。
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/select"/);
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/switch"/);
   }

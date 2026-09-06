@@ -580,7 +580,6 @@ export function GitBranchSelector(props: {
         description: t("git.branchSelector.deleteForceDescription"),
         confirmLabel: t("git.branchSelector.forceDelete"),
         cancelLabel: t("chat.cancel"),
-        tone: "destructive",
       });
       if (!forced) return false;
       return runSheetMutation(() => gitClient.deleteBranch(workdir, branch.fullName, true));
@@ -596,7 +595,6 @@ export function GitBranchSelector(props: {
         description: t("git.branchSelector.deleteForceDescription"),
         confirmLabel: t("git.branchSelector.forceDelete"),
         cancelLabel: t("chat.cancel"),
-        tone: "destructive",
       });
       if (!forced) return false;
       setActionBusy(true);
@@ -631,7 +629,6 @@ export function GitBranchSelector(props: {
       description: t("git.branchSelector.deleteConfirmDescription"),
       confirmLabel: t("git.branchSelector.deleteBranch"),
       cancelLabel: t("chat.cancel"),
-      tone: "destructive",
     });
     if (!confirmed) return;
     const ok = await runSheetMutation(() => gitClient.deleteBranch(workdir, branch.fullName));
@@ -714,7 +711,6 @@ export function GitBranchSelector(props: {
       description: t("git.branchSelector.deleteWorktreeConfirmDescription"),
       confirmLabel: t("git.branchSelector.deleteWorktree"),
       cancelLabel: t("chat.cancel"),
-      tone: "destructive",
     });
     if (!confirmed) return;
 
@@ -726,7 +722,6 @@ export function GitBranchSelector(props: {
       description: t("git.branchSelector.deleteWorktreeBranchDescription"),
       confirmLabel: t("git.branchSelector.deleteWorktreeAndBranch"),
       cancelLabel: t("git.branchSelector.keepWorktreeBranch"),
-      tone: "warning",
     });
 
     const refreshAfterRemoval = !checkedOutWorktree.isCurrent;
@@ -738,7 +733,6 @@ export function GitBranchSelector(props: {
         description: t("git.branchSelector.deleteWorktreeForceDescription"),
         confirmLabel: t("git.branchSelector.forceRemoveWorktree"),
         cancelLabel: t("chat.cancel"),
-        tone: "destructive",
       });
       if (!forced) return;
       result = await runWorktreeRemoval(

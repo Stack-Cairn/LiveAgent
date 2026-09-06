@@ -85,8 +85,10 @@ function createCardHarness(initialState = {}) {
         Check: (props) => ({ type: "Check", props }),
         ChevronDown: (props) => ({ type: "ChevronDown", props }),
         ChevronUp: (props) => ({ type: "ChevronUp", props }),
-        Sparkles: (props) => ({ type: "Sparkles", props }),
       },
+      "@liveagent/ui/components/ui/badge": { Badge: BadgeStub },
+      "@liveagent/ui/components/ui/button": { Button: ButtonStub },
+      "@liveagent/ui/components/ui/input": { Input: InputStub },
       "@liveagent/ui/lib/shared/utils": {
         cn(...values) {
           return values.filter(Boolean).join(" ");
@@ -111,6 +113,13 @@ function createCardHarness(initialState = {}) {
   };
 }
 
+// 卡片改用共享基础组件后，真实实现走 React.forwardRef，而本文件的 React 桩
+// 没有该 API，故一并桩掉。注意 loader 的 JSX 变换不调用组件，直接把组件引用
+// 放进 node.type，因此查询只能按引用比较，不能按名字字符串。
+const BadgeStub = (props) => ({ type: "Badge", props });
+const ButtonStub = (props) => ({ type: "Button", props });
+const InputStub = (props) => ({ type: "Input", props });
+
 function findAll(node, predicate, matches = []) {
   if (Array.isArray(node)) {
     for (const child of node) findAll(child, predicate, matches);
@@ -123,12 +132,15 @@ function findAll(node, predicate, matches = []) {
 }
 
 function findSubmitButton(tree) {
-  return findAll(
-    tree,
-    (node) =>
-      node.type === "button" &&
-      ["chat.askUser.submit", "chat.askUser.submitting"].includes(node.props?.children),
-  )[0];
+  // 底部按钮已改用共享 Button 组件；标签是 children 数组的最后一项
+  // （前面还有图标节点），因此不能再按 children 全等匹配。
+  return findAll(tree, (node) => {
+    if (node.type !== ButtonStub) return false;
+    const children = [node.props?.children].flat(Infinity);
+    return children.some((child) =>
+      ["chat.askUser.submit", "chat.askUser.submitting", "chat.askUser.continue"].includes(child),
+    );
+  })[0];
 }
 
 function treeText(node) {
@@ -154,13 +166,15 @@ test("card surface avoids an outer shadow that the collapse viewport would clip"
     (node) =>
       node.type === "div" &&
       typeof node.props?.className === "string" &&
-      node.props.className.includes("rounded-2xl") &&
-      node.props.className.includes("backdrop-blur-xl"),
+      node.props.className.includes("rounded-xl") &&
+      node.props.className.includes("border-border/60"),
   )[0];
 
   assert.ok(surface);
-  assert.match(surface.props.className, /shadow-\[inset_/);
-  assert.doesNotMatch(surface.props.className, /0_12px_40px|0_2px_6px/);
+  // 卡片改用设计 token（描边 + 淡底），不再有毛玻璃与 inset 高光；
+  // 关键约束不变：不能有会被折叠视口裁掉的外阴影。
+  assert.doesNotMatch(surface.props.className, /shadow-\[/);
+  assert.doesNotMatch(surface.props.className, /backdrop-blur/);
 });
 
 async function flushPromises() {
@@ -186,7 +200,8 @@ test("expired countdown disables options, custom input, and submit before tool_r
 
   const optionButtons = findAll(
     tree,
-    (node) => node.type === "button" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"],
   );
   assert.equal(optionButtons.length, 2);
   assert.equal(optionButtons.every((button) => button.props.disabled === true), true);
@@ -194,12 +209,13 @@ test("expired countdown disables options, custom input, and submit before tool_r
 
   const customOption = findAll(
     tree,
-    (node) => node.type === "div" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && node.props["aria-label"],
   )[0];
-  assert.equal(customOption.props["aria-disabled"], true);
-  assert.equal(customOption.props.tabIndex, -1);
+  // 自定义项现在与上方选项共用同一套禁用语义（disabled）。
+  assert.equal(customOption.props.disabled, true);
 
-  const customInput = findAll(tree, (node) => node.type === "input")[0];
+  const customInput = findAll(tree, (node) => node.type === InputStub)[0];
   assert.ok(customInput);
   assert.equal(customInput.props.disabled, true);
 
@@ -236,15 +252,17 @@ test("a deadline already past at mount is distrusted and the pending card stays 
 
   const optionButtons = findAll(
     tree,
-    (node) => node.type === "button" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"],
   );
   assert.equal(optionButtons.length, 2);
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
   const customOption = findAll(
     tree,
-    (node) => node.type === "div" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && node.props["aria-label"],
   )[0];
-  assert.equal(customOption.props["aria-disabled"], false);
+  assert.equal(customOption.props.disabled, false);
 
   const submitButton = findSubmitButton(tree);
   assert.equal(submitButton.props.disabled, false);
@@ -264,7 +282,8 @@ test("a deadline beyond the full answer window is distrusted and clamps the coun
 
   const optionButtons = findAll(
     tree,
-    (node) => node.type === "button" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"],
   );
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
   // 倒计时按挂载近似显示完整窗口，而不是把偏移量当剩余时间。
@@ -284,7 +303,8 @@ test("a complete answer before the deadline submits the selected non-first optio
 
   const optionButtons = findAll(
     tree,
-    (node) => node.type === "button" && node.props?.role === "radio",
+    (node) =>
+      node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"],
   );
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
   const submitButton = findSubmitButton(tree);
@@ -302,7 +322,7 @@ test("a complete answer before the deadline submits the selected non-first optio
   ]);
 });
 
-test("multi-question selection auto-advances and preserves a mixed custom payload", async () => {
+test("multi-question selection stays put until 继续 and preserves a mixed custom payload", async () => {
   const multiQuestions = [
     {
       id: "q1",
@@ -346,18 +366,29 @@ test("multi-question selection auto-advances and preserves a mixed custom payloa
     ).length,
     2,
   );
-  findAll(tree, (node) => node.type === "button" && node.props?.role === "radio")[1].props.onClick();
+  const optionRadios = (node) =>
+    node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"];
 
+  // 选中不再自动跳题：选完仍停在本题，翻页只由「继续」驱动。
+  findAll(tree, optionRadios)[1].props.onClick();
+  tree = card.render(props);
+  assert.match(treeText(tree), /Question one/);
+  assert.doesNotMatch(treeText(tree), /Question two/);
+
+  findSubmitButton(tree).props.onClick();
   tree = card.render(props);
   assert.match(treeText(tree), /Question two/);
-  findAll(tree, (node) => node.type === "button" && node.props?.role === "radio")[0].props.onClick();
 
+  findAll(tree, optionRadios)[0].props.onClick();
+  tree = card.render(props);
+  assert.match(treeText(tree), /Question two/);
+
+  findSubmitButton(tree).props.onClick();
   tree = card.render(props);
   assert.match(treeText(tree), /Question three/);
-  findAll(tree, (node) => node.type === "div" && node.props?.role === "radio")[0].props.onClick();
 
-  tree = card.render(props);
-  const customInput = findAll(tree, (node) => node.type === "input")[0];
+  // 自定义回答的输入框常驻，输入本身即代表选中该项（无需先点单选圆）。
+  const customInput = findAll(tree, (node) => node.type === InputStub)[0];
   assert.ok(customInput);
   customInput.props.onChange({ currentTarget: { value: "Typed third answer" } });
 

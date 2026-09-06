@@ -35,12 +35,6 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   /** Transcript-stable entry key; block ids alone repeat across rounds. */
   traceKey?: string;
   showTurnStatus?: boolean;
-  /**
-   * True when the block renders as its own transcript row outside the work
-   * trace (interaction cards, answer-layer results). Standalone rows get
-   * their vertical rhythm from the layout layer, so the operation wrapper
-   * must not stack its own my-1 on top of it.
-   */
   readOnly?: boolean;
   redactToolContent?: boolean;
   workdir?: string;

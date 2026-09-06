@@ -290,7 +290,6 @@ export function CheckpointRewindProvider(props: {
             actionable.length > 0 ? actionable.map((entry) => entry.path).join("\n") : undefined,
           confirmLabel: zh ? "回退" : "Rewind",
           cancelLabel: zh ? "取消" : "Cancel",
-          tone: "warning",
         });
         if (!confirmed) return;
         // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
@@ -350,7 +349,6 @@ export function CheckpointRewindProvider(props: {
             confirmLabel: zh ? "知道了" : "OK",
             cancelLabel: "",
             hideCancel: true,
-            tone: "destructive",
           });
         }
       } catch (error) {
@@ -360,7 +358,6 @@ export function CheckpointRewindProvider(props: {
           confirmLabel: zh ? "知道了" : "OK",
           cancelLabel: "",
           hideCancel: true,
-          tone: "destructive",
         });
       } finally {
         busyTurnRef.current = null;

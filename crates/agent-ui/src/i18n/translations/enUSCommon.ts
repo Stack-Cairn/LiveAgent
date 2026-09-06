@@ -579,7 +579,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.selectModel": "Select Model",
   "chat.searchModel": "Search models...",
   "chat.noModelFound": "No matching models found",
-  "chat.sortProvidersByType": "Group providers by type",
+  "chat.sortProvidersByType": "Sort providers by type",
   "chat.sortProvidersByName": "Sort providers alphabetically",
   "chat.expandProvider": "Expand provider models",
   "chat.collapseProvider": "Collapse provider models",

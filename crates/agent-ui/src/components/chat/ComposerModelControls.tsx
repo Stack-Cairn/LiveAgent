@@ -9,10 +9,12 @@ import {
   type SelectedModel,
 } from "@liveagent/app/lib/settings";
 import {
+  ArrowDownAZ,
   Check,
   ChevronDown,
   Globe,
   GlobeOff,
+  Layers,
   Lightbulb,
   LightbulbOff,
   Pencil,
@@ -32,6 +34,7 @@ import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import {
   groupModelOptionsByProvider,
   type ProviderSortMode,
+  persistProviderSortMode,
   readStoredProviderSortMode,
   sortModelOptionGroups,
 } from "@liveagent/ui/lib/models/modelOptions";
@@ -145,15 +148,20 @@ function ReasoningEffortSegments(props: {
     if (!track) return;
     const segments = Array.from(track.querySelectorAll<HTMLElement>("[data-effort-segment]"));
     if (segments.length === 0) return;
-    let hit = segments.findIndex((segment) => {
+    // 取中心点最近的一段，而不是「命中矩形」：容器有 gap-0.5，段与段之间
+    // 存在 2px 缝隙，按命中判定会全部落空；再按左右钳到端点的话，点在任意
+    // 内部缝隙上都会被判成「在轨道右侧」而跳到最高档。按距离取最近段同时
+    // 覆盖了滑出轨道两端的情况。
+    let hit = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    segments.forEach((segment, index) => {
       const rect = segment.getBoundingClientRect();
-      return clientX >= rect.left && clientX <= rect.right;
+      const distance = Math.abs(clientX - (rect.left + rect.width / 2));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        hit = index;
+      }
     });
-    // 拖到轨道两端之外时钳到首/末档，避免手指滑出边界后档位不动。
-    if (hit < 0) {
-      const first = segments[0].getBoundingClientRect();
-      hit = clientX < first.left ? 0 : segments.length - 1;
-    }
     const next = choices[hit];
     if (next && next !== value) onSelect(next);
   };
@@ -191,7 +199,7 @@ function ReasoningEffortSegments(props: {
           className="pointer-events-none absolute bottom-0.5 top-0.5 rounded-md bg-sky-500/15 transition-[left,width] duration-200 ease-out motion-reduce:transition-none"
         />
       ) : null}
-      {choices.map((level) => {
+      {choices.map((level, index) => {
         const isSelected = level === value;
         return (
           // biome-ignore lint/a11y/useSemanticElements: Segmented buttons need button semantics for the shared focus/disabled styling; native radios cannot carry it.
@@ -203,10 +211,29 @@ function ReasoningEffortSegments(props: {
             role="radio"
             aria-checked={isSelected}
             disabled={disabled}
+            // radiogroup 的漫游焦点：整组只占一个 Tab 停靠点，落在当前选中项上。
+            tabIndex={isSelected || (activeIndex < 0 && index === 0) ? 0 : -1}
             title={`${label}: ${formatLevel(level)}`}
             onClick={() => onSelect(level)}
+            onKeyDown={(event) => {
+              // radiogroup 约定用方向键改选。原实现是 input[type=range]，
+              // 方向键本就可用；换成分段按钮后必须自己实现，否则 role="radio"
+              // 承诺的交互与实际不符。
+              const step =
+                event.key === "ArrowRight" || event.key === "ArrowDown"
+                  ? 1
+                  : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                    ? -1
+                    : 0;
+              if (step === 0) return;
+              event.preventDefault();
+              const from = activeIndex < 0 ? 0 : activeIndex;
+              const next = choices[Math.min(choices.length - 1, Math.max(0, from + step))];
+              if (next && next !== value) onSelect(next);
+            }}
             className={cn(
               "relative z-10 flex flex-1 items-center justify-center whitespace-nowrap rounded-md px-1.5 text-[11px] font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
               isSelected
                 ? "text-sky-700 dark:text-sky-300"
                 : "text-muted-foreground hover:text-foreground",
@@ -259,9 +286,21 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [expandedGroupId, setExpandedGroupId] = useState<string | null | undefined>(undefined);
-  // 排序模式仍沿用用户此前持久化的选择；面板内的切换入口已移除（图标显示
-  // 的是目标模式而非当前模式，且没有任何开关态，几乎不可用）。
-  const [providerSortMode] = useState<ProviderSortMode>(() => readStoredProviderSortMode());
+  const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
+    readStoredProviderSortMode(),
+  );
+  // 图标与提示描述「当前模式」而非切换目标：此前显示目标模式，使 Layers
+  // 图标的含义变成「你现在处于字母序」，与直觉相反；且没有 aria-pressed，
+  // 唯一反馈只有图标替换。
+  const sortByName = providerSortMode === "alpha";
+  const sortToggleTitle = sortByName
+    ? t("chat.sortProvidersByName")
+    : t("chat.sortProvidersByType");
+  const toggleProviderSortMode = () => {
+    const next: ProviderSortMode = sortByName ? "type" : "alpha";
+    persistProviderSortMode(next);
+    setProviderSortMode(next);
+  };
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popoverContentRef = useRef<HTMLDivElement>(null);
   const executionModeRadioName = useId();
@@ -374,7 +413,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         collisionPadding={8}
         initialFocus={resolveModelPickerInitialFocus}
         aria-label={t("chat.selectModel")}
-        className="flex max-h-[min(26rem,var(--available-height,26rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg"
+        className="model-selector-dropdown flex max-h-[min(26rem,var(--available-height,26rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg"
       >
         <div className="flex min-h-0 flex-1 flex-col">
           {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
@@ -433,28 +472,44 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
               </div>
             </div>
-            <div className="flex h-7 w-full items-center gap-2 rounded-lg bg-muted/60 px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-ring/25">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
-              <input
-                ref={searchInputRef}
-                value={modelSearch}
-                onChange={(event) => setModelSearch(event.target.value)}
-                placeholder={t("chat.searchModel")}
-                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
-                onKeyDown={(event) => {
-                  // Escape 必须冒泡给 Popover 关闭，方向键留给列表导航；
-                  // 其余按键才拦下，避免触发编辑器/全局快捷键。
-                  if (
-                    event.key === "Escape" ||
-                    event.key === "ArrowDown" ||
-                    event.key === "ArrowUp" ||
-                    event.key === "Enter"
-                  ) {
-                    return;
-                  }
-                  event.stopPropagation();
-                }}
-              />
+            <div className="flex items-center gap-1.5">
+              <div className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted/60 px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-ring/25">
+                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
+                <input
+                  ref={searchInputRef}
+                  value={modelSearch}
+                  onChange={(event) => setModelSearch(event.target.value)}
+                  placeholder={t("chat.searchModel")}
+                  className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+                  onKeyDown={(event) => {
+                    // Escape 必须冒泡给 Popover 关闭，方向键留给列表导航；
+                    // 其余按键才拦下，避免触发编辑器/全局快捷键。
+                    if (
+                      event.key === "Escape" ||
+                      event.key === "ArrowDown" ||
+                      event.key === "ArrowUp" ||
+                      event.key === "Enter"
+                    ) {
+                      return;
+                    }
+                    event.stopPropagation();
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={toggleProviderSortMode}
+                title={sortToggleTitle}
+                aria-label={sortToggleTitle}
+                aria-pressed={sortByName}
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 aria-pressed:text-foreground"
+              >
+                {sortByName ? (
+                  <ArrowDownAZ className="h-3.5 w-3.5" />
+                ) : (
+                  <Layers className="h-3.5 w-3.5" />
+                )}
+              </button>
             </div>
           </div>
           {/* pt-0：sticky 分组表头贴 top-0，容器顶部若还有内边距，那条带子里的
@@ -499,7 +554,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         disabled={groupToggleLocked}
                         aria-expanded={expanded}
                         className={cn(
-                          "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                          "model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
                           isSelectedGroup
                             ? "text-foreground"
                             : "text-muted-foreground/85 dark:text-white/80",
@@ -555,7 +610,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 setIsModelPickerOpen(false);
                               }}
                               className={cn(
-                                "flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-lg py-0 pl-8 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
+                                "model-selector-item flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-lg py-0 pl-8 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
                                 isSelected &&
                                   "bg-muted/70 font-medium hover:bg-muted/70 focus-visible:bg-muted/70",
                               )}

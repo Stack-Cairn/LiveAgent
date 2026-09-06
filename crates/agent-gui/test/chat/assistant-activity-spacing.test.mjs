@@ -42,10 +42,11 @@ const chatStylesSource = fs.readFileSync(
 
 test("tool and operation blocks share the same compact rhythm as prose", () => {
   assert.match(roundContentSource, /const isOperationBlock = block\.kind !== "text";/);
-  // Inside the work trace the operation wrapper owns its rhythm (my-1 matches
-  // thinking/tool-header pb-1). Standalone rows defer to the layout layer so
-  // margins never stack with unit gaps.
-  assert.match(roundContentSource, /isOperationBlock && !standalone && "my-1"/);
+  // 行距已收归工作轨迹容器（AssistantWorkTrace 的 space-y-2）：此前由
+  // RoundContent 的 my-1 加上各行自带的 pb-1 拼出，四种行类型凑出的间隙
+  // 并不相等。包装层现在不再贡献任何外边距。
+  assert.doesNotMatch(roundContentSource, /my-1/);
+  assert.doesNotMatch(roundContentSource, /standalone/);
   assert.match(roundContentSource, /data-assistant-operation=\{isOperationBlock \? "" : undefined\}/);
 });
 

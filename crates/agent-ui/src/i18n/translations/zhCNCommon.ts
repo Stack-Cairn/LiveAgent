@@ -537,7 +537,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.selectModel": "选择模型",
   "chat.searchModel": "搜索模型...",
   "chat.noModelFound": "未找到匹配的模型",
-  "chat.sortProvidersByType": "按供应商类型分组",
+  "chat.sortProvidersByType": "按供应商类型排序",
   "chat.sortProvidersByName": "按供应商首字母排序",
   "chat.expandProvider": "展开该提供商的模型",
   "chat.collapseProvider": "收起该提供商的模型",

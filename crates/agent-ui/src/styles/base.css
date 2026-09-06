@@ -188,10 +188,19 @@
   --_scroll-fade-size: var(--scroll-fade-size, 48px);
   --_scroll-fade-reveal: var(--scroll-fade-reveal, 24px);
 
-  /* Baseline for engines without scroll-driven animations: a static fade on
-     both edges. Degraded but never wrong-looking. */
-  --scroll-fade-t-size: var(--_scroll-fade-size);
-  --scroll-fade-b-size: var(--_scroll-fade-size);
+  /* Engines without scroll-driven animations get no mask at all (see the
+     @supports block below, which is where mask-image is applied).
+
+     A static fade was tried here first and is wrong: the mask would be applied
+     unconditionally, so the top band stays faded at scrollTop 0 and even when
+     the content does not overflow. With `no-scrollbar` on both consumers there
+     is then no overflow affordance left either, and the fade conveys nothing
+     because it never changes. The workspace list uses scroll-fade-8 (32px)
+     against 30px rows, so the entire first row would sit inside the band.
+     WKWebView (the desktop shell) only gained scroll(self y) in Safari 26, so
+     this path is live, not hypothetical. */
+  --scroll-fade-t-size: 0px;
+  --scroll-fade-b-size: 0px;
 
   /* Eased alpha ramp rather than a straight `transparent → black`. A linear
      mask spends most of its depth in the barely-tinted range and reads as "not
@@ -210,16 +219,14 @@
     rgb(0 0 0 / 0.1) calc(100% - var(--scroll-fade-b-size) * 0.28),
     rgb(0 0 0 / 0) 100%
   );
-  -webkit-mask-image: var(--_scroll-fade-mask);
-  mask-image: var(--_scroll-fade-mask);
-
   @supports (animation-timeline: scroll(self y)) {
     /* Both edges start clear and the timeline fills them in. When the timeline
        is inactive — content that doesn't overflow — the effect isn't applied at
-       all, so these declared values stand and nothing fades. That's why the
-       clear state has to be the declared one rather than the animated one. */
-    --scroll-fade-t-size: 0px;
-    --scroll-fade-b-size: 0px;
+       all, so the 0px values above stand and nothing fades. That's why the
+       clear state has to be the declared one rather than the animated one, and
+       why the mask is only applied inside this block. */
+    -webkit-mask-image: var(--_scroll-fade-mask);
+    mask-image: var(--_scroll-fade-mask);
     /* Longhands, not the `animation` shorthand: the shorthand gets expanded
        with `animation-duration: 0s` (CSS Animations 1's initial value), which
        collapses a scroll-driven animation into a hard snap at the range start.

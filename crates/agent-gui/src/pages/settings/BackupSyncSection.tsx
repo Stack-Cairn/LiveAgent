@@ -393,7 +393,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         description: t("settings.backupSyncAutoConfirmDesc"),
         confirmLabel: t("settings.backupSyncAutoConfirmAction"),
         cancelLabel: t("settings.backupCancel"),
-        tone: "warning",
       });
       if (confirmed) patchForm({ autoSync: true });
     },
@@ -473,7 +472,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
           description: describeSource(remote.manifest, t),
           confirmLabel: t("settings.backupSyncUpload"),
           cancelLabel: t("settings.backupCancel"),
-          tone: "warning",
         });
         if (!confirmed) return;
       }
@@ -506,7 +504,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         description: describeSource(remote.manifest, t),
         confirmLabel: t("settings.backupSyncDownload"),
         cancelLabel: t("settings.backupCancel"),
-        tone: "warning",
       });
       if (!confirmed) return;
 
@@ -559,7 +556,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         detail: preview.path,
         confirmLabel: t("settings.backupImportConfirmAction"),
         cancelLabel: t("settings.backupCancel"),
-        tone: "warning",
       });
       if (!confirmed) return;
 

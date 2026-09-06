@@ -385,9 +385,10 @@ export function AskUserQuestionCard({
                       );
                     })}
 
-                    {/* 自定义回答：保留单选圆使左缘与上方选项对齐，输入框
-                        直接占据标签位置；聚焦或输入即视为选中本项，选中上方
-                        任一选项会取消它（文本保留、只是不再生效）。 */}
+                    {/* 自定义回答：保留单选圆使左缘与上方选项对齐，输入框直接
+                        占据标签位置。切换到本项只由「真正输入」或点单选圆触发，
+                        不能用 onFocus：输入框常驻且排在选项之后，键盘 Tab 路过
+                        它就会清掉已选选项，使该题变回未作答、提交按钮禁用。 */}
                     {interactive && !isSettled && !cancelled ? (
                       <div
                         className={cn(
@@ -424,7 +425,6 @@ export function AskUserQuestionCard({
                           maxLength={ASK_USER_QUESTION_CUSTOM_MAX_LENGTH}
                           placeholder={t("chat.askUser.customPlaceholder")}
                           aria-label={t("chat.askUser.customPlaceholder")}
-                          onFocus={() => selectCustom(question.id)}
                           onKeyDown={(event) => {
                             event.stopPropagation();
                             if (event.key === "Enter" && allAnswered) {

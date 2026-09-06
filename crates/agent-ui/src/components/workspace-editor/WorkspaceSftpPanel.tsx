@@ -1029,7 +1029,6 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
         confirmLabel: t("workspaceSftp.deleteConfirm"),
         cancelLabel: t("workspaceSftp.cancel"),
         closeLabel: t("workspaceSftp.cancel"),
-        tone: "destructive",
       });
       if (!confirmed) return;
       setBusyMessage(t("workspaceSftp.deleting"));
@@ -1129,7 +1128,6 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
               confirmLabel: t("workspaceSftp.overwrite"),
               cancelLabel: t("workspaceSftp.cancel"),
               closeLabel: t("workspaceSftp.cancel"),
-              tone: "warning",
             });
             if (!confirmed) {
               pendingTransferStartsRef.current = Math.max(0, pendingTransferStartsRef.current - 1);

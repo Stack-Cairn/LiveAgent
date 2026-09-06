@@ -711,7 +711,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         detail: t("settings.providerUsageCustomConfirmDetail"),
         confirmLabel: t("settings.providerUsageCustomConfirmAction"),
         cancelLabel: t("settings.cancel"),
-        tone: "warning",
       });
       if (!confirmed) return;
       setCustomUsageQueryConfirmed(true);

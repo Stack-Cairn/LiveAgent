@@ -178,7 +178,9 @@ function BackgroundTaskLogDialog(props: {
     >
       <DialogContent
         layout="bottom-sheet-mobile"
-        className="flex h-[85dvh] flex-col p-0 sm:h-[min(80dvh,36rem)]"
+        // 显式声明宽度：这是唯一依赖 primitive 默认值的调用点，默认值从
+        // max-w-lg 收到 max-w-md 后它会被动变窄 64px，而它承载等宽终端日志。
+        className="flex h-[85dvh] max-w-lg flex-col p-0 sm:h-[min(80dvh,36rem)]"
         closeLabel={t("projectTools.close")}
         showCloseButton
       >

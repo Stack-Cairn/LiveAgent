@@ -48,10 +48,17 @@ test("unmeasured layouts produce a blank key so nothing is cached", () => {
   assert.equal(lru.restore("conv-1", buildTranscriptLayoutKey(0, 768)), null);
 });
 
-test("gateway transcript grid consumes the stage width directly", () => {
+test("gateway transcript and composer columns both drop the retired avatar rail", () => {
+  // 会话流与输入框读的是两个不同变量（会话流可调宽、输入框固定宽），所以
+  // 退役头像列的 40px 补偿必须在两处各写一次；只改一处会让输入框比它要
+  // 对齐的正文列宽 40px。
   assert.match(
     transcriptStylesSource,
-    /minmax\(\s*0,\s*min\(var\(--chat-transcript-content-width,\s*768px\),\s*100%\)\s*\)/,
+    /minmax\(\s*0,\s*min\(calc\(var\(--chat-transcript-content-width,\s*768px\)\s*-\s*40px\),\s*100%\)\s*\)/,
+  );
+  assert.match(
+    transcriptStylesSource,
+    /minmax\(\s*0,\s*min\(calc\(var\(--gateway-chat-column-width,\s*768px\)\s*-\s*40px\),\s*100%\)\s*\)/,
   );
   assert.doesNotMatch(transcriptStylesSource, /--gateway-transcript-column-width/);
 });

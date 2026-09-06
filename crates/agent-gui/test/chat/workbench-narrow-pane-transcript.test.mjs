@@ -41,7 +41,9 @@ test("composer derives its body-aligned width from the live transcript width", (
     /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-4\.75rem\)\]/,
   );
   assert.match(composerSource, /w-\[calc\(100%-2\.25rem\)\]/);
-  assert.match(composerSource, /translate-x-\[18px\]/);
+  // 头像列退役后输入框不再需要补偿性右移：该位移原本是为了抵消正文被
+  // 28px 头像 + 12px 间隙挤出的不对称，现在正文本身已居中。
+  assert.doesNotMatch(composerSource, /translate-x-\[18px\]/);
 });
 
 test("FloorNavRail clamps its panel to the container, not the viewport", () => {

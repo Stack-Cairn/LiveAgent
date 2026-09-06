@@ -574,7 +574,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       confirmLabel: t("chat.conversationBulkDelete"),
       cancelLabel: t("chat.cancel"),
       closeLabel: t("chat.cancel"),
-      tone: "destructive",
     }).finally(() => {
       bulkConfirmOpenRef.current = false;
     });
@@ -746,7 +745,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         description: t("chat.workspaceGroupDeleteConfirmDescription"),
         confirmLabel: t("chat.workspaceGroupDelete"),
         cancelLabel: t("chat.cancel"),
-        tone: "destructive",
       });
       if (confirmed) onDeleteWorkspaceGroup?.(group.id);
     },

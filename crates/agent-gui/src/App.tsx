@@ -621,7 +621,6 @@ export default function App() {
       cancelLabel: translate("appUpdate.restartLater", settings.locale),
       confirmLabel: translate("appUpdate.restartAnyway", settings.locale),
       closeLabel: translate("appUpdate.restartLater", settings.locale),
-      tone: "warning",
       preferCancel: true,
     });
   }, [requestRestartConfirm, settings.locale]);

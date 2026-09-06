@@ -750,9 +750,12 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-composer-layer {
   display: grid;
+  /* 与 .gateway-transcript-shell 同步减去已退役的 40px 头像列，否则输入框
+     会比它要对齐的正文列宽 40px。两者读不同变量（输入框固定宽、会话流可
+     调宽），所以这个补偿必须在两处各写一次。 */
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
-    minmax(0, min(var(--gateway-chat-column-width, 768px), 100%))
+    minmax(0, min(calc(var(--gateway-chat-column-width, 768px) - 40px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
   max-height: 100%;
   padding-bottom: var(--gateway-chat-composer-bottom, 16px);

@@ -141,7 +141,6 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
               confirmLabel: t("chat.workspaceDeleteWorktree"),
               cancelLabel: t("chat.cancel"),
               closeLabel: t("chat.workspaceDeleteWorktreeConfirmClose"),
-              tone: "warning",
             });
             if (!confirmed) return;
             if (terminalClient) {

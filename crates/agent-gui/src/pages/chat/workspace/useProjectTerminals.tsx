@@ -121,7 +121,6 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
           confirmLabel: t("chat.exitConfirmContinue"),
           cancelLabel: t("chat.cancel"),
           closeLabel: t("chat.exitConfirmClose"),
-          tone: "warning",
         }));
       if (!confirmed || cancelled) return;
       // 退出路径的 close_all 会广播 closed;先置位护栏,ChatPage 的

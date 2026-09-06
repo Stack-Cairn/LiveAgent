@@ -413,8 +413,9 @@ test("assistant rounds hide task tools while preserving grouped top-level render
     ["hostedSearchGroup"],
   );
   assert.equal(footerRows(snapshot).length, 1);
-  assert.equal(workTraceRows(snapshot)[0].showAvatar, true);
-  assert.ok(blockRows(snapshot).every((row) => !row.showAvatar));
+  // 头像已整体退役，行模型不再携带 showAvatar；显式断言字段消失，
+  // 否则 !undefined === true 会让旧断言空洞地通过。
+  assert.equal("showAvatar" in workTraceRows(snapshot)[0], false);
 });
 
 test("turn layout keeps every intermediate round in one trace and exposes only final prose", () => {
@@ -1213,11 +1214,6 @@ test("history: a compaction inside a reply renders one avatar, one trace with a 
     ["work-trace", "block", "footer"],
   );
   assert.deepEqual(
-    units.map((row) => row.showAvatar),
-    [true, false, false],
-    "exactly one avatar for the whole reply",
-  );
-  assert.deepEqual(
     units[0].unit.entries.map((entry) => entry.block.kind),
     ["toolGroup", "checkpoint", "toolGroup"],
     "the checkpoint is a seam inside the processing trace",
@@ -1336,10 +1332,6 @@ test("live: a mid-run compaction absorbs the committed half into the live reply 
   assert.deepEqual(
     settled.rows.at(-1).units.map((unit) => unit.unit.kind),
     ["work-trace", "block", "footer"],
-  );
-  assert.deepEqual(
-    settled.rows.at(-1).units.map((unit) => unit.showAvatar),
-    [true, false, false],
   );
 });
 

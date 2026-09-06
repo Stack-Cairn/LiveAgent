@@ -1223,7 +1223,6 @@ export function SshSection(props: SettingsSectionProps) {
         confirmLabel: t("settings.sshReconnectKbiGotIt"),
         cancelLabel: t("settings.cancel"),
         closeLabel: t("settings.sshReconnectKbiGotIt"),
-        tone: "warning",
         hideCancel: true,
       });
       return;
@@ -1235,7 +1234,6 @@ export function SshSection(props: SettingsSectionProps) {
       detail: t("settings.sshReconnectPromptDetail"),
       confirmLabel: t("settings.sshReconnectPromptConfirm").replace("{count}", count),
       cancelLabel: t("settings.sshReconnectPromptKeep"),
-      tone: "warning",
     });
     if (!proceed) return;
     const saveOutcome = await waitForSettingsSaved();
@@ -1365,7 +1363,6 @@ export function SshSection(props: SettingsSectionProps) {
           : t("settings.deleteConfirmDesc"),
       confirmLabel: t("settings.delete"),
       cancelLabel: t("settings.cancel"),
-      tone: "destructive",
     });
     if (!proceed) return;
     // Close before deleting so the sessions never outlive their host config;
