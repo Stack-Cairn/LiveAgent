@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   statSync,
   unlinkSync,
   unwatchFile,
@@ -16,15 +17,19 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { defaultDevStateDir, missingDevDependency } from "./dev-stack-paths.mjs";
+import { desktopBackendReady } from "./dev-stack-readiness.mjs";
 
 const scriptPath = resolve(import.meta.filename);
-const repoRoot = resolve(import.meta.dirname, "..");
+const repoRoot = realpathSync(resolve(import.meta.dirname, ".."));
 const userKey =
-  typeof process.getuid === "function" ? String(process.getuid()) : (process.env.USERNAME ?? "user");
+  typeof process.getuid === "function"
+    ? String(process.getuid())
+    : (process.env.USERNAME ?? "user");
 const stateDir = resolve(
-  process.env.LIVEAGENT_DEV_STATE_DIR ?? join(tmpdir(), `liveagent-dev-stack-${userKey}`),
+  process.env.LIVEAGENT_DEV_STATE_DIR ?? defaultDevStateDir(repoRoot, userKey),
 );
 const gatewayDataDir = resolve(
   process.env.LIVEAGENT_GATEWAY_DATA_DIR ?? join(homedir(), ".liveagent/gateway"),
@@ -35,7 +40,8 @@ const ports = {
   webui: Number(process.env.LIVEAGENT_DEV_WEBUI_PORT ?? 5173),
 };
 const mcpBridgePort = Number(process.env.LIVEAGENT_DEV_MCP_BRIDGE_PORT ?? 9223);
-const gatewayToken = process.env.LIVEAGENT_GATEWAY_TOKEN ?? process.env.DEV_GATEWAY_TOKEN ?? "dev-token";
+const gatewayToken =
+  process.env.LIVEAGENT_GATEWAY_TOKEN ?? process.env.DEV_GATEWAY_TOKEN ?? "dev-token";
 const urls = Object.fromEntries(
   Object.entries(ports).map(([service, port]) => [service, `http://localhost:${port}`]),
 );
@@ -52,7 +58,7 @@ Environment variables:
   LIVEAGENT_DEV_WEBUI_PORT      WebUI Vite port (default: 5173)
   LIVEAGENT_DEV_DESKTOP_PORT    Desktop Vite port (default: 1420)
   LIVEAGENT_DEV_MCP_BRIDGE_PORT MCP Bridge port (default: 9223)
-  LIVEAGENT_DEV_STATE_DIR       State and log directory`);
+  LIVEAGENT_DEV_STATE_DIR       State and log directory (default: isolated per checkout)`);
 }
 
 function fail(message) {
@@ -92,7 +98,10 @@ function readState(service) {
 
 function writeState(state) {
   mkdirSync(stateDir, { recursive: true });
-  writeFileSync(statePath(state.service), `${JSON.stringify(state)}\n`);
+  writeFileSync(
+    statePath(state.service),
+    `${JSON.stringify({ ...state, repoRoot, port: ports[state.service] })}\n`,
+  );
 }
 
 function removeState(service, token) {
@@ -120,6 +129,11 @@ function stateIsFresh(state) {
 function managedState(service) {
   const state = readState(service);
   if (!state) return undefined;
+  if (state.repoRoot !== repoRoot || state.port !== ports[service]) {
+    fail(
+      `${service} state belongs to another checkout or port; use its original checkout/configuration to stop it, or choose a separate LIVEAGENT_DEV_STATE_DIR`,
+    );
+  }
   if (!processIsAlive(state.pid)) {
     removeState(service, state.token);
     return undefined;
@@ -145,11 +159,15 @@ async function portIsListening(port) {
   });
 }
 
-async function httpReady(service) {
+async function httpReady(service, requireVisible = false) {
   const url = service === "gateway" ? `${urls.gateway}/healthz` : `${urls[service]}/`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
-    return response.ok;
+    return (
+      response.ok &&
+      (service !== "desktop" ||
+        (await desktopBackendReady(repoRoot, mcpBridgePort, requireVisible)))
+    );
   } catch {
     return false;
   }
@@ -295,7 +313,7 @@ function tail(file, lineCount) {
 
 async function waitUntilReady(service, timeoutSeconds) {
   for (let elapsed = 0; elapsed < timeoutSeconds; elapsed += 1) {
-    if (await httpReady(service)) return true;
+    if (await httpReady(service, true)) return true;
     const state = managedState(service);
     if (!state || !stateIsFresh(state)) return false;
     await wait(1000);
@@ -304,31 +322,46 @@ async function waitUntilReady(service, timeoutSeconds) {
 }
 
 async function startService(service) {
+  // A fresh worktree can spend several minutes compiling the native app.
+  const timeoutSeconds = service === "desktop" ? 600 : 60;
   const state = managedState(service);
   if (state) {
     if (!stateIsFresh(state)) {
-      console.error(`${service}: managed state is stale for pid ${state.pid}; refusing to replace it`);
+      console.error(
+        `${service}: managed state is stale for pid ${state.pid}; refusing to replace it`,
+      );
       return false;
     }
-    console.log(`${service}: already running (managed pid ${state.pid}, ${urls[service]})`);
-    return true;
-  }
-  if (await portIsListening(ports[service])) {
     if (await httpReady(service)) {
-      console.log(`${service}: already listening on port ${ports[service]} (external, ${urls[service]})`);
+      console.log(`${service}: already running (managed pid ${state.pid}, ${urls[service]})`);
       return true;
     }
-    console.error(`${service}: port ${ports[service]} has an unhealthy external listener; refusing to replace it`);
+    console.log(`${service}: waiting for managed pid ${state.pid} to become ready`);
+    return await waitUntilReady(service, timeoutSeconds);
+  }
+  if (await portIsListening(ports[service])) {
+    console.error(
+      `${service}: port ${ports[service]} is occupied by an unmanaged process (${urls[service]}); stop that process before starting this checkout. An HTTP response does not identify it as LiveAgent.`,
+    );
+    return false;
+  }
+
+  const missing = missingDevDependency(repoRoot, service);
+  if (missing) {
+    console.error(
+      `${service}: missing ${missing}; run "mise exec -- pnpm install --frozen-lockfile" from ${repoRoot} before starting this checkout`,
+    );
     return false;
   }
 
   const supervisor = launchSupervisor(service);
-  const timeoutSeconds = service === "desktop" ? 180 : 60;
   if (await waitUntilReady(service, timeoutSeconds)) {
     console.log(`${service}: started (managed pid ${supervisor.pid}, ${urls[service]})`);
     return true;
   }
-  console.error(`${service}: failed to become ready; last log lines:\n${tail(logPath(service), 30)}`);
+  console.error(
+    `${service}: failed to become ready; last log lines:\n${tail(logPath(service), 30)}`,
+  );
   await stopService(service);
   return false;
 }
@@ -365,7 +398,9 @@ async function stopService(service) {
     return true;
   }
   if (!stateIsFresh(state)) {
-    console.error(`${service}: managed heartbeat is stale for pid ${state.pid}; refusing to stop it`);
+    console.error(
+      `${service}: managed heartbeat is stale for pid ${state.pid}; refusing to stop it`,
+    );
     return false;
   }
 
@@ -392,7 +427,9 @@ async function statusService(service) {
     } else if (await httpReady(service)) {
       console.log(`${service}: ready (managed pid ${state.pid}, ${urls[service]})`);
     } else {
-      console.log(`${service}: starting or unhealthy (managed pid ${state.pid}, port ${ports[service]})`);
+      console.log(
+        `${service}: starting or unhealthy (managed pid ${state.pid}, port ${ports[service]})`,
+      );
     }
     return;
   }
@@ -441,7 +478,8 @@ async function main() {
   }
   validateConfiguration();
   if (action === "__run") {
-    if (!services.includes(target) || typeof process.argv[4] !== "string") fail("invalid supervisor arguments");
+    if (!services.includes(target) || typeof process.argv[4] !== "string")
+      fail("invalid supervisor arguments");
     await runService(target, process.argv[4]);
     return;
   }
@@ -454,20 +492,24 @@ async function main() {
   }
   if (action === "stop") {
     let failed = false;
-    for (const service of targetServices(target, true)) failed = !(await stopService(service)) || failed;
+    for (const service of targetServices(target, true))
+      failed = !(await stopService(service)) || failed;
     if (failed) process.exitCode = 1;
     return;
   }
   if (action === "restart") {
     let failed = false;
-    for (const service of targetServices(target, true)) failed = !(await stopService(service)) || failed;
+    for (const service of targetServices(target, true))
+      failed = !(await stopService(service)) || failed;
     for (const service of targetServices(target)) failed = !(await startService(service)) || failed;
     if (failed) process.exitCode = 1;
     return;
   }
   if (action === "status") {
     for (const service of targetServices(target)) await statusService(service);
-    console.log(`mcp-bridge: ${(await portIsListening(mcpBridgePort)) ? "ready" : "stopped"} (port ${mcpBridgePort})`);
+    console.log(
+      `mcp-bridge: ${(await portIsListening(mcpBridgePort)) ? "ready" : "stopped"} (port ${mcpBridgePort})`,
+    );
     return;
   }
   if (action === "logs") {

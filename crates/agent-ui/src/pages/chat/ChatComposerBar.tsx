@@ -1240,13 +1240,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         hidden && "hidden",
       )}
     >
-      {surface === "desktop" ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
-          style={{ height: "1rem" }}
-        />
-      ) : null}
+      {/* 层底 16px 悬浮留白（desktop pb-4 / web --gateway-chat-composer-bottom）
+          的兜底实底条：读数裙边只盖到读数行底边，滚动中的正文会从这条缝里
+          露出来。两端共用，不做 surface 分支。 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
+        style={{ height: "1rem" }}
+      />
       {/* Desktop aligns to the assistant message body: transcript px-5 + px-5
           = 40px removed from the column, and the column itself already gives
           back the retired 40px avatar rail. The card extends 2px past each
