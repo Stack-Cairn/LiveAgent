@@ -581,13 +581,12 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  /* Two deliberately separate columns, both defaulting to 768px: the composer
-     keeps a fixed width while the transcript is user-resizable, so widening
-     the conversation never drags the input box along. Only the composer layer
-     may read --gateway-chat-column-width; the transcript reads
-     --chat-transcript-content-width, which TranscriptWidthControls overwrites
-     inline on .gateway-transcript-stage. */
-  --gateway-chat-column-width: 768px;
+  /* One shared column width: the composer column follows the user-resizable
+     transcript width, matching desktop (ChatComposerBar's desktop branch reads
+     the same variable for the card column). TranscriptWidthControls overwrites
+     --chat-transcript-content-width inline on .gateway-transcript-stage, and
+     the composer layer is a descendant of the stage, so it inherits every
+     update, drag frames included. */
   --chat-transcript-content-width: 768px;
   --gateway-chat-column-gutter: 16px;
   --gateway-chat-composer-bottom: 16px;
@@ -694,6 +693,10 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   overscroll-behavior: contain;
 }
 
+/* Blocking on purpose: the panel layer sits above the shared width handles
+   (z-index 10). GatewayAppView suspends TranscriptWidthControls for exactly as
+   long as this is mounted, so no handle hides beneath it and the handles return
+   with its exit (#749). */
 .gateway-history-switch-overlay {
   position: absolute;
   inset: 0;
@@ -750,7 +753,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   display: grid;
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
-    minmax(0, min(var(--gateway-chat-column-width, 768px), 100%))
+    minmax(0, min(var(--chat-transcript-content-width, 768px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
   max-height: 100%;
   padding-bottom: var(--gateway-chat-composer-bottom, 16px);

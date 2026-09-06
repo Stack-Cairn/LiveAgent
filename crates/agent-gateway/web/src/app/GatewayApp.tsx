@@ -10,6 +10,7 @@ import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationS
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
+import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
   createConversationOpenController,
@@ -460,6 +461,9 @@ function useGatewayAppController() {
   >(() => "");
   const {
     activateWorkspaceProject,
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
+    searchConversationWorkdir,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
     archivedWorkspaceProjectPathKeys,
@@ -509,13 +513,13 @@ function useGatewayAppController() {
   // established history window in the single open phase — messages above the
   // window edge stay unfetched until the user pages up. Deps go through refs
   // (assigned per render) so the controller instance stays stable.
-  const openInitialRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(() =>
-    Promise.resolve("painted"),
-  );
+  const openInitialRef = useRef<
+    (id: string, request?: ConversationOpenRequest) => Promise<"cache-hit" | "painted">
+  >(() => Promise.resolve("painted"));
   const openController = useMemo(
     () =>
       createConversationOpenController({
-        openInitial: (id) => openInitialRef.current(id),
+        openInitial: (id, request) => openInitialRef.current(id, request),
         onStateChange: setConversationOpenState,
       }),
     [],
@@ -1135,6 +1139,8 @@ function useGatewayAppController() {
     handleSidebarSelectConversation,
     startNewConversation,
   } = createGatewayConversationActions({
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
     activeView,
     activeWorkspaceProjectPath,
     api,
@@ -1414,7 +1420,11 @@ function useGatewayAppController() {
   const resourceWorkdir =
     sidebarConversationsById.get(displayedConversationId)?.cwd?.trim() ||
     conversationWorkdirsRef.current.get(displayedConversationId)?.trim() ||
-    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+    (searchConversationWorkdir === ""
+      ? ""
+      : isAgentMode
+        ? activeWorkspaceProjectPath || settings.system.workdir.trim()
+        : "");
   const {
     activeProviders,
     availableSkills,
@@ -1513,7 +1523,11 @@ function useGatewayAppController() {
   const displayedConversationWorkdir =
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
-    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+    (searchConversationWorkdir === ""
+      ? ""
+      : isAgentMode
+        ? activeWorkspaceProjectPath || settings.system.workdir.trim()
+        : "");
   const searchMentionableConversations = useCallback(
     (query: string) =>
       searchMentionConversations({

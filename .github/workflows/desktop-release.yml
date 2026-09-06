@@ -283,9 +283,24 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
-            protobuf-compiler \
             rpm \
+            unzip \
             wget
+
+      # ubuntu-22.04 的 apt protobuf-compiler 是 3.12，不支持 proto3 `optional`
+      # （prost-build 不会传 --experimental_allow_proto3_optional），改装官方 release。
+      # protoc 只是宿主构建工具，不影响产物 glibc 基线。
+      - name: Install protobuf compiler
+        env:
+          PROTOC_VERSION: "34.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          sudo unzip -oq /tmp/protoc.zip -d /usr/local 'bin/protoc' 'include/*'
+          sudo chmod +x /usr/local/bin/protoc
+          echo "PROTOC=/usr/local/bin/protoc" >> "$GITHUB_ENV"
+          /usr/local/bin/protoc --version
 
       - uses: Swatinem/rust-cache@v2
         with:

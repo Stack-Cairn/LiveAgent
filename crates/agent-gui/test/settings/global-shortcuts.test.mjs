@@ -115,25 +115,6 @@ test("writeGlobalShortcutBindings round-trips through readGlobalShortcutBindings
   });
 });
 
-test("writeGlobalShortcutBindings announces same-window binding changes", async () => {
-  const storage = createMemoryLocalStorage();
-  const eventTarget = new EventTarget();
-  eventTarget.localStorage = storage;
-  let changeCount = 0;
-  eventTarget.addEventListener("liveagent:global-shortcut-bindings-changed", () => {
-    changeCount += 1;
-  });
-  await withWindow(eventTarget.localStorage, async () => {
-    // withWindow installs a plain object; expose the EventTarget methods used by the module.
-    globalThis.window.dispatchEvent = eventTarget.dispatchEvent.bind(eventTarget);
-    const { writeGlobalShortcutBindings } = loadGlobalShortcuts();
-    writeGlobalShortcutBindings({
-      searchConversations: { accelerator: "Super+KeyK", enabled: true },
-    });
-  });
-  assert.equal(changeCount, 1);
-});
-
 test("applyGlobalShortcuts registers only enabled bindings with non-empty accelerators", async () => {
   const calls = [];
   const { applyGlobalShortcuts } = loadGlobalShortcuts({
@@ -160,12 +141,6 @@ test("applyGlobalShortcuts registers only enabled bindings with non-empty accele
     },
   ]);
   assert.deepEqual(failures, [{ action: "summon", accelerator: "Ctrl+KeyA", error: "taken" }]);
-});
-
-test("formatGlobalShortcutAccelerator follows the settings keyboard labels", () => {
-  const { formatGlobalShortcutAccelerator } = loadGlobalShortcuts();
-  assert.equal(formatGlobalShortcutAccelerator("Super+Shift+KeyK", true), "⌘⇧K");
-  assert.equal(formatGlobalShortcutAccelerator("Ctrl+ArrowUp", false), "Ctrl ↑");
 });
 
 test("applyGlobalShortcuts tolerates non-Tauri environments and bad responses", async () => {

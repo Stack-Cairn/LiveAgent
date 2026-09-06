@@ -12,7 +12,6 @@ import {
 
 import { cn } from "../../../lib/shared/utils";
 import {
-  areWidthControlsUsable,
   clampWidthToStage,
   DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
@@ -20,6 +19,7 @@ import {
   resolveDragWidth,
   resolveKeyboardWidth,
   resolveStageMaxWidth,
+  resolveTranscriptWidthControlsState,
   TRANSCRIPT_HORIZONTAL_SAFE_SPACE,
   TRANSCRIPT_WIDTH_CONTROLS_HIDDEN_MEDIA_QUERY,
   type TranscriptResizeSide,
@@ -40,6 +40,15 @@ type TranscriptWidthControlsProps = {
   onWidthChange: (width: number) => void;
   resizeLabel: string;
   resetLabel: string;
+  /**
+   * True while a loading overlay covers the stage (history switch, first
+   * layout settle). The handles unmount — an opaque overlay leaves nothing to
+   * grab, and a focusable separator must not hide beneath a blocking layer —
+   * while the stage observer keeps the width variable clamped. They return in
+   * the same commit the overlay leaves, re-measured against the stage as it is
+   * then, so no unrelated layout change is needed to wake them.
+   */
+  suspended?: boolean;
 };
 
 function subscribeControlsHidden(onChange: () => void) {
@@ -72,13 +81,16 @@ function applyWidth(host: HTMLElement | null, width: number) {
 }
 
 export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
-  const { hostRef, width, onWidthChange, resizeLabel, resetLabel } = props;
+  const { hostRef, width, onWidthChange, resizeLabel, resetLabel, suspended = false } = props;
   const [maxWidth, setMaxWidth] = useState(() => resolveStageMaxWidth(null));
   const [resizingWidth, setResizingWidth] = useState<number | null>(null);
   const pendingWidthRef = useRef(width);
   const resizingRef = useRef(false);
   const resizeFrameRef = useRef<number | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // Ends the drag in flight — listeners off, pending width committed. Null
+  // while no drag is running.
+  const endResizeRef = useRef<(() => void) | null>(null);
   // Read by the stage observer, which must outlive individual width commits.
   const widthRef = useRef(width);
   widthRef.current = width;
@@ -90,6 +102,12 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
     readControlsHidden,
     () => true,
   );
+  const controlsState = resolveTranscriptWidthControlsState({
+    suspended,
+    mediaHidden: controlsHidden,
+    maxWidth,
+  });
+  const handlesVisible = controlsState === "ready";
 
   useLayoutEffect(() => {
     // Mid-drag the pointer owns the variable; that drag's commit reconciles it.
@@ -97,22 +115,42 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
     applyWidth(hostRef.current, clampWidthToStage(width, maxWidth));
   }, [hostRef, maxWidth, resizingWidth, width]);
 
+  // One measurement shared by mount, reveal, window resize and the stage
+  // observer: reads the stage as it is right now, stores the ceiling and
+  // re-clamps the variable unless a drag currently owns it.
+  const measureStage = useCallback(() => {
+    const host = hostRef.current;
+    const nextMaxWidth = measureStageMaxWidth(host);
+    setMaxWidth(nextMaxWidth);
+    if (!resizingRef.current) {
+      applyWidth(host, clampWidthToStage(widthRef.current, nextMaxWidth));
+    }
+  }, [hostRef]);
+
+  // Mount and every reveal measure synchronously, before paint. A pane that
+  // changed size behind a loading overlay would otherwise keep the ceiling
+  // measured before the overlay, and a stale narrow ceiling keeps the handles
+  // hidden until some unrelated layout change wakes the observer (#749). On a
+  // first mount whose host ref is not attached yet the measurement falls back
+  // to the unmeasured ceiling and the observer below corrects it on its first
+  // delivery.
+  useLayoutEffect(() => {
+    if (suspended) return;
+    measureStage();
+  }, [measureStage, suspended]);
+
   // Keyed off the host alone on purpose: re-arming the observer on every width
   // commit would tear it down and rebuild it mid-interaction for nothing.
   useEffect(() => {
     const host = hostRef.current;
     let frameId = 0;
-    const updateMaxWidth = () => {
+    const measureOnFrame = () => {
       frameId = 0;
-      const nextMaxWidth = measureStageMaxWidth(host);
-      setMaxWidth(nextMaxWidth);
-      if (!resizingRef.current) {
-        applyWidth(host, clampWidthToStage(widthRef.current, nextMaxWidth));
-      }
+      measureStage();
     };
     const scheduleUpdate = () => {
       if (frameId !== 0) return;
-      frameId = requestAnimationFrame(updateMaxWidth);
+      frameId = requestAnimationFrame(measureOnFrame);
     };
     scheduleUpdate();
     window.addEventListener("resize", scheduleUpdate);
@@ -124,7 +162,14 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       if (frameId !== 0) cancelAnimationFrame(frameId);
       observer?.disconnect();
     };
-  }, [hostRef]);
+  }, [hostRef, measureStage]);
+
+  // An overlay landing mid-drag ends the drag where the pointer is: the window
+  // listeners would otherwise keep resizing a stage the user can no longer
+  // see, holding a handle that is about to unmount.
+  useEffect(() => {
+    if (suspended) endResizeRef.current?.();
+  }, [suspended]);
 
   useEffect(
     () => () => {
@@ -194,6 +239,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
         document.body.style.userSelect = previousUserSelect;
         resizingRef.current = false;
         cleanupRef.current = null;
+        endResizeRef.current = null;
       };
 
       const handleMove = (moveEvent: PointerEvent) => {
@@ -206,6 +252,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       };
 
       cleanupRef.current = cleanup;
+      endResizeRef.current = handleEnd;
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", handleEnd);
       window.addEventListener("pointercancel", handleEnd);
@@ -228,14 +275,16 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
     commitWidth(DEFAULT_CHAT_TRANSCRIPT_WIDTH);
   }, [commitWidth]);
 
-  if (controlsHidden || !areWidthControlsUsable(maxWidth)) return null;
-
   const handleTitle = `${resizeLabel} · ${resetLabel}`;
 
   // Only the right handle is exposed to assistive tech. Both handles drive one
   // value, and aria-value* is only meaningful on a focusable separator — so
   // the left handle stays a pointer-only affordance instead of advertising
   // values nothing can focus to change.
+  //
+  // The transparent hit target spans the pane's full height at 17px wide —
+  // the original 96px-tall, 12px-wide grips were hard to acquire (#749
+  // follow-up). Only the hit area grew; the visible pill stays small.
   const renderHandle = (side: TranscriptResizeSide) => {
     const isPrimary = side === "right";
     return (
@@ -258,14 +307,14 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
         onPointerDown={(event) => handleResizeStart(side, event)}
         onDoubleClick={resetWidth}
         className={cn(
-          "group pointer-events-auto absolute top-1/2 z-10 h-24 max-h-full w-3 -translate-y-1/2 touch-none cursor-col-resize border-0 bg-transparent p-0 focus-visible:outline-none",
+          "group pointer-events-auto absolute inset-y-0 z-10 flex w-[17px] touch-none cursor-col-resize items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-none",
           isPrimary ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
         )}
       >
         <span
           aria-hidden="true"
           className={cn(
-            "absolute left-1/2 top-1/2 h-10 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/25 opacity-0 shadow-sm transition-[height,background-color,opacity] duration-150",
+            "h-10 w-0.5 rounded-full bg-muted-foreground/25 opacity-0 shadow-sm transition-[height,background-color,opacity] duration-150",
             "group-hover:h-16 group-hover:bg-primary/60 group-hover:opacity-100 group-focus-visible:h-16 group-focus-visible:bg-primary group-focus-visible:opacity-100",
             resizingWidth !== null && "h-20 bg-primary opacity-100",
           )}
@@ -277,14 +326,21 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
   return (
     <div
       className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2"
+      // The root stays mounted in every state and names the gate that hides
+      // the handles, so a runtime look at a pane that lost them tells the
+      // gates apart instead of finding nothing to inspect (#749). `hidden`
+      // keeps the empty root out of layout, hit testing and the a11y tree.
+      data-transcript-width-state={controlsState}
+      data-transcript-width-max={maxWidth}
+      hidden={!handlesVisible}
       style={{
         width: `var(${CHAT_TRANSCRIPT_WIDTH_CSS_VAR}, ${DEFAULT_CHAT_TRANSCRIPT_WIDTH}px)`,
         maxWidth: `calc(100% - ${TRANSCRIPT_HORIZONTAL_SAFE_SPACE}px)`,
       }}
     >
-      {renderHandle("left")}
-      {renderHandle("right")}
-      {resizingWidth !== null ? (
+      {handlesVisible ? renderHandle("left") : null}
+      {handlesVisible ? renderHandle("right") : null}
+      {handlesVisible && resizingWidth !== null ? (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] font-medium tabular-nums text-muted-foreground shadow-sm">
           {effectiveWidth} px
         </div>

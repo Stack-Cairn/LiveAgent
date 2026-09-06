@@ -4,6 +4,7 @@ import type {
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
@@ -54,8 +55,6 @@ export type ChatHistorySidebarProps = {
   fontScale?: number;
   /** Incremented by the desktop host when its configured search shortcut fires. */
   conversationSearchRequestKey?: number;
-  /** Display label for the enabled desktop shortcut (for example, ⌘⇧K). */
-  conversationSearchShortcutLabel?: string;
   activeView?: "chat" | "skills-hub" | "mcp-hub";
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -95,7 +94,7 @@ export type ChatHistorySidebarProps = {
   // collapsed group at the end of the list.
   archivedProjectPathKeys?: ReadonlySet<string>;
   onNewConversation: () => void;
-  onSelectConversation: (id: string) => void;
+  onSelectConversation: (id: string, options?: ConversationOpenOptions) => void;
   /** Workbench drag intent from a conversation row title (desktop pointer). */
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,
@@ -203,7 +202,6 @@ export type ChatHistorySidebarContainerSource = Required<
     | "isOpen"
     | "fontScale"
     | "conversationSearchRequestKey"
-    | "conversationSearchShortcutLabel"
     | "onNewConversation"
     | "onSelectConversation"
     | "canShareConversations"
@@ -269,12 +267,7 @@ type ChatHistorySidebarBaseState = Pick<
 export function buildChatHistorySidebarBaseProps(
   source: Pick<
     ChatHistorySidebarContainerSource,
-    | "currentConversationId"
-    | "isOpen"
-    | "fontScale"
-    | "conversationSearchRequestKey"
-    | "conversationSearchShortcutLabel"
-    | "activeView"
+    "currentConversationId" | "isOpen" | "fontScale" | "conversationSearchRequestKey" | "activeView"
   >,
   state: ChatHistorySidebarBaseState,
 ) {
@@ -297,7 +290,6 @@ export function buildChatHistorySidebarBaseProps(
     isOpen: source.isOpen,
     fontScale: source.fontScale,
     conversationSearchRequestKey: source.conversationSearchRequestKey,
-    conversationSearchShortcutLabel: source.conversationSearchShortcutLabel,
     activeView: source.activeView,
   };
 }

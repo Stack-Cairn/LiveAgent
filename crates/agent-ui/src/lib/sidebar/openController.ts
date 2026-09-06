@@ -1,3 +1,15 @@
+import type { SidebarConversation } from "./types";
+
+export type ConversationOpenOptions = {
+  source?: "search";
+  beforeCommit?: (conversation: SidebarConversation) => void;
+  afterCommit?: () => void;
+};
+
+export type ConversationOpenRequest = ConversationOpenOptions & {
+  isCurrent: () => boolean;
+};
+
 export type ConversationOpenPhase = "idle" | "opening" | "ready" | "failed";
 
 export type ConversationOpenState = {
@@ -8,14 +20,17 @@ export type ConversationOpenState = {
 };
 
 export type ConversationOpenController = {
-  open(conversationId: string): void;
+  open(conversationId: string, options?: ConversationOpenOptions): void;
   cancel(): void;
   getSequence(): number;
   getState(): ConversationOpenState;
 };
 
 export type ConversationOpenControllerDeps = {
-  openInitial(conversationId: string): Promise<"cache-hit" | "painted">;
+  openInitial(
+    conversationId: string,
+    request?: ConversationOpenRequest,
+  ): Promise<"cache-hit" | "painted">;
   onStateChange(state: ConversationOpenState): void;
   overlayDelayMs?: number;
 };
@@ -49,7 +64,7 @@ export function createConversationOpenController(
   };
 
   return {
-    open: (conversationId) => {
+    open: (conversationId, options) => {
       sequence += 1;
       const requestSequence = sequence;
       clearOverlayTimer();
@@ -61,7 +76,7 @@ export function createConversationOpenController(
       }, overlayDelayMs);
 
       deps
-        .openInitial(conversationId)
+        .openInitial(conversationId, { ...options, isCurrent: () => requestSequence === sequence })
         .then(() => {
           if (requestSequence !== sequence) return;
           clearOverlayTimer();

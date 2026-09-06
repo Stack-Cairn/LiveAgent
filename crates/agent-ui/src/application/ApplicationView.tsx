@@ -17,8 +17,6 @@ type ApplicationViewProps = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   isAgentMode: boolean;
-  sidebarOpen: boolean;
-  onOpenSidebar: () => void;
   initialSkills?: SkillSummary[];
   initialSkillsRootDir?: string;
   className?: string;
@@ -34,8 +32,6 @@ export function ApplicationView(props: ApplicationViewProps) {
     settings,
     setSettings,
     isAgentMode,
-    sidebarOpen,
-    onOpenSidebar,
     initialSkills,
     initialSkillsRootDir,
     className,
@@ -54,19 +50,11 @@ export function ApplicationView(props: ApplicationViewProps) {
         initialSkills={initialSkills}
         initialRootDir={initialSkillsRootDir}
         isAgentMode={isAgentMode}
-        sidebarOpen={sidebarOpen}
-        onOpenSidebar={onOpenSidebar}
       />
     );
   } else if (activeView === "mcp-hub") {
     content = (
-      <McpHubPage
-        settings={settings}
-        setSettings={setSettings}
-        isAgentMode={isAgentMode}
-        sidebarOpen={sidebarOpen}
-        onOpenSidebar={onOpenSidebar}
-      />
+      <McpHubPage settings={settings} setSettings={setSettings} isAgentMode={isAgentMode} />
     );
   } else {
     const { containerProps, content: chatContent } = chat;

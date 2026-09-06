@@ -32,9 +32,10 @@ export type WorkbenchDragPointerEvent = {
   clientX: number;
   clientY: number;
   /**
-   * The element that received pointer-down. Capturing on it keeps move/up
-   * events flowing while the pointer crosses xterm canvases, contenteditable
-   * composers, and the dock/canvas boundary.
+   * The element that received pointer-down. Once a drag activates, capturing
+   * on it keeps move/up events flowing across xterm canvases, contenteditable
+   * composers, and the dock/canvas boundary. Ordinary presses stay uncaptured
+   * so a nested button remains the target of the browser's click.
    */
   currentTarget?: EventTarget | null;
 };
@@ -182,15 +183,6 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
     (payload: WorkbenchDragPayload, event: WorkbenchDragPointerEvent) => {
       if (!enabled || sessionRef.current.phase !== "idle") return;
       const captureElement = event.currentTarget instanceof Element ? event.currentTarget : null;
-      if (captureElement) {
-        try {
-          captureElement.setPointerCapture(event.pointerId);
-          pointerCaptureRef.current = { element: captureElement, pointerId: event.pointerId };
-        } catch {
-          // Capture is best-effort: window listeners still see the gesture
-          // when the host rejects setPointerCapture (inactive pointer, etc.).
-        }
-      }
       dispatch({
         type: "arm",
         payload,
@@ -238,6 +230,19 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
             onUnavailableRef.current?.("canvas-too-narrow");
             teardown();
             return;
+          }
+          // Capturing the tab container on pointer-down retargets even a
+          // plain click away from its nested activation button. Window
+          // capture-phase listeners track the armed gesture until it becomes
+          // a real drag; only then may pointer capture change the target.
+          if (captureElement) {
+            try {
+              captureElement.setPointerCapture(event.pointerId);
+              pointerCaptureRef.current = { element: captureElement, pointerId: event.pointerId };
+            } catch {
+              // Capture is best-effort; window listeners still track the drag
+              // if the source disappeared or the host rejects capture.
+            }
           }
           if (canvasElement && geometry && canvasAllowsPointerSplit(geometry)) {
             const canvasRect = canvasElement.getBoundingClientRect();

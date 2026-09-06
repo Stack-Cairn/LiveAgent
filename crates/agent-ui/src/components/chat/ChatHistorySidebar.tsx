@@ -50,6 +50,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import {
   buildWorkspaceProjectSections,
@@ -184,7 +185,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     isOpen,
     fontScale = 1,
     conversationSearchRequestKey,
-    conversationSearchShortcutLabel,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -195,7 +195,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     projectsCollapsed = false,
     workspaceFolderDropActive = false,
     workspaceFolderDropHandlers,
-    recentCollapsed = false,
+    recentCollapsed: persistedRecentCollapsed = false,
     onProjectsCollapsedChange,
     onRecentCollapsedChange,
     onCreateProject,
@@ -244,6 +244,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const { t } = useLocale();
 
   const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
+  const [revealedSearchConversationId, setRevealedSearchConversationId] = useState<string | null>(
+    null,
+  );
+  const pendingSearchScrollRef = useRef<string | null>(null);
+  const recentCollapsed =
+    revealedSearchConversationId === currentConversationId ? false : persistedRecentCollapsed;
   const lastConversationSearchRequestKeyRef = useRef(conversationSearchRequestKey);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -348,12 +354,26 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       ),
     [busyConversationIds, items, runningConversationIds, sectionsDisabled],
   );
-  const handleSelectConversation = useStableEvent((id: string) => {
-    if (!sectionsDisabled) {
-      selectionAnchorRef.current = id;
-      onSelectConversation(id);
-    }
-  });
+  const handleSelectConversation = useStableEvent(
+    (id: string, options?: ConversationOpenOptions) => {
+      if (!sectionsDisabled) {
+        selectionAnchorRef.current = id;
+        onSelectConversation(
+          id,
+          options?.source === "search"
+            ? {
+                ...options,
+                afterCommit: () => {
+                  pendingSearchScrollRef.current = id;
+                  setRevealedSearchConversationId(id);
+                  options.afterCommit?.();
+                },
+              }
+            : options,
+        );
+      }
+    },
+  );
   const handleStartRenaming = useStableEvent((item: SidebarConversation) => {
     if (!sectionsDisabled) {
       onStartRenaming(item);
@@ -439,6 +459,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   });
   const handleRecentCollapsedChange = useStableEvent(() => {
     if (!sectionsDisabled) {
+      setRevealedSearchConversationId(null);
       onRecentCollapsedChange?.(!recentCollapsed);
     }
   });
@@ -957,6 +978,29 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
 
   useEffect(() => {
     if (
+      !isOpen ||
+      listStatus !== "ready" ||
+      revealedSearchConversationId !== currentConversationId ||
+      recentCollapsed ||
+      pendingSearchScrollRef.current !== currentConversationId
+    )
+      return;
+    const index = items.findIndex((item) => item.id === revealedSearchConversationId);
+    if (index < 0) return;
+    historyVirtualizer.scrollToIndex(index, { align: "auto" });
+    pendingSearchScrollRef.current = null;
+  }, [
+    currentConversationId,
+    historyVirtualizer,
+    isOpen,
+    items,
+    listStatus,
+    recentCollapsed,
+    revealedSearchConversationId,
+  ]);
+
+  useEffect(() => {
+    if (
       sectionsDisabled ||
       !hasMore ||
       listStatus === "loading" ||
@@ -1293,21 +1337,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               disabled={sectionsDisabled}
               onClick={() => setConversationSearchOpen(true)}
               className="chat-history-search-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-              title={
-                conversationSearchShortcutLabel
-                  ? `${t("chat.searchConversations")} (${conversationSearchShortcutLabel})`
-                  : t("chat.searchConversations")
-              }
+              title={t("chat.searchConversations")}
             >
               <Search className="h-4 w-4 shrink-0 text-foreground/85" />
               <span className="min-w-0 flex-1 truncate text-left">
                 {t("chat.searchConversations")}
               </span>
-              {conversationSearchShortcutLabel ? (
-                <kbd className="hidden rounded border border-border/50 bg-background/40 px-1 py-px text-[9px] font-medium leading-4 text-muted-foreground/70 min-[220px]:inline-flex">
-                  {conversationSearchShortcutLabel}
-                </kbd>
-              ) : null}
             </Button>
             <Button
               type="button"

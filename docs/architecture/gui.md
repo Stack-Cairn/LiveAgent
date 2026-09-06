@@ -26,6 +26,16 @@
 | 后台 runner | `CronPromptRunner` 接管 prompt 类型 cron；`MemoryOrganizerRunner` 接管自动整理记忆。 |
 | 远程桥接 | Remote settings 启用时，Tauri GatewayController 连接 Go Gateway，并把 settings/history/chat event 发布出去。 |
 
+## 本机快捷键偏好
+
+桌面端「设置 → 快捷键」中的偏好保存在本机 WebView 的 localStorage，不进入设置同步或 Gateway 配置。
+
+- **发送消息**：行内切换 Enter 与 Ctrl+Enter（macOS 显示 ⌘+Enter，兼容 Ctrl+Enter）。选择组合键发送时，普通 Enter 换行；Shift+Enter 始终换行。发送键只在当前消息输入框中生效，保留输入法选词保护。默认使用 Enter 发送。
+- **生效范围**：每个已绑定的应用动作可切换「全局 / 应用」。全局绑定通过 Tauri 系统热键注册；应用绑定仅在 LiveAgent 窗口有焦点时派发，并在 Rust 端再次检查窗口焦点。未带范围字段的旧绑定继续按全局处理。
+- **录制与切换**：录制期间同时暂停全局注册和应用内监听；全量注册请求串行执行，切到应用范围时撤销原有系统热键。应用范围的无修饰字符键不会抢占输入框的正常输入，托盘菜单只回显全局范围的快捷键。
+
+主要入口为 `src/lib/shortcuts/globalShortcuts.ts`、`src/pages/settings/GlobalShortcutsSection.tsx`、`src-tauri/src/commands/app/app.rs`；共享消息输入框读取 `agent-ui/src/lib/chat/sendShortcut.ts`。
+
 ## ChatPage 编排
 
 | 子系统 | 说明 | 关键路径 |

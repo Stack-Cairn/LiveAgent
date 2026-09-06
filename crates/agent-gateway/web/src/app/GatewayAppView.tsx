@@ -856,6 +856,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             settings.locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度"
           }
           resetLabel={settings.locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度"}
+          // The history overlay below is a blocking panel layer above the
+          // handles; suspend them for exactly as long as it is mounted (#749).
+          suspended={conversationOpenState.showOverlay}
         />
         {displayedTranscriptRowCount > 0 && !conversationOpenState.showOverlay ? (
           <FloorNavRail
@@ -1276,7 +1279,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               showProjects={isAgentMode && status?.online === true}
               projects={workspaceProjects}
               workspaceProjectGroups={settings.system.workspaceProjectGroups}
-              activeProjectId={activeWorkspaceProject?.id}
+              activeProjectId={activeWorkspaceProject?.id ?? ""}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
               workspaceFolderDropActive={workspaceFolderDropActive}
@@ -1443,8 +1446,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 settings={settings}
                 setSettings={setSettings}
                 isAgentMode={isAgentMode}
-                sidebarOpen={sidebarOpen}
-                onOpenSidebar={() => setSidebarOpen(true)}
                 initialSkills={availableSkills}
                 initialSkillsRootDir={skillsRootDir}
                 className="contents"
@@ -1575,6 +1576,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                     ? "Double-click to reset"
                                     : "双击恢复默认宽度"
                                 }
+                                suspended={conversationOpenState.showOverlay}
                               />
                               {displayedTranscriptRowCount > 0 &&
                               !conversationOpenState.showOverlay ? (
