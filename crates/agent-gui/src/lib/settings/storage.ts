@@ -1,3 +1,4 @@
+import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import {
   buildGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncUpdatePayload,
@@ -126,6 +127,7 @@ function readLocalUiSettings(): {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,
       },
+      sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
       chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
       rightDock: normalizeRightDockSettings(obj.rightDock),
       // 三档枚举（与 normalizeCustomSettings 同口径）：脏值/缺省落回统计状态栏。

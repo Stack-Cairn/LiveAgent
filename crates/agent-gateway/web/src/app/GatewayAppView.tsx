@@ -245,8 +245,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleSidebarConversationsRemoved,
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
-    handleSidebarOpenMcpHub,
-    handleSidebarOpenSkillsHub,
+    handleSidebarOpenResourceHub,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
     handleSidebarSelectConversation,
@@ -1328,9 +1327,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
               onConversationsRemoved={handleSidebarConversationsRemoved}
               onCloseSidebar={() => setSidebarOpen(false)}
-              onOpenSettings={() => openSettings()}
-              onOpenSkillsHub={handleSidebarOpenSkillsHub}
-              onOpenMcpHub={handleSidebarOpenMcpHub}
+              sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+              onOpenSettings={openSettings}
+              onOpenResourceHub={handleSidebarOpenResourceHub}
             />
 
             {shareConversation ? (

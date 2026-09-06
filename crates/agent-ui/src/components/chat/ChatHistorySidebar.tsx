@@ -2,10 +2,12 @@ import { type WorkspaceProject, workspaceProjectPathKey } from "@liveagent/app/l
 import {
   AlertCircle,
   Blend,
+  Brain,
   Cable,
   Check,
   ChevronRight,
   CirclePlus,
+  Clock3,
   Folder,
   FolderClosed,
   FolderOpen,
@@ -50,6 +52,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { normalizeSidebarShortcuts, SIDEBAR_SHORTCUTS } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import {
@@ -235,9 +238,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onDeleteConversations,
     onLoadMore,
     onCloseSidebar,
+    sidebarShortcuts = normalizeSidebarShortcuts(undefined),
     onOpenSettings,
-    onOpenSkillsHub,
-    onOpenMcpHub,
+    onOpenResourceHub,
     headerTop,
     brand,
     hideCloseButton = false,
@@ -1377,46 +1380,30 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 {t("chat.searchConversations")}
               </span>
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenSkillsHub?.()}
-              className={cn(
-                "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
-                activeView === "skills-hub"
-                  ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
-              )}
-              title="Skills Hub"
-            >
-              <Blend
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  activeView === "skills-hub" ? "text-amber-500" : "text-foreground/85",
-                )}
-              />
-              <span className="truncate">Skills</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenMcpHub?.()}
-              className={cn(
-                "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
-                activeView === "mcp-hub"
-                  ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
-              )}
-              title="MCP Hub"
-            >
-              <Cable
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  activeView === "mcp-hub" ? "text-violet-500" : "text-foreground/85",
-                )}
-              />
-              <span className="truncate">MCP</span>
-            </Button>
+            {SIDEBAR_SHORTCUTS.filter(({ id }) => sidebarShortcuts[id]).map(({ id, labelKey }) => {
+              const Icon = { skills: Blend, mcp: Cable, cron: Clock3, memory: Brain }[id];
+              const active = activeView === `${id}-hub`;
+              return (
+                <Button
+                  key={id}
+                  type="button"
+                  variant="ghost"
+                  data-testid={`sidebar-shortcut-${id}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => onOpenResourceHub(id)}
+                  className={cn(
+                    "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                    active
+                      ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
+                      : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+                  )}
+                  title={t(labelKey)}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-foreground/85" />
+                  <span className="truncate">{t(labelKey)}</span>
+                </Button>
+              );
+            })}
           </div>
         </div>
 
@@ -2157,7 +2144,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             // 不必靠文案或坐标去猜。可读名走 i18n——屏幕阅读器念给用户听的
             // 东西不该为了脚本方便固定成英文。
             data-testid="open-settings"
-            onClick={onOpenSettings}
+            onClick={() => onOpenSettings()}
             className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
             title={t("tooltip.settings")}
           >

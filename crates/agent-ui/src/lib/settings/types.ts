@@ -2,6 +2,8 @@ import type { Locale } from "@liveagent/app/i18n/config";
 import type { ThinkingLevel } from "@liveagent/ui/lib/models/modelThinking";
 import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 
+import type { SidebarShortcuts } from "./sidebarShortcuts";
+
 export type ProviderId = "codex" | "claude_code" | "gemini" | "xai" | "deepseek";
 
 export type ExecutionMode = "text" | "tools" | "agent-dev";
@@ -162,6 +164,7 @@ export type ChatTranscriptSettings = {
 export type ComposerContextDisplayMode = "statsBar" | "both" | "ring";
 
 export type CustomSettings = {
+  sidebarShortcuts: SidebarShortcuts;
   conversationTitleModel?: SelectedModel;
   // AI commit-message generation in the Git review dock. Unset means "follow
   // the current conversation model"; a stored selection whose provider/model

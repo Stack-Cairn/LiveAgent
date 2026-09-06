@@ -3978,17 +3978,13 @@ export function ChatPage(props: ChatPageProps) {
         onShareConversation={handleOpenShareModal}
         onOpenSharedConversations={handleOpenSharedHistoryManager}
         onCloseSidebar={handleCloseSidebar}
-        onOpenSettings={() => onOpenSettings()}
+        sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+        onOpenSettings={onOpenSettings}
         appUpdate={appUpdate}
-        onOpenSkillsHub={() => {
+        onOpenResourceHub={(resource) => {
           cacheActiveComposerDraft();
           setRightDockOpen(false);
-          setActiveView("skills-hub");
-        }}
-        onOpenMcpHub={() => {
-          cacheActiveComposerDraft();
-          setRightDockOpen(false);
-          setActiveView("mcp-hub");
+          setActiveView(`${resource}-hub`);
         }}
       />
 

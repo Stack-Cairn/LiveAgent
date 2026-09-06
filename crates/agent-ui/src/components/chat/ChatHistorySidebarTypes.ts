@@ -1,9 +1,11 @@
 import type { WorkspaceProject } from "@liveagent/app/lib/settings";
+import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import type {
   SidebarBatchDeleteOptions,
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
@@ -57,7 +59,7 @@ export type ChatHistorySidebarProps = {
   fontScale?: number;
   /** Incremented by the desktop host when its configured search shortcut fires. */
   conversationSearchRequestKey?: number;
-  activeView?: "chat" | "skills-hub" | "mcp-hub";
+  activeView?: ApplicationViewId;
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
   projects?: WorkspaceProject[];
@@ -140,9 +142,9 @@ export type ChatHistorySidebarProps = {
   ) => Promise<SidebarBatchDeleteResult>;
   onLoadMore: () => void;
   onCloseSidebar: () => void;
+  sidebarShortcuts?: SidebarShortcuts;
   onOpenSettings: () => void;
-  onOpenSkillsHub?: () => void;
-  onOpenMcpHub?: () => void;
+  onOpenResourceHub: (resource: SidebarShortcutId) => void;
   headerTop?: ReactNode;
   brand?: ReactNode;
   hideCloseButton?: boolean;
@@ -211,9 +213,10 @@ export type ChatHistorySidebarContainerSource = Required<
     | "onShareConversation"
     | "onOpenSharedConversations"
     | "onCloseSidebar"
+    | "sidebarShortcuts"
     | "onOpenSettings"
   > &
-  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenSkillsHub" | "onOpenMcpHub">> & {
+  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenResourceHub">> & {
     projects: WorkspaceProject[];
   };
 
@@ -226,9 +229,9 @@ type ChatHistorySidebarConversationSource = Pick<
   | "onShareConversation"
   | "onOpenSharedConversations"
   | "onCloseSidebar"
+  | "sidebarShortcuts"
   | "onOpenSettings"
-  | "onOpenSkillsHub"
-  | "onOpenMcpHub"
+  | "onOpenResourceHub"
 >;
 
 type ChatHistorySidebarConversationHandlers = Pick<
@@ -310,8 +313,8 @@ export function buildChatHistorySidebarConversationProps(
     onOpenSharedConversations: source.onOpenSharedConversations,
     onCloseSidebar: source.onCloseSidebar,
     onOpenSettings: source.onOpenSettings,
-    onOpenSkillsHub: source.onOpenSkillsHub,
-    onOpenMcpHub: source.onOpenMcpHub,
+    sidebarShortcuts: source.sidebarShortcuts,
+    onOpenResourceHub: source.onOpenResourceHub,
   };
 }
 

@@ -3542,3 +3542,27 @@ test("workspace resource overflow uses locale-independent Unicode code-point ord
   assert.ok(normalized["/repo/a"]);
   assert.equal(normalized["/repo/ä"], undefined);
 });
+
+
+test("sidebar shortcut migration tolerates partial and malformed preferences", () => {
+  for (const input of [null, [], "hidden", {}]) {
+    assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: input }, []).sidebarShortcuts,
+      { skills: true, mcp: true, cron: true, memory: true });
+  }
+  assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: {
+    skills: false, mcp: "false", cron: null, memory: true,
+  } }, []).sidebarShortcuts, { skills: false, mcp: true, cron: true, memory: true });
+});
+
+test("gateway sync preserves each device's sidebar shortcuts including legacy peers", () => {
+  const local = settings.normalizeSettings({ customSettings: {
+    sidebarShortcuts: { skills: false, mcp: false, cron: false, memory: false },
+  } });
+  const outgoing = sync.buildGatewaySettingsSyncPayload(local);
+  assert.deepEqual(outgoing.customSettings.sidebarShortcuts,
+    { skills: true, mcp: true, cron: true, memory: true });
+  for (const incoming of [outgoing, { customSettings: {} }]) {
+    const applied = sync.applyGatewaySettingsSyncPayload(local, incoming);
+    assert.deepEqual(applied.customSettings.sidebarShortcuts, local.customSettings.sidebarShortcuts);
+  }
+});
