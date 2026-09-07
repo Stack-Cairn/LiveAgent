@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,6 +13,9 @@ import (
 func OriginAllowed(r *http.Request) bool {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {
+		// Non-browser clients (curl, scripts, SDKs) don't send Origin.
+		// Allow them but log for audit — authentication should gate access.
+		slog.Debug("websocket upgrade: no Origin header (non-browser client)", "remote", r.RemoteAddr)
 		return true
 	}
 	parsed, err := url.Parse(origin)

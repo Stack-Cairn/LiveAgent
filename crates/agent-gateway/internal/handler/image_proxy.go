@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -102,6 +104,25 @@ func validateImageProxyURL(raw string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("image URL is not allowed: %v", err)
 	}
+
+	// DNS rebinding protection: resolve the hostname before making the
+	// outbound request and verify the resolved IP is not in a blocked
+	// range. This prevents TOCTOU races where DNS returns a safe IP
+	// during validation but a malicious IP during the actual request.
+	if hostname := parsed.Hostname(); hostname != "" && net.ParseIP(hostname) == nil {
+		ips, err := net.LookupIP(hostname)
+		if err != nil {
+			slog.Warn("image proxy DNS lookup failed", "host", hostname, "err", err)
+			return nil, fmt.Errorf("image URL DNS resolution failed: %v", err)
+		}
+		for _, ip := range ips {
+			if isBlockedOutboundIP(ip) {
+				slog.Warn("image proxy DNS rebinding blocked", "host", hostname, "ip", ip.String())
+				return nil, fmt.Errorf("image URL host %s resolves to blocked IP %s", hostname, ip.String())
+			}
+		}
+	}
+
 	return parsed, nil
 }
 
