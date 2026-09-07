@@ -8,6 +8,7 @@ const {
   DEFAULT_FOLLOW_CONFIG,
   createFollowState,
   isDominantVerticalWheel,
+  isPointInNativeScrollbarGutter,
   reduceFollowEvent,
 } = createTsModuleLoader().loadModule("@liveagent/ui/lib/chat-scroll/scrollFollowCore");
 
@@ -186,6 +187,75 @@ test("a scrollbar track click detaches while following", () => {
   ]);
   assert.equal(state.following, false);
   assert.equal(pin, false);
+});
+
+test("native scrollbar thumb drag detaches through scroll events alone", () => {
+  // A native thumb drag delivers no pointermove to the page (Chromium/WebKit
+  // route it to the scrollbar), only scroll events. Without the pointerdown
+  // promotion the drag reads as "following + gap opened" and the corrector
+  // re-pins every frame — the thumb looks glued to the bottom. With the
+  // promotion the first away-movement detaches and the drag stays free.
+  const glued = run([growth(0), { type: "pointerDown" }, scroll(120, 10), scroll(260, 20)]);
+  assert.equal(glued.state.following, true, "precondition: unpromoted press gets corrected");
+  assert.equal(glued.pin, true);
+
+  const drag = run([
+    growth(0),
+    { type: "pointerDown" },
+    { type: "pointerDragStart" }, // hook: press landed in the native scrollbar gutter
+    scroll(120, 10),
+    scroll(260, 20),
+    scroll(800, 30),
+  ]);
+  assert.equal(drag.state.following, false);
+  assert.equal(drag.pin, false);
+  // Releasing mid-history stays detached; dragging back down and releasing
+  // inside the zone re-engages exactly like a custom-scrollbar drag.
+  const releasedHigh = run([{ type: "pointerRelease", gap: 800 }], { state: drag.state });
+  assert.equal(releasedHigh.state.following, false);
+  const releasedLow = run([scroll(300, 40), scroll(40, 50), { type: "pointerRelease", gap: 40 }], {
+    state: drag.state,
+  });
+  assert.equal(releasedLow.state.following, true);
+  assert.equal(releasedLow.pin, true);
+});
+
+test("native scrollbar gutter hit test: border box minus client box", () => {
+  // 300x400 border box at (100,50); a 6px vertical scrollbar on the right
+  // (clientWidth 294) and a 6px horizontal one at the bottom (clientHeight 394).
+  const box = {
+    left: 100,
+    top: 50,
+    width: 300,
+    height: 400,
+    clientLeft: 0,
+    clientTop: 0,
+    clientWidth: 294,
+    clientHeight: 394,
+  };
+  // Content presses.
+  assert.equal(isPointInNativeScrollbarGutter(100, 50, box), false);
+  assert.equal(isPointInNativeScrollbarGutter(250, 200, box), false);
+  assert.equal(isPointInNativeScrollbarGutter(393.9, 443.9, box), false);
+  // Vertical scrollbar column, including a `scrollbar-gutter: stable` reserve
+  // (the client box already excludes it).
+  assert.equal(isPointInNativeScrollbarGutter(394, 200, box), true);
+  assert.equal(isPointInNativeScrollbarGutter(399, 200, box), true);
+  // Horizontal scrollbar row.
+  assert.equal(isPointInNativeScrollbarGutter(200, 444, box), true);
+  // Outside the element entirely (a press on a sibling that bubbled through
+  // a listener root) is never a scrollbar press.
+  assert.equal(isPointInNativeScrollbarGutter(400, 200, box), false);
+  assert.equal(isPointInNativeScrollbarGutter(99, 200, box), false);
+  assert.equal(isPointInNativeScrollbarGutter(200, 450, box), false);
+  // No scrollbar at all (clientWidth == width): nothing qualifies.
+  const noBar = { ...box, clientWidth: 300, clientHeight: 400 };
+  assert.equal(isPointInNativeScrollbarGutter(399, 449, noBar), false);
+  // RTL / left-side scrollbar: clientLeft carries the bar width.
+  const rtl = { ...box, clientLeft: 6, clientWidth: 294, clientHeight: 400 };
+  assert.equal(isPointInNativeScrollbarGutter(103, 200, rtl), true);
+  assert.equal(isPointInNativeScrollbarGutter(106, 200, rtl), false);
+  assert.equal(isPointInNativeScrollbarGutter(399, 200, rtl), false);
 });
 
 test("held pointer suppresses zone attach; release inside the zone re-engages", () => {
