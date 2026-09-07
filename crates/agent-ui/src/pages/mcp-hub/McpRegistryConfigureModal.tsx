@@ -306,7 +306,7 @@ export function McpRegistryConfigureModal(props: {
         showCloseButton
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <DialogHeader className="flex-row items-center gap-3 px-6">
+          <DialogHeader className="flex-row items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
               <Sparkles className="h-5 w-5" />
             </div>
@@ -318,7 +318,7 @@ export function McpRegistryConfigureModal(props: {
             </div>
           </DialogHeader>
 
-          <DialogBody className="px-6 py-5">
+          <DialogBody>
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-1">
@@ -547,7 +547,7 @@ export function McpRegistryConfigureModal(props: {
             </div>
           </DialogBody>
 
-          <DialogFooter className="flex-row flex-wrap px-6">
+          <DialogFooter className="flex-row flex-wrap">
             <Button type="button" variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>

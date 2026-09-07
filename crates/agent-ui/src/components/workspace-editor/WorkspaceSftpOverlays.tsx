@@ -74,7 +74,7 @@ export function CreateFolderDialog(props: {
               </DialogDescription>
             ) : null}
           </DialogHeader>
-          <DialogBody className="space-y-2 py-5">
+          <DialogBody className="space-y-2">
             <label
               className="block text-xs font-medium text-muted-foreground"
               htmlFor="workspace-sftp-new-folder-name"
@@ -123,7 +123,7 @@ export function CopyPathDialog(props: {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="mt-1 text-xs">{prompt}</DialogDescription>
         </DialogHeader>
-        <DialogBody className="py-5">
+        <DialogBody>
           <textarea
             value={text}
             readOnly
@@ -208,7 +208,7 @@ export function RenameEntryDialog(props: {
               </DialogDescription>
             ) : null}
           </DialogHeader>
-          <DialogBody className="space-y-2 py-5">
+          <DialogBody className="space-y-2">
             <label
               className="block text-xs font-medium text-muted-foreground"
               htmlFor="workspace-sftp-rename-entry-name"

@@ -135,20 +135,10 @@ type SkillsHubPageProps = {
   initialSkills?: SkillSummary[];
   initialRootDir?: string;
   isAgentMode: boolean;
-  sidebarOpen: boolean;
-  onOpenSidebar: () => void;
 };
 
 export function SkillsHubPage(props: SkillsHubPageProps) {
-  const {
-    settings,
-    setSettings,
-    initialSkills,
-    initialRootDir,
-    isAgentMode,
-    sidebarOpen,
-    onOpenSidebar,
-  } = props;
+  const { settings, setSettings, initialSkills, initialRootDir, isAgentMode } = props;
   const { t } = useLocale();
   const lockedByChatMode = !isAgentMode;
 
@@ -1503,8 +1493,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               </Button>
             </div>
           }
-          sidebarOpen={sidebarOpen}
-          onOpenSidebar={onOpenSidebar}
         />
 
         <div className="hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10">

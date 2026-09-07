@@ -11,6 +11,10 @@ import {
   safeStringify,
   shouldDisplayToolTraceItem,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import { type ChatFileLink, parseChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { type CompactionSeam, getCompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
+import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
+import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import type {
   SubagentCardDetails,
   SubagentReportDetails,
@@ -36,6 +40,72 @@ import {
   Trash2,
   Wrench,
 } from "../../IconSet";
+
+export type ToolActivityCategory =
+  | "read"
+  | "search"
+  | "edit"
+  | "command"
+  | "list"
+  | "agent"
+  | "other";
+
+export function getToolActivityCategory(name: string): ToolActivityCategory {
+  if (isTaskToolName(name)) return "other";
+  switch (name) {
+    case "Read":
+    case "Image":
+    case "SkillsManager":
+      return "read";
+    case "Glob":
+    case "Grep":
+    case "ToolSearch":
+      return "search";
+    case "Write":
+    case "Edit":
+    case "Delete":
+      return "edit";
+    case "Bash":
+    case "ManagedProcess":
+    case "ProcessWait":
+    case "ProcessStop":
+    case "SSHManager":
+    case "SshManager":
+      return "command";
+    case "List":
+      return "list";
+    case "Agent":
+    case "SendMessage":
+      return "agent";
+    default:
+      return "other";
+  }
+}
+
+const ATTENTION_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode"]);
+
+export function isUserInteractionToolName(name: string) {
+  return ATTENTION_TOOL_NAMES.has(name);
+}
+
+/**
+ * The turn is parked on the user rather than on the model: an unanswered
+ * question / plan card, or an ordinary tool held at the approval gate. The
+ * gate fires *before* the call executes, so approval-pending items are not in
+ * `runningToolCallIds` and are recognised by the synced argument marker.
+ */
+export function hasActiveUserInteraction(items: ToolTraceItem[], runningToolCallIds: string[]) {
+  if (items.length === 0) return false;
+  const runningIds = new Set(runningToolCallIds);
+  return items.some((item) => {
+    if (item.toolResult) return false;
+    if (readToolApprovalPending(item.toolCall.arguments)) return true;
+    return (
+      isUserInteractionToolName(item.toolCall.name) &&
+      Boolean(item.toolCall.id && runningIds.has(item.toolCall.id))
+    );
+  });
+}
 
 export function getToolMeta(name: string): {
   Icon: IconComponent;
@@ -189,7 +259,337 @@ export type GroupedRoundBlock =
       kind: "toolGroup";
       key: string;
       items: ToolTraceItem[];
+    }
+  | {
+      /**
+       * A context compaction that landed inside this reply. Rendered as a
+       * seam milestone in the work trace so the reply reads as one
+       * continuous turn instead of two replies split by a card.
+       */
+      kind: "checkpoint";
+      key: string;
+      seam: CompactionSeam;
     };
+
+function isReasoningOrSearchBlock(block: GroupedRoundBlock) {
+  return (
+    block.kind === "thinking" || block.kind === "hostedSearch" || block.kind === "hostedSearchGroup"
+  );
+}
+
+export function resolveReasoningSearchWorkLayout(blocks: GroupedRoundBlock[]) {
+  let lastWorkIndex = -1;
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block && isReasoningOrSearchBlock(block)) {
+      lastWorkIndex = index;
+      break;
+    }
+  }
+  if (lastWorkIndex === -1) {
+    return { firstIndex: -1, indexes: [] as number[] };
+  }
+
+  const answerStartIndex = blocks.findIndex(
+    (block, index) =>
+      index > lastWorkIndex && block.kind === "text" && block.text.trim().length > 0,
+  );
+  const indexes: number[] = [];
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (!block) continue;
+    if (isReasoningOrSearchBlock(block)) {
+      indexes.push(index);
+      continue;
+    }
+    if (
+      block.kind === "text" &&
+      block.text.trim().length > 0 &&
+      index < (answerStartIndex === -1 ? blocks.length : answerStartIndex)
+    ) {
+      indexes.push(index);
+    }
+  }
+  return { firstIndex: indexes[0] ?? -1, indexes };
+}
+
+export type AssistantTurnLayoutEntry = {
+  key: string;
+  roundKey: string;
+  roundMeta?: UiRound["meta"];
+  block: GroupedRoundBlock;
+  runningToolCallIds: string[];
+  thinkingOpen: boolean;
+};
+
+export type AssistantTurnLayout = {
+  work: AssistantTurnLayoutEntry[];
+  interaction: AssistantTurnLayoutEntry[];
+  answer: AssistantTurnLayoutEntry[];
+};
+
+type AssistantTurnRound = UiRound & {
+  key?: string;
+  runningToolCallIds?: string[];
+  thinkingOpen?: boolean;
+};
+
+function isVisibleTurnBlock(block: GroupedRoundBlock) {
+  if (block.kind === "text" || block.kind === "thinking") {
+    return block.text.trim().length > 0;
+  }
+  if (block.kind === "checkpoint") return true;
+  return !isTaskToolBlock(block);
+}
+
+function isTerminalStopReason(stopReason: string | undefined) {
+  return Boolean(stopReason && stopReason !== "toolUse");
+}
+
+function isAnswerResultBlock(block: GroupedRoundBlock) {
+  if (block.kind === "text") return block.text.trim().length > 0;
+  if (block.kind === "hostedSearch" || block.kind === "hostedSearchGroup") return true;
+  if (block.kind !== "tool") return false;
+  if (block.item.toolCall.name !== "Image" || block.item.toolResult?.isError) return false;
+  return getBuiltinResultKind(block.item.toolResult) === "display_image";
+}
+
+function mergeRunningToolCallIds(left: string[], right: string[]) {
+  if (right.length === 0) return left;
+  if (left.length === 0) return right;
+  return Array.from(new Set([...left, ...right]));
+}
+
+/**
+ * Turn raw round-by-round activity into the stage-oriented trace used by the
+ * transcript. Provider rounds often alternate `thinking -> one tool` dozens
+ * of times; exposing that shape produces a repetitive log instead of a useful
+ * work summary. Thinking segments stay in the trace as collapsed disclosures
+ * (the reasoning body only mounts when the user expands one), and they act as
+ * stage boundaries: neighboring tool/search activity merges into one group
+ * until a thinking segment or a visible progress note starts the next stage.
+ */
+export function compactAssistantWorkEntries(
+  entries: readonly AssistantTurnLayoutEntry[],
+): AssistantTurnLayoutEntry[] {
+  const compacted: AssistantTurnLayoutEntry[] = [];
+
+  for (const entry of entries) {
+    const previous = compacted.at(-1);
+    if (previous?.block.kind === "toolGroup" && entry.block.kind === "toolGroup") {
+      compacted[compacted.length - 1] = {
+        ...previous,
+        block: {
+          ...previous.block,
+          items: [...previous.block.items, ...entry.block.items],
+        },
+        runningToolCallIds: mergeRunningToolCallIds(
+          previous.runningToolCallIds,
+          entry.runningToolCallIds,
+        ),
+      };
+      continue;
+    }
+
+    if (previous?.block.kind === "hostedSearchGroup" && entry.block.kind === "hostedSearchGroup") {
+      compacted[compacted.length - 1] = {
+        ...previous,
+        block: {
+          ...previous.block,
+          items: [...previous.block.items, ...entry.block.items],
+        },
+      };
+      continue;
+    }
+
+    compacted.push(entry);
+  }
+
+  return compacted;
+}
+
+/**
+ * The most recent thinking entry is the only one that can still be streaming.
+ * Its key is exposed so renderers can show that single disclosure in the live
+ * "思考中" state; every earlier segment is a settled "思考了/思考过程" row.
+ */
+export function resolveActiveThinkingEntryKey(
+  entries: readonly AssistantTurnLayoutEntry[],
+): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.block.kind !== "thinking") continue;
+    return entry.thinkingOpen ? entry.key : null;
+  }
+  return null;
+}
+
+/**
+ * The work entry the turn is visibly busy with *right now*: a streaming
+ * reasoning segment, a tool batch with running calls, an in-flight hosted
+ * search, or the progress note currently being streamed. When the user
+ * collapses the processing disclosure mid-run, this entry is re-rendered
+ * outside it so the transcript never goes blank while work continues. A
+ * settled trailing entry returns null — the liveness sparkle alone covers
+ * gaps between activities.
+ */
+export function resolveActiveWorkEntry(
+  entries: readonly AssistantTurnLayoutEntry[],
+): AssistantTurnLayoutEntry | null {
+  const entry = entries.at(-1);
+  if (!entry) return null;
+  const block = entry.block;
+  if (block.kind === "checkpoint") return null;
+  if (block.kind === "thinking") return entry.thinkingOpen ? entry : null;
+  if (block.kind === "text") return entry;
+  if (block.kind === "tool" || block.kind === "toolGroup") {
+    const runningIds = new Set(entry.runningToolCallIds);
+    const items = block.kind === "tool" ? [block.item] : block.items;
+    return items.some((item) => item.toolCall.id && runningIds.has(item.toolCall.id))
+      ? entry
+      : null;
+  }
+  const searches = block.kind === "hostedSearch" ? [block.item] : block.items;
+  return searches.some((item) => item.status === "searching") ? entry : null;
+}
+
+/**
+ * Only an *unanswered* interaction is pinned outside the processing
+ * disclosure — it must stay visible and operable while it blocks the run.
+ * The moment it settles (answered, cancelled or timed out) it becomes
+ * ordinary timeline activity and flows back into the trace at the position
+ * where it happened, so later reasoning/tools stack below it instead of the
+ * answered card trailing the whole turn.
+ */
+export function isPendingUserInteractionBlock(block: GroupedRoundBlock) {
+  if (block.kind === "tool") {
+    return isUserInteractionToolName(block.item.toolCall.name) && !block.item.toolResult;
+  }
+  if (block.kind === "toolGroup") {
+    return block.items.some(
+      (item) => isUserInteractionToolName(item.toolCall.name) && !item.toolResult,
+    );
+  }
+  return false;
+}
+
+function splitInteractionEntries(entries: readonly AssistantTurnLayoutEntry[]) {
+  const interactionIndexes = new Set<number>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry || !isPendingUserInteractionBlock(entry.block)) continue;
+    interactionIndexes.add(index);
+
+    // A model usually explains why it needs input immediately before calling
+    // AskUserQuestion / ExitPlanMode. Keep that adjacent prose with the card so
+    // neither can disappear inside the processing disclosure.
+    for (let proseIndex = index - 1; proseIndex >= 0; proseIndex -= 1) {
+      const proseEntry = entries[proseIndex];
+      if (!proseEntry || proseEntry.block.kind !== "text") break;
+      interactionIndexes.add(proseIndex);
+    }
+  }
+
+  return {
+    background: entries.filter((_, index) => !interactionIndexes.has(index)),
+    interaction: entries.filter((_, index) => interactionIndexes.has(index)),
+  };
+}
+
+/**
+ * Project every model/tool round produced by one user request into the three
+ * visual layers used by the transcript:
+ *
+ * - `work` is the visible in-progress trace (reasoning disclosures, progress
+ *   notes, searches and tool activity), shown inside one collapsible section.
+ * - `interaction` is user-facing decision prose plus its interactive card,
+ *   rendered outside the work disclosure so it cannot be hidden while pending.
+ * - `answer` is the final trailing user-visible result, rendered as the
+ *   assistant's durable response below that section. It may include prose,
+ *   native image results, or hosted search results produced at the end of the
+ *   same provider round.
+ *
+ * A live, non-terminal turn deliberately keeps trailing prose in `work`.
+ * Otherwise a progress note would jump in and out of the final-answer layer
+ * every time the model resumes with another tool call.
+ */
+export function resolveAssistantTurnLayout(
+  rounds: readonly AssistantTurnRound[],
+  options: { live: boolean },
+): AssistantTurnLayout {
+  const entries = rounds.flatMap((round) => {
+    const roundKey = round.key?.trim() || `r${round.round}`;
+    const runningToolCallIds = round.runningToolCallIds ?? [];
+    const thinkingOpen = round.thinkingOpen ?? false;
+    const seam = getCompactionSeam(round);
+    if (seam) {
+      // A compaction seam is a stage boundary of its own: it renders as a
+      // milestone row in the work trace and, like a thinking segment, keeps
+      // the tool batches on either side from merging into one group.
+      return [
+        {
+          key: `${roundKey}:checkpoint`,
+          roundKey,
+          roundMeta: round.meta,
+          block: { kind: "checkpoint" as const, key: `checkpoint-${seam.key}`, seam },
+          runningToolCallIds,
+          thinkingOpen,
+        },
+      ];
+    }
+    return groupRoundBlocks(round.blocks)
+      .filter(isVisibleTurnBlock)
+      .map((block) => ({
+        key: `${roundKey}:${block.key}`,
+        roundKey,
+        roundMeta: round.meta,
+        block,
+        runningToolCallIds,
+        thinkingOpen,
+      }));
+  });
+
+  if (entries.length === 0) return { work: [], interaction: [], answer: [] };
+
+  const { background, interaction } = splitInteractionEntries(entries);
+
+  const lastRound = rounds.at(-1);
+  if (options.live && !isTerminalStopReason(lastRound?.meta?.stopReason)) {
+    return {
+      work: compactAssistantWorkEntries(background),
+      interaction,
+      answer: [],
+    };
+  }
+
+  const lastEntry = background.at(-1);
+  if (!lastEntry || !isAnswerResultBlock(lastEntry.block)) {
+    return {
+      work: compactAssistantWorkEntries(background),
+      interaction,
+      answer: [],
+    };
+  }
+
+  let answerStart = background.length - 1;
+  while (answerStart > 0) {
+    const previous = background[answerStart - 1];
+    if (
+      !previous ||
+      previous.roundKey !== lastEntry.roundKey ||
+      !isAnswerResultBlock(previous.block)
+    ) {
+      break;
+    }
+    answerStart -= 1;
+  }
+
+  return {
+    work: compactAssistantWorkEntries(background.slice(0, answerStart)),
+    interaction,
+    answer: background.slice(answerStart),
+  };
+}
 
 const stableValueSignatureCache = new WeakMap<object, string>();
 
@@ -268,6 +668,81 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+export type FileOperationKind = "read" | "create" | "edit" | "delete";
+
+export type FileOperationDisplay = {
+  kind: FileOperationKind;
+  path: string;
+  fileName: string;
+  link: ChatFileLink | null;
+};
+
+function getFileOperationKind(item: ToolTraceItem): FileOperationKind | null {
+  switch (item.toolCall.name) {
+    case "Read":
+      return "read";
+    case "Write": {
+      const details = asRecord(item.toolResult?.details);
+      return details?.existedBefore === true ? "edit" : "create";
+    }
+    case "Edit":
+      return "edit";
+    case "Delete":
+      return "delete";
+    default:
+      return null;
+  }
+}
+
+function fileNameFromPath(path: string) {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized.slice(normalized.lastIndexOf("/") + 1) || normalized;
+}
+
+/**
+ * Extract the concise, IDE-addressable target used by successful file-tool rows.
+ * Result metadata wins because it carries the host-resolved absolute path; the
+ * original argument remains the streaming and legacy-history fallback.
+ */
+export function getFileOperationDisplay(item: ToolTraceItem): FileOperationDisplay | null {
+  const kind = getFileOperationKind(item);
+  if (!kind) return null;
+
+  const details = asRecord(item.toolResult?.details);
+  const args = item.toolCall.arguments || {};
+  const displayPath =
+    displayString(details?.displayPath) ||
+    displayString(details?.relativePath) ||
+    displayString(details?.path) ||
+    displayString(args.path) ||
+    displayString(args.notebook_path);
+  if (!displayPath) return null;
+
+  const linkPath =
+    displayString(details?.absolutePath) ||
+    displayString(details?.relativePath) ||
+    displayString(details?.path) ||
+    displayString(args.path) ||
+    displayString(args.notebook_path);
+  const parsedLink = linkPath ? parseChatFileLink(linkPath) : null;
+  const startLine = args.start_line;
+  const link =
+    parsedLink &&
+    parsedLink.line === undefined &&
+    typeof startLine === "number" &&
+    Number.isSafeInteger(startLine) &&
+    startLine > 0
+      ? { ...parsedLink, line: startLine }
+      : parsedLink;
+
+  return {
+    kind,
+    path: displayPath,
+    fileName: fileNameFromPath(displayPath),
+    link,
+  };
 }
 
 export function getShellSessionDisplayDetails(
@@ -358,7 +833,7 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
       if (
         block.item.toolCall.name === "Image" ||
         isTaskToolName(block.item.toolCall.name) ||
-        block.item.toolCall.name === "AskUserQuestion" ||
+        isUserInteractionToolName(block.item.toolCall.name) ||
         block.item.toolCall.name === "ProcessWait" ||
         block.item.toolCall.name === "ProcessStop" ||
         isAgentToolName(block.item.toolCall.name)

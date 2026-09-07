@@ -11,18 +11,21 @@ const sharedAssistantStatusSource = fs.readFileSync(
   "utf8",
 );
 
-test("the streaming assistant always owns one stable live-status footer", () => {
+test("the streaming assistant keeps live status inside its stable work trace", () => {
   assert.doesNotMatch(transcriptSource, /function shouldShowLiveStatusForRounds/);
+  assert.doesNotMatch(transcriptSource, /function LiveStatusFooter/);
   assert.match(
     transcriptSource,
-    /isLatestLiveStreaming\s*\?\s*\(\s*<LiveStatusFooter[\s\S]*?status=\{displayedToolStatus \?\? VIBING_STATUS\}/,
+    /<AssistantBubble[\s\S]*?toolStatus=\{isLatestLiveStreaming \? displayedToolStatus : null\}/,
   );
   assert.match(transcriptSource, /data-row-key=\{row\.key\}/);
-  assert.match(transcriptSource, /gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1/);
-  assert.match(transcriptSource, /<LiveAssistantStatus status=\{status\}/);
+  assert.match(
+    transcriptSource,
+    /toolStatusVariant=\{displayedToolStatusIsCompaction \? "compaction" : "default"\}/,
+  );
   assert.match(sharedAssistantStatusSource, /export function LiveAssistantStatus/);
   assert.match(sharedAssistantStatusSource, /if \(isCompaction\) return <CompactingText/);
-  assert.match(sharedAssistantStatusSource, /return <VibingText/);
+  assert.match(sharedAssistantStatusSource, /return <LiveSparkle/);
   assert.match(sharedAssistantStatusSource, /return <AssistantStatus/);
 });
 

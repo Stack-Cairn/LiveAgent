@@ -1,6 +1,7 @@
 import { Menu } from "@base-ui/react";
 import * as React from "react";
 import { cn } from "../../lib/shared/utils";
+import { useZoneFontScaleStyle } from "./zone-font-scale";
 
 export const DropdownMenu = Menu.Root;
 export const DropdownMenuTrigger = Menu.Trigger;
@@ -13,26 +14,30 @@ type DropdownMenuContentProps = React.ComponentPropsWithoutRef<typeof Menu.Popup
   >;
 
 export const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
-  ({ className, side, align, sideOffset = 4, collisionPadding, ...props }, ref) => (
-    <Menu.Portal>
-      <Menu.Positioner
-        side={side}
-        align={align}
-        sideOffset={sideOffset}
-        collisionPadding={collisionPadding}
-        className="layer-popover"
-      >
-        <Menu.Popup
-          ref={ref}
-          className={cn(
-            "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-            className,
-          )}
-          {...props}
-        />
-      </Menu.Positioner>
-    </Menu.Portal>
-  ),
+  ({ className, side, align, sideOffset = 4, collisionPadding, ...props }, ref) => {
+    const zoneStyle = useZoneFontScaleStyle();
+    return (
+      <Menu.Portal>
+        <Menu.Positioner
+          side={side}
+          align={align}
+          sideOffset={sideOffset}
+          collisionPadding={collisionPadding}
+          className="layer-popover"
+          style={zoneStyle}
+        >
+          <Menu.Popup
+            ref={ref}
+            className={cn(
+              "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              className,
+            )}
+            {...props}
+          />
+        </Menu.Positioner>
+      </Menu.Portal>
+    );
+  },
 );
 DropdownMenuContent.displayName = "DropdownMenuContent";
 
@@ -78,26 +83,30 @@ export const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownM
   (
     { className, side = "right", align = "start", sideOffset = 6, collisionPadding, ...props },
     ref,
-  ) => (
-    <Menu.Portal>
-      <Menu.Positioner
-        side={side}
-        align={align}
-        sideOffset={sideOffset}
-        collisionPadding={collisionPadding}
-        className="layer-popover"
-      >
-        <Menu.Popup
-          ref={ref}
-          className={cn(
-            "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-            className,
-          )}
-          {...props}
-        />
-      </Menu.Positioner>
-    </Menu.Portal>
-  ),
+  ) => {
+    const zoneStyle = useZoneFontScaleStyle();
+    return (
+      <Menu.Portal>
+        <Menu.Positioner
+          side={side}
+          align={align}
+          sideOffset={sideOffset}
+          collisionPadding={collisionPadding}
+          className="layer-popover"
+          style={zoneStyle}
+        >
+          <Menu.Popup
+            ref={ref}
+            className={cn(
+              "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              className,
+            )}
+            {...props}
+          />
+        </Menu.Positioner>
+      </Menu.Portal>
+    );
+  },
 );
 DropdownMenuSubContent.displayName = "DropdownMenuSubContent";
 

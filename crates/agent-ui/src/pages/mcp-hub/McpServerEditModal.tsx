@@ -262,7 +262,7 @@ export function McpServerEditModal(props: {
         showCloseButton
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <DialogHeader className="flex-row items-center gap-3 px-6 py-4">
+          <DialogHeader className="flex-row items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <McpLogo className="h-5 w-5" />
             </div>
@@ -274,7 +274,7 @@ export function McpServerEditModal(props: {
             </div>
           </DialogHeader>
 
-          <DialogBody className="px-6 py-5">
+          <DialogBody>
             <div className="space-y-6">
               <section aria-labelledby="mcp-edit-basics-heading" className="space-y-3">
                 <h3
@@ -581,7 +581,7 @@ export function McpServerEditModal(props: {
             </div>
           </DialogBody>
 
-          <DialogFooter className="flex-row flex-wrap px-6 py-3.5">
+          <DialogFooter className="flex-row flex-wrap">
             <Button type="button" variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>

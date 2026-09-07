@@ -188,6 +188,7 @@ macro_rules! app_invoke_handler {
             commands::app::app_frontend_ready,
             commands::app::app_set_close_window_behavior,
             commands::app::app_set_global_shortcuts,
+            commands::app::app_run_shortcut,
             commands::app::app_window_pinned,
             commands::app::app_toggle_window_pin,
             commands::app::app_confirmed_exit,
@@ -421,6 +422,7 @@ enum AppAction {
     ToggleWindow,
     TogglePin,
     NewChat,
+    SearchConversations,
     OpenConversation(String),
     ViewAllConversations,
     SwitchWorkspace(String),
@@ -521,6 +523,9 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
         AppAction::ToggleWindow => toggle_main_window(app),
         AppAction::TogglePin => toggle_main_window_pin(app),
         AppAction::NewChat => forward_app_action(app, "new-chat", None, None, true),
+        AppAction::SearchConversations => {
+            forward_app_action(app, "search-conversations", None, None, true);
+        }
         AppAction::OpenConversation(id) => {
             forward_app_action(app, "open-conversation", Some(id), None, true);
         }
@@ -605,10 +610,15 @@ fn handle_global_shortcut(
     let Some(action) = action else {
         return;
     };
-    let action = match action.as_str() {
+    run_shortcut_action(app, &action);
+}
+
+fn run_shortcut_action(app: &tauri::AppHandle, action: &str) {
+    let action = match action {
         "summon" => AppAction::Summon,
         "toggle" => AppAction::ToggleWindow,
         "newChat" => AppAction::NewChat,
+        "searchConversations" => AppAction::SearchConversations,
         "pin" => AppAction::TogglePin,
         _ => return,
     };

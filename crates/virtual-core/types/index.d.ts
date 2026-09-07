@@ -186,6 +186,13 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
     private getVirtualDistanceFromEnd;
     getDistanceFromEnd: () => number;
     isAtEnd: (threshold?: number) => boolean;
+    /**
+     * The scroll offset the viewport will hold once outstanding 'origin'
+     * anchoring debt is settled — its true distance from the top of the
+     * laid-out content. Prefer this over DOM scrollTop for "near the top"
+     * paging triggers: while debt is outstanding scrollTop is parked.
+     */
+    getSettledScrollOffset: () => number;
     getOffsetForAlignment: (toOffset: number, align: ScrollAlignment, itemSize?: number) => number;
     getOffsetForIndex: (index: number, align?: ScrollAlignment) => readonly [number, "auto"] | readonly [number, "start" | "center" | "end"] | undefined;
     scrollToOffset: (toOffset: number, { align, behavior }?: ScrollToOffsetOptions) => void;

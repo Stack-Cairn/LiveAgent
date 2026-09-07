@@ -509,6 +509,17 @@ export class Virtualizer<
   // viewport, which reads as a jump through the transcript.
   private _pendingRebaseDebt: number | null = null
   private _pendingRebasePreWriteOffset = 0
+  // Scrollable-range ceiling read right before the rebase write. An echo
+  // that lands exactly on this bound while the intent lay beyond it was
+  // clamped by the browser, not moved by the user — a partial landing whose
+  // remainder must return to the origin. (Rebase targets are never negative,
+  // so the floor cannot clamp; see maybeRebaseOrigin.)
+  private _pendingRebaseMaxOffset = 0
+  // Origin debt created while no scroll event is due (a history page
+  // prepended onto an idle viewport, an idle re-measure) would otherwise sit
+  // unsettled until the user's next scroll: the sizer stays short and the
+  // rows above y=0 stay unreachable. Settle it on the next frame instead.
+  private _idleRebaseRafId: number | null = null
   shouldAdjustScrollPositionOnItemSizeChange:
     | undefined
     | ((
@@ -913,6 +924,10 @@ export class Virtualizer<
       this.targetWindow.cancelAnimationFrame(this._writeVerifyRafId)
       this._writeVerifyRafId = null
     }
+    if (this._idleRebaseRafId != null && this.targetWindow) {
+      this.targetWindow.cancelAnimationFrame(this._idleRebaseRafId)
+      this._idleRebaseRafId = null
+    }
     this.scrollState = null
     // The iOS gesture/deferral state is scoped to the current scroll
     // element: the touch listeners that maintain it were just removed, and
@@ -1000,20 +1015,35 @@ export class Virtualizer<
           // self-write — by the time the user has moved 1.5 px, the
           // intended value will already have been consumed by a prior
           // scroll event and cleared.
+          let rebaseLayoutRolledBack = false
           if (this._intendedScrollOffset !== null) {
-            if (Math.abs(offset - this._intendedScrollOffset) < 1.5) {
-              offset = this._intendedScrollOffset
-            }
+            const intended = this._intendedScrollOffset
             this._intendedScrollOffset = null
-            // A scroll event consumed the intent, so treat any in-flight
-            // rebase as landed. Rolling back from here would misattribute
-            // concurrent user movement as a swallowed write (freezing
-            // visible content for a frame on engines that honor mid-gesture
-            // writes). The genuinely-swallowed case produces no scroll
-            // event at all and is settled by the verify frame instead —
-            // and on WebKit, where swallowing happens, rebase writes are
-            // only issued once the gesture has settled.
-            this._pendingRebaseDebt = null
+            if (Math.abs(offset - intended) < 1.5) {
+              offset = intended
+              // The write landed in full: any in-flight rebase is settled.
+              this._pendingRebaseDebt = null
+            } else if (this._pendingRebaseDebt !== null) {
+              if (this.isClampedRebaseEcho(offset, intended)) {
+                // The write stopped exactly at the scrollable range's edge
+                // (a sizer that had not grown to the rebased layout yet): a
+                // partial landing. The layout already moved by the full
+                // debt, the viewport only by what the browser allowed —
+                // return the unconfirmed remainder to the origin in this
+                // same pass so nothing paints misaligned.
+                rebaseLayoutRolledBack = this.resolveRebaseTransaction(offset)
+              } else {
+                // The echo carries concurrent user movement: treat the
+                // rebase as landed. Rolling back here would misattribute
+                // that movement as a swallowed write and freeze visible
+                // content for a frame on engines that honor mid-gesture
+                // writes. The genuinely-swallowed case produces no scroll
+                // event at all and is settled by the verify frame instead —
+                // and on WebKit, where swallowing happens, rebase writes are
+                // only issued once the gesture has settled.
+                this._pendingRebaseDebt = null
+              }
+            }
           }
 
           this.scrollAdjustments = 0
@@ -1043,7 +1073,13 @@ export class Virtualizer<
           if (this.scrollState) {
             this.scheduleScrollReconcile()
           }
-          this.maybeNotify()
+          if (rebaseLayoutRolledBack) {
+            // Positions moved even where the index range did not: force the
+            // render maybeNotify would skip.
+            this.notify(isScrolling)
+          } else {
+            this.maybeNotify()
+          }
           // A scroll event is the freshest DOM truth we ever hold — the
           // safest moment to settle origin debt (no-op in 'offset' mode).
           this.maybeRebaseOrigin()
@@ -1146,6 +1182,28 @@ export class Virtualizer<
         this.scrollToEnd({ behavior: followOnAppend })
       }
     }
+
+    // A prepend absorbed into the origin during this render (setOptions)
+    // leaves debt with no scroll event on the way to settle it. Not here —
+    // we are inside the consumer's commit, where a synchronous publish
+    // cannot flush — but on the next frame.
+    if (this.scrollElement && this.options.enabled) {
+      this.scheduleIdleRebase()
+    }
+  }
+
+  // Settle outstanding origin debt on the next frame, for debt created
+  // outside a scroll event. maybeRebaseOrigin's own gates still apply: a
+  // WebKit gesture in flight defers to the settle-time scroll event as usual.
+  private scheduleIdleRebase = () => {
+    if (this.options.scrollAnchoring !== 'origin' || this.originOffset === 0) {
+      return
+    }
+    if (!this.targetWindow || this._idleRebaseRafId != null) return
+    this._idleRebaseRafId = this.targetWindow.requestAnimationFrame(() => {
+      this._idleRebaseRafId = null
+      this.maybeRebaseOrigin()
+    })
   }
 
   // Apply any accumulated iOS-deferred scroll adjustment, but only when we're
@@ -1814,6 +1872,16 @@ export class Virtualizer<
     // origin-shifted rebuild can never be skipped.
     this.pendingMin = 0
     this.itemSizeCacheVersion++
+    // Debt absorbed while idle has no scroll event coming to settle it.
+    this.scheduleIdleRebase()
+  }
+
+  // Whether a write echo that missed its intent stopped at the scrollable
+  // range's edge the write was clamped against — as opposed to carrying
+  // concurrent user movement.
+  private isClampedRebaseEcho = (observed: number, intended: number) => {
+    const max = this._pendingRebaseMaxOffset
+    return intended > max + 0.5 && Math.abs(observed - max) < 1.5
   }
 
   // Settle an in-flight rebase transaction against an observed DOM offset.
@@ -1876,25 +1944,64 @@ export class Virtualizer<
       return
     }
     if (!this.isScrolling && !nearTop && !overCap && this.getDistanceFromEnd() < size) {
-      // Idle at the bottom: a positive-debt write here would clamp against
-      // the not-yet-grown sizer. The debt is harmless anywhere but the top,
-      // so keep waiting — scrolling away from the bottom settles it.
+      // Idle at the bottom: the debt is harmless anywhere but the top, and
+      // a write here would only disturb a reader parked on the last row.
+      // Keep waiting — scrolling away from the bottom settles it.
       return
     }
     const preWriteOffset = this.getScrollOffset()
     const delta = -this.originOffset
+    // Positive debt larger than the current offset means the viewport has
+    // already entered the blank band the debt opened at the top (WebKit
+    // defers rebases through a fling). The layout must still close the whole
+    // band, but the viewport can only follow to 0: the part it cannot follow
+    // is a one-time, unavoidable visible shift — not residual to return to
+    // the origin, which would re-open the band and retry forever. Arm the
+    // transaction with the reachable part only.
+    const target = Math.max(0, preWriteOffset + delta)
+    const reachableDelta = target - preWriteOffset
     this.originOffset = 0
     this.pendingMin = 0
     this.itemSizeCacheVersion++
-    // Mirror + DOM write + write-landing verification; then re-render with
-    // the rebased layout and offset in one consistent pass.
-    this.applyScrollAdjustment(delta)
+    // Publish the rebased layout BEFORE writing scrollTop. The browser clamps
+    // a scrollTop write against the sizer as it stands at that instant, and
+    // the sizer only grows when the consumer renders this layout: written
+    // first, a positive delta (a prepended history page, rows above that
+    // grew) would land short of its target while the layout had already
+    // moved by the full debt — the viewport tears off the layout and the
+    // transcript jumps. A synchronous publish (direct DOM styles, or the
+    // React adapter's flushSync) grows the sizer first, so the write below
+    // has room to land. The mirror is carried to the target ahead of the
+    // publish so the range rendered is the one the viewport is about to
+    // show; the intent is armed so the mirror invariant knows why the DOM
+    // still lags for the duration of this pass.
+    this.scrollOffset = target
+    this._intendedScrollOffset = target
+    this.notify(true)
+    if (process.env.NODE_ENV !== 'production' && this.options.debug) {
+      console.info('rebase', { preWriteOffset, delta, target })
+    }
+    // Read the scrollable ceiling right before the write: an echo that lands
+    // exactly there while the intent lay beyond it was clamped, not moved by
+    // the user, and its remainder must return to the origin.
+    this._pendingRebaseMaxOffset = this.getMaxScrollOffset()
+    this._scrollToOffset(target, { adjustments: undefined, behavior: undefined })
+    this.scheduleScrollWriteVerify()
     // Arm the transaction after the write (issuing a write clears any stale
     // transaction): until a scroll event or the verify frame confirms the
     // viewport followed, the settled debt is provisional.
-    this._pendingRebaseDebt = delta
+    this._pendingRebaseDebt = reachableDelta
     this._pendingRebasePreWriteOffset = preWriteOffset
-    this.notify(false)
+  }
+
+  // The scroll offset the viewport will hold once outstanding origin debt is
+  // settled — its true distance from the top of the laid-out content. In
+  // 'origin' mode DOM scrollTop is parked while debt is outstanding (a
+  // prepended history page sits above y=0 until the rebase), so consumers
+  // that page on "distance from the top" must read this, not scrollTop:
+  // the parked scrollTop would keep re-arming them for page after page.
+  getSettledScrollOffset = () => {
+    return this.getScrollOffset() - this.originOffset
   }
 
   getVirtualItems = memo(

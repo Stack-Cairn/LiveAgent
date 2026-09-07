@@ -14,10 +14,65 @@ export type ConversationWorkbenchSurface = {
   project: ProjectRef;
 };
 
-export type FileTreeWorkbenchSurface = {
-  kind: "fileTree";
-  project: ProjectRef;
-};
+/**
+ * Project tools that can leave the Right Dock and live in a workbench pane.
+ * Every kind is a singleton per scope (see `surfaceIdentityKey`): the pane and
+ * the dock never show the same tool twice, and the dock hides its tab while a
+ * pane holds the tool ("lease").
+ */
+export const PROJECT_TOOL_SURFACE_KINDS = [
+  "fileTree",
+  "gitReview",
+  "tunnel",
+  "sshTunnel",
+  "backgroundTasks",
+] as const;
+
+export type ProjectToolSurfaceKind = (typeof PROJECT_TOOL_SURFACE_KINDS)[number];
+
+/**
+ * Distributive so `switch (surface.kind)` narrows per tool. Background tasks
+ * carry the project they were opened from only for focus→dock project
+ * context; their identity is window-wide (the managed-process registry is
+ * global, so a second pane would just mirror the first).
+ */
+export type ProjectToolWorkbenchSurface = {
+  [K in ProjectToolSurfaceKind]: { kind: K; project: ProjectRef };
+}[ProjectToolSurfaceKind];
+
+export type FileTreeWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "fileTree" }>;
+export type GitReviewWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "gitReview" }>;
+export type TunnelWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "tunnel" }>;
+export type SshTunnelWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "sshTunnel" }>;
+export type BackgroundTasksWorkbenchSurface = Extract<
+  ProjectToolWorkbenchSurface,
+  { kind: "backgroundTasks" }
+>;
+
+const PROJECT_TOOL_SURFACE_KIND_SET: ReadonlySet<string> = new Set(PROJECT_TOOL_SURFACE_KINDS);
+
+export function isProjectToolSurfaceKind(kind: string): kind is ProjectToolSurfaceKind {
+  return PROJECT_TOOL_SURFACE_KIND_SET.has(kind);
+}
+
+export function isProjectToolSurface(
+  surface: WorkbenchSurfaceSpec,
+): surface is ProjectToolWorkbenchSurface {
+  return isProjectToolSurfaceKind(surface.kind);
+}
+
+/**
+ * Identity key of a project tool without building a surface first. Hosts use
+ * it for lease lookups (`findPaneIdBySurfaceKey`) and drop de-duplication.
+ * Background tasks ignore the project (window singleton); the trailing colon
+ * keeps the key shape `${kind}:${scope}` uniform.
+ */
+export function projectToolSurfaceIdentityKey(
+  kind: ProjectToolSurfaceKind,
+  projectPathKey: string,
+): string {
+  return kind === "backgroundTasks" ? "backgroundTasks:" : `${kind}:${projectPathKey.trim()}`;
+}
 
 export type LocalTerminalLaunchSpec = {
   cwd: string;
@@ -61,7 +116,7 @@ export type TerminalWorkbenchSurface = LocalTerminalWorkbenchSurface | SshTermin
 
 export type WorkbenchSurfaceSpec =
   | ConversationWorkbenchSurface
-  | FileTreeWorkbenchSurface
+  | ProjectToolWorkbenchSurface
   | TerminalWorkbenchSurface
   | UnsupportedWorkbenchSurface;
 
@@ -75,7 +130,11 @@ export function surfaceIdentityKey(surface: WorkbenchSurfaceSpec): string {
     case "conversation":
       return `conversation:${surface.conversationId.trim()}`;
     case "fileTree":
-      return `fileTree:${surface.project.projectPathKey.trim()}`;
+    case "gitReview":
+    case "tunnel":
+    case "sshTunnel":
+    case "backgroundTasks":
+      return projectToolSurfaceIdentityKey(surface.kind, surface.project.projectPathKey);
     case "localTerminal":
     case "sshTerminal":
       return `terminal:${surface.surfaceId.trim()}`;

@@ -16,13 +16,13 @@ export function ResourceSelectionCard(props: {
   return (
     <article
       className={cn(
-        "flex min-h-20 items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,background-color]",
+        "flex items-center gap-2.5 rounded-lg border bg-card p-2.5 text-left transition-[border-color,background-color]",
         props.checked ? "border-emerald-600/25" : "border-border",
         props.disabled && "bg-muted/10",
       )}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
-        <Icon className="h-4 w-4" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground">
+        <Icon className="h-3.5 w-3.5" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -31,7 +31,7 @@ export function ResourceSelectionCard(props: {
         </div>
         <p
           className={cn(
-            "mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground",
+            "mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground",
             props.warning && "text-amber-600 dark:text-amber-300",
           )}
           title={props.description}

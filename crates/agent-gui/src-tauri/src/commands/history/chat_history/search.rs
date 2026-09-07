@@ -590,7 +590,7 @@ fn search_chat_history_fts_with_refresh(
     Ok(matches)
 }
 
-fn search_chat_history_sync(
+pub(crate) fn search_chat_history_sync(
     args: ChatHistorySearchArgs,
 ) -> Result<ChatHistorySearchResponse, String> {
     let query = args.query.trim();

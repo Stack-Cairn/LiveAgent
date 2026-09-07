@@ -685,7 +685,6 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         confirmLabel: t("projectTools.closeSshSessionContinue"),
         cancelLabel: t("projectTools.closeSshSessionCancel"),
         closeLabel: t("projectTools.closeSshSessionClose"),
-        tone: "destructive",
       });
       if (!confirmed) return;
       setClosingSessionIds((current) => new Set(current).add(session.id));
@@ -784,7 +783,6 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
             detail: sessionEndpointLabel(session),
             confirmLabel: t("projectTools.sshTunnelReconnectKbiConfirm"),
             cancelLabel: t("projectTools.closeSshSessionCancel"),
-            tone: "warning",
           });
           if (recreate) {
             await recreateSessionForKbi(session);

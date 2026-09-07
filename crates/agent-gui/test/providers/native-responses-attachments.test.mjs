@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+const OFFICIAL_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const OFFICIAL_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
+const OFFICIAL_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const KIMI_RELAY_BASE_URL = "https://api.kimi.com/coding";
+
 function createLoader(invoke) {
   return createTsModuleLoader({
     mocks: {
@@ -53,6 +58,7 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
       context: { messages: [message] },
       model: { api: "openai-responses", input: ["text", "image"] },
       workdir: "/workspace",
+      baseUrl: OFFICIAL_OPENAI_BASE_URL,
     });
 
   assert.equal(calls.length, 2);
@@ -63,8 +69,10 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
   assert.equal(result.input[0].content[0].type, "input_text");
   assert.match(
     result.input[0].content[0].text,
-    /Analyze the native attachments directly first/,
+    /included in this OpenAI Responses request/,
   );
+  assert.match(result.input[0].content[0].text, /screenshot\.png \(image, 5 B\); inlined/);
+  assert.match(result.input[0].content[0].text, /report\.pdf \(pdf, 3 B\); inlined/);
   assert.equal(result.input[0].content[1].type, "input_image");
   assert.equal(result.input[0].content[1].image_url, "data:image/png;base64,aW1hZ2U=");
   assert.equal(result.input[0].content[2].type, "input_file");
@@ -258,6 +266,7 @@ test("Anthropic Messages native attachment adapter adds image and document block
       context: { messages: [message] },
       model: { api: "anthropic-messages", input: ["text", "image"] },
       workdir: "/workspace",
+      baseUrl: OFFICIAL_ANTHROPIC_BASE_URL,
     });
 
   assert.equal(calls.length, 2);
@@ -285,22 +294,27 @@ test("Anthropic Messages native attachment adapter adds image and document block
   });
 });
 
-test("Anthropic Messages native attachment adapter sends text files as text documents", async () => {
-  const calls = [];
-  const loader = createLoader(async (command, args) => {
-    calls.push({ command, args });
-    return { mimeType: "text/plain", data: "SGVsbG8gQ2xhdWRl", sizeBytes: 12 };
+test("Anthropic Messages native attachment adapter keeps text files on the Read path", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read text attachments for native inline");
   });
   const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
   const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
 
   const message = uploadedFiles.createUserMessageWithUploads("Summarize this", [
     {
-      relativePath: "uploads/1/notes.txt",
-      absolutePath: "/workspace/uploads/1/notes.txt",
-      fileName: "notes.txt",
+      relativePath: "uploads/1/notes.md",
+      absolutePath: "/workspace/uploads/1/notes.md",
+      fileName: "notes.md",
       kind: "text",
       sizeBytes: 12,
+    },
+    {
+      relativePath: "uploads/1/table.csv",
+      absolutePath: "/workspace/uploads/1/table.csv",
+      fileName: "table.csv",
+      kind: "text",
+      sizeBytes: 48,
     },
   ]);
   const payload = {
@@ -313,17 +327,224 @@ test("Anthropic Messages native attachment adapter sends text files as text docu
       context: { messages: [message] },
       model: { api: "anthropic-messages", input: ["text", "image"] },
       workdir: "/workspace",
+      baseUrl: OFFICIAL_ANTHROPIC_BASE_URL,
+    });
+
+  assert.equal(result, payload);
+  assert.match(payload.messages[0].content, /Use Read with these exact paths/);
+  assert.match(payload.messages[0].content, /notes\.md \(text, 12 B\)/);
+  assert.match(payload.messages[0].content, /table\.csv \(text, 48 B\)/);
+  assert.doesNotMatch(payload.messages[0].content, /; inlined/);
+});
+
+test("Anthropic Messages native attachment adapter keeps PDFs on the Read path at relay endpoints", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read PDF attachments on third-party Anthropic relays");
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
+    {
+      relativePath: "uploads/1/report.pdf",
+      absolutePath: "/workspace/uploads/1/report.pdf",
+      fileName: "report.pdf",
+      kind: "pdf",
+      sizeBytes: 3,
+    },
+  ]);
+  const payload = {
+    messages: [{ role: "user", content: message.content }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToAnthropicPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "anthropic-messages", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: KIMI_RELAY_BASE_URL,
+    });
+
+  assert.equal(result, payload);
+  assert.match(payload.messages[0].content, /report\.pdf \(pdf, 3 B\)/);
+  assert.doesNotMatch(JSON.stringify(result), /"type":"document"/);
+});
+
+test("OpenAI Responses native attachment adapter keeps PDFs on the Read path at relay endpoints", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read PDF attachments on third-party OpenAI relays");
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
+    {
+      relativePath: "uploads/1/report.pdf",
+      absolutePath: "/workspace/uploads/1/report.pdf",
+      fileName: "report.pdf",
+      kind: "pdf",
+      sizeBytes: 3,
+    },
+  ]);
+  const payload = {
+    input: [{ role: "user", content: [{ type: "input_text", text: message.content }] }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToResponsesPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "openai-responses", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: "https://relay.example.com/v1",
+    });
+
+  assert.equal(result, payload);
+  assert.match(payload.input[0].content[0].text, /report\.pdf \(pdf, 3 B\)/);
+  assert.doesNotMatch(JSON.stringify(result), /input_file/);
+});
+
+test("OpenAI Responses native attachment adapter never inlines text or office files", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read text or office attachments for native inline");
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
+    {
+      relativePath: "uploads/1/notes.md",
+      absolutePath: "/workspace/uploads/1/notes.md",
+      fileName: "notes.md",
+      kind: "text",
+      sizeBytes: 20,
+    },
+    {
+      relativePath: "uploads/1/table.csv",
+      absolutePath: "/workspace/uploads/1/table.csv",
+      fileName: "table.csv",
+      kind: "text",
+      sizeBytes: 40,
+    },
+    {
+      relativePath: "uploads/1/report.docx",
+      absolutePath: "/workspace/uploads/1/report.docx",
+      fileName: "report.docx",
+      kind: "word",
+      sizeBytes: 80,
+    },
+    {
+      relativePath: "uploads/1/sheet.xlsx",
+      absolutePath: "/workspace/uploads/1/sheet.xlsx",
+      fileName: "sheet.xlsx",
+      kind: "spreadsheet",
+      sizeBytes: 90,
+    },
+  ]);
+  const payload = {
+    input: [{ role: "user", content: [{ type: "input_text", text: message.content }] }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToResponsesPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "openai-responses", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: OFFICIAL_OPENAI_BASE_URL,
+    });
+
+  assert.equal(result, payload);
+  assert.doesNotMatch(JSON.stringify(result), /input_file/);
+});
+
+test("mixed image and markdown only inlines the image and marks that line", async () => {
+  const calls = [];
+  const loader = createLoader(async (command, args) => {
+    calls.push({ command, args });
+    return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
+    {
+      relativePath: "uploads/1/screenshot.png",
+      absolutePath: "/workspace/uploads/1/screenshot.png",
+      fileName: "screenshot.png",
+      kind: "image",
+      sizeBytes: 5,
+    },
+    {
+      relativePath: "uploads/1/ARCHITECTURE.md",
+      absolutePath: "/workspace/uploads/1/ARCHITECTURE.md",
+      fileName: "ARCHITECTURE.md",
+      kind: "text",
+      sizeBytes: 15455,
+    },
+  ]);
+  const payload = {
+    messages: [{ role: "user", content: message.content }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToAnthropicPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "anthropic-messages", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: KIMI_RELAY_BASE_URL,
     });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].args.kind, "text");
-  assert.equal(result.messages[0].content[1].type, "document");
-  assert.equal(result.messages[0].content[1].title, "notes.txt");
-  assert.deepEqual(result.messages[0].content[1].source, {
-    type: "text",
-    media_type: "text/plain",
-    data: "Hello Claude",
+  assert.equal(calls[0].args.kind, "image");
+  assert.equal(result.messages[0].content[1].type, "image");
+  assert.match(result.messages[0].content[0].text, /screenshot\.png \(image, 5 B\); inlined/);
+  assert.match(result.messages[0].content[0].text, /ARCHITECTURE\.md \(text, 15 KB\)/);
+  assert.doesNotMatch(result.messages[0].content[0].text, /ARCHITECTURE\.md \(text, 15 KB\); inlined/);
+  assert.doesNotMatch(JSON.stringify(result), /"type":"document"/);
+});
+
+test("PDF native inline is limited to official provider hosts", () => {
+  const loader = createLoader(async () => {
+    throw new Error("unused");
   });
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const { supportsNativePdfInline } = nativeAttachments.__nativeResponsesAttachmentsTest;
+
+  assert.equal(
+    supportsNativePdfInline({ api: "anthropic-messages" }, OFFICIAL_ANTHROPIC_BASE_URL),
+    true,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "anthropic-messages" }, KIMI_RELAY_BASE_URL),
+    false,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "openai-responses" }, OFFICIAL_OPENAI_BASE_URL),
+    true,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "openai-responses" }, "https://relay.example.com/v1"),
+    false,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "openai-responses" }, "https://api.x.ai/v1"),
+    true,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "google-generative-ai" }, OFFICIAL_GEMINI_BASE_URL),
+    true,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "google-generative-ai" }, "https://proxy.xf233.io"),
+    false,
+  );
+  assert.equal(
+    supportsNativePdfInline({ api: "openai-completions" }, OFFICIAL_OPENAI_BASE_URL),
+    false,
+  );
 });
 
 test("Anthropic Messages native attachment adapter preserves Read fallback for unsupported files", async () => {
@@ -455,6 +676,7 @@ test("Gemini native attachment adapter adds inlineData parts", async () => {
       context: { messages: [message] },
       model: { api: "google-generative-ai", input: ["text", "image"] },
       workdir: "/workspace",
+      baseUrl: OFFICIAL_GEMINI_BASE_URL,
     });
 
   assert.equal(calls.length, 2);
@@ -478,6 +700,74 @@ test("Gemini native attachment adapter adds inlineData parts", async () => {
     result.contents[0].parts[2].text,
     /Gemini request as native inlineData inputs/,
   );
+});
+
+test("Gemini native attachment adapter keeps PDFs on the Read path at relay endpoints", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read PDF attachments on third-party Gemini relays");
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
+    {
+      relativePath: "uploads/1/report.pdf",
+      absolutePath: "/workspace/uploads/1/report.pdf",
+      fileName: "report.pdf",
+      kind: "pdf",
+      sizeBytes: 3,
+    },
+  ]);
+  const payload = {
+    contents: [{ role: "user", parts: [{ text: message.content }] }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToGeminiPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "google-generative-ai", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: "https://proxy.xf233.io",
+    });
+
+  assert.equal(result, payload);
+  assert.match(payload.contents[0].parts[0].text, /report\.pdf \(pdf, 3 B\)/);
+  assert.doesNotMatch(JSON.stringify(result), /inlineData/);
+});
+
+test("Gemini native attachment adapter keeps text files on the Read path", async () => {
+  const loader = createLoader(async () => {
+    throw new Error("should not read text attachments for native inline");
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Summarize this", [
+    {
+      relativePath: "uploads/1/notes.md",
+      absolutePath: "/workspace/uploads/1/notes.md",
+      fileName: "notes.md",
+      kind: "text",
+      sizeBytes: 12,
+    },
+  ]);
+  const payload = {
+    contents: [{ role: "user", parts: [{ text: message.content }] }],
+  };
+
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToGeminiPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "google-generative-ai", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: OFFICIAL_GEMINI_BASE_URL,
+    });
+
+  assert.equal(result, payload);
+  assert.match(payload.contents[0].parts[0].text, /notes\.md \(text, 12 B\)/);
+  assert.doesNotMatch(JSON.stringify(result), /inlineData/);
 });
 
 test("Gemini native attachment adapter follows Gemini image MIME support", async () => {

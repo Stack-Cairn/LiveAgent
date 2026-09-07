@@ -76,7 +76,49 @@ test("thinking-only rounds count as content", () => {
   assert.equal(rows[0].kind, "assistant");
 });
 
-test("checkpoint and error entries flush the assistant group", () => {
+test("a mid-reply checkpoint stitches both halves into one assistant row with a seam round", () => {
+  const rows = buildRowsFromEntries(
+    [
+      { id: "a-1", kind: "assistant", text: "before", round: 1 },
+      {
+        id: "checkpoint-s1",
+        kind: "checkpoint",
+        content: "summary",
+        summaryId: "s1",
+        coveredMessageCount: 3,
+        generatedBy: { providerId: "liveagent", model: "summary" },
+        contextUsageTokens: 1200,
+      },
+      { id: "a-2", kind: "assistant", text: "after", round: 1, timestamp: 42 },
+      { id: "err-1", kind: "error", text: "boom" },
+    ],
+    "history",
+  );
+  assert.deepEqual(
+    rows.map((row) => row.kind),
+    ["assistant", "error"],
+  );
+  assert.equal(rows[0].key, "ag:a-1", "the leading part keys the stitched row");
+  assert.equal(rows[0].timestamp, 42, "the reply timestamp is the last part's");
+  assert.deepEqual(
+    rows[0].rounds.map((round) => [round.key, round.blocks.length, Boolean(round.checkpoint)]),
+    [
+      ["ag:a-1:r1", 1, false],
+      ["checkpoint-s1", 0, true],
+      ["ag:a-2:r1", 1, false],
+    ],
+  );
+  assert.equal(rows[0].rounds[1].checkpoint.summaryId, "s1");
+  assert.equal(rows[0].rounds[1].checkpoint.contextUsageTokens, 1200);
+  assert.deepEqual(
+    rows[0].rounds.map((round) =>
+      round.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])).join(""),
+    ),
+    ["before", "", "after"],
+  );
+});
+
+test("a checkpoint that ends the chain stays a standalone card; errors still flush", () => {
   const rows = buildRowsFromEntries(
     [
       { id: "a-1", kind: "assistant", text: "before", round: 1 },
@@ -88,17 +130,17 @@ test("checkpoint and error entries flush the assistant group", () => {
         coveredMessageCount: 3,
         generatedBy: { providerId: "liveagent", model: "summary" },
       },
-      { id: "a-2", kind: "assistant", text: "after", round: 1 },
       { id: "err-1", kind: "error", text: "boom" },
+      { id: "a-2", kind: "assistant", text: "after", round: 1 },
     ],
     "history",
   );
   assert.deepEqual(
     rows.map((row) => row.kind),
-    ["assistant", "checkpoint", "assistant", "error"],
+    ["assistant", "checkpoint", "error", "assistant"],
   );
   assert.equal(rowText(rows[0]), "before");
-  assert.equal(rowText(rows[2]), "after");
+  assert.equal(rowText(rows[3]), "after");
 });
 
 test("buildTurnRows emits the user bubble before any assistant content, tagged with the turn key", () => {

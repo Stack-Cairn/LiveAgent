@@ -21,7 +21,7 @@ export function ResourceTabsList<Value extends string>(props: {
     <TabsList
       aria-label={props.ariaLabel}
       className={cn(
-        "h-9 max-w-full shrink-0 justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "h-8 max-w-full shrink-0 justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         props.className,
       )}
     >
@@ -33,7 +33,7 @@ export function ResourceTabsList<Value extends string>(props: {
             key={item.value}
             value={item.value}
             className={cn(
-              "group relative h-7 shrink-0 gap-1.5 rounded-md px-3 text-[13px] hover:text-foreground data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+              "group relative shrink-0 gap-1.5 rounded-md px-3 hover:text-foreground data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
               props.triggerClassName,
             )}
           >

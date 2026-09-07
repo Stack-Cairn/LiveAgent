@@ -12,10 +12,7 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
-import {
-  type CustomHeader,
-  mergeCustomHeaders,
-} from "../../lib/providers/customHeaders";
+import { type CustomHeader, mergeCustomHeaders } from "../../lib/providers/customHeaders";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
@@ -669,26 +666,14 @@ export function mergeFetchedModels(
   return merged;
 }
 
-export function getModelBulkActionCounts(
-  selectedModels: ReadonlySet<string>,
+// 供“列表总开关”一次性设置一批模型的启用状态：enabled=true 时并集，false 时差集。
+export function applyModelsActiveState(
   activeModels: ReadonlySet<string>,
-): { enableCount: number; disableCount: number } {
-  let enableCount = 0;
-  let disableCount = 0;
-  for (const modelId of selectedModels) {
-    if (activeModels.has(modelId)) disableCount += 1;
-    else enableCount += 1;
-  }
-  return { enableCount, disableCount };
-}
-
-export function applyModelBulkActiveState(
-  activeModels: ReadonlySet<string>,
-  selectedModels: ReadonlySet<string>,
+  targetModels: Iterable<string>,
   enabled: boolean,
 ): Set<string> {
   const next = new Set(activeModels);
-  for (const modelId of selectedModels) {
+  for (const modelId of targetModels) {
     if (enabled) next.add(modelId);
     else next.delete(modelId);
   }

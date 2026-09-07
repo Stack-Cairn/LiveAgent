@@ -153,6 +153,8 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         totalCount: response.total_count,
       } as T;
     }
+    case "chat_history_search":
+      return invokeGatewayMemory<T>(command, args);
     case "chat_history_workdirs":
       return (await getGatewayWebSocketClient(loadToken().trim()).listHistoryWorkdirs()) as T;
     case "system_create_project_folder":

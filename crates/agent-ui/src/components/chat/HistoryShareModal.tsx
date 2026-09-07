@@ -208,7 +208,7 @@ export function HistoryShareModal({
           </div>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 py-5">
+        <DialogBody className="space-y-4">
           <div className="rounded-2xl border border-border/60 bg-muted/25 px-4 py-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">

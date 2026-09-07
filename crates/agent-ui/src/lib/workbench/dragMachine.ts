@@ -4,8 +4,6 @@ import {
   hitTestWorkbenchDrop,
   MIN_CONVERSATION_PANE_HEIGHT,
   MIN_CONVERSATION_PANE_WIDTH,
-  MIN_FILE_TREE_PANE_HEIGHT,
-  MIN_FILE_TREE_PANE_WIDTH,
   MIN_TERMINAL_PANE_HEIGHT,
   MIN_TERMINAL_PANE_WIDTH,
   previewRectForDropTarget,
@@ -16,7 +14,13 @@ import {
   type WorkbenchGeometry,
   type WorkbenchRect,
 } from "./index";
-import { type ProjectRef, surfaceIdentityKey, type WorkbenchLayout } from "./types";
+import {
+  type ProjectRef,
+  type ProjectToolSurfaceKind,
+  projectToolSurfaceIdentityKey,
+  surfaceIdentityKey,
+  type WorkbenchLayout,
+} from "./types";
 
 export const DRAG_THRESHOLD_PX = 6;
 /** Pointer-splitting is disabled on very narrow canvases (doc §22). */
@@ -59,8 +63,9 @@ function payloadMinForEdge(
   if (payload.kind === "terminalSession" || payload.kind === "newTerminal") {
     return horizontal ? MIN_TERMINAL_PANE_WIDTH : MIN_TERMINAL_PANE_HEIGHT;
   }
-  if (payload.kind === "fileTree") {
-    return horizontal ? MIN_FILE_TREE_PANE_WIDTH : MIN_FILE_TREE_PANE_HEIGHT;
+  if (payload.kind === "projectTool") {
+    const min = surfaceMinSize({ kind: payload.tool, project: payload.project });
+    return horizontal ? min.minWidth : min.minHeight;
   }
   if (payload.kind === "pane") {
     const pane = layout.panes[payload.paneId];
@@ -121,8 +126,11 @@ export type WorkbenchDragPayload =
   | { kind: "terminalSession"; sessionId: string; project: ProjectRef; title: string }
   /** Dragging a "new terminal" affordance creates a terminal at the drop spot. */
   | { kind: "newTerminal"; project: ProjectRef; title: string }
-  /** Dragging the singleton File Tree tool opens/moves its project surface. */
-  | { kind: "fileTree"; project: ProjectRef; title: string };
+  /**
+   * Dragging a singleton project tool (file tree, git review, tunnel, SSH,
+   * background tasks) out of the Right Dock opens or moves its surface.
+   */
+  | { kind: "projectTool"; tool: ProjectToolSurfaceKind; project: ProjectRef; title: string };
 
 export function conversationReferenceForWorkbenchPayload(
   payload: WorkbenchDragPayload,
@@ -161,9 +169,10 @@ function ownPaneIdForPayload(
   layout: WorkbenchLayout,
 ): string | undefined {
   if (payload.kind === "pane") return payload.paneId;
-  if (payload.kind === "fileTree") {
+  if (payload.kind === "projectTool") {
+    const key = projectToolSurfaceIdentityKey(payload.tool, payload.project.projectPathKey);
     return Object.values(layout.panes).find(
-      (pane) => surfaceIdentityKey(pane.surface) === `fileTree:${payload.project.projectPathKey}`,
+      (pane) => pane.surface.kind !== "unsupported" && surfaceIdentityKey(pane.surface) === key,
     )?.paneId;
   }
   if (payload.kind !== "conversation") return undefined;

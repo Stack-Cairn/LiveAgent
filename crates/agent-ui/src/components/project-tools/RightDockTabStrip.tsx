@@ -6,7 +6,11 @@ import { useState } from "react";
 import { cn } from "../../lib/shared/utils";
 import type { TerminalSession } from "../../lib/terminal/types";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
-import { formatTerminalSessionTitle, type RightDockVisibleTab } from "./rightDockModel";
+import {
+  formatTerminalSessionTitle,
+  type RightDockLeasedToolKind,
+  type RightDockVisibleTab,
+} from "./rightDockModel";
 import { getRightDockToolDefinition, type RightDockSingletonTabKind } from "./rightDockRegistry";
 import type { RightDockTabDragProps } from "./useRightDockTabReorder";
 
@@ -50,8 +54,21 @@ type RightDockTabStripProps = {
    * session beside the focused workbench pane. Enables the tab context menu.
    */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
-  onFileTreeTabDragStart?: (event: { pointerId: number; clientX: number; clientY: number }) => void;
-  onOpenFileTreeInWorkbench?: () => void;
+  /**
+   * Provided when project tool tabs (file tree, git review, tunnel, SSH,
+   * background tasks) can be dragged out into a workbench pane.
+   */
+  onToolTabDragStart?: (
+    kind: RightDockLeasedToolKind,
+    event: {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      currentTarget?: EventTarget | null;
+    },
+  ) => void;
+  /** Tab context-menu "open in split" for project tools. */
+  onOpenToolInWorkbench?: (kind: RightDockLeasedToolKind) => void;
 };
 
 // One descriptor per tab regardless of kind, so every tab shares a single
@@ -104,13 +121,39 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     onCloseTerminalRequest,
     onTerminalTabDragStart,
     onOpenTerminalInWorkbench,
-    onFileTreeTabDragStart,
-    onOpenFileTreeInWorkbench,
+    onToolTabDragStart,
+    onOpenToolInWorkbench,
   } = props;
   const { t } = useLocale();
   // One open menu at a time, keyed by tab id — the strip is a single row, so a
   // per-tab open flag would only add bookkeeping.
   const [menuTabId, setMenuTabId] = useState("");
+
+  // Shared drag-out / menu wiring for every project tool tab; terminal tabs
+  // carry a session and keep their own descriptor.
+  const toolTabWorkbenchProps = (
+    kind: RightDockLeasedToolKind,
+  ): Pick<DockTabDescriptor, "menuItems" | "dragProps"> => ({
+    menuItems: onOpenToolInWorkbench ? (
+      <DropdownMenuItem onSelect={() => onOpenToolInWorkbench(kind)} className="gap-2 text-xs">
+        <Columns2 className="h-3.5 w-3.5" />
+        {t("workbench.openInSplit")}
+      </DropdownMenuItem>
+    ) : undefined,
+    dragProps: onToolTabDragStart
+      ? {
+          onPointerDown: (event) => {
+            if (event.button !== 0 || event.pointerType === "touch") return;
+            onToolTabDragStart(kind, {
+              pointerId: event.pointerId,
+              clientX: event.clientX,
+              clientY: event.clientY,
+              currentTarget: event.currentTarget,
+            });
+          },
+        }
+      : undefined,
+  });
 
   const renderDockTab = (tab: DockTabDescriptor) => {
     const tabBody = (
@@ -262,6 +305,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             running: backgroundTasksRunning > 0,
             closeLabel,
             closeTitle: closeLabel,
+            ...toolTabWorkbenchProps("backgroundTasks"),
             onActivate: () => onActivateTab(tab.id),
             onClose: onCloseBackgroundTasks,
           });
@@ -270,14 +314,6 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           const definition = getRightDockToolDefinition(tab.kind);
           if (!definition) return null;
           const closeLabel = t(definition.closeKey);
-          const isFileTree = tab.kind === "fileTree";
-          const menuItems =
-            isFileTree && onOpenFileTreeInWorkbench ? (
-              <DropdownMenuItem onSelect={onOpenFileTreeInWorkbench} className="gap-2 text-xs">
-                <Columns2 className="h-3.5 w-3.5" />
-                {t("workbench.openInSplit")}
-              </DropdownMenuItem>
-            ) : null;
           return renderDockTab({
             id: tab.id,
             label: t(definition.titleKey),
@@ -285,20 +321,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             isActive: currentActiveTab === tab.kind,
             closeLabel,
             closeTitle: closeLabel,
-            menuItems,
-            dragProps:
-              isFileTree && onFileTreeTabDragStart
-                ? {
-                    onPointerDown: (event) => {
-                      if (event.button !== 0 || event.pointerType === "touch") return;
-                      onFileTreeTabDragStart({
-                        pointerId: event.pointerId,
-                        clientX: event.clientX,
-                        clientY: event.clientY,
-                      });
-                    },
-                  }
-                : undefined,
+            ...toolTabWorkbenchProps(tab.kind),
             onActivate: () => onActivateTab(tab.id),
             onClose: () => onCloseToolTab(tab.kind),
           });

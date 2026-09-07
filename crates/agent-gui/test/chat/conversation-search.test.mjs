@@ -6,6 +6,11 @@ test("conversation mention search uses complete indexed history, deduplicates, a
   const calls = [];
   const { searchMentionConversations } = createTsModuleLoader({
     mocks: {
+      "@liveagent/ui/lib/chat/historySearch": {
+        async searchChatHistory() {
+          throw new Error("mention search must not use global navigation search");
+        },
+      },
       "@liveagent/ui/lib/memory/api": {
         async memorySearch(args) {
           calls.push(args);
@@ -70,6 +75,11 @@ test("conversation mention search skips the backend for an empty query", async (
   let calls = 0;
   const { searchMentionConversations } = createTsModuleLoader({
     mocks: {
+      "@liveagent/ui/lib/chat/historySearch": {
+        async searchChatHistory() {
+          throw new Error("empty mention search must not use global navigation search");
+        },
+      },
       "@liveagent/ui/lib/memory/api": {
         async memorySearch() {
           calls += 1;
@@ -84,4 +94,124 @@ test("conversation mention search skips the backend for an empty query", async (
     [],
   );
   assert.equal(calls, 0);
+});
+
+test("sidebar conversation search uses the global history API and ranks without filtering workdirs", async () => {
+  const { searchPersistedConversations } = createTsModuleLoader({
+    mocks: {
+      "@liveagent/ui/lib/chat/historySearch": {
+        async searchChatHistory(args) {
+          assert.deepEqual(args, { query: "release notes", limit: 80 });
+          return {
+            matches: [
+              {
+                conversationId: "other-workspace",
+                title: "Remote release notes",
+                cwd: "/repo/b",
+                snippet: "assistant: [release notes] from another workspace",
+                score: 12,
+                updatedAt: 60,
+              },
+              {
+                conversationId: "current-workspace",
+                title: "Release planning",
+                cwd: "/repo/a",
+                snippet: "assistant: [release notes] are ready",
+                score: 4,
+                updatedAt: 50,
+              },
+              {
+                conversationId: "global-chat",
+                title: "Chat without a workspace",
+                cwd: null,
+                snippet: "user: [release notes]",
+                score: 8,
+                updatedAt: 55,
+              },
+            ],
+          };
+        },
+      },
+      "@liveagent/ui/lib/memory/api": {
+        async memorySearch() {
+          throw new Error("sidebar navigation search must not use memory_search");
+        },
+      },
+    },
+  }).loadModule("@liveagent/ui/lib/chat/conversationSearch");
+
+  const results = await searchPersistedConversations({
+    query: "release notes",
+    currentWorkdir: "/repo/a",
+  });
+
+  assert.deepEqual(
+    results.map((result) => result.id),
+    ["current-workspace", "other-workspace", "global-chat"],
+  );
+  assert.equal(results[0].searchPreview, "assistant: [release notes] are ready");
+});
+
+test("global history API invokes the dedicated chat history command", async () => {
+  const calls = [];
+  const { searchChatHistory } = createTsModuleLoader({
+    mocks: {
+      "@liveagent/app/shims/tauriCore": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          return { matches: [] };
+        },
+      },
+    },
+  }).loadModule("@liveagent/ui/lib/chat/historySearch");
+
+  assert.deepEqual(await searchChatHistory({ query: "global", limit: 12 }), { matches: [] });
+  assert.deepEqual(calls, [
+    {
+      command: "chat_history_search",
+      args: { args: { query: "global", limit: 12 } },
+    },
+  ]);
+});
+
+test("Gateway shim forwards global history search without a workdir scope", async () => {
+  const calls = [];
+  const gatewayRoot = new URL("../../../agent-gateway/web", import.meta.url).pathname;
+  const { invoke } = createTsModuleLoader({
+    rootDir: gatewayRoot,
+    mocks: {
+      "../lib/gatewaySocket": {
+        getGatewayWebSocketClient(token) {
+          assert.equal(token, "gateway-token");
+          return {
+            async memoryManage(payload) {
+              calls.push(payload);
+              return { matches: [] };
+            },
+          };
+        },
+      },
+      "../lib/storage": {
+        loadToken() {
+          return "gateway-token";
+        },
+      },
+      "./browserPathPrompt": {
+        async promptPathInBrowser() {
+          throw new Error("path prompt must not be used by history search");
+        },
+      },
+    },
+  }).loadModule("src/shims/tauriCore");
+
+  assert.deepEqual(
+    await invoke("chat_history_search", { args: { query: "global", limit: 12 } }),
+    { matches: [] },
+  );
+  assert.deepEqual(calls, [
+    {
+      command: "chat_history_search",
+      args: { query: "global", limit: 12 },
+    },
+  ]);
 });

@@ -245,9 +245,20 @@ test("trailing newlines render a visual line anchor without changing DOM text", 
   );
   assert.equal(
     html,
-    'alpha\n<span aria-hidden="true" class="chat-user-trailing-newline-anchor"></span>',
+    '<span class="chat-user-message-content">alpha\n<span aria-hidden="true" class="chat-user-trailing-newline-anchor"></span></span>',
   );
   assert.doesNotMatch(html, /\u200b/i);
+});
+
+test("plain user message text is wrapped in an inline selection boundary", () => {
+  const html = renderToStaticMarkup(
+    jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
+      text: "只用 Edit 工具把第 1000 行改成 line 1000 changed，不要重写整个文件。",
+    }),
+  );
+
+  assert.match(html, /^<span class="chat-user-message-content">/);
+  assert.match(html, /不要重写整个文件。<\/span>$/);
 });
 
 test("code mention tokens round trip through transcript tokenization", () => {

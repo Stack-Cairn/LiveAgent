@@ -366,7 +366,7 @@ export function CronTaskModal({
         showCloseButton
       >
         {/* Header */}
-        <DialogHeader className="flex-row items-center gap-3 px-6">
+        <DialogHeader className="flex-row items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Clock3 className="h-5 w-5" />
           </div>
@@ -912,7 +912,7 @@ export function CronTaskModal({
         </DialogBody>
 
         {/* Footer */}
-        <DialogFooter className="px-6 min-[821px]:justify-between">
+        <DialogFooter className="min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
               <div className="flex items-center gap-1.5 text-xs text-destructive">

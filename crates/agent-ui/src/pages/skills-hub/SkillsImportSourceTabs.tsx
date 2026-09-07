@@ -48,7 +48,7 @@ export function SkillsImportSourceTabs(props: {
             value={tool}
             disabled={props.disabled || !scan}
             aria-label={`${label}: ${scan?.exists ? scan.skills.length : 0}`}
-            className="group h-7 shrink-0 gap-1 rounded-md border border-transparent px-2 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60"
+            className="group shrink-0 gap-1 rounded-md border border-transparent px-2 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60"
           >
             <ExternalToolSourceIcon tool={tool} className="h-3.5 w-3.5" />
             <span>{label}</span>

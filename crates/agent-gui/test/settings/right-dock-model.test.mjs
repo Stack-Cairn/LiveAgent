@@ -316,14 +316,17 @@ test("a leased file tree leaves the dock without clearing its persisted tool sta
     tunnelAvailable: true,
   };
 
-  const leased = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: true });
+  const leased = rightDockModel.getRightDockVisibleTabs({
+    ...options,
+    leasedTools: new Set(["fileTree"]),
+  });
   assert.deepEqual(
     leased.map((tab) => tab.kind),
     ["gitReview"],
   );
   assert.deepEqual(Object.keys(projectState.tools), ["fileTree", "gitReview"]);
 
-  const released = rightDockModel.getRightDockVisibleTabs({ ...options, fileTreeLeased: false });
+  const released = rightDockModel.getRightDockVisibleTabs({ ...options, leasedTools: new Set() });
   assert.deepEqual(
     released.map((tab) => tab.kind),
     ["fileTree", "gitReview"],

@@ -60,6 +60,24 @@ export function areWidthControlsUsable(maxWidth: number): boolean {
   return maxWidth > MIN_CHAT_TRANSCRIPT_WIDTH;
 }
 
+// The one gate that currently hides the handles, checked in this order.
+// Rendered as `data-transcript-width-state` on the controls root so a runtime
+// look at the DOM names the reason — a loading overlay owns the stage, the
+// pointer/viewport media query hides them, or the stage cannot host more than
+// the minimum — without instrumenting the component (#749).
+export type TranscriptWidthControlsState = "ready" | "suspended" | "media-hidden" | "stage-narrow";
+
+export function resolveTranscriptWidthControlsState(input: {
+  suspended: boolean;
+  mediaHidden: boolean;
+  maxWidth: number;
+}): TranscriptWidthControlsState {
+  if (input.suspended) return "suspended";
+  if (input.mediaHidden) return "media-hidden";
+  if (!areWidthControlsUsable(input.maxWidth)) return "stage-narrow";
+  return "ready";
+}
+
 // Width for a drag of `deltaX` on `side`. The column is centered, so moving
 // one edge by d changes the width by 2d — that is what keeps the handle
 // under the pointer.

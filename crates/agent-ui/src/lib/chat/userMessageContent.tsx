@@ -1057,15 +1057,15 @@ export const UserMessageContent = memo(function UserMessageContent({
   ) : null;
   if (!hasChip) {
     return (
-      <>
+      <span className="chat-user-message-content">
         {normalizedText}
         {trailingNewlineAnchor}
-      </>
+      </span>
     );
   }
 
   return (
-    <>
+    <span className="chat-user-message-content">
       {parts.map((part, idx) => {
         const key = userMessageSegmentKey(part, idx);
         if (part.type === "mention") {
@@ -1101,6 +1101,6 @@ export const UserMessageContent = memo(function UserMessageContent({
         return <span key={key}>{part.value}</span>;
       })}
       {trailingNewlineAnchor}
-    </>
+    </span>
   );
 });

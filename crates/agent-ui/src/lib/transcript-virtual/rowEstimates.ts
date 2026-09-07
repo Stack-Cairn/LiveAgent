@@ -28,10 +28,13 @@ export type AssistantRowEstimateStats = {
   thinkingCount: number;
 };
 
-// Avatar row base, prose at ~3.2 chars/px, code at ~20px per line plus block
-// chrome per fence, a collapsed header per tool and thinking block. The cap
-// is generous on purpose: over-estimates cost one cheap correction, while
-// under-estimates are the flash-causing direction.
+// Row base, prose at ~3.2 chars/px, code at ~20px per line plus block chrome
+// per fence, a collapsed header per tool and thinking block. The base was
+// calibrated when assistant rows still reserved an avatar column and each row
+// carried its own vertical margin; both are gone, so it now over-estimates
+// slightly. Left as-is deliberately: the cap is generous on purpose —
+// over-estimates cost one cheap correction, while under-estimates are the
+// flash-causing direction. Re-calibrate only against measured scroll behavior.
 export function estimateAssistantRowHeight(stats: AssistantRowEstimateStats): number {
   const proseHeight = Math.min(900, 28 + stats.proseChars / 3.2);
   const codeHeight = stats.codeFences * 58 + stats.codeLines * 20;

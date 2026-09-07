@@ -26,12 +26,14 @@ const loader = createWebModuleLoader({
       },
     },
     "./assistant-bubble/RoundContent": {
-      RoundContent({ round }) {
-        const toolNames = round.blocks.flatMap((block) =>
-          block.kind === "tool" ? [block.item.toolCall.name] : [],
+      AssistantTurnContent({ rounds }) {
+        const toolNames = rounds.flatMap((round) =>
+          round.blocks.flatMap((block) =>
+            block.kind === "tool" ? [block.item.toolCall.name] : [],
+          ),
         );
         return jsxRuntime.jsx("div", {
-          "data-round": round.round,
+          "data-rounds": rounds.length,
           children: toolNames.join(","),
         });
       },

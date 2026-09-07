@@ -83,6 +83,26 @@ export function ToolApprovalBar({
 
   useEffect(() => {
     if (!currentToolCallId) return;
+    // Approvals arrive mid-turn, whenever the model happens to call a tool — so
+    // this can land while the user is mid-word in a rename field or the
+    // new-group draft. Grabbing focus there drops their keystrokes and, for the
+    // sidebar's blur-to-commit inputs, silently discards the row. The keyboard
+    // shortcuts this focus enables are worth less than not stealing an active
+    // caret; the user can Tab or click into the bar.
+    //
+    // The composer is the exception: this bar replaces it (ChatComposerBar
+    // hides the card), so there is no caret left to protect there. Focus still
+    // sits on the hidden textarea at commit time — the browser's focus fixup
+    // runs later — so an editable activeElement only counts when it is still
+    // rendered; otherwise Enter/Escape would silently stop working right after
+    // sending a message, which is the common case.
+    const active = document.activeElement as HTMLElement | null;
+    const activeIsEditable =
+      active !== null &&
+      (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+    if (activeIsEditable && active.getClientRects().length > 0) {
+      return;
+    }
     panelRef.current?.focus({ preventScroll: true });
   }, [currentToolCallId]);
 

@@ -1,5 +1,6 @@
 import { terminalLaunchSpecIsInProject } from "./projectScope";
 import {
+  isProjectToolSurface,
   type PaneNode,
   surfaceIdentityKey,
   WORKBENCH_LAYOUT_SCHEMA_VERSION,
@@ -216,14 +217,14 @@ export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): Workbench
       } else {
         identityValid = true;
       }
-    } else if (surface.kind === "fileTree") {
+    } else if (isProjectToolSurface(surface)) {
       identityValid = Boolean(surface.project.projectPathKey.trim());
       if (!identityValid) {
         issues.push(
           issue(
             "invalid-pane-record",
             `${panePath}.surface.project.projectPathKey`,
-            "File tree surfaces require a project path key.",
+            `${surface.kind} surfaces require a project path key.`,
           ),
         );
       }
@@ -276,12 +277,12 @@ export function collectWorkbenchLayoutIssues(layout: WorkbenchLayout): Workbench
                 `Conversation '${surface.conversationId.trim()}' is already bound to pane '${previousPaneId}'.`,
               ),
             );
-          } else if (surface.kind === "fileTree") {
+          } else if (isProjectToolSurface(surface)) {
             issues.push(
               issue(
                 "duplicate-surface",
                 `${panePath}.surface.project.projectPathKey`,
-                `File tree for project '${surface.project.projectPathKey.trim()}' is already bound to pane '${previousPaneId}'.`,
+                `Tool '${surfaceKey}' is already bound to pane '${previousPaneId}'.`,
               ),
             );
           } else {

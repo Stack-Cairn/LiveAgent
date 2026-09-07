@@ -11,8 +11,9 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
   return (
     <div
       data-pane-loading-skeleton={variant}
+      data-pane-loading-motion="static"
       className={cn(
-        "workbench-pane-restoring relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
+        "relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
         className,
       )}
       role="status"

@@ -243,7 +243,10 @@ jobs:
 
   linux:
     name: Linux x64
-    runs-on: ubuntu-latest
+    # 必须在 Ubuntu 22.04 (glibc 2.35) 上构建,产物才符合 README 承诺的 Ubuntu 22.04+ / Debian 12+。
+    # 若用 ubuntu-latest(24.04, glibc 2.39)构建,二进制会引用 GLIBC_2.38/2.39,在 22.04 上启动即退出 (#714)。
+    # 该 runner 与 Ubuntu 22.04 LTS 标准支持同在 2027-04 前退役;届时需迁移到 ubuntu:22.04 容器构建。
+    runs-on: ubuntu-22.04
     needs: release-metadata
     env:
       LIVEAGENT_APP_VERSION: ${{ needs.release-metadata.outputs.app_version }}
@@ -280,9 +283,24 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
-            protobuf-compiler \
             rpm \
+            unzip \
             wget
+
+      # ubuntu-22.04 的 apt protobuf-compiler 是 3.12，不支持 proto3 `optional`
+      # （prost-build 不会传 --experimental_allow_proto3_optional），改装官方 release。
+      # protoc 只是宿主构建工具，不影响产物 glibc 基线。
+      - name: Install protobuf compiler
+        env:
+          PROTOC_VERSION: "34.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          sudo unzip -oq /tmp/protoc.zip -d /usr/local 'bin/protoc' 'include/*'
+          sudo chmod +x /usr/local/bin/protoc
+          echo "PROTOC=/usr/local/bin/protoc" >> "$GITHUB_ENV"
+          /usr/local/bin/protoc --version
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -299,6 +317,9 @@ jobs:
           LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
         run: pnpm tauri build --config src-tauri/tauri.linux.release.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
+
+      - name: Verify glibc baseline
+        run: bash scripts/release/verify-linux-glibc-baseline.sh
 
       - name: Strip bundled Wayland libraries and re-sign AppImage
         env:

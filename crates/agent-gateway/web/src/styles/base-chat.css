@@ -581,13 +581,12 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  /* Two deliberately separate columns, both defaulting to 768px: the composer
-     keeps a fixed width while the transcript is user-resizable, so widening
-     the conversation never drags the input box along. Only the composer layer
-     may read --gateway-chat-column-width; the transcript reads
-     --chat-transcript-content-width, which TranscriptWidthControls overwrites
-     inline on .gateway-transcript-stage. */
-  --gateway-chat-column-width: 768px;
+  /* One shared column width: the composer column follows the user-resizable
+     transcript width, matching desktop (ChatComposerBar's desktop branch reads
+     the same variable for the card column). TranscriptWidthControls overwrites
+     --chat-transcript-content-width inline on .gateway-transcript-stage, and
+     the composer layer is a descendant of the stage, so it inherits every
+     update, drag frames included. */
   --chat-transcript-content-width: 768px;
   --gateway-chat-column-gutter: 16px;
   --gateway-chat-composer-bottom: 16px;
@@ -694,6 +693,10 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   overscroll-behavior: contain;
 }
 
+/* Blocking on purpose: the panel layer sits above the shared width handles
+   (z-index 10). GatewayAppView suspends TranscriptWidthControls for exactly as
+   long as this is mounted, so no handle hides beneath it and the handles return
+   with its exit (#749). */
 .gateway-history-switch-overlay {
   position: absolute;
   inset: 0;
@@ -728,9 +731,11 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-transcript-shell {
   display: grid;
+  /* Assistant rows dropped their 40px avatar column, so the transcript column
+     gives that width back rather than widening the reading measure. */
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
-    minmax(0, min(var(--chat-transcript-content-width, 768px), 100%))
+    minmax(0, min(calc(var(--chat-transcript-content-width, 768px) - 40px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
   width: 100%;
   min-width: 0;
@@ -748,9 +753,12 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-composer-layer {
   display: grid;
+  /* 与 .gateway-transcript-shell 同步减去已退役的 40px 头像列，否则输入框
+     会比它要对齐的正文列宽 40px。两条规则现在读同一个变量（#762 起输入框
+     也跟随可调的正文宽），但 grid 模板无法复用，补偿仍需两处各写一次。 */
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
-    minmax(0, min(var(--gateway-chat-column-width, 768px), 100%))
+    minmax(0, min(calc(var(--chat-transcript-content-width, 768px) - 40px), 100%))
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
   max-height: 100%;
   padding-bottom: var(--gateway-chat-composer-bottom, 16px);
@@ -933,10 +941,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   html[data-liveagent-webui="gateway"] .changed-file-row-action {
     display: none;
   }
-  .chat-user-bubble-actions,
-  .chat-assistant-actions {
-    opacity: 1;
-  }
 
   .chat-user-bubble-action,
   .chat-assistant-action {
@@ -946,6 +950,15 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
+  }
+}
+
+/* Only force the action row visible when *no* hover-capable pointer exists.
+ * `(pointer: coarse)` alone matches many desktop 2-in-1s that still have a mouse. */
+@media (any-hover: none) {
+  .chat-user-bubble-actions,
+  .chat-assistant-actions {
+    opacity: 1;
   }
 }
 

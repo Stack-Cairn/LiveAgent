@@ -159,24 +159,28 @@ const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
         model: params.model,
         providerId: params.providerId,
         workdir: params.workdir,
+        baseUrl: params.baseUrl,
       });
       nextOptions = attachOpenAICompletionsNativeAttachments(nextOptions, {
         context: params.context,
         model: params.model,
         providerId: params.providerId,
         workdir: params.workdir,
+        baseUrl: params.baseUrl,
       });
       nextOptions = attachAnthropicMessagesNativeAttachments(nextOptions, {
         context: params.context,
         model: params.model,
         providerId: params.providerId,
         workdir: params.workdir,
+        baseUrl: params.baseUrl,
       });
       return attachGeminiGenerativeAINativeAttachments(nextOptions, {
         context: params.context,
         model: params.model,
         providerId: params.providerId,
         workdir: params.workdir,
+        baseUrl: params.baseUrl,
       });
     },
   },

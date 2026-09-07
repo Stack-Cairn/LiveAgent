@@ -1,3 +1,8 @@
+import {
+  assembleContinuousReply,
+  type ReplyStitchClass,
+  stitchCompactedReplies,
+} from "@liveagent/ui/lib/chat/replyContinuity";
 import type { SubagentBatchDetails } from "@liveagent/ui/lib/subagents/protocol";
 import type { ToolCall, ToolResultMessage } from "@/lib/agentTypes";
 import {
@@ -171,6 +176,69 @@ function buildParentAgentToolCallForBatchResult(toolResult: ToolResultMessage): 
 }
 
 export function buildRowsFromEntries(
+  entries: ChatEntry[],
+  origin: TranscriptRowOrigin,
+): TranscriptRow[] {
+  return stitchCompactedRows(buildRawRowsFromEntries(entries, origin));
+}
+
+function classifyRow(row: TranscriptRow): ReplyStitchClass {
+  if (row.kind === "assistant") return "assistant";
+  if (row.kind === "checkpoint") return "checkpoint";
+  return "other";
+}
+
+// A compaction that fires inside a reply is persisted as
+// `assistant → checkpoint → assistant` with no user entry between the
+// halves. The raw pass emits that as two assistant rows around a card;
+// this pass folds the chain into ONE assistant row whose round list carries
+// the checkpoint as a zero-block seam round, so the reply renders with one
+// avatar, one processing trace (seam milestone inline) and one footer.
+// A checkpoint that ends the chain — idle manual compaction, a run stopped
+// right after compacting — stays a standalone divider card. Round keys
+// already carry a group-unique prefix, so no positional re-keying.
+export function stitchCompactedRows(rows: TranscriptRow[]): TranscriptRow[] {
+  const groups = stitchCompactedReplies(rows, classifyRow);
+  if (groups.every((group) => group.kind === "single")) return rows;
+  const stitched: TranscriptRow[] = [];
+  for (const group of groups) {
+    if (group.kind === "single") {
+      stitched.push(group.item);
+      continue;
+    }
+    const leader = group.items[0];
+    if (!leader || leader.kind !== "assistant") continue;
+    if (group.items.length === 1) {
+      stitched.push(leader);
+      continue;
+    }
+    const reply = assembleContinuousReply<TranscriptRow, GatewayTranscriptRound>(group.items, {
+      classify: classifyRow,
+      roundsOf: (row) => (row.kind === "assistant" ? row.rounds : []),
+      seamOf: (row) => {
+        if (row.kind !== "checkpoint") throw new Error("seamOf called on a non-checkpoint row");
+        return row;
+      },
+      rekeyParts: false,
+    });
+    let timestamp = leader.timestamp;
+    let turnKey = leader.turnKey;
+    for (const item of group.items) {
+      if (item.kind !== "assistant") continue;
+      if (item.timestamp !== undefined) timestamp = item.timestamp;
+      if (item.turnKey !== undefined) turnKey = item.turnKey;
+    }
+    stitched.push({
+      ...leader,
+      rounds: reply.rounds as GatewayTranscriptRound[],
+      timestamp,
+      ...(turnKey !== undefined ? { turnKey } : {}),
+    });
+  }
+  return stitched;
+}
+
+function buildRawRowsFromEntries(
   entries: ChatEntry[],
   origin: TranscriptRowOrigin,
 ): TranscriptRow[] {

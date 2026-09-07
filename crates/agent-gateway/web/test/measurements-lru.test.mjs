@@ -48,11 +48,18 @@ test("unmeasured layouts produce a blank key so nothing is cached", () => {
   assert.equal(lru.restore("conv-1", buildTranscriptLayoutKey(0, 768)), null);
 });
 
-test("gateway transcript grid consumes the stage width directly", () => {
-  assert.match(
-    transcriptStylesSource,
-    /minmax\(\s*0,\s*min\(var\(--chat-transcript-content-width,\s*768px\),\s*100%\)\s*\)/,
-  );
+test("gateway transcript and composer columns both drop the retired avatar rail", () => {
+  // 两条规则现在读同一个变量（#762 起输入框也跟随可调的正文宽），但 grid
+  // 模板无法复用，所以退役头像列的 40px 补偿仍需两处各写一次；只改一处会
+  // 让输入框比它要对齐的正文列宽 40px。分别按规则块断言，确保两处都在。
+  const column = String.raw`minmax\(\s*0,\s*min\(calc\(var\(--chat-transcript-content-width,\s*768px\)\s*-\s*40px\),\s*100%\)\s*\)`;
+  for (const rule of [".gateway-transcript-shell", ".gateway-composer-layer"]) {
+    const block = transcriptStylesSource.match(
+      new RegExp(`\\${rule} \\{[\\s\\S]*?\\n\\}`),
+    );
+    assert.ok(block, `${rule} 规则存在`);
+    assert.match(block[0], new RegExp(column));
+  }
   assert.doesNotMatch(transcriptStylesSource, /--gateway-transcript-column-width/);
 });
 

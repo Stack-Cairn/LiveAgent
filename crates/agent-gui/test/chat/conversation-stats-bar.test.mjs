@@ -304,3 +304,29 @@ test("approvalBar 可见时状态栏让位（ChatComposerBar 插槽互斥）", (
     "statsBar 插槽必须保持 approvalBar 互斥，且只在 ring 展示模式下不挂载（§4.7 三档）",
   );
 });
+
+test("读数下是全宽毛玻璃裙边：盖住整行并上探填掉卡片圆角外的缺口", async () => {
+  // 验证反馈：正文滚进输入区下方时，读数与底下的文字重叠到难以辨认，卡片
+  // 圆角外侧的弧形缺口也会漏出正文。裙边与卡片同宽，-top-8（= rounded-4xl
+  // 半径 2rem）藏到卡片身后，-z-10 保证压在卡片之下、正文之上。
+  const { container, unmount } = await render(sampleStats());
+  const skirt = container.querySelector('[role="status"] > div[aria-hidden="true"]');
+  assert.ok(skirt, "读数下应有一层毛玻璃裙边");
+  for (const cls of [
+    "pointer-events-none",
+    "absolute inset-x-0 -top-8 bottom-0 -z-10",
+    "bg-background/70",
+    "backdrop-blur-md",
+  ]) {
+    assert.ok(skirt.className.includes(cls), `裙边缺少 ${cls}：${skirt.className}`);
+  }
+  // 用户反馈：裙边自带的底部圆角又会在两角漏字——裙边不做圆角，方角全覆盖。
+  assert.equal(skirt.className.includes("rounded"), false, "裙边不许带圆角");
+  await unmount();
+
+  // 空态占位不带裙边：无数据时不显示一条空的毛玻璃。
+  const empty = await render(null);
+  assert.equal(empty.container.querySelector('[role="status"]'), null);
+  assert.equal(empty.container.firstElementChild.children.length, 0);
+  await empty.unmount();
+});

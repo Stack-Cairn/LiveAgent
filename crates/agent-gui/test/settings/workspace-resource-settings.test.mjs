@@ -120,7 +120,12 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedProjectSettings, /"general" \| "directories" \| "resources" \| "prompt"/);
   assert.match(sharedProjectSettings, /id: "prompt"/);
   assert.match(sharedProjectSettings, /<ProjectPromptSettingsPanel/);
-  assert.match(sharedResourcePanel, /\["inherit", "custom", "off"\]/);
+  // The three resource modes are mutually exclusive settings, not views —
+  // they must stay a radiogroup rather than drifting back to a tab strip.
+  assert.match(sharedResourcePanel, /value: "inherit"/);
+  assert.match(sharedResourcePanel, /value: "custom"/);
+  assert.match(sharedResourcePanel, /value: "off"/);
+  assert.match(sharedResourcePanel, /role="radiogroup"/);
   assert.match(sharedResourcePanel, /value: "skills"/);
   assert.match(sharedResourcePanel, /value: "mcp"/);
   assert.match(sharedResourcePanel, /<ResourceTabsList/);
@@ -192,7 +197,12 @@ test("workspace configuration uses one entry and one shared two-column modal", (
 });
 
 test("prompt templates expose global and project scopes with append or replace editing", () => {
-  assert.match(sharedProjectPromptEditor, /\["append", "replace"\]/);
+  assert.match(sharedProjectPromptEditor, /value: "append" as const/);
+  assert.match(sharedProjectPromptEditor, /value: "replace" as const/);
+  // The strategy switch must stay on the shared tabs component — it was once a
+  // hand-rolled fieldset that drifted to its own height, border and type size.
+  assert.match(sharedProjectPromptEditor, /<ResourceTabsList/);
+  assert.doesNotMatch(sharedProjectPromptEditor, /aria-pressed/);
   assert.doesNotMatch(sharedProjectPromptEditor, /projectPromptEffectivePreview/);
   assert.match(guiChatPage, /onConfigureProject=\{setProjectSettingsProject\}/);
   assert.match(webGatewayAppView, /onConfigureProject=\{setProjectSettingsProject\}/);

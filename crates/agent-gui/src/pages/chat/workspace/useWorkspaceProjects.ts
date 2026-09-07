@@ -80,9 +80,22 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     () => mergeWorkspaceProjectsWithHistory(settings.system, sidebarWorkdirs),
     [sidebarWorkdirs, settings.system],
   );
-  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
+  const [searchNavigation, setSearchNavigation] = useState<{
+    mode: typeof isAgentMode;
+    cwd: string;
+  } | null>(null);
+  const clearSearchConversationWorkspace = useCallback(() => setSearchNavigation(null), []);
+  const searchCwd = searchNavigation?.mode === isAgentMode ? searchNavigation.cwd : undefined;
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectIdState] = useState<string>(
     () => settings.system.activeWorkspaceProjectId?.trim() || DEFAULT_WORKSPACE_PROJECT_ID,
   );
+  const setActiveWorkspaceProjectId = useCallback<Dispatch<SetStateAction<string>>>((id) => {
+    setSearchNavigation(null);
+    setActiveWorkspaceProjectIdState(id);
+  }, []);
+  useEffect(() => {
+    if (searchNavigation && searchNavigation.mode !== isAgentMode) setSearchNavigation(null);
+  }, [searchNavigation, isAgentMode]);
   const missingWorkspaceProjectPathKeys = useMemo(
     () => new Set(settings.system.missingWorkspaceProjectPaths.map(workspaceProjectPathKey)),
     [settings.system.missingWorkspaceProjectPaths],
@@ -100,23 +113,30 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     return active.length > 0 ? active : workspaceProjects;
   }, [archivedWorkspaceProjectPathKeys, workspaceProjects]);
   const activeWorkspaceProject = useMemo(
-    () => findWorkspaceProject(selectableWorkspaceProjects, activeWorkspaceProjectId),
-    [activeWorkspaceProjectId, selectableWorkspaceProjects],
+    () =>
+      searchCwd === ""
+        ? undefined
+        : findWorkspaceProject(selectableWorkspaceProjects, activeWorkspaceProjectId),
+    [activeWorkspaceProjectId, selectableWorkspaceProjects, searchCwd],
   );
   useEffect(() => {
     if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
       setActiveWorkspaceProjectId(activeWorkspaceProject.id);
     }
-  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
+  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId, setActiveWorkspaceProjectId]);
   const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
   const sidebarScope = useMemo<SidebarScope>(
     () =>
-      isAgentMode
-        ? activeWorkspaceProjectPath
-          ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
-          : { kind: "none" }
-        : { kind: "unscoped" },
-    [activeWorkspaceProjectPath, isAgentMode],
+      searchCwd !== undefined
+        ? searchCwd
+          ? { kind: "workdir", cwd: searchCwd }
+          : { kind: "unscoped" }
+        : isAgentMode
+          ? activeWorkspaceProjectPath
+            ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+            : { kind: "none" }
+          : { kind: "unscoped" },
+    [activeWorkspaceProjectPath, isAgentMode, searchCwd],
   );
   useEffect(() => {
     sidebarStore.setScope(sidebarScope);
@@ -183,7 +203,11 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Action refs deliberately provide the latest conversation-transition handlers without changing this callback identity.
   const activateWorkspaceProject = useCallback(
-    (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
+    (
+      project: WorkspaceProject,
+      options?: { startConversation?: boolean; preserveMissing?: boolean },
+    ) => {
+      setSearchNavigation(null);
       const pathKey = project.path.trim();
       if (!pathKey) return null;
       const normalizedPathKey = workspaceProjectPathKey(pathKey);
@@ -252,9 +276,11 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
             hiddenWorkspaceProjectPaths: prev.system.hiddenWorkspaceProjectPaths.filter(
               (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
             ),
-            missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
-              (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
-            ),
+            missingWorkspaceProjectPaths: options?.preserveMissing
+              ? prev.system.missingWorkspaceProjectPaths
+              : prev.system.missingWorkspaceProjectPaths.filter(
+                  (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+                ),
             // Activating a workspace always brings it back from the archive.
             archivedWorkspaceProjectPaths: prev.system.archivedWorkspaceProjectPaths.filter(
               (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
@@ -274,6 +300,32 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       return null;
     },
     [setSettings, workspaceProjects, activeWorkspaceProjectId, settings.system],
+  );
+
+  // Reading persisted history does not require the original directory to exist.
+  const activateSearchConversationWorkspace = useCallback(
+    (cwd?: string) => {
+      const path = cwd?.trim() ?? "";
+      if (
+        path &&
+        workspaceProjectPathKey(path) !== workspaceProjectPathKey(activeWorkspaceProjectPath)
+      ) {
+        const project =
+          workspaceProjects.find(
+            (item) => workspaceProjectPathKey(item.path) === workspaceProjectPathKey(path),
+          ) ?? createWorkspaceProjectFromPath(path, "history");
+        activateWorkspaceProject(project, { preserveMissing: true });
+      }
+      setSearchNavigation({ mode: isAgentMode, cwd: path });
+      sidebarStore.setScope(path ? { kind: "workdir", cwd: path } : { kind: "unscoped" });
+    },
+    [
+      activeWorkspaceProjectPath,
+      workspaceProjects,
+      activateWorkspaceProject,
+      isAgentMode,
+      sidebarStore,
+    ],
   );
 
   const handleSelectWorkspaceProject = useCallback(
@@ -683,6 +735,9 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     historyScopeKey,
     checkWorkspaceProjectDirectory,
     activateWorkspaceProject,
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
+    searchConversationWorkdir: searchCwd,
     handleSelectWorkspaceProject,
     handleNewConversationForProject,
     handleBrowseWorkspaceProjectInFileTree,

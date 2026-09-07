@@ -46,6 +46,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { readSendShortcut, shouldSendOnEnter } from "../../lib/chat/sendShortcut";
 import {
   COMMIT_MENTION_SHA_ATTR,
   CONVERSATION_MENTION_ID_ATTR,
@@ -1943,18 +1944,18 @@ export const MentionComposer = memo(
           }
         }
 
-        // Normal Enter → send
-        if (isEnter && !e.shiftKey) {
+        // Send only with the configured combination, after IME and mention handling.
+        if (isEnter && shouldSendOnEnter(e, readSendShortcut())) {
           imeEnterSuppressUntilRef.current = 0;
           compositionEnterKeyRef.current = false;
           lastCompositionEndAtRef.current = 0;
           e.preventDefault();
-          onSend();
+          if (!e.repeat) onSend();
           return;
         }
 
-        // Shift+Enter → line break (normalise to <br>)
-        if (isEnter && e.shiftKey) {
+        // All other Enter combinations insert a normalised line break.
+        if (isEnter) {
           imeEnterSuppressUntilRef.current = 0;
           compositionEnterKeyRef.current = false;
           lastCompositionEndAtRef.current = 0;
@@ -2293,7 +2294,7 @@ export const MentionComposer = memo(
           onCompositionEnd={handleCompositionEnd}
           onBlur={handleBlur}
           className={cn(
-            "mention-composer min-h-[70px] max-h-[160px] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
+            "mention-composer min-h-10 max-h-[160px] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
             "text-sm",
             isDomEmpty && "is-empty",
             disabled && "cursor-not-allowed opacity-60",

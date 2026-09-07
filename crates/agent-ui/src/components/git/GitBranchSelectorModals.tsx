@@ -516,7 +516,7 @@ export function BranchActionsModal(props: {
             </div>
           </DialogHeader>
           {mode === "menu" ? (
-            <DialogBody className="space-y-1 px-3 py-3">
+            <DialogBody className="space-y-1 py-3">
               {canWrite ? (
                 <button
                   type="button"

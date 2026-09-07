@@ -1,6 +1,8 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import {
   getUserMessageAttachments,
+  locateUploadedFilesInstructionHeader,
+  matchesUploadedFileInstructionLine,
   type PendingUploadedFile,
   parsePastedTextDisplayReferences,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -11,11 +13,6 @@ type NativeAttachmentCommandResponse = {
   data: string;
   sizeBytes: number;
 };
-
-const UPLOAD_INSTRUCTION_LINES = [
-  "The user attached the files below to this message.",
-  "Use Read with these exact paths before analyzing or modifying them:",
-] as const;
 
 function decodeBase64Utf8(data: string) {
   const binary = atob(data);
@@ -49,18 +46,16 @@ async function readLargePaste(workdir: string, file: PendingUploadedFile) {
 }
 
 function removeUploadInstructionLine(content: string, file: PendingUploadedFile) {
-  const absolutePath = file.absolutePath?.trim();
-  if (!absolutePath) return content;
-  const target = `- ${absolutePath} (${file.kind})`;
-  const lines = content.split("\n").filter((line) => line !== target);
-  const instructionIndex = lines.findIndex(
-    (line, index) =>
-      line === UPLOAD_INSTRUCTION_LINES[0] && lines[index + 1] === UPLOAD_INSTRUCTION_LINES[1],
-  );
-  if (instructionIndex < 0) return lines.join("\n");
+  if (!file.absolutePath?.trim()) return content;
+  const lines = content
+    .split("\n")
+    .filter((line) => !matchesUploadedFileInstructionLine(line, file));
+  const header = locateUploadedFilesInstructionHeader(lines);
+  if (!header) return lines.join("\n");
+  const instructionIndex = header.index;
 
   const hasRemainingFile = lines
-    .slice(instructionIndex + UPLOAD_INSTRUCTION_LINES.length)
+    .slice(instructionIndex + header.length)
     .some((line) => line.startsWith("- "));
   if (hasRemainingFile) return lines.join("\n");
 
@@ -68,10 +63,7 @@ function removeUploadInstructionLine(content: string, file: PendingUploadedFile)
     instructionIndex > 0 && lines[instructionIndex - 1] === ""
       ? instructionIndex - 1
       : instructionIndex;
-  lines.splice(
-    removeFrom,
-    UPLOAD_INSTRUCTION_LINES.length + (removeFrom < instructionIndex ? 1 : 0),
-  );
+  lines.splice(removeFrom, header.length + (removeFrom < instructionIndex ? 1 : 0));
   return lines.join("\n");
 }
 

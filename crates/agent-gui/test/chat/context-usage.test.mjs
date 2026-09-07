@@ -6,9 +6,14 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const contextUsage = loader.loadModule("@liveagent/ui/lib/chat/contextUsage.ts");
+const { formatTokenCount } = loader.loadModule("@liveagent/ui/lib/chat/formatTokenCount.ts");
 const tokenLedger = loader.loadModule("src/lib/chat/compaction/tokenLedger.ts");
 const chatComposerBarSource = readFileSync(
   new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
+const mentionComposerSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/MentionComposer.tsx", import.meta.url),
   "utf8",
 );
 const chatTurnQueueSource = readFileSync(
@@ -45,6 +50,16 @@ const {
   isResponsesReasoningSignature,
   isStrippedHostedSearchUsage,
 } = contextUsage;
+
+test("token counts use K for thousands while keeping smaller values intact", () => {
+  assert.equal(formatTokenCount(0, "zh-CN"), "0");
+  assert.equal(formatTokenCount(420, "zh-CN"), "420");
+  assert.equal(formatTokenCount(999, "zh-CN"), "999");
+  assert.equal(formatTokenCount(1_000, "zh-CN"), "1K");
+  assert.equal(formatTokenCount(1_840, "zh-CN"), "1.84K");
+  assert.equal(formatTokenCount(2_260, "zh-CN"), "2.26K");
+  assert.equal(formatTokenCount(128_000, "zh-CN"), "128K");
+});
 
 test("threshold boundaries: <50% ok, 50-80% warn, >=80% danger", () => {
   assert.equal(CONTEXT_USAGE_WARN_RATIO, 0.5);
@@ -86,20 +101,53 @@ test("WebUI manual compaction converges from the transcript store and a bounded 
   assert.match(gatewayAppSource, /chat\.manualCompactTimedOut/);
 });
 
-test("context usage ring stays vertically centered in the shared composer", () => {
-  assert.match(
-    chatComposerBarSource,
-    /className="absolute right-3 top-1\/2 z-20 -translate-y-1\/2"/,
+test("context usage ring lives in the stacked runtime control deck", () => {
+  assert.match(chatComposerBarSource, /composer-control-deck/);
+  assert.ok(
+    chatComposerBarSource.indexOf("composer-control-deck") <
+      chatComposerBarSource.indexOf("<ComposerContextUsageRing"),
   );
-  assert.doesNotMatch(chatComposerBarSource, /className="absolute bottom-11 right-3 z-20"/);
+  assert.doesNotMatch(chatComposerBarSource, /absolute right-3 top-1\/2/);
 });
 
-test("composer editor row reserves the right control rail so the scrollbar clears the ring", () => {
+test("composer editor row reserves the right rail so the scrollbar clears expand", () => {
   // 让位必须做在编辑器外层容器上：padding 不移动滚动条，编辑器自带 pr-8 时
-  // 那条 6px 滚动轨会压在用量环/展开图标上（right-3 + w-8 的 44px 轨道）。
+  // 那条 6px 滚动轨仍会压在右上角展开按钮上。
   assert.match(chatComposerBarSource, /"relative flex flex-1 pl-4 pr-12"/);
   assert.doesNotMatch(chatComposerBarSource, /"relative flex flex-1 px-4"/);
   assert.doesNotMatch(chatComposerBarSource, /"px-0 py-0 pr-8"/);
+});
+
+test("composer uses the opaque Tessera surface and a compact idle height", () => {
+  assert.match(
+    chatComposerBarSource,
+    /composer-glass-card[^\n]+rounded-4xl[^\n]+border-border\/65 bg-muted/,
+  );
+  assert.match(
+    chatComposerBarSource,
+    /composer-input-surface[^\n]+rounded-4xl bg-background/,
+  );
+  assert.match(chatComposerBarSource, /composer-control-deck[^\n]+min-h-9[^\n]+bg-muted/);
+  assert.doesNotMatch(chatComposerBarSource, /composer-input-surface[^\n]+bg-white\/76/);
+  assert.doesNotMatch(chatComposerBarSource, /composer-glass-card[^\n]+bg-black\/\[0\.035\]/);
+  assert.match(mentionComposerSource, /mention-composer min-h-10 max-h-\[160px\]/);
+});
+
+test("composer expand toggle appears only after the editor overflows", () => {
+  assert.match(
+    chatComposerBarSource,
+    /const \[composerHasOverflow, setComposerHasOverflow\] = useState\(false\)/,
+  );
+  assert.match(
+    chatComposerBarSource,
+    /editor\.scrollHeight - editor\.clientHeight > 1/,
+  );
+  assert.match(chatComposerBarSource, /new MutationObserver\(scheduleMeasure\)/);
+  assert.match(
+    chatComposerBarSource,
+    /const showComposerExpandToggle = isComposerExpanded \|\| composerHasOverflow/,
+  );
+  assert.match(chatComposerBarSource, /\{showComposerExpandToggle \? \(\s*<button/);
 });
 
 test("context usage ring resets a stale confirm popover when compaction flips unavailable", () => {

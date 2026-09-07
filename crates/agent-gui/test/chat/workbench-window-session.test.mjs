@@ -92,6 +92,11 @@ test("layout validation reports a terminal cwd outside its project", () => {
 test("startup paints theme and shell before progressively hydrating pane contents", () => {
   const htmlSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const appStyles = readFileSync(new URL("../../src/index.css", import.meta.url), "utf8");
+  const paneLoadingSource = readFileSync(
+    new URL("../../src/components/app/PaneLoadingSkeleton.tsx", import.meta.url),
+    "utf8",
+  );
   const tauriConfigSource = readFileSync(
     new URL("../../src-tauri/tauri.conf.json", import.meta.url),
     "utf8",
@@ -212,6 +217,9 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.match(settingsDbSource, /SCHEMA_INITIALIZED\.get\(\)\.is_none\(\)/);
   assert.match(transcriptLoadingSource, /<PaneLoadingSkeleton/);
   assert.doesNotMatch(transcriptLoadingSource, /LoaderCircle/);
+  assert.match(paneLoadingSource, /data-pane-loading-motion="static"/);
+  assert.doesNotMatch(paneLoadingSource, /animate-|shimmer|pulse|workbench-pane-restoring/);
+  assert.doesNotMatch(appStyles, /workbench(?:PaneLoadingIn|RestoreThread)/);
   assert.match(transcriptSource, /DEFER_REVEAL_HISTORY_ITEM_THRESHOLD = 120/);
   assert.match(
     transcriptSource,

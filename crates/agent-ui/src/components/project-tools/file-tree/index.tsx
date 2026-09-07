@@ -508,7 +508,6 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         confirmLabel: t("projectTools.fileTree.delete"),
         cancelLabel: t("settings.cancel"),
         closeLabel: t("projectTools.fileTree.deleteConfirmClose"),
-        tone: "destructive",
       });
       if (!confirmed) return;
       setBusyAction(true);

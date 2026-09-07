@@ -9,6 +9,8 @@ import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
+import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
   createConversationOpenController,
@@ -20,6 +22,7 @@ import {
   terminalSessionBelongsToProject,
 } from "@liveagent/ui/lib/terminal/sessionStore";
 import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProjectRemoval";
+import { projectToolSurfaceTitleKey } from "@liveagent/ui/lib/workbench/projectToolSurfaces";
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -458,6 +461,9 @@ function useGatewayAppController() {
   >(() => "");
   const {
     activateWorkspaceProject,
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
+    searchConversationWorkdir,
     activeWorkspaceProject,
     activeWorkspaceProjectPath,
     archivedWorkspaceProjectPathKeys,
@@ -507,13 +513,13 @@ function useGatewayAppController() {
   // established history window in the single open phase — messages above the
   // window edge stay unfetched until the user pages up. Deps go through refs
   // (assigned per render) so the controller instance stays stable.
-  const openInitialRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(() =>
-    Promise.resolve("painted"),
-  );
+  const openInitialRef = useRef<
+    (id: string, request?: ConversationOpenRequest) => Promise<"cache-hit" | "painted">
+  >(() => Promise.resolve("painted"));
   const openController = useMemo(
     () =>
       createConversationOpenController({
-        openInitial: (id) => openInitialRef.current(id),
+        openInitial: (id, request) => openInitialRef.current(id, request),
         onStateChange: setConversationOpenState,
       }),
     [],
@@ -1133,6 +1139,8 @@ function useGatewayAppController() {
     handleSidebarSelectConversation,
     startNewConversation,
   } = createGatewayConversationActions({
+    activateSearchConversationWorkspace,
+    clearSearchConversationWorkspace,
     activeView,
     activeWorkspaceProjectPath,
     api,
@@ -1412,7 +1420,11 @@ function useGatewayAppController() {
   const resourceWorkdir =
     sidebarConversationsById.get(displayedConversationId)?.cwd?.trim() ||
     conversationWorkdirsRef.current.get(displayedConversationId)?.trim() ||
-    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+    (searchConversationWorkdir === ""
+      ? ""
+      : isAgentMode
+        ? activeWorkspaceProjectPath || settings.system.workdir.trim()
+        : "");
   const {
     activeProviders,
     availableSkills,
@@ -1511,7 +1523,11 @@ function useGatewayAppController() {
   const displayedConversationWorkdir =
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
-    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+    (searchConversationWorkdir === ""
+      ? ""
+      : isAgentMode
+        ? activeWorkspaceProjectPath || settings.system.workdir.trim()
+        : "");
   const searchMentionableConversations = useCallback(
     (query: string) =>
       searchMentionConversations({
@@ -1600,6 +1616,7 @@ function useGatewayAppController() {
     handleOpenSshTerminal,
     handleOpenWorkspaceFile,
     handleProjectTerminalSessionsChange,
+    updateProjectTerminalSessions,
     handleRightDockClose,
     handleRightDockFileTreeStateChange,
     handleRightDockInsertCodeReviewSkill,
@@ -1691,6 +1708,7 @@ function useGatewayAppController() {
     terminalSessions,
     terminalProjectPath,
     newTerminalTitle: translate("projectTools.newTerminal", settings.locale),
+    projectToolTitle: (tool) => translate(projectToolSurfaceTitleKey(tool), settings.locale),
     selectConversation: handleSidebarSelectConversation,
     startConversationForProject: handleNewConversationForProject,
     conversationWorkdirFor: (conversationId) =>
@@ -1708,6 +1726,9 @@ function useGatewayAppController() {
       ),
     onConversationAlreadyOpen: () =>
       addNotify("success", translate("workbench.conversationAlreadyOpen", settings.locale)),
+    onProjectToolPaneClosed: (tool, projectPathKey) =>
+      setSettings((prev) => releaseProjectToolFromDock(prev, tool, projectPathKey)),
+    onTerminalCloseFailed: (message) => addNotify("error", message),
   });
   workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
   workbenchClearRef.current = workbenchController.clearWorkbench;
@@ -2029,6 +2050,7 @@ function useGatewayAppController() {
     handleOpenWorkspaceFolder,
     handleOpenWorktree,
     handleProjectTerminalSessionsChange,
+    updateProjectTerminalSessions,
     handleRefreshSharedHistoryStatuses,
     handleRemoveWorkspaceProject,
     handleRenameWorkspaceGroup,

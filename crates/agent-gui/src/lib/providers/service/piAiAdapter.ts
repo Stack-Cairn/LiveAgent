@@ -21,6 +21,7 @@ import {
   resolveAnthropicThinkingRuntime,
   resolveGeminiThinkingRuntime,
 } from "../runtime/thinkingLevels";
+import { omitToolResultImagesForTextOnlyModel } from "../runtime/toolResultImageFallback";
 import type { StreamOptionsEx, ToolChoice } from "../runtime/types";
 import type { LlmAdapter } from "./types";
 
@@ -30,6 +31,11 @@ import type { LlmAdapter } from "./types";
 // 各分支为 streamByApi.ts 原实现的原样搬移（PR-1 行为等价不变量）：分支内的
 // withStreamRetry 包装位置、toolChoice 映射、thinking runtime 解析、注释
 // 一并保留，不做任何重写。判定基准是 PR-0 golden 快照零修改通过。
+//
+// 唯一的入口侧处理：对 openai-completions / openai-responses / google 三协议，
+// 纯文本模型（model.input 不含 "image"）的工具结果图片在进 pi-ai 前替换为
+// 说明文字。pi-ai 对这三协议本就按 model.input 静默丢弃这些图片，模型只会
+// 看到"see image below"却没有图；这里让缺图原因与替代做法对模型显式可见。
 // ============================================================================
 
 function mapToolChoiceToOpenAI(
@@ -180,13 +186,28 @@ export const piAiAdapter: LlmAdapter = {
   stream(model, context, options) {
     switch (model.api) {
       case "anthropic-messages":
+        // 不按 model.input 剥离工具结果图片：自定义 anthropic 模型的 input 是
+        // 保守默认值（["text"]），中转背后的模型可能具备视觉，pi-ai 该协议
+        // 也不看 model.input，与附件路径口径一致（见 modelFactory 注释）。
         return streamAnthropicMessages(model, context, options);
       case "openai-completions":
-        return streamOpenAICompletionsApi(model, context, options);
+        return streamOpenAICompletionsApi(
+          model,
+          omitToolResultImagesForTextOnlyModel(context, model),
+          options,
+        );
       case "openai-responses":
-        return streamOpenAIResponsesApi(model, context, options);
+        return streamOpenAIResponsesApi(
+          model,
+          omitToolResultImagesForTextOnlyModel(context, model),
+          options,
+        );
       case "google-generative-ai":
-        return streamGoogleGenerativeAi(model, context, options);
+        return streamGoogleGenerativeAi(
+          model,
+          omitToolResultImagesForTextOnlyModel(context, model),
+          options,
+        );
       default:
         // 注册表按 apis 路由到这里，正常不可达；防御分支保持同一错误文案。
         throw new Error(`Unsupported model API: ${model.api}`);

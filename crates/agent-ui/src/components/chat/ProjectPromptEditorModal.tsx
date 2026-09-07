@@ -5,6 +5,7 @@ import {
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
 import { BookOpen, Check, Loader2 } from "@liveagent/ui/components/IconSet";
+import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { Tabs } from "@liveagent/ui/components/ui/tabs";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -37,32 +39,37 @@ export function ProjectPromptSettingsPanel(props: {
 
   return (
     <section className={cn("flex min-h-full flex-col p-6 max-[720px]:p-4", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h3 className="text-base font-semibold">{t("chat.projectPromptTitle")}</h3>
-        <fieldset className="flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
-          <legend className="sr-only">{t("chat.projectPromptStrategy")}</legend>
-          {(["append", "replace"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={strategy === value}
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
-                strategy === value && "bg-background text-foreground shadow-sm",
-              )}
-              onClick={() => onStrategyChange(value)}
-            >
-              {t(value === "append" ? "chat.projectPromptAppend" : "chat.projectPromptReplace")}
-            </button>
-          ))}
-        </fieldset>
+      {/* Title and hint share a column so the taller tabs control can't stretch
+          the gap between them. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">{t("chat.projectPromptTitle")}</h3>
+          {/* 只解释当前选中的组合策略，随切换实时更新。 */}
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {t(
+              strategy === "append"
+                ? "chat.projectPromptAppendHint"
+                : "chat.projectPromptReplaceHint",
+            )}
+          </p>
+        </div>
+        <Tabs
+          value={strategy}
+          onValueChange={(value) => {
+            if (value === "append" || value === "replace") onStrategyChange(value);
+          }}
+          className="shrink-0"
+        >
+          <ResourceTabsList
+            value={strategy}
+            items={[
+              { value: "append" as const, label: t("chat.projectPromptAppend") },
+              { value: "replace" as const, label: t("chat.projectPromptReplace") },
+            ]}
+            ariaLabel={t("chat.projectPromptStrategy")}
+          />
+        </Tabs>
       </div>
-      {/* 只解释当前选中的组合策略，随切换实时更新。 */}
-      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-        {t(
-          strategy === "append" ? "chat.projectPromptAppendHint" : "chat.projectPromptReplaceHint",
-        )}
-      </p>
 
       <Textarea
         value={projectPrompt}
@@ -126,7 +133,7 @@ export function ProjectPromptEditorModal(props: {
         layout="fullscreen-mobile"
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3.5 px-6 py-5">
+        <DialogHeader className="flex-row items-center gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300">
             <BookOpen className="h-5 w-5" />
           </div>
@@ -150,7 +157,7 @@ export function ProjectPromptEditorModal(props: {
           {error ? <p className="px-6 pb-4 text-xs text-destructive">{error}</p> : null}
         </DialogBody>
 
-        <DialogFooter className="px-6">
+        <DialogFooter>
           <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={saving}>
               {t("chat.cancel")}

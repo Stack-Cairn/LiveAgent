@@ -232,37 +232,39 @@ export function CheckpointRewindProvider(props: {
         const parts: string[] = [];
         if (stats.restoreFiles > 0)
           parts.push(
-            zh ? `恢复 ${stats.restoreFiles} 个文件` : `restore ${stats.restoreFiles} file(s)`,
+            zh ? `将恢复 ${stats.restoreFiles} 个文件` : `Restore ${stats.restoreFiles} file(s)`,
           );
         if (stats.deleteFiles > 0)
           parts.push(
-            zh ? `删除 ${stats.deleteFiles} 个文件` : `delete ${stats.deleteFiles} file(s)`,
+            zh ? `将删除 ${stats.deleteFiles} 个文件` : `Delete ${stats.deleteFiles} file(s)`,
           );
         if (stats.cleanFiles > 0)
           parts.push(
-            zh ? `${stats.cleanFiles} 个文件已一致` : `${stats.cleanFiles} file(s) unchanged`,
+            zh ? `${stats.cleanFiles} 个文件无变化` : `${stats.cleanFiles} file(s) unchanged`,
           );
         if (stats.skippedDirs > 0)
           parts.push(
             zh
-              ? `${stats.skippedDirs} 个目录删除不可恢复`
-              : `${stats.skippedDirs} deleted dir(s) not restorable`,
+              ? `${stats.skippedDirs} 个已删除的目录无法恢复`
+              : `${stats.skippedDirs} deleted director(ies) cannot be restored`,
           );
         if (stats.missingBlobs > 0)
           parts.push(
-            zh ? `${stats.missingBlobs} 个前像缺失` : `${stats.missingBlobs} blob(s) missing`,
+            zh
+              ? `${stats.missingBlobs} 个文件缺少改动前快照`
+              : `${stats.missingBlobs} file(s) missing their pre-edit snapshot`,
           );
         if (stats.unresolvableFiles > 0)
           parts.push(
             zh
-              ? `${stats.unresolvableFiles} 个路径已不可回退（根未授权或路径含符号链接）`
-              : `${stats.unresolvableFiles} path(s) not rewindable (root unauthorized or symlinked)`,
+              ? `${stats.unresolvableFiles} 个路径无法回退（目录未授权，或路径包含符号链接）`
+              : `${stats.unresolvableFiles} path(s) cannot be rewound (directory unauthorized, or path contains a symlink)`,
           );
         if (stats.captureErrors > 0 || turn.incomplete)
           parts.push(
             zh
-              ? `⚠ 该轮有 ${Math.max(stats.captureErrors, 1)} 次前像捕获失败，回退可能不完整`
-              : `⚠ ${Math.max(stats.captureErrors, 1)} pre-image capture failure(s); rewind may be incomplete`,
+              ? `本轮有 ${Math.max(stats.captureErrors, 1)} 次快照记录失败，回退结果可能不完整`
+              : `${Math.max(stats.captureErrors, 1)} snapshot(s) failed to record this turn; the rewind may be incomplete`,
           );
         const actionable = stats.entries.filter(
           (entry) => entry.action === "restore" || entry.action === "delete",
@@ -272,23 +274,22 @@ export function CheckpointRewindProvider(props: {
         if (actionable.length > 0)
           parts.push(
             zh
-              ? "手动编辑（编辑器/文件树）不在检查点内，会被一并覆盖"
-              : "Manual edits (editor / file tree) are not checkpointed and will be overwritten",
+              ? "在编辑器或文件树中的手动修改不在检查点内，将被一并覆盖"
+              : "Manual edits made in the editor or file tree are not checkpointed and will be overwritten",
           );
         const confirmed = await confirm({
-          title: zh ? "回退代码到此轮开始前" : "Rewind code to before this turn",
+          title: zh ? "回退到本轮开始前" : "Rewind to before this turn",
           subtitle: new Date(turn.firstCapturedAt).toLocaleString(),
           description:
             parts.length > 0
               ? parts.join(zh ? "，" : ", ")
               : zh
-                ? "没有需要回退的改动"
-                : "Nothing to rewind",
+                ? "本轮没有可回退的文件改动"
+                : "No file changes to rewind in this turn",
           detail:
             actionable.length > 0 ? actionable.map((entry) => entry.path).join("\n") : undefined,
           confirmLabel: zh ? "回退" : "Rewind",
           cancelLabel: zh ? "取消" : "Cancel",
-          tone: "warning",
         });
         if (!confirmed) return;
         // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
@@ -348,7 +349,6 @@ export function CheckpointRewindProvider(props: {
             confirmLabel: zh ? "知道了" : "OK",
             cancelLabel: "",
             hideCancel: true,
-            tone: "destructive",
           });
         }
       } catch (error) {
@@ -358,7 +358,6 @@ export function CheckpointRewindProvider(props: {
           confirmLabel: zh ? "知道了" : "OK",
           cancelLabel: "",
           hideCancel: true,
-          tone: "destructive",
         });
       } finally {
         busyTurnRef.current = null;

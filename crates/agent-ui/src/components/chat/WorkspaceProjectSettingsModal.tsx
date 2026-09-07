@@ -25,6 +25,7 @@ import {
   DialogBody,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -273,19 +274,6 @@ export function WorkspaceProjectSettingsModal(props: {
 
   const visibleSkillSelection = mode === "inherit" ? globalSkillNames : skillNames;
   const visibleMcpSelection = mode === "inherit" ? globalMcpIds : mcpServerIds;
-  const selectableSkills = listedSkills.filter(
-    ({ skill }) => !isAlwaysEnabledSkillName(skill.name),
-  );
-  const visibleSelectedSkillCount =
-    settings.skills.enabled && mode !== "off"
-      ? selectableSkills.filter(({ skill }) => visibleSkillSelection.has(skill.name)).length
-      : 0;
-  const visibleSelectedMcpCount =
-    mode !== "off"
-      ? settings.mcp.servers.filter(
-          (server) => server.enabled && visibleMcpSelection.has(server.id),
-        ).length
-      : 0;
   const projectKindLabel = t(
     `chat.workspaceSettingsKind${project.kind[0].toUpperCase()}${project.kind.slice(1)}`,
   );
@@ -333,31 +321,18 @@ export function WorkspaceProjectSettingsModal(props: {
         layout="fullscreen-mobile"
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/35 text-foreground">
-              <FolderTree className="h-4.5 w-4.5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
-                <DialogTitle
-                  id="workspace-project-settings-title"
-                  className="truncate text-sm leading-normal"
-                >
-                  {t("chat.workspaceSettingsTitle")}
-                </DialogTitle>
-                <span className="max-w-[240px] truncate rounded-full border bg-muted/60 px-2.5 py-0.5 text-[11px] text-muted-foreground">
-                  {normalizedProjectName || project.name}
-                </span>
-              </div>
-              <div
-                className="mt-0.5 max-w-[620px] truncate text-[11px] text-muted-foreground"
-                title={project.path}
-              >
-                {project.path}
-              </div>
-            </div>
-          </div>
+        <DialogHeader>
+          <DialogTitle id="workspace-project-settings-title" className="truncate">
+            {t("chat.workspaceSettingsTitle")}
+          </DialogTitle>
+          {/* The path is already shown (and copyable) on the 通用配置 panel, so the
+              header only needs to say which workspace this is. */}
+          <DialogDescription
+            className="truncate text-xs"
+            title={normalizedProjectName || project.name}
+          >
+            {normalizedProjectName || project.name}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="flex overflow-hidden p-0 max-[720px]:flex-col">
@@ -370,8 +345,10 @@ export function WorkspaceProjectSettingsModal(props: {
                 key={id}
                 type="button"
                 className={cn(
-                  "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
-                  activePanel === id && "bg-primary/10 font-medium text-primary",
+                  "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                  activePanel === id
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
                 onClick={() => setActivePanel(id)}
                 aria-current={activePanel === id ? "page" : undefined}
@@ -431,7 +408,6 @@ export function WorkspaceProjectSettingsModal(props: {
                 tab={tab}
                 query={query}
                 category={category}
-                listedSkills={listedSkills}
                 filteredSkills={filteredSkills}
                 filteredMcp={filteredMcp}
                 skillCategoryCounts={skillCategoryCounts}
@@ -439,8 +415,6 @@ export function WorkspaceProjectSettingsModal(props: {
                 visibleMcpSelection={visibleMcpSelection}
                 skillNames={skillNames}
                 mcpServerIds={mcpServerIds}
-                visibleSelectedSkillCount={visibleSelectedSkillCount}
-                visibleSelectedMcpCount={visibleSelectedMcpCount}
                 onModeChange={selectMode}
                 onTabChange={(nextTab) => {
                   setTab(nextTab);
@@ -464,10 +438,10 @@ export function WorkspaceProjectSettingsModal(props: {
           </main>
         </DialogBody>
 
-        <DialogFooter className="bg-muted/20 py-3.5 min-[821px]:justify-between">
+        <DialogFooter className="bg-muted/20 min-[821px]:justify-between">
           <div
             className={cn(
-              "min-w-0 truncate text-xs text-muted-foreground max-[520px]:hidden",
+              "min-w-0 flex-1 truncate text-xs text-muted-foreground max-[520px]:hidden",
               rootError && "text-destructive",
             )}
           >
@@ -479,17 +453,17 @@ export function WorkspaceProjectSettingsModal(props: {
                     .replace("{mcp}", String(mcpServerIds.size))
                 : null}
           </div>
-          <DialogActions className="ml-auto max-[520px]:w-full">
+          <DialogActions>
             <DialogClose
               disabled={saving}
-              render={<Button type="button" variant="outline" className="max-[520px]:flex-1" />}
+              render={<Button type="button" variant="outline" className="h-8" />}
             >
               {t("chat.cancel")}
             </DialogClose>
             <Button
               onClick={() => void handleSave()}
               disabled={saving || !dialogOpen || projectNameInvalid}
-              className="max-[520px]:flex-1"
+              className="h-8"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t("workspaceEditor.save")}

@@ -1,8 +1,12 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import {
   ANTHROPIC_DEFAULT_REQUEST_HEADERS,
+  CLAUDE_SESSION_ID_HEADER,
+  CLIENT_REQUEST_ID_HEADER,
   CODEX_CONVERSATION_ID_HEADER,
+  CODEX_OFFICIAL_SESSION_ID_HEADER,
   CODEX_SESSION_ID_HEADER,
+  CODEX_THREAD_ID_HEADER,
   isAnthropicOAuthApiKey,
   mergeCustomHeaders,
 } from "@liveagent/ui/lib/providers/customHeaders";
@@ -52,19 +56,26 @@ export function buildProviderRequestHeaders(
   const authHeaders = buildProviderAuthHeaders(providerId, apiKey);
   if (providerId === "claude_code") {
     if (isAnthropicOAuthApiKey(apiKey)) return {};
+    const requestSessionId = normalizeSessionId(sessionId);
     return {
       ...authHeaders,
       ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
+      // 官方 CLI 每请求都带 X-Claude-Code-Session-Id（client.ts:108）。
+      ...(requestSessionId ? { [CLAUDE_SESSION_ID_HEADER]: requestSessionId } : {}),
     };
   }
   if (providerId === "codex") {
     // 标准 Chat Completions 是无状态协议，只需 Authorization——
-    // session_id/conversation_id 是 Responses（Codex CLI）链路专属头，
-    // 不得泄漏进 completions 格式的请求。
+    // 会话身份头是 Responses（Codex CLI）链路专属，不得泄漏进 completions。
     if (requestFormat === "openai-completions") return authHeaders;
     const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
     return {
       ...authHeaders,
+      // 现行 Codex CLI（codex-api responses.rs）：session-id / thread-id /
+      // x-client-request-id。下划线旧名留给既有中转与 LiveAgent 存量链路。
+      [CODEX_OFFICIAL_SESSION_ID_HEADER]: requestSessionId,
+      [CODEX_THREAD_ID_HEADER]: requestSessionId,
+      [CLIENT_REQUEST_ID_HEADER]: requestSessionId,
       [CODEX_SESSION_ID_HEADER]: requestSessionId,
       [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
     };

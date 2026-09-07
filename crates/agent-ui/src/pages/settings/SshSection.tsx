@@ -318,7 +318,7 @@ function SshHostModal(props: {
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3 px-6">
+        <DialogHeader className="flex-row items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Key className="h-5 w-5" />
           </div>
@@ -330,7 +330,7 @@ function SshHostModal(props: {
           </div>
         </DialogHeader>
 
-        <DialogBody className="px-6 py-5">
+        <DialogBody>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ssh-name" className="text-xs font-medium text-muted-foreground">
@@ -715,7 +715,7 @@ function SshHostModal(props: {
           </div>
         </DialogBody>
 
-        <DialogFooter className="px-6">
+        <DialogFooter>
           <DialogActions>
             <Button variant="outline" onClick={onClose}>
               {t("settings.cancel")}
@@ -781,7 +781,7 @@ function SshImportModal(props: {
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3 px-6">
+        <DialogHeader className="flex-row items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Upload className="h-5 w-5" />
           </div>
@@ -791,7 +791,7 @@ function SshImportModal(props: {
           </div>
         </DialogHeader>
 
-        <DialogBody className="px-6 py-5">
+        <DialogBody>
           {!result && !error ? (
             <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/20 text-sm text-muted-foreground">
               {t("settings.sshImportScanning")}
@@ -877,7 +877,7 @@ function SshImportModal(props: {
           ) : null}
         </DialogBody>
 
-        <DialogFooter className="px-6 min-[821px]:justify-between">
+        <DialogFooter className="min-[821px]:justify-between">
           <div className="text-xs text-muted-foreground">
             {t("settings.sshImportSelected").replace("{count}", String(selected.length))}
           </div>
@@ -1223,7 +1223,6 @@ export function SshSection(props: SettingsSectionProps) {
         confirmLabel: t("settings.sshReconnectKbiGotIt"),
         cancelLabel: t("settings.cancel"),
         closeLabel: t("settings.sshReconnectKbiGotIt"),
-        tone: "warning",
         hideCancel: true,
       });
       return;
@@ -1235,7 +1234,6 @@ export function SshSection(props: SettingsSectionProps) {
       detail: t("settings.sshReconnectPromptDetail"),
       confirmLabel: t("settings.sshReconnectPromptConfirm").replace("{count}", count),
       cancelLabel: t("settings.sshReconnectPromptKeep"),
-      tone: "warning",
     });
     if (!proceed) return;
     const saveOutcome = await waitForSettingsSaved();
@@ -1365,7 +1363,6 @@ export function SshSection(props: SettingsSectionProps) {
           : t("settings.deleteConfirmDesc"),
       confirmLabel: t("settings.delete"),
       cancelLabel: t("settings.cancel"),
-      tone: "destructive",
     });
     if (!proceed) return;
     // Close before deleting so the sessions never outlive their host config;

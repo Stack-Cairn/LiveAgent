@@ -17,8 +17,6 @@ type McpHubPageProps = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   isAgentMode: boolean;
-  sidebarOpen: boolean;
-  onOpenSidebar: () => void;
 };
 
 type McpHubView = "installed" | "store" | "import";
@@ -30,7 +28,7 @@ function isMcpHubView(value: unknown): value is McpHubView {
 }
 
 export function McpHubPage(props: McpHubPageProps) {
-  const { settings, setSettings, sidebarOpen, onOpenSidebar } = props;
+  const { settings, setSettings } = props;
   const { t } = useLocale();
   const [view, setView] = useState<McpHubView>("installed");
   const [editing, setEditing] = useState<EditingState | null>(null);
@@ -108,8 +106,6 @@ export function McpHubPage(props: McpHubPageProps) {
               </Button>
             </div>
           }
-          sidebarOpen={sidebarOpen}
-          onOpenSidebar={onOpenSidebar}
         />
 
         <div className="hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10">

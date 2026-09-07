@@ -6,16 +6,44 @@ import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Tabs } from "@liveagent/ui/components/ui/tabs";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import type { ComponentType } from "react";
 import {
   STORE_CATEGORY_ICONS,
   StoreCategoryChips,
   type StoreCategoryValue,
 } from "../../../pages/skills-hub/SkillCategoryControls";
-import { Blend, Cable, Search } from "../../IconSet";
+import { Ban, Blend, Cable, Globe2, Search, Settings2 } from "../../IconSet";
 import { classifyWorkspaceSkill } from "./workspaceProjectSettingsUtils";
 
 export type WorkspaceResourceTab = "skills" | "mcp";
+
+const RESOURCE_MODES = [
+  {
+    value: "inherit",
+    Icon: Globe2,
+    labelKey: "chat.workspaceResourcesModeInherit",
+    hintKey: "chat.workspaceResourcesInheritHint",
+  },
+  {
+    value: "custom",
+    Icon: Settings2,
+    labelKey: "chat.workspaceResourcesModeCustom",
+    hintKey: "chat.workspaceResourcesCustomHint",
+  },
+  {
+    value: "off",
+    Icon: Ban,
+    labelKey: "chat.workspaceResourcesModeOff",
+    hintKey: "chat.workspaceResourcesOffHint",
+  },
+] as const satisfies readonly {
+  value: WorkspaceResourceSettingsMode;
+  Icon: ComponentType<{ className?: string }>;
+  labelKey: string;
+  hintKey: string;
+}[];
 
 type ListedSkill = {
   skill: Pick<SkillSummary, "name" | "description">;
@@ -28,7 +56,6 @@ export function WorkspaceResourceSettingsPanel(props: {
   tab: WorkspaceResourceTab;
   query: string;
   category: StoreCategoryValue;
-  listedSkills: readonly ListedSkill[];
   filteredSkills: readonly ListedSkill[];
   filteredMcp: AppSettings["mcp"]["servers"];
   skillCategoryCounts: ReadonlyMap<StoreCategoryValue, number>;
@@ -36,8 +63,6 @@ export function WorkspaceResourceSettingsPanel(props: {
   visibleMcpSelection: ReadonlySet<string>;
   skillNames: ReadonlySet<string>;
   mcpServerIds: ReadonlySet<string>;
-  visibleSelectedSkillCount: number;
-  visibleSelectedMcpCount: number;
   onModeChange: (mode: WorkspaceResourceSettingsMode) => void;
   onTabChange: (tab: WorkspaceResourceTab) => void;
   onQueryChange: (query: string) => void;
@@ -51,7 +76,6 @@ export function WorkspaceResourceSettingsPanel(props: {
     tab,
     query,
     category,
-    listedSkills,
     filteredSkills,
     filteredMcp,
     skillCategoryCounts,
@@ -59,8 +83,6 @@ export function WorkspaceResourceSettingsPanel(props: {
     visibleMcpSelection,
     skillNames,
     mcpServerIds,
-    visibleSelectedSkillCount,
-    visibleSelectedMcpCount,
     onModeChange,
     onTabChange,
     onQueryChange,
@@ -70,89 +92,81 @@ export function WorkspaceResourceSettingsPanel(props: {
   } = props;
   const { t } = useLocale();
   const readonly = mode !== "custom";
-  const selectableSkillCount = listedSkills.filter(
-    ({ skill }) => !isAlwaysEnabledSkillName(skill.name),
-  ).length;
-
   return (
     <section className="flex min-h-full flex-col">
-      <div className="border-b border-border/60 px-6 py-5 max-[720px]:px-4">
-        <h3 className="text-base font-semibold">{t("chat.workspaceSettingsResources")}</h3>
+      <div className="px-6 py-5 max-[720px]:px-4">
+        <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsResources")}</h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {t("chat.workspaceSettingsResourcesDescription")}
         </p>
-        <Tabs
-          value={mode}
-          onValueChange={(value) => {
-            if (value === "inherit" || value === "custom" || value === "off") {
-              onModeChange(value);
-            }
-          }}
-          className="mt-4"
+        {/* Mode cards, not tabs: these are three mutually exclusive settings,
+            not three views. Picking "inherit" or "off" leaves the same list
+            below, just read-only — so a nav control read wrong. Same shape as
+            WorkspaceCloneModal's create-mode picker. */}
+        <div
+          className="mt-4 grid gap-2 sm:grid-cols-3"
+          role="radiogroup"
+          aria-label={t("chat.workspaceSettingsResources")}
         >
-          <ResourceTabsList
-            value={mode}
-            items={(["inherit", "custom", "off"] as const).map((value) => ({
-              value,
-              label: t(`chat.workspaceResourcesMode${value[0].toUpperCase()}${value.slice(1)}`),
-            }))}
-            ariaLabel={t("chat.workspaceSettingsResources")}
-            className="grid w-full grid-cols-3"
-            triggerClassName="w-full px-2 text-xs"
-          />
-        </Tabs>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          {mode === "inherit"
-            ? t("chat.workspaceResourcesInheritHint")
-            : mode === "off"
-              ? t("chat.workspaceResourcesOffHint")
-              : t("chat.workspaceResourcesCustomHint")}
-        </p>
+          {RESOURCE_MODES.map(({ value, Icon, labelKey, hintKey }) => {
+            const isActive = mode === value;
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: Mode cards carry an icon, a label and a hint; a native radio cannot render that as one focusable choice.
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                onClick={() => onModeChange(value)}
+                className={cn(
+                  "flex flex-col gap-1 rounded-lg p-2.5 text-left transition-colors focus-visible:outline-hidden",
+                  isActive ? "bg-primary/[0.08]" : "bg-muted/40 hover:bg-muted/70",
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-muted-foreground",
+                      isActive && "text-primary",
+                    )}
+                  />
+                  <span className="text-sm font-medium">{t(labelKey)}</span>
+                </span>
+                <span className="text-xs leading-relaxed text-muted-foreground">{t(hintKey)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex min-h-[360px] flex-1 flex-col px-6 py-4 max-[720px]:px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              if (value === "skills" || value === "mcp") onTabChange(value);
-            }}
-          >
-            <ResourceTabsList
-              value={tab}
-              items={[
-                {
-                  value: "skills",
-                  label: "Skills",
-                  icon: Blend,
-                  countLabel:
-                    listedSkills.length > 0
-                      ? `${visibleSelectedSkillCount}/${selectableSkillCount}`
-                      : null,
-                },
-                {
-                  value: "mcp",
-                  label: "MCP",
-                  icon: Cable,
-                  countLabel:
-                    settings.mcp.servers.length > 0
-                      ? `${visibleSelectedMcpCount}/${settings.mcp.servers.length}`
-                      : null,
-                },
-              ]}
-              ariaLabel={t("chat.workspaceSettingsResources")}
-            />
-          </Tabs>
-          <div className="relative min-w-[12rem] flex-1">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative w-60 max-w-full">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.currentTarget.value)}
               placeholder={t("chat.workspaceResourcesSearch")}
-              className="h-10 rounded-full border-border bg-background pl-10 pr-4 text-sm shadow-none placeholder:text-muted-foreground"
+              className="h-8 rounded-lg border-border bg-background pl-9 pr-3 text-sm shadow-none placeholder:text-muted-foreground"
             />
           </div>
+          <Tabs
+            value={tab}
+            onValueChange={(value) => {
+              if (value === "skills" || value === "mcp") onTabChange(value);
+            }}
+            className="ml-auto shrink-0"
+          >
+            <ResourceTabsList
+              value={tab}
+              items={[
+                { value: "skills", label: "Skills", icon: Blend },
+                { value: "mcp", label: "MCP", icon: Cable },
+              ]}
+              ariaLabel={t("chat.workspaceSettingsResources")}
+            />
+          </Tabs>
         </div>
 
         {tab === "skills" ? (
@@ -165,7 +179,7 @@ export function WorkspaceResourceSettingsPanel(props: {
         ) : null}
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {tab === "skills"
               ? filteredSkills.map(({ skill, missing }) => {
                   const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);

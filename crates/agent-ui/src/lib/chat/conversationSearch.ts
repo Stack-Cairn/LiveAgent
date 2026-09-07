@@ -1,4 +1,8 @@
 import type { MentionComposerConversation } from "@liveagent/ui/components/chat/MentionComposerModel";
+import {
+  type ChatHistorySearchResponse,
+  searchChatHistory,
+} from "@liveagent/ui/lib/chat/historySearch";
 import { memorySearch } from "@liveagent/ui/lib/memory/api";
 
 const HISTORY_SEARCH_FETCH_LIMIT = 80;
@@ -8,25 +12,28 @@ function normalizePreview(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-export async function searchMentionConversations(params: {
-  query: string;
-  currentConversationId: string;
-  currentWorkdir?: string;
-  limit?: number;
-}): Promise<MentionComposerConversation[]> {
-  const query = params.query.trim();
-  if (!query) return [];
+export type PersistedConversationSearchResult = {
+  id: string;
+  title: string;
+  cwd?: string;
+  updatedAt?: number;
+  searchPreview?: string;
+};
 
-  const response = await memorySearch({
-    query,
-    includeHistory: true,
-    limit: HISTORY_SEARCH_FETCH_LIMIT,
-  });
-  const byConversation = new Map<string, MentionComposerConversation & { score: number }>();
-  for (const match of response.historyMatches ?? []) {
+function normalizeHistoryMatches(
+  matches: ChatHistorySearchResponse["matches"],
+  params: {
+    currentWorkdir?: string;
+    excludeConversationId?: string;
+    limit?: number;
+  },
+): PersistedConversationSearchResult[] {
+  const excludedId = params.excludeConversationId?.trim();
+  const byConversation = new Map<string, PersistedConversationSearchResult & { score: number }>();
+  for (const match of matches) {
     const id = match.conversationId.trim();
     const title = match.title.trim();
-    if (!id || !title || id === params.currentConversationId) continue;
+    if (!id || !title || id === excludedId) continue;
     const existing = byConversation.get(id);
     const score = Number.isFinite(match.score) ? match.score : 0;
     if (existing && existing.score >= score) continue;
@@ -51,4 +58,41 @@ export async function searchMentionConversations(params: {
     })
     .slice(0, Math.max(1, params.limit ?? HISTORY_SEARCH_RESULT_LIMIT))
     .map(({ score: _score, ...conversation }) => conversation);
+}
+
+export async function searchPersistedConversations(params: {
+  query: string;
+  currentWorkdir?: string;
+  excludeConversationId?: string;
+  limit?: number;
+}): Promise<PersistedConversationSearchResult[]> {
+  const query = params.query.trim();
+  if (!query) return [];
+
+  const response = await searchChatHistory({
+    query,
+    limit: HISTORY_SEARCH_FETCH_LIMIT,
+  });
+  return normalizeHistoryMatches(response.matches ?? [], params);
+}
+
+export async function searchMentionConversations(params: {
+  query: string;
+  currentConversationId: string;
+  currentWorkdir?: string;
+  limit?: number;
+}): Promise<MentionComposerConversation[]> {
+  const query = params.query.trim();
+  if (!query) return [];
+
+  const response = await memorySearch({
+    query,
+    includeHistory: true,
+    limit: HISTORY_SEARCH_FETCH_LIMIT,
+  });
+  return normalizeHistoryMatches(response.historyMatches ?? [], {
+    currentWorkdir: params.currentWorkdir,
+    excludeConversationId: params.currentConversationId,
+    limit: params.limit,
+  });
 }

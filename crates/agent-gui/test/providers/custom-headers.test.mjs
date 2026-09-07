@@ -215,6 +215,173 @@ test("does not read @files and leaves current headers unchanged when nothing is 
   assert.deepEqual(current, [{ key: "X-Existing", value: "unchanged" }]);
 });
 
+test("buildCliIdentityHeaders(claude_code) writes UA plus the Anthropic fingerprint minus Content-Type", () => {
+  const headers = customHeaders.buildCliIdentityHeaders("claude_code");
+  assert.deepEqual(headers[0], {
+    key: "User-Agent",
+    value: customHeaders.CLI_IDENTITY_USER_AGENTS.claude_code,
+  });
+  const map = new Map(headers.map((header) => [header.key, header.value]));
+  // Content-Type 不写入（发请求侧按 body 决定）。
+  assert.equal(map.has("Content-Type"), false);
+  // 其余 Anthropic 指纹头逐条写入且取值一致。
+  for (const [key, value] of Object.entries(customHeaders.ANTHROPIC_DEFAULT_REQUEST_HEADERS)) {
+    if (key.toLowerCase() === "content-type") continue;
+    assert.equal(map.get(key), value);
+  }
+});
+
+test("buildCliIdentityHeaders(codex) adds static originator + version headers matched to the UA", () => {
+  const ua = customHeaders.CLI_IDENTITY_USER_AGENTS.codex;
+  const codexVersion = ua.slice("codex_cli_rs/".length).split(" ")[0];
+  assert.deepEqual(customHeaders.buildCliIdentityHeaders("codex"), [
+    { key: "User-Agent", value: ua },
+    { key: "originator", value: "codex_cli_rs" },
+    { key: "version", value: codexVersion },
+  ]);
+});
+
+test("buildCliIdentityHeaders(xai) adds the grok-shell client identity headers matched to the UA", () => {
+  const ua = customHeaders.CLI_IDENTITY_USER_AGENTS.xai;
+  const grokVersion = ua.slice("grok-shell/".length).split(" ")[0];
+  assert.deepEqual(customHeaders.buildCliIdentityHeaders("xai"), [
+    { key: "User-Agent", value: ua },
+    { key: "x-grok-client-identifier", value: "grok-shell" },
+    { key: "x-grok-client-version", value: grokVersion },
+    { key: "x-grok-client-mode", value: "interactive" },
+    { key: "X-XAI-Token-Auth", value: "xai-grok-cli" },
+    { key: "x-authenticateresponse", value: "authenticate-response" },
+  ]);
+});
+
+test("listCliIdentityProviderIds puts the matching provider first", () => {
+  assert.deepEqual(customHeaders.listCliIdentityProviderIds(), [
+    "claude_code",
+    "codex",
+    "xai",
+  ]);
+  assert.deepEqual(customHeaders.listCliIdentityProviderIds("xai"), [
+    "xai",
+    "claude_code",
+    "codex",
+  ]);
+  assert.deepEqual(customHeaders.listCliIdentityProviderIds("gemini"), [
+    "claude_code",
+    "codex",
+    "xai",
+  ]);
+});
+
+test("every CLI identity header set is valid, unreserved, and merges without duplicates", () => {
+  for (const id of customHeaders.CLI_IDENTITY_PROVIDER_IDS) {
+    const identity = customHeaders.buildCliIdentityHeaders(id);
+    for (const { key, value } of identity) {
+      assert.ok(customHeaders.isValidCustomHeaderKey(key), `invalid key: ${key}`);
+      assert.ok(customHeaders.isValidCustomHeaderValue(value), `invalid value for ${key}`);
+      assert.equal(
+        customHeaders.isReservedCustomHeaderKey(key),
+        false,
+        `reserved key leaked into identity: ${key}`,
+      );
+    }
+    const merged = customHeaders.mergeImportedCustomHeaders([], identity);
+    assert.equal(merged.headers.length, identity.length, `duplicate keys for ${id}`);
+  }
+});
+
+test("applyCliIdentity replaces the previous CLI's whole fingerprint instead of layering on top", () => {
+  const business = [{ key: "X-Relay-Channel", value: "vip" }];
+  const claude = customHeaders.applyCliIdentity(business, "claude_code");
+  assert.equal(claude.removedCount, 0);
+  assert.equal(claude.overwrittenCount, 0);
+  assert.equal(
+    claude.headers.length,
+    1 + customHeaders.buildCliIdentityHeaders("claude_code").length,
+  );
+
+  // 用户手填了 Claude 的会话头，然后切到 Codex。
+  const withDynamic = [
+    ...claude.headers,
+    { key: customHeaders.CLAUDE_SESSION_ID_HEADER, value: "sess-1" },
+  ];
+  const codex = customHeaders.applyCliIdentity(withDynamic, "codex");
+  const keys = codex.headers.map((header) => header.key.toLowerCase());
+
+  // Anthropic 家族整套消失，包括手填的会话头。
+  assert.ok(!keys.includes("x-app"));
+  assert.ok(!keys.some((key) => key.startsWith("x-stainless-")));
+  assert.ok(!keys.includes("anthropic-version"));
+  assert.ok(!keys.includes("anthropic-dangerous-direct-browser-access"));
+  assert.ok(!keys.includes(customHeaders.CLAUDE_SESSION_ID_HEADER.toLowerCase()));
+
+  // 业务头原样保留在原位；UA 就地换成 Codex。
+  assert.deepEqual(codex.headers[0], { key: "X-Relay-Channel", value: "vip" });
+  const map = new Map(codex.headers.map((header) => [header.key, header.value]));
+  assert.equal(map.get("User-Agent"), customHeaders.CLI_IDENTITY_USER_AGENTS.codex);
+  assert.equal(map.get("originator"), "codex_cli_rs");
+
+  // 结果恰好 = 业务头 + Codex 整套身份头，没有残留。
+  assert.equal(codex.headers.length, 1 + customHeaders.buildCliIdentityHeaders("codex").length);
+  assert.equal(codex.overwrittenCount, 1);
+  // 只有业务头和共享的 User-Agent 留下，其余都是被剥掉的 Anthropic 头。
+  assert.equal(codex.removedCount, withDynamic.length - 2);
+  // 输入未被改动。
+  assert.equal(withDynamic.length, claude.headers.length + 1);
+});
+
+test("applyCliIdentity strips hand-filled x-grok-* per-turn headers when leaving Grok", () => {
+  const start = [
+    ...customHeaders.buildCliIdentityHeaders("xai"),
+    { key: "x-grok-conv-id", value: "conv-1" },
+    { key: "X-Title", value: "mine" },
+  ];
+  const claude = customHeaders.applyCliIdentity(start, "claude_code");
+  const keys = claude.headers.map((header) => header.key.toLowerCase());
+  assert.ok(!keys.some((key) => key.startsWith("x-grok-")));
+  assert.ok(!keys.includes("x-xai-token-auth"));
+  assert.ok(!keys.includes("x-authenticateresponse"));
+  assert.ok(keys.includes("x-title"));
+  assert.equal(
+    claude.headers.length,
+    1 + customHeaders.buildCliIdentityHeaders("claude_code").length,
+  );
+  assert.equal(claude.removedCount, start.length - 2);
+});
+
+test("re-applying the same CLI keeps its own hand-filled per-session headers", () => {
+  const start = [
+    ...customHeaders.buildCliIdentityHeaders("codex"),
+    { key: customHeaders.CODEX_OFFICIAL_SESSION_ID_HEADER, value: "thread-1" },
+    { key: customHeaders.CLIENT_REQUEST_ID_HEADER, value: "req-1" },
+  ];
+  const again = customHeaders.applyCliIdentity(start, "codex");
+  const map = new Map(again.headers.map((header) => [header.key, header.value]));
+  assert.equal(map.get(customHeaders.CODEX_OFFICIAL_SESSION_ID_HEADER), "thread-1");
+  assert.equal(map.get(customHeaders.CLIENT_REQUEST_ID_HEADER), "req-1");
+  assert.equal(again.removedCount, 0);
+  assert.equal(again.overwrittenCount, customHeaders.buildCliIdentityHeaders("codex").length);
+  assert.equal(again.headers.length, start.length);
+});
+
+test("x-client-request-id survives a Claude <-> Codex switch but not a switch to Grok", () => {
+  const start = [
+    ...customHeaders.buildCliIdentityHeaders("claude_code"),
+    { key: customHeaders.CLIENT_REQUEST_ID_HEADER, value: "req-1" },
+  ];
+  const codex = customHeaders.applyCliIdentity(start, "codex");
+  assert.ok(
+    codex.headers.some(
+      (header) => header.key === customHeaders.CLIENT_REQUEST_ID_HEADER && header.value === "req-1",
+    ),
+  );
+  const grok = customHeaders.applyCliIdentity(start, "xai");
+  assert.ok(
+    !grok.headers.some(
+      (header) => header.key.toLowerCase() === customHeaders.CLIENT_REQUEST_ID_HEADER.toLowerCase(),
+    ),
+  );
+});
+
 test("parsed and saved headers reach runtime merge while CR/LF values are rejected", () => {
   const parsed = customHeaders.parseCustomHeadersImport(
     '{"X-Imported":"sentinel"}',

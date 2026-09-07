@@ -61,6 +61,17 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     setTerminalSessions(sortTerminalSessions(sessions));
   }, []);
 
+  // 函数式变体:回调方按 React 当前值合并,而不是按 render 闭包里的快照。
+  // 两个事件在一次重渲染之间到达(SSH 面板 snapshot 紧跟 reconcile)时,
+  // 整表提交会让后者覆盖前者;这里与 dock 侧 `sessionsRef.current` 同口径。
+  const updateProjectTerminalSessions = useCallback(
+    (updater: (current: readonly TerminalSession[]) => readonly TerminalSession[]) => {
+      terminalSessionsVersionRef.current += 1;
+      setTerminalSessions((current) => sortTerminalSessions(updater(current)));
+    },
+    [],
+  );
+
   useEffect(() => {
     // Loaded flips false whenever the gates or the gateway session identity
     // change, and true only once list() settles below — RightDockPanel uses it
@@ -182,6 +193,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     terminalStatusSessionIdRef,
     projectTerminalSessions,
     handleProjectTerminalSessionsChange,
+    updateProjectTerminalSessions,
     resetTerminalSessions,
   };
 }

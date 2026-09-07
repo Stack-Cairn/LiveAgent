@@ -4,6 +4,7 @@ import type {
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
@@ -31,6 +32,8 @@ export type ChatHistorySidebarProps = {
   runningConversationIds: ReadonlySet<string>;
   /** Conversations currently blocked on an explicit tool approval. */
   approvalConversationIds?: ReadonlySet<string>;
+  /** Conversations currently blocked on an unanswered AskUserQuestion card. */
+  questionConversationIds?: ReadonlySet<string>;
   listStatus: ChatHistorySidebarListStatus;
   // Identity of the current list scope (workspace/text mode). A change
   // remounts the list content with a soft enter transition and resets scroll.
@@ -52,6 +55,8 @@ export type ChatHistorySidebarProps = {
   renameDraft: string;
   isOpen: boolean;
   fontScale?: number;
+  /** Incremented by the desktop host when its configured search shortcut fires. */
+  conversationSearchRequestKey?: number;
   activeView?: "chat" | "skills-hub" | "mcp-hub";
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -91,7 +96,7 @@ export type ChatHistorySidebarProps = {
   // collapsed group at the end of the list.
   archivedProjectPathKeys?: ReadonlySet<string>;
   onNewConversation: () => void;
-  onSelectConversation: (id: string) => void;
+  onSelectConversation: (id: string, options?: ConversationOpenOptions) => void;
   /** Workbench drag intent from a conversation row title (desktop pointer). */
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,
@@ -198,6 +203,7 @@ export type ChatHistorySidebarContainerSource = Required<
     | "currentConversationId"
     | "isOpen"
     | "fontScale"
+    | "conversationSearchRequestKey"
     | "onNewConversation"
     | "onSelectConversation"
     | "canShareConversations"
@@ -263,7 +269,7 @@ type ChatHistorySidebarBaseState = Pick<
 export function buildChatHistorySidebarBaseProps(
   source: Pick<
     ChatHistorySidebarContainerSource,
-    "currentConversationId" | "isOpen" | "fontScale" | "activeView"
+    "currentConversationId" | "isOpen" | "fontScale" | "conversationSearchRequestKey" | "activeView"
   >,
   state: ChatHistorySidebarBaseState,
 ) {
@@ -285,6 +291,7 @@ export function buildChatHistorySidebarBaseProps(
     renameDraft: state.renameDraft,
     isOpen: source.isOpen,
     fontScale: source.fontScale,
+    conversationSearchRequestKey: source.conversationSearchRequestKey,
     activeView: source.activeView,
   };
 }

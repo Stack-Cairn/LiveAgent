@@ -56,6 +56,7 @@ import {
 } from "react";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import { isKnownProviderId, ProviderBrandIcon } from "../ProviderBrandIcon";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -78,6 +79,7 @@ type HistoryRowProps = {
   isBusy: boolean;
   isRunning: boolean;
   needsApproval: boolean;
+  hasPendingQuestion: boolean;
   isDeleteDisabled: boolean;
   canShareConversation: boolean;
   isRenaming: boolean;
@@ -126,6 +128,8 @@ function areRenderedHistoryItemsEqual(previous: SidebarConversation, next: Sideb
   return (
     previous.id === next.id &&
     previous.title === next.title &&
+    previous.providerId === next.providerId &&
+    previous.model === next.model &&
     previous.cwd === next.cwd &&
     previous.isPinned === next.isPinned &&
     previous.isShared === next.isShared &&
@@ -140,6 +144,7 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.isBusy === next.isBusy &&
     previous.isRunning === next.isRunning &&
     previous.needsApproval === next.needsApproval &&
+    previous.hasPendingQuestion === next.hasPendingQuestion &&
     previous.isDeleteDisabled === next.isDeleteDisabled &&
     previous.canShareConversation === next.canShareConversation &&
     previous.isRenaming === next.isRenaming &&
@@ -178,6 +183,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     isBusy,
     isRunning,
     needsApproval,
+    hasPendingQuestion,
     isDeleteDisabled,
     canShareConversation,
     isRenaming,
@@ -208,7 +214,15 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     onOpenInWorkbenchSplit,
   } = props;
   const { t } = useLocale();
-  const showRunningIndicator = isRunning && !needsApproval;
+  // Either blocked state replaces the spinner: the turn is suspended on the
+  // user, not working. Approval wins when both are pending — it is the harder
+  // block and the row has room for only one pill.
+  const blockedBadgeLabel = needsApproval
+    ? t("chat.toolApproval.sidebarStatus")
+    : hasPendingQuestion
+      ? t("chat.askUser.sidebarStatus")
+      : null;
+  const showRunningIndicator = isRunning && !blockedBadgeLabel;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Enter/Escape mark the blur as handled so onBlur commits exactly once —
@@ -700,12 +714,21 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     {isSelected ? <Check className="h-3 w-3" /> : null}
                   </span>
                 ) : null}
+                {!isSelectionMode && isKnownProviderId(item.providerId) ? (
+                  <span
+                    aria-hidden="true"
+                    title={item.model || undefined}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center"
+                  >
+                    <ProviderBrandIcon type={item.providerId} />
+                  </span>
+                ) : null}
                 <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">
                   {item.title}
                 </span>
-                {!isSelectionMode && needsApproval ? (
+                {!isSelectionMode && blockedBadgeLabel ? (
                   <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300">
-                    {t("chat.toolApproval.sidebarStatus")}
+                    {blockedBadgeLabel}
                   </span>
                 ) : null}
               </button>
@@ -835,7 +858,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleTogglePinned}
-                    className="gap-2"
+                    className="text-xs gap-2"
                   >
                     {item.isPinned ? (
                       <PinOff className="h-3.5 w-3.5" />
@@ -848,7 +871,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isRunning || isBusy}
                   onSelect={handleEnterSelectionMode}
-                  className="gap-2"
+                  className="text-xs gap-2"
                 >
                   <ListChecks className="h-3.5 w-3.5" />
                   {t("chat.conversationBulkSelect")}
@@ -857,7 +880,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onOpenInWorkbenchSplit(item)}
-                    className="gap-2"
+                    className="text-xs gap-2"
                   >
                     <Columns2 className="h-3.5 w-3.5" />
                     {t("workbench.openInSplit")}
@@ -866,7 +889,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled}
                   onSelect={handleStartRenamingFromMenu}
-                  className="gap-2"
+                  className="text-xs gap-2"
                 >
                   <Edit3 className="h-3.5 w-3.5" />
                   {t("chat.conversationRename")}
@@ -876,7 +899,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     disabled={
                       isInteractionDisabled || isRunning || isBusy || moveWorkspaces.length === 0
                     }
-                    className="gap-2"
+                    className="text-xs gap-2"
                   >
                     <Folder className="h-3.5 w-3.5" />
                     {t("chat.conversationMoveToWorkspace")}
@@ -892,7 +915,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                           workspace.path === item.cwd
                         }
                         onSelect={() => handleMoveToWorkspace(workspace.path)}
-                        className="gap-2"
+                        className="text-xs gap-2"
                       >
                         <FolderClosed className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{workspace.path}</span>
@@ -904,7 +927,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleShare}
-                    className="gap-2"
+                    className="text-xs gap-2"
                   >
                     <Share2 className="h-3.5 w-3.5" />
                     {t("chat.conversationShare")}
@@ -913,7 +936,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isDeleteDisabled}
                   onSelect={handleRequestDelete}
-                  className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   {t("chat.conversationDelete")}
@@ -953,45 +976,85 @@ export function ProjectGroupHeader(props: {
     onDelete,
   } = props;
   const { t } = useLocale();
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  // Same Base UI return-focus race as the conversation rename input above:
+  // "Rename" unmounts this menu in the commit that mounts the input, and the
+  // trigger takes focus back before the input's ref attaches, so the blur
+  // committed the untouched name. finalFocus consumes the one-shot flag and the
+  // effect below owns focus placement.
+  const suppressMenuReturnFocusRef = useRef(false);
+  const skipNextBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!isRenaming) return;
+    skipNextBlurCommitRef.current = false;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [isRenaming]);
 
   if (isRenaming) {
     return (
-      <div className="flex h-[30px] items-center gap-2 rounded-lg pl-2 pr-1">
-        <Input
-          value={renameDraft}
-          onChange={(event) => onRenameDraftChange(event.currentTarget.value)}
-          onBlur={onCommitRename}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
+      // Same geometry as the non-renaming header below, chevron included, so
+      // the name stays put when the row flips into and out of edit mode.
+      <div className="flex h-[30px] items-center rounded-lg pl-1">
+        <div className="flex h-[30px] min-w-0 flex-1 items-center gap-2 px-2">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                group.collapsed ? "" : "rotate-90",
+              )}
+            />
+          </span>
+          <Input
+            ref={renameInputRef}
+            value={renameDraft}
+            onChange={(event) => onRenameDraftChange(event.currentTarget.value)}
+            onBlur={() => {
+              if (skipNextBlurCommitRef.current) {
+                skipNextBlurCommitRef.current = false;
+                return;
+              }
               onCommitRename();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onCancelRename();
-            }
-          }}
-          className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
-          autoFocus
-        />
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                skipNextBlurCommitRef.current = true;
+                onCommitRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                skipNextBlurCommitRef.current = true;
+                onCancelRename();
+              }
+            }}
+            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="group/project-group flex h-[30px] items-center rounded-lg pl-1 pr-0.5 transition-colors hover:bg-foreground/[0.04]">
+    <div className="group/project-group flex h-[30px] items-center rounded-lg pl-1 transition-colors hover:bg-foreground/[0.04]">
       <button
         type="button"
-        className="flex h-[30px] min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onToggleCollapsed}
         title={t("chat.workspaceGroupToggle")}
       >
-        <ChevronRight
-          aria-hidden="true"
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-            group.collapsed ? "" : "rotate-90",
-          )}
-        />
+        {/* 14px chevron in a 16px slot: the slot has to match ProjectRow's
+            folder icon so group names and workspace names share a left edge. */}
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          <ChevronRight
+            aria-hidden="true"
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              group.collapsed ? "" : "rotate-90",
+            )}
+          />
+        </span>
         <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-5">
           {group.name}
         </span>
@@ -1012,8 +1075,23 @@ export function ProjectGroupHeader(props: {
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-40">
-          <DropdownMenuItem onSelect={onStartRename} className="gap-2 text-xs">
+        <DropdownMenuContent
+          className="min-w-40"
+          finalFocus={() => {
+            if (suppressMenuReturnFocusRef.current) {
+              suppressMenuReturnFocusRef.current = false;
+              return false;
+            }
+            return true;
+          }}
+        >
+          <DropdownMenuItem
+            onSelect={() => {
+              suppressMenuReturnFocusRef.current = true;
+              onStartRename();
+            }}
+            className="gap-2 text-xs"
+          >
             <Edit3 className="h-3.5 w-3.5" />
             <span>{t("chat.workspaceGroupRename")}</span>
           </DropdownMenuItem>
@@ -1293,7 +1371,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               type="button"
               aria-disabled={isArchived || undefined}
               className={cn(
-                "flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-[30px] min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 isMissing
                   ? "hover:text-destructive focus-visible:bg-destructive/10"
                   : isArchived
@@ -1477,7 +1555,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onConfigureProject(project)}
-                    className="gap-2"
+                    className="text-xs gap-2"
                   >
                     <Settings className="h-3.5 w-3.5 text-muted-foreground" />
                     {t("chat.workspaceConfigure")}
@@ -1485,7 +1563,10 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   {/* 无任何分组时隐藏“移动到分组”，避免展开空的子菜单。 */}
                   {onMoveProjectToGroup && workspaceProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
-                      <DropdownMenuSubTrigger disabled={isInteractionDisabled} className="gap-2">
+                      <DropdownMenuSubTrigger
+                        disabled={isInteractionDisabled}
+                        className="text-xs gap-2"
+                      >
                         <Folder className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="min-w-0 flex-1">{t("chat.workspaceGroupMove")}</span>
                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1530,7 +1611,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleArchive}
-                      className="gap-2"
+                      className="text-xs gap-2"
                     >
                       <Archive className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceArchive")}
@@ -1540,7 +1621,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleUnarchive}
-                      className="gap-2"
+                      className="text-xs gap-2"
                     >
                       <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceUnarchive")}
@@ -1554,7 +1635,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInFileTree}
-                      className="gap-2"
+                      className="text-xs gap-2"
                     >
                       <FolderTree className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInFileTree")}
@@ -1564,7 +1645,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInSystemFileManager}
-                      className="gap-2"
+                      className="text-xs gap-2"
                     >
                       <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInSystemFileManager")}
@@ -1577,7 +1658,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       <DropdownMenuItem
                         disabled={isInteractionDisabled}
                         onSelect={handleRequestRemove}
-                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                       >
                         <X className="h-3.5 w-3.5" />
                         {t("chat.workspaceRemoveOnly")}
@@ -1586,7 +1667,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                         <DropdownMenuItem
                           disabled={isInteractionDisabled}
                           onSelect={handleRequestDeleteWorktree}
-                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("chat.workspaceDeleteWorktree")}

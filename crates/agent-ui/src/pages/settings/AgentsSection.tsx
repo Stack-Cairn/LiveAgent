@@ -525,7 +525,7 @@ function AgentPromptViewModal({
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3.5 px-6 py-5">
+        <DialogHeader className="flex-row items-center gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
             <Eye className="h-5 w-5" />
           </div>
@@ -546,7 +546,7 @@ function AgentPromptViewModal({
           </span>
         </DialogHeader>
 
-        <DialogBody className="px-6 py-5">
+        <DialogBody>
           <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
             <aside className="min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
               <div className="flex items-center gap-2.5">

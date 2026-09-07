@@ -15,6 +15,20 @@
   inherits: false;
 }
 
+/* scroll-fade — ejected from shadcn/tailwind.css (we have no `shadcn` package
+   dependency). Registered so the scroll timeline can interpolate them. */
+@property --scroll-fade-t-size {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-fade-b-size {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @theme inline {
   --radius-xs: calc(var(--radius) - 6px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -140,6 +154,141 @@
     animation: none;
     background-image: none;
     -webkit-text-fill-color: currentColor;
+  }
+}
+
+@keyframes tw-scroll-fade-in-top {
+  from {
+    --scroll-fade-t-size: 0px;
+  }
+
+  to {
+    --scroll-fade-t-size: var(--_scroll-fade-size);
+  }
+}
+
+@keyframes tw-scroll-fade-out-bottom {
+  from {
+    --scroll-fade-b-size: var(--_scroll-fade-size);
+  }
+
+  to {
+    --scroll-fade-b-size: 0px;
+  }
+}
+
+/*
+ * Fades the scroll container's own box, so the gradient stays pinned to the
+ * viewport edges while content moves under it — no overlay element and no
+ * scroll listener. The mask also eats the scrollbar, so the native bar is
+ * hidden alongside it — but only inside the @supports block where the fade is
+ * actually applied. Engines without scroll-driven animations keep their
+ * scrollbar: with neither fade nor bar there would be no overflow affordance
+ * left at all (WKWebView only gained scroll(self y) in Safari 26).
+ */
+@utility scroll-fade {
+  --_scroll-fade-size: var(--scroll-fade-size, 48px);
+  --_scroll-fade-reveal: var(--scroll-fade-reveal, 24px);
+
+  /* Engines without scroll-driven animations get no mask at all (see the
+     @supports block below, which is where mask-image is applied).
+
+     A static fade was tried here first and is wrong: the mask would be applied
+     unconditionally, so the top band stays faded at scrollTop 0 and even when
+     the content does not overflow. Hiding the scrollbar there too would leave
+     no overflow affordance at all, and the fade conveys nothing because it
+     never changes. The workspace list uses scroll-fade-8 (32px)
+     against 30px rows, so the entire first row would sit inside the band.
+     WKWebView (the desktop shell) only gained scroll(self y) in Safari 26, so
+     this path is live, not hypothetical. */
+  --scroll-fade-t-size: 0px;
+  --scroll-fade-b-size: 0px;
+
+  /* Eased alpha ramp rather than a straight `transparent → black`. A linear
+     mask spends most of its depth in the barely-tinted range and reads as "not
+     doing anything"; front-loading the falloff makes the same depth visibly
+     dissolve the row at the edge. */
+  --_scroll-fade-mask: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0) 0,
+    rgb(0 0 0 / 0.1) calc(var(--scroll-fade-t-size) * 0.28),
+    rgb(0 0 0 / 0.45) calc(var(--scroll-fade-t-size) * 0.55),
+    rgb(0 0 0 / 0.82) calc(var(--scroll-fade-t-size) * 0.8),
+    rgb(0 0 0 / 1) var(--scroll-fade-t-size),
+    rgb(0 0 0 / 1) calc(100% - var(--scroll-fade-b-size)),
+    rgb(0 0 0 / 0.82) calc(100% - var(--scroll-fade-b-size) * 0.8),
+    rgb(0 0 0 / 0.45) calc(100% - var(--scroll-fade-b-size) * 0.55),
+    rgb(0 0 0 / 0.1) calc(100% - var(--scroll-fade-b-size) * 0.28),
+    rgb(0 0 0 / 0) 100%
+  );
+  @supports (animation-timeline: scroll(self y)) {
+    /* Both edges start clear and the timeline fills them in. When the timeline
+       is inactive — content that doesn't overflow — the effect isn't applied at
+       all, so the 0px values above stand and nothing fades. That's why the
+       clear state has to be the declared one rather than the animated one, and
+       why the mask is only applied inside this block. */
+    -webkit-mask-image: var(--_scroll-fade-mask);
+    mask-image: var(--_scroll-fade-mask);
+    /* The mask would paint the native scrollbar half-faded on engines that
+       still draw one; the fade is the overflow signal from here on. */
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+    /* Longhands, not the `animation` shorthand: the shorthand gets expanded
+       with `animation-duration: 0s` (CSS Animations 1's initial value), which
+       collapses a scroll-driven animation into a hard snap at the range start.
+       `auto` is what makes it span the range. */
+    animation-name: tw-scroll-fade-in-top, tw-scroll-fade-out-bottom;
+    animation-duration: auto, auto;
+    animation-timing-function: linear, linear;
+    animation-fill-mode: both, both;
+    animation-timeline: scroll(self y);
+    animation-range:
+      0px var(--_scroll-fade-reveal),
+      calc(100% - var(--_scroll-fade-reveal)) 100%;
+  }
+}
+
+@utility scroll-fade-* {
+  --scroll-fade-size: calc(var(--spacing) * --value(integer));
+  --scroll-fade-size: --value([length], [percentage]);
+}
+
+@keyframes chat-work-pixel {
+  0%,
+  55%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.8);
+  }
+
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chat-work-pixel {
+  opacity: 0.15;
+  animation: chat-work-pixel 650ms ease-in-out var(--chat-work-delay) infinite;
+}
+
+/* Frozen while the turn waits on the user: still legible as an indicator,
+   but visibly not cycling. */
+.chat-work-pixel[data-paused] {
+  opacity: 0.45;
+  transform: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-work-pixel {
+    opacity: 0.15;
+    transform: none;
+    animation: none;
   }
 }
 
