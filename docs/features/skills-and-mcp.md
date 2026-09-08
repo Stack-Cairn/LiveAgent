@@ -8,7 +8,7 @@
 
 从主侧栏打开这四类资源时，只切换右侧内容区域，保留桌面侧栏与当前聊天草稿；窄屏沿用原有的侧栏自动收起行为。四个页面共用紧凑的顶部布局。
 
-可见性保存在本机 `customSettings.sidebarShortcuts`（`skills`、`mcp`、`cron`、`memory`）中，不随 Gateway 设置同步覆盖其他设备；旧配置中缺少字段时按显示处理。
+可见性保存在 `customSettings.sidebarShortcuts`（`skills`、`mcp`、`cron`、`memory`）中，经 Gateway 在桌面端与连接该桌面 Agent 的 WebUI 间双向同步，并写入各端本地存储以便刷新后恢复。旧配置中缺少字段时按显示处理；旧版本同步消息未携带该字段时保留当前状态。
 
 ## Skills 架构
 
