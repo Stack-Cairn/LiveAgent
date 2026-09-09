@@ -3,10 +3,15 @@ import {
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
+  getLegacyProviderChatProtocol,
+  getProviderChatProtocolAdapter,
   normalizeProviderModelConfigs,
+  PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_RETRY_DEFAULT_MAX_RETRIES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   type PromptCacheHintMode,
+  type ProviderChatProtocol,
+  type ProviderEndpointConfig,
   type ProviderId,
   type ProviderModelConfig,
   type ProviderRetryPolicy,
@@ -179,9 +184,13 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [newModelPhases, setNewModelPhases] = useState<ReadonlyMap<string, NewModelPhase>>(
     () => new Map(),
   );
-  const [requestFormat, setRequestFormat] = useState<CodexRequestFormat>(
-    initialData?.requestFormat ?? "openai-responses",
+  const requestFormat: CodexRequestFormat = initialData?.requestFormat ?? "openai-responses";
+  const [defaultChatProtocol, setDefaultChatProtocol] = useState<ProviderChatProtocol | "auto">(
+    initialData?.defaultChatProtocol ?? "auto",
   );
+  const [endpointConfigs, setEndpointConfigs] = useState<
+    Partial<Record<ProviderChatProtocol, ProviderEndpointConfig>>
+  >(() => ({ ...initialData?.endpointConfigs }));
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
   const [streamRetryMode, setStreamRetryMode] = useState<"default" | "off" | "custom">(
     initialData?.retryPolicy?.mode ?? "default",
@@ -550,8 +559,18 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const editingModelMaxOutputToken = editingModel
     ? parsePositiveInteger(editingModel.maxOutputToken)
     : null;
-  const canOverrideModelInputModalities =
-    providerSupportsModelInputModalitiesOverride(providerType);
+  const automaticChatProtocol = getLegacyProviderChatProtocol(providerType, requestFormat);
+  const effectiveDefaultChatProtocol =
+    defaultChatProtocol === "auto" ? automaticChatProtocol : defaultChatProtocol;
+  function getModelAdapterProviderId(model: ProviderModelConfig): ProviderId {
+    return getProviderChatProtocolAdapter(
+      model.chatProtocol ?? effectiveDefaultChatProtocol,
+      providerType,
+    );
+  }
+  const canOverrideModelInputModalities = editingModel
+    ? providerSupportsModelInputModalitiesOverride(getModelAdapterProviderId(editingModel.model))
+    : false;
   const editingModelInputModalitiesMode = editingModel
     ? getModelInputModalitiesMode(editingModel.model)
     : "auto";
@@ -567,6 +586,15 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           }
         : prev,
     );
+  }
+
+  function updateEndpointBaseUrl(protocol: ProviderChatProtocol, value: string) {
+    setEndpointConfigs((current) => {
+      const next = { ...current };
+      if (value.trim()) next[protocol] = { baseUrl: value };
+      else delete next[protocol];
+      return next;
+    });
   }
 
   function saveInlineModelSettings() {
@@ -735,8 +763,20 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         providerType === "xai"
           ? "openai-responses"
           : providerType === "codex"
-            ? requestFormat
+            ? defaultChatProtocol === "openai-completions" ||
+              defaultChatProtocol === "openai-responses"
+              ? defaultChatProtocol
+              : requestFormat
             : undefined,
+      defaultChatProtocol: defaultChatProtocol === "auto" ? undefined : defaultChatProtocol,
+      endpointConfigs:
+        Object.keys(endpointConfigs).length > 0
+          ? Object.fromEntries(
+              Object.entries(endpointConfigs)
+                .map(([protocol, config]) => [protocol, { baseUrl: config.baseUrl.trim() }])
+                .filter(([, config]) => Boolean((config as ProviderEndpointConfig).baseUrl)),
+            )
+          : undefined,
       reasoning:
         providerType === "gemini" && initialData?.reasoning === "xhigh"
           ? "high"
@@ -937,7 +977,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     apiKeyIsRedactedDisplay,
     applyHeaderSuggestion,
     applyCliIdentityHeaders,
+    automaticChatProtocol,
     baseUrl,
+    defaultChatProtocol,
+    effectiveDefaultChatProtocol,
     canSaveEditingModel,
     canOverrideModelInputModalities,
     cancelCustomHeaderImport,
@@ -948,8 +991,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     editingModelContextWindow,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
+    endpointConfigs,
     fetchError,
     fetchingModels,
+    getModelAdapterProviderId,
     focusCustomHeader,
     getModelReorderProps,
     handleAddModel,
@@ -994,12 +1039,12 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     removeModel,
     renderModelDragHandle,
     requestClose,
-    requestFormat,
     saveInlineModelSettings,
     setActivePanel,
     setAddingModel,
     setApiKey,
     setBaseUrl,
+    setDefaultChatProtocol,
     setEditingModel,
     setEditingModelInputModalitiesMode,
     setHeaderImportError,
@@ -1016,7 +1061,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setPromptCacheHintMode,
     setPromptCacheRetention,
     setPromptCachingEnabled,
-    setRequestFormat,
     setShowApiKey,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,
@@ -1024,6 +1068,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setUsageQuery,
     setUsageTimeoutInput,
     setUseSystemProxy,
+    updateEndpointBaseUrl,
     showApiKey,
     showUsageVariableApiKey,
     streamRetryCountInput,
@@ -1043,6 +1088,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     useSystemProxy,
     visibleActiveCount,
     visibleModels,
+    providerChatProtocols: PROVIDER_CHAT_PROTOCOLS,
   };
   return viewModel;
 }

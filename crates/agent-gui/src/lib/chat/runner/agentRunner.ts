@@ -540,7 +540,7 @@ export async function runAssistantWithTools(params: {
     });
 
     const model = createModelFromConfig(
-      params.providerId,
+      params.runtime.adapterProviderId ?? params.providerId,
       modelId,
       proxyRequest.baseUrl,
       params.runtime.requestFormat,
@@ -548,7 +548,7 @@ export async function runAssistantWithTools(params: {
       params.runtime.baseUrl.trim(),
     );
     const nativeWebSearchStatus = resolveProviderNativeWebSearchStatus({
-      providerId: params.providerId,
+      providerId: params.runtime.adapterProviderId ?? params.providerId,
       api: model.api,
       enabled: params.nativeWebSearch,
       baseUrl: params.runtime.baseUrl,
@@ -560,7 +560,7 @@ export async function runAssistantWithTools(params: {
     });
 
     const thinkingLevel = toAssistantThinkingLevel({
-      providerId: params.providerId,
+      providerId: params.runtime.adapterProviderId ?? params.providerId,
       reasoning: params.runtime.reasoning,
       api: model.api,
     });
@@ -626,7 +626,7 @@ export async function runAssistantWithTools(params: {
           runtime: fallback.runtime,
           proxyRequest: fallbackProxyRequest,
           model: createModelFromConfig(
-            fallback.providerId,
+            fallback.runtime.adapterProviderId ?? fallback.providerId,
             fallback.model,
             fallbackProxyRequest.baseUrl,
             fallback.runtime.requestFormat,
@@ -651,7 +651,7 @@ export async function runAssistantWithTools(params: {
       const fallback = failoverParams?.fallbacks[index - 1];
       if (!fallback) return { api: model.api, provider: model.provider, id: modelId };
       const identity = createModelFromConfig(
-        fallback.providerId,
+        fallback.runtime.adapterProviderId ?? fallback.providerId,
         fallback.model,
         fallback.runtime.baseUrl.trim(),
         fallback.runtime.requestFormat,
@@ -1264,7 +1264,7 @@ export async function runAssistantWithTools(params: {
       const roundCacheRetention =
         options?.cacheRetention ??
         resolveProviderCacheRetention(
-          primaryRoundTarget.providerId,
+          primaryRoundTarget.runtime.adapterProviderId ?? primaryRoundTarget.providerId,
           primaryRoundTarget.runtime.promptCachingEnabled,
           undefined,
           primaryRoundTarget.runtime.promptCacheRetention,
@@ -1274,7 +1274,7 @@ export async function runAssistantWithTools(params: {
         systemPrompt: effectiveContext.systemPrompt,
         tools: effectiveContext.tools,
         cacheControl: describeProviderCacheShape({
-          providerId: primaryRoundTarget.providerId,
+          providerId: primaryRoundTarget.runtime.adapterProviderId ?? primaryRoundTarget.providerId,
           baseUrl: primaryRoundTarget.runtime.baseUrl,
           promptCacheHintMode:
             primaryRoundTarget.runtime.modelConfig?.promptCacheHintMode ??
@@ -1297,10 +1297,11 @@ export async function runAssistantWithTools(params: {
 
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
+        const transportProviderId = target.runtime.adapterProviderId ?? target.providerId;
         const fallbackReasoning =
-          target.providerId === "claude_code" ||
-          target.providerId === "gemini" ||
-          target.providerId === "deepseek" ||
+          transportProviderId === "claude_code" ||
+          transportProviderId === "gemini" ||
+          transportProviderId === "deepseek" ||
           targetModel.api === "openai-responses" ||
           targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
@@ -1309,7 +1310,7 @@ export async function runAssistantWithTools(params: {
           target.index === 0
             ? nativeWebSearchStatus
             : resolveProviderNativeWebSearchStatus({
-                providerId: target.providerId,
+                providerId: transportProviderId,
                 api: targetModel.api,
                 enabled: params.nativeWebSearch,
                 baseUrl: target.runtime.baseUrl,
@@ -1317,7 +1318,7 @@ export async function runAssistantWithTools(params: {
               });
         const shouldProbeHostedSearch = Boolean(targetNativeWebSearchStatus);
         const hostedSearchProbeId = shouldProbeHostedSearch
-          ? createHostedSearchProbeId(target.providerId)
+          ? createHostedSearchProbeId(transportProviderId)
           : undefined;
         let streamOptions: StreamOptionsEx = {
           ...(options ?? {}),
@@ -1334,12 +1335,12 @@ export async function runAssistantWithTools(params: {
           cacheRetention:
             options?.cacheRetention ??
             resolveProviderCacheRetention(
-              target.providerId,
+              transportProviderId,
               target.runtime.promptCachingEnabled,
               undefined,
               target.runtime.promptCacheRetention,
             ),
-          metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
+          metadata: buildProviderRequestMetadata(transportProviderId, params.sessionId),
           toolChoice:
             params.resolveToolChoice?.(round) ??
             options?.toolChoice ??
@@ -1368,7 +1369,7 @@ export async function runAssistantWithTools(params: {
         };
 
         streamOptions = finalizeProviderStreamOptions({
-          providerId: target.providerId,
+          providerId: transportProviderId,
           baseUrl: target.runtime.baseUrl,
           options: streamOptions,
           context: effectiveContext,
@@ -1410,7 +1411,7 @@ export async function runAssistantWithTools(params: {
         }
 
         const hostedSearchAggregator = createHostedSearchEventAggregator({
-          providerId: target.providerId,
+          providerId: transportProviderId,
           onHostedSearch: (hostedSearch) => {
             if (hostedSearch.status === "searching") {
               nativeWebSearchStatusController.schedule();
@@ -1423,7 +1424,7 @@ export async function runAssistantWithTools(params: {
           },
         });
         const hostedSearchProbe = startHostedSearchFetchProbe({
-          providerId: target.providerId,
+          providerId: transportProviderId,
           sessionId: params.sessionId,
           requestId: hostedSearchProbeId,
           enabled: shouldProbeHostedSearch,

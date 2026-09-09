@@ -48,6 +48,8 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
   for (const field of [
     "baseUrl",
     "isFullUrl",
+    "adapterProviderId",
+    "chatProtocol",
     "apiKey",
     "customHeaders",
     "requestFormat",
@@ -60,6 +62,36 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
   ]) {
     assert.ok(field in runtime, `${field} must be present on the runtime config`);
   }
+});
+
+test("createProviderRuntimeConfig resolves a model-level protocol and endpoint", () => {
+  const runtime = createProviderRuntimeConfig(
+    createProvider({
+      type: "codex",
+      baseUrl: "https://gateway.example/v1",
+      isFullUrl: false,
+      defaultChatProtocol: "openai-responses",
+      endpointConfigs: {
+        "anthropic-messages": { baseUrl: "https://gateway.example/anthropic/v1" },
+      },
+      models: [
+        {
+          id: "claude-proxy",
+          contextWindow: 200_000,
+          maxOutputToken: 32_000,
+          chatProtocol: "anthropic-messages",
+        },
+      ],
+    }),
+    "claude-proxy",
+    settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+  );
+
+  assert.equal(runtime.chatProtocol, "anthropic-messages");
+  assert.equal(runtime.adapterProviderId, "claude_code");
+  assert.equal(runtime.baseUrl, "https://gateway.example/anthropic/v1");
+  assert.equal(runtime.isFullUrl, false);
+  assert.equal(runtime.requestFormat, undefined);
 });
 
 test("createProviderRuntimeConfig gates reasoning on model support", () => {

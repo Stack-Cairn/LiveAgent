@@ -4,6 +4,7 @@ import {
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   normalizeChatRuntimeControlsForProvider,
+  resolveProviderChatRoute,
 } from "../../settings";
 import type { ProviderRuntimeConfig } from "./types";
 
@@ -16,19 +17,23 @@ export function createProviderRuntimeConfig(
   model: string,
   controlsInput: ChatRuntimeControls | undefined,
 ): ProviderRuntimeConfig {
+  const modelConfig = findProviderModelConfig(provider, model);
+  const route = resolveProviderChatRoute(provider, model);
   const reasoningParams = {
-    providerId: provider.type,
-    requestFormat: provider.requestFormat,
+    providerId: route.adapterProviderId,
+    requestFormat: route.requestFormat,
     modelId: model,
   };
   const controls = normalizeChatRuntimeControlsForProvider(controlsInput, reasoningParams);
   const reasoningSupported = getChatRuntimeReasoningLevelsForProvider(reasoningParams).length > 0;
   return {
-    baseUrl: provider.baseUrl,
-    isFullUrl: provider.isFullUrl,
+    baseUrl: route.baseUrl,
+    isFullUrl: route.isFullUrl,
+    adapterProviderId: route.adapterProviderId,
+    chatProtocol: route.protocol,
     apiKey: provider.apiKey,
     customHeaders: provider.customHeaders,
-    requestFormat: provider.requestFormat,
+    requestFormat: route.requestFormat,
     reasoning: reasoningSupported
       ? controls.thinkingEnabled
         ? controls.reasoning
@@ -40,6 +45,6 @@ export function createProviderRuntimeConfig(
     nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     useSystemProxy: provider.useSystemProxy,
     ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),
-    modelConfig: findProviderModelConfig(provider, model),
+    modelConfig,
   } as ProviderRuntimeConfig;
 }

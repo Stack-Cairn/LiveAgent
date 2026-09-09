@@ -556,10 +556,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         .replace("{accepted}", String(counts.accepted))
         .replace("{rejected}", String(counts.rejected));
     const runtimeModel = createModelFromConfig(
-      providerId,
+      providerConfig.adapterProviderId,
       model,
-      provider.baseUrl.trim(),
-      provider.requestFormat,
+      providerConfig.baseUrl.trim(),
+      providerConfig.requestFormat,
       providerConfig.modelConfig,
     );
 

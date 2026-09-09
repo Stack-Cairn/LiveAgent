@@ -25,7 +25,16 @@ export type SendChatFn = (
 
 export type ModelProviderSource = Pick<
   CustomProvider,
-  "id" | "name" | "type" | "requestFormat" | "activeModels"
+  | "id"
+  | "name"
+  | "type"
+  | "baseUrl"
+  | "isFullUrl"
+  | "requestFormat"
+  | "defaultChatProtocol"
+  | "endpointConfigs"
+  | "models"
+  | "activeModels"
 >;
 
 export type TunnelManagerToolChange = {

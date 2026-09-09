@@ -804,6 +804,35 @@ test("DeepSeek full URL requests normalize legacy endpoints to /responses", asyn
   assert.equal(prepared.headers["x-liveagent-upstream-origin"], "https://relay.example.com");
 });
 
+test("resolved protocol adapter controls auth and proxy routing", async () => {
+  const localLoader = createTsModuleLoader({
+    mocks: {
+      "@liveagent/app/shims/tauriCore": {
+        async invoke(command) {
+          assert.equal(command, "proxy_get_server_info");
+          return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
+        },
+      },
+    },
+  });
+  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const prepared = await localProviders.prepareProviderRequest("codex", {
+    baseUrl: "https://gateway.example/anthropic/v1",
+    isFullUrl: false,
+    adapterProviderId: "claude_code",
+    chatProtocol: "anthropic-messages",
+    apiKey: "secret",
+  });
+
+  assert.equal(
+    prepared.baseUrl,
+    "http://127.0.0.1:18080/proxy/claude_code/anthropic/v1",
+  );
+  assert.equal(prepared.headers["x-api-key"], "secret");
+  assert.equal(prepared.headers.Authorization, undefined);
+  assert.equal(prepared.headers["anthropic-version"], "2023-06-01");
+});
+
 test("DeepSeek relay base URLs append /v1 while official DeepSeek stays at the root", async () => {
   const localLoader = createTsModuleLoader({
     mocks: {

@@ -89,14 +89,15 @@ function buildTextOnlyStreamOptions(params: {
   ) => void;
   onRetryRecovered?: () => void;
 }): StreamOptionsEx {
+  const transportProviderId = params.runtime.adapterProviderId ?? params.providerId;
   const sessionId = normalizeSessionId(params.sessionId);
   const nativeWebSearch =
-    providerSupportsNativeWebSearch(params.providerId, params.model.api, {
+    providerSupportsNativeWebSearch(transportProviderId, params.model.api, {
       baseUrl: params.runtime.baseUrl,
       modelId: params.model.id,
     }) && params.nativeWebSearch;
   const usesOpenAIChatNativeWebSearch =
-    nativeWebSearch && params.providerId === "codex" && params.model.api === "openai-completions";
+    nativeWebSearch && transportProviderId === "codex" && params.model.api === "openai-completions";
   const onRetryStatus = params.onRetryStatus;
   const options: StreamOptionsEx = {
     apiKey: params.runtime.apiKey,
@@ -104,22 +105,22 @@ function buildTextOnlyStreamOptions(params: {
     signal: params.signal,
     sessionId,
     cacheRetention: resolveProviderCacheRetention(
-      params.providerId,
+      transportProviderId,
       params.runtime.promptCachingEnabled,
       params.cacheRetention,
       params.runtime.promptCacheRetention,
     ),
-    metadata: buildProviderRequestMetadata(params.providerId, sessionId),
+    metadata: buildProviderRequestMetadata(transportProviderId, sessionId),
     reasoning:
-      ((params.providerId === "codex" || params.providerId === "xai") &&
+      ((transportProviderId === "codex" || transportProviderId === "xai") &&
         (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
-      (params.providerId === "claude_code" && params.model.api === "anthropic-messages") ||
-      (params.providerId === "gemini" && params.model.api === "google-generative-ai") ||
-      params.providerId === "deepseek"
+      (transportProviderId === "claude_code" && params.model.api === "anthropic-messages") ||
+      (transportProviderId === "gemini" && params.model.api === "google-generative-ai") ||
+      transportProviderId === "deepseek"
         ? toSimpleStreamReasoning(params.runtime.reasoning)
         : undefined,
     deepSeekThinking:
-      params.providerId === "deepseek" && params.runtime.reasoning === "off"
+      transportProviderId === "deepseek" && params.runtime.reasoning === "off"
         ? "disabled"
         : undefined,
     workdir: params.workdir,
@@ -138,7 +139,7 @@ function buildTextOnlyStreamOptions(params: {
     },
   };
   return finalizeProviderStreamOptions({
-    providerId: params.providerId,
+    providerId: transportProviderId,
     baseUrl: params.runtime.baseUrl,
     options,
     context: params.context,
@@ -231,7 +232,7 @@ export async function streamAssistantMessage(params: {
   });
 
   const m = createModelFromConfig(
-    params.providerId,
+    params.runtime.adapterProviderId ?? params.providerId,
     modelId,
     proxyRequest.baseUrl,
     params.runtime.requestFormat,
@@ -241,12 +242,12 @@ export async function streamAssistantMessage(params: {
 
   const shouldProbeHostedSearch =
     Boolean(params.nativeWebSearch) &&
-    providerSupportsNativeWebSearch(params.providerId, m.api, {
+    providerSupportsNativeWebSearch(params.runtime.adapterProviderId ?? params.providerId, m.api, {
       baseUrl: params.runtime.baseUrl,
       modelId: m.id,
     });
   const hostedSearchProbeId = shouldProbeHostedSearch
-    ? createHostedSearchProbeId(params.providerId)
+    ? createHostedSearchProbeId(params.runtime.adapterProviderId ?? params.providerId)
     : undefined;
   const primaryFailoverLabel =
     params.failover?.primary.label ?? `${params.providerId} · ${modelId}`;
@@ -309,7 +310,7 @@ export async function streamAssistantMessage(params: {
         { sessionId: params.sessionId },
       );
       const fallbackModel = createModelFromConfig(
-        fallback.providerId,
+        fallback.runtime.adapterProviderId ?? fallback.providerId,
         fallback.model,
         fallbackProxyRequest.baseUrl,
         fallback.runtime.requestFormat,
@@ -353,7 +354,7 @@ export async function streamAssistantMessage(params: {
     const fallback = failover?.fallbacks[index - 1];
     if (!fallback) return { api: m.api, provider: m.provider, id: m.id };
     const identity = createModelFromConfig(
-      fallback.providerId,
+      fallback.runtime.adapterProviderId ?? fallback.providerId,
       fallback.model,
       fallback.runtime.baseUrl.trim(),
       fallback.runtime.requestFormat,
@@ -607,7 +608,7 @@ export async function completeAssistantMessage(params: {
   });
 
   const m = createModelFromConfig(
-    params.providerId,
+    params.runtime.adapterProviderId ?? params.providerId,
     modelId,
     proxyRequest.baseUrl,
     params.runtime.requestFormat,

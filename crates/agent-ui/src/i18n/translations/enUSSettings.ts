@@ -500,6 +500,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.hideApiKey": "Hide API Key",
   "settings.showApiKey": "Show API Key",
   "settings.requestFormat": "Request Format",
+  "settings.providerDefaultChatProtocol": "Default chat protocol",
+  "settings.providerChatProtocolAuto": "Automatic ({protocol})",
+  "settings.providerDefaultChatProtocolHint":
+    "Models may override this route. Automatic keeps the existing provider type and request-format behavior.",
+  "settings.providerProtocolEndpoints": "Protocol endpoint overrides",
+  "settings.providerProtocolEndpointPlaceholder": "Leave blank to use the primary Base URL",
+  "settings.providerProtocolEndpointsHint":
+    "Only set a separate API root when a protocol needs one. The provider still owns the API key and custom headers.",
   "settings.reasoning": "Reasoning",
   "settings.reasoning.off": "Off",
   "settings.reasoning.minimal": "Minimal",
@@ -651,6 +659,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesTextImage": "Text and images",
   "settings.modelInputModalitiesHint":
     "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
+  "settings.modelChatProtocol": "Chat protocol",
+  "settings.modelChatProtocolInherit": "Inherit provider ({protocol})",
+  "settings.modelChatProtocolHint":
+    "Override only when one provider serves different models over different protocols. Routing controls auth, payloads, and response parsing.",
   "settings.modelModalityImage": "Supports image input",
   "settings.modelModalityAudio": "Supports audio input",
   "settings.modelModalityVideo": "Supports video input",

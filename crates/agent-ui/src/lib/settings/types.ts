@@ -8,6 +8,36 @@ export type ExecutionMode = "text" | "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
 
+/**
+ * Chat wire protocols supported by the runtime adapter registry. ProviderId is
+ * the saved connection/category; this value is the protocol used for one
+ * request. Keeping them separate lets a gateway expose models over different
+ * protocols without pretending to be several providers.
+ */
+export const PROVIDER_CHAT_PROTOCOLS = [
+  "anthropic-messages",
+  "openai-completions",
+  "openai-responses",
+  "google-generative-ai",
+  "deepseek-responses",
+] as const;
+
+export type ProviderChatProtocol = (typeof PROVIDER_CHAT_PROTOCOLS)[number];
+
+export type ProviderEndpointConfig = {
+  /** Protocol-specific base URL. Missing entries reuse the provider baseUrl. */
+  baseUrl: string;
+};
+
+export type ResolvedProviderChatRoute = {
+  protocol: ProviderChatProtocol;
+  /** Existing adapter family used for auth, payload policy, and model creation. */
+  adapterProviderId: ProviderId;
+  baseUrl: string;
+  isFullUrl: boolean;
+  requestFormat?: CodexRequestFormat;
+};
+
 export type ReasoningLevel = "off" | ThinkingLevel;
 
 export type McpTransport = "stdio" | "http" | "sse";
@@ -454,6 +484,8 @@ export type ProviderModelConfig = {
    * 读取前须经 normalizeInputModalities 归一化。
    */
   inputModalities?: ModelInputModalitiesOverride;
+  /** Per-model wire override. Missing means inherit the provider default route. */
+  chatProtocol?: ProviderChatProtocol;
 };
 
 export type ChatRuntimeControls = {
@@ -602,6 +634,10 @@ export type CustomProvider = {
   modelOrder?: string[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
+  /** Default wire override. Missing preserves the legacy provider-type routing. */
+  defaultChatProtocol?: ProviderChatProtocol;
+  /** Optional base URL overrides keyed by wire protocol. */
+  endpointConfigs?: Partial<Record<ProviderChatProtocol, ProviderEndpointConfig>>;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
   /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */
@@ -726,6 +762,14 @@ export type AppSettings = {
 export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {
   "openai-completions": "OpenAI-Completions",
   "openai-responses": "Responses API",
+};
+
+export const PROVIDER_CHAT_PROTOCOL_LABELS: Record<ProviderChatProtocol, string> = {
+  "anthropic-messages": "Anthropic Messages",
+  "openai-completions": "OpenAI Chat Completions",
+  "openai-responses": "OpenAI Responses",
+  "google-generative-ai": "Google Generate Content",
+  "deepseek-responses": "DeepSeek Responses",
 };
 
 export const PROMPT_CACHE_HINT_MODES = [

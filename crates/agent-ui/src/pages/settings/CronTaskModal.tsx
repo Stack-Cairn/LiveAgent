@@ -4,6 +4,7 @@ import {
   getChatRuntimeReasoningLevelsForProvider,
   isAgentExecutionMode,
   isThinkingAlwaysOnForModel,
+  resolveProviderChatRoute,
 } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,
@@ -131,12 +132,14 @@ function getCronReasoningLevels(
     : undefined;
   if (!selectedModel || !provider) return [...CRON_REASONING_LEVELS];
 
+  const route = resolveProviderChatRoute(provider, selectedModel.model);
+
   const supportedLevels = getChatRuntimeReasoningLevelsForProvider({
-    providerId: provider.type,
-    requestFormat: provider.requestFormat,
+    providerId: route.adapterProviderId,
+    requestFormat: route.requestFormat,
     modelId: selectedModel.model,
   }).filter(isCronReasoningLevel);
-  const thinkingAlwaysOn = isThinkingAlwaysOnForModel(provider.type, selectedModel.model);
+  const thinkingAlwaysOn = isThinkingAlwaysOnForModel(route.adapterProviderId, selectedModel.model);
 
   return thinkingAlwaysOn ? supportedLevels : ["off", ...supportedLevels];
 }

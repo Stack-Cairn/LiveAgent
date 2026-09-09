@@ -150,6 +150,7 @@ import {
   parseSelectedModelJson,
   resolveEffectivePromptSettings,
   resolveEffectiveTheme,
+  resolveProviderChatRoute,
   resolveWorkspaceResources,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
@@ -3294,21 +3295,25 @@ export function ChatPage(props: ChatPageProps) {
     const paneProvider = paneSelectedModel
       ? settings.customProviders.find((entry) => entry.id === paneSelectedModel.customProviderId)
       : undefined;
+    const paneRoute =
+      paneProvider && paneSelectedModel
+        ? resolveProviderChatRoute(paneProvider, paneSelectedModel.model)
+        : undefined;
     const paneRuntimeControls = normalizeChatRuntimeControlsForProvider(
       settings.chatRuntimeControls,
       {
-        providerId: paneProvider?.type,
-        requestFormat: paneProvider?.requestFormat,
+        providerId: paneRoute?.adapterProviderId,
+        requestFormat: paneRoute?.requestFormat,
         modelId: paneSelectedModel?.model,
       },
     );
     const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({
-      providerId: paneProvider?.type,
-      requestFormat: paneProvider?.requestFormat,
+      providerId: paneRoute?.adapterProviderId,
+      requestFormat: paneRoute?.requestFormat,
       modelId: paneSelectedModel?.model,
     });
     const paneThinkingAlwaysOn = isThinkingAlwaysOnForModel(
-      paneProvider?.type ?? "claude_code",
+      paneRoute?.adapterProviderId ?? "claude_code",
       paneSelectedModel?.model,
     );
     const paneModelLabel = (() => {

@@ -4,6 +4,7 @@ import type {
   CodexRequestFormat,
   CustomProvider,
   PromptCacheHintMode,
+  ProviderChatProtocol,
   ProviderId,
   ProviderModelConfig,
   ProviderRetryPolicy,
@@ -28,6 +29,9 @@ export type ProviderRuntimeConfig = {
   readonly [PROVIDER_RUNTIME_CONFIG_BRAND]: true;
   baseUrl: string;
   isFullUrl: boolean;
+  /** Saved provider category remains caller identity; this is the resolved transport adapter. */
+  adapterProviderId: ProviderId;
+  chatProtocol: ProviderChatProtocol;
   apiKey: string;
   customHeaders?: CustomProvider["customHeaders"];
   requestFormat?: CodexRequestFormat;

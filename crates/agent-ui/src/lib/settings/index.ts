@@ -84,12 +84,14 @@ import type {
   ModelLimitsSource,
   ProjectPromptStrategy,
   PromptCacheHintMode,
+  ProviderChatProtocol,
   ProviderFailoverSettings,
   ProviderId,
   ProviderModelConfig,
   ProviderRetryPolicy,
   ReasoningLevel,
   RemoteSettings,
+  ResolvedProviderChatRoute,
   RightDockFileTreeState,
   RightDockFileTreeStatePatch,
   RightDockProjectState,
@@ -122,6 +124,7 @@ import {
   getDefaultUsageQueryConfig,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
+  PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_TOOL_KINDS,
@@ -210,6 +213,80 @@ function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undef
     default:
       return undefined;
   }
+}
+
+export function normalizeProviderChatProtocol(input: unknown): ProviderChatProtocol | undefined {
+  return PROVIDER_CHAT_PROTOCOLS.find((protocol) => protocol === input);
+}
+
+export function getLegacyProviderChatProtocol(
+  providerId: ProviderId,
+  requestFormat?: CodexRequestFormat,
+): ProviderChatProtocol {
+  if (providerId === "claude_code") return "anthropic-messages";
+  if (providerId === "gemini") return "google-generative-ai";
+  if (providerId === "deepseek") return "deepseek-responses";
+  if (providerId === "xai") return "openai-responses";
+  return requestFormat === "openai-completions" ? "openai-completions" : "openai-responses";
+}
+
+export function getProviderChatProtocolAdapter(
+  protocol: ProviderChatProtocol,
+  savedProviderId: ProviderId,
+): ProviderId {
+  switch (protocol) {
+    case "anthropic-messages":
+      return "claude_code";
+    case "google-generative-ai":
+      return "gemini";
+    case "deepseek-responses":
+      return "deepseek";
+    case "openai-completions":
+      return "codex";
+    case "openai-responses":
+      // Preserve xAI's Responses-specific payload/search behavior on its own
+      // provider tab; generic multiplexing gateways use the Codex adapter.
+      return savedProviderId === "xai" ? "xai" : "codex";
+  }
+}
+
+/**
+ * Resolve the one route used by a model. Precedence is model override >
+ * provider default > legacy provider type/requestFormat. Endpoint configs only
+ * replace connection details; they never silently change the protocol.
+ */
+export function resolveProviderChatRoute(
+  provider: Pick<
+    CustomProvider,
+    | "type"
+    | "baseUrl"
+    | "isFullUrl"
+    | "requestFormat"
+    | "models"
+    | "defaultChatProtocol"
+    | "endpointConfigs"
+  >,
+  modelId: string,
+): ResolvedProviderChatRoute {
+  // Some gateway call sites can still receive a pre-normalization provider
+  // snapshot (and older snapshots did not require `models`). Keep this
+  // resolver tolerant at that boundary; normalization will fill the array on
+  // the next settings round-trip.
+  const modelProtocol = provider.models?.find((model) => model.id === modelId)?.chatProtocol;
+  const legacyProtocol = getLegacyProviderChatProtocol(provider.type, provider.requestFormat);
+  const protocol = modelProtocol ?? provider.defaultChatProtocol ?? legacyProtocol;
+  const endpoint = provider.endpointConfigs?.[protocol];
+  return {
+    protocol,
+    adapterProviderId: getProviderChatProtocolAdapter(protocol, provider.type),
+    baseUrl: endpoint?.baseUrl || provider.baseUrl,
+    // Protocol-specific endpoint overrides are API roots. Full-URL mode remains
+    // a property of the legacy primary connection only.
+    isFullUrl: endpoint || protocol !== legacyProtocol ? false : provider.isFullUrl,
+    ...(protocol === "openai-completions" || protocol === "openai-responses"
+      ? { requestFormat: protocol }
+      : {}),
+  };
 }
 
 function normalizePromptCacheHintMode(input: unknown): PromptCacheHintMode | undefined {
@@ -867,6 +944,7 @@ export function normalizeProviderModelConfig(
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
+  const chatProtocol = normalizeProviderChatProtocol(obj.chatProtocol);
   return {
     id,
     ...(ownedBy ? { ownedBy } : {}),
@@ -878,6 +956,7 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
+    ...(chatProtocol ? { chatProtocol } : {}),
   };
 }
 
@@ -1099,6 +1178,25 @@ export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolic
   return undefined;
 }
 
+function normalizeProviderEndpointConfigs(
+  input: unknown,
+): CustomProvider["endpointConfigs"] | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const configs: NonNullable<CustomProvider["endpointConfigs"]> = {};
+  for (const protocol of PROVIDER_CHAT_PROTOCOLS) {
+    const raw = source[protocol];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const baseUrl = normalizeBaseUrl(
+      typeof (raw as Record<string, unknown>).baseUrl === "string"
+        ? ((raw as Record<string, unknown>).baseUrl as string)
+        : "",
+    );
+    if (baseUrl) configs[protocol] = { baseUrl };
+  }
+  return Object.keys(configs).length > 0 ? configs : undefined;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
@@ -1122,6 +1220,8 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? (normalizePromptCacheHintMode(obj.promptCacheHintMode) ??
         (obj.promptCachingEnabled === false ? "none" : "auto"))
       : undefined;
+  const defaultChatProtocol = normalizeProviderChatProtocol(obj.defaultChatProtocol);
+  const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs);
 
   return {
     id,
@@ -1143,6 +1243,8 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       validModelIds.has(modelId),
     ),
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
+    ...(defaultChatProtocol ? { defaultChatProtocol } : {}),
+    ...(endpointConfigs ? { endpointConfigs } : {}),
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
     // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。

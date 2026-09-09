@@ -13,6 +13,7 @@ import {
   normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
+  resolveProviderChatRoute,
   type SelectedModel,
   serializeSelectedModelJson,
   setSelectedModel,
@@ -91,6 +92,10 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     ? settings.customProviders.find((item) => item.id === activeSelectedModel.customProviderId)
     : undefined;
   const currentChatModelId = activeSelectedModel?.model;
+  const currentChatRoute =
+    currentChatProvider && currentChatModelId
+      ? resolveProviderChatRoute(currentChatProvider, currentChatModelId)
+      : undefined;
 
   const handleSelectModel = useCallback(
     (selection: SelectedModel) => {
@@ -144,11 +149,11 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
 
   const chatRuntimeReasoningParams = useMemo(
     () => ({
-      providerId: currentChatProvider?.type,
-      requestFormat: currentChatProvider?.requestFormat,
+      providerId: currentChatRoute?.adapterProviderId,
+      requestFormat: currentChatRoute?.requestFormat,
       modelId: currentChatModelId,
     }),
-    [currentChatModelId, currentChatProvider?.requestFormat, currentChatProvider?.type],
+    [currentChatModelId, currentChatRoute?.adapterProviderId, currentChatRoute?.requestFormat],
   );
   const chatRuntimeReasoningOptions = useMemo(
     () => getChatRuntimeReasoningLevelsForProvider(chatRuntimeReasoningParams),
@@ -156,8 +161,11 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
   );
   const chatRuntimeThinkingAlwaysOn = useMemo(
     () =>
-      isThinkingAlwaysOnForModel(currentChatProvider?.type ?? "claude_code", currentChatModelId),
-    [currentChatModelId, currentChatProvider?.type],
+      isThinkingAlwaysOnForModel(
+        currentChatRoute?.adapterProviderId ?? "claude_code",
+        currentChatModelId,
+      ),
+    [currentChatModelId, currentChatRoute?.adapterProviderId],
   );
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>

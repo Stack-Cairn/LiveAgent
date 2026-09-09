@@ -479,6 +479,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hideApiKey": "隐藏 API Key",
   "settings.showApiKey": "显示 API Key",
   "settings.requestFormat": "请求格式",
+  "settings.providerDefaultChatProtocol": "默认聊天协议",
+  "settings.providerChatProtocolAuto": "自动（{protocol}）",
+  "settings.providerDefaultChatProtocolHint":
+    "模型可单独覆盖；未覆盖时使用这里的协议。自动模式保持现有供应商类型与请求格式行为。",
+  "settings.providerProtocolEndpoints": "协议端点覆盖",
+  "settings.providerProtocolEndpointPlaceholder": "留空则使用主 Base URL",
+  "settings.providerProtocolEndpointsHint":
+    "只为需要独立 API 根地址的协议填写。API Key 与自定义请求头仍由该供应商统一管理。",
   "settings.reasoning": "思考强度",
   "settings.reasoning.off": "关闭",
   "settings.reasoning.minimal": "最低",
@@ -625,6 +633,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesTextImage": "文本与图片",
   "settings.modelInputModalitiesHint":
     "默认按模型名称和内置目录推断；仅在供应商能力与推断不一致时手动覆盖。",
+  "settings.modelChatProtocol": "聊天协议",
+  "settings.modelChatProtocolInherit": "继承供应商（{protocol}）",
+  "settings.modelChatProtocolHint":
+    "仅在同一供应商按模型暴露不同协议时覆盖；路由会影响鉴权、请求体和响应解析。",
   "settings.modelModalityImage": "支持图片输入",
   "settings.modelModalityAudio": "支持音频输入",
   "settings.modelModalityVideo": "支持视频输入",

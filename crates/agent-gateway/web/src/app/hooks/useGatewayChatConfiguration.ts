@@ -14,6 +14,7 @@ import {
   isAgentDevMode,
   isThinkingAlwaysOnForModel,
   normalizeChatRuntimeControlsForProvider,
+  resolveProviderChatRoute,
   resolveWorkspaceResources,
   type SelectedModel,
   setSelectedModel,
@@ -62,34 +63,45 @@ export function useGatewayChatConfiguration({
       (item) => item.id === activeSelectedModel.customProviderId,
     );
   }, [activeSelectedModel, settings.customProviders]);
+  const currentChatRoute = useMemo(
+    () =>
+      currentChatProvider && activeSelectedModel
+        ? resolveProviderChatRoute(currentChatProvider, activeSelectedModel.model)
+        : undefined,
+    [activeSelectedModel, currentChatProvider],
+  );
   const chatRuntimeReasoningOptions = useMemo(
     () =>
       getChatRuntimeReasoningLevelsForProvider({
-        providerId: currentChatProvider?.type,
-        requestFormat: currentChatProvider?.requestFormat,
-        modelId: activeSelectedModel?.model,
-      }),
-    [activeSelectedModel?.model, currentChatProvider?.requestFormat, currentChatProvider?.type],
-  );
-  const chatRuntimeThinkingAlwaysOn = useMemo(
-    () =>
-      isThinkingAlwaysOnForModel(
-        currentChatProvider?.type ?? "claude_code",
-        activeSelectedModel?.model,
-      ),
-    [activeSelectedModel?.model, currentChatProvider?.type],
-  );
-  const chatRuntimeControlsForCurrentProvider = useMemo(
-    () =>
-      normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
-        providerId: currentChatProvider?.type,
-        requestFormat: currentChatProvider?.requestFormat,
+        providerId: currentChatRoute?.adapterProviderId,
+        requestFormat: currentChatRoute?.requestFormat,
         modelId: activeSelectedModel?.model,
       }),
     [
       activeSelectedModel?.model,
-      currentChatProvider?.requestFormat,
-      currentChatProvider?.type,
+      currentChatRoute?.adapterProviderId,
+      currentChatRoute?.requestFormat,
+    ],
+  );
+  const chatRuntimeThinkingAlwaysOn = useMemo(
+    () =>
+      isThinkingAlwaysOnForModel(
+        currentChatRoute?.adapterProviderId ?? "claude_code",
+        activeSelectedModel?.model,
+      ),
+    [activeSelectedModel?.model, currentChatRoute?.adapterProviderId],
+  );
+  const chatRuntimeControlsForCurrentProvider = useMemo(
+    () =>
+      normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
+        providerId: currentChatRoute?.adapterProviderId,
+        requestFormat: currentChatRoute?.requestFormat,
+        modelId: activeSelectedModel?.model,
+      }),
+    [
+      activeSelectedModel?.model,
+      currentChatRoute?.adapterProviderId,
+      currentChatRoute?.requestFormat,
       settings.chatRuntimeControls,
     ],
   );
@@ -98,16 +110,16 @@ export function useGatewayChatConfiguration({
       setSettings((prev) => ({
         ...prev,
         chatRuntimeControls: updateChatRuntimeControlsForProvider(prev.chatRuntimeControls, patch, {
-          providerId: currentChatProvider?.type,
-          requestFormat: currentChatProvider?.requestFormat,
+          providerId: currentChatRoute?.adapterProviderId,
+          requestFormat: currentChatRoute?.requestFormat,
           modelId: activeSelectedModel?.model,
         }),
       }));
     },
     [
       activeSelectedModel?.model,
-      currentChatProvider?.requestFormat,
-      currentChatProvider?.type,
+      currentChatRoute?.adapterProviderId,
+      currentChatRoute?.requestFormat,
       setSettings,
     ],
   );

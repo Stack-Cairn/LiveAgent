@@ -7,6 +7,7 @@ import {
   type CustomProvider,
   normalizeChatRuntimeControlsForProvider,
   resolvePromptClarifyModel,
+  resolveProviderChatRoute,
 } from "@/lib/settings";
 
 /** clarify.prompt_turn 的最小 API 面（GatewayWebSocketRpcClient 子集）。 */
@@ -45,6 +46,7 @@ export async function executeClarifyPromptTurn(
   if (!provider || !model) {
     throw new Error("no active model selected");
   }
+  const route = resolveProviderChatRoute(provider, model);
   const result = await api.clarifyPromptTurn(
     {
       messages,
@@ -52,8 +54,8 @@ export async function executeClarifyPromptTurn(
       model,
       runtimeControls: override
         ? normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
-            providerId: provider.type,
-            requestFormat: provider.requestFormat,
+            providerId: route.adapterProviderId,
+            requestFormat: route.requestFormat,
             modelId: model,
           })
         : fallback.runtimeControls,

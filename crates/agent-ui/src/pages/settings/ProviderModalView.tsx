@@ -1,8 +1,7 @@
 import { getUsagePlanDisplay } from "@liveagent/app/lib/providers/usageQuery";
 import {
-  CODEX_REQUEST_FORMAT_LABELS,
-  type CodexRequestFormat,
   PROMPT_CACHE_HINT_MODES,
+  PROVIDER_CHAT_PROTOCOL_LABELS,
   type PromptCacheHintMode,
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
@@ -71,6 +70,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   applyUsageQueryModePreset,
   formatTokenCount,
+  providerSupportsModelInputModalitiesOverride,
   setUsageQueryScript,
   USAGE_QUERY_CODING_PLAN_PROVIDERS,
 } from "@liveagent/ui/pages/settings/providerUtils";
@@ -108,19 +108,24 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     apiKeyIsRedactedDisplay,
     applyHeaderSuggestion,
     applyCliIdentityHeaders,
+    automaticChatProtocol,
     baseUrl,
     canOverrideModelInputModalities,
     canSaveEditingModel,
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
+    defaultChatProtocol,
     draggingModelId,
     editingModel,
     editingModelContextWindow,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
+    effectiveDefaultChatProtocol,
+    endpointConfigs,
     fetchError,
     fetchingModels,
+    getModelAdapterProviderId,
     focusCustomHeader,
     getModelReorderProps,
     handleAddModel,
@@ -160,17 +165,18 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     promptCacheHintMode,
     promptCacheRetention,
     promptCachingEnabled,
+    providerChatProtocols,
     providerType,
     removeCustomHeader,
     removeModel,
     renderModelDragHandle,
     requestClose,
-    requestFormat,
     saveInlineModelSettings,
     setActivePanel,
     setAddingModel,
     setApiKey,
     setBaseUrl,
+    setDefaultChatProtocol,
     setEditingModel,
     setEditingModelInputModalitiesMode,
     setHeaderImportError,
@@ -187,7 +193,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setPromptCacheHintMode,
     setPromptCacheRetention,
     setPromptCachingEnabled,
-    setRequestFormat,
     setShowApiKey,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,
@@ -205,6 +210,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     toggleVisibleModelsActive,
     typeLabel,
     updateCustomHeader,
+    updateEndpointBaseUrl,
     usageQuery,
     usageQueryConfirmDialog,
     usageQueryTest,
@@ -428,26 +434,69 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   </div>
                 ) : null}
 
-                {providerType === "codex" ? (
-                  <div className="mt-4 space-y-2">
-                    <Label className="text-muted-foreground">{t("settings.requestFormat")}</Label>
-                    <Select
-                      value={requestFormat}
-                      onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
-                    >
-                      <SelectTrigger className="h-8 w-full shadow-none">
-                        <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
+                <div className="mt-4 space-y-2">
+                  <Label className="text-muted-foreground">
+                    {t("settings.providerDefaultChatProtocol")}
+                  </Label>
+                  <Select
+                    value={defaultChatProtocol}
+                    onValueChange={(value) =>
+                      setDefaultChatProtocol(value as typeof defaultChatProtocol)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-full shadow-none">
+                      <SelectValue>
+                        {defaultChatProtocol === "auto"
+                          ? t("settings.providerChatProtocolAuto").replace(
+                              "{protocol}",
+                              PROVIDER_CHAT_PROTOCOL_LABELS[effectiveDefaultChatProtocol],
+                            )
+                          : PROVIDER_CHAT_PROTOCOL_LABELS[defaultChatProtocol]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        {t("settings.providerChatProtocolAuto").replace(
+                          "{protocol}",
+                          PROVIDER_CHAT_PROTOCOL_LABELS[automaticChatProtocol],
+                        )}
+                      </SelectItem>
+                      {providerChatProtocols.map((protocol) => (
+                        <SelectItem key={protocol} value={protocol}>
+                          {PROVIDER_CHAT_PROTOCOL_LABELS[protocol]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {t("settings.providerDefaultChatProtocolHint")}
+                  </p>
+                  <details className="rounded-lg border bg-muted/10 px-3 py-2">
+                    <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+                      {t("settings.providerProtocolEndpoints")}
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      {providerChatProtocols.map((protocol) => (
+                        <div key={protocol} className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            {PROVIDER_CHAT_PROTOCOL_LABELS[protocol]}
+                          </Label>
+                          <Input
+                            className="h-8 shadow-none"
+                            value={endpointConfigs[protocol]?.baseUrl ?? ""}
+                            placeholder={t("settings.providerProtocolEndpointPlaceholder")}
+                            onChange={(event) =>
+                              updateEndpointBaseUrl(protocol, event.currentTarget.value)
+                            }
+                          />
+                        </div>
+                      ))}
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        {t("settings.providerProtocolEndpointsHint")}
+                      </p>
+                    </div>
+                  </details>
+                </div>
 
                 <div className="mt-6 text-sm font-semibold">{t("settings.models")}</div>
                 <div className="mt-3 overflow-hidden rounded-xl border">
@@ -577,9 +626,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         const newModelPhase = newModelPhases.get(model.id);
                         // 用户覆盖（仅表达 text/image 门控、仅部分供应商生效）优先于
                         // 目录快照：覆盖存在时图标要跟随覆盖，避免与编辑面板矛盾。
+                        const modelAdapterProviderId = getModelAdapterProviderId(model);
                         const inputModalities: readonly CatalogInputModality[] | undefined =
-                          (canOverrideModelInputModalities ? model.inputModalities : undefined) ??
-                          resolveModelInputModalities(providerType, model.id);
+                          (providerSupportsModelInputModalitiesOverride(modelAdapterProviderId)
+                            ? model.inputModalities
+                            : undefined) ??
+                          resolveModelInputModalities(modelAdapterProviderId, model.id);
                         const modalityIcons = MODEL_MODALITY_ICONS.filter(({ modality }) =>
                           inputModalities?.includes(modality),
                         );
@@ -615,6 +667,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                       )}
                                     >
                                       {t("settings.newModelBadge")}
+                                    </span>
+                                  ) : null}
+                                  {model.chatProtocol ? (
+                                    <span className="shrink-0 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                                      {PROVIDER_CHAT_PROTOCOL_LABELS[model.chatProtocol]}
                                     </span>
                                   ) : null}
                                 </div>
@@ -775,6 +832,63 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                       </p>
                                     </div>
                                   ) : null}
+                                  <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
+                                    <Label className="text-muted-foreground">
+                                      {t("settings.modelChatProtocol")}
+                                    </Label>
+                                    <Select
+                                      value={editingModel.model.chatProtocol ?? "inherit"}
+                                      onValueChange={(value) =>
+                                        setEditingModel((prev) =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                model: {
+                                                  ...prev.model,
+                                                  chatProtocol:
+                                                    value === "inherit"
+                                                      ? undefined
+                                                      : (value as keyof typeof PROVIDER_CHAT_PROTOCOL_LABELS),
+                                                },
+                                              }
+                                            : prev,
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-8 shadow-none">
+                                        <SelectValue>
+                                          {editingModel.model.chatProtocol
+                                            ? PROVIDER_CHAT_PROTOCOL_LABELS[
+                                                editingModel.model.chatProtocol
+                                              ]
+                                            : t("settings.modelChatProtocolInherit").replace(
+                                                "{protocol}",
+                                                PROVIDER_CHAT_PROTOCOL_LABELS[
+                                                  effectiveDefaultChatProtocol
+                                                ],
+                                              )}
+                                        </SelectValue>
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="inherit">
+                                          {t("settings.modelChatProtocolInherit").replace(
+                                            "{protocol}",
+                                            PROVIDER_CHAT_PROTOCOL_LABELS[
+                                              effectiveDefaultChatProtocol
+                                            ],
+                                          )}
+                                        </SelectItem>
+                                        {providerChatProtocols.map((protocol) => (
+                                          <SelectItem key={protocol} value={protocol}>
+                                            {PROVIDER_CHAT_PROTOCOL_LABELS[protocol]}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                      {t("settings.modelChatProtocolHint")}
+                                    </p>
+                                  </div>
                                   {providerType === "codex" ? (
                                     <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
                                       <Label className="text-muted-foreground">

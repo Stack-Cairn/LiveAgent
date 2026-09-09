@@ -93,18 +93,19 @@ export async function prepareProviderRequest(
   runtime: ProviderRuntimeConfig,
   options?: { sessionId?: string },
 ): Promise<PreparedProxyRequest> {
+  const transportProviderId = runtime.adapterProviderId ?? providerId;
   const upstreamBaseUrl =
-    providerId === "deepseek"
+    transportProviderId === "deepseek"
       ? runtime.isFullUrl
         ? normalizeDeepSeekResponsesEndpoint(runtime.baseUrl)
         : normalizeDeepSeekResponsesBaseUrl(runtime.baseUrl)
       : runtime.baseUrl;
   return prepareProxyRequest(
-    providerId,
+    transportProviderId,
     upstreamBaseUrl.trim(),
     mergeCustomHeaders(
       buildProviderRequestHeaders(
-        providerId,
+        transportProviderId,
         runtime.apiKey,
         options?.sessionId,
         runtime.requestFormat,

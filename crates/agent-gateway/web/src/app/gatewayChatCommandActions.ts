@@ -23,6 +23,7 @@ import type { ChatQueueSnapshot } from "@/lib/gatewayTypes";
 import {
   type AppSettings,
   normalizeChatRuntimeControlsForProvider,
+  resolveProviderChatRoute,
   type SelectedModel,
 } from "@/lib/settings";
 
@@ -94,9 +95,13 @@ export function resolveConversationRuntimeControls(input: {
   const provider = input.activeProviders.find(
     (entry) => entry.id === input.selectedModel?.customProviderId,
   );
+  const route =
+    provider && input.selectedModel
+      ? resolveProviderChatRoute(provider, input.selectedModel.model)
+      : undefined;
   return normalizeChatRuntimeControlsForProvider(input.runtimeControls, {
-    providerId: provider?.type,
-    requestFormat: provider?.requestFormat,
+    providerId: route?.adapterProviderId,
+    requestFormat: route?.requestFormat,
     modelId: input.selectedModel?.model,
   });
 }
