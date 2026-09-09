@@ -123,18 +123,16 @@ func (c *browserConn) serve() {
 	defer observability.Usage.V2BrowserConnectionsActive.Add(-1)
 
 	for {
-		frame, ok := c.readFrame()
+		frame, denied, ok := c.readFrame()
 		if !ok {
 			return
 		}
 		c.core.TouchInboundActivity()
 
-		// 入站限速：超限丢帧回错，连续违规判定失控客户端、关闭连接。
-		if allowed, exceeded := c.rateLimiter.Allow(); !allowed {
-			if exceeded {
-				return
-			}
-			_ = c.sendLocalError(frame.GetRequestId(), "too many requests")
+		// 入站限速已在 readFrame 内、反序列化前计数（文本帧同罪）；被丢弃的帧
+		// 无 request 上下文，回无关联 id 的本地错误，连续违规由 readFrame 判死。
+		if denied {
+			_ = c.sendLocalError("", "too many requests")
 			continue
 		}
 
@@ -168,29 +166,42 @@ func (c *browserConn) serve() {
 }
 
 // readFrame 读取并解码一帧；解码失败说明帧流已破坏，直接关闭连接。
-func (c *browserConn) readFrame() (*gatewayv2.WebClientFrame, bool) {
+// 限速在每次 ReadMessage 成功后、proto 反序列化前立即计数：文本帧与大型
+// 二进制帧同样消耗令牌——旧实现把 Allow 放在反序列化之后且文本帧直接
+// continue，洪泛文本帧可零成本绕过限速，大帧的解析 CPU 也无法被约束。
+// denied=true 表示该帧在解析前被限速丢弃、连接仍存活；ok=false 表示连接
+// 应关闭（读错误 / 解码失败 / 连续违规超阈值判定失控客户端）。
+func (c *browserConn) readFrame() (frame *gatewayv2.WebClientFrame, denied bool, ok bool) {
 	for {
 		messageType, data, err := c.conn.ReadMessage()
 		if err != nil {
-			return nil, false
+			return nil, false, false
+		}
+		if allowed, exceeded := c.rateLimiter.Allow(); !allowed {
+			if exceeded {
+				return nil, false, false
+			}
+			return nil, true, true
 		}
 		if messageType != websocket.BinaryMessage {
-			// v2 链路上文本帧无意义；容忍并忽略（仍计入存活）。
+			// v2 链路上文本帧无意义；计入限速（上方）后忽略（仍计入存活）。
 			c.core.TouchInboundActivity()
 			continue
 		}
-		var frame gatewayv2.WebClientFrame
-		if err := proto.Unmarshal(data, &frame); err != nil {
-			return nil, false
+		var decoded gatewayv2.WebClientFrame
+		if err := proto.Unmarshal(data, &decoded); err != nil {
+			return nil, false, false
 		}
-		return &frame, true
+		return &decoded, false, true
 	}
 }
 
 // handshake 处理首帧 hello；失败时写出失败应答并关闭。
 func (c *browserConn) handshake() bool {
-	frame, ok := c.readFrame()
-	if !ok {
+	// 首帧即被限速（前置洪泛耗尽突发额度）说明对端行为异常，直接关闭；
+	// 正常客户端的 hello 是第一帧，不会命中限速。
+	frame, denied, ok := c.readFrame()
+	if !ok || denied {
 		return false
 	}
 	hello := frame.GetHello()

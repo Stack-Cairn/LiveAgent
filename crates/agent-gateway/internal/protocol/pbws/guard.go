@@ -84,7 +84,9 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
-		action := strings.TrimSpace(payload.GitRequest.GetAction())
+		// 大小写归一:桌面侧对 action 做 to_ascii_lowercase 后执行,若此处不归一,
+		// CLONE_START/Push 等变体可绕过写操作门控(判为读操作)却在桌面端执行真实写操作。
+		action := strings.ToLower(strings.TrimSpace(payload.GitRequest.GetAction()))
 		if gitActionIsWrite(action) && !sm.WebGitEnabled() {
 			return errors.New("web git is disabled in desktop Remote settings")
 		}

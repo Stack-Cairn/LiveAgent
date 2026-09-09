@@ -262,6 +262,47 @@ test("subscribeEvents forwards history events normalized and bridges activity di
   assert.equal(state.historyListeners.size, 0);
 });
 
+test("subscribeEvents skips upserts without a conversation object instead of crashing", () => {
+  const { api, state, emitHistory } = createFakeApi();
+  const activityStore = createActivityStore();
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore,
+    getProtectedConversationIds: () => [],
+  });
+
+  const events = [];
+  backend.subscribeEvents((event) => events.push(event));
+
+  // 网关合法路径可发出不带 conversation 的 upsert(会话隔离/迁移,adapters
+  // 不生成该键);此前 normalizeGatewayConversationSummary(undefined) 抛
+  // TypeError,中断 emitHistory 对后续监听者的投递。修复后该帧被跳过,
+  // 后续事件照常到达。
+  emitHistory({ kind: "upsert", conversation_id: "conv-a" });
+  assert.deepEqual(events, [], "upsert without conversation must be skipped");
+
+  emitHistory({
+    kind: "upsert",
+    conversation_id: "c1",
+    conversation: summary("c1", { updated_at: SECONDS + 9 }),
+  });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, "upsert");
+  assert.equal(events[0].conversationId, "c1");
+
+  // 第二个监听者注册在异常帧之后:不得被先行抛出的异常饿死。
+  const second = [];
+  backend.subscribeEvents((event) => second.push(event));
+  emitHistory({
+    kind: "upsert",
+    conversation_id: "c2",
+    conversation: summary("c2"),
+  });
+  assert.equal(second.length, 1);
+  assert.equal(second[0].conversationId, "c2");
+  assert.equal(events.length, 2);
+});
+
 test("subscribeEvents seeds the already-running set on attach", () => {
   const { api } = createFakeApi();
   const activityStore = createActivityStore();
