@@ -30,7 +30,7 @@ type SetMcpSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
 
 function ConfigurationCount(props: { count: number; label: string }) {
   return (
-    <span className="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-[10px] text-muted-foreground ring-1 ring-border/60">
+    <span className="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-10px text-muted-foreground ring-1 ring-border/60">
       <span className="font-semibold tabular-nums text-foreground">{props.count}</span>
       <span>{props.label}</span>
     </span>
@@ -117,7 +117,7 @@ function OauthControls(props: { server: McpServerConfig }) {
     <span className="inline-flex items-center gap-1">
       <Badge
         variant={badgeVariant}
-        className="h-5 px-1.5 text-[10px]"
+        className="h-5 px-1.5 text-10px"
         title={
           error ??
           (isWebui
@@ -135,7 +135,7 @@ function OauthControls(props: { server: McpServerConfig }) {
             type="button"
             variant="outline"
             size="sm"
-            className="h-5 rounded-full px-2 text-[10px]"
+            className="h-5 rounded-full px-2 text-10px"
             disabled={busy}
             onClick={() => void handleConnect()}
           >
@@ -146,7 +146,7 @@ function OauthControls(props: { server: McpServerConfig }) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-5 rounded-full px-2 text-[10px] text-muted-foreground"
+              className="h-5 rounded-full px-2 text-10px text-muted-foreground"
               disabled={busy}
               onClick={() => void handleDisconnect()}
             >
@@ -228,7 +228,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
             <SearchHighlight
               text={displayName}
               query={searchQuery}
-              className="text-[13px] font-semibold text-foreground"
+              className="text-13px font-semibold text-foreground"
             />
           </button>
           {docsLink ? (
@@ -236,15 +236,15 @@ export const McpServerCard = memo(function McpServerCard(props: {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-5 w-5 shrink-0 text-muted-foreground"
+              className="size-5 shrink-0 text-muted-foreground"
               title={t("mcpHub.storeOpenExternal")}
               aria-label={t("mcpHub.storeOpenExternal")}
               onClick={() => void openUrl(docsLink)}
             >
-              <ExternalLink aria-hidden="true" className="h-3 w-3" />
+              <ExternalLink aria-hidden="true" className="size-3" />
             </Button>
           ) : null}
-          <Badge variant="muted" className="h-5 px-1.5 text-[10px] uppercase tracking-wide">
+          <Badge variant="muted" className="h-5 px-1.5 text-10px uppercase tracking-wide">
             <SearchHighlight text={transportLabel} query={searchQuery} />
           </Badge>
           {isOauthServer(server) ? <OauthControls server={server} /> : null}
@@ -254,7 +254,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
             type="button"
             onClick={onEdit}
             title={detailLine}
-            className="mt-1 min-w-0 truncate rounded-sm text-left text-[11px] text-muted-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-1 min-w-0 truncate rounded-sm text-left text-11px text-muted-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <SearchHighlight text={detailLine} query={searchQuery} />
           </button>
@@ -278,7 +278,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
           </div>
         ) : null}
 
-        <div className="grid shrink-0 grid-cols-[auto_2rem_2rem] items-center gap-1.5 @max-[520px]:ml-auto">
+        <div className="grid shrink-0 grid-cols-mcp-actions items-center gap-1.5 @max-[520px]:ml-auto">
           <ToolPolicyToggle
             value={policy}
             ariaLabel={displayName}
@@ -288,12 +288,12 @@ export const McpServerCard = memo(function McpServerCard(props: {
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={onEdit}
             title={t("settings.edit")}
-            className="h-8 w-8 text-muted-foreground"
+            className="text-muted-foreground"
           >
-            <Settings className="h-3.5 w-3.5" />
+            <Settings className="size-3.5" />
           </Button>
           <ConfirmDeletePopover
             name={server.id || `Server ${idx + 1}`}
@@ -323,12 +323,12 @@ export const McpServerCard = memo(function McpServerCard(props: {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 onClick={open}
-                className="h-8 w-8 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 title={t("settings.delete")}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="size-3.5" />
               </Button>
             )}
           </ConfirmDeletePopover>

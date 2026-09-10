@@ -255,9 +255,9 @@ export function McpImportView(props: {
     <div className="h-full min-h-0 overflow-y-auto px-0.5 pb-4 pr-1 pt-1.5">
       <div className="flex flex-col gap-4">
         {error ? (
-          <GlassPanel tone="error" className="hub-panel-enter">
+          <GlassPanel tone="error" className="animate-hub-panel-enter motion-reduce:animate-none!">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+              <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">
                 {t("mcpHub.importScanFailed")}: {error}
               </span>
@@ -266,9 +266,9 @@ export function McpImportView(props: {
         ) : null}
 
         {fileError ? (
-          <GlassPanel tone="error" className="hub-panel-enter">
+          <GlassPanel tone="error" className="animate-hub-panel-enter motion-reduce:animate-none!">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+              <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">
                 {t("mcpHub.importFileFailed")}: {fileError}
               </span>
@@ -277,9 +277,9 @@ export function McpImportView(props: {
         ) : null}
 
         {importedCount !== null && importedCount > 0 ? (
-          <GlassPanel tone="muted" className="hub-panel-enter">
+          <GlassPanel tone="muted" className="animate-hub-panel-enter motion-reduce:animate-none!">
             <div className="flex items-center gap-2">
-              <Check className="h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
+              <Check className="size-4 shrink-0 text-[hsl(var(--chat-success))]" />
               <span className="text-xs text-muted-foreground">
                 {t("mcpHub.importDone").replace("{count}", String(importedCount))}
               </span>
@@ -288,15 +288,15 @@ export function McpImportView(props: {
         ) : null}
 
         {loading && !scans ? (
-          <GlassPanel className="hub-panel-enter">
+          <GlassPanel className="animate-hub-panel-enter motion-reduce:animate-none!">
             <div className="flex items-center gap-3 py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">{t("mcpHub.importScanning")}</span>
             </div>
           </GlassPanel>
         ) : (
           <>
-            <div className="hub-panel-enter flex flex-wrap items-center justify-between gap-3">
+            <div className="animate-hub-panel-enter motion-reduce:animate-none! flex flex-wrap items-center justify-between gap-3">
               <McpImportSourcePicker
                 scans={allScans}
                 value={activeTool}
@@ -316,26 +316,26 @@ export function McpImportView(props: {
                   onClick={() => void pickFileAndScan()}
                 >
                   {filePicking ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <FileText className="h-3.5 w-3.5" />
+                    <FileText className="size-3.5" />
                   )}
                   {t("mcpHub.importFromFile")}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-w-[6.75rem] justify-center gap-1.5 rounded-full"
+                  className="min-w-6p75rem justify-center gap-1.5 rounded-full"
                   disabled={loading}
                   aria-busy={loading}
                   onClick={() => void handleRescan()}
                 >
                   {loading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : rescanComplete ? (
-                    <Check className="h-3.5 w-3.5 text-[hsl(var(--chat-success))]" />
+                    <Check className="size-3.5 text-[hsl(var(--chat-success))]" />
                   ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="size-3.5" />
                   )}
                   <span aria-live="polite">
                     {loading
@@ -351,16 +351,19 @@ export function McpImportView(props: {
                   disabled={selected.size === 0 || loading}
                   onClick={importSelected}
                 >
-                  <Download className="h-3.5 w-3.5" />
+                  <Download className="size-3.5" />
                   {`${t("mcpHub.importButton")}${selected.size > 0 ? ` (${selected.size})` : ""}`}
                 </Button>
               </div>
             </div>
 
             {activeScan ? (
-              <div key={activeScan.tool} className="hub-panel-enter flex flex-col gap-3">
+              <div
+                key={activeScan.tool}
+                className="animate-hub-panel-enter motion-reduce:animate-none! flex flex-col gap-3"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11px text-muted-foreground">
                     <span className="font-mono">{activeScan.configPath}</span>
                     {activeScan.errors.length > 0 ? (
                       <>
@@ -378,7 +381,7 @@ export function McpImportView(props: {
                     ) : null}
                   </p>
                   {importableInActive.length > 0 ? (
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-11px text-muted-foreground">
                       <span className="tabular-nums">
                         {t("mcpHub.importSelectedCount")
                           .replace("{selected}", String(selectedInActive))
@@ -389,7 +392,7 @@ export function McpImportView(props: {
                         variant="outline"
                         size="sm"
                         onClick={toggleAllActive}
-                        className="h-7 rounded-lg border-border/70 bg-card px-2 text-[11px] shadow-xs"
+                        className="h-7 rounded-lg border-border/70 bg-card px-2 text-11px shadow-xs"
                       >
                         {allActiveSelected
                           ? t("mcpHub.importDeselectAll")
@@ -453,42 +456,42 @@ export function McpImportView(props: {
                         >
                           <span
                             className={cn(
-                              "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
                               checked && !alreadyImported
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-border/70 bg-background",
                             )}
                           >
-                            {checked && !alreadyImported ? <Check className="h-3 w-3" /> : null}
+                            {checked && !alreadyImported ? <Check className="size-3" /> : null}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <span className="truncate text-[13px] font-medium text-foreground">
+                              <span className="truncate text-13px font-medium text-foreground">
                                 <SearchHighlight text={server.id} query={query} />
                               </span>
-                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/70 px-1.5 py-0.5 text-10px uppercase text-muted-foreground">
                                 {isStdio ? (
-                                  <Terminal className="h-2.5 w-2.5" />
+                                  <Terminal className="size-2.5" />
                                 ) : (
-                                  <Globe2 className="h-2.5 w-2.5" />
+                                  <Globe2 className="size-2.5" />
                                 )}
                                 {server.transport}
                               </span>
                               {server.origin !== "user" ? (
                                 <span
-                                  className="inline-flex max-w-[10rem] shrink-0 items-center truncate rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                  className="inline-flex max-w-10rem shrink-0 items-center truncate rounded-full bg-muted/70 px-1.5 py-0.5 text-10px text-muted-foreground"
                                   title={server.origin}
                                 >
                                   {t("mcpHub.importOriginProject")}
                                 </span>
                               ) : null}
                               {alreadyImported ? (
-                                <span className="inline-flex shrink-0 items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-foreground/70 ring-1 ring-border/45">
+                                <span className="inline-flex shrink-0 items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-10px font-medium text-foreground/70 ring-1 ring-border/45">
                                   {t("mcpHub.importAlreadyImported")}
                                 </span>
                               ) : null}
                             </span>
-                            <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                            <span className="mt-1 block truncate font-mono text-11px text-muted-foreground">
                               <SearchHighlight text={preview} query={query} />
                             </span>
                             {extras.length > 0 ? (
@@ -496,7 +499,7 @@ export function McpImportView(props: {
                                 {extras.map((extra) => (
                                   <span
                                     key={extra}
-                                    className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground"
+                                    className="rounded-full bg-muted/60 px-1.5 py-0.5 text-10px tabular-nums text-muted-foreground"
                                   >
                                     {extra}
                                   </span>

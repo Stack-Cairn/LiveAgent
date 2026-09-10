@@ -974,7 +974,7 @@ export function GitBranchSelector(props: {
         (isCurrent || !canWrite) && "text-muted-foreground",
       )}
     >
-      {isCurrent ? <Check className="h-3.5 w-3.5" /> : <GitBranch className="h-3.5 w-3.5" />}
+      {isCurrent ? <Check className="size-3.5" /> : <GitBranch className="size-3.5" />}
       <span className="min-w-0 flex-1 truncate">{labelText}</span>
       <button
         type="button"
@@ -997,7 +997,7 @@ export function GitBranchSelector(props: {
           openBranchActions(branch);
         }}
       >
-        <MoreHorizontal className="h-3.5 w-3.5" />
+        <MoreHorizontal className="size-3.5" />
       </button>
     </DropdownMenuItem>
   );
@@ -1020,9 +1020,9 @@ export function GitBranchSelector(props: {
           title={visibleError || (!canWrite ? disabledMessage : "") || label}
         >
           {loading || mutating || initializing ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <Loader2 className="size-4 shrink-0 animate-spin" />
           ) : (
-            <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <GitBranch className="size-4 shrink-0 text-muted-foreground" />
           )}
           <span className={COMPOSER_CONTROL_LABEL_CLASS}>{label}</span>
           <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
@@ -1034,7 +1034,7 @@ export function GitBranchSelector(props: {
         >
           <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-medium text-foreground">
-              <Github className="h-3.5 w-3.5 shrink-0" />
+              <Github className="size-3.5 shrink-0" />
               <span>Git</span>
             </div>
             {noRepo ? null : (
@@ -1050,9 +1050,9 @@ export function GitBranchSelector(props: {
                   aria-label={t("git.branchSelector.fetch")}
                 >
                   {remoteAction === "fetch" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <CloudDownload className="h-3.5 w-3.5" />
+                    <CloudDownload className="size-3.5" />
                   )}
                 </button>
                 <span className="relative inline-flex">
@@ -1067,13 +1067,13 @@ export function GitBranchSelector(props: {
                     aria-label={t("git.branchSelector.pull")}
                   >
                     {remoteAction === "pull" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <Download className="h-3.5 w-3.5" />
+                      <Download className="size-3.5" />
                     )}
                   </button>
                   {showSyncBadges && state.behind > 0 ? (
-                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] font-medium leading-3 text-primary-foreground">
+                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-9px font-medium leading-3 text-primary-foreground">
                       {state.behind > 9 ? "9+" : state.behind}
                     </span>
                   ) : null}
@@ -1090,13 +1090,13 @@ export function GitBranchSelector(props: {
                     aria-label={t("git.branchSelector.push")}
                   >
                     {remoteAction === "push" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <Upload className="h-3.5 w-3.5" />
+                      <Upload className="size-3.5" />
                     )}
                   </button>
                   {showSyncBadges && state.ahead > 0 ? (
-                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] font-medium leading-3 text-primary-foreground">
+                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-9px font-medium leading-3 text-primary-foreground">
                       {state.ahead > 9 ? "9+" : state.ahead}
                     </span>
                   ) : null}
@@ -1115,7 +1115,7 @@ export function GitBranchSelector(props: {
               title={t("git.branchSelector.refresh")}
               aria-label={t("git.branchSelector.refresh")}
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </button>
           </div>
           {repositories.length > 1 ? (
@@ -1127,7 +1127,7 @@ export function GitBranchSelector(props: {
                   title={t("git.branchSelector.switchRepository")}
                   aria-label={t("git.branchSelector.switchRepository")}
                 >
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="shrink-0 text-muted-foreground">
                     {t("git.branchSelector.repositoryLabel")}
                   </span>
@@ -1135,10 +1135,10 @@ export function GitBranchSelector(props: {
                     {selectedGitRepositoryLabel(repositories, selectedRepoRoot) ||
                       t("git.branchSelector.switchRepository")}
                   </span>
-                  <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] leading-4 text-muted-foreground">
+                  <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-10px leading-4 text-muted-foreground">
                     {repositories.length}
                   </span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="min-w-52">
                   {repositories.map((repo) => {
@@ -1169,9 +1169,9 @@ export function GitBranchSelector(props: {
                         }}
                       >
                         {isCurrent ? (
-                          <Check className="h-3.5 w-3.5 shrink-0" />
+                          <Check className="size-3.5 shrink-0" />
                         ) : (
-                          <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                         )}
                         <span className="min-w-0 flex-1 truncate">
                           {gitDiscoveredRepositoryLabel(repo)}
@@ -1186,7 +1186,7 @@ export function GitBranchSelector(props: {
           {showFilter ? (
             <div className="shrink-0 border-b border-border/60 px-2 py-1.5">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
@@ -1215,7 +1215,7 @@ export function GitBranchSelector(props: {
             ) : null}
             {noRepo && !visibleError ? (
               <>
-                <div className="px-2 py-2 text-xs text-muted-foreground">
+                <div className="p-2 text-xs text-muted-foreground">
                   {t("git.branchSelector.noRepositoryFound")}
                 </div>
                 <DropdownMenuSeparator />
@@ -1226,9 +1226,9 @@ export function GitBranchSelector(props: {
                   title={!canWrite ? disabledMessage : undefined}
                 >
                   {initializing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="size-3.5" />
                   )}
                   <span>{t("git.branchSelector.initRepository")}</span>
                 </DropdownMenuItem>
@@ -1236,7 +1236,7 @@ export function GitBranchSelector(props: {
             ) : noRepo ? null : (
               <>
                 {filteredLocalBranches.length > 0 ? (
-                  <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <DropdownMenuLabel className="px-2 py-1 text-11px uppercase tracking-wide text-muted-foreground">
                     {t("git.branchSelector.localBranches")}
                   </DropdownMenuLabel>
                 ) : null}
@@ -1244,7 +1244,7 @@ export function GitBranchSelector(props: {
                   renderBranchRow(branch, branch.current, branch.name),
                 )}
                 {filteredRemoteBranches.length > 0 ? (
-                  <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <DropdownMenuLabel className="px-2 py-1 text-11px uppercase tracking-wide text-muted-foreground">
                     {t("git.branchSelector.remoteBranches")}
                   </DropdownMenuLabel>
                 ) : null}
@@ -1255,7 +1255,7 @@ export function GitBranchSelector(props: {
                   return renderBranchRow(branch, isCurrentUpstream, branch.fullName);
                 })}
                 {filteredRemoteBranches.length > REMOTE_BRANCH_DISPLAY_LIMIT ? (
-                  <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                  <div className="px-2 py-1 text-11px text-muted-foreground">
                     {t("git.branchSelector.moreRemoteBranches").replace(
                       "{count}",
                       String(filteredRemoteBranches.length - REMOTE_BRANCH_DISPLAY_LIMIT),
@@ -1265,7 +1265,7 @@ export function GitBranchSelector(props: {
                 {normalizedFilter &&
                 filteredLocalBranches.length === 0 &&
                 filteredRemoteBranches.length === 0 ? (
-                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                  <div className="p-2 text-xs text-muted-foreground">
                     {t("git.branchSelector.noMatches")}
                   </div>
                 ) : null}
@@ -1318,7 +1318,7 @@ export function GitBranchSelector(props: {
                         setCreating(true);
                       }}
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="size-3.5" />
                       {t("git.branchSelector.createNewBranch")}
                     </button>
                     <DropdownMenuSub>
@@ -1328,7 +1328,7 @@ export function GitBranchSelector(props: {
                         aria-label={t("git.branchSelector.moreActions")}
                         title={t("git.branchSelector.moreActions")}
                       >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
+                        <MoreHorizontal className="size-3.5" />
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent className="min-w-44">
                         <DropdownMenuItem
@@ -1340,7 +1340,7 @@ export function GitBranchSelector(props: {
                           }}
                           className="gap-2 text-xs"
                         >
-                          <Download className="h-3.5 w-3.5" />
+                          <Download className="size-3.5" />
                           <span>{t("git.branchSelector.stashPush")}</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -1352,7 +1352,7 @@ export function GitBranchSelector(props: {
                           }}
                           className="gap-2 text-xs"
                         >
-                          <Upload className="h-3.5 w-3.5" />
+                          <Upload className="size-3.5" />
                           <span>
                             {t("git.branchSelector.stashPop")}
                             {state.stashCount > 0 ? ` (${state.stashCount})` : ""}
@@ -1373,7 +1373,7 @@ export function GitBranchSelector(props: {
                         openWorktreeModal();
                       }}
                     >
-                      <FolderTree className="h-3.5 w-3.5" />
+                      <FolderTree className="size-3.5" />
                       {t("git.branchSelector.createWorktree")}
                     </button>
                   ) : null}

@@ -81,7 +81,7 @@ export function ComposerAttachmentCard(props: {
     return (
       <div
         title={fileName}
-        className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color] hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]"
+        className="group relative size-12 shrink-0 overflow-hidden rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color] hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]"
       >
         {imageSrc && !imageLoadFailed ? (
           <button
@@ -89,7 +89,7 @@ export function ComposerAttachmentCard(props: {
             disabled={!canPreview}
             onClick={() => setPreviewOpen(true)}
             className={cn(
-              "block h-full w-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60",
+              "block size-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60",
               canPreview ? "cursor-zoom-in" : "cursor-default",
             )}
             aria-label={previewLabel ? `${previewLabel}: ${fileName}` : fileName}
@@ -104,7 +104,7 @@ export function ComposerAttachmentCard(props: {
               src={imageSrc}
               alt=""
               draggable={false}
-              className="block h-full w-full object-cover"
+              className="block size-full object-cover"
               onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
               onError={() => {
                 setImageLoadState({ src: imageSrc, status: "error" });
@@ -113,21 +113,21 @@ export function ComposerAttachmentCard(props: {
             />
           </button>
         ) : imageLoadFailed ? (
-          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <span className="flex size-full items-center justify-center text-muted-foreground">
             {fallbackIcon}
           </span>
         ) : (
-          <span className="block h-full w-full animate-pulse bg-black/[0.055] dark:bg-white/[0.09]" />
+          <span className="block size-full animate-pulse bg-black/[0.055] dark:bg-white/[0.09]" />
         )}
         <button
           type="button"
           disabled={disabled}
           onClick={onRemove}
-          className="absolute right-0.5 top-0.5 z-10 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale] hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35"
+          className="absolute right-0.5 top-0.5 z-10 inline-flex size-4 items-center justify-center rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale] hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35"
           aria-label={`${removeLabel} ${fileName}`}
           title={removeLabel}
         >
-          <X className="h-2.5 w-2.5" />
+          <X className="size-2.5" />
         </button>
         {previewOpen ? (
           <ImagePreview
@@ -154,13 +154,13 @@ export function ComposerAttachmentCard(props: {
   return (
     <div
       title={pathTitle}
-      className="group flex h-9 w-36 max-w-[calc(100vw-5rem)] shrink-0 items-center gap-1 rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.64)] transition-[border-color,background-color] hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.055)] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]"
+      className="group flex h-9 w-36 max-w-viewport-inset-5rem shrink-0 items-center gap-1 rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color] hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-ui-composerattachmentcard-2 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]"
     >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]">
+      <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]">
         {fallbackIcon}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-4 tracking-tight text-foreground/90">
+      <span className="min-w-0 flex-1 truncate text-scaled-11px font-medium leading-4 tracking-tight text-foreground/90">
         {fileName}
       </span>
 
@@ -168,11 +168,11 @@ export function ComposerAttachmentCard(props: {
         type="button"
         disabled={disabled}
         onClick={onRemove}
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale] hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35"
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale] hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35"
         aria-label={`${removeLabel} ${fileName}`}
         title={removeLabel}
       >
-        <X className="h-3 w-3" />
+        <X className="size-3" />
       </button>
     </div>
   );

@@ -301,14 +301,14 @@ export function McpRegistryConfigureModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        className="flex max-h-92dvh max-w-3xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="flex-row items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
-              <Sparkles className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
+              <Sparkles className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
               <DialogTitle>{t("mcpHub.storeConfigureTitle")}</DialogTitle>
@@ -394,7 +394,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-command"
                         value={draft.command}
                         placeholder="npx"
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ command: event.currentTarget.value })}
                       />
                     </div>
@@ -409,7 +409,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-cwd"
                         value={draft.cwd}
                         placeholder={t("mcpHub.cwdDefault")}
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
                       />
                     </div>
@@ -425,7 +425,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-args"
                       value={draft.argsText}
                       placeholder={"-y\n@modelcontextprotocol/server-time"}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
                     />
                   </div>
@@ -437,7 +437,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-env"
                       value={draft.envText}
                       placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
                     />
                   </div>
@@ -456,7 +456,7 @@ export function McpRegistryConfigureModal(props: {
                           ? "http://127.0.0.1:3000/mcp"
                           : "http://127.0.0.1:3000/sse"
                       }
-                      className="font-mono text-[12.5px]"
+                      className="font-mono text-12p5px"
                       onChange={(event) => updateDraft({ url: event.currentTarget.value })}
                     />
                   </div>
@@ -472,7 +472,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-message-url"
                         value={draft.messageUrl}
                         placeholder="http://127.0.0.1:3000/message"
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ messageUrl: event.currentTarget.value })}
                       />
                     </div>
@@ -488,7 +488,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-headers"
                       value={draft.headersText}
                       placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
                     />
                   </div>
@@ -525,7 +525,7 @@ export function McpRegistryConfigureModal(props: {
                               updateConfigValue(input, event.currentTarget.value)
                             }
                           />
-                          <div className="flex items-start gap-1.5 text-[10.5px] text-muted-foreground">
+                          <div className="flex items-start gap-1.5 text-10p5px text-muted-foreground">
                             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground/75">
                               {configTargetLabel(input, t)}
                             </span>
@@ -540,7 +540,7 @@ export function McpRegistryConfigureModal(props: {
 
               {formError ? (
                 <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
                 </div>
               ) : null}
@@ -552,7 +552,7 @@ export function McpRegistryConfigureModal(props: {
               {t("settings.cancel")}
             </Button>
             <Button type="submit" className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="size-3.5" />
               {t("mcpHub.storeConfigureSubmit")}
             </Button>
           </DialogFooter>

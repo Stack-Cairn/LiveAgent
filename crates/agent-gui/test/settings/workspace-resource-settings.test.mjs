@@ -171,8 +171,8 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(sharedProjectSettings, /window\.requestAnimationFrame/);
   assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
   assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
-  assert.match(webRemotePathPicker, /h-\[min\(650px,92vh\)\]/);
-  assert.match(webRemotePathPicker, /max-h-\[92vh\]/);
+  assert.match(webRemotePathPicker, /h-dialog-650px-vh/);
+  assert.match(webRemotePathPicker, /max-h-92vh/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
   assert.doesNotMatch(webRemotePathPicker, /forceRender/);
   assert.doesNotMatch(webRemotePathPicker, /overlayClassName|viewportClassName|z-\[\d+\]/);
@@ -225,7 +225,7 @@ test("global and project prompt cards share row and action layout", () => {
   assert.match(projectCards, /disabled=\{!configured\}/);
   assert.match(
     projectCards,
-    /size="icon"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
+    /size="icon-xs"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
   );
   assert.doesNotMatch(
     projectCards,
@@ -242,7 +242,7 @@ test("project prompt preview renders the effective prompt without overflowing it
   assert.match(sharedAgentsSection, /label: t\("chat\.globalPromptTitle"\)/);
   assert.match(sharedAgentsSection, /<PromptScopeLabel label=\{segment\.label\}/);
   assert.match(sharedAgentsSection, /my-5 h-px w-full bg-border\/70/);
-  assert.match(sharedAgentsSection, /md:grid-cols-\[minmax\(0,16rem\)_minmax\(0,1fr\)\]/);
+  assert.match(sharedAgentsSection, /md:grid-cols-model-picker/);
   assert.match(sharedAgentsSection, /\[overflow-wrap:anywhere\]/);
   assert.match(
     sharedAgentsSection,

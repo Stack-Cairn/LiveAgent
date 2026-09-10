@@ -98,8 +98,8 @@ export function GitInitModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <GitBranch className="h-5 w-5" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-sm leading-normal">
@@ -176,9 +176,9 @@ export function GitInitModal(props: {
               </Button>
               <Button type="submit" size="sm" disabled={loading || !branch.trim()}>
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <GitBranch className="h-3.5 w-3.5" />
+                  <GitBranch className="size-3.5" />
                 )}
                 {t("git.branchSelector.initRepository")}
               </Button>
@@ -265,8 +265,8 @@ export function WorktreeCreateModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <FolderTree className="h-5 w-5" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                <FolderTree className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-sm leading-normal">
@@ -365,12 +365,12 @@ export function WorktreeCreateModal(props: {
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-9 w-9 shrink-0"
+                    className="shrink-0"
                     onClick={() => onParentDirectoryChange("")}
                     disabled={loading}
                     title={t("git.branchSelector.worktreeUseDefaultLocation")}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="size-3.5" />
                   </Button>
                 ) : null}
                 <Button
@@ -381,7 +381,7 @@ export function WorktreeCreateModal(props: {
                   onClick={() => void chooseParentDirectory()}
                   disabled={loading}
                 >
-                  <FolderOpen className="h-3.5 w-3.5" />
+                  <FolderOpen className="size-3.5" />
                   {t("git.branchSelector.worktreeChooseParent")}
                 </Button>
               </div>
@@ -410,9 +410,9 @@ export function WorktreeCreateModal(props: {
                 disabled={loading || !branch.trim() || !directoryName.trim()}
               >
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <FolderTree className="h-3.5 w-3.5" />
+                  <FolderTree className="size-3.5" />
                 )}
                 {t("git.branchSelector.createWorktree")}
               </Button>
@@ -502,8 +502,8 @@ export function BranchActionsModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <GitBranch className="h-5 w-5" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="truncate text-sm leading-normal" title={branch.fullName}>
@@ -524,7 +524,7 @@ export function BranchActionsModal(props: {
                   onClick={onShowCreateFrom}
                   disabled={busy}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="size-3.5" />
                   <span>{t("git.branchSelector.createFromHere")}</span>
                 </button>
               ) : null}
@@ -535,7 +535,7 @@ export function BranchActionsModal(props: {
                   onClick={onShowRename}
                   disabled={busy}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Pencil className="size-3.5" />
                   <span>{t("git.branchSelector.renameBranch")}</span>
                 </button>
               ) : null}
@@ -545,7 +545,7 @@ export function BranchActionsModal(props: {
                 onClick={onCopyName}
                 disabled={busy}
               >
-                <Copy className="h-3.5 w-3.5" />
+                <Copy className="size-3.5" />
                 <span>
                   {copied ? t("git.branchSelector.copied") : t("git.branchSelector.copyName")}
                 </span>
@@ -562,9 +562,9 @@ export function BranchActionsModal(props: {
                     disabled={busy}
                   >
                     {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <FolderTree className="h-3.5 w-3.5" />
+                      <FolderTree className="size-3.5" />
                     )}
                     <span>{t("git.branchSelector.deleteWorktree")}</span>
                   </button>
@@ -579,9 +579,9 @@ export function BranchActionsModal(props: {
                     disabled={busy}
                   >
                     {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="size-3.5" />
                     )}
                     <span>{t("git.branchSelector.deleteBranch")}</span>
                   </button>
@@ -651,11 +651,11 @@ export function BranchActionsModal(props: {
                 </Button>
                 <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
                   {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : mode === "rename" ? (
-                    <Pencil className="h-3.5 w-3.5" />
+                    <Pencil className="size-3.5" />
                   ) : (
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="size-3.5" />
                   )}
                   {mode === "rename"
                     ? t("git.branchSelector.renameBranch")

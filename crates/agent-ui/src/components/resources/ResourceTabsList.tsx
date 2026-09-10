@@ -37,12 +37,12 @@ export function ResourceTabsList<Value extends string>(props: {
               props.triggerClassName,
             )}
           >
-            {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+            {Icon ? <Icon className="size-3.5" /> : null}
             <span>{item.label}</span>
             {item.countLabel !== null && item.countLabel !== undefined ? (
               <Badge
                 variant={active ? "secondary" : "muted"}
-                className="ml-0.5 h-5 px-1.5 text-[10px] tabular-nums"
+                className="ml-0.5 h-5 px-1.5 text-10px tabular-nums"
               >
                 {item.countLabel}
               </Badge>

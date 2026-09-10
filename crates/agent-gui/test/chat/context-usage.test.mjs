@@ -130,7 +130,7 @@ test("composer uses the opaque Tessera surface and a compact idle height", () =>
   assert.match(chatComposerBarSource, /composer-control-deck[^\n]+min-h-9[^\n]+bg-muted/);
   assert.doesNotMatch(chatComposerBarSource, /composer-input-surface[^\n]+bg-white\/76/);
   assert.doesNotMatch(chatComposerBarSource, /composer-glass-card[^\n]+bg-black\/\[0\.035\]/);
-  assert.match(mentionComposerSource, /mention-composer min-h-10 max-h-\[160px\]/);
+  assert.match(mentionComposerSource, /mention-composer min-h-10 max-h-160px/);
 });
 
 test("composer expand toggle appears only after the editor overflows", () => {

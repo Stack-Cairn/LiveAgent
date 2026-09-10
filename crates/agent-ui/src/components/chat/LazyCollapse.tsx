@@ -41,7 +41,7 @@ export function LazyCollapse(props: {
         // rounded corners sit outside the text box; without this outdent the
         // clip lands exactly on the text edge and erases them. Outdent equals
         // padding, so content position is unchanged.
-        "-mx-3 grid h-min origin-top content-start px-3 transition-[grid-template-rows] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+        "-mx-3 grid h-min origin-top content-start px-3 transition-[grid-template-rows] duration-220ms ease-ui-enter motion-reduce:transition-none",
         open ? "grid-rows-[1fr]" : "pointer-events-none grid-rows-[0fr]",
         className,
       )}
@@ -51,7 +51,7 @@ export function LazyCollapse(props: {
           <div
             data-lazy-collapse-content=""
             className={cn(
-              "origin-top transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transform-none motion-reduce:transition-none",
+              "origin-top transition-[opacity,transform] duration-200 ease-ui-enter motion-reduce:transform-none motion-reduce:transition-none",
               open ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
             )}
           >

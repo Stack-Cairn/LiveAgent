@@ -88,7 +88,7 @@ export function isMacOsTauri(): boolean {
 export function MacOsTitleBarSpacer({ className }: { className?: string }) {
   const [show] = useState(isMacOsTauri);
   if (!show) return null;
-  return <div data-tauri-drag-region className={cn("h-[38px] shrink-0", className)} />;
+  return <div data-tauri-drag-region className={cn("h-38px shrink-0", className)} />;
 }
 
 /**
@@ -137,7 +137,7 @@ export function MacOsTitleBarToggle({
           width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
         }}
       >
-        {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+        {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeft className="size-4" />}
       </button>
       {!sidebarOpen && onOpenSettings && (
         <button
@@ -154,7 +154,7 @@ export function MacOsTitleBarToggle({
             width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
           }}
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="size-4" />
         </button>
       )}
       {!sidebarOpen && onOpenSettings && appUpdate ? (
@@ -171,5 +171,5 @@ export function MacOsTitleBarToggle({
 export function MacOsTitleBarLeadingInset({ className }: { className?: string }) {
   const [show] = useState(isMacOsTauri);
   if (!show) return null;
-  return <div data-tauri-drag-region className={cn("w-[88px] shrink-0", className)} />;
+  return <div data-tauri-drag-region className={cn("w-88px shrink-0", className)} />;
 }

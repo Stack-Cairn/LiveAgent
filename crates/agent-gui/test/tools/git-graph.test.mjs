@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { resolveStyleValues } from "../../../../scripts/test-style-values.mjs";
 
 const guiRoot = fileURLToPath(new URL("../..", import.meta.url));
 const graphModules = {
@@ -27,7 +28,7 @@ function simplifyRows(rows) {
 
 for (const [surface, graph] of Object.entries(graphModules)) {
   test(`${surface} git graph uses VS Code source control graph colors`, () => {
-    assert.deepEqual(graph.GRAPH_COLORS, [
+    assert.deepEqual(graph.GRAPH_COLORS.map((value) => resolveStyleValues(value)), [
       "#ffb000",
       "#dc267f",
       "#994f00",

@@ -12,8 +12,8 @@ const FLIP_BATCH_STAGGER_LIMIT = 8;
 const FLIP_WAVE_DURATION_MS = 280;
 const FLIP_WAVE_DELAY_MS = 30;
 const FLIP_WAVE_MAX_DELAY_MS = 400;
-const FLIP_HERO_TRANSITION = `translate ${FLIP_HERO_DURATION_MS}ms cubic-bezier(0.34, 1.3, 0.64, 1)`;
-const FLIP_WAVE_TRANSITION = `translate ${FLIP_WAVE_DURATION_MS}ms cubic-bezier(0.16, 1, 0.3, 1)`;
+const FLIP_HERO_TRANSITION = `translate ${FLIP_HERO_DURATION_MS}ms var(--ease-ui-curve-3)`;
+const FLIP_WAVE_TRANSITION = `translate ${FLIP_WAVE_DURATION_MS}ms var(--ease-ui-enter)`;
 
 export type FlipMode = "single" | "wave" | "batch";
 type FlipPosition = { left: number; top: number };

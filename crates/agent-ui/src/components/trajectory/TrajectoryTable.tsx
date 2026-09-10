@@ -126,7 +126,7 @@ export function TrajectoryTable(props: {
 
   if (items.length === 0) {
     return (
-      <div className="flex min-w-0 flex-1 items-center justify-center p-6 text-[13px] text-muted-foreground">
+      <div className="flex min-w-0 flex-1 items-center justify-center p-6 text-13px text-muted-foreground">
         {props.searchMatchIndexes === null
           ? t("trajectory.empty.title")
           : t("trajectory.empty.noMatch")}
@@ -208,7 +208,7 @@ function TurnHeader(props: {
       onClick={props.onToggle}
       aria-expanded={props.collapsible ? !props.collapsed : undefined}
       className={cn(
-        "flex h-[30px] w-full items-center gap-1 bg-muted/30 px-3 text-[11px] text-muted-foreground",
+        "flex h-30px w-full items-center gap-1 bg-muted/30 px-3 text-11px text-muted-foreground",
         props.collapsible && "hover:bg-muted/60 hover:text-foreground",
       )}
     >

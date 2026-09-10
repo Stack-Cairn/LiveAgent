@@ -13,9 +13,9 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode } from "react";
 
 function ThemeToggleIcon(props: { theme: Theme }) {
-  if (props.theme === "light") return <Sun className="h-4 w-4" />;
-  if (props.theme === "dark") return <Moon className="h-4 w-4" />;
-  return <MonitorSmartphone className="h-4 w-4" />;
+  if (props.theme === "light") return <Sun className="size-4" />;
+  if (props.theme === "dark") return <Moon className="size-4" />;
+  return <MonitorSmartphone className="size-4" />;
 }
 
 export type ChatHeaderProps = {
@@ -57,7 +57,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
       data-tauri-drag-region
       className={cn(
         "flex items-center justify-between gap-2 py-2.5 pr-4",
-        !sidebarOpen && desktopTitleBarInset ? "pl-[232px]" : "pl-4",
+        !sidebarOpen && desktopTitleBarInset ? "pl-232px" : "pl-4",
         className,
       )}
     >
@@ -65,12 +65,12 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         {!sidebarOpen && !desktopTitleBarInset ? (
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={onOpenSidebar}
             title={t("tooltip.openSidebar")}
-            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+            className="rounded-lg text-muted-foreground hover:text-foreground"
           >
-            <PanelLeft className="h-4.5 w-4.5" />
+            <PanelLeft className="size-4.5" />
           </Button>
         ) : null}
         {leadingActions}
@@ -83,23 +83,23 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         {preThemeActions}
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-sm"
           onClick={onToggleTheme}
           title={themeToggleTitle}
           aria-label={themeToggleTitle}
-          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+          className="rounded-lg text-muted-foreground hover:text-foreground"
         >
           <ThemeToggleIcon theme={nextTheme} />
         </Button>
         {!sidebarOpen && !desktopTitleBarInset ? (
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={() => onOpenSettings()}
             title={t("tooltip.settings")}
-            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+            className="rounded-lg text-muted-foreground hover:text-foreground"
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="size-4" />
           </Button>
         ) : null}
         {trailingActions}

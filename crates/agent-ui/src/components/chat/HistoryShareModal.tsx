@@ -67,7 +67,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -87,7 +87,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -125,7 +125,7 @@ function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () 
     >
       <span
         className={cn(
-          "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+          "absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform",
           checked ? "translate-x-5" : "translate-x-0",
         )}
       />
@@ -193,8 +193,8 @@ export function HistoryShareModal({
       <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
-              <Share2 className="h-5 w-5" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
+              <Share2 className="size-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle className="text-sm leading-normal">分享会话</DialogTitle>
@@ -237,13 +237,13 @@ export function HistoryShareModal({
               <div className="flex min-w-0 items-start gap-3">
                 <div
                   className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
+                    "flex size-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
                     redactToolContent
                       ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                       : "border-border/60 bg-background text-muted-foreground",
                   )}
                 >
-                  {redactToolContent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {redactToolContent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium text-foreground">工具调用脱敏</span>
@@ -265,7 +265,7 @@ export function HistoryShareModal({
 
           {isLoading ? (
             <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
               正在读取分享状态...
             </div>
           ) : null}
@@ -280,7 +280,7 @@ export function HistoryShareModal({
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">分享链接</div>
               <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm">
-                <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Link2 className="size-4 shrink-0 text-muted-foreground" />
                 {shareUrl ? (
                   <a
                     href={shareUrl}
@@ -305,7 +305,7 @@ export function HistoryShareModal({
                   onClick={handleCopy}
                   disabled={!canCopy}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors",
                     canCopy
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "cursor-not-allowed text-muted-foreground/40",
@@ -314,9 +314,9 @@ export function HistoryShareModal({
                   aria-label="复制链接"
                 >
                   {copied ? (
-                    <Check className="h-4 w-4 text-emerald-500" />
+                    <Check className="size-4 text-emerald-500" />
                   ) : (
-                    <Copy className="h-4 w-4" />
+                    <Copy className="size-4" />
                   )}
                 </button>
                 <a
@@ -325,14 +325,14 @@ export function HistoryShareModal({
                   rel="noreferrer"
                   aria-disabled={!shareUrl}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors",
                     shareUrl
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "pointer-events-none text-muted-foreground/40",
                   )}
                   title="打开链接"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="size-4" />
                 </a>
               </div>
               {!shareOriginLoading && !publicOrigin ? (
@@ -342,7 +342,7 @@ export function HistoryShareModal({
               ) : null}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border/70 px-3 py-3 text-sm text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
               开启分享后会在这里生成公开访问链接。
             </div>
           )}

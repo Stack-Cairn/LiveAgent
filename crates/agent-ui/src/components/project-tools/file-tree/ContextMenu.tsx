@@ -178,7 +178,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     <div
       ref={menuRef}
       role="menu"
-      className="editor-context-menu layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+      className="animate-editor-context-menu origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
       style={{
         left: (position ?? anchor).x,
         top: (position ?? anchor).y,
@@ -202,9 +202,9 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
             }}
           >
             {isWorkspacePreviewPath(path) ? (
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="size-3.5" />
             ) : (
-              <FilePenLine className="h-3.5 w-3.5" />
+              <FilePenLine className="size-3.5" />
             )}
             {t(
               isWorkspacePreviewPath(path)
@@ -223,7 +223,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
                 onClose();
               }}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="size-3.5" />
               {t("projectTools.fileTree.openExternal")}
             </button>
           ) : null}
@@ -240,7 +240,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus className="size-3.5" />
         {t("projectTools.fileTree.newFile")}
       </button>
       <button
@@ -253,7 +253,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Folder className="h-3.5 w-3.5" />
+        <Folder className="size-3.5" />
         {t("projectTools.fileTree.newFolder")}
       </button>
       <button
@@ -266,7 +266,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Edit3 className="h-3.5 w-3.5" />
+        <Edit3 className="size-3.5" />
         {t("projectTools.fileTree.rename")}
       </button>
       <button
@@ -279,7 +279,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="size-3.5" />
         {t("projectTools.fileTree.delete")}
       </button>
       <div className="mx-1 my-1 h-px bg-border/60" />
@@ -293,7 +293,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        {showHidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         {t(
           showHidden
             ? "projectTools.fileTree.hideHiddenFiles"
@@ -307,7 +307,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
         disabled={!hasPathAction}
         onClick={(event) => void handleCopy(event)}
       >
-        <Copy className="h-3.5 w-3.5" />
+        <Copy className="size-3.5" />
         {copied ? t("projectTools.fileTree.copiedPath") : t("projectTools.fileTree.copyPath")}
       </button>
       {FILE_TREE_HAS_OS_INTEGRATION ? (
@@ -321,7 +321,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
             onClose();
           }}
         >
-          <FolderOpen className="h-3.5 w-3.5" />
+          <FolderOpen className="size-3.5" />
           {t("projectTools.fileTree.openContainingDirectory")}
         </button>
       ) : null}
@@ -335,7 +335,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <span className="flex h-3.5 w-3.5 items-center justify-center text-[calc(11px*var(--zone-font-scale,1))] font-semibold">
+        <span className="flex size-3.5 items-center justify-center text-scaled-11px font-semibold">
           @
         </span>
         {t("projectTools.fileTree.insertReference")}
@@ -350,7 +350,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <RefreshCw className="h-3.5 w-3.5" />
+        <RefreshCw className="size-3.5" />
         {t("projectTools.fileTree.refresh")}
       </button>
     </div>

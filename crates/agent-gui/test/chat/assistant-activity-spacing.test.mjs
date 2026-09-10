@@ -1,3 +1,5 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -35,10 +37,7 @@ const markdownSource = fs.readFileSync(
   new URL("../../../agent-ui/src/components/Markdown.tsx", import.meta.url),
   "utf8",
 );
-const chatStylesSource = fs.readFileSync(
-  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
-  "utf8",
-);
+const chatStylesSource = readStyleSource(new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url));
 
 test("tool and operation blocks share the same compact rhythm as prose", () => {
   assert.match(roundContentSource, /const isOperationBlock = block\.kind !== "text";/);
@@ -71,9 +70,9 @@ test("inline code uses the higher-contrast transcript treatment", () => {
 });
 
 test("operation rows use compact icons and reveal disclosure chevrons on intent", () => {
-  assert.match(hostedSearchSource, /Globe className="h-3 w-3/);
-  assert.match(toolTraceSource, /BatchIcon className="h-3 w-3/);
-  assert.match(toolCallSource, /ToolIcon className="h-3 w-3/);
+  assertJsxDimensions(hostedSearchSource, "Globe", { width: "3", height: "3" });
+  assertJsxDimensions(toolTraceSource, "BatchIcon", { width: "3", height: "3" });
+  assertJsxDimensions(toolCallSource, "ToolIcon", { width: "3", height: "3" });
 
   assert.match(workTraceSource, /opacity-0[^"\n]*group-hover\/work-trace:opacity-100/);
   assert.match(hostedSearchSource, /opacity-0[^"\n]*group-hover\/search-trace:opacity-100/);

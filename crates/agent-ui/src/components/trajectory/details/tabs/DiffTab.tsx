@@ -32,10 +32,10 @@ export function DiffTab(props: DetailTabProps) {
         return (
           <section key={slot} className="space-y-1">
             <p className="font-medium">{props.t(`trajectory.details.slot.${slot}`)}</p>
-            <p className="break-all font-mono text-[9px] text-muted-foreground">
+            <p className="break-all font-mono text-9px text-muted-foreground">
               {beforeRef ?? "∅"} → {afterRef ?? "∅"}
             </p>
-            <pre className="max-h-96 overflow-auto rounded bg-muted/40 p-2 font-mono text-[10px] leading-4">
+            <pre className="max-h-96 overflow-auto rounded bg-muted/40 p-2 font-mono text-10px leading-4">
               {lines.map(({ key, line }) => (
                 <span
                   key={key}

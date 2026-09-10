@@ -47,7 +47,7 @@ export function SegmentedSlider<T extends string>(props: SegmentedSliderProps<T>
         data-slot="segmented-slider-thumb"
         className="absolute inset-y-0.5 left-0.5 rounded-md bg-background shadow-sm transition-transform duration-200 ease-out"
         style={{
-          width: `calc((100% - 4px) / ${segmentCount})`,
+          width: `calc((100% - var(--spacing-4px)) / ${segmentCount})`,
           transform: `translateX(${selectedIndex * 100}%)`,
         }}
       />
@@ -55,7 +55,7 @@ export function SegmentedSlider<T extends string>(props: SegmentedSliderProps<T>
         <label
           key={option.value}
           className={cn(
-            "relative inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-[11px] font-medium leading-none transition-colors",
+            "relative inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-11px font-medium leading-none transition-colors",
             "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
             disabled ? "cursor-not-allowed" : "cursor-pointer",
             option.value === value ? "text-foreground" : "hover:text-foreground/80",

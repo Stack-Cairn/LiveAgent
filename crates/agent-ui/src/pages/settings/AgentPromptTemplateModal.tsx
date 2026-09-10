@@ -50,13 +50,13 @@ export function AgentPromptTemplateModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-[90dvh] max-w-4xl flex-col p-0"
+        className="flex max-h-90dvh max-w-4xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3.5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
-            <ScrollText className="h-5 w-5" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
+            <ScrollText className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate">
@@ -72,8 +72,8 @@ export function AgentPromptTemplateModal({
           <div className="grid items-stretch gap-4 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
             <section className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
               <div className="mb-5 flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
-                  <BookOpen className="h-4 w-4" />
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                  <BookOpen className="size-4" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold">{t("settings.agentsTemplateDetails")}</h3>
@@ -111,11 +111,11 @@ export function AgentPromptTemplateModal({
               </div>
             </section>
 
-            <section className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs md:min-h-[438px]">
+            <section className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs md:min-h-438px">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
-                    <FileText className="h-4 w-4" />
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                    <FileText className="size-4" />
                   </div>
                   <div>
                     <Label htmlFor="agent-template-prompt" className="text-sm font-semibold">
@@ -135,7 +135,7 @@ export function AgentPromptTemplateModal({
                 id="agent-template-prompt"
                 value={prompt}
                 placeholder={t("settings.agentsPromptPlaceholder")}
-                className="h-80 min-h-80 flex-1 resize-none overflow-y-auto overscroll-contain p-4 font-mono text-[13px] leading-6 md:h-auto md:min-h-0"
+                className="h-80 min-h-80 flex-1 resize-none overflow-y-auto overscroll-contain p-4 font-mono text-13px leading-6 md:h-auto md:min-h-0"
                 onChange={(e) => setPrompt(e.currentTarget.value)}
               />
             </section>
@@ -149,7 +149,7 @@ export function AgentPromptTemplateModal({
               onClick={handleSave}
               disabled={!name.trim() || !prompt.trim()}
             >
-              <Check className="h-3.5 w-3.5" />
+              <Check className="size-3.5" />
               {t("settings.save")}
             </Button>
           </DialogActions>

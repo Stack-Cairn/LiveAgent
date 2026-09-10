@@ -315,7 +315,7 @@ export function WorkspaceProjectSettingsModal(props: {
       }}
     >
       <DialogContent
-        className="flex h-[min(650px,calc(100dvh-2rem))] max-w-[940px] flex-col p-0"
+        className="flex h-dialog-650px max-w-940px flex-col p-0"
         closeDisabled={saving}
         closeLabel={t("window.close")}
         layout="fullscreen-mobile"
@@ -337,7 +337,7 @@ export function WorkspaceProjectSettingsModal(props: {
 
         <DialogBody className="flex overflow-hidden p-0 max-[720px]:flex-col">
           <nav
-            className="flex w-[188px] shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
+            className="flex w-188px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
             aria-label={t("chat.workspaceSettingsNavigation")}
           >
             {navigation.map(({ id, icon: Icon, label }) => (
@@ -353,7 +353,7 @@ export function WorkspaceProjectSettingsModal(props: {
                 onClick={() => setActivePanel(id)}
                 aria-current={activePanel === id ? "page" : undefined}
               >
-                <Icon className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
+                <Icon className="size-4 shrink-0 max-[720px]:size-3.5" />
                 {label}
               </button>
             ))}
@@ -465,7 +465,7 @@ export function WorkspaceProjectSettingsModal(props: {
               disabled={saving || !dialogOpen || projectNameInvalid}
               className="h-8"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
               {t("workspaceEditor.save")}
             </Button>
           </DialogActions>

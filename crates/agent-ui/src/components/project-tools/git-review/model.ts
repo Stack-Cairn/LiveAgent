@@ -23,8 +23,7 @@ export type GitReviewClient = GitClient & {
   openSystemFileLocation?: (workdir: string, path: string) => Promise<GitOperationResponse>;
 };
 
-export const GIT_REVIEW_SPLIT_GRID_CLASS =
-  "grid-cols-[clamp(9.5rem,38%,18rem)_minmax(10rem,1fr)] grid-rows-1";
+export const GIT_REVIEW_SPLIT_GRID_CLASS = "grid-cols-trajectory-details grid-rows-1";
 
 export const LARGE_DIFF_CHUNK_CHAR_LIMIT = 120 * 1024;
 export const LARGE_DIFF_CHUNK_LINE_LIMIT = 1800;
@@ -140,7 +139,7 @@ export type GitFileContextPayload = {
 export const CHANGE_CONTEXT_MENU_ITEM_CLASS =
   "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
 export const CONTEXT_MENU_CONTAINER_CLASS =
-  "editor-context-menu select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
+  "animate-editor-context-menu origin-top-left select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
 export const CONTEXT_MENU_SEPARATOR_CLASS = "mx-1 my-1 h-px bg-border/60";
 
 // Clamp a rendered context menu into its bounds using measured rects (no

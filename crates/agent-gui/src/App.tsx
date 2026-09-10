@@ -99,7 +99,7 @@ function AppChrome(props: { children: ReactNode }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Root-level pointer handlers only route native input menus and dismissals; child controls own activation semantics.
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden bg-background"
+      className="relative flex size-full flex-col overflow-hidden bg-background"
       onContextMenu={onRootContextMenu}
       onMouseDownCapture={onRootMouseDownCapture}
     >
@@ -780,7 +780,7 @@ export default function App() {
             title={translate("app.windowPinnedHint", settings.locale)}
             className="layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
           >
-            <Pin className="h-3 w-3" />
+            <Pin className="size-3" />
             {translate("app.windowPinned", settings.locale)}
           </button>
         )}

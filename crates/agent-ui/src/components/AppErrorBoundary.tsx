@@ -37,12 +37,12 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps, ErrorBoundar
       return this.props.children;
     }
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background p-8 text-center">
+      <div className="flex size-full flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <div className="text-base font-semibold text-foreground">{this.props.labels.title}</div>
         <div className="max-w-md text-sm text-muted-foreground">
           {this.props.labels.description}
         </div>
-        <div className="max-h-40 max-w-xl overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/40 p-3 text-left font-mono text-[11px] text-muted-foreground">
+        <div className="max-h-40 max-w-xl overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/40 p-3 text-left font-mono text-11px text-muted-foreground">
           {error.message}
           {import.meta.env.DEV && this.state.componentStack
             ? `\n${this.state.componentStack}`

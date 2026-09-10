@@ -865,7 +865,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             conversationId={displayedConversationId}
             floors={transcriptFloors}
             activeRowKey={activeFloorKey}
-            bottomOffset="calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px)"
+            bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
             scrollViewport={transcriptViewport}
             onJump={handleFloorJump}
           />
@@ -1222,12 +1222,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       <div
         ref={workbenchController.dragGhostRef}
         data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className="layer-popover pointer-events-none fixed max-w-220px truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
           left: 0,
           top: 0,
           transform:
-            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+            "translate3d(var(--workbench-drag-ghost-x, var(--spacing-minus-9999px)), var(--workbench-drag-ghost-y, var(--spacing-minus-9999px)), 0)",
           willChange: "transform",
         }}
       >
@@ -1435,7 +1435,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       isOpen={rightDockOpen}
                       sessionCount={projectTerminalSessions.length}
                       disabledMessage={projectToolsDisabledMessage}
-                      className="gateway-project-tools-panel-toggle"
+                      className="mr-6px max-520:mr-8px"
                       onToggle={() => setRightDockOpen((open) => !open)}
                     />
                     <UserMenu
@@ -1602,7 +1602,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   conversationId={displayedConversationId}
                                   floors={transcriptFloors}
                                   activeRowKey={activeFloorKey}
-                                  bottomOffset="calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px)"
+                                  bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
                                   scrollViewport={transcriptViewport}
                                   onJump={handleFloorJump}
                                 />
@@ -1620,7 +1620,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               aria-label="滚动到底部"
                               title="滚动到底部"
                             >
-                              <ChevronDown className="h-4 w-4" />
+                              <ChevronDown className="size-4" />
                             </button>
                           ) : null}
                           <ChatComposerBar
@@ -2017,7 +2017,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             <div
               className={cn(
                 "gateway-settings-overlay",
-                overlay === "open" ? "gateway-settings-overlay-open" : "",
+                // Keep the settled transform at none: a transformed settings scroller
+                // can leave blank rasterized regions on Android Chrome.
+                overlay === "open" ? "opacity-100! transform-none!" : "",
               )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >

@@ -99,15 +99,15 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
           subtitle: t("chat.exitConfirmSubtitle"),
           description: (
             <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
-                <Terminal className="h-4 w-4" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                <Terminal className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-foreground">
                     {t("chat.exitConfirmRunningLabel")}
                   </span>
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-amber-700 dark:text-amber-300">
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-scaled-11px font-semibold text-amber-700 dark:text-amber-300">
                     {runningCount}
                   </span>
                 </div>

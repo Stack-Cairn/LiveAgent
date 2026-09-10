@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -18,34 +19,30 @@ const providersSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
 );
-const responsiveStylesSource = readFileSync(
-  new URL("../src/styles/responsive.css", import.meta.url),
-  "utf8",
-);
+const responsiveStylesSource = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
+const themeSource = readStyleSource(new URL("../../../agent-ui/src/styles/tokens.css", import.meta.url));
 
 test("empty hook events render only the content-area add action", () => {
-  assert.match(hooksSource, /activeHooks\.length > 0 \? \([\s\S]*settings-hooks-detail-add/);
+  assert.match(hooksSource, /activeHooks\.length > 0 \? \([\s\S]*?<Button[\s\S]*?onClick=\{openAdd\}/);
   assert.match(hooksSource, /activeHooks\.length === 0 \? \([\s\S]*settings\.hooksAdd/);
 });
 
 test("mobile hook headers keep an existing hook action beside its title", () => {
-  assert.match(hooksSource, /settings-hooks-detail-heading/);
-  assert.match(responsiveStylesSource, /\.settings-hooks-detail-heading\s*\{[\s\S]*flex-direction:\s*row;/);
-  assert.match(responsiveStylesSource, /\.settings-hooks-detail-add\s*\{[\s\S]*flex:\s*0 0 auto;/);
+  assert.match(hooksSource, /web:max-820:flex-row! web:max-820:items-start! web:max-820:gap-10px!/);
+  assert.match(hooksSource, /web:max-380:flex-col! web:max-380:items-stretch!/);
+  assert.match(hooksSource, /settings-section-action[^"\n]*web:max-820:flex-none/);
 });
 
 test("mobile device rows move text actions below the client details", () => {
   assert.match(devicesSource, /settings-devices-card-row/);
-  assert.match(devicesSource, /settings-devices-card-main min-w-0 flex-1/);
-  assert.match(devicesSource, /settings-devices-card-actions flex shrink-0/);
+  assert.match(devicesSource, /min-w-0 flex-1 max-820:min-w-0/);
+  assert.match(devicesSource, /flex shrink-0[^"\n]*max-820:col-span-full max-820:w-full/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-devices-card-row\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*36px minmax\(0, 1fr\);/,
+    devicesSource,
+    /max-820:grid max-820:grid-cols-settings-devices-card-row/,
   );
-  assert.match(
-    responsiveStylesSource,
-    /\.settings-devices-card-actions\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*width:\s*100%;/,
-  );
+  assert.match(themeSource, /--grid-template-columns-settings-devices-card-row:\s*36px minmax\(0, 1fr\);/);
+  assert.match(devicesSource, /max-820:\[&_>_button\]:min-w-0/);
 });
 
 test("mobile cron details give configuration more room and compact log summaries", () => {
@@ -62,12 +59,12 @@ test("mobile cron details give configuration more room and compact log summaries
 });
 
 test("mobile provider toolbar stacks tabs above a full-width action group", () => {
-  assert.match(providersSource, /settings-provider-section/);
+  assert.match(providersSource, /flex min-h-0 flex-1 flex-col web:max-820:min-w-0/);
   assert.match(providersSource, /settings-provider-action-group/);
   assert.match(providersSource, /settings-provider-empty-add/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-tabs-wrap\s*\{[\s\S]*flex-direction:\s*column;/,
+    providersSource,
+    /web:max-820:flex web:max-820:w-full web:max-820:flex-col/,
   );
   assert.match(
     responsiveStylesSource,
@@ -78,7 +75,7 @@ test("mobile provider toolbar stacks tabs above a full-width action group", () =
     /\.settings-provider-action-label\s*\{[\s\S]*display:\s*inline;/,
   );
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-custom-sheet\s*\{[\s\S]*inset:\s*0;/,
+    providersSource,
+    /<SheetContent[\s\S]*?web:max-820:inset-0/,
   );
 });

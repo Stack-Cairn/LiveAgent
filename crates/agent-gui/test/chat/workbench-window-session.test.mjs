@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -92,7 +93,7 @@ test("layout validation reports a terminal cwd outside its project", () => {
 test("startup paints theme and shell before progressively hydrating pane contents", () => {
   const htmlSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
-  const appStyles = readFileSync(new URL("../../src/index.css", import.meta.url), "utf8");
+  const appStyles = readStyleSource(new URL("../../src/index.css", import.meta.url));
   const paneLoadingSource = readFileSync(
     new URL("../../src/components/app/PaneLoadingSkeleton.tsx", import.meta.url),
     "utf8",

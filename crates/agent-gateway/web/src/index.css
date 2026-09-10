@@ -2,7 +2,15 @@
 @import "../../../agent-ui/src/styles/base.css";
 @import "../../../agent-ui/src/styles/transcript.css";
 @import "../../../agent-ui/src/styles/common.css";
-@config "../tailwind.config.js";
+@reference "../../../agent-ui/src/styles/semantic-colors.css";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:is(.dark *));
+@source "../index.html";
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
 @source "../../../agent-ui/src";
 
 @font-face {
@@ -15,43 +23,17 @@
 
 @layer components {
   .sidebar-context-menu[data-state="open"] {
-    animation: sidebarMenuIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: sidebarMenuIn var(--ui-duration-180ms) var(--ease-ui-enter);
     --tw-enter-opacity: initial;
     --tw-enter-scale: initial;
     --tw-enter-translate-x: initial;
   }
 
   .sidebar-context-menu[data-state="closed"] {
-    animation: sidebarMenuOut 0.12s cubic-bezier(0.4, 0, 1, 1);
+    animation: sidebarMenuOut var(--ui-duration-120ms) var(--ease-in);
     --tw-exit-opacity: initial;
     --tw-exit-scale: initial;
     --tw-exit-translate-x: initial;
-  }
-
-  @keyframes sidebarMenuIn {
-    from {
-      opacity: 0;
-      transform: translate(var(--sidebar-menu-slide-x), var(--sidebar-menu-slide-y)) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-  }
-
-  @keyframes sidebarMenuOut {
-    from {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translate(
-          calc(var(--sidebar-menu-slide-x) / 2),
-          calc(var(--sidebar-menu-slide-y) / 2)
-        )
-        scale(0.98);
-    }
   }
 
   .mention-composer.is-empty::before {
@@ -60,41 +42,13 @@
     padding-right: inherit;
   }
 
-  @keyframes composerReasoningDropdownIn {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes composerReasoningDropdownOut {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(5px) scale(0.975);
-    }
-  }
-
-  .composer-reasoning-trigger[data-state="open"] {
-    box-shadow:
-      0 8px 18px -14px rgba(88, 28, 135, 0.55),
-      inset 0 0 0 1px rgba(167, 139, 250, 0.12);
-  }
-
   .composer-add-dropdown,
   .composer-branch-dropdown,
   .composer-safety-dropdown {
     transform-origin: var(--transform-origin, bottom left);
     transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity var(--ui-duration-180ms) var(--ease-ui-enter),
+      transform var(--ui-duration-180ms) var(--ease-ui-enter);
   }
 
   .composer-add-dropdown[data-starting-style],
@@ -104,28 +58,28 @@
   .composer-safety-dropdown[data-starting-style],
   .composer-safety-dropdown[data-ending-style] {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(var(--spacing-6px)) scale(0.97);
   }
 
   .composer-add-dropdown[data-ending-style],
   .composer-branch-dropdown[data-ending-style],
   .composer-safety-dropdown[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    transform: translateY(5px) scale(0.975);
+    transition-duration: var(--ui-duration-120ms);
+    transition-timing-function: var(--ease-in);
+    transform: translateY(var(--spacing-5px)) scale(0.975);
   }
 
   .composer-add-dropdown[data-state="open"],
   .composer-branch-dropdown[data-state="open"],
   .composer-safety-dropdown[data-state="open"] {
-    animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: composerReasoningDropdownIn var(--ui-duration-180ms) var(--ease-ui-enter);
     transform-origin: var(--transform-origin, bottom left);
   }
 
   .composer-add-dropdown[data-state="closed"],
   .composer-branch-dropdown[data-state="closed"],
   .composer-safety-dropdown[data-state="closed"] {
-    animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
+    animation: composerReasoningDropdownOut var(--ui-duration-120ms) var(--ease-in) forwards;
     transform-origin: var(--transform-origin, bottom left);
   }
 
@@ -135,12 +89,7 @@
     .composer-safety-dropdown {
       /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides dropdown open/close animations. */
       animation: none !important;
-      transition: none !important;
-    }
-
-    .composer-reasoning-trigger,
-    .composer-reasoning-trigger > svg:last-child {
-      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides trigger and chevron transitions. */
+      /* biome-ignore lint/complexity/noImportantStyles: Preserve reduced-motion overrides. */
       transition: none !important;
     }
   }

@@ -131,9 +131,9 @@ function FeedbackStrip({ status }: { status: Status }) {
       }`}
     >
       {ok ? (
-        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
       ) : (
-        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <XCircle className="mt-0.5 size-3.5 shrink-0" />
       )}
       <span className="min-w-0 break-all font-medium">{status.text}</span>
     </div>
@@ -146,7 +146,7 @@ function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) 
       {children}
       {hint ? (
         <LabelTooltip label={<span className="max-w-64 text-xs leading-relaxed">{hint}</span>}>
-          <CircleHelp className="h-3.5 w-3.5 cursor-help text-muted-foreground/60" />
+          <CircleHelp className="size-3.5 cursor-help text-muted-foreground/60" />
         </LabelTooltip>
       ) : null}
     </Label>
@@ -166,7 +166,7 @@ function SyncStatusBanner({
   if (loading && !view) {
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-5 py-4">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">{t("settings.backupSyncLoading")}</span>
       </div>
     );
@@ -185,10 +185,8 @@ function SyncStatusBanner({
   return (
     <div className="rounded-2xl border border-border/60 bg-card px-5 py-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconWrap}`}
-        >
-          {failed ? <AlertTriangle className="h-5 w-5" /> : <Cloud className="h-5 w-5" />}
+        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${iconWrap}`}>
+          {failed ? <AlertTriangle className="size-5" /> : <Cloud className="size-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground">
@@ -208,13 +206,13 @@ function SyncStatusBanner({
         </div>
         {configured ? (
           <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-11px font-medium leading-none ${
               view?.autoSync
                 ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
                 : "border-border/70 bg-muted/45 text-muted-foreground"
             }`}
           >
-            <Zap className="h-3 w-3" />
+            <Zap className="size-3" />
             {view?.autoSync ? t("settings.backupSyncAutoOn") : t("settings.backupSyncAutoOff")}
           </span>
         ) : null}
@@ -251,8 +249,8 @@ function ActionTile({
       onClick={onClick}
       className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-55"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        {busy ? <Loader2 className="size-4 animate-spin" /> : icon}
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-medium text-foreground">{title}</span>
@@ -279,12 +277,12 @@ function ScopeItem({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-11px font-medium leading-none ${
         excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85"
       }`}
     >
       <span
-        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
+        className={`flex size-3.5 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
       >
         {icon}
       </span>
@@ -575,24 +573,24 @@ export function BackupSyncSection(props: SettingsSectionProps) {
   const presetOptions: { id: PresetId }[] = [...SYNC_PRESETS, { id: "custom" as const }];
 
   return (
-    <div className="mx-auto w-full max-w-[980px] space-y-5">
+    <div className="mx-auto w-full max-w-980px space-y-5">
       <SyncStatusBanner view={syncView} loading={syncBusy === "load"} t={t} />
 
       {/* 两栏等高拉伸（默认 stretch），保证左右卡片底边始终对齐。 */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid gap-5 lg:grid-cols-gateway-settings-compact">
         {/* 左栏：WebDAV 同步配置。弹性布局把底部操作区钉在底边，撑高时中间留白。 */}
         <section className="flex flex-col rounded-2xl border border-border/60 bg-card">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-5 py-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Cloud className="h-4 w-4" />
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Cloud className="size-4" />
               </span>
               <h3 className="text-sm font-semibold text-foreground">
                 {t("settings.backupSyncTitle")}
               </h3>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-[11px] font-medium leading-none text-muted-foreground">
-              <Lock className="h-3 w-3" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-11px font-medium leading-none text-muted-foreground">
+              <Lock className="size-3" />
               {t("settings.backupSyncCredentialNote")}
             </span>
           </header>
@@ -626,7 +624,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             <div className="space-y-1.5">
               <FieldLabel>{t("settings.backupSyncUrl")}</FieldLabel>
               <div className="relative">
-                <Server className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                <Server className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
                 <Input
                   value={form.url}
                   disabled={syncLocked}
@@ -650,7 +648,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               <div className="space-y-1.5">
                 <FieldLabel>{t("settings.backupSyncPassword")}</FieldLabel>
                 <div className="relative">
-                  <Key className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                  <Key className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
                   <Input
                     type="password"
                     value={form.password}
@@ -702,7 +700,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3">
               <div className="flex min-w-0 items-center gap-2.5">
-                <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Zap className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-foreground">
                     {t("settings.backupSyncAuto")}
@@ -726,9 +724,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" disabled={syncLocked} onClick={() => void handleSaveSync()}>
                 {syncBusy === "save" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Save className="h-3.5 w-3.5" />
+                  <Save className="size-3.5" />
                 )}
                 {t("settings.backupSyncSave")}
               </Button>
@@ -739,9 +737,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 onClick={() => void handleTestSync()}
               >
                 {syncBusy === "test" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Plug className="h-3.5 w-3.5" />
+                  <Plug className="size-3.5" />
                 )}
                 {t("settings.backupSyncTest")}
               </Button>
@@ -753,9 +751,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 onClick={() => void handleUpload()}
               >
                 {syncBusy === "upload" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Upload className="h-3.5 w-3.5" />
+                  <Upload className="size-3.5" />
                 )}
                 {t("settings.backupSyncUpload")}
               </Button>
@@ -766,9 +764,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 onClick={() => void handleDownload()}
               >
                 {syncBusy === "download" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <CloudDownload className="h-3.5 w-3.5" />
+                  <CloudDownload className="size-3.5" />
                 )}
                 {t("settings.backupSyncDownload")}
               </Button>
@@ -776,7 +774,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
             {dirty && !syncLocked ? (
               <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <AlertTriangle className="size-3.5 shrink-0" />
                 {t("settings.backupSyncDirtyHint")}
               </div>
             ) : null}
@@ -789,8 +787,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         <aside className="flex flex-col gap-5">
           <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <HardDrive className="h-4 w-4" />
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <HardDrive className="size-4" />
               </span>
               <h3 className="text-sm font-semibold text-foreground">
                 {t("settings.backupLocalTitle")}
@@ -799,7 +797,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
             <div className="space-y-2">
               <ActionTile
-                icon={<Download className="h-4 w-4" />}
+                icon={<Download className="size-4" />}
                 busy={busy === "export"}
                 title={t("settings.backupExport")}
                 hint={t("settings.backupExportHint")}
@@ -807,7 +805,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 onClick={() => void handleExport()}
               />
               <ActionTile
-                icon={<Upload className="h-4 w-4" />}
+                icon={<Upload className="size-4" />}
                 busy={busy === "import"}
                 title={t("settings.backupImport")}
                 hint={t("settings.backupImportHint")}
@@ -816,8 +814,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               />
             </div>
 
-            <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
-              <ArchiveRestore className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="flex items-start gap-2 text-11px leading-relaxed text-muted-foreground">
+              <ArchiveRestore className="mt-0.5 size-3.5 shrink-0" />
               <span>{t("settings.backupAutoBackupHint")}</span>
             </div>
 
@@ -826,8 +824,8 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
           <section className="flex-1 space-y-3 rounded-2xl border border-border/60 bg-card p-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Shield className="h-4 w-4" />
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Shield className="size-4" />
               </span>
               <h3 className="text-sm font-semibold text-foreground">
                 {t("settings.backupScopeTitle")}
@@ -835,70 +833,70 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeIncluded")}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <ScopeItem
-                  icon={<Server className="h-3.5 w-3.5" />}
+                  icon={<Server className="size-3.5" />}
                   label={t("settings.backupDomainProviders")}
                 />
                 <ScopeItem
-                  icon={<McpLogo className="h-3.5 w-3.5" />}
+                  icon={<McpLogo className="size-3.5" />}
                   label={t("settings.backupDomainMcp")}
                 />
                 <ScopeItem
-                  icon={<Settings2 className="h-3.5 w-3.5" />}
+                  icon={<Settings2 className="size-3.5" />}
                   label={t("settings.backupDomainSystem")}
                 />
                 <ScopeItem
-                  icon={<ScrollText className="h-3.5 w-3.5" />}
+                  icon={<ScrollText className="size-3.5" />}
                   label={t("settings.backupDomainAgents")}
                 />
                 <ScopeItem
-                  icon={<Layers className="h-3.5 w-3.5" />}
+                  icon={<Layers className="size-3.5" />}
                   label={t("settings.backupDomainModelFailover")}
                 />
                 <ScopeItem
-                  icon={<Mic className="h-3.5 w-3.5" />}
+                  icon={<Mic className="size-3.5" />}
                   label={t("settings.backupDomainStt")}
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeExcluded")}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <ScopeItem
                   excluded
-                  icon={<MessageSquare className="h-3.5 w-3.5" />}
+                  icon={<MessageSquare className="size-3.5" />}
                   label={t("settings.backupScopeChat")}
                 />
                 <ScopeItem
                   excluded
-                  icon={<Brain className="h-3.5 w-3.5" />}
+                  icon={<Brain className="size-3.5" />}
                   label={t("settings.backupScopeMemory")}
                 />
                 <ScopeItem
                   excluded
-                  icon={<FileText className="h-3.5 w-3.5" />}
+                  icon={<FileText className="size-3.5" />}
                   label={t("settings.backupScopeUploads")}
                 />
                 <ScopeItem
                   excluded
-                  icon={<Key className="h-3.5 w-3.5" />}
+                  icon={<Key className="size-3.5" />}
                   label={t("settings.backupScopeSshKeys")}
                 />
                 <ScopeItem
                   excluded
-                  icon={<SkillIcon className="h-3.5 w-3.5" />}
+                  icon={<SkillIcon className="size-3.5" />}
                   label={t("settings.backupScopeSkills")}
                 />
                 <ScopeItem
                   excluded
-                  icon={<HardDrive className="h-3.5 w-3.5" />}
+                  icon={<HardDrive className="size-3.5" />}
                   label={t("settings.backupScopeDeviceLocal")}
                 />
               </div>

@@ -178,32 +178,32 @@ export function ToolApprovalBar({
           onDecide(current.toolCallId, "approve"),
         );
       }}
-      className="tool-expand @container relative flex h-32 w-full flex-col rounded-3xl border border-black/[0.055] bg-white/72 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] outline-none backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)]"
+      className="animate-tool-expand motion-reduce:animate-none! @container relative flex h-32 w-full flex-col rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19"
     >
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-          <Terminal className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-[calc(11.5px*var(--zone-font-scale,1))] leading-none">
+          <Terminal className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-scaled-11p5px leading-none">
             {displayToolName}
           </span>
           <span
             role="timer"
             title={`${formatCountdown(remainingMs)} ${t("chat.toolApproval.timeoutHint")}`}
-            className="shrink-0 text-[calc(10.5px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/65"
+            className="shrink-0 text-scaled-10p5px tabular-nums text-muted-foreground/65"
           >
             {pending.length > 1 ? `1 / ${pending.length} · ` : null}
             {formatCountdown(remainingMs)}
           </span>
         </div>
 
-        <p className="mt-2 truncate text-[calc(13px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/92">
+        <p className="mt-2 truncate text-scaled-13px font-medium leading-1p5 text-foreground/92">
           {t("chat.toolApproval.body").replace("{tool}", displayToolName)}
         </p>
 
         {current.summary ? (
           <pre
             title={current.summary}
-            className="mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.45] text-muted-foreground"
+            className="mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-scaled-11p5px leading-1p45 text-muted-foreground"
           >
             {current.summary}
           </pre>
@@ -214,7 +214,7 @@ export function ToolApprovalBar({
         {errorText ? (
           <span
             role="alert"
-            className="mr-auto min-w-0 flex-1 truncate text-[calc(10.5px*var(--zone-font-scale,1))] text-red-600 dark:text-red-400"
+            className="mr-auto min-w-0 flex-1 truncate text-scaled-10p5px text-red-600 dark:text-red-400"
           >
             {errorText}
           </span>
@@ -231,15 +231,15 @@ export function ToolApprovalBar({
               onDecide(current.toolCallId, "deny"),
             )
           }
-          className="h-7 shrink-0 px-3 text-[calc(11px*var(--zone-font-scale,1))]"
+          className="h-7 shrink-0 px-3 text-scaled-11px"
         >
           {submittingAction === `deny:${current.toolCallId}` ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="size-3.5 animate-spin" />
           ) : null}
           {t("chat.toolApproval.deny")}
           <span
             aria-hidden="true"
-            className="rounded bg-muted px-1 py-0.5 font-sans text-[9px] font-normal leading-none text-muted-foreground"
+            className="rounded bg-muted px-1 py-0.5 font-sans text-9px font-normal leading-none text-muted-foreground"
           >
             Esc
           </span>
@@ -257,15 +257,15 @@ export function ToolApprovalBar({
                   onDecide(current.toolCallId, "approve"),
                 )
               }
-              className="h-7 rounded-r-none px-3 text-[calc(11px*var(--zone-font-scale,1))] shadow-none"
+              className="h-7 rounded-r-none px-3 text-scaled-11px shadow-none"
             >
               {submittingAction === `approve:${current.toolCallId}` ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : null}
               {t("chat.toolApproval.approve")}
               <span
                 aria-hidden="true"
-                className="rounded bg-primary-foreground/10 px-1 py-0.5 font-sans text-[10px] font-normal leading-none text-primary-foreground/75"
+                className="rounded bg-primary-foreground/10 px-1 py-0.5 font-sans text-10px font-normal leading-none text-primary-foreground/75"
               >
                 ↵
               </span>
@@ -280,7 +280,7 @@ export function ToolApprovalBar({
               }
               aria-label={t("chat.toolApproval.moreActions")}
             >
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="size-3" />
             </DropdownMenuTrigger>
           </div>
           <DropdownMenuContent side="top" align="end" className="min-w-32">

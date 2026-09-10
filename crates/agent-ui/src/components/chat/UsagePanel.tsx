@@ -98,7 +98,7 @@ export function UsagePanel(props: {
     <dl
       data-chat-usage-details
       className={cn(
-        "grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1.5 text-[calc(12px*var(--zone-font-scale,1))] leading-5",
+        "grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1.5 text-scaled-12px leading-5",
         className,
       )}
     >
@@ -133,13 +133,13 @@ export function UsageInfoPopover(props: {
           <button
             type="button"
             className={cn(
-              "chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+              "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
               className,
             )}
             title={label}
             aria-label={label}
           >
-            <Info className="h-3.5 w-3.5" />
+            <Info className="size-3.5" />
           </button>
         }
       />
@@ -150,7 +150,7 @@ export function UsageInfoPopover(props: {
             displayableEntries.map((entry, index) => (
               <div key={entry.key} className={cn(index > 0 && "border-t border-border/55 pt-2.5")}>
                 {displayableEntries.length > 1 ? (
-                  <div className="mb-1 text-[11px] font-medium text-muted-foreground/75">
+                  <div className="mb-1 text-11px font-medium text-muted-foreground/75">
                     {label} {index + 1}
                   </div>
                 ) : null}

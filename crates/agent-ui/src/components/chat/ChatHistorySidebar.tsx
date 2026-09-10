@@ -29,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
@@ -68,6 +69,7 @@ import {
 } from "../../lib/workspaceProjects";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
+import { PROJECT_ICON_BUTTON_CLASS } from "./ChatHistorySidebarStyles";
 import type {
   ChatHistorySidebarProps,
   WorkspaceProjectRemoveOptions,
@@ -97,8 +99,6 @@ const MOBILE_SIDEBAR_MEDIA_QUERY = "(max-width: 820px)";
 const HISTORY_ROW_ESTIMATED_HEIGHT = 30;
 const HISTORY_ROW_GAP = 2;
 const HISTORY_ROW_OVERSCAN_COUNT = 8;
-const PROJECT_ICON_BUTTON_CLASS =
-  "h-7 w-7 rounded-lg !bg-transparent text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground active:!bg-transparent focus-visible:!bg-transparent data-[state=open]:!bg-transparent data-[state=open]:text-foreground data-[popup-open]:!bg-transparent data-[popup-open]:text-foreground";
 const PROJECT_LIST_COLLAPSED_MAX = 30;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
 const EMPTY_APPROVAL_CONVERSATION_IDS = new Set<string>();
@@ -137,20 +137,20 @@ function HistoryListLoadingSkeleton() {
       aria-live="polite"
       aria-label={t("sidebar.readingHistory")}
     >
-      <div className="flex items-center gap-2 px-2 pb-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/75">
-        <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-primary/70" />
+      <div className="flex items-center gap-2 px-2 pb-1 text-scaled-11px font-medium text-muted-foreground/75">
+        <span className="relative flex size-2 shrink-0" aria-hidden="true">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/35 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-primary/70" />
         </span>
         <span>{t("sidebar.readingHistory")}</span>
       </div>
       {HISTORY_LOADING_SKELETON_ROWS.map((row) => (
         <div key={`${row.title}-${row.meta}`} className="rounded-lg px-2 py-2.5">
           <div className="flex items-start gap-2">
-            <div className="skills-skeleton-shimmer mt-1 h-3.5 w-3.5 shrink-0 rounded-md" />
+            <Skeleton className="mt-1 size-3.5 shrink-0 rounded-md" />
             <div className="min-w-0 flex-1 space-y-2">
-              <div className={cn("skills-skeleton-shimmer h-3.5 rounded", row.title)} />
-              <div className={cn("skills-skeleton-shimmer h-2.5 rounded", row.meta)} />
+              <Skeleton className={cn("h-3.5 rounded", row.title)} />
+              <Skeleton className={cn("h-2.5 rounded", row.meta)} />
             </div>
           </div>
         </div>
@@ -1245,13 +1245,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       >
         {visible.map((item) => renderHistoryRow(item))}
         {!state || (state.loading && visible.length === 0) ? (
-          <div role="status" className="px-2 py-2 text-xs text-muted-foreground">
+          <div role="status" className="p-2 text-xs text-muted-foreground">
             {t("sidebar.readingHistory")}
           </div>
         ) : visible.length === 0 && !state.error ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            {t("chat.emptyChatHistory")}
-          </div>
+          <div className="p-2 text-xs text-muted-foreground">{t("chat.emptyChatHistory")}</div>
         ) : null}
         {state?.error ? (
           <div role="alert" className="px-2 py-1 text-xs text-destructive">
@@ -1263,7 +1261,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             type="button"
             disabled={sectionsDisabled || state?.loading}
             onClick={() => void onLoadWorkspaceHistory?.(project.path, !state?.error, archivedIds)}
-            className="flex h-[30px] w-full items-center rounded-md px-2 text-left text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="flex h-30px w-full items-center rounded-md px-2 text-left text-scaled-14px font-normal leading-5 text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             {state?.loading
               ? t("sidebar.loadingMoreHistory")
@@ -1347,7 +1345,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronRight
-            className={cn("h-3 w-3 transition-transform", archivedConversationsOpen && "rotate-90")}
+            className={cn("size-3 transition-transform", archivedConversationsOpen && "rotate-90")}
           />
           {t("chat.archivedConversations").replace("{count}", String(archivedItems.length))}
         </button>
@@ -1364,7 +1362,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       data-state={isOpen ? "open" : "closed"}
       className={cn(
         "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
-        isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
+        isOpen ? "w-272px opacity-100" : "w-0 opacity-0",
       )}
       style={{ "--zone-font-scale": fontScale } as CSSProperties}
     >
@@ -1373,21 +1371,21 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           ref={reorder.ghostRef}
           aria-hidden="true"
           data-sidebar-drag-ghost
-          className="pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-[240px] items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3 text-[calc(14px*var(--zone-font-scale,1))] text-popover-foreground shadow-lg backdrop-blur-sm"
+          className="pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-240px items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3 text-scaled-14px text-popover-foreground shadow-lg backdrop-blur-sm"
           style={{
             transform:
-              "translate3d(var(--sidebar-drag-x, -9999px), var(--sidebar-drag-y, -9999px), 0)",
+              "translate3d(var(--sidebar-drag-x, var(--spacing-minus-9999px)), var(--sidebar-drag-y, var(--spacing-minus-9999px)), 0)",
           }}
         >
           {draggedPinnedEntry?.kind === "conversation" ? (
-            <MessageSquare className="h-4 w-4 shrink-0" />
+            <MessageSquare className="size-4 shrink-0" />
           ) : (
-            <FolderClosed className="h-4 w-4 shrink-0" />
+            <FolderClosed className="size-4 shrink-0" />
           )}
           <span className="truncate">{draggedTitle}</span>
         </div>
       ) : null}
-      <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
+      <div className="chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col">
         {headerTop}
         <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
           <div className="flex items-center justify-between gap-2">
@@ -1398,7 +1396,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   alt=""
                   aria-hidden="true"
                   draggable={false}
-                  className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
+                  className="size-8 shrink-0 select-none rounded-xl object-contain"
                 />
                 <div className="min-w-0">
                   <div className="truncate font-semibold tracking-tight">Live Agent</div>
@@ -1413,9 +1411,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 size="icon"
                 onClick={onCloseSidebar}
                 title={t("sidebar.closeSidebar")}
-                className="h-9 w-9 shrink-0 rounded-2xl text-muted-foreground hover:text-foreground"
+                className="shrink-0 rounded-2xl text-muted-foreground hover:text-foreground"
               >
-                <PanelLeftClose className="h-4 w-4" />
+                <PanelLeftClose className="size-4" />
               </Button>
             ) : null}
           </div>
@@ -1426,14 +1424,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={onNewConversation}
               className={cn(
-                "chat-history-new-conversation-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                "h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 shadow-none transition-colors web:text-14px! web:leading-20px! web:font-normal",
                 activeView === "chat"
                   ? "text-foreground/90 hover:bg-foreground/[0.08] hover:text-foreground active:bg-foreground/[0.1] active:text-foreground focus-visible:bg-foreground/[0.08]"
                   : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
               )}
             >
-              <CirclePlus className="h-4 w-4 shrink-0 text-foreground/85" />
-              <span className="chat-history-new-conversation-label">
+              <CirclePlus className="size-4 shrink-0 text-foreground/85" />
+              <span className="web:font-app web:[font-size:inherit] web:[line-height:inherit] web:[font-weight:inherit]">
                 {t("chat.newConversation")}
               </span>
             </Button>
@@ -1442,10 +1440,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               disabled={sectionsDisabled}
               onClick={() => setConversationSearchOpen(true)}
-              className="chat-history-search-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
+              className="chat-history-search-button h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
               title={t("chat.searchConversations")}
             >
-              <Search className="h-4 w-4 shrink-0 text-foreground/85" />
+              <Search className="size-4 shrink-0 text-foreground/85" />
               <span className="min-w-0 flex-1 truncate text-left">
                 {t("chat.searchConversations")}
               </span>
@@ -1462,14 +1460,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   aria-current={active ? "page" : undefined}
                   onClick={() => onOpenResourceHub(id)}
                   className={cn(
-                    "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                    "sidebar-hub-menu-item h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 shadow-none transition-colors",
                     active
                       ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
                       : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
                   )}
                   title={t(labelKey)}
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-foreground/85" />
+                  <Icon className="size-4 shrink-0 text-foreground/85" />
                   <span className="truncate">{t(labelKey)}</span>
                 </Button>
               );
@@ -1504,7 +1502,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       {t("chat.pinnedSection")}
                       <ChevronRight
                         aria-hidden="true"
-                        className="h-3.5 w-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100"
+                        className="size-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100"
                         style={{ transform: `rotate(${pinnedCollapsed ? 0 : 90}deg)` }}
                       />
                     </button>
@@ -1551,7 +1549,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     </span>
                     <ChevronRight
                       aria-hidden="true"
-                      className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                      className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
                       style={{ transform: `rotate(${projectsCollapsed ? 0 : 90}deg)` }}
                     />
                   </button>
@@ -1569,7 +1567,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       aria-label={t("chat.conversationBulkSelect")}
                       title={t("chat.conversationBulkSelect")}
                     >
-                      <ListChecks className="h-3.5 w-3.5" />
+                      <ListChecks className="size-3.5" />
                     </Button>
                     {canShareConversations && (
                       <Button
@@ -1583,7 +1581,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           String(sharedConversationCount),
                         )}
                       >
-                        <Share2 className="h-3.5 w-3.5" />
+                        <Share2 className="size-3.5" />
                       </Button>
                     )}
                     <Button
@@ -1596,7 +1594,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       disabled={sectionsDisabled || !onCreateProject}
                       onClick={() => onCreateProject?.()}
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="size-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -1609,7 +1607,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         onClick={onDismissActionError}
                         aria-label={t("chat.cancel")}
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X className="size-3.5" />
                       </button>
                     )}
                   </div>
@@ -1629,9 +1627,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       <div
                         role="status"
                         aria-live="polite"
-                        className="flex h-[30px] items-center gap-2 px-2 text-xs text-muted-foreground"
+                        className="flex h-30px items-center gap-2 px-2 text-xs text-muted-foreground"
                       >
-                        <FolderOpen className="h-4 w-4 shrink-0" />
+                        <FolderOpen className="size-4 shrink-0" />
                         <span className="truncate">{t("chat.workspaceDropFolder")}</span>
                       </div>
                     ) : null}
@@ -1667,7 +1665,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     {renderedSections.ungrouped.length > 0 ? (
                       <Fragment>
                         {renderedSections.grouped.length > 0 ? (
-                          <div className="px-2 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                          <div className="px-2 pt-1.5 text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
                             {t("chat.workspaceUngrouped")}
                           </div>
                         ) : null}
@@ -1679,7 +1677,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     {hiddenProjectCount > 0 || showAllProjects ? (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-scaled-11p5px font-medium text-muted-foreground outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={handleShowAllProjects}
                         disabled={sectionsDisabled}
                       >
@@ -1697,11 +1695,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           type="button"
                           onClick={() => setArchivedGroupOpen((current) => !current)}
                           disabled={sectionsDisabled}
-                          className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground/80 outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-scaled-11p5px font-medium text-muted-foreground/80 outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <ChevronRight
                             className={cn(
-                              "h-3 w-3 shrink-0 transition-transform duration-200",
+                              "size-3 shrink-0 transition-transform duration-200",
                               archivedGroupOpen && "rotate-90",
                             )}
                           />
@@ -1737,7 +1735,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   aria-live="polite"
                   className="flex min-w-0 items-center gap-1.5 px-3 py-1 text-xs font-semibold text-foreground/85"
                 >
-                  <ListChecks className="h-3.5 w-3.5 shrink-0" />
+                  <ListChecks className="size-3.5 shrink-0" />
                   <span className="min-w-0 truncate">
                     {t("chat.conversationBulkSelectedCount").replace(
                       "{count}",
@@ -1756,7 +1754,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   <span className="min-w-0 truncate">{t("chat.recentConversation")}</span>
                   <ChevronRight
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                    className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
                     style={{ transform: `rotate(${recentCollapsed ? 0 : 90}deg)` }}
                   />
                 </button>
@@ -1790,16 +1788,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         aria-label={t("chat.conversationMoveToWorkspace")}
                       >
                         {isBulkMoving ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="size-3.5 animate-spin" />
                         ) : (
-                          <Folder className="h-3.5 w-3.5" />
+                          <Folder className="size-3.5" />
                         )}
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         side="top"
                         align="start"
                         collisionPadding={12}
-                        className="sidebar-context-menu max-h-[18rem] min-w-[12rem] overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
+                        className="sidebar-context-menu max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
                       >
                         {activeProjects.map((workspace) => (
                           <DropdownMenuItem
@@ -1807,7 +1805,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                             onSelect={() => void handleBulkMove(workspace.path)}
                             className="gap-2"
                           >
-                            <FolderClosed className="h-3.5 w-3.5 shrink-0" />
+                            <FolderClosed className="size-3.5 shrink-0" />
                             <span className="truncate">{workspace.path}</span>
                           </DropdownMenuItem>
                         ))}
@@ -1829,9 +1827,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       aria-label={t("chat.conversationBulkDelete")}
                     >
                       {isBulkDeleting ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="size-3.5 animate-spin" />
                       ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="size-3.5" />
                       )}
                     </Button>
                     <Button
@@ -1843,7 +1841,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       title={t("chat.cancel")}
                       aria-label={t("chat.cancel")}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="size-3.5" />
                     </Button>
                   </>
                 ) : (
@@ -1852,11 +1850,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       <span
                         role="status"
                         aria-live="polite"
-                        className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-primary/80"
+                        className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-scaled-10p5px font-medium text-primary/80"
                       >
-                        <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
-                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/70" />
+                        <span className="relative flex size-1.5 shrink-0" aria-hidden="true">
+                          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/35 opacity-75" />
+                          <span className="relative inline-flex size-1.5 rounded-full bg-primary/70" />
                         </span>
                         {t("chat.history.syncing")}
                       </span>
@@ -1865,10 +1863,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       <span
                         role="status"
                         title={`${t("chat.historyReadFailed")}: ${errorMessage}`}
-                        className="flex h-7 w-7 items-center justify-center text-destructive"
+                        className="flex size-7 items-center justify-center text-destructive"
                       >
                         <AlertCircle
-                          className="h-3.5 w-3.5 shrink-0"
+                          className="size-3.5 shrink-0"
                           aria-label={t("chat.historyReadFailed")}
                         />
                       </span>
@@ -1888,7 +1886,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         title={t("chat.conversationBulkSelectHint")}
                         aria-label={t("chat.conversationBulkSelect")}
                       >
-                        <ListChecks className="h-3.5 w-3.5" />
+                        <ListChecks className="size-3.5" />
                       </Button>
                     ) : null}
                     {canShareConversations ? (
@@ -1908,7 +1906,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           String(sharedConversationCount),
                         )}
                       >
-                        <Share2 className="h-3.5 w-3.5" />
+                        <Share2 className="size-3.5" />
                       </Button>
                     ) : null}
                   </>
@@ -1933,9 +1931,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <div
                   role="alert"
                   title={actionErrorMessage}
-                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive"
+                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-scaled-11px leading-4 text-destructive"
                 >
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                   <span className="min-w-0 break-words">{actionErrorMessage}</span>
                   {onDismissActionError ? (
                     <button
@@ -1944,7 +1942,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       onClick={onDismissActionError}
                       title={t("chat.cancel")}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="size-3.5" />
                     </button>
                   ) : null}
                 </div>
@@ -1958,7 +1956,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               {items.length > 0 ? (
                 <div
                   key={scopeKey || "scope"}
-                  className="chat-history-scope-enter relative"
+                  className="animate-chat-history-scope-enter will-change-[transform,opacity] motion-reduce:animate-none relative"
                   style={{ height: historyVirtualizer.getTotalSize() }}
                 >
                   {virtualHistoryRows.map((virtualRow) => {
@@ -1987,7 +1985,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               ) : listStatus === "loading" || listStatus === "initial" ? (
                 <HistoryListLoadingSkeleton />
               ) : listStatus === "ready" && !errorMessage ? (
-                <div className="chat-history-scope-enter flex items-center justify-center px-4 py-8 text-center">
+                <div className="animate-chat-history-scope-enter will-change-[transform,opacity] motion-reduce:animate-none flex items-center justify-center px-4 py-8 text-center">
                   <p className="text-xs font-medium text-muted-foreground/60">
                     {t("chat.emptyChatHistory")}
                   </p>
@@ -2018,10 +2016,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             // 东西不该为了脚本方便固定成英文。
             data-testid="open-settings"
             onClick={() => onOpenSettings()}
-            className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
+            className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-scaled-13px font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
             title={t("tooltip.settings")}
           >
-            <Settings className="h-4 w-4 shrink-0 text-foreground/75" />
+            <Settings className="size-4 shrink-0 text-foreground/75" />
             <span className="truncate">{t("tooltip.settings")}</span>
           </Button>
           {footerTrailing}

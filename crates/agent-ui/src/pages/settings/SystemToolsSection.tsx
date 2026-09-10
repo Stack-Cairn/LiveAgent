@@ -93,8 +93,8 @@ function BrowserModeRow(props: {
                 onClick={() => onChange(option)}
                 className={
                   active
-                    ? "rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium leading-none text-primary-foreground transition-colors"
-                    : "rounded-md px-2.5 py-1 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground"
+                    ? "rounded-md bg-primary px-2.5 py-1 text-11px font-medium leading-none text-primary-foreground transition-colors"
+                    : "rounded-md px-2.5 py-1 text-11px font-medium leading-none text-muted-foreground transition-colors hover:text-foreground"
                 }
               >
                 {t(`settings.browserMode.${option}`)}
@@ -106,8 +106,8 @@ function BrowserModeRow(props: {
           <span
             className={
               info.connected
-                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] leading-none text-emerald-500"
-                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] leading-none text-amber-500"
+                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-10px leading-none text-emerald-500"
+                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-10px leading-none text-amber-500"
             }
           >
             {t(
@@ -118,22 +118,22 @@ function BrowserModeRow(props: {
           </span>
         ) : null}
       </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+      <p className="text-11px leading-relaxed text-muted-foreground/80">
         {t(`settings.browserMode.${mode}.desc`)}
       </p>
       {showGuide ? (
         <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-11px leading-relaxed text-muted-foreground">
             {t("settings.browserMode.installGuide")}
           </p>
           {info.extensionDir ? (
             <div className="flex flex-wrap items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1 font-mono text-[10px] leading-none text-muted-foreground">
+              <code className="min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1 font-mono text-10px leading-none text-muted-foreground">
                 {info.extensionDir}
               </code>
               <button
                 type="button"
-                className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium leading-none text-foreground transition-colors hover:bg-muted/60"
+                className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-11px font-medium leading-none text-foreground transition-colors hover:bg-muted/60"
                 onClick={() => {
                   void invoke("browser_extension_reveal_dir", {}).catch(() => {});
                 }}
@@ -194,8 +194,8 @@ export function SystemToolsSection(props: SettingsSectionProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <Wrench className="h-[18px] w-[18px] text-primary" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <Wrench className="size-18px text-primary" />
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{t("settings.systemTools")}</h3>
@@ -204,7 +204,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
           </p>
         </div>
         {overriddenCount > 0 ? (
-          <span className="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium leading-none text-primary">
+          <span className="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-11px font-medium leading-none text-primary">
             {t("settings.toolPermissionsOverridden").replace("{count}", String(overriddenCount))}
           </span>
         ) : null}
@@ -213,7 +213,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
       <div className="space-y-4">
         {groups.map(({ category, entries }) => (
           <div key={category.id} className="space-y-1.5">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+            <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
               {t(category.labelKey)}
             </div>
             <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-background/60">
@@ -227,11 +227,11 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                           <span className="text-sm font-medium">
                             {t(`settings.builtinTool.${entry.id}.name`)}
                           </span>
-                          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground">
+                          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-10px leading-none text-muted-foreground">
                             {entry.toolName}
                           </code>
                           {entry.isReadOnly ? (
-                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] leading-none text-emerald-500">
+                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-10px leading-none text-emerald-500">
                               {t("settings.toolDetailReadOnly")}
                             </span>
                           ) : null}
@@ -241,7 +241,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                         </div>
                       </div>
                       {entry.isReadOnly ? (
-                        <span className="shrink-0 text-[11px] text-muted-foreground/60">
+                        <span className="shrink-0 text-11px text-muted-foreground/60">
                           {t("settings.toolPolicy.allow")}
                         </span>
                       ) : (

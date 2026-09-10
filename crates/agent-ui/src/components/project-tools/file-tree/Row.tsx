@@ -86,7 +86,7 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
         <button
           type="button"
           className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-background",
+            "flex size-5 shrink-0 items-center justify-center rounded hover:bg-background",
             hidden && "opacity-60 group-hover:opacity-80",
           )}
           onClick={(event) => {
@@ -96,15 +96,15 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
           title={expanded ? t("projectTools.fileTree.collapse") : t("projectTools.fileTree.expand")}
         >
           {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <ChevronRight
-              className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")}
+              className={cn("size-3.5 transition-transform", expanded && "rotate-90")}
             />
           )}
         </button>
       ) : (
-        <span className="h-5 w-5 shrink-0" />
+        <span className="size-5 shrink-0" />
       )}
       <div
         className={cn(
@@ -112,7 +112,7 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
           hidden && "opacity-60 group-hover:opacity-80",
         )}
       >
-        <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+        <TypeIcon className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{name}</span>
       </div>
     </div>
@@ -129,7 +129,7 @@ export const FileTreeErrorRow = memo(function FileTreeErrorRow(props: FileTreeEr
   const { depth, message } = props;
   return (
     <div
-      className="break-all px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] text-amber-600"
+      className="break-all px-3 py-1 text-scaled-11px text-amber-600"
       style={{ paddingLeft: 12 + depth * 14 }}
     >
       {message}

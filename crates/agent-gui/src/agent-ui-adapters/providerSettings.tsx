@@ -272,13 +272,13 @@ function CcsImportModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
       <DialogContent
-        className="flex h-[min(34rem,85dvh)] max-w-xl flex-col p-0"
+        className="flex h-dialog-34rem-dvh max-w-xl flex-col p-0"
         closeDisabled={importing}
         closeLabel="关闭"
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6">
-          {sourceLogo("ccswitch", "h-9 w-9")}
+          {sourceLogo("ccswitch", "size-9")}
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-sm leading-normal">从 CC Switch 导入</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
@@ -316,7 +316,7 @@ function CcsImportModal(props: {
                       {item.baseUrl || "未配置 Base URL"}
                     </div>
                   </div>
-                  {item.apiKey.trim() ? <Key className="h-3.5 w-3.5" /> : null}
+                  {item.apiKey.trim() ? <Key className="size-3.5" /> : null}
                   {alreadyImported ? (
                     <span className="text-xs text-emerald-600">已导入</span>
                   ) : null}
@@ -331,7 +331,7 @@ function CcsImportModal(props: {
         </DialogBody>
         {result ? (
           <div className="flex items-start gap-2 border-t px-6 py-3 text-xs text-emerald-600">
-            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
             <span>{result}</span>
           </div>
         ) : null}
@@ -346,9 +346,9 @@ function CcsImportModal(props: {
               disabled={importing || selectedItems.length === 0}
             >
               {importing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Download className="h-3.5 w-3.5" />
+                <Download className="size-3.5" />
               )}
               导入 {selectedItems.length} 项
             </Button>
@@ -615,19 +615,19 @@ export function ProviderSettingsExtension(props: {
             }
           >
             {scanning ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <Download className="h-3.5 w-3.5" />
+              <Download className="size-3.5" />
             )}
             <span className="settings-provider-action-label">{t("settings.importProviders")}</span>
             <ChevronDown
-              className={cn("h-3.5 w-3.5 shrink-0 transition-transform", menuOpen && "rotate-180")}
+              className={cn("size-3.5 shrink-0 transition-transform", menuOpen && "rotate-180")}
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>桌面配置同步</DropdownMenuLabel>
             <DropdownMenuItem onSelect={() => void scan()} disabled={scanning} className="gap-2">
-              <RefreshCw className={cn("h-4 w-4", scanning && "animate-spin")} />
+              <RefreshCw className={cn("size-4", scanning && "animate-spin")} />
               重新扫描本地配置
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -636,7 +636,7 @@ export function ProviderSettingsExtension(props: {
               onSelect={() => setCcsModalOpen(true)}
               className="gap-3 py-2.5"
             >
-              {sourceLogo("ccswitch", "h-8 w-8")}
+              {sourceLogo("ccswitch", "size-8")}
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">CC Switch</span>
                 <span className="block truncate text-xs text-muted-foreground">
@@ -649,7 +649,7 @@ export function ProviderSettingsExtension(props: {
               onSelect={() => setCherryModalOpen(true)}
               className="gap-3 py-2.5"
             >
-              {sourceLogo("cherry", "h-8 w-8")}
+              {sourceLogo("cherry", "size-8")}
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">Cherry Studio</span>
                 <span className="block truncate text-xs text-muted-foreground">

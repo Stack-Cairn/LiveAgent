@@ -3891,12 +3891,12 @@ export function ChatPage(props: ChatPageProps) {
       <div
         ref={workbenchDragGhostRef}
         data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className="layer-popover pointer-events-none fixed max-w-220px truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
         style={{
           left: 0,
           top: 0,
           transform:
-            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+            "translate3d(var(--workbench-drag-ghost-x, var(--spacing-minus-9999px)), var(--workbench-drag-ghost-y, var(--spacing-minus-9999px)), 0)",
           willChange: "transform",
         }}
       >
@@ -3905,10 +3905,7 @@ export function ChatPage(props: ChatPageProps) {
     ) : null;
 
   return (
-    <div
-      data-app-frame="three-column"
-      className="relative flex h-full min-h-0 w-full overflow-hidden"
-    >
+    <div data-app-frame="three-column" className="relative flex size-full min-h-0 overflow-hidden">
       <MacOsTitleBarToggle
         sidebarOpen={sidebarOpen}
         onToggle={handleToggleSidebar}

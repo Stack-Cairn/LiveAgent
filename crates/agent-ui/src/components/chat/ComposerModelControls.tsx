@@ -81,7 +81,7 @@ function RuntimeToggleChip(props: {
       title={ariaLabel}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-11px font-medium outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
         pressed
           ? pressedClassName
           : "bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground",
@@ -196,7 +196,7 @@ function ReasoningEffortSegments(props: {
         <span
           aria-hidden="true"
           style={{ left: indicator.left, width: indicator.width }}
-          className="pointer-events-none absolute bottom-0.5 top-0.5 rounded-md bg-sky-500/15 transition-[left,width] duration-200 ease-out motion-reduce:transition-none"
+          className="pointer-events-none absolute inset-y-0.5 rounded-md bg-sky-500/15 transition-[left,width] duration-200 ease-out motion-reduce:transition-none"
         />
       ) : null}
       {choices.map((level, index) => {
@@ -232,7 +232,7 @@ function ReasoningEffortSegments(props: {
               if (next && next !== value) onSelect(next);
             }}
             className={cn(
-              "relative z-10 flex flex-1 items-center justify-center whitespace-nowrap rounded-md px-1.5 text-[11px] font-medium transition-colors",
+              "relative z-10 flex flex-1 items-center justify-center whitespace-nowrap rounded-md px-1.5 text-11px font-medium transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
               isSelected
                 ? "text-sky-700 dark:text-sky-300"
@@ -396,7 +396,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         {selectedOption ? (
           <ProviderBrandIcon type={selectedOption.providerType} className="opacity-90" />
         ) : (
-          <Sparkle className="h-4 w-4 shrink-0 text-violet-500 dark:text-violet-400" />
+          <Sparkle className="size-4 shrink-0 text-violet-500 dark:text-violet-400" />
         )}
         <span className={COMPOSER_CONTROL_LABEL_CLASS}>{triggerLabel}</span>
         <ChevronDown
@@ -413,14 +413,14 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         collisionPadding={8}
         initialFocus={resolveModelPickerInitialFocus}
         aria-label={t("chat.selectModel")}
-        className="model-selector-dropdown flex max-h-[min(26rem,var(--available-height,26rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg"
+        className="flex max-h-popover-26rem w-popover-25rem flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg web:font-app web:text-14px web:leading-1p3"
       >
         <div className="flex min-h-0 flex-1 flex-col">
           {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
               provider·model 副标题：模型名在触发器、副标题、列表勾选处重复
               三次，且 11px 的标题比 12px 的模型行还小，标题反而是面板里最小
               的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。 */}
-          <div className="shrink-0 px-2 py-2">
+          <div className="shrink-0 p-2">
             <div className="flex items-center justify-between gap-2 pb-1.5">
               <span className="min-w-0 shrink truncate pl-0.5 text-xs font-semibold text-foreground">
                 {t("chat.selectModel")}
@@ -433,7 +433,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
               >
                 <label
                   className={cn(
-                    "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
+                    "relative cursor-pointer rounded-md px-2.5 py-1 text-11px font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
                       ? "text-muted-foreground hover:text-foreground"
                       : "bg-background text-foreground shadow-sm",
@@ -451,7 +451,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
                 <label
                   className={cn(
-                    "relative cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
+                    "relative cursor-pointer rounded-md px-2.5 py-1 text-11px font-medium transition-[color,background-color,box-shadow] has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
                     isAgent
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -471,7 +471,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted/60 px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-ring/25">
-                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
+                <Search className="size-3.5 shrink-0 text-muted-foreground/65" />
                 <input
                   ref={searchInputRef}
                   value={modelSearch}
@@ -502,9 +502,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 aria-pressed:text-foreground"
               >
                 {sortByName ? (
-                  <ArrowDownAZ className="h-3.5 w-3.5" />
+                  <ArrowDownAZ className="size-3.5" />
                 ) : (
-                  <Layers className="h-3.5 w-3.5" />
+                  <Layers className="size-3.5" />
                 )}
               </button>
             </div>
@@ -551,7 +551,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         disabled={groupToggleLocked}
                         aria-expanded={expanded}
                         className={cn(
-                          "model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                          "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg px-2.5 py-0 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 web:font-app web:text-14px! web:leading-1p3!",
                           isSelectedGroup
                             ? "text-foreground"
                             : "text-muted-foreground/85 dark:text-white/80",
@@ -559,7 +559,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
-                          className="h-3.5 w-3.5 opacity-90"
+                          className="size-3.5 opacity-90"
                         />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
                       </button>
@@ -572,7 +572,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         aria-label={`${t("settings.editProvider")}: ${group.name}`}
                         className="flex w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/50 opacity-100 transition-colors duration-150 hover:bg-muted/65 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="size-3.5" />
                       </button>
                       <button
                         type="button"
@@ -586,7 +586,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                       >
                         <ChevronDown
                           className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            "size-3.5 shrink-0 transition-transform duration-200",
                             expanded && "rotate-180",
                           )}
                         />
@@ -607,7 +607,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 setIsModelPickerOpen(false);
                               }}
                               className={cn(
-                                "model-selector-item flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-lg py-0 pl-8 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white",
+                                "flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-lg py-0 pl-8 pr-2 text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow] hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white web:font-app web:text-14px! web:leading-1p3!",
                                 isSelected &&
                                   "bg-muted/70 font-medium hover:bg-muted/70 focus-visible:bg-muted/70",
                               )}
@@ -618,7 +618,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 <ProviderBrandIcon
                                   type={option.providerType}
                                   className={cn(
-                                    "h-3 w-3 shrink-0",
+                                    "size-3 shrink-0",
                                     isSelected ? "opacity-80" : "opacity-45",
                                   )}
                                 />
@@ -656,9 +656,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
             pressedClassName="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
             icon={
               chatRuntimeControls.nativeWebSearchEnabled ? (
-                <Globe className="h-3.5 w-3.5 shrink-0" />
+                <Globe className="size-3.5 shrink-0" />
               ) : (
-                <GlobeOff className="h-3.5 w-3.5 shrink-0" />
+                <GlobeOff className="size-3.5 shrink-0" />
               )
             }
             onClick={() =>
@@ -701,9 +701,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
               pressedClassName="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
               icon={
                 thinkingOn ? (
-                  <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+                  <Lightbulb className="size-3.5 shrink-0" />
                 ) : (
-                  <LightbulbOff className="h-3.5 w-3.5 shrink-0" />
+                  <LightbulbOff className="size-3.5 shrink-0" />
                 )
               }
               onClick={() =>

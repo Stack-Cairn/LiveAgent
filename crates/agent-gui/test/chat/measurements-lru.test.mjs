@@ -55,7 +55,7 @@ test("width handle hit targets span the full transcript height", () => {
   );
   assert.ok(handleClass, "transcript width handle class not found");
   assert.match(handleClass[1], /inset-y-0/);
-  assert.match(handleClass[1], /w-\[17px\]/);
+  assert.match(handleClass[1], /w-17px/);
   assert.equal(
     handleClass[1].includes("h-24"),
     false,

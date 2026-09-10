@@ -103,7 +103,7 @@ export function McpHubPage(props: McpHubPageProps) {
                 onClick={openAdd}
                 title={t("mcpHub.add")}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="size-3.5" />
                 <span className="hidden whitespace-nowrap sm:inline">{t("mcpHub.add")}</span>
               </Button>
             </div>
@@ -117,7 +117,7 @@ export function McpHubPage(props: McpHubPageProps) {
               : "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10"
           }
         >
-          <div className="hub-content-stage mx-auto flex h-full min-h-0 w-full max-w-[1320px] flex-col">
+          <div className="hub-content-stage mx-auto flex size-full min-h-0 max-w-1320px flex-col">
             <Tabs
               value={view}
               onValueChange={(nextView) => {
@@ -125,8 +125,8 @@ export function McpHubPage(props: McpHubPageProps) {
               }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="hub-panel-enter relative mb-5">
-                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="animate-hub-panel-enter motion-reduce:animate-none! relative mb-5">
+                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="search"
                   value={activeSearchQuery}
@@ -140,7 +140,7 @@ export function McpHubPage(props: McpHubPageProps) {
                 />
               </div>
 
-              <div className="hub-panel-enter flex min-h-11 items-center justify-between gap-3 max-sm:items-stretch">
+              <div className="animate-hub-panel-enter motion-reduce:animate-none! flex min-h-11 items-center justify-between gap-3 max-sm:items-stretch">
                 <ResourceTabsList
                   value={view}
                   items={[

@@ -57,8 +57,8 @@ test("bulk-mode guidance stays in the overlay instead of shifting page content",
   const page = readSkillHubSource("SkillsHubPage.tsx");
   const imported = readSkillHubSource("SkillsImportView.tsx");
 
-  assert.doesNotMatch(page, /hub-panel-enter flex items-center gap-2 text-\[11px\][^>]*skillsBulkHint/);
-  assert.doesNotMatch(imported, /hub-panel-enter flex items-center gap-2 text-\[11px\][^>]*skillsBulkImportHint/);
+  assert.doesNotMatch(page, /hub-panel-enter flex items-center gap-2 text-11px[^>]*skillsBulkHint/);
+  assert.doesNotMatch(imported, /hub-panel-enter flex items-center gap-2 text-11px[^>]*skillsBulkImportHint/);
   assert.match(page, /pointer-events-none absolute inset-x-0 bottom-4/);
   assert.match(page, /settings\.skillsBulkClickToSelect/);
 });

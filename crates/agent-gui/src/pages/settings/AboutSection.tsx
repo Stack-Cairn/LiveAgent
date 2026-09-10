@@ -135,8 +135,8 @@ export function AboutSection(props: AboutSectionProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Info className="h-5 w-5 text-primary" />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <Info className="size-5 text-primary" />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">{t("settings.aboutTitle")}</h3>
@@ -154,7 +154,7 @@ export function AboutSection(props: AboutSectionProps) {
               size="sm"
               onClick={() => void openUrl(latestResult.releaseUrl || "")}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="size-3.5" />
               {t("settings.aboutOpenRelease")}
             </Button>
           ) : null}
@@ -166,16 +166,16 @@ export function AboutSection(props: AboutSectionProps) {
             disabled={checking || installing || restarting}
           >
             {checking ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="size-3.5" />
             )}
             {t("settings.aboutCheckUpdate")}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 lg:grid-cols-gateway-settings">
         <section className="space-y-4 rounded-2xl border border-border/60 bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -187,24 +187,24 @@ export function AboutSection(props: AboutSectionProps) {
               </div>
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-xs font-medium">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <Sparkles className="size-3.5 text-primary" />
               {channelLabel}
             </div>
           </div>
 
           <div className="rounded-xl border border-border/60 bg-background/70 p-4">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                 {checkState.status === "error" || restartRequiredNotice ? (
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertTriangle className="size-4 text-amber-500" />
                 ) : restarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <Loader2 className="size-4 animate-spin text-primary" />
                 ) : latestResult?.available || latestResult?.manualDownload ? (
-                  <Download className="h-4 w-4 text-primary" />
+                  <Download className="size-4 text-primary" />
                 ) : checking ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
                 ) : (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <CheckCircle2 className="size-4 text-emerald-500" />
                 )}
               </div>
               <div className="min-w-0 flex-1" role="status" aria-live="polite" aria-atomic="true">
@@ -237,11 +237,11 @@ export function AboutSection(props: AboutSectionProps) {
                 disabled={(installed ? false : !canInstall) || installing || restarting}
               >
                 {installing || restarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : installed ? (
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="size-4" />
                 ) : (
-                  <Download className="h-4 w-4" />
+                  <Download className="size-4" />
                 )}
                 {installed ? t("settings.aboutRestartApp") : t("settings.aboutInstallUpdate")}
               </Button>
@@ -269,7 +269,7 @@ export function AboutSection(props: AboutSectionProps) {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
+                  <Shield className="size-4 text-muted-foreground" />
                   {t("settings.aboutPrereleaseTitle")}
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">

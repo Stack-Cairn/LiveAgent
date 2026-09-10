@@ -37,7 +37,7 @@ const ToastEntry = memo(function ToastEntry(props: {
     const timer = setTimeout(() => {
       const el = elRef.current;
       if (el) {
-        el.classList.add("notify-toast-exit");
+        el.classList.add("animate-notify-toast-exit");
         const onEnd = () => onDismiss(item.id);
         el.addEventListener("animationend", onEnd, { once: true });
         // fallback in case animationend doesn't fire
@@ -59,7 +59,7 @@ const ToastEntry = memo(function ToastEntry(props: {
       aria-live={item.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
       className={cn(
-        "notify-toast-enter pointer-events-auto flex w-[min(18rem,calc(100vw-2rem))] items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
+        "animate-notify-toast-enter motion-reduce:animate-none! motion-reduce:animate-none! pointer-events-auto flex w-notification items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
         isWarning
           ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
           : isSuccess
@@ -70,17 +70,17 @@ const ToastEntry = memo(function ToastEntry(props: {
       {isWarning ? (
         <AlertTriangle
           aria-hidden="true"
-          className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+          className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
         />
       ) : isSuccess ? (
         <CheckCircle2
           aria-hidden="true"
-          className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+          className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
         />
       ) : (
         <XCircle
           aria-hidden="true"
-          className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+          className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400"
         />
       )}
       <p
@@ -101,7 +101,7 @@ const ToastEntry = memo(function ToastEntry(props: {
         aria-label={t("common.dismissNotification")}
         className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
       >
-        <X aria-hidden="true" className="h-3.5 w-3.5" />
+        <X aria-hidden="true" className="size-3.5" />
       </button>
     </div>
   );

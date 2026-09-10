@@ -19,7 +19,7 @@
  */
 .chat-row-hover-chrome {
   transition-property: opacity;
-  transition-duration: 150ms;
+  transition-duration: var(--ui-duration-150ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -55,13 +55,13 @@
     opacity: 1;
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: The any-hover media conditions are mutually exclusive. */
   .chat-row-hover-chrome--actions {
     pointer-events: auto;
   }
 }
 
-.chat-row-hover-chrome[data-force-visible="true"],
-.chat-assistant-actions:has(.settings-confirm-popover) .chat-row-hover-chrome {
+.chat-row-hover-chrome[data-force-visible="true"] {
   opacity: 1;
   pointer-events: auto;
 }

@@ -259,7 +259,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
       <div
         ref={setScrollViewport}
         data-scroll-viewport
-        className="h-full w-full overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]"
+        className="size-full overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]"
       >
         <div
           className={cn(
@@ -267,7 +267,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             // transcript column gives that width back instead of widening the
             // reading measure. Keeps assistant text at its original width and
             // aligned with the composer, which is tuned off the same variable.
-            "mx-auto w-full max-w-[calc(var(--chat-transcript-content-width,768px)-2.5rem)] px-5 py-4 [overflow-anchor:none]",
+            "mx-auto w-full max-w-transcript-web px-5 py-4 [overflow-anchor:none]",
             // Empty states center against the scroll viewport (the pane), not
             // the window: a viewport-height min-height overflows half-height
             // panes in vertical splits and shifts the hero content.
@@ -356,7 +356,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           aria-label={jumpToBottomLabel}
           title={jumpToBottomLabel}
           onClick={() => scrollFollowHandle.jumpToBottom()}
-          className="chat-jump-to-bottom absolute z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+          className="chat-jump-to-bottom absolute z-10 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
           // Centered on the composer card (not the pane) and stacked above
           // the task-progress pill / queue panel: the composer layer paints
           // over the transcript, so any overlap would hide the button.
@@ -365,7 +365,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             bottom: Math.ceil(bottomReservePx) + Math.ceil(floatingOverhangPx) + 16,
           }}
         >
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="size-4" />
         </button>
       ) : null}
       {renderedContextMenu && transcriptContextMenuPosition
@@ -374,7 +374,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
               ref={transcriptContextMenuRef}
               role="menu"
               className={cn(
-                "editor-context-menu layer-popover fixed w-max min-w-38 max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
+                "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
                 isContextMenuExiting && "editor-context-menu-exit",
               )}
               style={{
@@ -388,13 +388,13 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   writeTextToClipboard(renderedContextMenu.selectedText);
                   closeTranscriptContextMenu();
                 }}
               >
-                <Copy className="h-3.5 w-3.5 shrink-0" />
+                <Copy className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{copySelectedTextLabel}</span>
               </button>
             </div>,

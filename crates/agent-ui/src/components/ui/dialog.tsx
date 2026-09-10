@@ -79,11 +79,11 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
           data-slot="dialog-viewport"
           data-layout={layout}
           className={cn(
-            "layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]",
+            "layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-safe-bottom pt-safe-top",
             layout === "fullscreen-mobile" &&
               "max-[720px]:items-stretch max-[720px]:overflow-hidden max-[720px]:p-0",
             layout === "bottom-sheet-mobile" &&
-              "items-stretch justify-end overflow-hidden p-0 sm:items-center sm:justify-start sm:overflow-y-auto sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-[max(1rem,env(safe-area-inset-top))]",
+              "items-stretch justify-end overflow-hidden p-0 sm:items-center sm:justify-start sm:overflow-y-auto sm:px-4 sm:pb-safe-bottom sm:pt-safe-top",
           )}
         >
           <DialogPrimitive.Popup
@@ -141,12 +141,12 @@ export function DialogCloseButton({ className, disabled, label }: DialogCloseBut
       title={label}
       disabled={disabled}
       className={cn(
-        "absolute right-4 top-4 z-10 group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:top-[max(1rem,env(safe-area-inset-top))]",
+        "absolute right-4 top-4 z-10 group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:top-safe-top",
         className,
       )}
-      render={<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" />}
+      render={<Button variant="ghost" size="icon-sm" className="rounded-lg" />}
     >
-      <X className="h-4 w-4" />
+      <X className="size-4" />
     </DialogPrimitive.Close>
   );
 }
@@ -159,7 +159,7 @@ export const DialogHeader = React.forwardRef<HTMLDivElement, React.HTMLAttribute
       className={cn(
         // Headers hold a title plus at most one description line, so they take
         // one step less vertical padding than the body/footer.
-        "relative flex shrink-0 flex-col min-h-13 gap-1.5 border-b border-border/60 px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2 group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pt-[max(0.75rem,env(safe-area-inset-top))]",
+        "relative flex shrink-0 flex-col min-h-13 gap-1.5 border-b border-border/60 px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2 group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pt-safe-top-compact",
         className,
         "group-data-[has-close-button=true]/dialog:pr-14 group-data-[has-close-button=true]/dialog:max-[820px]:pr-12",
       )}
@@ -191,7 +191,7 @@ export const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
       ref={ref}
       data-slot="dialog-body"
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-3.5",
+        "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 max-[820px]:p-3.5",
         className,
       )}
       {...props}
@@ -224,7 +224,7 @@ export const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttribute
       className={cn(
         // Footer matches the header's vertical padding: both are chrome around
         // the body, so they read tighter than the content they frame.
-        "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2 border-t border-border/60 px-4 py-3 max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3 group-data-[layout=bottom-sheet-mobile]/dialog:max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+        "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2 border-t border-border/60 px-4 py-3 max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3 group-data-[layout=bottom-sheet-mobile]/dialog:max-sm:pb-safe-bottom-compact group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pb-safe-bottom-compact",
         className,
       )}
       {...props}

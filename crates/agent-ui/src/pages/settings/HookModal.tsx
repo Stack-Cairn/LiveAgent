@@ -7,6 +7,8 @@ import {
   Terminal,
   Zap,
 } from "@liveagent/ui/components/IconSet";
+import { ChoiceCard } from "@liveagent/ui/components/settings/ChoiceCard";
+import { StepMarker } from "@liveagent/ui/components/settings/StepMarker";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   HOOK_EVENT_TRANSLATION_KEYS,
@@ -114,21 +116,21 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
   return (
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent
-        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        className="flex max-h-92dvh max-w-3xl flex-col p-0"
         closeDisabled={isSaving}
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
-            <Zap className="h-5 w-5" />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+            <Zap className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <DialogTitle>
               {isEditing ? t("settings.hooksEdit") : t("settings.hooksAdd")}
             </DialogTitle>
             <DialogDescription className="mt-0.5 flex items-center gap-2 text-xs">
-              <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+              <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-11px text-muted-foreground">
                 {event}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -141,9 +143,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
         <DialogBody className="p-0 max-[820px]:p-0">
           <div className="border-b border-border/30 px-6 py-5">
             <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
-                1
-              </div>
+              <StepMarker>1</StepMarker>
               <span className="text-sm font-semibold">{t("settings.hooksName")}</span>
             </div>
 
@@ -186,35 +186,32 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
           <div className="border-b border-border/30 px-6 py-5">
             <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
-                2
-              </div>
+              <StepMarker>2</StepMarker>
               <span className="text-sm font-semibold">{t("settings.hooksType")}</span>
             </div>
 
             <div className="settings-choice-grid grid grid-cols-2 gap-3">
-              <button
+              <ChoiceCard
                 type="button"
                 onClick={() => {
                   setFormError(null);
                   setType("command");
                 }}
-                className={cn(
-                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
+                className={
                   type === "command"
                     ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
-                )}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
+                }
               >
                 <div
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "command"
                       ? "bg-blue-500/15 text-blue-500"
                       : "bg-muted/60 text-muted-foreground",
                   )}
                 >
-                  <Terminal className="h-5 w-5" />
+                  <Terminal className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
@@ -231,33 +228,32 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                 </div>
                 {type === "command" ? (
                   <div className="absolute right-3 top-3">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-blue-500" />
+                    <CheckCircle2 className="size-4.5 text-blue-500" />
                   </div>
                 ) : null}
-              </button>
+              </ChoiceCard>
 
-              <button
+              <ChoiceCard
                 type="button"
                 onClick={() => {
                   setFormError(null);
                   setType("http");
                 }}
-                className={cn(
-                  "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
+                className={
                   type === "http"
                     ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20",
-                )}
+                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
+                }
               >
                 <div
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                     type === "http"
                       ? "bg-emerald-500/15 text-emerald-500"
                       : "bg-muted/60 text-muted-foreground",
                   )}
                 >
-                  <Globe className="h-5 w-5" />
+                  <Globe className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div
@@ -276,19 +272,17 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                 </div>
                 {type === "http" ? (
                   <div className="absolute right-3 top-3">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
+                    <CheckCircle2 className="size-4.5 text-emerald-500" />
                   </div>
                 ) : null}
-              </button>
+              </ChoiceCard>
             </div>
           </div>
 
           <div className="px-6 py-5">
             <DialogSectionHeader>
               <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
-                  3
-                </div>
+                <StepMarker>3</StepMarker>
                 <span className="text-sm font-semibold">
                   {type === "command"
                     ? t("settings.hooksCommandList")
@@ -297,16 +291,16 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               </div>
               {type === "command" ? (
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">
+                  <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-11px font-medium text-blue-600 dark:text-blue-400">
                     {scriptLineCount} {t("settings.hooksScriptLinesCount")}
                   </span>
-                  <span className="rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <span className="rounded-md bg-muted/50 px-2 py-0.5 text-11px font-medium text-muted-foreground">
                     {t("settings.hooksSequential")}
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-11px font-medium text-emerald-600 dark:text-emerald-400">
                     {requests.length} {t("settings.hooksRequestsCount")}
                   </span>
                   <Button
@@ -321,7 +315,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                       setExpandedRequest(draft.id);
                     }}
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="size-3" />
                     {t("settings.add")}
                   </Button>
                 </div>
@@ -332,18 +326,18 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               <div className="space-y-3">
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
                   <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Terminal className="h-3 w-3" />
+                    <div className="flex items-center gap-1.5 text-11px text-muted-foreground">
+                      <Terminal className="size-3" />
                       <span className="font-medium">{t("settings.hooksCommandList")}</span>
                     </div>
-                    <span className="text-[11px] text-muted-foreground/60">
+                    <span className="text-11px text-muted-foreground/60">
                       {t("settings.hooksCommandHint")}
                     </span>
                   </div>
                   <Textarea
                     value={scriptText}
                     placeholder={"pnpm install\npnpm build\npnpm test"}
-                    className="min-h-[180px] resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed focus-visible:ring-0"
+                    className="min-h-180px resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed focus-visible:ring-0"
                     onChange={(e) => {
                       setFormError(null);
                       setScriptText(e.currentTarget.value);
@@ -390,12 +384,12 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
           <div className="min-w-0 flex-1">
             {formError ? (
               <div className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <AlertTriangle className="size-3.5 shrink-0" />
                 <span className="truncate">{formError}</span>
               </div>
             ) : name.trim() && (type !== "command" || scriptText.trim()) ? (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                <Check className="h-3.5 w-3.5" />
+                <Check className="size-3.5" />
                 <span>{t("settings.agentsReady")}</span>
               </div>
             ) : null}

@@ -57,3 +57,8 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | `doc/` | 既有专项文档与历史设计资料，例如 memory 方案、Gateway 协议草案、上下文压缩策略等。 |
 
 后续如果某个专项文档已经稳定成为当前实现的一部分，可以在 `docs/` 中建立摘要与导航，但不建议把 `doc/` 直接重命名为 `docs/`，以免丢失历史上下文。
+
+## UI 设计
+
+- [UI 样式变量](ui-style-variables.md)
+- [UI 第一阶段整理记录](ui-design-audit.md)

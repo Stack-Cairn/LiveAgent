@@ -51,8 +51,8 @@ function isDraftAnswered(draft: DraftAnswer): boolean {
 
 function RecommendedTag({ label }: { label: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-amber-400/25 to-amber-500/15 px-1.5 py-0.5 text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:from-amber-300/[0.18] dark:to-amber-400/[0.10] dark:text-amber-300 dark:ring-amber-300/20">
-      <Sparkles className="h-2.5 w-2.5" />
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-amber-400/25 to-amber-500/15 px-1.5 py-0.5 text-scaled-9px font-semibold leading-none text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:from-amber-300/[0.18] dark:to-amber-400/[0.10] dark:text-amber-300 dark:ring-amber-300/20">
+      <Sparkles className="size-2.5" />
       {label}
     </span>
   );
@@ -63,14 +63,14 @@ function SelectionIndicator({ selected, multiple }: { selected: boolean; multipl
   return (
     <span
       className={cn(
-        "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center border transition-colors",
+        "mt-2px flex size-3.5 shrink-0 items-center justify-center border transition-colors",
         multiple ? "rounded-sm" : "rounded-full",
         selected
           ? "border-primary bg-primary text-primary-foreground"
           : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
       )}
     >
-      {selected ? <Check className="h-2.5 w-2.5" /> : null}
+      {selected ? <Check className="size-2.5" /> : null}
     </span>
   );
 }
@@ -209,8 +209,8 @@ function SettledRoundSummary({
   return (
     <div className="overflow-hidden rounded-xl border border-black/[0.05] bg-white/45 dark:border-white/[0.06] dark:bg-white/[0.03]">
       <div className="flex items-center gap-1.5 border-b border-black/[0.04] bg-muted/35 px-2.5 py-1 dark:border-white/[0.05] dark:bg-white/[0.03]">
-        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-        <span className="text-[calc(10px*var(--zone-font-scale,1))] font-medium uppercase tracking-wide text-muted-foreground/75">
+        <CheckCircle2 className="size-3 text-emerald-500" />
+        <span className="text-scaled-10px font-medium uppercase tracking-wide text-muted-foreground/75">
           {roundLabel}
         </span>
       </div>
@@ -223,31 +223,31 @@ function SettledRoundSummary({
           return (
             <div key={question.id} className="flex flex-col gap-1">
               <div className="flex items-start gap-1.5">
-                <span className="mt-[1px] inline-flex h-4 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] px-1 text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]">
+                <span className="mt-1px inline-flex h-4 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] px-1 text-scaled-9px font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]">
                   Q{index + 1}
                 </span>
-                <span className="min-w-0 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground">
+                <span className="min-w-0 text-scaled-11px leading-1p5 text-muted-foreground">
                   {question.prompt}
                 </span>
               </div>
-              <div className="ml-[22px] flex flex-wrap items-center gap-1">
+              <div className="ml-22px flex flex-wrap items-center gap-1">
                 {labels.map((label) => (
                   <span
                     key={label}
-                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/[0.08] px-1.5 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.4] text-foreground/85 dark:border-primary/30 dark:bg-primary/[0.12]"
+                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/[0.08] px-1.5 py-0.5 text-scaled-11px font-medium leading-1p4 text-foreground/85 dark:border-primary/30 dark:bg-primary/[0.12]"
                   >
-                    <Check className="h-2.5 w-2.5 shrink-0 text-primary" />
+                    <Check className="size-2.5 shrink-0 text-primary" />
                     <span className="min-w-0 break-words">{label}</span>
                   </span>
                 ))}
                 {custom ? (
-                  <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-dashed border-sky-500/35 bg-sky-500/[0.07] px-1.5 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.4] text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]">
-                    <Pencil className="h-2.5 w-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
+                  <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-dashed border-sky-500/35 bg-sky-500/[0.07] px-1.5 py-0.5 text-scaled-11px leading-1p4 text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]">
+                    <Pencil className="size-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
                     <span className="min-w-0 break-words">{custom}</span>
                   </span>
                 ) : null}
                 {!answered ? (
-                  <span className="text-[calc(11px*var(--zone-font-scale,1))] italic leading-[1.4] text-muted-foreground/55">
+                  <span className="text-scaled-11px italic leading-1p4 text-muted-foreground/55">
                     {skippedLabel}
                   </span>
                 ) : null}
@@ -421,11 +421,11 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
     // 钳制，不参与压缩。
     <div
       data-clarify-panel=""
-      className="relative z-30 mx-auto mb-1.5 flex max-h-[50vh] min-h-0 w-[calc(100%-1.5rem)] max-w-[720px] shrink-0 flex-col overflow-hidden rounded-2xl border border-black/[0.055] bg-white/80 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.24),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_8px_24px_-18px_rgba(0,0,0,0.72),inset_0_1px_0_rgba(255,255,255,0.08)]"
+      className="relative z-30 mx-auto mb-1.5 flex max-h-50vh min-h-0 w-inset-1p5rem max-w-720px shrink-0 flex-col overflow-hidden rounded-2xl border border-black/[0.055] bg-white/80 shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
-        <span className="flex items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
-          <WandSparkles className="h-3.5 w-3.5" />
+        <span className="flex items-center gap-1.5 text-scaled-11px font-medium text-muted-foreground">
+          <WandSparkles className="size-3.5" />
           {t("chat.clarify.title")}
         </span>
         <button
@@ -433,9 +433,9 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
           onClick={onClose}
           aria-label={t("chat.clarify.close")}
           title={t("chat.clarify.close")}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="size-3.5" />
         </button>
       </div>
 
@@ -452,10 +452,10 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
         <div className="flex flex-col gap-2">
           {state.draftText ? (
             <div className="rounded-xl bg-primary/10 px-2.5 py-1.5">
-              <span className="mr-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <span className="mr-1.5 text-scaled-10px font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("chat.clarify.draftLabel")}
               </span>
-              <span className="line-clamp-2 whitespace-pre-wrap break-words text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-foreground/80">
+              <span className="line-clamp-2 whitespace-pre-wrap break-words text-scaled-11px leading-relaxed text-foreground/80">
                 {state.draftText}
               </span>
             </div>
@@ -492,13 +492,13 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               type="button"
                               onClick={() => goToQuestion(index)}
                               className={cn(
-                                "flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-none transition-colors",
+                                "flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-scaled-11px font-medium leading-none transition-colors",
                                 isActive
                                   ? "bg-foreground/[0.07] text-foreground dark:bg-white/[0.09]"
                                   : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/80",
                               )}
                             >
-                              {isAnswered ? <Check className="h-3 w-3 text-emerald-500" /> : null}
+                              {isAnswered ? <Check className="size-3 text-emerald-500" /> : null}
                               {question.header || `${t("chat.clarify.tabFallback")} ${index + 1}`}
                             </button>
                           );
@@ -511,14 +511,18 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                       key={activeQuestion.id}
                       className={cn(
                         "flex flex-col gap-1.5",
-                        switchDirection === "forward" ? "ask-question-enter-forward" : "",
-                        switchDirection === "backward" ? "ask-question-enter-backward" : "",
+                        switchDirection === "forward"
+                          ? "animate-ask-question-enter-forward motion-reduce:animate-none!"
+                          : "",
+                        switchDirection === "backward"
+                          ? "animate-ask-question-enter-backward motion-reduce:animate-none!"
+                          : "",
                       )}
                     >
-                      <div className="text-[calc(12.5px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/90">
+                      <div className="text-scaled-12p5px font-medium leading-1p55 text-foreground/90">
                         {activeQuestion.prompt}
                         {activeQuestion.allowMultiple ? (
-                          <span className="ml-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-normal text-muted-foreground/70">
+                          <span className="ml-1.5 text-scaled-10px font-normal text-muted-foreground/70">
                             {t("chat.clarify.multiHint")}
                           </span>
                         ) : null}
@@ -545,7 +549,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               />
                               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                                 <span className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
+                                  <span className="text-scaled-12px font-medium leading-1p5 text-foreground/85">
                                     {option.label}
                                   </span>
                                   {option.recommended ? (
@@ -553,7 +557,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   ) : null}
                                 </span>
                                 {option.description ? (
-                                  <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground/80">
+                                  <span className="text-scaled-11px leading-1p5 text-muted-foreground/80">
                                     {option.description}
                                   </span>
                                 ) : null}
@@ -578,7 +582,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               multiple={activeQuestion.allowMultiple}
                             />
                             <span className="flex min-w-0 flex-1 flex-col gap-1">
-                              <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
+                              <span className="text-scaled-12px font-medium leading-1p5 text-foreground/85">
                                 {t("chat.clarify.customOption")}
                               </span>
                               {customVisible ? (
@@ -598,7 +602,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   onChange={(event) =>
                                     setCustomText(activeQuestion, event.currentTarget.value)
                                   }
-                                  className="ask-custom-input-enter h-7 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2 text-[calc(12px*var(--zone-font-scale,1))] text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
+                                  className="animate-ask-custom-input-enter motion-reduce:animate-none! h-7 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2 text-scaled-12px text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
                                 />
                               ) : null}
                             </span>
@@ -617,7 +621,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                             onChange={(event) =>
                               setCustomText(activeQuestion, event.currentTarget.value)
                             }
-                            className="h-8 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2.5 text-[calc(12px*var(--zone-font-scale,1))] text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
+                            className="h-8 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2.5 text-scaled-12px text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
                           />
                         )}
                       </ChoiceGroup>
@@ -628,18 +632,18 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             : null}
 
           {busy && state.streamingText ? (
-            <div className="max-w-[92%] self-start whitespace-pre-wrap rounded-xl bg-muted/60 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] leading-relaxed text-foreground/90">
+            <div className="max-w-[92%] self-start whitespace-pre-wrap rounded-xl bg-muted/60 px-2.5 py-1.5 text-scaled-12px leading-relaxed text-foreground/90">
               {state.streamingText}
             </div>
           ) : null}
           {state.status === "asking" && !state.streamingText ? (
-            <div className="flex items-center gap-1.5 self-start rounded-xl bg-muted/60 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
+            <div className="flex items-center gap-1.5 self-start rounded-xl bg-muted/60 px-2.5 py-1.5 text-scaled-12px text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
               {t("chat.clarify.thinking")}
             </div>
           ) : null}
           {state.status === "error" && state.error ? (
-            <div className="flex items-center gap-2 self-start rounded-xl bg-destructive/10 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-destructive">
+            <div className="flex items-center gap-2 self-start rounded-xl bg-destructive/10 px-2.5 py-1.5 text-scaled-12px text-destructive">
               <span className="min-w-0 flex-1">
                 {t("chat.clarify.errorPrefix")}: {state.error}
               </span>
@@ -648,7 +652,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                 onClick={onRetry}
                 className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-colors hover:bg-destructive/15"
               >
-                <RefreshCw className="h-3 w-3" />
+                <RefreshCw className="size-3" />
                 {t("chat.clarify.retry")}
               </button>
             </div>
@@ -658,7 +662,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
 
       {interactive ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-black/[0.05] px-2.5 py-1.5 dark:border-white/[0.08]">
-          <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
+          <span className="min-w-0 truncate text-scaled-11px tabular-nums text-muted-foreground/70">
             {progressText}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -666,16 +670,16 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
               type="button"
               onClick={generateNow}
               title={t("chat.clarify.generate")}
-              className="inline-flex h-7 items-center gap-1 rounded-full border border-black/[0.06] px-2.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground dark:border-white/[0.12]"
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-black/[0.06] px-2.5 text-scaled-11px font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground dark:border-white/[0.12]"
             >
-              <WandSparkles className="h-3 w-3" />
+              <WandSparkles className="size-3" />
               <span className="whitespace-nowrap">{t("chat.clarify.generate")}</span>
             </button>
             <button
               type="button"
               disabled={!allAnswered}
               onClick={submit}
-              className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex h-7 items-center rounded-full bg-primary px-3 text-scaled-11px font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
             >
               {t("chat.clarify.submit")}
             </button>

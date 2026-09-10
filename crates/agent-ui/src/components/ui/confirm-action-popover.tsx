@@ -60,13 +60,13 @@ export function ConfirmActionPopover(props: {
           <div className="flex items-start gap-2.5">
             <div
               className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                "flex size-8 shrink-0 items-center justify-center rounded-lg",
                 tone === "destructive" ? "bg-destructive/10" : "bg-primary/10",
               )}
             >
               <AlertTriangle
                 className={cn(
-                  "h-4 w-4",
+                  "size-4",
                   tone === "destructive" ? "text-destructive" : "text-primary",
                 )}
               />

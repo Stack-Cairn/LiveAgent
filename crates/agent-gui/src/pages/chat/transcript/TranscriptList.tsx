@@ -507,7 +507,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
             data-assistant-reply-key={assistantReplyKey ?? undefined}
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
-            className="absolute left-0 right-0 top-0"
+            className="absolute inset-x-0 top-0"
           >
             {body}
             {row.gapAfter > 0 && virtualRow.index < rows.length - 1 ? (

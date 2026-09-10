@@ -1,3 +1,4 @@
+import { resolveStyleValues } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -99,7 +100,7 @@ for (const { label, loader, sources } of implementations) {
   });
 
   test(`${label} wires visual order, selection order, persistence, and reduced-motion FLIP`, () => {
-    const source = sources.map((file) => readFileSync(file, "utf8")).join("\n");
+    const source = resolveStyleValues(sources.map((file) => readFileSync(file, "utf8")).join("\n"));
 
     assert.match(source, /skillsHub\.installedSort/);
     assert.match(source, /sortInstalledSkillItems\(filtered, installedSort, selected/);
@@ -155,34 +156,34 @@ for (const { label, loader, sources } of implementations) {
     assert.match(source, /element\.style\.translate/);
     assert.match(
       source,
-      /<SelectTrigger[\s\S]*h-8 w-auto max-w-\[11rem\][^"]*bg-transparent/,
+      /<SelectTrigger[\s\S]*h-8 w-auto max-w-11rem[^"]*bg-transparent/,
     );
     assert.match(source, /<Input[\s\S]*h-11 rounded-full[^"]*bg-background/);
     assert.match(source, /from "@liveagent\/ui\/components\/ui\/select"/);
     assert.match(
       source,
-      /hub-panel-enter flex min-h-11 items-center justify-between gap-3 max-sm:flex-col/,
+      /animate-hub-panel-enter motion-reduce:animate-none! flex min-h-11 items-center justify-between gap-3 max-sm:flex-col/,
     );
     assert.match(
       source,
       /max-w-full[^"]*overflow-x-auto[^"]*\[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden/,
     );
-    assert.match(source, /max-sm:max-w-\[8rem\]/);
-    assert.match(source, /hub-panel-enter relative mb-5/);
+    assert.match(source, /max-sm:max-w-8rem/);
+    assert.match(source, /animate-hub-panel-enter motion-reduce:animate-none! relative mb-5/);
     assert.equal(source.match(/2xl:grid-cols-5/g)?.length, 5);
-    assert.match(source, /pb-\[calc\(10rem\+env\(safe-area-inset-bottom\)\)\] sm:pb-24/);
+    assert.match(source, /pb-safe-bottom-10rem sm:pb-24/);
     assert.equal(
-      source.match(/max-sm:bottom-\[calc\(1rem\+env\(safe-area-inset-bottom\)\)\]/g)?.length,
+      source.match(/max-sm:bottom-safe-bottom-offset(?=[\s"])/g)?.length,
       2,
     );
-    assert.match(source, /max-sm:bottom-\[calc\(0\.25rem\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(source, /max-sm:bottom-safe-bottom-offset-compact/);
     assert.equal(source.match(/<SheetPopup/g)?.length, 2);
     assert.equal(source.match(/variant="inset"/g)?.length, 2);
     assert.equal(source.match(/<SheetPanel/g)?.length, 2);
     assert.match(source, /from "@liveagent\/ui\/components\/ui\/sheet"/);
     assert.doesNotMatch(source, /createPortal/);
     assert.equal(
-      source.match(/hub-panel-enter pointer-events-auto[^"]*bg-background\/95/g)?.length,
+      source.match(/animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto[^"]*bg-background\/95/g)?.length,
       3,
     );
     assert.match(
@@ -193,7 +194,7 @@ for (const { label, loader, sources } of implementations) {
     assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /hub-skill-card[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /skill-card-enter group flex h-full[^"]*backdrop-blur/);
-    assert.doesNotMatch(source, /hub-panel-enter pointer-events-auto[^"]*backdrop-blur/);
+    assert.doesNotMatch(source, /animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /notify-toast-enter[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /fixed inset-0 z-50 flex justify-end/);
   });

@@ -57,7 +57,7 @@ test("installed Skill switches stay right-aligned while delete appears in the ca
   );
   assert.match(
     source,
-    /data-card-delete-zone=""[\s\S]*className="h-8 w-8 text-muted-foreground hover:bg-destructive\/10 hover:text-destructive"/,
+    /data-card-delete-zone=""[\s\S]*size="icon-sm"\s+className="text-muted-foreground hover:bg-destructive\/10 hover:text-destructive"/,
   );
 });
 

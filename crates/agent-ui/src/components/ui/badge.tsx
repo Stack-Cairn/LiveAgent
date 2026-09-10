@@ -8,6 +8,11 @@ const badgeVariants = cva(
   "inline-flex w-fit shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium leading-none transition-colors",
   {
     variants: {
+      size: {
+        default: "",
+        "filter-count":
+          "h-4 min-w-4 rounded-full px-1 text-9p5px font-semibold tabular-nums group-data-[active]:bg-foreground/[0.08] group-data-[active]:text-foreground",
+      },
       variant: {
         default: "border-transparent bg-primary text-primary-foreground",
         secondary: "border-transparent bg-secondary text-secondary-foreground",
@@ -20,6 +25,7 @@ const badgeVariants = cva(
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   },
 );
@@ -31,14 +37,14 @@ type BadgeProps = Omit<React.HTMLAttributes<HTMLSpanElement>, "className"> &
   };
 
 export const Badge = React.forwardRef<HTMLElement, BadgeProps>(
-  ({ className, variant, render, ...props }, ref) =>
+  ({ className, variant, size, render, ...props }, ref) =>
     useRender({
       defaultTagName: "span",
       render,
       ref,
       props: {
         ...props,
-        className: cn(badgeVariants({ variant }), className),
+        className: cn(badgeVariants({ variant, size }), className),
       },
     }),
 );

@@ -61,7 +61,7 @@ export function LiveSparkle({
       <span aria-hidden="true" className="flex h-5 w-3 shrink-0 items-center justify-center">
         <svg
           aria-hidden="true"
-          className="h-5 w-5 shrink-0"
+          className="size-5 shrink-0"
           fill="currentColor"
           viewBox="0 0 16 16"
           xmlns="http://www.w3.org/2000/svg"

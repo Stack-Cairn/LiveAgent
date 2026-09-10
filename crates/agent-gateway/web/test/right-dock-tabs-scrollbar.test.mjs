@@ -1,12 +1,10 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const stylesSource = readFileSync(new URL("../src/styles/base-chat.css", import.meta.url), "utf8");
-const sharedStylesSource = readFileSync(
-  new URL("../../../agent-ui/src/styles/base.css", import.meta.url),
-  "utf8",
-);
+const stylesSource = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
+const dockSource = readFileSync(new URL("../../../agent-ui/src/components/project-tools/RightDockPanel.tsx", import.meta.url), "utf8");
 
 test("WebUI right dock hides the native tabs scrollbar behind its custom scrollbar", () => {
   assert.match(
@@ -22,5 +20,5 @@ test("WebUI right dock hides the native tabs scrollbar behind its custom scrollb
       stylesSource.indexOf('html[data-liveagent-webui="gateway"] * {'),
     "the tabs override must follow the WebUI-wide scrollbar rule",
   );
-  assert.match(sharedStylesSource, /\.project-tools-panel-tabs-scrollbar-visible/);
+  assert.match(dockSource, /scrollbar\.visible && "opacity-100 pointer-events-auto"/);
 });

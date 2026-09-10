@@ -13,8 +13,8 @@ type SwitchProps = React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root> &
 // trackWidth - thumbWidth - inset, so overriding only the track from a call site
 // would leave the thumb overshooting or short of the far edge.
 const SWITCH_SIZES = {
-  default: { track: "h-5 w-9", thumb: "h-4 w-4 data-[checked]:translate-x-[18px]" },
-  sm: { track: "h-4 w-7", thumb: "h-3 w-3 data-[checked]:translate-x-[14px]" },
+  default: { track: "h-5 w-9", thumb: "size-4 data-[checked]:translate-x-18px" },
+  sm: { track: "h-4 w-7", thumb: "size-3 data-[checked]:translate-x-14px" },
 } as const;
 
 export const Switch = React.forwardRef<HTMLElement, SwitchProps>(

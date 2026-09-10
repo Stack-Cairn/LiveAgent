@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -14,10 +15,7 @@ const providerListSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
 );
-const responsiveStylesSource = readFileSync(
-  new URL("../src/styles/responsive.css", import.meta.url),
-  "utf8",
-);
+const responsiveStylesSource = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
 
 test("WebUI provider model refresh only disables while a request is running", () => {
   const clickHandlerIndex = providersSectionSource.indexOf("onClick={handleRefresh}");
@@ -54,11 +52,13 @@ test("provider model refresh accepts a saved WebUI key without exposing it", () 
 
 test("provider cards keep their content and actions on one mobile row", () => {
   assert.match(providerListSource, /settings-provider-card-row/);
-  assert.match(providerListSource, /settings-provider-card-main min-w-0 flex-1/);
+  assert.match(providerListSource, /min-w-0 flex-1 web:max-520:min-w-0/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-card-row\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px 20px minmax\(0, 1fr\) auto;/,
+    providerListSource,
+    /web:max-520:grid web:max-520:grid-cols-settings-provider-card-row/,
   );
+  const theme = readStyleSource(new URL("../../../agent-ui/src/styles/tokens.css", import.meta.url));
+  assert.match(theme, /--grid-template-columns-settings-provider-card-row:\s*20px\s+20px\s+minmax\(0, 1fr\)\s+auto;/);
 });
 
 test("provider request navigation label stays centered on mobile", () => {

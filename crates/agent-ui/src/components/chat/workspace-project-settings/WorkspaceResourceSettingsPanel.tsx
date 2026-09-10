@@ -126,7 +126,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                 <span className="flex items-center gap-2">
                   <Icon
                     className={cn(
-                      "h-4 w-4 shrink-0 text-muted-foreground",
+                      "size-4 shrink-0 text-muted-foreground",
                       isActive && "text-primary",
                     )}
                   />
@@ -139,10 +139,10 @@ export function WorkspaceResourceSettingsPanel(props: {
         </div>
       </div>
 
-      <div className="flex min-h-[360px] flex-1 flex-col px-6 py-4 max-[720px]:px-4">
+      <div className="flex min-h-360px flex-1 flex-col px-6 py-4 max-[720px]:px-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-60 max-w-full">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               value={query}
@@ -200,7 +200,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       warning={missing}
                       metadata={
                         alwaysEnabled ? (
-                          <Badge variant="muted" className="h-5 px-1.5 text-[10px]">
+                          <Badge variant="muted" className="h-5 px-1.5 text-10px">
                             {t("settings.skillsAlwaysOn")}
                           </Badge>
                         ) : null
@@ -236,7 +236,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       metadata={
                         <Badge
                           variant="muted"
-                          className="h-5 px-1.5 text-[10px] uppercase tracking-wide"
+                          className="h-5 px-1.5 text-10px uppercase tracking-wide"
                         >
                           {transportLabel}
                         </Badge>

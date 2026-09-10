@@ -35,7 +35,7 @@ export function WorkspaceGeneralSettingsPanel(props: {
           <label htmlFor="workspace-project-name" className="shrink-0 text-sm font-medium">
             {t("chat.workspaceSettingsProjectName")}
           </label>
-          <div className="w-[280px] max-w-full max-[560px]:w-full">
+          <div className="w-280px max-w-full max-[560px]:w-full">
             <Input
               id="workspace-project-name"
               value={projectName}
@@ -89,7 +89,7 @@ export function WorkspaceGeneralSettingsPanel(props: {
       </div>
 
       <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-        <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <Shield className="mt-0.5 size-3.5 shrink-0" />
         {t("chat.workspaceSettingsPrimaryHint")}
       </p>
     </section>

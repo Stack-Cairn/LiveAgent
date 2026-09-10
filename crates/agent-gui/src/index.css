@@ -2,7 +2,15 @@
 @import "../../agent-ui/src/styles/base.css";
 @import "../../agent-ui/src/styles/transcript.css";
 @import "../../agent-ui/src/styles/common.css";
-@config "../tailwind.config.js";
+@reference "../../agent-ui/src/styles/semantic-colors.css";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:is(.dark *));
+@source "../index.html";
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
 @source "../../agent-ui/src";
 
 @font-face {
@@ -52,23 +60,7 @@
     @apply my-2 border-l-2 border-border/70 pl-3 text-xs not-italic text-muted-foreground;
   }
   .release-notes-markdown [data-streamdown="inline-code"] {
-    @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] text-foreground/90;
-  }
-
-  /* Smooth entrance for chat bubbles */
-  .chat-bubble-enter {
-    animation: chatBubbleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  @keyframes chatBubbleIn {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
+    @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-scaled-11px text-foreground/90;
   }
 
   /* Jump-to-bottom affordance: mounted only while scroll-follow is detached,
@@ -78,38 +70,29 @@
    * theme tint + blur/saturate, white-tint override in dark). */
   .chat-jump-to-bottom {
     transform: translateX(-50%);
-    animation: chatJumpToBottomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    border: 1px solid hsl(var(--border) / 0.55);
+    animation: chatJumpToBottomIn var(--ui-duration-180ms) var(--ease-ui-enter);
+    border: var(--spacing-1px) solid hsl(var(--border) / 0.55);
     background: hsl(var(--background) / 0.45);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--spacing-18px)) saturate(180%);
+    backdrop-filter: blur(var(--spacing-18px)) saturate(180%);
     box-shadow:
-      0 1px 0 hsl(0 0% 100% / 0.45) inset,
-      0 8px 24px -14px hsl(0 0% 0% / 0.35);
+      0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p45) inset,
+      0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-14px)
+      var(--ui-color-hsl-0-0-0-0p35);
   }
   .chat-jump-to-bottom:hover {
     background: hsl(var(--background) / 0.65);
   }
   .dark .chat-jump-to-bottom {
-    border-color: hsl(0 0% 100% / 0.12);
-    background: hsl(0 0% 100% / 0.06);
+    border-color: var(--ui-color-hsl-0-0-100-0p12);
+    background: var(--ui-color-hsl-0-0-100-0p06);
     box-shadow:
-      0 1px 0 hsl(0 0% 100% / 0.08) inset,
-      0 8px 24px -14px hsl(0 0% 0% / 0.6);
+      0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p08) inset,
+      0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-14px)
+      var(--ui-color-hsl-0-0-0-0p6);
   }
   .dark .chat-jump-to-bottom:hover {
-    background: hsl(0 0% 100% / 0.11);
-  }
-
-  @keyframes chatJumpToBottomIn {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+    background: var(--ui-color-hsl-0-0-100-0p11);
   }
 
   /* Sidebar workspace / recent-conversation context menus: grow out of the
@@ -118,8 +101,8 @@
    * data-ending-style and the transition delays unmount. */
   .sidebar-context-menu {
     transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity var(--ui-duration-180ms) var(--ease-ui-enter),
+      transform var(--ui-duration-180ms) var(--ease-ui-enter);
   }
 
   .sidebar-context-menu[data-starting-style],
@@ -129,8 +112,8 @@
   }
 
   .sidebar-context-menu[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+    transition-duration: var(--ui-duration-120ms);
+    transition-timing-function: var(--ease-in);
     transform: translate(
         calc(var(--sidebar-menu-slide-x) / 2),
         calc(var(--sidebar-menu-slide-y) / 2)
@@ -142,19 +125,14 @@
    * Base UI drives these popups, so open styling keys off data-popup-open on
    * the trigger and enter/exit key off data-starting-style / data-ending-style
    * on the popup (data-state rules never match Base UI). */
-  .composer-reasoning-trigger[data-popup-open] {
-    box-shadow:
-      0 8px 18px -14px rgba(88, 28, 135, 0.55),
-      inset 0 0 0 1px rgba(167, 139, 250, 0.12);
-  }
 
   .composer-add-dropdown,
   .composer-branch-dropdown,
   .composer-safety-dropdown {
     transform-origin: var(--transform-origin);
     transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity var(--ui-duration-180ms) var(--ease-ui-enter),
+      transform var(--ui-duration-180ms) var(--ease-ui-enter);
   }
 
   .composer-add-dropdown[data-starting-style],
@@ -164,20 +142,18 @@
   .composer-safety-dropdown[data-starting-style],
   .composer-safety-dropdown[data-ending-style] {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(var(--spacing-6px)) scale(0.97);
   }
 
   .composer-add-dropdown[data-ending-style],
   .composer-branch-dropdown[data-ending-style],
   .composer-safety-dropdown[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    transform: translateY(5px) scale(0.975);
+    transition-duration: var(--ui-duration-120ms);
+    transition-timing-function: var(--ease-in);
+    transform: translateY(var(--spacing-5px)) scale(0.975);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .composer-reasoning-trigger,
-    .composer-reasoning-trigger svg:last-child,
     .composer-add-dropdown,
     .composer-branch-dropdown,
     .composer-safety-dropdown {
@@ -208,7 +184,7 @@
   .settings-section-heading-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: var(--spacing-12px);
   }
 
   .settings-section-title-group {
@@ -226,7 +202,7 @@
   }
 
   .settings-card-row {
-    padding: 12px;
+    padding: var(--spacing-12px);
   }
 }
 
@@ -245,34 +221,13 @@
   contain: layout paint style;
 }
 
-/*
- * The history list already virtualizes once it grows large. Avoid
- * content-visibility on rows: after pin/unpin reorders the list, WKWebView can
- * keep the moved row in a skipped paint state and render only the white row
- * background, making the conversation title look blank.
- */
-/* Exit leg for menus driven by useMenuExitPresence (lib/shared/menuMotion.ts):
- * the hook keeps the menu mounted for MENU_EXIT_MS while this plays, so the
- * duration below must stay in sync with that constant. `forwards` holds the
- * faded-out frame in case the unmount timer lands a tick late. */
-@keyframes editorContextMenuOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-}
-
 .editor-context-menu-exit {
-  animation: editorContextMenuOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: editorContextMenuOut var(--ui-duration-120ms) var(--ease-in) forwards;
   pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-context-menu {
+  .animate-editor-context-menu {
     animation: none;
   }
   .editor-context-menu-exit {
@@ -289,16 +244,10 @@
  * utility classes baked into the mirrored markup (unlayered styles win over
  * the utilities layer in Tailwind v4).
  */
-.project-tools-panel-header {
-  height: 3.25rem;
-}
 .project-tools-panel-tabs {
-  height: 2.5rem;
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
+  height: var(--spacing-2p5rem);
+  padding-top: var(--spacing-0p25rem);
+  padding-bottom: var(--spacing-0p25rem);
 }
 /* Mobile drag handle from the mirrored WebUI markup; the desktop GUI has no
  * mobile sheet presentation, so it is never shown here. */
-.project-tools-panel-handle {
-  display: none;
-}

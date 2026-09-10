@@ -810,7 +810,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       if (Math.abs(delta) < 1) continue;
       row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
         duration: MODEL_FLIP_DURATION_MS,
-        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        easing: getComputedStyle(row).getPropertyValue("--ease-ui-curve-2").trim(),
       });
     }
   }, [orderedModels]);
@@ -899,7 +899,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           " " +
           headerImportSummary.overwrittenCount,
         (headerImportSummary.removedCount ?? 0) > 0
-          ? t("settings.customHeaderImportSummary.removed") + " " + headerImportSummary.removedCount
+          ? `${t("settings.customHeaderImportSummary.removed")} ${headerImportSummary.removedCount}`
           : null,
         headerImportSummary.issues.length > 0
           ? t("settings.customHeaderImportSummary.skipped") +

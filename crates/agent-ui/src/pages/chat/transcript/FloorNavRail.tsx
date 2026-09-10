@@ -70,7 +70,7 @@ export function FloorNavRail(props: {
     conversationId,
     floors,
     activeRowKey,
-    bottomOffset = "8px",
+    bottomOffset = "var(--spacing-8px)",
     scrollViewport = null,
     onJump,
   } = props;
@@ -284,7 +284,7 @@ export function FloorNavRail(props: {
           type="button"
           onClick={() => handleJump(floor.rowKey)}
           className={cn(
-            "min-h-11 min-w-0 flex-1 truncate px-2 py-2 text-left text-[12px] leading-tight",
+            "min-h-11 min-w-0 flex-1 truncate p-2 text-left text-12px leading-tight",
             isActive ? "font-medium text-foreground" : "text-muted-foreground",
           )}
           title={floor.preview}
@@ -297,7 +297,7 @@ export function FloorNavRail(props: {
           title={isBookmarked ? unpinLabel : pinLabel}
           onClick={() => toggleFloorBookmark(conversationId, floor.messageId)}
           className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-all",
+            "flex size-11 shrink-0 items-center justify-center rounded-md transition-all",
             isBookmarked
               ? "text-amber-500 hover:text-amber-600"
               : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
@@ -305,7 +305,7 @@ export function FloorNavRail(props: {
             isCoarsePointer && "opacity-100",
           )}
         >
-          <Pin className={cn("h-3 w-3", isBookmarked && "fill-current")} />
+          <Pin className={cn("size-3", isBookmarked && "fill-current")} />
         </button>
       </div>
     );
@@ -345,7 +345,7 @@ export function FloorNavRail(props: {
           className={cn(
             // 宽度按容器(转录区/Pane)钳制而非视口:分屏窄 Pane 下面板不得
             // 溢出 Pane。无容器祖先时 cqw 按视口回退,行为与旧 100vw 一致。
-            "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100cqw-2rem)] touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-[0_12px_32px_-16px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
+            "floor-nav-panel flex max-h-transcript-search w-60 max-w-container-inset-2rem touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-ui-floornavrail-43 backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
             // 隐藏态不吃指针事件：触摸透传给转写区，不会点到看不见的控件。
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
@@ -353,8 +353,8 @@ export function FloorNavRail(props: {
           <div ref={panelScrollRef} className="min-h-0 overflow-y-auto p-1.5">
             {bookmarkedFloors.length > 0 ? (
               <div className="mb-1.5 rounded-lg bg-amber-500/[0.07] p-1 ring-1 ring-amber-500/20">
-                <div className="flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-[10.5px] font-medium text-amber-600/90 dark:text-amber-400/90">
-                  <Pin className="h-2.5 w-2.5 fill-current" />
+                <div className="flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-10p5px font-medium text-amber-600/90 dark:text-amber-400/90">
+                  <Pin className="size-2.5 fill-current" />
                   {pinnedTitle}
                 </div>
                 {bookmarkedFloors.map((floor) => renderPanelRow(floor, true))}
@@ -366,7 +366,7 @@ export function FloorNavRail(props: {
       ) : (
         <div
           className={cn(
-            "flex max-h-full touch-manipulation flex-col items-end gap-[7.5px] overflow-visible py-2 pl-2 pr-0.5",
+            "flex max-h-full touch-manipulation flex-col items-end gap-7p5px overflow-visible py-2 pl-2 pr-0.5",
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
           // 触屏收起态：2px 的短横线没法精确点按，整列点按一律先展开面板，
@@ -414,10 +414,10 @@ export function FloorNavRail(props: {
       )}
       {!isCoarsePointer && hoveredFloor ? (
         <div
-          className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100cqw-5rem)] -translate-y-1/2 rounded-xl border border-border/60 bg-background/92 p-2 shadow-[0_14px_40px_-20px_rgba(15,23,42,0.48)] backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none dark:border-white/[0.1] dark:bg-[#2a2a2a]/95"
+          className="pointer-events-auto absolute z-20 w-80 max-w-container-inset-5rem -translate-y-1/2 rounded-xl border border-border/60 bg-background/92 p-2 shadow-ui-floornavrail-44 backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none dark:border-white/[0.1] dark:bg-ui-2a2a2a/95"
           style={{
             top: previewCardTop,
-            right: "calc(100% - 2px)",
+            right: "calc(100% - var(--spacing-2px))",
           }}
         >
           <div className="group/preview flex min-w-0 items-start gap-1 rounded-lg">
@@ -426,11 +426,11 @@ export function FloorNavRail(props: {
               onClick={() => handleJump(hoveredFloor.rowKey)}
               className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]"
             >
-              <span className="block truncate text-[13px] font-medium leading-5 text-foreground">
+              <span className="block truncate text-13px font-medium leading-5 text-foreground">
                 {hoveredFloor.preview}
               </span>
               {hoveredFloor.responsePreview ? (
-                <span className="mt-1 block line-clamp-3 text-[12px] leading-[1.55] text-muted-foreground">
+                <span className="mt-1 block line-clamp-3 text-12px leading-1p55 text-muted-foreground">
                   {hoveredFloor.responsePreview}
                 </span>
               ) : null}
@@ -441,17 +441,14 @@ export function FloorNavRail(props: {
               title={bookmarks.has(hoveredFloor.messageId) ? unpinLabel : pinLabel}
               onClick={() => toggleFloorBookmark(conversationId, hoveredFloor.messageId)}
               className={cn(
-                "mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+                "mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
                 bookmarks.has(hoveredFloor.messageId)
                   ? "text-amber-500 hover:bg-amber-500/10"
                   : "text-muted-foreground/50 hover:bg-foreground/[0.05] hover:text-foreground",
               )}
             >
               <Pin
-                className={cn(
-                  "h-3.5 w-3.5",
-                  bookmarks.has(hoveredFloor.messageId) && "fill-current",
-                )}
+                className={cn("size-3.5", bookmarks.has(hoveredFloor.messageId) && "fill-current")}
               />
             </button>
           </div>

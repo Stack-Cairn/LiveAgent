@@ -1,3 +1,6 @@
+@import "./tokens.css";
+@import "./animations.css";
+
 /* shimmer — ejected from shadcn/tailwind.css */
 @property --shimmer-angle {
   syntax: "<angle>";
@@ -29,27 +32,6 @@
   initial-value: 0px;
 }
 
-@theme inline {
-  --radius-xs: calc(var(--radius) - 6px);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
-
-  @keyframes tw-shimmer {
-    from {
-      background-position: 100% 0;
-    }
-
-    to {
-      background-position: 0 0;
-    }
-  }
-}
-
 @utility layer-raised {
   z-index: var(--layer-raised);
 }
@@ -79,7 +61,7 @@
 }
 
 @utility shimmer {
-  --_spread: var(--shimmer-spread, calc(3ch + 40px));
+  --_spread: var(--shimmer-spread, calc(var(--spacing-3ch) + var(--spacing-40px)));
   --_base: currentColor;
   --_highlight: var(--shimmer-color, oklch(from currentColor l c h / calc(alpha * 0.2)));
 
@@ -100,7 +82,7 @@
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: var(--shimmer-text-fill, transparent);
-  animation: tw-shimmer var(--shimmer-duration, 2s) linear infinite;
+  animation: tw-shimmer var(--shimmer-duration, var(--ui-duration-2000ms)) linear infinite;
 
   @variant dark {
     --_highlight: var(
@@ -137,7 +119,7 @@
 }
 
 @utility shimmer-duration-* {
-  --shimmer-duration: calc(--value(integer) * 1ms);
+  --shimmer-duration: calc(--value(integer) * var(--ui-duration-1ms));
 }
 
 @utility shimmer-spread-* {
@@ -157,26 +139,6 @@
   }
 }
 
-@keyframes tw-scroll-fade-in-top {
-  from {
-    --scroll-fade-t-size: 0px;
-  }
-
-  to {
-    --scroll-fade-t-size: var(--_scroll-fade-size);
-  }
-}
-
-@keyframes tw-scroll-fade-out-bottom {
-  from {
-    --scroll-fade-b-size: var(--_scroll-fade-size);
-  }
-
-  to {
-    --scroll-fade-b-size: 0px;
-  }
-}
-
 /*
  * Fades the scroll container's own box, so the gradient stays pinned to the
  * viewport edges while content moves under it — no overlay element and no
@@ -187,8 +149,8 @@
  * left at all (WKWebView only gained scroll(self y) in Safari 26).
  */
 @utility scroll-fade {
-  --_scroll-fade-size: var(--scroll-fade-size, 48px);
-  --_scroll-fade-reveal: var(--scroll-fade-reveal, 24px);
+  --_scroll-fade-size: var(--scroll-fade-size, var(--spacing-48px));
+  --_scroll-fade-reveal: var(--scroll-fade-reveal, var(--spacing-24px));
 
   /* Engines without scroll-driven animations get no mask at all (see the
      @supports block below, which is where mask-image is applied).
@@ -210,16 +172,16 @@
      dissolve the row at the edge. */
   --_scroll-fade-mask: linear-gradient(
     to bottom,
-    rgb(0 0 0 / 0) 0,
-    rgb(0 0 0 / 0.1) calc(var(--scroll-fade-t-size) * 0.28),
-    rgb(0 0 0 / 0.45) calc(var(--scroll-fade-t-size) * 0.55),
-    rgb(0 0 0 / 0.82) calc(var(--scroll-fade-t-size) * 0.8),
-    rgb(0 0 0 / 1) var(--scroll-fade-t-size),
-    rgb(0 0 0 / 1) calc(100% - var(--scroll-fade-b-size)),
-    rgb(0 0 0 / 0.82) calc(100% - var(--scroll-fade-b-size) * 0.8),
-    rgb(0 0 0 / 0.45) calc(100% - var(--scroll-fade-b-size) * 0.55),
-    rgb(0 0 0 / 0.1) calc(100% - var(--scroll-fade-b-size) * 0.28),
-    rgb(0 0 0 / 0) 100%
+    var(--ui-color-00000000) 0,
+    var(--ui-color-rgb-0-0-0-0p1) calc(var(--scroll-fade-t-size) * 0.28),
+    var(--ui-color-rgb-0-0-0-0p45) calc(var(--scroll-fade-t-size) * 0.55),
+    var(--ui-color-rgb-0-0-0-0p82) calc(var(--scroll-fade-t-size) * 0.8),
+    var(--ui-color-000) var(--scroll-fade-t-size),
+    var(--ui-color-000) calc(100% - var(--scroll-fade-b-size)),
+    var(--ui-color-rgb-0-0-0-0p82) calc(100% - var(--scroll-fade-b-size) * 0.8),
+    var(--ui-color-rgb-0-0-0-0p45) calc(100% - var(--scroll-fade-b-size) * 0.55),
+    var(--ui-color-rgb-0-0-0-0p1) calc(100% - var(--scroll-fade-b-size) * 0.28),
+    var(--ui-color-00000000) 100%
   );
   @supports (animation-timeline: scroll(self y)) {
     /* Both edges start clear and the timeline fills them in. When the timeline
@@ -257,51 +219,8 @@
   --scroll-fade-size: --value([length], [percentage]);
 }
 
-@keyframes chat-work-pixel {
-  0%,
-  55%,
-  100% {
-    opacity: 0.15;
-    transform: scale(0.8);
-  }
-
-  25% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.chat-work-pixel {
-  opacity: 0.15;
-  animation: chat-work-pixel 650ms ease-in-out var(--chat-work-delay) infinite;
-}
-
 /* Frozen while the turn waits on the user: still legible as an indicator,
    but visibly not cycling. */
-.chat-work-pixel[data-paused] {
-  opacity: 0.45;
-  transform: none;
-  animation: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-work-pixel {
-    opacity: 0.15;
-    transform: none;
-    animation: none;
-  }
-}
-
-/*
- * Route Tailwind's mono theme font through the user-configurable code font.
- * A hand-written `.font-mono` override only covers bare class usage — variant
- * forms (`[&_pre>code]:font-mono`), `@apply font-mono`, and preflight's
- * code/kbd/samp/pre rule all resolve from the built-in `--font-mono` theme
- * variable, so the override must happen at the theme level.
- */
-@theme {
-  --font-mono: var(--code-font-family);
-}
 
 @layer utilities {
   .font-chat {
@@ -396,15 +315,15 @@
   [contenteditable="true"]:focus-visible,
   [contenteditable="plaintext-only"]:focus-visible,
   [role="textbox"]:focus-visible {
-    --tw-ring-offset-shadow: 0 0 #0000;
-    --tw-ring-shadow: 0 0 #0000;
+    --tw-ring-offset-shadow: 0 0 var(--ui-color-00000000);
+    --tw-ring-shadow: 0 0 var(--ui-color-00000000);
     border-color: hsl(var(--input));
-    box-shadow: var(--tw-shadow, 0 0 #0000);
+    box-shadow: var(--tw-shadow, 0 0 var(--ui-color-00000000));
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: var(--spacing-6px);
+    height: var(--spacing-6px);
   }
 
   ::-webkit-scrollbar-track {
@@ -413,7 +332,7 @@
 
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--muted-foreground) / 0.2);
-    border-radius: 3px;
+    border-radius: var(--radius-3px);
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -447,22 +366,17 @@
 
   .project-tools-panel-tabs-scrollbar {
     position: relative;
-    height: 4px;
-    flex: 0 0 4px;
+    height: var(--spacing-4px);
+    flex: 0 0 var(--spacing-4px);
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-999px);
     background: var(--project-tools-tabs-scrollbar-track, hsl(var(--muted) / 0.42));
     opacity: 0;
     pointer-events: none;
     touch-action: none;
     transition:
-      background-color 160ms ease,
-      opacity 160ms ease;
-  }
-
-  .project-tools-panel-tabs-scrollbar-visible {
-    opacity: 1;
-    pointer-events: auto;
+      background-color var(--ui-duration-160ms) ease,
+      opacity var(--ui-duration-160ms) ease;
   }
 
   .project-tools-panel-tabs-scrollbar-thumb {
@@ -470,14 +384,14 @@
     top: 0;
     bottom: 0;
     left: 0;
-    min-width: 28px;
+    min-width: var(--spacing-28px);
     border-radius: inherit;
     background: var(--project-tools-tabs-scrollbar-thumb, hsl(var(--muted-foreground) / 0.22));
-    box-shadow: inset 0 0 0 1px
+    box-shadow: inset 0 0 0 var(--spacing-1px)
       var(--project-tools-tabs-scrollbar-thumb-border, hsl(var(--background) / 0.82));
     transition:
-      background-color 160ms ease,
-      box-shadow 160ms ease;
+      background-color var(--ui-duration-160ms) ease,
+      box-shadow var(--ui-duration-160ms) ease;
   }
 
   .project-tools-panel-tabs-scrollbar:hover,
@@ -507,30 +421,30 @@
 
   .chat-queue-scrollbar {
     position: absolute;
-    top: 2px;
-    right: 1px;
-    bottom: 2px;
-    z-index: 2;
-    width: 8px;
-    border-radius: 999px;
+    top: var(--spacing-2px);
+    right: var(--spacing-1px);
+    bottom: var(--spacing-2px);
+    z-index: var(--ui-z-index-2);
+    width: var(--spacing-8px);
+    border-radius: var(--radius-999px);
     background: hsl(var(--muted) / 0.36);
-    box-shadow: inset 0 0 0 1px hsl(var(--background) / 0.42);
+    box-shadow: inset 0 0 0 var(--spacing-1px) hsl(var(--background) / 0.42);
     cursor: default;
     touch-action: none;
   }
 
   .chat-queue-scrollbar-thumb {
     position: absolute;
-    left: 1px;
-    right: 1px;
+    left: var(--spacing-1px);
+    right: var(--spacing-1px);
     top: 0;
-    min-height: 24px;
-    border-radius: 999px;
+    min-height: var(--spacing-24px);
+    border-radius: var(--radius-999px);
     background: hsl(var(--muted-foreground) / 0.42);
     box-shadow:
-      inset 0 0 0 1px hsl(var(--background) / 0.55),
-      0 1px 2px hsl(220 22% 10% / 0.08);
-    transition: background-color 0.16s ease;
+      inset 0 0 0 var(--spacing-1px) hsl(var(--background) / 0.55),
+      0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-hsl-220-22-10-0p08);
+    transition: background-color var(--ui-duration-160ms) ease;
   }
 
   .chat-queue-scrollbar:hover .chat-queue-scrollbar-thumb {
@@ -544,7 +458,7 @@
   .tool-text-scroll {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.2s ease;
+    transition: scrollbar-color var(--ui-duration-200ms) ease;
   }
 
   .tool-text-scroll:hover {
@@ -552,19 +466,19 @@
   }
 
   .tool-text-scroll::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: var(--spacing-10px);
+    height: var(--spacing-10px);
   }
 
   .tool-text-scroll::-webkit-scrollbar-track {
     background: transparent;
-    margin: 6px;
+    margin: var(--spacing-6px);
   }
 
   .tool-text-scroll::-webkit-scrollbar-thumb {
-    border-radius: 999px;
+    border-radius: var(--radius-999px);
     background: hsl(var(--muted-foreground) / 0.14);
-    transition: background 0.2s ease;
+    transition: background var(--ui-duration-200ms) ease;
   }
 
   .tool-text-scroll:hover::-webkit-scrollbar-thumb {
@@ -574,181 +488,13 @@
   .tool-text-scroll:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.38);
   }
-
-  :root {
-    color-scheme: light;
-    --app-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
-    --chat-font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
-    --code-font-family:
-      "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
-      monospace;
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.625rem;
-
-    /* Modal/popover portals share a plane so later nested portals stay interactive. */
-    --layer-content: 1;
-    --layer-raised: 10;
-    --layer-panel: 20;
-    --layer-popover: 10000;
-    --layer-modal: 10000;
-    --layer-toast: 10010;
-    --layer-critical: 10020;
-
-    /* Sidebar */
-    --sidebar-bg: 220 14% 96%;
-
-    /* Hub pages (MCP/Skills) canvas — in dark it sits below --background so
-       background-tinted glass panels read as elevated surfaces. */
-    --hub-canvas: var(--background);
-
-    /* Chip / pill buttons (MCP, Skills, 新对话) */
-    --chip-bg: 220 13% 91%;
-    --chip-bg-hover: 220 13% 86%;
-    /* Send button disabled */
-    --send-disabled-bg: 220 13% 91%;
-
-    /* Chat-specific tokens */
-    --chat-user-bg: 220 9% 91%;
-    --chat-user-fg: 222 84% 5%;
-    --chat-assistant-bg: 0 0% 100%;
-    --chat-assistant-fg: 222.2 84% 4.9%;
-    --chat-tool-bg: 0 0% 100%;
-    --chat-tool-border: 220 13% 91%;
-    --chat-thinking-bg: 220 14% 97%;
-    --chat-thinking-border: 220 13% 90%;
-    --chat-success: 152 60% 42%;
-    --chat-error: 0 72% 51%;
-    --chat-running: 252 56% 57%;
-
-    /* Tool card frosted glass tokens */
-    --tool-card-bg: 0 0% 100% / 0.72;
-    --tool-card-border: 0 0% 0% / 0.06;
-    --tool-bash-accent: 142 70% 45%;
-    --tool-file-accent: 220 70% 55%;
-    --tool-search-accent: 38 92% 50%;
-    --tool-list-accent: 262 52% 56%;
-
-    /* Context checkpoint tokens – macOS frosted glass */
-    --checkpoint-accent: 220 9% 46%;
-    --checkpoint-bg: 0 0% 100% / 0.72;
-    --checkpoint-border: 0 0% 0% / 0.06;
-    --checkpoint-icon-bg: 220 10% 95%;
-    --checkpoint-icon-fg: 220 9% 46%;
-
-    /* VS Code SCM graph reference colors */
-    --git-review-graph-ref-local: #0063d3;
-    --git-review-graph-ref-remote: #652d90;
-    --git-review-graph-ref-base: #ea5c00;
-  }
-
-  .dark {
-    color-scheme: dark;
-
-    --background: 224 22% 9%;
-    --foreground: 210 30% 96%;
-
-    --card: 224 22% 10%;
-    --card-foreground: 210 30% 96%;
-
-    --popover: 224 20% 12%;
-    --popover-foreground: 210 30% 96%;
-
-    --primary: 210 30% 96%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 220 18% 17%;
-    --secondary-foreground: 210 30% 96%;
-
-    --muted: 220 18% 17%;
-    --muted-foreground: 215 18% 76%;
-
-    --accent: 220 18% 17%;
-    --accent-foreground: 210 30% 96%;
-
-    --destructive: 0 62.8% 36%;
-    --destructive-foreground: 210 30% 96%;
-
-    --border: 220 14% 26%;
-    --input: 220 14% 26%;
-    --ring: 212.7 26.8% 83.9%;
-
-    /* Chip / pill buttons (dark) */
-    --chip-bg: 220 16% 24%;
-    --chip-bg-hover: 220 16% 30%;
-    /* Send button disabled (dark) */
-    --send-disabled-bg: 220 16% 24%;
-
-    /* Hub pages canvas (dark) — deeper than --background for glass elevation */
-    --hub-canvas: 224 24% 6.5%;
-
-    /* Chat-specific tokens (dark) */
-    --sidebar-bg: 224 22% 11%;
-    --chat-user-bg: 220 14% 28%;
-    --chat-user-fg: 210 30% 96%;
-    --chat-assistant-bg: 224 22% 9%;
-    --chat-assistant-fg: 210 30% 96%;
-    --chat-tool-bg: 224 22% 9%;
-    --chat-tool-border: 220 14% 24%;
-    --chat-thinking-bg: 220 18% 13%;
-    --chat-thinking-border: 220 14% 22%;
-    --chat-success: 152 56% 52%;
-    --chat-error: 0 75% 65%;
-    --chat-running: 252 60% 70%;
-
-    /* Tool card frosted glass tokens (dark) */
-    --tool-card-bg: 0 0% 100% / 0.08;
-    --tool-card-border: 0 0% 100% / 0.14;
-    --tool-bash-accent: 142 60% 62%;
-    --tool-file-accent: 220 70% 72%;
-    --tool-search-accent: 38 90% 66%;
-    --tool-list-accent: 262 60% 74%;
-
-    /* Context checkpoint tokens – macOS frosted glass (dark) */
-    --checkpoint-accent: 220 12% 78%;
-    --checkpoint-bg: 0 0% 100% / 0.08;
-    --checkpoint-border: 0 0% 100% / 0.14;
-    --checkpoint-icon-bg: 220 12% 22%;
-    --checkpoint-icon-fg: 220 14% 76%;
-
-    /* VS Code SCM graph reference colors (dark) */
-    --git-review-graph-ref-local: #59a4f9;
-    --git-review-graph-ref-remote: #b180d7;
-    --git-review-graph-ref-base: #ea5c00;
-  }
 }
 
 @layer base {
   .project-terminal-viewport {
-    --project-terminal-padding-x: 0.75rem;
-    --project-terminal-padding-y: 0.625rem;
-    --project-terminal-scrollbar-size: 8px;
+    --project-terminal-padding-x: var(--spacing-0p75rem);
+    --project-terminal-padding-y: var(--spacing-0p625rem);
+    --project-terminal-scrollbar-size: var(--spacing-8px);
     --project-terminal-background: hsl(var(--background));
     background: var(--project-terminal-background);
   }
@@ -770,13 +516,13 @@
   }
 
   .project-terminal-viewport .xterm-scrollable-element > .scrollbar.vertical > .slider {
-    border-radius: 999px;
+    border-radius: var(--radius-999px);
   }
 
   .project-terminal-viewport .xterm-viewport {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.2s ease;
+    transition: scrollbar-color var(--ui-duration-200ms) ease;
   }
 
   .project-terminal-viewport:hover .xterm-viewport {
@@ -793,9 +539,9 @@
   }
 
   .project-terminal-viewport .xterm-viewport::-webkit-scrollbar-thumb {
-    border-radius: 999px;
+    border-radius: var(--radius-999px);
     background: transparent;
-    transition: background 0.2s ease;
+    transition: background var(--ui-duration-200ms) ease;
   }
 
   .project-terminal-viewport:hover .xterm-viewport::-webkit-scrollbar-thumb {

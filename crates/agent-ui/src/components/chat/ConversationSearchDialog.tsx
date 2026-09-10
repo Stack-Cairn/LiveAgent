@@ -200,7 +200,7 @@ export function ConversationSearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-conversation-search-dialog=""
-        className="flex max-h-[min(640px,calc(100vh-2rem))] max-w-[600px] flex-col overflow-hidden p-0"
+        className="flex max-h-dialog-640px max-w-600px flex-col overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">{t("chat.searchConversations")}</DialogTitle>
         <DialogDescription className="sr-only">
@@ -209,9 +209,9 @@ export function ConversationSearchDialog({
 
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/60 px-4">
           {status === "loading" ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
           ) : (
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Search className="size-4 shrink-0 text-muted-foreground" />
           )}
           <Input
             autoFocus
@@ -246,20 +246,20 @@ export function ConversationSearchDialog({
             }}
             placeholder={t("chat.searchConversationsPlaceholder")}
             aria-label={t("chat.searchConversations")}
-            className="h-auto flex-1 border-0 bg-transparent px-0 text-[15px] shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+            className="h-auto flex-1 border-0 bg-transparent px-0 text-15px shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
           />
-          <kbd className="hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+          <kbd className="hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-10px font-medium text-muted-foreground sm:inline-flex">
             Esc
           </kbd>
         </div>
 
         <div
           ref={resultsListRef}
-          className="min-h-[220px] flex-1 overflow-y-auto overscroll-contain p-2"
+          className="min-h-220px flex-1 overflow-y-auto overscroll-contain p-2"
           role="listbox"
         >
           {status === "error" ? (
-            <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-destructive">
+            <div className="flex min-h-200px flex-col items-center justify-center gap-3 px-8 text-center text-sm text-destructive">
               <span>{t("chat.conversationSearchFailed")}</span>
               <button
                 type="button"
@@ -270,8 +270,8 @@ export function ConversationSearchDialog({
               </button>
             </div>
           ) : normalizedQuery && status === "ready" && results.length === 0 ? (
-            <div className="flex min-h-[200px] flex-col items-center justify-center px-8 text-center">
-              <MessageSquareText className="mb-3 h-8 w-8 text-muted-foreground/35" />
+            <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
+              <MessageSquareText className="mb-3 size-8 text-muted-foreground/35" />
               <div className="text-sm font-medium text-foreground">
                 {t("chat.noConversationSearchResults")}
               </div>
@@ -280,8 +280,8 @@ export function ConversationSearchDialog({
               </div>
             </div>
           ) : !normalizedQuery && selectableItems.length === 0 ? (
-            <div className="flex min-h-[200px] flex-col items-center justify-center px-8 text-center">
-              <Search className="mb-3 h-8 w-8 text-muted-foreground/35" />
+            <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
+              <Search className="mb-3 size-8 text-muted-foreground/35" />
               <div className="text-sm text-muted-foreground">
                 {t("chat.searchConversationsDescription")}
               </div>
@@ -296,8 +296,8 @@ export function ConversationSearchDialog({
               return (
                 <fieldset key={group.id} className="m-0 border-0 p-0 pb-2 last:pb-0">
                   <legend className="sr-only">{group.label}</legend>
-                  <div className="flex h-8 items-center gap-2 px-2 text-[11px] font-medium text-muted-foreground/75">
-                    <GroupIcon className="h-3.5 w-3.5" />
+                  <div className="flex h-8 items-center gap-2 px-2 text-11px font-medium text-muted-foreground/75">
+                    <GroupIcon className="size-3.5" />
                     <span>{group.label}</span>
                   </div>
                   <div className="space-y-0.5">
@@ -329,7 +329,7 @@ export function ConversationSearchDialog({
                           ) : null}
                           {meta ? (
                             <div
-                              className="mt-1 truncate text-[11px] leading-4 text-muted-foreground/70"
+                              className="mt-1 truncate text-11px leading-4 text-muted-foreground/70"
                               title={meta}
                             >
                               {meta}

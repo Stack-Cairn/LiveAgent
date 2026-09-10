@@ -240,6 +240,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -256,6 +258,16 @@ jobs:
 
       - name: Check shared UI dependency boundaries
         run: pnpm check:ui-boundaries
+
+      - name: Check incremental style drift
+        env:
+          STYLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if git cat-file -e "${STYLE_BASE_SHA}^{commit}" 2>/dev/null; then
+            pnpm check:style-drift --base "$STYLE_BASE_SHA"
+          else
+            pnpm check:style-drift --base "$(git hash-object -t tree /dev/null)"
+          fi
 
   whitespace:
     name: Diff Hygiene

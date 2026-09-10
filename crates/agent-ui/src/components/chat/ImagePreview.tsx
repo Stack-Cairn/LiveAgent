@@ -192,7 +192,7 @@ function ImagePreviewToolButton(props: {
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
         pressed && "bg-muted text-foreground",
       )}
       title={label}
@@ -349,7 +349,7 @@ export function ImagePreviewContextMenu(props: {
             onClose();
           }}
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <Maximize2 className="size-3.5" />
           {t("chat.imageViewer.open")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -357,7 +357,7 @@ export function ImagePreviewContextMenu(props: {
         <ImagePreviewMenuItem
           onClick={() => run(() => saveImagePreviewSlide(slide), t("chat.imageViewer.saveFailed"))}
         >
-          <Download className="h-3.5 w-3.5" />
+          <Download className="size-3.5" />
           {t("chat.imageViewer.save")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -365,7 +365,7 @@ export function ImagePreviewContextMenu(props: {
         <ImagePreviewMenuItem
           onClick={() => run(() => copyImagePreviewSlide(slide), t("chat.imageViewer.copyFailed"))}
         >
-          <Copy className="h-3.5 w-3.5" />
+          <Copy className="size-3.5" />
           {t("chat.imageViewer.copy")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -378,7 +378,7 @@ export function ImagePreviewContextMenu(props: {
             )
           }
         >
-          <Copy className="h-3.5 w-3.5" />
+          <Copy className="size-3.5" />
           {t("chat.imageViewer.copyAbsolutePath")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -391,7 +391,7 @@ export function ImagePreviewContextMenu(props: {
             )
           }
         >
-          <Copy className="h-3.5 w-3.5" />
+          <Copy className="size-3.5" />
           {t("chat.imageViewer.copyRelativePath")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -404,7 +404,7 @@ export function ImagePreviewContextMenu(props: {
             )
           }
         >
-          <ExternalLink className="h-3.5 w-3.5" />
+          <ExternalLink className="size-3.5" />
           {t("chat.imageViewer.openSystem")}
         </ImagePreviewMenuItem>
       ) : null}
@@ -693,7 +693,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
       <DialogContent
         ref={dialogRef}
         initialFocus={dialogRef}
-        className="chat-image-preview-dialog flex h-[min(78vh,760px)] w-[min(82vw,1120px)] max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border bg-background p-0 text-foreground"
+        className="flex h-image-preview-height w-image-preview-width max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border bg-background p-0 text-foreground [&:fullscreen]:w-100vw [&:fullscreen]:h-100vh [&:fullscreen]:max-w-none [&:fullscreen]:max-h-none [&:fullscreen]:border-0 [&:fullscreen]:border-current [&:fullscreen]:rounded-none"
         onKeyDown={(event) => {
           if (
             (event.ctrlKey || event.metaKey) &&
@@ -721,16 +721,16 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   disabled={!canOpenPrevious}
                   onClick={() => setActiveImage(clampedIndex - 1)}
                 >
-                  <ChevronRight className="h-4 w-4 rotate-180" />
+                  <ChevronRight className="size-4 rotate-180" />
                 </ImagePreviewToolButton>
                 <ImagePreviewToolButton
                   label={t("chat.imageViewer.next")}
                   disabled={!canOpenNext}
                   onClick={() => setActiveImage(clampedIndex + 1)}
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="size-4" />
                 </ImagePreviewToolButton>
-                <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                <span className="ml-1 shrink-0 text-11px tabular-nums text-muted-foreground">
                   {clampedIndex + 1} / {imageCount}
                 </span>
               </>
@@ -742,9 +742,9 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               disabled={viewerState.scale <= IMAGE_VIEWER_MIN_SCALE}
               onClick={() => zoomByStep(-1)}
             >
-              <Minus className="h-4 w-4" />
+              <Minus className="size-4" />
             </ImagePreviewToolButton>
-            <span className="w-11 text-center text-[11px] tabular-nums text-muted-foreground">
+            <span className="w-11 text-center text-11px tabular-nums text-muted-foreground">
               {Math.round(viewerState.scale * 100)}%
             </span>
             <ImagePreviewToolButton
@@ -752,25 +752,25 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               disabled={viewerState.scale >= IMAGE_VIEWER_MAX_SCALE}
               onClick={() => zoomByStep(1)}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
               label={t("chat.imageViewer.rotateLeft")}
               onClick={() => rotateImage(-1)}
             >
-              <RotateCwSquare className="h-4 w-4 -scale-x-100" />
+              <RotateCwSquare className="size-4 -scale-x-100" />
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
               label={t("chat.imageViewer.rotateRight")}
               onClick={() => rotateImage(1)}
             >
-              <RotateCwSquare className="h-4 w-4" />
+              <RotateCwSquare className="size-4" />
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
               label={t("chat.imageViewer.reset")}
               onClick={() => setViewerState(resetImageViewerState())}
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="size-4" />
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
               label={t("chat.imageViewer.save")}
@@ -778,9 +778,9 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               onClick={() => void saveImage()}
             >
               {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Download className="h-4 w-4" />
+                <Download className="size-4" />
               )}
             </ImagePreviewToolButton>
             {capabilities?.canOpenSystem ? (
@@ -788,7 +788,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 label={t("chat.imageViewer.openSystem")}
                 onClick={() => void openSystemViewer()}
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="size-4" />
               </ImagePreviewToolButton>
             ) : null}
             <ImagePreviewToolButton
@@ -797,9 +797,9 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               onClick={() => void copyImage()}
             >
               {isCopying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Copy className="h-4 w-4" />
+                <Copy className="size-4" />
               )}
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
@@ -807,7 +807,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               pressed={showInfo}
               onClick={() => setShowInfo((current) => !current)}
             >
-              <Info className="h-4 w-4" />
+              <Info className="size-4" />
             </ImagePreviewToolButton>
             <ImagePreviewToolButton
               label={t(
@@ -815,14 +815,14 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               )}
               onClick={() => void handleFullscreen()}
             >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </ImagePreviewToolButton>
             <DialogClose
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={closeLabel}
               aria-label={closeLabel}
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </DialogClose>
           </div>
         </div>
@@ -900,12 +900,12 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               }}
             >
               <div
-                className="h-full w-full"
+                className="size-full"
                 style={{ transform: `rotate(${viewerState.rotation}deg)` }}
               >
                 <img
                   key={activeSlideKey ?? undefined}
-                  className="h-full w-full select-none object-contain"
+                  className="size-full select-none object-contain"
                   src={imageSource}
                   alt={slide.alt ?? getImagePreviewDisplayName(slide)}
                   draggable={false}
@@ -934,7 +934,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           {actionError ? (
             <div
               role="alert"
-              className="absolute left-3 top-3 z-10 max-w-[min(28rem,calc(100%-1.5rem))] rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur"
+              className="absolute left-3 top-3 z-10 max-w-panel-28rem rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur"
             >
               {actionError}
             </div>
@@ -948,12 +948,12 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 <div className="text-sm font-semibold">{t("chat.imageViewer.infoPanel")}</div>
                 <button
                   type="button"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   title={closeLabel}
                   aria-label={closeLabel}
                   onClick={() => setShowInfo(false)}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="size-3.5" />
                 </button>
               </div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-muted-foreground">
@@ -1010,7 +1010,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <Minus className="h-3.5 w-3.5" />
+                <Minus className="size-3.5" />
                 {t("chat.imageViewer.zoomOut")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1020,7 +1020,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="size-3.5" />
                 {t("chat.imageViewer.zoomIn")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1029,7 +1029,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="size-3.5" />
                 {t("chat.imageViewer.reset")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1038,7 +1038,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <RotateCwSquare className="h-3.5 w-3.5 -scale-x-100" />
+                <RotateCwSquare className="size-3.5 -scale-x-100" />
                 {t("chat.imageViewer.rotateLeft")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1047,7 +1047,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <RotateCwSquare className="h-3.5 w-3.5" />
+                <RotateCwSquare className="size-3.5" />
                 {t("chat.imageViewer.rotateRight")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1056,7 +1056,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                   setContextMenu(null);
                 }}
               >
-                <Info className="h-3.5 w-3.5" />
+                <Info className="size-3.5" />
                 {t("chat.imageViewer.info")}
               </ImagePreviewMenuItem>
               <ImagePreviewMenuItem
@@ -1066,9 +1066,9 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 }}
               >
                 {isFullscreen ? (
-                  <Minimize2 className="h-3.5 w-3.5" />
+                  <Minimize2 className="size-3.5" />
                 ) : (
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize2 className="size-3.5" />
                 )}
                 {t(
                   isFullscreen ? "chat.imageViewer.exitFullscreen" : "chat.imageViewer.fullscreen",

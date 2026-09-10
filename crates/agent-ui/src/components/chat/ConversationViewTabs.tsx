@@ -47,7 +47,7 @@ export function ConversationViewTabs(props: {
               if (!selected) props.onChange(tab.id);
             }}
           >
-            <Icon className="h-3.5 w-3.5" />
+            <Icon className="size-3.5" />
             <span>{t(tab.labelKey)}</span>
           </button>
         );

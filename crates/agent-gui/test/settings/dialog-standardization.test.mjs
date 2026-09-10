@@ -32,8 +32,8 @@ test("shared Dialog owns modal visibility and motion", () => {
   assert.match(dialogSource, /data-slot="dialog-overlay"/);
   assert.match(dialogSource, /data-slot="dialog-viewport"/);
   assert.match(dialogSource, /data-slot="dialog-content"/);
-  assert.match(dialogSource, /safe-area-inset-top/);
-  assert.match(dialogSource, /safe-area-inset-bottom/);
+  assert.match(dialogSource, /pt-safe-top/);
+  assert.match(dialogSource, /pb-safe-bottom/);
   assert.match(
     dialogSource,
     /type DialogLayout = "center" \| "fullscreen-mobile" \| "bottom-sheet-mobile"/,
@@ -58,8 +58,8 @@ test("shared Dialog owns modal visibility and motion", () => {
 
 test("shared AlertDialog owns its viewport and composition", () => {
   assert.match(alertDialogSource, /data-slot="alert-dialog-viewport"/);
-  assert.match(alertDialogSource, /safe-area-inset-top/);
-  assert.match(alertDialogSource, /safe-area-inset-bottom/);
+  assert.match(alertDialogSource, /pt-safe-top/);
+  assert.match(alertDialogSource, /pb-safe-bottom/);
   assert.match(alertDialogSource, /AlertDialogHeader/);
   assert.match(alertDialogSource, /AlertDialogBody/);
   assert.match(alertDialogSource, /AlertDialogFooter/);

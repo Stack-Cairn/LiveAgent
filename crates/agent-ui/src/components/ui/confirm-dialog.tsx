@@ -76,7 +76,7 @@ function ConfirmDialog(
                 <div className="text-sm leading-relaxed text-foreground">{description}</div>
               ) : null}
               {detail ? (
-                <div className="break-all rounded-md bg-muted/50 px-2.5 py-1.5 font-mono text-[calc(12px*var(--zone-font-scale,1))] leading-5 text-muted-foreground">
+                <div className="break-all rounded-md bg-muted/50 px-2.5 py-1.5 font-mono text-scaled-12px leading-5 text-muted-foreground">
                   {detail}
                 </div>
               ) : null}

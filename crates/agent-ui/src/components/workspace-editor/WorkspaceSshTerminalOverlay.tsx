@@ -10,6 +10,7 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { XTermViewport } from "@liveagent/ui/components/project-tools/XTermViewport";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -350,37 +351,37 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
     >
       <WorkspaceOverlayTitleBar />
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3">
-        <Terminal className="h-4 w-4 shrink-0 text-primary" />
+        <Terminal className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceSshTerminal.title")}
           </div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
+          <div className="truncate font-mono text-11px text-muted-foreground">
             {activeSession ? sessionEndpointLabel(activeSession) : t("workspaceSshTerminal.empty")}
           </div>
         </div>
         <button
           type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-amber-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 dark:hover:text-amber-400"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-amber-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 dark:hover:text-amber-400"
           title={t("workspaceSshTerminal.reconnect")}
           aria-label={t("workspaceSshTerminal.reconnect")}
           disabled={!activeSession || activeSessionReconnecting}
           onClick={() => void reconnectActiveSession()}
         >
-          <RefreshCw className={cn("h-4 w-4", activeSessionReconnecting && "animate-spin")} />
+          <RefreshCw className={cn("size-4", activeSessionReconnecting && "animate-spin")} />
         </button>
         <button
           type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           title={t("workspaceSshTerminal.close")}
           aria-label={t("workspaceSshTerminal.close")}
           onClick={hideOverlay}
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </button>
       </div>
 
-      <div className="workspace-ssh-terminal-tabs flex h-10 shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-background px-2 pt-1">
+      <div className="flex h-10 shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-background px-2 pt-1 web:overscroll-x-contain web:[scrollbar-width:none]! web:[-ms-overflow-style:none] web:[-webkit-overflow-scrolling:touch] web:scroll-px-0p5rem web:[&::-webkit-scrollbar]:hidden web:[&::-webkit-scrollbar]:size-0 web:max-820:h-44px web:max-820:px-8px web:max-820:scroll-px-8px">
         {openTabRecords.map(({ tab, session }) => (
           <div
             key={tab.id}
@@ -392,7 +393,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
               }
             }}
             className={cn(
-              "workspace-ssh-terminal-tab group flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs transition-colors",
+              "group flex h-8 max-w-14rem shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs transition-colors web:max-w-workspace-ssh-terminal-tab-max-w web:max-820:max-w-workspace-ssh-terminal-tab-max-w-2 web:max-820:[&_>_button:last-child]:size-1p75rem",
               tab.id === effectiveActiveTabId
                 ? "border-border bg-muted text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -420,13 +421,11 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                   : undefined
               }
             >
-              <span
-                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClassName(session))}
-              />
+              <span className={cn("size-1.5 shrink-0 rounded-full", statusDotClassName(session))} />
               {tab.kind === "sftp" ? (
-                <FolderTree className="h-3.5 w-3.5 shrink-0" />
+                <FolderTree className="size-3.5 shrink-0" />
               ) : (
-                <Terminal className="h-3.5 w-3.5 shrink-0" />
+                <Terminal className="size-3.5 shrink-0" />
               )}
               <span className="min-w-0 truncate">
                 {tab.kind === "sftp"
@@ -436,7 +435,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
             </button>
             <button
               type="button"
-              className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/75 hover:bg-background hover:text-foreground"
+              className="ml-0.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/75 hover:bg-background hover:text-foreground"
               title={t("workspaceSshTerminal.closeTab")}
               aria-label={t("workspaceSshTerminal.closeTab")}
               onClick={(event) => {
@@ -444,7 +443,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                 closeTab(tab.id);
               }}
             >
-              <X className="h-3 w-3" />
+              <X className="size-3" />
             </button>
           </div>
         ))}
@@ -452,7 +451,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
 
       {error ? (
         <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <AlertTriangle className="size-4 shrink-0" />
           <div className="min-w-0 flex-1 truncate">{error}</div>
         </div>
       ) : null}
@@ -486,9 +485,9 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                     />
                   </Suspense>
                 ) : paneLeasedSessionIds?.has(session.id) ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
-                      <Terminal className="h-5 w-5" />
+                  <EmptyState variant="workspace">
+                    <div className="flex size-10 items-center justify-center rounded-lg bg-muted/70">
+                      <Terminal className="size-5" />
                     </div>
                     <div>{t("workspaceSshTerminal.openedInWorkbench")}</div>
                     {onFocusLeasedSession ? (
@@ -500,7 +499,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
                         {t("workspaceSshTerminal.focusWorkbenchPane")}
                       </button>
                     ) : null}
-                  </div>
+                  </EmptyState>
                 ) : (
                   <XTermViewport
                     client={client}
@@ -514,12 +513,12 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
             );
           })
         ) : openTabRecords.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
-              <Terminal className="h-5 w-5" />
+          <EmptyState variant="workspace">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-muted/70">
+              <Terminal className="size-5" />
             </div>
             <div>{t("workspaceSshTerminal.empty")}</div>
-          </div>
+          </EmptyState>
         ) : null}
       </div>
     </div>

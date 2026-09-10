@@ -13,7 +13,7 @@
     "check:fast": "node scripts/check.mjs fast",
     "check:all": "node scripts/check.mjs all",
     "check:strict": "node scripts/check.mjs strict",
-    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs",
+    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs scripts/style-drift.test.mjs",
     "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
     "typecheck:ui": "pnpm --filter @liveagent/ui typecheck",
     "typecheck:virtual-core": "pnpm --filter @tanstack/virtual-core typecheck",
@@ -22,7 +22,10 @@
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",
     "test:gui": "pnpm --filter liveagent test:frontend",
-    "test:webui": "pnpm --filter @liveagent/gateway-webui test"
+    "test:webui": "pnpm --filter @liveagent/gateway-webui test",
+    "style:sync": "node scripts/sync-style-tokens.mjs",
+    "check:style-drift": "node scripts/check-style-drift.mjs",
+    "style:preview": "node scripts/style-preview.mjs"
   },
   "pnpm": {
     "overrides": {
@@ -50,6 +53,7 @@
   },
   "devDependencies": {
     "@babel/parser": "7.29.8",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "postcss": "8.5.8"
   }
 }

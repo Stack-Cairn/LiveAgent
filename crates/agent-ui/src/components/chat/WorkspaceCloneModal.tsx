@@ -155,14 +155,14 @@ export function WorkspaceCloneModal({
       }}
     >
       <DialogContent
-        className="flex max-h-[90dvh] max-w-xl flex-col p-0"
+        className="flex max-h-90dvh max-w-xl flex-col p-0"
         closeDisabled={cloning}
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6 py-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
-            <GitBranch className="h-5 w-5" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
+            <GitBranch className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-base leading-normal">
@@ -184,7 +184,7 @@ export function WorkspaceCloneModal({
               onClose();
             }}
           >
-            <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <FolderOpen className="size-5 shrink-0 text-muted-foreground" />
             <span>
               <span className="block font-medium">{t("chat.workspaceOpenFolder")}</span>
               <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
@@ -199,7 +199,7 @@ export function WorkspaceCloneModal({
 
           <section className="rounded-2xl border border-border/60 bg-muted/20 p-4">
             <div className="mb-4 flex items-start gap-3">
-              <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <GitBranch className="mt-0.5 size-5 shrink-0 text-primary" />
               <div>
                 <h3 className="text-sm font-semibold">{t("chat.workspaceCloneRepository")}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -282,7 +282,7 @@ export function WorkspaceCloneModal({
                         }
                       />
                     </SelectTrigger>
-                    <SelectContent className="max-h-60 w-72 max-w-[calc(100vw-2rem)]">
+                    <SelectContent className="max-h-60 w-72 max-w-viewport-inset-2rem">
                       {branches.map((value) => (
                         <SelectItem key={value} value={value}>
                           {value}
@@ -303,9 +303,9 @@ export function WorkspaceCloneModal({
               </Button>
               <Button onClick={() => void cloneRepository()} disabled={!canSubmit}>
                 {cloning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <GitBranch className="h-4 w-4" />
+                  <GitBranch className="size-4" />
                 )}
                 {cloning ? t("chat.workspaceCloning") : t("chat.workspaceCloneSubmit")}
               </Button>

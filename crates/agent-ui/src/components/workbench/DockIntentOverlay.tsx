@@ -17,7 +17,7 @@ export function DockIntentOverlay(props: DockIntentOverlayProps) {
     <div
       data-workbench-drop-preview=""
       aria-hidden="true"
-      className="pointer-events-none absolute z-20 flex items-center justify-center rounded-lg border border-primary/50 bg-primary/[0.08] shadow-[inset_0_0_0_1px_var(--color-background)]"
+      className="pointer-events-none absolute z-20 flex items-center justify-center rounded-lg border border-primary/50 bg-primary/[0.08] shadow-ui-dockintentoverlay-33"
       style={{
         left: rect.left + 3,
         top: rect.top + 3,

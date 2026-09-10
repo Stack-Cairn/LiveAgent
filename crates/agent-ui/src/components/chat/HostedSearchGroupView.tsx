@@ -77,8 +77,8 @@ function SourceFavicon({ url }: { url: string }) {
 
   if (!candidate) {
     return (
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Link2 className="h-2.5 w-2.5" />
+      <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Link2 className="size-2.5" />
       </span>
     );
   }
@@ -87,7 +87,7 @@ function SourceFavicon({ url }: { url: string }) {
     <img
       alt=""
       aria-hidden="true"
-      className="h-3.5 w-3.5 shrink-0 rounded-xs bg-muted object-contain"
+      className="size-3.5 shrink-0 rounded-xs bg-muted object-contain"
       decoding="async"
       loading="lazy"
       onError={() => setCandidateIndex((current) => current + 1)}
@@ -149,10 +149,10 @@ export function HostedSearchGroupView({
         type="button"
         aria-expanded={expanded}
         aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
-        className="-mx-1.5 flex h-auto max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-lg px-1.5 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="-mx-1.5 flex h-auto max-w-bleed-0p75rem items-center gap-1.5 rounded-lg px-1.5 py-1 text-scaled-13px font-450 text-foreground/60 transition-colors hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setExpanded((current) => !current)}
       >
-        <Globe className="h-3 w-3 shrink-0 text-foreground/45" />
+        <Globe className="size-3 shrink-0 text-foreground/45" />
         <span
           className={cn(
             "min-w-0 truncate",
@@ -165,7 +165,7 @@ export function HostedSearchGroupView({
         <ChevronRight
           aria-hidden="true"
           className={cn(
-            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
+            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
             expanded && "rotate-90",
           )}
         />
@@ -185,8 +185,8 @@ export function HostedSearchGroupView({
                       className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5"
                       key={query}
                     >
-                      <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] text-foreground">
+                      <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 truncate text-scaled-12p5px text-foreground">
                         {query}
                       </span>
                     </div>
@@ -201,10 +201,10 @@ export function HostedSearchGroupView({
                       target="_blank"
                     >
                       <SourceFavicon url={source.url} />
-                      <span className="min-w-0 flex-1 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-medium text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-scaled-12p5px font-medium text-foreground">
                         {source.title || getSourceHost(source.url)}
                       </span>
-                      <span className="max-w-40 shrink-0 truncate text-[calc(11.5px*var(--zone-font-scale,1))] text-muted-foreground">
+                      <span className="max-w-40 shrink-0 truncate text-scaled-11p5px text-muted-foreground">
                         {getSourceHost(source.url)}
                       </span>
                     </a>

@@ -15,9 +15,6 @@ type DiffRow = {
   pieces: DiffPiece[];
 };
 
-const DELETE_HATCH =
-  "repeating-linear-gradient(45deg, hsl(var(--chat-error)) 0, hsl(var(--chat-error)) 1.5px, transparent 1.5px, transparent 3px)";
-
 const CODE_KEYWORDS = new Set([
   "import",
   "from",
@@ -252,12 +249,12 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
   const displayPath = filePath?.trim() || "changed file";
   return (
     <figure
-      className="edit-tool-diff-view w-full max-w-[420px] overflow-hidden rounded-xl border border-border/65 bg-card/85 shadow-[0_5px_18px_-14px_hsl(var(--foreground)/0.28)]"
+      className="edit-tool-diff-view w-full max-w-420px overflow-hidden rounded-xl border border-border/65 bg-card/85 shadow-ui-editdiffview-5"
       aria-label={`Diff for ${displayPath}`}
       data-chat-code-diff=""
     >
-      <figcaption className="flex h-11 items-center gap-2 border-b border-border/60 px-4 text-[12.5px]">
-        <span className="inline-flex min-w-0 items-center gap-[7px]">
+      <figcaption className="flex h-11 items-center gap-2 border-b border-border/60 px-4 text-12p5px">
+        <span className="inline-flex min-w-0 items-center gap-7px">
           <CodeFileIcon />
           <span className="truncate font-mono leading-none text-foreground">{displayPath}</span>
         </span>
@@ -268,8 +265,10 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
       </figcaption>
 
       <div
-        className="py-3 font-mono text-[12.5px] leading-[1.65] text-foreground/78"
-        style={{ "--diff-gutter": `calc(${diff.gutterDigits}ch + 4px)` } as CSSProperties}
+        className="py-3 font-mono text-12p5px leading-1p65 text-foreground/78"
+        style={
+          { "--diff-gutter": `calc(${diff.gutterDigits}ch + var(--spacing-4px))` } as CSSProperties
+        }
       >
         <div className="relative">
           <span
@@ -291,14 +290,17 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
                 {added || deleted ? (
                   <span
                     aria-hidden="true"
-                    className={cn("absolute inset-y-0 left-0 w-[3px]", added && "bg-emerald-600")}
-                    style={deleted ? { background: DELETE_HATCH } : undefined}
+                    className={cn(
+                      "absolute inset-y-0 left-0 w-3px",
+                      added && "bg-emerald-600",
+                      deleted && "bg-diff-deleted",
+                    )}
                   />
                 ) : null}
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "select-none text-center text-[11px] tabular-nums",
+                    "select-none text-center text-11px tabular-nums",
                     added
                       ? "text-emerald-700 dark:text-emerald-300"
                       : deleted

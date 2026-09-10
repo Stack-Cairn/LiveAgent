@@ -38,6 +38,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      postcss:
+        specifier: 8.5.8
+        version: 8.5.8
 
   crates/agent-gateway/web:
     dependencies:

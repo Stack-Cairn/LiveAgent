@@ -41,11 +41,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
               <SettingsChoiceRow
                 key={behavior}
                 icon={
-                  isMinimize ? (
-                    <Minimize2 className="h-4.5 w-4.5" />
-                  ) : (
-                    <LogOut className="h-4.5 w-4.5" />
-                  )
+                  isMinimize ? <Minimize2 className="size-4.5" /> : <LogOut className="size-4.5" />
                 }
                 title={
                   isMinimize ? t("settings.closeWindowMinimize") : t("settings.closeWindowExit")

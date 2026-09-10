@@ -324,7 +324,7 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "status-board-pill",
+        "flex items-center h-33px gap-7px border border-solid border-status-cyan/20 rounded-999px px-12px py-0 bg-rgba-255-255-255-0p055 text-rgba-233-245-255-0p84 text-11px no-underline uppercase whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default",
         online ? "status-board-pill--online" : "status-board-pill--offline",
       )}
     >
@@ -984,10 +984,10 @@ export function StatusDashboardPage() {
       <div className="status-board-orb status-board-orb--b" aria-hidden="true" />
       <div className="status-board-orb status-board-orb--c" aria-hidden="true" />
 
-      <section className="status-board-stage">
-        <header className="status-board-header status-board-command">
+      <section className="relative z-1 box-border grid grid-rows-status-board-stage gap-12px w-status-board-stage-w h-status-board-stage-h min-h-0 px-18px pt-14px pb-12px status-compact:w-100vw status-compact:h-100dvh status-compact:p-10px">
+        <header className="status-board-command flex items-center">
           <div className="status-board-brand">
-            <div className="status-board-logo status-board-logo--hot">
+            <div className="status-board-logo animate-status-board-logo-hot">
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div>
@@ -1004,7 +1004,7 @@ export function StatusDashboardPage() {
                 : "syncing snapshot"}
             </em>
           </div>
-          <div className="status-board-actions">
+          <div className="flex items-center flex-nowrap justify-end gap-8px">
             <StatusPill
               online={status?.online === true}
               label={status?.online ? "Agent online" : "Agent offline"}
@@ -1040,15 +1040,15 @@ export function StatusDashboardPage() {
         </header>
 
         {snapshot.error && (
-          <div className="status-board-warning">
+          <div className="absolute top-82px right-24px z-6 flex max-w-540px items-center gap-9px border border-solid border-status-amber/30 rounded-16px px-12px py-9px bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-12px shadow-status-board-warning backdrop-blur-18px">
             <AlertCircle size={16} />
             <span>{snapshot.error}</span>
           </div>
         )}
 
-        <section className="status-board-cockpit">
-          <aside className="status-board-left-rail">
-            <section className="status-board-card status-board-panel status-board-reactor-panel">
+        <section className="grid grid-cols-status-board-cockpit gap-12px min-h-0 status-compact:grid-cols-status-board-cockpit-2 status-compact:gap-8px">
+          <aside className="grid min-h-0 gap-12px grid-rows-status-board-left-rail status-compact:gap-8px">
+            <section className="status-board-card status-board-panel min-h-0">
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Core Reactor</p>
@@ -1056,18 +1056,18 @@ export function StatusDashboardPage() {
                 </div>
                 <Shield size={18} />
               </div>
-              <div className="status-board-reactor-core">
+              <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
                     "status-board-reactor",
                     status?.online && "status-board-reactor--online",
                   )}
                   style={{
-                    background: `conic-gradient(from -90deg, rgba(41, 255, 214, 0.96) 0deg, rgba(20, 184, 255, 0.96) ${integrityScore * 3.6}deg, rgba(30, 39, 68, 0.88) ${integrityScore * 3.6}deg 360deg)`,
+                    background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
                   }}
                 >
-                  <div className="status-board-reactor-ring status-board-reactor-ring--a" />
-                  <div className="status-board-reactor-ring status-board-reactor-ring--b" />
+                  <div className="status-board-reactor-ring inset-minus-8px animate-status-board-reactor-ring-a" />
+                  <div className="status-board-reactor-ring inset-28px border-status-violet/28! animate-status-board-reactor-ring-b" />
                   <div className="status-board-reactor-number">
                     <strong>{integrityScore}</strong>
                     <span>derived %</span>
@@ -1089,7 +1089,7 @@ export function StatusDashboardPage() {
               <FactList items={runtimeFacts} />
             </section>
 
-            <section className="status-board-card status-board-panel status-board-fabric-panel">
+            <section className="status-board-card status-board-panel min-h-0">
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Gateway Fabric</p>
@@ -1098,7 +1098,7 @@ export function StatusDashboardPage() {
                 <Server size={18} />
               </div>
               <FactList items={fabricFacts} />
-              <div className="status-board-mini-grid status-board-mini-grid--matrix">
+              <div className="status-board-mini-grid--matrix grid gap-8px grid-cols-2 mt-10px">
                 <div className="status-board-mini-card">
                   <Globe2 size={17} />
                   <span>Tunnels</span>
@@ -1123,7 +1123,7 @@ export function StatusDashboardPage() {
             </section>
           </aside>
 
-          <section className="status-board-center-stack">
+          <section className="grid min-h-0 gap-12px grid-rows-status-board-center-stack status-compact:gap-8px">
             <section className="status-board-card status-board-panel status-board-radar-panel">
               <div className="status-board-section-head">
                 <div>
@@ -1133,13 +1133,13 @@ export function StatusDashboardPage() {
                 <span>{eventsPerMinute.toFixed(1)} events/min</span>
               </div>
 
-              <section className="status-board-metrics-grid">
+              <section className="grid gap-8px grid-cols-6 flex-none status-compact:grid-cols-3">
                 {metrics.map((metric) => (
                   <MetricTile key={metric.label} metric={metric} />
                 ))}
               </section>
 
-              <div className="status-board-radar-deck">
+              <div className="grid grid-cols-status-board-radar-deck items-center gap-14px min-h-0 flex-auto mt-12px">
                 <div
                   className="status-board-radar-screen"
                   role="img"
@@ -1163,7 +1163,7 @@ export function StatusDashboardPage() {
                   ))}
                 </div>
 
-                <div className="status-board-throughput">
+                <div className="min-w-0">
                   <div className="status-board-throughput-head">
                     <span>Stream Load</span>
                     <strong>{compactNumber(liveCounters.events)} events</strong>
@@ -1195,7 +1195,7 @@ export function StatusDashboardPage() {
                 </div>
                 <MessageSquareText size={18} />
               </div>
-              <div className="status-board-event-list">
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {recentEvents.length === 0 ? (
                   <EmptyState>
                     我还没收到实时事件；当 token、thinking 或 tool_call 抵达时，这里会亮起来。
@@ -1206,7 +1206,7 @@ export function StatusDashboardPage() {
                       key={event.id}
                       className={cn("status-board-event", `status-board-tone-${event.tone}`)}
                     >
-                      <span className="status-board-event-dot" />
+                      <span className="size-8px mt-5px rounded-999px bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
                       <div>
                         <div className="status-board-event-title-row">
                           <strong>{event.title}</strong>
@@ -1214,7 +1214,7 @@ export function StatusDashboardPage() {
                         </div>
                         <p>{event.detail}</p>
                         {(event.conversationId || event.workdir) && (
-                          <span className="status-board-event-meta">
+                          <span className="text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-999px px-6px py-2px bg-rgba-255-255-255-0p06">
                             {event.workdir
                               ? basename(event.workdir)
                               : truncateMiddle(event.conversationId ?? "", 18)}
@@ -1228,8 +1228,8 @@ export function StatusDashboardPage() {
             </section>
           </section>
 
-          <aside className="status-board-right-rail">
-            <section className="status-board-card status-board-panel status-board-model-panel">
+          <aside className="grid min-h-0 gap-12px grid-rows-status-board-right-rail status-compact:gap-8px">
+            <section className="status-board-card status-board-panel min-h-0">
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Model Route</p>
@@ -1238,7 +1238,7 @@ export function StatusDashboardPage() {
                 <Radio size={18} />
               </div>
               <FactList items={modelFacts} />
-              <div className="status-board-running-list">
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {runningConversations.length === 0 ? (
                   <EmptyState>暂无运行中会话。</EmptyState>
                 ) : (
@@ -1258,7 +1258,7 @@ export function StatusDashboardPage() {
               </div>
             </section>
 
-            <section className="status-board-card status-board-panel status-board-workspace-panel">
+            <section className="status-board-card status-board-panel min-h-0">
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Workspace Heat</p>
@@ -1271,7 +1271,7 @@ export function StatusDashboardPage() {
                 <strong title={activeWorkspaceHint}>{activeWorkspaceName}</strong>
                 <em>{activeWorkspaceHint}</em>
               </div>
-              <div className="status-board-workdir-list">
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {workdirs.length === 0 ? (
                   <EmptyState>暂无项目维度历史。</EmptyState>
                 ) : (

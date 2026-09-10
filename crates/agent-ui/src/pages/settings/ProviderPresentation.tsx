@@ -141,16 +141,16 @@ export function HintTip(props: { text: string; label?: string }) {
           <button
             type="button"
             aria-label={label ?? text}
-            className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         }
       >
-        <Info className="h-3 w-3" />
+        <Info className="size-3" />
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
         align="start"
-        className="max-w-60 px-2.5 py-2 text-[11px] font-normal leading-relaxed text-popover-foreground/90"
+        className="max-w-60 px-2.5 py-2 text-11px font-normal leading-relaxed text-popover-foreground/90"
       >
         {text}
       </TooltipContent>
@@ -178,7 +178,7 @@ export function DrawerGroupLabel(props: { label: string; hint?: string }) {
   const { label, hint } = props;
   return (
     <div className="flex items-center gap-2">
-      <span className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65">
+      <span className="flex shrink-0 items-center gap-1 text-10p5px font-semibold uppercase leading-none tracking-0p08em text-muted-foreground/65">
         {label}
         {hint ? <HintTip text={hint} label={label} /> : null}
       </span>
@@ -198,11 +198,11 @@ export function DrawerSectionHeader(props: {
   const { icon, title, hint, badge, action } = props;
   return (
     <div className="flex items-center gap-2.5">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.05] bg-foreground/[0.04] text-foreground/70">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.05] bg-foreground/[0.04] text-foreground/70">
         {icon}
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h3 className="truncate text-[13px] font-semibold tracking-tight text-foreground/90">
+        <h3 className="truncate text-13px font-semibold tracking-tight text-foreground/90">
           {title}
         </h3>
         {hint ? <HintTip text={hint} label={title} /> : null}
@@ -225,7 +225,7 @@ export function DialogSwitch(props: {
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
-      className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       onClick={() => onCheckedChange(!checked)}
     >
       <span
@@ -239,7 +239,7 @@ export function DialogSwitch(props: {
             single-inset figure the transform-only Switch primitive uses. */}
         <span
           className={cn(
-            "absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-background shadow-sm transition-transform",
+            "absolute left-0.5 top-0.5 size-3 rounded-full bg-background shadow-sm transition-transform",
             checked && "translate-x-3",
           )}
         />

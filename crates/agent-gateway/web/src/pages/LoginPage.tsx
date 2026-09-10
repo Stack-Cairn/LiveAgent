@@ -48,19 +48,27 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
     <main className="login-shell">
       {/* Subtle mesh gradient backdrop */}
       <div className="login-backdrop" aria-hidden="true" />
-      <div className="login-backdrop-orb login-backdrop-orb--1" aria-hidden="true" />
-      <div className="login-backdrop-orb login-backdrop-orb--2" aria-hidden="true" />
+      <div
+        className="login-backdrop-orb size-500px top-minus-120px left-minus-80px bg-hsl-210-100-88-0p5 animate-login-backdrop-orb-1 dark:bg-hsl-210-80-30-0p2 max-820:size-300px"
+        aria-hidden="true"
+      />
+      <div
+        className="login-backdrop-orb size-400px bottom-minus-100px right-minus-60px bg-hsl-250-70-88-0p4 animate-login-backdrop-orb-2 dark:bg-hsl-250-60-30-0p15 max-820:size-250px"
+        aria-hidden="true"
+      />
 
-      <div className="login-container login-entrance">
+      <div className="relative z-1 grid grid-cols-login-container gap-0 w-login-container-w rounded-28px overflow-hidden border border-solid border-hsl-0-0-100-0p7 bg-hsl-0-0-100-0p55 backdrop-blur-40px backdrop-saturate-160 shadow-login-container dark:border-hsl-0-0-100-0p08 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2 max-1080:grid-cols-login-container-2 max-1080:w-login-container-w-2 max-820:rounded-22px max-640:rounded-20px max-640:w-full max-380:rounded-18px animate-login-entrance motion-reduce:animate-none">
         {/* Left: branding + features */}
-        <div className="login-hero login-entrance-d1">
-          <div className="login-hero-title-row">
+        <div className="flex flex-col justify-center px-40px py-48px border-r border-solid border-r-hsl-0-0-0-0p04 bg-hsl-0-0-100-0p3 dark:border-r-hsl-0-0-100-0p05 dark:bg-hsl-0-0-100-0p02 max-1080:border-r-0 max-1080:border-r-current max-1080:border-b max-1080:border-solid max-1080:border-b-hsl-0-0-0-0p04 max-1080:px-32px max-1080:pt-36px max-1080:pb-28px dark:max-1080:border-b-hsl-0-0-100-0p05 max-820:px-24px max-820:pt-28px max-820:pb-20px max-640:px-20px max-640:pt-24px max-640:pb-18px max-380:px-16px max-380:pt-20px max-380:pb-14px animate-login-entrance-d1 motion-reduce:animate-none">
+          <div className="flex items-center gap-12px max-380:gap-8px">
             <div className="login-logo-mark">
               <Shield size={18} strokeWidth={2} />
             </div>
-            <h1 className="login-hero-title">LiveAgent Gateway</h1>
+            <h1 className="m-0 text-28px font-bold leading-1p15 tracking-minus-0p035em text-foreground max-820:text-26px max-640:text-24px max-380:text-22px">
+              LiveAgent Gateway
+            </h1>
           </div>
-          <p className="login-hero-desc">
+          <p className="mx-0 mt-14px mb-0 text-14px leading-1p7 text-muted-foreground max-640:text-13px max-640:mt-10px max-380:text-12p5px max-380:leading-1p6">
             安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
           </p>
 
@@ -80,20 +88,33 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
         </div>
 
         {/* Right: auth form */}
-        <div className="login-form-panel login-entrance-d2">
-          <div className="login-form-card">
-            <div className="login-form-header">
-              <div className="login-form-title-row">
-                <div className="login-form-icon">
+        <div className="login-entrance-d2 flex items-center justify-center px-40px py-48px max-1080:px-32px max-1080:pt-28px max-1080:pb-36px max-820:px-24px max-820:pt-20px max-820:pb-28px max-640:px-20px max-640:pt-18px max-640:pb-24px max-380:px-16px max-380:pt-14px max-380:pb-20px">
+          <div className="w-full max-w-360px max-1080:max-w-full">
+            <div className="mb-28px max-640:mb-20px max-380:mb-16px">
+              <div className="flex items-center gap-10px">
+                <div className="shrink-0 flex items-center justify-center size-34px rounded-10px text-muted-foreground bg-muted/60 border border-solid border-hsl-0-0-0-0p04 dark:bg-hsl-0-0-100-0p06 dark:border-hsl-0-0-100-0p06 max-820:size-30px max-820:rounded-9px max-380:size-28px max-380:rounded-8px">
                   <Lock size={16} strokeWidth={2} />
                 </div>
-                <h2 className="login-form-title">连接控制台</h2>
+                <h2 className="m-0 text-22px font-bold tracking-minus-0p02em text-foreground max-820:text-20px max-380:text-18px">
+                  连接控制台
+                </h2>
               </div>
-              <p className="login-form-sub">输入 Gateway 服务端的 Access Token 以验证身份</p>
+              <p className="mx-0 mt-8px mb-0 text-13px leading-1p6 text-muted-foreground max-640:text-12p5px max-380:text-12px">
+                输入 Gateway 服务端的 Access Token 以验证身份
+              </p>
             </div>
 
-            <div className={cn("login-input-wrap", isFocused && "login-input-wrap--focus")}>
-              <label htmlFor="access-token" className="login-input-label">
+            <div
+              className={cn(
+                "mb-16px px-16px py-14px rounded-16px border border-solid border-hsl-0-0-0-0p06 bg-hsl-0-0-100-0p55 transition-[border-color,box-shadow] duration-250ms ease-default dark:border-hsl-0-0-100-0p08 dark:bg-hsl-0-0-100-0p04 max-820:px-14px max-820:py-12px max-820:rounded-14px max-380:px-12px max-380:py-10px max-380:rounded-12px max-380:mb-12px",
+                isFocused &&
+                  "border-hsl-215-70-60-0p4 shadow-login-input-wrap-focus dark:border-hsl-215-60-55-0p5 dark:shadow-login-input-wrap--focus-2",
+              )}
+            >
+              <label
+                htmlFor="access-token"
+                className="flex items-center gap-6px mb-10px text-11px font-semibold tracking-0p08em uppercase text-muted-foreground max-380:mb-8px max-380:text-10px"
+              >
                 <Key size={12} strokeWidth={2.5} />
                 Access Token
               </label>
@@ -112,7 +133,11 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               />
             </div>
 
-            {error && <p className="login-form-error">{error}</p>}
+            {error && (
+              <p className="mx-0 mt-0 mb-14px px-14px py-10px rounded-10px text-13px leading-1p5 text-hsl-0-72-50 bg-hsl-0-80-50-0p06 border border-solid border-hsl-0-80-50-0p1 dark:text-hsl-0-80-68 dark:bg-hsl-0-80-50-0p1 dark:border-hsl-0-80-50-0p15">
+                {error}
+              </p>
+            )}
 
             <Button
               type="button"
@@ -122,7 +147,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               className="login-btn"
             >
               {isSubmitting ? (
-                <span className="login-btn-loading" />
+                <span className="inline-block size-18px border-2 border-solid border-primary-foreground/30 border-t-primary-foreground rounded-half animate-login-btn-loading" />
               ) : (
                 <>
                   进入 Gateway
@@ -131,7 +156,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               )}
             </Button>
 
-            <p className="login-form-footer">Token 验证通过后将本地保存，下次自动登录</p>
+            <p className="mt-16px text-center text-11p5px text-muted-foreground/60 max-640:text-11px max-380:mt-12px">
+              Token 验证通过后将本地保存，下次自动登录
+            </p>
           </div>
         </div>
       </div>

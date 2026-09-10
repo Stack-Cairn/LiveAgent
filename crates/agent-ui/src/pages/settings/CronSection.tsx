@@ -140,8 +140,8 @@ export function CronSection(props: SettingsSectionProps) {
       {/* Header */}
       <div className="settings-section-heading-row flex items-center justify-between gap-4">
         <div className="settings-section-title-group flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10">
-            <Clock3 className="h-[18px] w-[18px] text-amber-500" />
+          <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10">
+            <Clock3 className="size-18px text-amber-500" />
           </div>
           <div>
             <h3 className="text-sm font-semibold">{t("settings.cronTitle")}</h3>
@@ -155,7 +155,7 @@ export function CronSection(props: SettingsSectionProps) {
             {t("settings.cronCount")}
             <span className="text-border">|</span>
             <span className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="size-1.5 rounded-full bg-emerald-500" />
               <span className="tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
                 {enabledCount}
               </span>
@@ -168,7 +168,7 @@ export function CronSection(props: SettingsSectionProps) {
             className="gap-1.5"
             onClick={() => setModal({ open: true, mode: "add" })}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="size-3.5" />
             {t("settings.cronAdd")}
           </Button>
         </div>
@@ -182,7 +182,7 @@ export function CronSection(props: SettingsSectionProps) {
 
       {actionError ? (
         <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <AlertTriangle className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{actionError}</span>
         </div>
       ) : null}
@@ -190,7 +190,7 @@ export function CronSection(props: SettingsSectionProps) {
       {/* Task List */}
       {tasks.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center">
-          <Clock3 className="mx-auto h-8 w-8 text-muted-foreground/30" />
+          <Clock3 className="mx-auto size-8 text-muted-foreground/30" />
           <p className="mt-3 text-sm font-medium text-muted-foreground">
             {t("settings.cronEmpty")}
           </p>
@@ -222,12 +222,12 @@ export function CronSection(props: SettingsSectionProps) {
                   {/* Icon */}
                   <div
                     className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                      "flex size-9 shrink-0 items-center justify-center rounded-lg",
                       tone.bg,
                       tone.text,
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="size-4" />
                   </div>
 
                   {/* Content */}
@@ -238,7 +238,7 @@ export function CronSection(props: SettingsSectionProps) {
                       </span>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-10px font-medium leading-none",
                           tone.bg,
                           tone.text,
                         )}
@@ -248,9 +248,9 @@ export function CronSection(props: SettingsSectionProps) {
                       {task.lastError ? (
                         <span
                           title={task.lastError}
-                          className="flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-red-600 dark:text-red-400"
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5 text-10px font-medium leading-none text-red-600 dark:text-red-400"
                         >
-                          <AlertTriangle className="h-2.5 w-2.5" />
+                          <AlertTriangle className="size-2.5" />
                           {t("settings.cronScheduleError")}
                         </span>
                       ) : null}
@@ -261,13 +261,13 @@ export function CronSection(props: SettingsSectionProps) {
                   </div>
 
                   {/* Cron Expression - fixed width for alignment */}
-                  <div className="hidden w-[140px] shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 md:flex">
-                    <Clock3 className="h-3 w-3 shrink-0" />
+                  <div className="hidden w-140px shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-11px font-medium text-amber-600 dark:text-amber-400 md:flex">
+                    <Clock3 className="size-3 shrink-0" />
                     <span className="font-mono">{task.cron}</span>
                   </div>
                   <div
                     className={cn(
-                      "hidden w-[74px] shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium md:flex",
+                      "hidden w-74px shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-11px font-medium md:flex",
                       exhausted
                         ? "bg-red-500/10 text-red-600 dark:text-red-400"
                         : task.remainingExecutions == null
@@ -289,28 +289,28 @@ export function CronSection(props: SettingsSectionProps) {
                     <button
                       type="button"
                       onClick={() => setModal({ open: true, mode: "view", taskId: task.id })}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                       title={t("settings.cronView")}
                     >
-                      <Eye className="h-3.5 w-3.5" />
+                      <Eye className="size-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setModal({ open: true, mode: "edit", task })}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                       title={t("settings.cronEdit")}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="size-3.5" />
                     </button>
                     <ConfirmDeletePopover name={task.name} onConfirm={() => handleDelete(task.id)}>
                       {(open) => (
                         <button
                           type="button"
                           onClick={open}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                           title={t("settings.cronDelete")}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="size-3.5" />
                         </button>
                       )}
                     </ConfirmDeletePopover>

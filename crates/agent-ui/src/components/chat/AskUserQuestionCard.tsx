@@ -88,17 +88,17 @@ function RollingDigits({ value }: { value: string }) {
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: Counter glyphs are positional animation cells.
             key={`${index}-${previousCharacter}-${nextCharacter}-${direction}`}
-            className="relative inline-block h-[1em] overflow-hidden align-[-0.05em] leading-[1em]"
+            className="relative inline-block h-1em overflow-hidden align-minus-0p05em leading-1em"
           >
             <span
               className="flex flex-col"
               style={{
-                transition: "transform 350ms cubic-bezier(0.4, 0, 0.2, 1)",
+                transition: "transform var(--ui-duration-350ms) var(--ease-in-out)",
                 transform: `translateY(${shifted ? restingOffset : startingOffset})`,
               }}
             >
-              <span className="h-[1em] leading-[1em]">{top}</span>
-              <span className="h-[1em] leading-[1em]">{bottom}</span>
+              <span className="h-1em leading-1em">{top}</span>
+              <span className="h-1em leading-1em">{bottom}</span>
             </span>
           </span>
         );
@@ -142,10 +142,7 @@ function useAnswerCountdown(active: boolean, deadlineAt?: number) {
 
 function RecommendedTag({ label }: { label: string }) {
   return (
-    <Badge
-      variant="success"
-      className="border-transparent px-1.5 text-[calc(11px*var(--zone-font-scale,1))]"
-    >
+    <Badge variant="success" className="border-transparent px-1.5 text-scaled-11px">
       {label}
     </Badge>
   );
@@ -284,7 +281,7 @@ export function AskUserQuestionCard({
   };
 
   return (
-    <div className="tool-expand w-full max-w-[min(100%,36rem)]">
+    <div className="animate-tool-expand motion-reduce:animate-none! w-full max-w-panel-36rem">
       <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
         <div className="px-4 pb-3 pt-4">
           {/* 只渲染当前题、高度自然撑开。此前用「固定高度视口 + transform
@@ -305,11 +302,15 @@ export function AskUserQuestionCard({
                 <div
                   key={question.id}
                   className={cn(
-                    switchDirection === "forward" ? "ask-question-enter-forward" : "",
-                    switchDirection === "backward" ? "ask-question-enter-backward" : "",
+                    switchDirection === "forward"
+                      ? "animate-ask-question-enter-forward motion-reduce:animate-none!"
+                      : "",
+                    switchDirection === "backward"
+                      ? "animate-ask-question-enter-backward motion-reduce:animate-none!"
+                      : "",
                   )}
                 >
-                  <div className="text-[calc(13px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground">
+                  <div className="text-scaled-13px font-medium leading-1p5 text-foreground">
                     {question.prompt}
                   </div>
 
@@ -334,7 +335,7 @@ export function AskUserQuestionCard({
                           tabIndex={active ? 0 : -1}
                           onClick={() => selectOption(question.id, option.label)}
                           className={cn(
-                            "group/option relative flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors duration-150",
+                            "group/option relative flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors duration-150",
                             selected
                               ? "bg-foreground/[0.06]"
                               : active && canInteract
@@ -348,7 +349,7 @@ export function AskUserQuestionCard({
                         >
                           <span
                             className={cn(
-                              "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
                               selected
                                 ? "border-foreground bg-foreground text-background"
                                 : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
@@ -356,7 +357,7 @@ export function AskUserQuestionCard({
                           >
                             <span
                               className={cn(
-                                "h-1.5 w-1.5 rounded-full bg-background transition-transform duration-200",
+                                "size-1.5 rounded-full bg-background transition-transform duration-200",
                                 selected ? "scale-100" : "scale-0",
                               )}
                             />
@@ -365,7 +366,7 @@ export function AskUserQuestionCard({
                             <span className="flex flex-wrap items-center gap-1.5">
                               <span
                                 className={cn(
-                                  "text-[calc(12.5px*var(--zone-font-scale,1))] leading-[1.45]",
+                                  "text-scaled-12p5px leading-1p45",
                                   selected ? "font-medium text-foreground" : "text-foreground/78",
                                 )}
                               >
@@ -376,7 +377,7 @@ export function AskUserQuestionCard({
                               ) : null}
                             </span>
                             {option.description ? (
-                              <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-muted-foreground/72">
+                              <span className="text-scaled-11px leading-1p5 text-muted-foreground/72">
                                 {option.description}
                               </span>
                             ) : null}
@@ -392,7 +393,7 @@ export function AskUserQuestionCard({
                     {interactive && !isSettled && !cancelled ? (
                       <div
                         className={cn(
-                          "group/option flex w-full items-center gap-2 rounded-lg px-2 py-2 transition-colors duration-150",
+                          "group/option flex w-full items-center gap-2 rounded-lg p-2 transition-colors duration-150",
                           questionCustomSelected ? "bg-foreground/[0.06]" : "",
                         )}
                       >
@@ -405,7 +406,7 @@ export function AskUserQuestionCard({
                           disabled={!canInteract}
                           onClick={() => selectCustom(question.id)}
                           className={cn(
-                            "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
+                            "flex size-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
                             questionCustomSelected
                               ? "border-foreground bg-foreground text-background"
                               : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
@@ -414,7 +415,7 @@ export function AskUserQuestionCard({
                         >
                           <span
                             className={cn(
-                              "h-1.5 w-1.5 rounded-full bg-background transition-transform duration-200",
+                              "size-1.5 rounded-full bg-background transition-transform duration-200",
                               questionCustomSelected ? "scale-100" : "scale-0",
                             )}
                           />
@@ -442,17 +443,17 @@ export function AskUserQuestionCard({
                             }));
                           }}
                           className={cn(
-                            "h-8 min-w-0 flex-1 bg-transparent text-[calc(12.5px*var(--zone-font-scale,1))] shadow-none",
+                            "h-8 min-w-0 flex-1 bg-transparent text-scaled-12p5px shadow-none",
                             questionCustomSelected ? "border-foreground/35" : "border-border/60",
                           )}
                         />
                       </div>
                     ) : questionCustomSelected && questionCustomText ? (
-                      <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2">
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-foreground bg-foreground">
-                          <span className="h-1.5 w-1.5 rounded-full bg-background" />
+                      <div className="flex w-full items-center gap-2 rounded-lg p-2">
+                        <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-foreground bg-foreground">
+                          <span className="size-1.5 rounded-full bg-background" />
                         </span>
-                        <span className="min-w-0 flex-1 break-words text-[calc(12.5px*var(--zone-font-scale,1))] font-medium leading-[1.45] text-foreground">
+                        <span className="min-w-0 flex-1 break-words text-scaled-12p5px font-medium leading-1p45 text-foreground">
                           {questionCustomText}
                         </span>
                       </div>
@@ -464,10 +465,7 @@ export function AskUserQuestionCard({
           </div>
 
           {errorText ? (
-            <div
-              role="alert"
-              className="mt-2 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] text-destructive"
-            >
+            <div role="alert" className="mt-2 text-scaled-11px leading-1p5 text-destructive">
               {errorText}
             </div>
           ) : null}
@@ -482,11 +480,11 @@ export function AskUserQuestionCard({
                   aria-label={t("chat.askUser.previousQuestion")}
                   disabled={safeActiveIndex === 0}
                   onClick={() => goToQuestion(safeActiveIndex - 1)}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                  className="flex size-18px items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
                 >
-                  <ChevronUp className="h-3.5 w-3.5" />
+                  <ChevronUp className="size-3.5" />
                 </button>
-                <span className="inline-flex items-center text-[calc(11px*var(--zone-font-scale,1))] font-medium tabular-nums leading-none">
+                <span className="inline-flex items-center text-scaled-11px font-medium tabular-nums leading-none">
                   <RollingDigits value={`${safeActiveIndex + 1} / ${questions.length}`} />
                 </span>
                 <button
@@ -494,16 +492,16 @@ export function AskUserQuestionCard({
                   aria-label={t("chat.askUser.nextQuestion")}
                   disabled={safeActiveIndex === questions.length - 1}
                   onClick={() => goToQuestion(safeActiveIndex + 1)}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                  className="flex size-18px items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
                 >
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="size-3.5" />
                 </button>
               </>
             ) : null}
             {interactive && !isSettled && !cancelled ? (
               <span
                 role="timer"
-                className="truncate text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/60"
+                className="truncate text-scaled-11px tabular-nums text-muted-foreground/60"
               >
                 {questions.length > 1 ? "· " : null}
                 {formatCountdown(remainingMs)} {t("chat.askUser.timeoutHint")}
@@ -512,17 +510,17 @@ export function AskUserQuestionCard({
           </div>
 
           {cancelled ? (
-            <span className="text-right text-[calc(11px*var(--zone-font-scale,1))] leading-[1.35] text-muted-foreground/70">
+            <span className="text-right text-scaled-11px leading-1p35 text-muted-foreground/70">
               {t("chat.askUser.cancelled")}
             </span>
           ) : isSettled ? (
             timedOut ? (
-              <span className="text-right text-[calc(11px*var(--zone-font-scale,1))] leading-[1.35] text-amber-600 dark:text-amber-400">
+              <span className="text-right text-scaled-11px leading-1p35 text-amber-600 dark:text-amber-400">
                 {t("chat.askUser.timedOut")}
               </span>
             ) : (
-              <Badge variant="success" className="text-[calc(11px*var(--zone-font-scale,1))]">
-                <Check className="h-3 w-3" />
+              <Badge variant="success" className="text-scaled-11px">
+                <Check className="size-3" />
                 {t("chat.askUser.answered")}
               </Badge>
             )
@@ -535,7 +533,7 @@ export function AskUserQuestionCard({
                   size="sm"
                   disabled={!canInteract}
                   onClick={() => goToQuestion(safeActiveIndex + 1)}
-                  className="h-7 rounded-full px-3 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground hover:text-foreground"
+                  className="h-7 rounded-full px-3 text-scaled-11px text-muted-foreground hover:text-foreground"
                 >
                   {t("chat.askUser.skip")}
                 </Button>
@@ -552,7 +550,7 @@ export function AskUserQuestionCard({
                   if (safeActiveIndex === questions.length - 1) void submit();
                   else goToQuestion(safeActiveIndex + 1);
                 }}
-                className="h-7 gap-1.5 rounded-full px-3.5 text-[calc(11px*var(--zone-font-scale,1))]"
+                className="h-7 gap-1.5 rounded-full px-3.5 text-scaled-11px"
               >
                 {submitting
                   ? t("chat.askUser.submitting")

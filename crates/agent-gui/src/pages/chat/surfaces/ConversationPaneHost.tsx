@@ -112,7 +112,7 @@ function RegisteredRestorableConversationPaneHost(props: {
       return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
     }
     return (
-      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="flex size-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{title || t("chat.pendingTitle")}</p>
         <button
           type="button"

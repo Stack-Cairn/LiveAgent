@@ -174,7 +174,7 @@ export function WindowsTitleBar() {
     <header
       className={cn(
         "relative z-50 flex h-8 shrink-0 select-none items-center border-b border-black/[0.06] bg-white/65 text-foreground/90 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55 dark:border-white/[0.06] dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/55",
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "shadow-ui-windowstitlebar-52 dark:shadow-ui-planmodecard-11",
         !isFocused && "text-foreground/55",
       )}
     >
@@ -187,10 +187,10 @@ export function WindowsTitleBar() {
         <img
           src={iconSimpleUrl}
           alt=""
-          className="h-[15px] w-[15px] shrink-0 rounded-xs"
+          className="size-15px shrink-0 rounded-xs"
           draggable={false}
         />
-        <span className="truncate text-[12px] font-medium leading-[1.45] tracking-[0.01em] text-foreground/80">
+        <span className="truncate text-12px font-medium leading-1p45 tracking-0p01em text-foreground/80">
           {t("app.name")}
         </span>
       </div>
@@ -201,34 +201,34 @@ export function WindowsTitleBar() {
       >
         <button
           type="button"
-          className="group flex h-full w-[38px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
+          className="group flex h-full w-38px items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
           aria-label={t("window.minimize")}
           title={t("window.minimize")}
           onClick={minimizeWindow}
         >
-          <Minus className="h-[13px] w-[13px]" strokeWidth={1.4} />
+          <Minus className="size-13px" strokeWidth={1.4} />
         </button>
         <button
           type="button"
-          className="group flex h-full w-[38px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
+          className="group flex h-full w-38px items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
           aria-label={maximizeLabel}
           title={maximizeLabel}
           onClick={toggleMaximize}
         >
           {isMaximized ? (
-            <Minimize2 className="h-[12px] w-[12px]" strokeWidth={1.4} />
+            <Minimize2 className="size-12px" strokeWidth={1.4} />
           ) : (
-            <Maximize2 className="h-[12px] w-[12px]" strokeWidth={1.4} />
+            <Maximize2 className="size-12px" strokeWidth={1.4} />
           )}
         </button>
         <button
           type="button"
-          className="group flex h-full w-[42px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-[#e81123] hover:text-white focus-visible:outline-hidden focus-visible:bg-[#e81123] focus-visible:text-white"
+          className="group flex h-full w-42px items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-ui-e81123 hover:text-white focus-visible:outline-hidden focus-visible:bg-ui-e81123 focus-visible:text-white"
           aria-label={t("window.close")}
           title={t("window.close")}
           onClick={closeWindow}
         >
-          <X className="h-[13px] w-[13px]" strokeWidth={1.5} />
+          <X className="size-13px" strokeWidth={1.5} />
         </button>
       </fieldset>
     </header>

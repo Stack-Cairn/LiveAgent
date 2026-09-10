@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -6,14 +7,8 @@ const gatewayAppViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),
   "utf8",
 );
-const baseChatStyles = readFileSync(
-  new URL("../src/styles/base-chat.css", import.meta.url),
-  "utf8",
-);
-const responsiveStyles = readFileSync(
-  new URL("../src/styles/responsive.css", import.meta.url),
-  "utf8",
-);
+const baseChatStyles = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
+const responsiveStyles = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
 
 test("gateway mounts workbench chrome outside the shared application view", () => {
   assert.match(gatewayAppViewSource, /<main className="gateway-main-shell">/);

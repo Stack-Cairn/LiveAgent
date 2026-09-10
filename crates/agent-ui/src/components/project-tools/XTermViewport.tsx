@@ -29,6 +29,7 @@ import {
 } from "../../lib/chat/workspacePathDrag";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
+import { readTerminalAppearance, readTerminalTheme } from "../../lib/terminal/theme";
 import type {
   TerminalClient,
   TerminalSession,
@@ -56,72 +57,6 @@ const SNAPSHOT_ATTACH_RETRY_MAX_MS = 5_000;
 const FIT_THROTTLE_MS = 80;
 const PTY_RESIZE_DEBOUNCE_MS = 100;
 
-function terminalTheme(theme: "light" | "dark") {
-  if (theme === "dark") {
-    return {
-      background: "#0b0f14",
-      foreground: "#4ade80",
-      cursor: "#f8fafc",
-      cursorAccent: "#0b0f14",
-      selectionBackground: "#2c3e57",
-      selectionInactiveBackground: "#22304a",
-      scrollbarSliderBackground: "rgba(148, 163, 184, 0.18)",
-      scrollbarSliderHoverBackground: "rgba(148, 163, 184, 0.3)",
-      scrollbarSliderActiveBackground: "rgba(148, 163, 184, 0.42)",
-      // xterm 的 css.toColor 不认关键字 "transparent"(canvas 回退路径遇到
-      // alpha<255 直接 throw),解析失败会静默落回默认色 #ffffff——overview
-      // ruler 每帧都会用该色画一条 1px 竖线(_renderRulerOutline),即终端右缘
-      // 的白线。8 位 hex 走独立分支不校验 alpha,才是真正的透明写法。
-      overviewRulerBorder: "#00000000",
-      black: "#1b2733",
-      red: "#ef4444",
-      green: "#22c55e",
-      yellow: "#eab308",
-      blue: "#38bdf8",
-      magenta: "#c084fc",
-      cyan: "#2dd4bf",
-      white: "#cbd5e1",
-      brightBlack: "#64748b",
-      brightRed: "#f87171",
-      brightGreen: "#4ade80",
-      brightYellow: "#fde047",
-      brightBlue: "#7dd3fc",
-      brightMagenta: "#d8b4fe",
-      brightCyan: "#5eead4",
-      brightWhite: "#f8fafc",
-    };
-  }
-  return {
-    background: "#fcfcfd",
-    foreground: "#1f2933",
-    cursor: "#111827",
-    cursorAccent: "#fcfcfd",
-    selectionBackground: "#bfdbfe",
-    selectionInactiveBackground: "#dbeafe",
-    scrollbarSliderBackground: "rgba(100, 116, 139, 0.16)",
-    scrollbarSliderHoverBackground: "rgba(100, 116, 139, 0.26)",
-    scrollbarSliderActiveBackground: "rgba(100, 116, 139, 0.36)",
-    // 同暗色主题:8 位 hex 透明,勿改回 "transparent"(见上)。
-    overviewRulerBorder: "#00000000",
-    black: "#1f2933",
-    red: "#dc2626",
-    green: "#16a34a",
-    yellow: "#b45309",
-    blue: "#2563eb",
-    magenta: "#9333ea",
-    cyan: "#0891b2",
-    white: "#e2e8f0",
-    brightBlack: "#64748b",
-    brightRed: "#ef4444",
-    brightGreen: "#22c55e",
-    brightYellow: "#d97706",
-    brightBlue: "#3b82f6",
-    brightMagenta: "#a855f7",
-    brightCyan: "#06b6d4",
-    brightWhite: "#f8fafc",
-  };
-}
-
 function terminalContainerHasSize(container: HTMLElement) {
   const rect = container.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
@@ -135,7 +70,7 @@ function fallbackCopyTextToClipboard(text: string) {
   textarea.value = text;
   textarea.setAttribute("readonly", "");
   textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
+  textarea.style.left = "var(--spacing-minus-9999px)";
   textarea.style.top = "0";
   document.body.appendChild(textarea);
   textarea.select();
@@ -186,7 +121,7 @@ export function XTermViewport({
   const termRef = useRef<XTerm | null>(null);
   const fitAndResizeRef = useRef<(() => void) | null>(null);
   const viewportStyle = {
-    "--project-terminal-background": terminalTheme(theme).background,
+    "--project-terminal-background": `var(--terminal-${theme}-background)`,
   } as CSSProperties;
 
   const canAcceptWorkspacePath = useCallback(
@@ -285,7 +220,7 @@ export function XTermViewport({
 
   useEffect(() => {
     if (!termRef.current) return;
-    termRef.current.options.theme = terminalTheme(theme);
+    termRef.current.options.theme = readTerminalTheme(theme);
   }, [theme]);
 
   useEffect(() => {
@@ -316,22 +251,23 @@ export function XTermViewport({
     let snapshotRetryDelayMs = SNAPSHOT_ATTACH_RETRY_MIN_MS;
     const bufferedChunks: TerminalStreamChunk[] = [];
     const encoder = new TextEncoder();
+    const appearance = readTerminalAppearance(themeRef.current);
     const term = new XTerm({
       cursorBlink: true,
       cursorStyle: "block",
       cursorInactiveStyle: "outline",
       disableStdin: true,
       fontFamily: getCodeFontFamily(),
-      fontSize: 13,
+      fontSize: appearance.fontSize,
       fontWeight: "normal",
       fontWeightBold: "bold",
-      lineHeight: 1.3,
+      lineHeight: appearance.lineHeight,
       letterSpacing: 0,
       scrollback: 5000,
       overviewRuler: {
-        width: 8,
+        width: appearance.overviewRulerWidth,
       },
-      theme: terminalTheme(themeRef.current),
+      theme: appearance.theme,
     });
     termRef.current = term;
     const fit = new FitAddon();
@@ -761,7 +697,7 @@ export function XTermViewport({
       ref={dropTargetRef}
       style={viewportStyle}
       className={cn(
-        "project-terminal-viewport relative h-full min-h-0 w-full overflow-hidden",
+        "project-terminal-viewport relative size-full min-h-0 overflow-hidden",
         className,
       )}
       data-workspace-path-drop-zone={workspacePathDropState ?? "idle"}
@@ -773,7 +709,7 @@ export function XTermViewport({
       }}
       onDrop={handleWorkspacePathDrop}
     >
-      <div ref={containerRef} className="h-full min-h-0 w-full" />
+      <div ref={containerRef} className="size-full min-h-0" />
       {workspacePathDropState ? (
         <div
           aria-hidden

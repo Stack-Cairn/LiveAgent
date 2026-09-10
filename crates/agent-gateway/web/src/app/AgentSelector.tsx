@@ -88,10 +88,10 @@ export function AgentSelector({
           <div className="flex min-w-0 items-center gap-2.5">
             <span
               className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
+                "size-2 shrink-0 rounded-full",
                 agent.online
-                  ? "bg-emerald-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.12)]"
-                  : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]",
+                  ? "bg-emerald-500 shadow-ui-agentselector-53"
+                  : "bg-rose-500 shadow-ui-agentselector-54",
               )}
               title={statusLabel}
             >
@@ -101,13 +101,13 @@ export function AgentSelector({
               <span className="block truncate text-sm font-medium" title={name || agentID}>
                 {name || truncateMiddle(agentID)}
               </span>
-              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+              <span className="block truncate font-mono text-11px text-muted-foreground">
                 {truncateMiddle(agentID)}
               </span>
             </span>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                "shrink-0 rounded-full px-2 py-0.5 text-10px font-medium",
                 agent.online
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -143,10 +143,10 @@ export function AgentSelector({
             >
               <span
                 className={cn(
-                  "h-2 w-2 shrink-0 rounded-full",
+                  "size-2 shrink-0 rounded-full",
                   agent.online
-                    ? "bg-emerald-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.12)]"
-                    : "bg-rose-500 shadow-[0_0_0_3px_rgb(244_63_94_/_0.10)]",
+                    ? "bg-emerald-500 shadow-ui-agentselector-53"
+                    : "bg-rose-500 shadow-ui-agentselector-54",
                 )}
                 title={statusLabel}
               >
@@ -158,14 +158,14 @@ export function AgentSelector({
                 </span>
                 {name ? (
                   <span
-                    className="block truncate font-mono text-[11px] text-muted-foreground"
+                    className="block truncate font-mono text-11px text-muted-foreground"
                     title={agentID}
                   >
                     {truncateMiddle(agentID)}
                   </span>
                 ) : null}
               </span>
-              {selected ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+              {selected ? <Check className="size-4 shrink-0 text-emerald-600" /> : null}
             </DropdownMenuItem>
           );
         })}

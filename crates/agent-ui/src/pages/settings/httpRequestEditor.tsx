@@ -156,8 +156,8 @@ export function HttpRequestListEditor({
             key={request.id}
             className="overflow-hidden rounded-xl border border-border/60 bg-background/80 transition-colors hover:border-border/80"
           >
-            <div className="settings-http-row flex items-center gap-3 px-4 py-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            <div className="flex items-center gap-3 px-4 py-3 web:max-820:flex-wrap web:max-820:items-stretch web:max-820:[&_>_input]:order-5 web:max-820:[&_>_input]:flex-[1_1_100%] web:max-820:[&_>_input]:min-w-0 web:max-820:[&_>_div:last-child]:ml-auto">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                 {index + 1}
               </div>
 
@@ -171,7 +171,7 @@ export function HttpRequestListEditor({
                   });
                 }}
               >
-                <SelectTrigger className="h-8 w-[100px] text-xs font-semibold">
+                <SelectTrigger className="h-8 w-100px text-xs font-semibold">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -198,15 +198,12 @@ export function HttpRequestListEditor({
                   type="button"
                   onClick={() => onExpand(isExpanded ? null : request.id)}
                   className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50",
+                    "flex size-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50",
                     isExpanded ? "text-primary" : "text-muted-foreground",
                   )}
                 >
                   <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform",
-                      isExpanded ? "" : "-rotate-90",
-                    )}
+                    className={cn("size-3.5 transition-transform", isExpanded ? "" : "-rotate-90")}
                   />
                 </button>
                 <button
@@ -218,23 +215,23 @@ export function HttpRequestListEditor({
                       onExpand(null);
                     }
                   }}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                   title={t("settings.delete")}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="size-3.5" />
                 </button>
               </div>
             </div>
 
             {isExpanded ? (
-              <div className="border-t border-border/30 bg-muted/10 px-4 py-4">
+              <div className="border-t border-border/30 bg-muted/10 p-4">
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">Headers</Label>
                     <Textarea
                       value={request.headersText}
                       placeholder={'{\n  "Authorization": "Bearer ..."\n}'}
-                      className="min-h-[100px] resize-y font-mono text-xs leading-relaxed"
+                      className="min-h-100px resize-y font-mono text-xs leading-relaxed"
                       onChange={(e) => {
                         onDirty();
                         updateRequest(request.id, { headersText: e.currentTarget.value });
@@ -247,14 +244,14 @@ export function HttpRequestListEditor({
                       <Textarea
                         value={request.bodyText}
                         placeholder={'{\n  "message": "hello"\n}'}
-                        className="min-h-[100px] resize-y font-mono text-xs leading-relaxed"
+                        className="min-h-100px resize-y font-mono text-xs leading-relaxed"
                         onChange={(e) => {
                           onDirty();
                           updateRequest(request.id, { bodyText: e.currentTarget.value });
                         }}
                       />
                     ) : (
-                      <div className="flex min-h-[100px] items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/10 text-xs text-muted-foreground/60">
+                      <div className="flex min-h-100px items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/10 text-xs text-muted-foreground/60">
                         {t("settings.cronHttpBodyDisabled")}
                       </div>
                     )}
@@ -268,7 +265,7 @@ export function HttpRequestListEditor({
 
       {requests.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/50 bg-muted/5 py-8 text-center">
-          <Globe className="mx-auto h-6 w-6 text-muted-foreground/30" />
+          <Globe className="mx-auto size-6 text-muted-foreground/30" />
           <p className="mt-2 text-xs text-muted-foreground">
             {t("settings.cronHttpRequestRequired")}
           </p>

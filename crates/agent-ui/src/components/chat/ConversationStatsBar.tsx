@@ -178,7 +178,7 @@ export function ConversationStatsBar(props: {
   const row = (
     <div
       aria-hidden="true"
-      className="flex min-w-0 items-center overflow-hidden text-[calc(11px*var(--zone-font-scale,1))] leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums"
+      className="flex min-w-0 items-center overflow-hidden text-scaled-11px leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums"
     >
       {prefix === "" ? null : <span className="mr-1">{t("chat.stats.approximate")}</span>}
       {groups.map((group, index) => (

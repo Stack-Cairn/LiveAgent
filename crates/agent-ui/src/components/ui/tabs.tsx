@@ -1,4 +1,5 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react";
+import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
@@ -11,17 +12,28 @@ export const Tabs = React.forwardRef<
 ));
 Tabs.displayName = "Tabs";
 
+const tabsListVariants = cva(
+  "inline-flex h-8 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+  {
+    variants: {
+      variant: {
+        default: "",
+        filter:
+          "flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  },
+);
+
 export const TabsList = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>
+>(({ className, variant, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
     data-slot="tabs-list"
-    className={cn(
-      "inline-flex h-8 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
-      className,
-    )}
+    className={cn(tabsListVariants({ variant }), className)}
     {...props}
   />
 ));

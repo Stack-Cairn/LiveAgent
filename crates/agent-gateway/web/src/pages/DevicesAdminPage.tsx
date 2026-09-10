@@ -10,7 +10,7 @@ export function DevicesAdminPage() {
         href="/"
         className="mb-5 flex w-fit items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="size-4" />
         返回聊天
       </a>
       <DevicesSection />

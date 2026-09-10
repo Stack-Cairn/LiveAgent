@@ -278,11 +278,11 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     const task = displayString(args.prompt);
 
     return (
-      <div className="tool-expand flex flex-col gap-2">
+      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
         {name ? (
           <ToolSurface>
             <ToolSurfaceLabel label="agent" />
-            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.55] text-foreground/86">
+            <div className="break-words text-scaled-11p5px font-semibold leading-1p55 text-foreground/86">
               {name}
             </div>
           </ToolSurface>
@@ -290,7 +290,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {role ? (
           <ToolSurface>
             <ToolSurfaceLabel label="role" />
-            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
+            <div className="break-words text-scaled-11p5px leading-1p55 text-foreground/78">
               {role}
             </div>
           </ToolSurface>
@@ -298,7 +298,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {task ? (
           <ToolSurface>
             <ToolSurfaceLabel label="task" />
-            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+            <div className="break-words text-scaled-11p5px leading-1p6 text-foreground/82">
               {task}
             </div>
           </ToolSurface>
@@ -315,7 +315,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         : "";
     if (!cmd) return null;
     return (
-      <div className="tool-expand flex flex-col gap-2">
+      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
         <ToolScrollablePre className="max-h-44 bg-zinc-950/90 text-emerald-300/90 dark:bg-zinc-950/90">
           <span className="mr-1 select-none text-emerald-500/30">$</span>
           {cmd}
@@ -328,13 +328,13 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
   // File tools: target path + compact request facts
   if (display.type === "file" && (display.path || display.tags.length > 0)) {
     return (
-      <div className="tool-expand flex flex-col gap-2">
+      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
         {display.path ? (
           <ToolSurface>
             <ToolSurfaceLabel label="path" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
             />
           </ToolSurface>
         ) : null}
@@ -346,13 +346,13 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
   // Search tools: query, scope, and request facts
   if (display.type === "search" && (display.pattern || display.path || display.tags.length > 0)) {
     return (
-      <div className="tool-expand flex flex-col gap-2">
+      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
         {display.pattern ? (
           <ToolSurface>
             <ToolSurfaceLabel label="query" />
             <div className="flex items-start gap-2">
-              <Search className="mt-[2px] h-3.5 w-3.5 shrink-0 text-muted-foreground/35" />
-              <span className="min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+              <Search className="mt-2px size-3.5 shrink-0 text-muted-foreground/35" />
+              <span className="min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 text-foreground/82">
                 {display.pattern}
               </span>
             </div>
@@ -363,7 +363,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="scope" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
             />
           </ToolSurface>
         ) : null}
@@ -383,7 +383,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
   // toolCallArgsForDisplay. Cached by argument identity — settled tool args
   // are immutable, so virtualizer remounts reuse the stringified form.
   return (
-    <ToolSurface className="overflow-hidden px-0 py-0">
+    <ToolSurface className="overflow-hidden p-0">
       <ToolScrollablePre className="max-h-56 whitespace-pre-wrap break-words rounded-none">
         {getRawArgsDisplayText(toolCall)}
       </ToolScrollablePre>
@@ -460,7 +460,7 @@ export function ShellToolDisplay({
       aria-label="Shell"
       data-shell-tool-display=""
     >
-      <div className="px-3 pb-0.5 pt-2.5 text-[calc(12px*var(--zone-font-scale,1))] font-medium text-muted-foreground/75">
+      <div className="px-3 pb-0.5 pt-2.5 text-scaled-12px font-medium text-muted-foreground/75">
         Shell
       </div>
       <ToolScrollablePre
@@ -842,14 +842,14 @@ export function ToolResultDisplay({
             {details.entries.map((entry) => (
               <div
                 key={`${entry.kind}-${entry.path}`}
-                className="flex items-start gap-2 rounded-md px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="flex items-start gap-2 rounded-md px-1.5 py-1 text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               >
-                <span className="mt-[1px] shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase text-muted-foreground/35">
+                <span className="mt-1px shrink-0 text-scaled-10px font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
                 </span>
                 <PathDisplay
                   path={entry.path}
-                  className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))]"
+                  className="min-w-0 break-all font-mono text-scaled-11px"
                 />
               </div>
             ))}
@@ -880,7 +880,7 @@ export function ToolResultDisplay({
               <PathDisplay
                 key={entry}
                 path={entry}
-                className="block rounded-md px-1.5 py-1 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="block rounded-md px-1.5 py-1 break-all font-mono text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               />
             ))}
           </div>
@@ -915,7 +915,7 @@ export function ToolResultDisplay({
                 >
                   <PathDisplay
                     path={file.path}
-                    className="block break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
+                    className="block break-all font-mono text-scaled-11px leading-1p5"
                   />
                   <MetaTags
                     tags={[
@@ -940,9 +940,9 @@ export function ToolResultDisplay({
                 <div className="flex items-start gap-2">
                   <PathDisplay
                     path={match.path}
-                    className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
+                    className="min-w-0 break-all font-mono text-scaled-11px leading-1p5"
                   />
-                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
+                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-1px text-scaled-10px font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
                     line {match.line}
                   </span>
                 </div>
@@ -976,7 +976,7 @@ export function ToolResultDisplay({
             { label: "issues", value: String(issues.length) },
           ]}
         />
-        <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
+        <div className="text-scaled-12px font-semibold leading-1p45 text-foreground/90">
           Agent call rejected — no subagents were started
         </div>
         {issues.length > 0 ? (
@@ -1033,21 +1033,21 @@ export function ToolResultDisplay({
       <ToolSurface className="space-y-2">
         <MetaTags tags={tags} />
         <div className="space-y-2">
-          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
+          <div className="text-scaled-12px font-semibold leading-1p45 text-foreground/90">
             {agentDisplayName}
           </div>
           {agent.role ? (
-            <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/78">
+            <div className="text-scaled-11px font-medium leading-1p55 text-foreground/78">
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
           ) : null}
           {agentTask ? (
-            <div className="break-words text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.6] text-foreground/80">
+            <div className="break-words text-scaled-11px font-medium leading-1p6 text-foreground/80">
               <span className="text-muted-foreground">task</span> {agentTask}
             </div>
           ) : null}
           {shouldShowSubagentWorktreeLocation(agent) ? (
-            <div className="break-all text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70">
+            <div className="break-all text-scaled-10px text-muted-foreground/70">
               {agent.branchName ? `${agent.branchName} | ` : ""}
               {agent.worktreeRoot}
             </div>
@@ -1136,12 +1136,12 @@ export function ToolResultDisplay({
           ]}
         />
         {details.subject ? (
-          <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.5] text-foreground/86">
+          <div className="break-words text-scaled-11p5px font-semibold leading-1p5 text-foreground/86">
             {details.subject}
           </div>
         ) : null}
         {details.bodyPreview ? (
-          <div className="rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
+          <div className="rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-scaled-11p5px leading-1p6 dark:border-white/[0.07] dark:bg-white/[0.03]">
             <Markdown content={details.bodyPreview} />
           </div>
         ) : null}
@@ -1198,7 +1198,7 @@ export function ToolResultDisplay({
     Object.keys(result.details).length > 0
   ) {
     return (
-      <ToolSurface className="overflow-hidden px-0 py-0">
+      <ToolSurface className="overflow-hidden p-0">
         <ToolScrollablePre className="max-h-32 rounded-none">
           {getStableValueSignature(result.details)}
         </ToolScrollablePre>

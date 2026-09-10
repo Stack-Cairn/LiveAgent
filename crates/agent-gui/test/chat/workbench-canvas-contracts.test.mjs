@@ -120,7 +120,7 @@ test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost
     assert.match(source, /<PaneChrome/);
   }
   const dragGhostClass =
-    /className="(layer-popover pointer-events-none fixed max-w-\[220px\][^"]+)"/;
+    /className="(layer-popover pointer-events-none fixed max-w-220px[^"]+)"/;
   assert.equal(chatPageSource.match(dragGhostClass)?.[1], gatewayViewSource.match(dragGhostClass)?.[1]);
 
   const blockedBannerClass =

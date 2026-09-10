@@ -13,7 +13,7 @@ export function ToolSection(props: { label?: string; trailing?: ReactNode; child
       {label || trailing ? (
         <div className="flex min-h-5 items-center gap-2">
           {label ? (
-            <span className="shrink-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/65">
+            <span className="shrink-0 text-scaled-11px font-medium text-muted-foreground/65">
               {label}
             </span>
           ) : null}
@@ -32,9 +32,7 @@ export function ToolSurface(props: { children: ReactNode; className?: string }) 
 
 export function ToolSurfaceLabel({ label }: { label: string }) {
   return (
-    <div className="mb-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground/55">
-      {label}
-    </div>
+    <div className="mb-0.5 text-scaled-10p5px font-medium text-muted-foreground/55">{label}</div>
   );
 }
 
@@ -45,7 +43,7 @@ export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
       {tags.map((tag) => (
         <ToolSurface key={`${tag.label}-${tag.value}`}>
           <ToolSurfaceLabel label={tag.label} />
-          <div className="break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
+          <div className="break-all font-mono text-scaled-11px leading-1p55 text-foreground/78">
             {tag.value}
           </div>
         </ToolSurface>
@@ -101,7 +99,7 @@ export function MetaTags({ tags }: { tags: MetaTag[] }) {
         return (
           <span
             key={stableKey}
-            className="inline-flex min-h-5 items-baseline gap-1 text-[calc(11px*var(--zone-font-scale,1))] leading-5"
+            className="inline-flex min-h-5 items-baseline gap-1 text-scaled-11px leading-5"
           >
             <span className="font-medium text-muted-foreground/55">{tag.label}</span>
             <span className="min-w-0 break-all font-mono tabular-nums text-foreground/75">
@@ -119,7 +117,7 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
+        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-scaled-11p5px leading-1p6",
         className,
       )}
     >

@@ -731,9 +731,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         data-workbench-pane-id={paneId}
         data-workbench-surface="conversation"
         data-workbench-surface-id={`conversation:${conversationId}`}
-        className="flex h-full min-h-0 w-full items-center justify-center"
+        className="flex size-full min-h-0 items-center justify-center"
       >
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -807,7 +807,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           {blockedMessage}
         </div>
       ) : null}
-      <div className="gateway-chat-frame relative flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="gateway-chat-frame relative flex size-full min-h-0 flex-col overflow-hidden">
         <section
           ref={usePrimary ? primary?.stageRef : undefined}
           className="gateway-transcript-stage"
@@ -872,7 +872,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                   aria-label="滚动到底部"
                   title="滚动到底部"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className="size-4" />
                 </button>
               ) : null}
             </div>

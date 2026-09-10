@@ -66,7 +66,7 @@ function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTrigg
   return (
     <SelectTrigger
       className={cn(
-        "h-8 w-fit max-w-[260px] gap-1.5 whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0 text-[13px] font-normal leading-none shadow-[0_1px_2px_hsl(var(--foreground)/0.035)] transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:opacity-40",
+        "h-8 w-fit max-w-260px gap-1.5 whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0 text-13px font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:size-3.5 [&_svg]:opacity-40",
         className,
       )}
       {...props}
@@ -80,7 +80,7 @@ function SettingsSelectContent({ className = "", ...props }: SettingsSelectConte
   return (
     <SelectContent
       className={cn(
-        "rounded-xl border-border/70 shadow-[0_10px_30px_hsl(var(--foreground)/0.1)] [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-[13px]",
+        "rounded-xl border-border/70 shadow-ui-systemsettingsform-49 [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-13px",
         className,
       )}
       {...props}
@@ -106,7 +106,7 @@ function ProxySettingsRow({
   onToggleDetails,
 }: ProxySettingsRowProps) {
   return (
-    <div className="relative flex min-h-[76px] flex-col gap-3 px-5 py-4 after:pointer-events-none after:absolute after:bottom-0 after:left-5 after:right-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden sm:flex-row sm:items-center">
+    <div className="relative flex min-h-76px flex-col gap-3 px-5 py-4 after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden sm:flex-row sm:items-center">
       <button
         type="button"
         aria-expanded={expanded}
@@ -121,11 +121,11 @@ function ProxySettingsRow({
           </span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-medium text-foreground/80 shadow-xs transition-colors group-hover:bg-muted/45">
-          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+          <Settings2 className="size-3.5 text-muted-foreground" />
           <span>{actionLabel}</span>
           <ChevronRight
             className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform",
+              "size-3.5 text-muted-foreground transition-transform",
               expanded && "rotate-90",
             )}
           />
@@ -179,9 +179,9 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   }
 
   function renderThemeIcon(theme: Theme) {
-    if (theme === "light") return <Sun className="h-3.5 w-3.5 opacity-60" />;
-    if (theme === "dark") return <Moon className="h-3.5 w-3.5 opacity-60" />;
-    return <MonitorSmartphone className="h-3.5 w-3.5 opacity-60" />;
+    if (theme === "light") return <Sun className="size-3.5 opacity-60" />;
+    if (theme === "dark") return <Moon className="size-3.5 opacity-60" />;
+    return <MonitorSmartphone className="size-3.5 opacity-60" />;
   }
 
   const fontScale = settings.customSettings.fontScale;
@@ -359,7 +359,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
       <SettingsGroup title={t("settings.executionMode")}>
         <fieldset aria-label={t("settings.executionMode")} className="m-0 min-w-0 border-0 p-0">
           <SettingsChoiceRow
-            icon={<MessageSquare className="h-4.5 w-4.5" />}
+            icon={<MessageSquare className="size-4.5" />}
             title={t("settings.chatMode")}
             description={t("settings.chatModeDesc")}
             selected={executionMode === "text"}
@@ -368,7 +368,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
             }
           />
           <SettingsChoiceRow
-            icon={<Wrench className="h-4.5 w-4.5" />}
+            icon={<Wrench className="size-4.5" />}
             title={t("settings.agentMode")}
             description={t("settings.agentModeDesc")}
             selected={isClassicAgentMode}
@@ -377,7 +377,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
             }
           />
           <SettingsChoiceRow
-            icon={<Cpu className="h-4.5 w-4.5" />}
+            icon={<Cpu className="size-4.5" />}
             title={t("settings.agentDevMode")}
             description={t("settings.agentDevModeDesc")}
             selected={isAgentDevMode}
@@ -488,7 +488,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                 </p>
               ) : null}
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_7rem] sm:items-start">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-ssh-form sm:items-start">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">
                     {t("settings.systemProxyType")}
@@ -592,7 +592,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                   />
                   {systemProxy.passwordConfigured &&
                   !(proxyPasswordDraft ?? systemProxy.password).trim() ? (
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-11px text-muted-foreground">
                       <span>{t("settings.systemProxyPasswordConfigured")}</span>
                       <button
                         type="button"
@@ -673,7 +673,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                     {showCustomInput ? (
                       <Input
                         id={`${key}-custom-input`}
-                        className="w-full min-w-0 rounded-xl sm:w-[240px]"
+                        className="w-full min-w-0 rounded-xl sm:w-240px"
                         value={customDraft}
                         list="font-family-suggestions"
                         spellCheck={false}

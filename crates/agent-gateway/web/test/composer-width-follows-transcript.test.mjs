@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -9,7 +10,7 @@ import test from "node:test";
 // .gateway-transcript-stage 内部，TranscriptWidthControls 写在 stage 上的内联值
 // （含拖拽逐帧更新）由 CSS 继承直接到达。本文件锁住这组耦合。
 
-const chatStyles = readFileSync(new URL("../src/styles/base-chat.css", import.meta.url), "utf8");
+const chatStyles = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
 const appViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),
   "utf8",
@@ -31,7 +32,7 @@ test("composer 列与转录列读同一个宽度变量", () => {
   // rail; see measurements-lru.test.mjs for that half of the invariant.
   assert.match(
     layer[0],
-    /min\(calc\(var\(--chat-transcript-content-width, 768px\) - 40px\), 100%\)/,
+    /min\(\s*calc\(var\(--chat-transcript-content-width, 768px\) - 40px\),\s*100%\s*\)/,
   );
   assert.doesNotMatch(
     chatStyles,
@@ -53,7 +54,7 @@ test("两条路径的 ChatComposerBar 都渲染在 stage 之内，宽度变量�
   // 桌面分支对照：卡片列 max-width 读同一变量，web 端行为以此为准。
   assert.match(
     composerSource,
-    /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-4\.75rem\)\]/,
+    /max-w-transcript-gui/,
   );
 });
 

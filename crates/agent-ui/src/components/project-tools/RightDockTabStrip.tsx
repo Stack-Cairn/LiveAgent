@@ -96,10 +96,10 @@ type DockTabDescriptor = {
 // NOTE: `transform` is deliberately absent from the transition list — drag
 // positioning drives `transform` via inline styles with its own transitions.
 const TAB_BASE_CLASS =
-  "project-tools-panel-tab group relative flex h-8 max-w-[12rem] shrink-0 select-none items-center gap-1 rounded-md border border-transparent px-1.5 text-xs text-muted-foreground transition-[background-color,border-color,color,opacity,box-shadow] hover:bg-muted/80 hover:text-foreground";
+  "group relative flex h-8 max-w-12rem shrink-0 select-none items-center gap-1 rounded-md border border-transparent px-1.5 text-xs text-muted-foreground transition-[background-color,border-color,color,opacity,box-shadow] hover:bg-muted/80 hover:text-foreground web:max-820:max-w-project-tools-panel-tab-max-w web:max-380:max-w-project-tools-panel-tab-max-w-2 web:max-380:pl-6px web:max-380:pr-6px";
 
 const CLOSE_BUTTON_CLASS =
-  "relative z-10 ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground focus-visible:bg-background focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
+  "relative z-10 ml-0.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground focus-visible:bg-background focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
 export function RightDockTabStrip(props: RightDockTabStripProps) {
   const {
@@ -136,7 +136,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
   ): Pick<DockTabDescriptor, "menuItems" | "dragProps"> => ({
     menuItems: onOpenToolInWorkbench ? (
       <DropdownMenuItem onSelect={() => onOpenToolInWorkbench(kind)} className="gap-2 text-xs">
-        <Columns2 className="h-3.5 w-3.5" />
+        <Columns2 className="size-3.5" />
         {t("workbench.openInSplit")}
       </DropdownMenuItem>
     ) : undefined,
@@ -221,7 +221,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
               tab.dragProps?.onPointerDown(event);
             }}
           >
-            <GripVertical className="h-3.5 w-3.5" />
+            <GripVertical className="size-3.5" />
           </button>
         ) : (
           renderTabDragHandle(tab.id, tab.label)
@@ -235,7 +235,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           {tab.running !== undefined ? (
             <span
               className={cn(
-                "h-1.5 w-1.5 shrink-0 rounded-full",
+                "size-1.5 shrink-0 rounded-full",
                 tab.running ? "bg-emerald-500" : "bg-muted-foreground/50",
               )}
             />
@@ -265,7 +265,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             tab.onClose();
           }}
         >
-          {tab.closeIcon ?? <X className="h-3 w-3" />}
+          {tab.closeIcon ?? <X className="size-3" />}
         </button>
       </div>
     );
@@ -300,7 +300,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           return renderDockTab({
             id: tab.id,
             label,
-            icon: <Cpu className="h-3.5 w-3.5 shrink-0" />,
+            icon: <Cpu className="size-3.5 shrink-0" />,
             isActive: currentActiveTab === "backgroundTasks",
             running: backgroundTasksRunning > 0,
             closeLabel,
@@ -317,7 +317,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           return renderDockTab({
             id: tab.id,
             label: t(definition.titleKey),
-            icon: definition.icon("h-3.5 w-3.5 shrink-0"),
+            icon: definition.icon("size-3.5 shrink-0"),
             isActive: currentActiveTab === tab.kind,
             closeLabel,
             closeTitle: closeLabel,
@@ -340,14 +340,14 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             onSelect={() => onOpenTerminalInWorkbench(session)}
             className="gap-2 text-xs"
           >
-            <Columns2 className="h-3.5 w-3.5" />
+            <Columns2 className="size-3.5" />
             {t("workbench.openInSplit")}
           </DropdownMenuItem>
         ) : null;
         return renderDockTab({
           id: session.id,
           label: sessionTitle,
-          icon: <Terminal className="h-3.5 w-3.5 shrink-0" />,
+          icon: <Terminal className="size-3.5 shrink-0" />,
           isActive: currentActiveTab === "terminal" && activeSession?.id === session.id,
           running: session.running,
           isPendingClose,
@@ -356,7 +356,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           closeTitle: isPendingClose
             ? t("projectTools.confirmCloseTerminal")
             : t("projectTools.closeTerminal"),
-          closeIcon: isPendingClose ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />,
+          closeIcon: isPendingClose ? <Check className="size-3" /> : <X className="size-3" />,
           closeDisabled: closingSessionIds.has(session.id),
           dragProps: onTerminalTabDragStart
             ? {

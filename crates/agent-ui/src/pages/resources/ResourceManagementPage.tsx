@@ -22,7 +22,7 @@ export function ResourceManagementPage({
         )}
       >
         <div
-          className={cn("mx-auto w-full max-w-[1320px]", memory && "flex min-h-0 flex-1 flex-col")}
+          className={cn("mx-auto w-full max-w-1320px", memory && "flex min-h-0 flex-1 flex-col")}
         >
           {memory ? (
             <MemoryPanel

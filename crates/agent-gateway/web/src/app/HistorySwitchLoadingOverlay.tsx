@@ -7,13 +7,13 @@ export function HistorySwitchLoadingOverlay(props: { locale: AppSettings["locale
 
   return (
     <div
-      className="gateway-history-switch-overlay"
+      className="absolute inset-0 z-(--layer-panel) flex items-center justify-center bg-background/95 backdrop-blur-2px"
       role="status"
       aria-live="polite"
       aria-label={label}
     >
-      <div className="gateway-history-switch-overlay-card">
-        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+      <div className="inline-flex items-center gap-0p5rem border border-solid border-border/60 rounded-999px bg-background/95 text-muted-foreground shadow-gateway-history-switch-overlay-card px-0p875rem py-0p5rem text-0p75rem font-medium leading-1rem">
+        <Loader2 className="size-4 animate-spin text-primary" />
         <span>{label}</span>
       </div>
     </div>

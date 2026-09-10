@@ -13,7 +13,7 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
       data-pane-loading-skeleton={variant}
       data-pane-loading-motion="static"
       className={cn(
-        "relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
+        "relative flex size-full min-h-0 flex-col overflow-hidden bg-background",
         className,
       )}
       role="status"
@@ -25,13 +25,13 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
         className="flex h-10 shrink-0 items-center gap-2 border-b border-border/45 px-4"
         aria-hidden
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25" />
+        <span className="size-1.5 rounded-full bg-muted-foreground/25" />
         <span className="h-1.5 w-20 rounded-full bg-muted-foreground/15" />
       </div>
       {variant === "terminal" ? (
         <div className="space-y-3 px-4 py-5 font-mono" aria-hidden>
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-sm bg-emerald-500/35" />
+            <span className="size-2 rounded-sm bg-emerald-500/35" />
             <span className="h-2 w-40 rounded-sm bg-muted-foreground/12" />
           </div>
           <div className="h-2 w-56 rounded-sm bg-muted-foreground/10" />

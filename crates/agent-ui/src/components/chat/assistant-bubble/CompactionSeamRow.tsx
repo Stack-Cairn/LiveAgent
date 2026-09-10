@@ -68,7 +68,7 @@ export function CompactionSeamRow(props: {
         trailing={
           <ChevronRight
             className={cn(
-              "ml-auto h-3 w-3 shrink-0 text-violet-600/60 transition-transform duration-150 ease-out dark:text-violet-300/60",
+              "ml-auto size-3 shrink-0 text-violet-600/60 transition-transform duration-150 ease-out dark:text-violet-300/60",
               open ? "rotate-90" : "",
             )}
           />
@@ -79,7 +79,7 @@ export function CompactionSeamRow(props: {
         {() => (
           <div className="overflow-hidden px-0.5 pb-1 pt-1.5">
             <div className="border-l border-violet-500/25 pl-3 dark:border-violet-400/25">
-              <div className="mb-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
+              <div className="mb-1 text-scaled-11px text-muted-foreground/70">
                 {seam.generatedBy.providerId} · {seam.generatedBy.model}
               </div>
               <Markdown

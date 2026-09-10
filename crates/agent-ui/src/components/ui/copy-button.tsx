@@ -86,27 +86,27 @@ export function CopyButton(props: {
           render={
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               disabled={disabled}
               aria-label={activeLabel}
               title={activeLabel}
               className={cn(
-                "h-7 w-7 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground",
+                "shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground",
                 className,
               )}
               onClick={() => void handleCopy()}
             >
               {copied ? (
-                <Check className={cn("h-3.5 w-3.5", iconClassName)} />
+                <Check className={cn("size-3.5", iconClassName)} />
               ) : (
-                <Copy className={cn("h-3.5 w-3.5", iconClassName)} />
+                <Copy className={cn("size-3.5", iconClassName)} />
               )}
             </Button>
           }
         />
         <TooltipContent>
           <span className="flex items-center gap-1.5">
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
+            {copied ? <Check className="size-3.5 text-emerald-600" /> : null}
             <span>{activeLabel}</span>
           </span>
         </TooltipContent>

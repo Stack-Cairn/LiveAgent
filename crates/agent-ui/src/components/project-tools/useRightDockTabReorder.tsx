@@ -24,7 +24,7 @@ import {
 
 // Pointer travel before a press turns into a drag; below this it stays a click.
 const TAB_DRAG_START_DISTANCE_PX = 5;
-const TAB_DRAG_TRANSITION = "transform 180ms cubic-bezier(0.2, 0, 0, 1)";
+const TAB_DRAG_TRANSITION = "transform var(--ui-duration-180ms) var(--ease-ui-curve-5)";
 const TAB_DROP_SETTLE_MS = 220;
 const TAB_DEFAULT_GAP_PX = 4;
 // Wildcard for "suppress the next tab click wherever it lands": after a real
@@ -480,7 +480,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
           beginTabDrag(event, tabId, "handle");
         }}
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripVertical className="size-3.5" />
       </button>
     ),
     [

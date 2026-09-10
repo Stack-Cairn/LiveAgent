@@ -127,7 +127,7 @@ export function Popup({
     <div
       ref={popupRef}
       className={cn(
-        "mention-popup-enter layer-popover fixed overflow-hidden rounded-2xl",
+        "animate-mention-popup-enter origin-bottom min-w-0 motion-reduce:animate-none! layer-popover fixed overflow-hidden rounded-2xl",
         "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
       )}
       onMouseDown={(event) => {
@@ -160,7 +160,7 @@ export function Popup({
               onBack();
             }}
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="size-3.5" />
             {mode === "apps"
               ? t("chat.composer.mentionGroupApps")
               : mode === "files"
@@ -183,16 +183,16 @@ export function Popup({
                   ? t("chat.composer.filesAndFolders")
                   : t("chat.composer.conversations")
         }
-        className="mention-popup-scroll relative flex flex-col overflow-y-auto px-2 pb-2"
+        className="relative flex flex-col overflow-y-auto px-2 pb-2 web:[scrollbar-color:var(--gateway-scrollbar-thumb)_transparent] web:[&::-webkit-scrollbar]:size-8px"
       >
         {isLoading && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
+          <div className="p-2 text-xs text-muted-foreground">
             {mode === "conversations"
               ? t("chat.composer.searchingConversations")
               : t("chat.composer.indexingFiles")}
           </div>
         )}
-        {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
+        {error && !isLoading && <div className="p-2 text-xs text-destructive">{error}</div>}
         {suggestions.map((suggestion, i) => {
           const isCategory = suggestion.type === "category";
           const isSkill = suggestion.type === "skill";
@@ -258,7 +258,7 @@ export function Popup({
                 // visual 34px row keeps the 4px gap while clicks in the gap
                 // still land on a row instead of a dead strip. shrink-0 stops
                 // the max-h flex column from compressing rows before it scrolls.
-                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
+                "animate-mention-popup-item [&:nth-child(1)]:[animation-delay:0ms] [&:nth-child(2)]:[animation-delay:var(--ui-duration-18ms)] [&:nth-child(3)]:[animation-delay:var(--ui-duration-36ms)] [&:nth-child(4)]:[animation-delay:var(--ui-duration-54ms)] [&:nth-child(5)]:[animation-delay:var(--ui-duration-72ms)] [&:nth-child(6)]:[animation-delay:var(--ui-duration-90ms)] [&:nth-child(7)]:[animation-delay:var(--ui-duration-108ms)] [&:nth-child(8)]:[animation-delay:var(--ui-duration-126ms)] [&:nth-child(n_+_9)]:[animation-delay:var(--ui-duration-140ms)] motion-reduce:animate-none! group flex h-38px shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
                 i === highlightIndex
                   ? "bg-foreground/[0.07] text-foreground"
                   : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
@@ -270,7 +270,7 @@ export function Popup({
             >
               <span
                 className={cn(
-                  "flex h-4 w-4 shrink-0 items-center justify-center",
+                  "flex size-4 shrink-0 items-center justify-center",
                   isCategory || conversation
                     ? "text-muted-foreground"
                     : isSkill || isApp
@@ -282,14 +282,14 @@ export function Popup({
               >
                 {isApp ? (
                   app?.iconDataUrl ? (
-                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-sm" />
+                    <img src={app.iconDataUrl} alt="" className="size-4 rounded-sm" />
                   ) : (
-                    <AppWindow className="h-4 w-4" />
+                    <AppWindow className="size-4" />
                   )
                 ) : RowIcon ? (
                   <RowIcon width={16} height={16} />
                 ) : (
-                  <Blend className="h-4 w-4" />
+                  <Blend className="size-4" />
                 )}
               </span>
               <span className="min-w-0 flex-1 truncate text-left">
@@ -299,14 +299,14 @@ export function Popup({
                 )}
               </span>
               {isCategory ? (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/65" />
               ) : isSkill ? (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                <span className="shrink-0 text-10px uppercase tracking-wider text-muted-foreground/60">
                   skill
                 </span>
               ) : (
                 isDir && (
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                  <span className="shrink-0 text-10px uppercase tracking-wider text-muted-foreground/60">
                     dir
                   </span>
                 )
@@ -315,7 +315,7 @@ export function Popup({
           );
         })}
         {showEmpty && !isLoading && !error && suggestions.length === 0 && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">{emptyLabel}</div>
+          <div className="p-2 text-xs text-muted-foreground">{emptyLabel}</div>
         )}
       </div>
     </div>,
@@ -445,11 +445,11 @@ export function CommitMentionTooltip({
       onMouseLeave={onMouseLeave}
     >
       <div className="flex items-start gap-2">
-        <GitHubMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+        <GitHubMarkIcon className="mt-0.5 size-4 shrink-0 text-foreground" />
         <div className="min-w-0">
           <div className="break-words font-medium leading-tight">{authorLabel}</div>
           {date ? (
-            <div className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
+            <div className="mt-0.5 text-scaled-11px leading-tight text-muted-foreground">
               {date.relative} ({date.absolute})
             </div>
           ) : null}
@@ -461,14 +461,14 @@ export function CommitMentionTooltip({
           {messageBody}
         </div>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[calc(11px*var(--zone-font-scale,1))] leading-tight">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-scaled-11px leading-tight">
         <span className="text-muted-foreground">{filesChangedLabel}</span>
         <span className="font-medium text-emerald-600 dark:text-emerald-400">
           {insertionsLabel}
         </span>
         <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-scaled-11px leading-tight text-muted-foreground">
         <span className="font-mono text-foreground">{shortSha}</span>
         {commit.remoteName ? <span>{commit.remoteName}</span> : null}
         {commit.githubUrl ? (
@@ -479,7 +479,7 @@ export function CommitMentionTooltip({
               className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-primary hover:bg-primary/10"
               onClick={() => commit.githubUrl && void openUrl(commit.githubUrl)}
             >
-              <GitHubMarkIcon className="h-3 w-3" />
+              <GitHubMarkIcon className="size-3" />
               {t("chat.composer.commitTooltipOpenGithub")}
             </button>
           </>

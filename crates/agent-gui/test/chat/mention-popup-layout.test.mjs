@@ -26,7 +26,7 @@ test("mention popup list stays compact and adapts to the room above the composer
 
 test("mention popup rows keep file names aligned with their icons", () => {
   assert.match(source, /mention-popup-item[^"\n]*text-left/);
-  assert.doesNotMatch(source, /max-h-\[320px\]/);
+  assert.doesNotMatch(source, /max-h-320px/);
 });
 
 test("narrow workbench panes keep the popup at the composer width", () => {
@@ -49,12 +49,8 @@ test("extremely narrow viewports still return a renderable layout", () => {
   assert.ok(layout.left + layout.width <= 8);
 });
 
-test("popup CSS no longer overrides the measured composer width", () => {
-  const css = readFileSync(
-    new URL("../../../agent-ui/src/styles/common-settings.css", import.meta.url),
-    "utf8",
-  );
-  const rule = css.match(/\.mention-popup-enter \{[\s\S]*?\}/)?.[0] ?? "";
-  assert.match(rule, /min-width:\s*0/);
-  assert.doesNotMatch(rule, /380px/);
+test("popup utilities leave its width to the measured composer layout", () => {
+  const popup = source.match(/className=\{cn\([\s\S]*?\)\}/)?.[0] ?? "";
+  assert.match(popup, /animate-mention-popup-enter[^"\n]*min-w-0/);
+  assert.doesNotMatch(popup, /(?:min-w-|w-)380px/);
 });

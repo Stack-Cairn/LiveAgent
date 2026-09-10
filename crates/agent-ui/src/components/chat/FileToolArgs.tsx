@@ -17,9 +17,7 @@ import {
 function StreamingArgPlaceholder({ label }: { label: string }) {
   return (
     <ToolSurface>
-      <div className="text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
-        {label}
-      </div>
+      <div className="text-scaled-11p5px leading-1p6 text-muted-foreground/62">{label}</div>
     </ToolSurface>
   );
 }
@@ -34,7 +32,7 @@ function StreamingTextPreviewSurface({
   preview: FileToolFieldPreview;
 }) {
   return (
-    <ToolSurface className="overflow-hidden px-0 py-0">
+    <ToolSurface className="overflow-hidden p-0">
       <div className="px-2.5 pt-2">
         <ToolSurfaceLabel label={label} />
       </div>
@@ -44,12 +42,12 @@ function StreamingTextPreviewSurface({
             {preview.text}
           </ToolScrollablePre>
         ) : (
-          <div className="px-2.5 pb-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
+          <div className="px-2.5 pb-2 text-scaled-11p5px leading-1p6 text-muted-foreground/62">
             {emptyLabel}
           </div>
         )
       ) : (
-        <div className="px-2.5 pb-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
+        <div className="px-2.5 pb-2 text-scaled-11p5px leading-1p6 text-muted-foreground/62">
           Waiting for {label}...
         </div>
       )}
@@ -73,13 +71,13 @@ function PathSurface({ path }: { path: string }) {
         >
           <PathDisplay
             path={path}
-            className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] transition-colors hover:text-foreground hover:underline"
+            className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 transition-colors hover:text-foreground hover:underline"
           />
         </button>
       ) : (
         <PathDisplay
           path={path}
-          className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+          className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
         />
       )}
     </ToolSurface>
@@ -93,7 +91,7 @@ export function FileToolArgsDisplay({ preview }: { preview: FileToolPreview }) {
     }
     const fieldLabel = preview.field === "new_source" ? "new source" : "content";
     return (
-      <div className="tool-expand flex flex-col gap-2">
+      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
         {preview.path ? <PathSurface path={preview.path} /> : null}
         {preview.content.has ? (
           <MetaTags
@@ -118,7 +116,7 @@ export function FileToolArgsDisplay({ preview }: { preview: FileToolPreview }) {
     return <StreamingArgPlaceholder label="Waiting for replacement strings..." />;
   }
   return (
-    <div className="tool-expand flex flex-col gap-2">
+    <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
       {preview.path ? <PathSurface path={preview.path} /> : null}
       <MetaTags
         tags={[

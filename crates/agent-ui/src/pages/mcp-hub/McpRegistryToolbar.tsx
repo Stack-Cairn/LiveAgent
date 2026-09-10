@@ -18,7 +18,7 @@ export function McpRegistryToolbar(props: {
   const { t } = useLocale();
 
   return (
-    <div className="hub-panel-enter flex items-center justify-between gap-3">
+    <div className="animate-hub-panel-enter motion-reduce:animate-none! flex items-center justify-between gap-3">
       <Tabs
         value={props.source}
         onValueChange={(value) => {
@@ -29,15 +29,12 @@ export function McpRegistryToolbar(props: {
         }}
         className="min-w-0 max-w-full"
       >
-        <TabsList
-          aria-label={t("mcpHub.tabStore")}
-          className="flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
+        <TabsList aria-label={t("mcpHub.tabStore")} variant="filter">
           {MCP_REGISTRY_SOURCE_OPTIONS.map((option) => (
             <TabsTrigger
               key={option.value}
               value={option.value}
-              className="shrink-0 rounded-md border border-transparent px-2.5 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
+              className="shrink-0 rounded-md border border-transparent px-2.5 text-11p5px font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
             >
               {option.label}
             </TabsTrigger>
@@ -49,13 +46,13 @@ export function McpRegistryToolbar(props: {
         size="sm"
         variant="outline"
         type="button"
-        className="h-8 w-8 shrink-0 rounded-lg px-0 sm:w-auto sm:gap-1.5 sm:px-3"
+        className="size-8 shrink-0 rounded-lg px-0 sm:w-auto sm:gap-1.5 sm:px-3"
         disabled={props.loading || props.loadingMore}
         onClick={props.onRefresh}
         title={t("mcpHub.storeRefresh")}
         aria-label={t("mcpHub.storeRefresh")}
       >
-        <RefreshCw className={cn("h-3.5 w-3.5", props.loading && "animate-spin")} />
+        <RefreshCw className={cn("size-3.5", props.loading && "animate-spin")} />
         <span className="hidden sm:inline">{t("mcpHub.storeRefresh")}</span>
       </Button>
     </div>

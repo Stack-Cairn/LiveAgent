@@ -243,7 +243,12 @@ const MODIFIER_KEY_CODES: Record<ShortcutModifier, string[]> = {
 };
 
 /** 每个动作的高亮色（与 .ghk-cN 类一一对应，索引按 GLOBAL_SHORTCUT_ACTIONS 顺序取模） */
-const ACTION_COLOR_HEX = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"];
+const ACTION_COLORS = [
+  "var(--ui-color-3b82f6)",
+  "var(--ui-color-8b5cf6)",
+  "var(--ui-color-10b981)",
+  "var(--ui-color-f59e0b)",
+];
 
 interface ShortcutDraft {
   mods: ShortcutModifier[];
@@ -262,48 +267,48 @@ interface BoundShortcutEntry {
 /* ============================== 组件 ============================== */
 
 const GHK_STYLE = `
-.ghk-root{--ghk-cap-top:#fdfdfe;--ghk-cap-side:#c9d3e0;--ghk-cap-text:#475569;
---ghk-cap-active:#bfdbfe;--ghk-cap-active-text:#1d4ed8;--ghk-cap-held:#dbeafe;--ghk-cap-held-side:#93b8f0;
---ghk-cap-enter:#bbf7d0;--ghk-cap-enter-text:#15803d;
---ghk-board1:#e9edf4;--ghk-board2:#d6dde8;--ghk-board-edge:#b7c2d1;--ghk-shadow:rgb(15 23 42/.26);}
-.dark .ghk-root{--ghk-cap-top:#313d4f;--ghk-cap-side:#10161f;--ghk-cap-text:#b6c2d4;
---ghk-cap-active:#1e40af;--ghk-cap-active-text:#bfdbfe;--ghk-cap-held:#1e3a8a;--ghk-cap-held-side:#172554;
---ghk-cap-enter:#14532d;--ghk-cap-enter-text:#86efac;
---ghk-board1:#222b38;--ghk-board2:#161d28;--ghk-board-edge:#0b1017;--ghk-shadow:rgb(0 0 0/.5);}
-.ghk-stage{perspective:1400px;}
-.ghk-board{display:inline-flex;gap:${BLOCK_GAP}px;padding:${BOARD_PAD}px;border-radius:16px;
+.ghk-root{--ghk-cap-top:var(--ui-color-fdfdfe);--ghk-cap-side:var(--ui-color-c9d3e0);--ghk-cap-text:var(--ui-color-475569);
+--ghk-cap-active:var(--ui-color-bfdbfe);--ghk-cap-active-text:var(--ui-color-1d4ed8);--ghk-cap-held:var(--ui-color-dbeafe);--ghk-cap-held-side:var(--ui-color-93b8f0);
+--ghk-cap-enter:var(--ui-color-bbf7d0);--ghk-cap-enter-text:var(--ui-color-15803d);
+--ghk-board1:var(--ui-color-e9edf4);--ghk-board2:var(--ui-color-d6dde8);--ghk-board-edge:var(--ui-color-b7c2d1);--ghk-shadow:var(--ui-color-rgb-15-23-42-p26);}
+.dark .ghk-root{--ghk-cap-top:var(--ui-color-313d4f);--ghk-cap-side:var(--ui-color-10161f);--ghk-cap-text:var(--ui-color-b6c2d4);
+--ghk-cap-active:var(--ui-color-1e40af);--ghk-cap-active-text:var(--ui-color-bfdbfe);--ghk-cap-held:var(--ui-color-1e3a8a);--ghk-cap-held-side:var(--ui-color-172554);
+--ghk-cap-enter:var(--ui-color-14532d);--ghk-cap-enter-text:var(--ui-color-86efac);
+--ghk-board1:var(--ui-color-222b38);--ghk-board2:var(--ui-color-161d28);--ghk-board-edge:var(--ui-color-0b1017);--ghk-shadow:var(--ui-color-rgb-0-0-0-p5);}
+.ghk-stage{perspective:var(--spacing-1400px);}
+.ghk-board{display:inline-flex;gap:${BLOCK_GAP}px;padding:${BOARD_PAD}px;border-radius:var(--radius-16px);
 background:linear-gradient(180deg,var(--ghk-board1),var(--ghk-board2));
-box-shadow:0 16px 0 -6px var(--ghk-board-edge),0 28px 32px var(--ghk-shadow);
-transform:rotateX(22deg);transform-style:preserve-3d;transition:transform .35s,box-shadow .35s;}
+box-shadow:0 var(--spacing-16px) 0 var(--spacing-minus-6px) var(--ghk-board-edge),0 var(--spacing-28px) var(--spacing-32px) var(--ghk-shadow);
+transform:rotateX(22deg);transform-style:preserve-3d;transition:transform var(--ui-duration-350ms),box-shadow var(--ui-duration-350ms);}
 .ghk-board.ghk-rec{
-box-shadow:0 16px 0 -6px var(--ghk-board-edge),0 28px 34px var(--ghk-shadow),0 0 0 2px rgb(59 130 246/.45),0 0 26px rgb(59 130 246/.28);}
-.ghk-key{position:relative;height:${KEY_UNIT}px;border-radius:7px;background:var(--ghk-cap-top);
-box-shadow:0 4px 0 var(--ghk-cap-side),0 6px 5px rgb(15 23 42/.16);color:var(--ghk-cap-text);
-display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;line-height:1.1;
-text-align:center;padding:0 2px;transition:transform .05s,box-shadow .05s,background .12s,color .12s;}
-.ghk-c0{--ghk-hl:#3b82f6;--ghk-hl-bg:#dbeafe;--ghk-hl-side:#94b6ee;--ghk-hl-text:#1d4ed8;}
-.ghk-c1{--ghk-hl:#8b5cf6;--ghk-hl-bg:#ede9fe;--ghk-hl-side:#b7a6ee;--ghk-hl-text:#6d28d9;}
-.ghk-c2{--ghk-hl:#10b981;--ghk-hl-bg:#d1fae5;--ghk-hl-side:#86d5b8;--ghk-hl-text:#047857;}
-.ghk-c3{--ghk-hl:#f59e0b;--ghk-hl-bg:#fef3c7;--ghk-hl-side:#e2c078;--ghk-hl-text:#b45309;}
-.dark .ghk-c0{--ghk-hl-bg:#1e3a8a;--ghk-hl-side:#152a63;--ghk-hl-text:#bfdbfe;}
-.dark .ghk-c1{--ghk-hl-bg:#4c1d95;--ghk-hl-side:#37156b;--ghk-hl-text:#ddd6fe;}
-.dark .ghk-c2{--ghk-hl-bg:#065f46;--ghk-hl-side:#04422f;--ghk-hl-text:#a7f3d0;}
-.dark .ghk-c3{--ghk-hl-bg:#78350f;--ghk-hl-side:#571f05;--ghk-hl-text:#fde68a;}
+box-shadow:0 var(--spacing-16px) 0 var(--spacing-minus-6px) var(--ghk-board-edge),0 var(--spacing-28px) var(--spacing-34px) var(--ghk-shadow),0 0 0 var(--spacing-2px) var(--ui-color-rgb-59-130-246-p45),0 0 var(--spacing-26px) var(--ui-color-rgb-59-130-246-p28);}
+.ghk-key{position:relative;height:${KEY_UNIT}px;border-radius:var(--radius-7px);background:var(--ghk-cap-top);
+box-shadow:0 var(--spacing-4px) 0 var(--ghk-cap-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-15-23-42-p16);color:var(--ghk-cap-text);
+display:flex;align-items:center;justify-content:center;font-size:var(--text-11px);font-weight:var(--font-weight-600);line-height:var(--leading-1p1);
+text-align:center;padding:0 var(--spacing-2px);transition:transform var(--ui-duration-50ms),box-shadow var(--ui-duration-50ms),background var(--ui-duration-120ms),color var(--ui-duration-120ms);}
+.ghk-c0{--ghk-hl:var(--ui-color-3b82f6);--ghk-hl-bg:var(--ui-color-dbeafe);--ghk-hl-side:var(--ui-color-94b6ee);--ghk-hl-text:var(--ui-color-1d4ed8);}
+.ghk-c1{--ghk-hl:var(--ui-color-8b5cf6);--ghk-hl-bg:var(--ui-color-ede9fe);--ghk-hl-side:var(--ui-color-b7a6ee);--ghk-hl-text:var(--ui-color-6d28d9);}
+.ghk-c2{--ghk-hl:var(--ui-color-10b981);--ghk-hl-bg:var(--ui-color-d1fae5);--ghk-hl-side:var(--ui-color-86d5b8);--ghk-hl-text:var(--ui-color-047857);}
+.ghk-c3{--ghk-hl:var(--ui-color-f59e0b);--ghk-hl-bg:var(--ui-color-fef3c7);--ghk-hl-side:var(--ui-color-e2c078);--ghk-hl-text:var(--ui-color-b45309);}
+.dark .ghk-c0{--ghk-hl-bg:var(--ui-color-1e3a8a);--ghk-hl-side:var(--ui-color-152a63);--ghk-hl-text:var(--ui-color-bfdbfe);}
+.dark .ghk-c1{--ghk-hl-bg:var(--ui-color-4c1d95);--ghk-hl-side:var(--ui-color-37156b);--ghk-hl-text:var(--ui-color-ddd6fe);}
+.dark .ghk-c2{--ghk-hl-bg:var(--ui-color-065f46);--ghk-hl-side:var(--ui-color-04422f);--ghk-hl-text:var(--ui-color-a7f3d0);}
+.dark .ghk-c3{--ghk-hl-bg:var(--ui-color-78350f);--ghk-hl-side:var(--ui-color-571f05);--ghk-hl-text:var(--ui-color-fde68a);}
 .ghk-key.ghk-bound{background:var(--ghk-hl-bg);color:var(--ghk-hl-text);
-box-shadow:0 4px 0 var(--ghk-hl-side),0 6px 5px rgb(15 23 42/.16);}
-.ghk-key.ghk-bound .ghk-klegend{transform:translateY(-5px);}
-.ghk-tag{position:absolute;left:2px;right:2px;bottom:2px;font-size:8px;font-weight:600;line-height:1.2;
+box-shadow:0 var(--spacing-4px) 0 var(--ghk-hl-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-15-23-42-p16);}
+.ghk-key.ghk-bound .ghk-klegend{transform:translateY(var(--spacing-minus-5px));}
+.ghk-tag{position:absolute;left:var(--spacing-2px);right:var(--spacing-2px);bottom:var(--spacing-2px);font-size:var(--text-8px);font-weight:var(--font-weight-600);line-height:var(--leading-1p2);
 color:var(--ghk-hl-text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;}
-.ghk-dots{position:absolute;top:3px;right:4px;display:flex;gap:2px;pointer-events:none;}
-.ghk-dot{width:5px;height:5px;border-radius:9999px;box-shadow:0 0 0 1px rgb(255 255 255/.55);}
-.dark .ghk-dot{box-shadow:0 0 0 1px rgb(0 0 0/.4);}
+.ghk-dots{position:absolute;top:var(--spacing-3px);right:var(--spacing-4px);display:flex;gap:var(--spacing-2px);pointer-events:none;}
+.ghk-dot{width:var(--spacing-5px);height:var(--spacing-5px);border-radius:var(--radius-9999px);box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p55);}
+.dark .ghk-dot{box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-rgb-0-0-0-p4);}
 .ghk-key.ghk-held{background:var(--ghk-cap-held);color:var(--ghk-cap-active-text);
-box-shadow:0 4px 0 var(--ghk-cap-held-side),0 6px 5px rgb(37 99 235/.22);}
-.ghk-key.ghk-down{transform:translateY(4px);background:var(--ghk-cap-active);color:var(--ghk-cap-active-text);
-box-shadow:0 0 0 var(--ghk-cap-side),0 1px 2px rgb(15 23 42/.2);}
+box-shadow:0 var(--spacing-4px) 0 var(--ghk-cap-held-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-37-99-235-p22);}
+.ghk-key.ghk-down{transform:translateY(var(--spacing-4px));background:var(--ghk-cap-active);color:var(--ghk-cap-active-text);
+box-shadow:0 0 0 var(--ghk-cap-side),0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-rgb-15-23-42-p2);}
 .ghk-key.ghk-enter.ghk-down{background:var(--ghk-cap-enter);color:var(--ghk-cap-enter-text);}
-.ghk-kbd{display:inline-block;padding:3px 9px;font-size:12px;font-weight:600;border-radius:6px;
-border:1px solid var(--ghk-cap-side);border-bottom-width:2.5px;background:var(--ghk-cap-top);color:var(--ghk-cap-text);}
+.ghk-kbd{display:inline-block;padding:var(--spacing-3px) var(--spacing-9px);font-size:var(--text-12px);font-weight:var(--font-weight-600);border-radius:var(--radius-6px);
+border:var(--spacing-1px) solid var(--ghk-cap-side);border-bottom-width:var(--spacing-2p5px);background:var(--ghk-cap-top);color:var(--ghk-cap-text);}
 `;
 
 /** 键帽上的占用标注：bound=该键是某快捷键主键；hintDots=按下更多修饰键后此修饰键下有组合 */
@@ -336,7 +341,10 @@ function KeyCap(props: {
       style={fill ? { width: "100%", height: "100%" } : { width: keyWidth(def.units) }}
       title={bound?.title ?? decor?.hintTitle}
     >
-      <span className="ghk-klegend" style={def.label.length > 3 ? { fontSize: 9 } : undefined}>
+      <span
+        className="ghk-klegend"
+        style={def.label.length > 3 ? { fontSize: "var(--text-9px)" } : undefined}
+      >
         {def.label}
       </span>
       {bound ? <span className="ghk-tag">{bound.tag}</span> : null}
@@ -391,7 +399,7 @@ function ShortcutRow({
         <div className="flex min-w-0 items-center gap-3">
           <div
             className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
+              "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
               editing
                 ? "bg-primary/10 text-primary"
                 : "bg-muted text-muted-foreground group-hover:bg-accent/80",
@@ -497,7 +505,7 @@ function ShortcutChoiceSwitch({
       <span
         aria-hidden="true"
         className={cn(
-          "min-w-[2em] whitespace-nowrap text-center transition-colors",
+          "min-w-2em whitespace-nowrap text-center transition-colors",
           !checked ? "font-semibold text-foreground" : "text-muted-foreground",
         )}
       >
@@ -509,7 +517,7 @@ function ShortcutChoiceSwitch({
       >
         <span
           className={cn(
-            "absolute left-[3px] top-[3px] h-4 w-4 rounded-full bg-primary shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "absolute left-3px top-3px size-4 rounded-full bg-primary shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none",
             checked ? "translate-x-4" : "translate-x-0",
           )}
         />
@@ -517,7 +525,7 @@ function ShortcutChoiceSwitch({
       <span
         aria-hidden="true"
         className={cn(
-          "min-w-[2em] whitespace-nowrap text-center transition-colors",
+          "min-w-2em whitespace-nowrap text-center transition-colors",
           checked ? "font-semibold text-foreground" : "text-muted-foreground",
         )}
       >
@@ -554,31 +562,31 @@ export function GlobalShortcutsSection() {
   }> = [
     {
       id: "summon",
-      icon: <Zap className="h-4.5 w-4.5" />,
+      icon: <Zap className="size-4.5" />,
       label: t("settings.shortcutSummon"),
       desc: t("settings.shortcutSummonDesc"),
     },
     {
       id: "toggle",
-      icon: <MonitorSmartphone className="h-4.5 w-4.5" />,
+      icon: <MonitorSmartphone className="size-4.5" />,
       label: t("settings.shortcutToggle"),
       desc: t("settings.shortcutToggleDesc"),
     },
     {
       id: "newChat",
-      icon: <SquarePen className="h-4.5 w-4.5" />,
+      icon: <SquarePen className="size-4.5" />,
       label: t("settings.shortcutNewChat"),
       desc: t("settings.shortcutNewChatDesc"),
     },
     {
       id: "pin",
-      icon: <Pin className="h-4.5 w-4.5" />,
+      icon: <Pin className="size-4.5" />,
       label: t("settings.shortcutPin"),
       desc: t("settings.shortcutPinDesc"),
     },
     {
       id: "searchConversations",
-      icon: <Search className="h-4.5 w-4.5" />,
+      icon: <Search className="size-4.5" />,
       label: t("settings.shortcutSearchConversations"),
       desc: t("settings.shortcutSearchConversationsDesc"),
     },
@@ -818,7 +826,7 @@ export function GlobalShortcutsSection() {
       label: actionLabelById[action],
       mods: SHORTCUT_MODIFIER_ORDER.filter((mod) => tokens.includes(mod)),
       main,
-      colorIndex: index % ACTION_COLOR_HEX.length,
+      colorIndex: index % ACTION_COLORS.length,
       combo: tokens.map((token) => displayToken(token)).join(" + "),
     });
   });
@@ -837,10 +845,10 @@ export function GlobalShortcutsSection() {
       } else if (heldMods.every((mod) => entry.mods.includes(mod))) {
         for (const mod of entry.mods) {
           if (heldMods.includes(mod)) continue;
-          const hex = ACTION_COLOR_HEX[entry.colorIndex];
+          const color = ACTION_COLORS[entry.colorIndex];
           for (const code of MODIFIER_KEY_CODES[mod]) {
             const dots = modHintDots.get(code) ?? [];
-            if (!dots.includes(hex)) dots.push(hex);
+            if (!dots.includes(color)) dots.push(color);
             modHintDots.set(code, dots);
             const titles = modHintTitles.get(code) ?? [];
             titles.push(`${entry.combo} · ${entry.label}`);
@@ -985,7 +993,7 @@ export function GlobalShortcutsSection() {
       <style>{GHK_STYLE}</style>
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Keyboard className="h-4 w-4 text-muted-foreground" />
+          <Keyboard className="size-4 text-muted-foreground" />
           {t("settings.globalShortcuts")}
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -995,7 +1003,7 @@ export function GlobalShortcutsSection() {
         <div className="space-y-2">
           <ShortcutRow
             id="sendMessage"
-            icon={<Send className="h-4.5 w-4.5" />}
+            icon={<Send className="size-4.5" />}
             label={t("settings.shortcutSend")}
             description={t(
               sendShortcut === "enter"
@@ -1027,7 +1035,7 @@ export function GlobalShortcutsSection() {
                 }
               }}
             />
-            <span aria-hidden="true" className="w-[66px] shrink-0" />
+            <span aria-hidden="true" className="w-66px shrink-0" />
           </ShortcutRow>
           {actionMeta.map((action) => {
             const isRecording = recording === action.id;
@@ -1093,9 +1101,9 @@ export function GlobalShortcutsSection() {
                       type="button"
                       onClick={() => clearBinding(action.id)}
                       title={t("settings.shortcutClear")}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="size-3.5" />
                     </button>
                   </>
                 ) : null}
@@ -1119,7 +1127,7 @@ export function GlobalShortcutsSection() {
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Keyboard className="h-4 w-4 text-muted-foreground" />
+            <Keyboard className="size-4 text-muted-foreground" />
             {t("settings.shortcutKeyboardTitle")}
           </div>
           <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
@@ -1149,8 +1157,8 @@ export function GlobalShortcutsSection() {
                 className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/80 px-2 py-1 text-xs"
               >
                 <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: ACTION_COLOR_HEX[entry.colorIndex] }}
+                  className="size-2 rounded-full"
+                  style={{ background: ACTION_COLORS[entry.colorIndex] }}
                 />
                 <span className="font-medium text-foreground">{entry.label}</span>
                 <span className="text-muted-foreground">{entry.combo}</span>

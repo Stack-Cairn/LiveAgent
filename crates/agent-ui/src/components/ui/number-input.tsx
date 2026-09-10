@@ -48,7 +48,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             aria-label={decrementLabel}
             className="flex w-9 shrink-0 items-center justify-center border-r border-input text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
           >
-            <Minus className="h-4 w-4" aria-hidden="true" />
+            <Minus className="size-4" aria-hidden="true" />
           </NumberField.Decrement>
         ) : null}
         <NumberField.Input
@@ -66,7 +66,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             aria-label={incrementLabel}
             className="flex w-9 shrink-0 items-center justify-center border-l border-input text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
+            <Plus className="size-4" aria-hidden="true" />
           </NumberField.Increment>
         ) : (
           <div className="flex w-7 shrink-0 flex-col border-l border-input">
@@ -74,13 +74,13 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
               aria-label={incrementLabel}
               className="flex min-h-0 flex-1 items-center justify-center border-b border-input text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
-              <ChevronUp className="h-3 w-3" aria-hidden="true" />
+              <ChevronUp className="size-3" aria-hidden="true" />
             </NumberField.Increment>
             <NumberField.Decrement
               aria-label={decrementLabel}
               className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
-              <ChevronDown className="h-3 w-3" aria-hidden="true" />
+              <ChevronDown className="size-3" aria-hidden="true" />
             </NumberField.Decrement>
           </div>
         )}

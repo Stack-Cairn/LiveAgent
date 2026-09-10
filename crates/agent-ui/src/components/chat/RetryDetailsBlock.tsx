@@ -22,13 +22,13 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
         type="button"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((prev) => !prev)}
-        className="retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground/80 hover:text-foreground"
+        className="retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5 text-left text-scaled-13px font-normal text-muted-foreground/80 hover:text-foreground"
       >
-        <RefreshCw className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <RefreshCw className="size-3.5 shrink-0 text-muted-foreground/60" />
         <span>{t("chat.retryDetailsToggle").replace("{count}", String(attempts.length))}</span>
         <ChevronRight
           className={cn(
-            "ml-auto h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out",
+            "ml-auto size-3.5 text-muted-foreground/60 transition-transform duration-200 ease-out",
             isOpen ? "rotate-90" : "",
           )}
         />
@@ -43,7 +43,7 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: retry attempts are append-only and their reported ordinals can repeat.
                 key={`${index}-${entry.attempt}-${entry.maxAttempts}`}
-                className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground"
+                className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-scaled-12px text-muted-foreground"
               >
                 <div className="font-medium text-foreground/80">
                   {t("chat.retryAttemptLabel")

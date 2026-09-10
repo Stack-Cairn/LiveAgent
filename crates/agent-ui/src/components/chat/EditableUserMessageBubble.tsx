@@ -115,7 +115,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
   return (
     <div
       className={cn(
-        "w-full max-w-[min(85%,calc(50em+2.5rem))] rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3",
+        "w-full max-w-user-bubble-gui rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3",
         className,
       )}
     >
@@ -134,7 +134,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       <textarea
         ref={textareaRef}
         className={cn(
-          "w-full resize-none rounded-lg bg-transparent p-2 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
+          "w-full resize-none rounded-lg bg-transparent p-2 font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
           textareaClassName,
         )}
         value={draftText}

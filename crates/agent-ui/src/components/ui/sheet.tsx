@@ -71,13 +71,13 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
         className={cn(
           "layer-modal fixed flex max-h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
           side === "top" &&
-            "inset-x-0 top-0 max-h-[85dvh] border-b data-[ending-style]:-translate-y-8 data-[starting-style]:-translate-y-8",
+            "inset-x-0 top-0 max-h-85dvh border-b data-[ending-style]:-translate-y-8 data-[starting-style]:-translate-y-8",
           side === "right" &&
-            "inset-y-0 right-0 w-[calc(100%-3rem)] max-w-lg border-l data-[ending-style]:translate-x-8 data-[starting-style]:translate-x-8",
+            "inset-y-0 right-0 w-inset-3rem max-w-lg border-l data-[ending-style]:translate-x-8 data-[starting-style]:translate-x-8",
           side === "bottom" &&
-            "inset-x-0 bottom-0 max-h-[85dvh] border-t data-[ending-style]:translate-y-8 data-[starting-style]:translate-y-8",
+            "inset-x-0 bottom-0 max-h-85dvh border-t data-[ending-style]:translate-y-8 data-[starting-style]:translate-y-8",
           side === "left" &&
-            "inset-y-0 left-0 w-[calc(100%-3rem)] max-w-lg border-r data-[ending-style]:-translate-x-8 data-[starting-style]:-translate-x-8",
+            "inset-y-0 left-0 w-inset-3rem max-w-lg border-r data-[ending-style]:-translate-x-8 data-[starting-style]:-translate-x-8",
           variant === "inset" && side === "right" && "inset-y-4 right-4 rounded-2xl border",
           variant === "inset" && side === "left" && "inset-y-4 left-4 rounded-2xl border",
           variant === "inset" && side === "top" && "inset-x-4 top-4 rounded-2xl border",
@@ -93,10 +93,10 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
             aria-label={closeLabel}
             title={closeLabel}
             className="absolute right-3 top-3 z-10"
-            render={<Button variant="ghost" size="icon" className="h-8 w-8" />}
+            render={<Button variant="ghost" size="icon-sm" />}
             {...closeProps}
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </SheetPrimitive.Close>
         ) : null}
       </SheetPrimitive.Popup>

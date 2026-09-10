@@ -15,7 +15,7 @@ export function DesktopSidebarBrand() {
         alt=""
         aria-hidden="true"
         draggable={false}
-        className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
+        className="size-8 shrink-0 select-none rounded-xl object-contain"
       />
       <div className="min-w-0">
         <div className="truncate font-semibold tracking-tight">Live Agent</div>

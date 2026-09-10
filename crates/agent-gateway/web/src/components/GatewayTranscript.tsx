@@ -164,15 +164,15 @@ function HistoryLoadingState(props: { title?: string }) {
   return (
     <div className="gateway-transcript-shell">
       <div className="gateway-chat-column gateway-empty-state">
-        <div className="flex min-h-[280px] w-full flex-col items-center justify-center px-4 text-center">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <div className="flex min-h-280px w-full flex-col items-center justify-center px-4 text-center">
+          <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
-          <div className="max-w-[28rem] text-[calc(14px*var(--zone-font-scale,1))] font-medium text-foreground/90">
+          <div className="max-w-28rem text-scaled-14px font-medium text-foreground/90">
             正在加载会话历史
           </div>
           {title ? (
-            <div className="mt-1 max-w-[28rem] truncate text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground">
+            <div className="mt-1 max-w-28rem truncate text-scaled-12px text-muted-foreground">
               {title}
             </div>
           ) : null}
@@ -189,9 +189,9 @@ function CheckpointCard(props: {
   const { item, readOnly = false } = props;
 
   return (
-    <div className="checkpoint-row flex w-full max-w-full items-start gap-3">
-      <div className="checkpoint-row-spacer mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
-      <div className="checkpoint-row-body min-w-0 flex-1">
+    <div className="flex max-w-full items-start gap-3 w-full max-640:block">
+      <div className="mt-0.5 size-6 shrink-0 max-640:hidden" aria-hidden="true" />
+      <div className="min-w-0 flex-1 w-full">
         <ContextCheckpointCard
           content={item.content}
           coveredMessageCount={item.coveredMessageCount}
@@ -214,7 +214,7 @@ function GatewayUserMessageBubbleBody(props: {
   const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
 
   return (
-    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
+    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))]">
       <UserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
@@ -290,8 +290,8 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
         imagePreviewMode="imageKind"
         attachmentRemoveLabel={t("settings.delete")}
-        className="chat-user-bubble-editor"
-        textareaClassName="chat-user-bubble-editor-textarea overflow-hidden"
+        className="shadow-chat-user-bubble-editor max-640:max-w-chat-user-bubble-editor-max-w"
+        textareaClassName="overflow-hidden block min-h-72px whitespace-pre-wrap wrap-anywhere [word-break:break-word]"
         textareaSizing="content"
         onCancel={() => setEditingMessageId(null)}
         onSubmit={(text, attachments) => {
@@ -303,7 +303,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   }
 
   return (
-    <div className="chat-user-bubble-wrap group relative ml-auto max-w-[min(85%,calc(50em+2rem))]">
+    <div className="chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web">
       <GatewayUserMessageBubbleBody
         text={row.text}
         attachments={row.attachments}
@@ -853,7 +853,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="absolute left-0 right-0 top-0 flex justify-center"
+              className="absolute inset-x-0 top-0 flex justify-center"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <button
@@ -880,7 +880,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute left-0 right-0 top-0"
+              className="gateway-transcript-row absolute inset-x-0 top-0"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <div className="w-full max-w-full">
@@ -908,7 +908,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row gateway-transcript-row-user absolute left-0 right-0 top-0"
+              className="gateway-transcript-row absolute inset-x-0 top-0 justify-end!"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <GatewayUserMessageRowBody
@@ -943,7 +943,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               data-index={virtualRow.index}
               data-row-key={row.key}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute left-0 right-0 top-0"
+              className="gateway-transcript-row absolute inset-x-0 top-0"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <div className="group/assistant min-w-0 w-full max-w-full space-y-1">
@@ -993,7 +993,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row gateway-transcript-row-checkpoint absolute left-0 right-0 top-0"
+              className="gateway-transcript-row absolute inset-x-0 top-0 w-full"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <CheckpointCard item={row} readOnly={readOnly} />
@@ -1006,11 +1006,13 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
             key={virtualRow.key}
             data-index={virtualRow.index}
             ref={transcriptVirtualizer.measureElement}
-            className="gateway-transcript-row absolute left-0 right-0 top-0"
+            className="gateway-transcript-row absolute inset-x-0 top-0"
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <div className="gateway-bubble gateway-bubble-error">
-              <div className="gateway-bubble-label">Error</div>
+            <div className="w-gateway-bubble-w rounded-22px border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px border-destructive/30 bg-destructive/5">
+              <div className="text-11px font-bold tracking-0p12em uppercase text-muted-foreground">
+                Error
+              </div>
               <div className="gateway-bubble-content">
                 <pre>{row.text}</pre>
               </div>
@@ -1140,10 +1142,12 @@ export function GatewayTranscript({
           redactToolContent={redactToolContent}
         />
         {shouldShowInlineError ? (
-          <div className="gateway-inline-error">{inlineErrorText}</div>
+          <div className="rounded-14px border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive">
+            {inlineErrorText}
+          </div>
         ) : null}
       </div>
-      <div className="gateway-transcript-bottom-spacer" />
+      <div className="col-2 h-gateway-transcript-bottom-spacer-h" />
     </div>
   );
 }

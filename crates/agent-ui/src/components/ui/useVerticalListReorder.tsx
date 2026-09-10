@@ -23,7 +23,7 @@ import { cn } from "../../lib/shared/utils";
 
 const DRAG_START_DISTANCE_PX = 5;
 const TOUCH_LONG_PRESS_MS = 350;
-const DRAG_TRANSITION = "transform 180ms cubic-bezier(0.2, 0, 0, 1)";
+const DRAG_TRANSITION = "transform var(--ui-duration-180ms) var(--ease-ui-curve-5)";
 const DROP_SETTLE_MS = 220;
 
 type DragState = {
@@ -414,7 +414,7 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
           beginDrag(event, itemId);
         }}
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="size-4" />
       </button>
     ),
     [

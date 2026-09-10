@@ -41,21 +41,18 @@ export function SkillsImportSourceTabs(props: {
       }}
       className="min-w-0 flex-1"
     >
-      <TabsList className="flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <TabsList variant="filter">
         {orderedSources.map(({ tool, label, scan }) => (
           <TabsTrigger
             key={tool}
             value={tool}
             disabled={props.disabled || !scan}
             aria-label={`${label}: ${scan?.exists ? scan.skills.length : 0}`}
-            className="group shrink-0 gap-1 rounded-md border border-transparent px-2 text-[11.5px] font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60"
+            className="group shrink-0 gap-1 rounded-md border border-transparent px-2 text-11p5px font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60"
           >
-            <ExternalToolSourceIcon tool={tool} className="h-3.5 w-3.5" />
+            <ExternalToolSourceIcon tool={tool} className="size-3.5" />
             <span>{label}</span>
-            <Badge
-              variant="muted"
-              className="h-4 min-w-4 rounded-full px-1 text-[9.5px] font-semibold tabular-nums group-data-[active]:bg-foreground/[0.08] group-data-[active]:text-foreground"
-            >
+            <Badge variant="muted" size="filter-count">
               {scan ? (scan.exists ? scan.skills.length : "—") : "…"}
             </Badge>
           </TabsTrigger>

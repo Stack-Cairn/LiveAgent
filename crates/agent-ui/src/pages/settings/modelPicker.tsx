@@ -141,16 +141,16 @@ export function ModelPicker({
           <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
             <span
               className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
                 selectedOption
                   ? "bg-violet-500/10 text-violet-500"
                   : "bg-muted/60 text-muted-foreground",
               )}
             >
               {selectedOption ? (
-                <ProviderBrandIcon type={selectedOption.providerType} className="h-3.5 w-3.5" />
+                <ProviderBrandIcon type={selectedOption.providerType} className="size-3.5" />
               ) : (
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="size-3.5" />
               )}
             </span>
             <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
@@ -159,7 +159,7 @@ export function ModelPicker({
           </span>
           <ChevronDown
             className={cn(
-              "h-4 w-4 shrink-0 text-muted-foreground opacity-50 transition-transform duration-200 ease-out",
+              "size-4 shrink-0 text-muted-foreground opacity-50 transition-transform duration-200 ease-out",
               isOpen && "rotate-180",
             )}
           />
@@ -172,7 +172,7 @@ export function ModelPicker({
         >
           <div className="px-2 py-1.5">
             <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+              <Search className="size-3.5 shrink-0 text-muted-foreground/70" />
               <input
                 ref={searchInputRef}
                 value={search}
@@ -183,23 +183,23 @@ export function ModelPicker({
               />
             </div>
           </div>
-          <div className="max-h-[min(14rem,var(--available-height,14rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+          <div className="max-h-popover-14rem overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
             {noneLabel && !normalizedSearch ? (
               <DropdownMenuItem
                 onSelect={() => onChange("")}
                 className={cn(
-                  "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                  "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                   value === "" &&
                     "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                 )}
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <Sparkles
-                    className={cn("h-4 w-4 shrink-0 opacity-70", value === "" && "opacity-100")}
+                    className={cn("size-4 shrink-0 opacity-70", value === "" && "opacity-100")}
                   />
                   <span className="min-w-0 truncate">{noneLabel}</span>
                 </span>
-                {value === "" ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+                {value === "" ? <Check className="size-4 shrink-0 text-primary" /> : null}
               </DropdownMenuItem>
             ) : null}
             {filteredGroups.length === 0 ? (
@@ -220,19 +220,19 @@ export function ModelPicker({
                         onSelect={() => toggleGroup(group.id)}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className="sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
+                        className="sticky top-0 z-10 flex h-30px shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
-                          className="h-3.5 w-3.5 opacity-90"
+                          className="size-3.5 opacity-90"
                         />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                        <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[10px] tabular-nums">
+                        <span className="inline-flex h-4 min-w-1p1rem shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-10px tabular-nums">
                           {group.opts.length}
                         </span>
                         <ChevronDown
                           className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            "size-3.5 shrink-0 transition-transform duration-200",
                             expanded && "rotate-180",
                           )}
                         />
@@ -246,7 +246,7 @@ export function ModelPicker({
                               key={option.value}
                               onSelect={() => onChange(option.value)}
                               className={cn(
-                                "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                                "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                                 isSelected &&
                                   "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                               )}
@@ -258,13 +258,13 @@ export function ModelPicker({
                                 />
                                 <span className="min-w-0 truncate">{option.label}</span>
                                 {option.description ? (
-                                  <span className="min-w-0 truncate text-[11px] text-muted-foreground/70">
+                                  <span className="min-w-0 truncate text-11px text-muted-foreground/70">
                                     {option.description}
                                   </span>
                                 ) : null}
                               </span>
                               {isSelected ? (
-                                <Check className="h-4 w-4 shrink-0 text-primary" />
+                                <Check className="size-4 shrink-0 text-primary" />
                               ) : null}
                             </DropdownMenuItem>
                           );

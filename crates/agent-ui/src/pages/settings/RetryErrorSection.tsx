@@ -80,7 +80,7 @@ export function RetryErrorSection(props: SettingsSectionProps) {
   return (
     <section className="py-5 last:pb-0">
       <DrawerSectionHeader
-        icon={<RefreshCw className="h-3.5 w-3.5" />}
+        icon={<RefreshCw className="size-3.5" />}
         title={t("settings.retryError")}
         hint={t("settings.retryErrorDesc")}
       />
@@ -114,7 +114,7 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                 >
                   <code
                     className={cn(
-                      "flex shrink-0 items-center rounded px-1 py-0.5 font-mono text-[10px] leading-none tabular-nums transition-colors",
+                      "flex shrink-0 items-center rounded px-1 py-0.5 font-mono text-10px leading-none tabular-nums transition-colors",
                       enabled
                         ? "bg-primary/15 text-primary"
                         : "bg-foreground/[0.06] text-muted-foreground",
@@ -122,12 +122,12 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                   >
                     {code}
                   </code>
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium">
+                  <span className="min-w-0 flex-1 truncate text-11p5px font-medium">
                     {t(`settings.retryError.presetShort.${code}`)}
                   </span>
                   <Check
                     className={cn(
-                      "h-3.5 w-3.5 shrink-0 text-primary transition-opacity",
+                      "size-3.5 shrink-0 text-primary transition-opacity",
                       enabled ? "opacity-100" : "opacity-0",
                     )}
                   />
@@ -163,7 +163,7 @@ export function RetryErrorSection(props: SettingsSectionProps) {
               onClick={addPattern}
               disabled={!patternDraft.trim()}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="size-3.5" />
               {t("settings.retryErrorAddPattern")}
             </Button>
           </div>
@@ -178,9 +178,9 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                   title={t("settings.retryErrorRemovePattern")}
                   aria-label={`${t("settings.retryErrorRemovePattern")} ${pattern}`}
                 >
-                  <span className="font-mono text-[11px] leading-none">{pattern}</span>
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors group-hover:text-destructive">
-                    <X className="h-3 w-3" />
+                  <span className="font-mono text-11px leading-none">{pattern}</span>
+                  <span className="flex size-4 items-center justify-center rounded-full text-muted-foreground transition-colors group-hover:text-destructive">
+                    <X className="size-3" />
                   </span>
                 </button>
               ))}

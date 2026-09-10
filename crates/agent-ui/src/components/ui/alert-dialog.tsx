@@ -40,9 +40,9 @@ export function AlertDialogCloseButton({
       title={label}
       disabled={disabled}
       className={className}
-      render={<Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" />}
+      render={<Button variant="ghost" size="icon-sm" className="shrink-0 rounded-lg" />}
     >
-      <X className="h-4 w-4" />
+      <X className="size-4" />
     </AlertDialogPrimitive.Close>
   );
 }
@@ -77,7 +77,7 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
         <AlertDialogOverlay />
         <AlertDialogPrimitive.Viewport
           data-slot="alert-dialog-viewport"
-          className="layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
+          className="layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-safe-bottom pt-safe-top"
         >
           <AlertDialogPrimitive.Popup
             ref={ref}
@@ -129,7 +129,7 @@ export const AlertDialogBody = React.forwardRef<
   <div
     ref={ref}
     data-slot="alert-dialog-body"
-    className={cn("px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-3.5", className)}
+    className={cn("px-4 py-3 max-[820px]:p-3.5", className)}
     {...props}
   />
 ));

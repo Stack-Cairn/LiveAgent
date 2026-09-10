@@ -1,0 +1,911 @@
+/* Animation definitions shared by both hosts. Keep original timing, keyframe layers and state-specific consumers. Duration and easing primitives live in tokens.css. */
+@theme inline {
+  --animate-hub-loading-progress: hubLoadingProgress var(--ui-duration-1450ms) var(--ease-in-out)
+    infinite;
+  --animate-chat-bubble-enter: chatBubbleIn var(--ui-duration-300ms) var(--ease-ui-enter);
+  --animate-status-board-logo-hot: status-board-logo-pulse var(--ui-duration-2800ms) ease-in-out
+    infinite;
+  --animate-status-board-reactor-ring-a: status-board-ring-spin var(--ui-duration-9000ms) linear
+    infinite;
+  --animate-status-board-reactor-ring-b: status-board-ring-spin var(--ui-duration-7000ms) linear
+    infinite reverse;
+  --animate-status-board-event-dot: status-board-pulse var(--ui-duration-1800ms) ease-in-out
+    infinite;
+  --animate-login-backdrop-orb-1: loginOrbFloat var(--ui-duration-20000ms) ease-in-out infinite;
+  --animate-login-backdrop-orb-2: loginOrbFloat var(--ui-duration-24000ms) ease-in-out infinite
+    reverse;
+  --animate-login-btn-loading: loginSpin var(--ui-duration-600ms) linear infinite;
+  --animate-login-entrance: loginSlideUp var(--ui-duration-600ms) var(--ease-ui-enter) both;
+  --animate-login-entrance-d1: loginSlideUp var(--ui-duration-500ms) var(--ease-ui-enter)
+    var(--ui-duration-100ms) both;
+  --animate-sync-loading-orb-1: loginOrbFloat var(--ui-duration-18000ms) ease-in-out infinite;
+  --animate-sync-loading-orb-2: loginOrbFloat var(--ui-duration-22000ms) ease-in-out infinite
+    reverse;
+  --animate-sync-loading-icon: syncIconBreathe var(--ui-duration-2800ms) ease-in-out infinite;
+  --animate-sync-loading-entrance: loginSlideUp var(--ui-duration-550ms) var(--ease-ui-enter) both;
+  --animate-chat-work-pixel: chat-work-pixel var(--ui-duration-650ms) ease-in-out
+    var(--chat-work-delay) infinite;
+  --animate-checkpoint-expand: checkpointExpandIn var(--ui-duration-300ms) var(--ease-ui-enter);
+  --animate-compaction-band-icon-active: compactionBandBreathe var(--ui-duration-1800ms) ease-in-out
+    infinite;
+  --animate-ask-custom-input-enter: askCustomInputReveal var(--ui-duration-180ms)
+    var(--ease-ui-enter);
+  --animate-skill-check-enter: skillCardCheckIn var(--ui-duration-300ms) var(--ease-ui-spring) both;
+  --animate-file-drop-overlay-zone: fileDropBorderPulse var(--ui-duration-2400ms) ease-in-out
+    infinite;
+  --animate-sftp-path-popover-enter: sftpPathPopoverIn var(--ui-duration-160ms) var(--ease-ui-enter);
+  --animate-mention-popup-enter: mentionPopupIn var(--ui-duration-150ms) var(--ease-ui-enter);
+  --animate-mention-popup-item: mentionItemIn var(--ui-duration-200ms) var(--ease-ui-enter) both;
+  --animate-chat-hero-logo-enter: chatHeroLogoIn var(--ui-duration-550ms) var(--ease-ui-spring)
+    backwards;
+  --animate-chat-hero-logo-float: chatHeroFloat var(--ui-duration-6000ms) ease-in-out
+    var(--ui-duration-1200ms) infinite;
+  --animate-chat-hero-halo-breathe: chatHeroHaloBreathe var(--ui-duration-6000ms) ease-in-out
+    var(--ui-duration-1200ms) infinite;
+  --animate-chat-hero-cta-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
+    var(--ui-duration-280ms) backwards;
+  --animate-chat-hero-card-enter: chatHeroCardIn var(--ui-duration-550ms) var(--ease-ui-enter)
+    var(--chat-hero-delay, var(--ui-duration-260ms)) backwards;
+  --animate-notify-toast-exit: notifyFadeOut var(--ui-duration-300ms) ease-out both;
+  --animate-chat-hero-title-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
+    var(--ui-duration-120ms) backwards;
+  --animate-chat-hero-line-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
+    var(--ui-duration-200ms) backwards;
+  --animate-settings-section-enter: settingsSectionIn var(--ui-duration-280ms) var(--ease-ui-enter);
+  --animate-settings-section-title-enter: settingsSectionTitleIn var(--ui-duration-220ms)
+    var(--ease-ui-enter);
+  --animate-provider-panel-enter: providerPanelIn var(--ui-duration-180ms) var(--ease-ui-enter);
+  --animate-chat-history-scope-enter: chatHistoryScopeIn var(--ui-duration-200ms)
+    var(--ease-ui-enter);
+  --animate-composer-typewriter-char: composerTypeCharIn var(--ui-duration-220ms) ease-out forwards;
+  --animate-settings-usage-reveal: settings-usage-reveal var(--ui-duration-240ms) ease-out;
+  --animate-checkpoint-card: checkpointSlideIn var(--ui-duration-350ms) var(--ease-ui-enter);
+  --animate-compaction-band-progress: compactionBandSweep var(--ui-duration-1600ms)
+    var(--ease-in-out) infinite;
+  --animate-tool-expand: toolExpandIn var(--ui-duration-220ms) var(--ease-ui-enter);
+  --animate-ask-question-enter-forward: askQuestionSlideForward var(--ui-duration-220ms)
+    var(--ease-ui-enter);
+  --animate-ask-question-enter-backward: askQuestionSlideBackward var(--ui-duration-220ms)
+    var(--ease-ui-enter);
+  --animate-notify-toast-enter: notifySlideIn var(--ui-duration-300ms) var(--ease-ui-enter) both;
+  --animate-hub-panel-enter: hubPanelIn var(--ui-duration-380ms) var(--ease-ui-enter) both;
+  --animate-file-drop-overlay: fileDropOverlayIn var(--ui-duration-160ms) var(--ease-ui-enter);
+  --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
+  --animate-git-review-tab-enter: gitReviewTabIn var(--ui-duration-220ms) var(--ease-ui-enter);
+  --animate-git-review-pane-enter-forward: gitReviewPaneForward var(--ui-duration-200ms)
+    var(--ease-ui-enter);
+  --animate-git-review-pane-enter-back: gitReviewPaneBack var(--ui-duration-200ms)
+    var(--ease-ui-enter);
+  --animate-editor-context-menu: editorContextMenuIn var(--ui-duration-150ms) var(--ease-ui-enter);
+  --animate-hub-frost-hero-after: hubFrostSheen var(--ui-duration-2600ms) ease-in-out infinite;
+  --animate-hub-frost-skeleton-after: hubLoadingTrackShimmer var(--ui-duration-2400ms) linear
+    infinite;
+  --animate-hub-frost-spinner-segment: hubFrostSpinnerFade var(--ui-duration-1000ms) linear infinite;
+  --animate-hub-frost-track-before: hubFrostTrack var(--ui-duration-1600ms) var(--ease-ui-curve-1)
+    infinite;
+  --animate-skills-skeleton-shimmer: skillsSkeletonShimmer var(--ui-duration-2000ms) ease-in-out
+    infinite;
+  --animate-skills-skeleton-pulse: skillsSkeletonPulse var(--ui-duration-1600ms) ease-in-out
+    infinite;
+  --animate-git-review-generate-progress: gitReviewGenerateSweep var(--ui-duration-1100ms)
+    ease-in-out infinite;
+  @keyframes tw-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: 0 0;
+    }
+  }
+}
+@keyframes chatHeroLogoIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-10px)) scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes chatHeroFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(var(--spacing-minus-5px));
+  }
+}
+@keyframes chatHeroHaloBreathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: var(--ui-opacity-0p6);
+  }
+}
+@keyframes chatHeroRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-12px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes chatHeroCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-14px)) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@layer components {
+  @keyframes providerPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-4px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes settingsSectionIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-14px)) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes settingsSectionTitleIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-8px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes chatHistoryScopeIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-6px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes sidebarMenuItemIn {
+    from {
+      opacity: 0;
+      transform: translate(
+        calc(var(--sidebar-menu-slide-x) / 2),
+        calc(var(--sidebar-menu-slide-y) / 2)
+      );
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes composerTypeCharIn {
+    from {
+      opacity: 0;
+      filter: blur(var(--spacing-2px));
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @keyframes mentionPopupIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-6px)) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes mentionItemIn {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-minus-6px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Smooth entrance for chat bubbles */
+
+  @keyframes chatBubbleIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-6px)) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes chatJumpToBottomIn {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(var(--spacing-6px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  @keyframes sidebarMenuIn {
+    from {
+      opacity: 0;
+      transform: translate(var(--sidebar-menu-slide-x), var(--sidebar-menu-slide-y)) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+  }
+
+  @keyframes sidebarMenuOut {
+    from {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate(
+          calc(var(--sidebar-menu-slide-x) / 2),
+          calc(var(--sidebar-menu-slide-y) / 2)
+        )
+        scale(0.98);
+    }
+  }
+
+  @keyframes composerReasoningDropdownIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-6px)) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes composerReasoningDropdownOut {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(var(--spacing-5px)) scale(0.975);
+    }
+  }
+
+  /* Context checkpoint animations */
+  @keyframes checkpointSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-8px)) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes checkpointExpandIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-minus-4px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Compaction band — shared chrome for the live "compressing context"
+     status and the settled in-reply seam. The active band carries a sweeping
+     progress line along its bottom edge and a breathing icon tile; the
+     settled band is static so history stays calm. */
+  @keyframes compactionBandSweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+
+  @keyframes compactionBandBreathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: var(--ui-opacity-0p85);
+    }
+    50% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  }
+
+  /* Tool card animations & micro-interactions */
+  @keyframes toolExpandIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-minus-4px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* AskUserQuestion 切题：按方向轻微滑入（forward 从右、backward 从左） */
+  @keyframes askQuestionSlideForward {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-10px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes askQuestionSlideBackward {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-minus-10px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* “其他（自行输入）”展开输入框：轻微下滑+淡入，呼应磨砂玻璃质感。 */
+  @keyframes askCustomInputReveal {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-minus-3px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Notify toast animations */
+
+  @keyframes notifySlideIn {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-20px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes notifyFadeOut {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(var(--spacing-20px));
+    }
+  }
+
+  /* Hub page loading and entrance animations */
+
+  @keyframes hubPageIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-8px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes hubPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-14px)) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes hubLoadingProgress {
+    0% {
+      transform: translateX(-60%) scaleX(0.35);
+    }
+    50% {
+      transform: translateX(30%) scaleX(0.85);
+    }
+    100% {
+      transform: translateX(145%) scaleX(0.35);
+    }
+  }
+
+  /* macOS frosted-glass loading hero — calm, monochrome, minimal */
+
+  @keyframes hubFrostSpinnerFade {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: var(--ui-opacity-0p18);
+    }
+  }
+
+  @keyframes hubFrostTrack {
+    0% {
+      transform: translateX(-105%);
+    }
+    100% {
+      transform: translateX(260%);
+    }
+  }
+
+  @keyframes hubFrostSheen {
+    0% {
+      transform: translateX(-60%);
+      opacity: 0;
+    }
+    24% {
+      opacity: 1;
+    }
+    76% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(160%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes hubLoadingTrackShimmer {
+    0% {
+      background-position: 150% 0;
+    }
+    100% {
+      background-position: -50% 0;
+    }
+  }
+
+  /* Skills loading animations */
+
+  @keyframes skillsSkeletonShimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  @keyframes skillCardIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-10px)) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes skillCardCheckIn {
+    0% {
+      transform: scale(0);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes skillsSkeletonPulse {
+    0%,
+    100% {
+      background-color: var(--color-hsl-muted-foreground-10);
+    }
+    50% {
+      background-color: hsl(var(--muted-foreground) / 0.22);
+    }
+  }
+
+  @keyframes fileDropOverlayIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fileDropCardIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-6px)) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes fileDropBorderPulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--foreground) / 0);
+    }
+    50% {
+      box-shadow: 0 0 0 var(--spacing-3px) hsl(var(--foreground) / 0.04);
+    }
+  }
+}
+/* 供应商卡片用量区:结果替换等高骨架占位时柔和浮现,只动透明度不动高度。 */
+@keyframes settings-usage-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sftpPathPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-minus-4px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes editorContextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes tw-scroll-fade-in-top {
+  from {
+    --scroll-fade-t-size: 0px;
+  }
+
+  to {
+    --scroll-fade-t-size: var(--_scroll-fade-size);
+  }
+}
+@keyframes tw-scroll-fade-out-bottom {
+  from {
+    --scroll-fade-b-size: var(--_scroll-fade-size);
+  }
+
+  to {
+    --scroll-fade-b-size: 0px;
+  }
+}
+@keyframes chat-work-pixel {
+  0%,
+  55%,
+  100% {
+    opacity: var(--ui-opacity-0p15);
+    transform: scale(0.8);
+  }
+
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@layer base {
+  /* Git review tab & pane transition animations */
+  @keyframes gitReviewTabIn {
+    from {
+      opacity: 0;
+      transform: translateY(var(--spacing-8px));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes gitReviewPaneForward {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-24px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes gitReviewPaneBack {
+    from {
+      opacity: 0;
+      transform: translateX(var(--spacing-minus-24px));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Indeterminate sweep across the top edge of the commit composer card while
+   * an AI commit-message generation request is in flight. */
+  @keyframes gitReviewGenerateSweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+/*
+ * The history list already virtualizes once it grows large. Avoid
+ * content-visibility on rows: after pin/unpin reorders the list, WKWebView can
+ * keep the moved row in a skipped paint state and render only the white row
+ * background, making the conversation title look blank.
+ */
+/* Exit leg for menus driven by useMenuExitPresence (lib/shared/menuMotion.ts):
+ * the hook keeps the menu mounted for MENU_EXIT_MS while this plays, so the
+ * duration below must stay in sync with that constant. `forwards` holds the
+ * faded-out frame in case the unmount timer lands a tick late. */
+@keyframes editorContextMenuOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes loginOrbFloat {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(var(--spacing-30px), var(--spacing-minus-20px));
+  }
+  66% {
+    transform: translate(var(--spacing-minus-20px), var(--spacing-15px));
+  }
+}
+@keyframes loginSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loginSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-18px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes syncIconBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+@keyframes syncDotBounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: var(--ui-opacity-0p35);
+  }
+  40% {
+    transform: translateY(var(--spacing-minus-7px));
+    opacity: 1;
+  }
+}
+/* Keep the hover-revealed action row visible while its inline confirm
+   popover is open (the pointer may sit outside the assistant row). */
+/* Confirm-action popover enter/exit: grow out of the anchor toward the
+   placement side. The component keeps the node mounted for the exit
+   animation (data-closing) and unmounts after CONFIRM_POPOVER_CLOSE_MS,
+   which must stay >= the confirmPopoverOut duration here. */
+@keyframes confirmPopoverOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--popup-motion-slide-y, var(--spacing-minus-6px)) / 2))
+      scale(0.98);
+  }
+}
+@keyframes status-board-aurora-drift {
+  from {
+    transform: rotate(-3deg) scale(1);
+  }
+  to {
+    transform: rotate(4deg) scale(1.07);
+  }
+}
+@keyframes status-board-float {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(var(--spacing-20px), var(--spacing-minus-24px), 0) scale(1.08);
+  }
+}
+@keyframes status-board-scanline {
+  from {
+    transform: translateY(var(--spacing-minus-18px));
+  }
+  to {
+    transform: translateY(var(--spacing-18px));
+  }
+}
+@keyframes status-board-pulse {
+  0%,
+  100% {
+    opacity: var(--ui-opacity-0p54);
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+@keyframes status-board-logo-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 var(--spacing-22px) rgba(var(--status-cyan), 0.18),
+      inset 0 0 var(--spacing-22px) var(--ui-color-hsl-0-0-100-0p08);
+  }
+  50% {
+    box-shadow:
+      0 0 var(--spacing-34px) rgba(var(--status-cyan), 0.42),
+      inset 0 0 var(--spacing-28px) rgba(var(--status-cyan), 0.12);
+  }
+}
+@keyframes status-board-ring-spin {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  to {
+    transform: rotate(360deg) scale(1.015);
+  }
+}
+@keyframes status-board-radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes status-board-node-pulse {
+  0%,
+  100% {
+    opacity: var(--ui-opacity-0p72);
+    filter: saturate(0.86);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.35);
+  }
+}
+@keyframes status-board-load-breathe {
+  from {
+    filter: brightness(0.82);
+  }
+  to {
+    filter: brightness(1.24);
+  }
+}
+
+/* Popover and tooltip share state transitions, with their original distances and timing. */
+@layer components {
+  .confirm-action-popover-popup {
+    --popup-motion-distance: var(--spacing-6px);
+    --popup-motion-enter-duration: var(--ui-duration-180ms);
+    --popup-motion-exit-duration: var(--ui-duration-120ms);
+  }
+  .label-tooltip-popup {
+    --popup-motion-distance: var(--spacing-4px);
+    --popup-motion-enter-duration: var(--ui-duration-150ms);
+    --popup-motion-exit-duration: var(--ui-duration-100ms);
+  }
+  .confirm-action-popover-popup,
+  .label-tooltip-popup {
+    --popup-motion-slide-y: calc(-1 * var(--popup-motion-distance));
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity var(--popup-motion-enter-duration) var(--ease-ui-enter),
+      transform var(--popup-motion-enter-duration) var(--ease-ui-enter);
+  }
+  .confirm-action-popover-popup[data-side="top"],
+  .label-tooltip-popup[data-side="top"] {
+    --popup-motion-slide-y: var(--popup-motion-distance);
+  }
+  .confirm-action-popover-popup[data-starting-style],
+  .confirm-action-popover-popup[data-ending-style],
+  .label-tooltip-popup[data-starting-style],
+  .label-tooltip-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(var(--popup-motion-slide-y)) scale(0.96);
+  }
+  .confirm-action-popover-popup[data-ending-style],
+  .label-tooltip-popup[data-ending-style] {
+    transition-duration: var(--popup-motion-exit-duration);
+    transition-timing-function: var(--ease-in);
+    transform: translateY(calc(var(--popup-motion-slide-y) / 2)) scale(0.98);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .confirm-action-popover-popup,
+    .label-tooltip-popup {
+      /* biome-ignore lint/complexity/noImportantStyles: Preserve state animation overrides. */
+      animation: none !important;
+      /* biome-ignore lint/complexity/noImportantStyles: Preserve state transition overrides. */
+      transition: none !important;
+    }
+  }
+}

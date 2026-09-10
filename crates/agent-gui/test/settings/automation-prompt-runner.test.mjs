@@ -1,3 +1,4 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -125,7 +126,7 @@ test("Cron manual run stays wired in shared UI", () => {
   assert.match(cronViewSource, /setManualRunStartedAt\(response\.startedAt\)/);
   assert.match(cronViewSource, /listCronRuns\(taskId, 500\)/);
   assert.match(cronViewSource, /settings\.cronViewRunNow/);
-  assert.match(cronViewSource, /<Play className="h-3\.5 w-3\.5" \/>/);
+  assertJsxDimensions(cronViewSource, "Play", { width: "3.5", height: "3.5" });
   assert.match(
     webAutomationBackendSource,
     /return cronManage<CronRunNowResponse>\("run_now", taskId\)/,

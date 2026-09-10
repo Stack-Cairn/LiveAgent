@@ -1,4 +1,5 @@
 import { Loader2, Terminal } from "@liveagent/ui/components/IconSet";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "../../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../../lib/terminal/types";
@@ -83,12 +84,12 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
           />
         </div>
       ) : (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70">
+        <EmptyState variant="workspace">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-muted/70">
             {phase === "connecting" ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="size-5 animate-spin" />
             ) : (
-              <Terminal className="h-5 w-5" />
+              <Terminal className="size-5" />
             )}
           </div>
           <div className={cn(phase === "error" && "text-destructive")}>
@@ -109,7 +110,7 @@ export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
                   : t("workbench.terminalRetry")}
             </Button>
           ) : null}
-        </div>
+        </EmptyState>
       )}
     </div>
   );

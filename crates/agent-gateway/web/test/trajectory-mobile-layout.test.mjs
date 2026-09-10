@@ -19,7 +19,7 @@ const resizeHandleSource = readFileSync(
 
 test("narrow trajectory container keeps empty details beside the list", () => {
   assert.match(trajectoryViewSource, /className="@container flex h-full min-h-0 flex-1 flex-col"/);
-  assert.match(detailsSource, /min-w-\[160px\] max-w-\[calc\(100%-140px\)\]/);
+  assert.match(detailsSource, /min-w-160px max-w-trajectory-details/);
   assert.match(detailsSource, /trajectory\.details\.empty/);
   assert.match(tableSource, /min-h-0 min-w-0 flex-1 overflow-y-auto/);
   assert.doesNotMatch(detailsSource, /@max-\[820px\]:hidden/);
@@ -33,7 +33,7 @@ test("trajectory details keep a bounded vertical scroll owner in the WebUI host"
 
 test("selected narrow-container details remain in a two-column layout", () => {
   assert.equal(
-    detailsSource.match(/min-w-\[160px\] max-w-\[calc\(100%-140px\)\]/g)?.length,
+    detailsSource.match(/min-w-160px max-w-trajectory-details/g)?.length,
     2,
   );
   assert.doesNotMatch(detailsSource, /@max-\[820px\]:absolute/);
@@ -47,7 +47,7 @@ test("narrow trajectory controls preserve horizontal content space", () => {
   assert.match(toolbarSource, /@max-\[520px\]:order-last[\s\S]*?@max-\[520px\]:w-full/);
   assert.match(timelineSource, /@max-\[520px\]:gap-1 @max-\[520px\]:px-2/);
   assert.match(timelineSource, /@max-\[520px\]:w-8/);
-  assert.match(rowSource, /@max-\[520px\]:w-12 @max-\[520px\]:text-\[11px\]/);
+  assert.match(rowSource, /@max-\[520px\]:w-12 @max-\[520px\]:text-11px/);
 });
 
 test("trajectory details resizing remains available in narrow containers", () => {

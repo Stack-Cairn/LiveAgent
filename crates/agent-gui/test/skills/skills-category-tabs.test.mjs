@@ -42,7 +42,7 @@ test("installed skill categories reuse the quiet store tabs with icons", () => {
   assert.doesNotMatch(hubSource, /showIcons=\{false\}/);
   assert.match(controlsSource, /appearance === "outlined"/);
   assert.match(controlsSource, /showIcons \? <CategoryIcon/);
-  assert.match(controlsSource, /<Badge[\s\S]*h-4 min-w-4 rounded-full px-1/);
+  assert.match(controlsSource, /<Badge[\s\S]*size="filter-count"/);
   // Height lives in the base TabsTrigger now, so the chips must NOT pin their
   // own — that drift is what made every tab row a different size.
   assert.match(controlsSource, /shrink-0 gap-1 rounded-md px-2/);

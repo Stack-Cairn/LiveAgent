@@ -387,8 +387,8 @@ export function SttSection({
   return (
     <div className="w-full min-w-0 space-y-5">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-          <Mic className="h-[18px] w-[18px] text-primary" />
+        <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10">
+          <Mic className="size-18px text-primary" />
         </div>
         <div>
           <h3 className="text-sm font-semibold">语音输入</h3>
@@ -396,7 +396,7 @@ export function SttSection({
             桌面端配置会同步到 Gateway WebUI；浏览器仅接收脱敏配置，录音统一为 16 kHz 单声道 PCM。
           </p>
           {service.runtimeLabel ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-11px text-muted-foreground">
               当前运行端：{service.runtimeLabel}
             </p>
           ) : null}
@@ -439,14 +439,14 @@ export function SttSection({
             >
               <ProviderBrandBadge
                 provider={item.id}
-                className="h-9 w-9 transition-transform duration-150 group-hover:scale-105"
-                iconClassName="h-[18px] w-[18px]"
+                className="size-9 transition-transform duration-150 group-hover:scale-105"
+                iconClassName="size-18px"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium leading-tight">
+                <span className="block truncate text-13px font-medium leading-tight">
                   {item.label}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="mt-0.5 flex items-center gap-1.5 text-11px text-muted-foreground">
                   <span className="truncate">{item.vendor}</span>
                   <span
                     className={cn(
@@ -456,7 +456,7 @@ export function SttSection({
                   >
                     <span
                       className={cn(
-                        "h-1.5 w-1.5 rounded-full",
+                        "size-1.5 rounded-full",
                         configured ? "bg-emerald-500" : "bg-muted-foreground/40",
                       )}
                     />
@@ -465,8 +465,8 @@ export function SttSection({
                 </span>
               </span>
               {active ? (
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <Check className="h-3 w-3" />
+                <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-3" />
                 </span>
               ) : null}
             </button>
@@ -478,14 +478,12 @@ export function SttSection({
           <div className="flex min-w-0 items-center gap-2.5">
             <ProviderBrandBadge
               provider={definition.id}
-              className="h-8 w-8"
-              iconClassName="h-4 w-4"
+              className="size-8"
+              iconClassName="size-4"
             />
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium leading-tight">
-                {definition.label}
-              </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">
+              <div className="truncate text-13px font-medium leading-tight">{definition.label}</div>
+              <div className="mt-0.5 text-11px text-muted-foreground">
                 {provider.configured
                   ? "凭据已保存，可直接使用语音输入"
                   : "填写凭据后保存并测试连接"}
@@ -493,8 +491,8 @@ export function SttSection({
             </div>
           </div>
           {provider.configured ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">
-              <Shield className="h-3 w-3" />
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-11px text-emerald-600 dark:text-emerald-400">
+              <Shield className="size-3" />
               密钥已脱敏保存
             </span>
           ) : null}
@@ -578,7 +576,7 @@ export function SttSection({
                   {secretField ? (
                     <button
                       type="button"
-                      className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                      className="absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
                       disabled={
                         saving ||
                         testing ||
@@ -599,11 +597,11 @@ export function SttSection({
                       }
                     >
                       {revealingSecret === secretField ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        <LoaderCircle className="size-4 animate-spin" />
                       ) : visible ? (
-                        <EyeOff className="h-4 w-4" />
+                        <EyeOff className="size-4" />
                       ) : (
-                        <Eye className="h-4 w-4" />
+                        <Eye className="size-4" />
                       )}
                     </button>
                   ) : null}
@@ -613,12 +611,12 @@ export function SttSection({
           })}
         </div>
         {service.secretRevealMode === "field-name" ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-11px text-muted-foreground">
             WebUI 的查看按钮只显示字段名；已保存的密钥内容不会下发到浏览器。
           </p>
         ) : null}
         {definition.id === "baidu_cloud" ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-11px text-muted-foreground">
             appid 必须是数字；dev_pid 不提供默认值，请按百度模型填写。
           </p>
         ) : null}
@@ -630,9 +628,9 @@ export function SttSection({
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
             {saving || testing ? (
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              <LoaderCircle className="size-3.5 animate-spin" />
             ) : (
-              <Plug className="h-3.5 w-3.5" />
+              <Plug className="size-3.5" />
             )}
             {saving ? "正在保存…" : testing ? "正在测试…" : "保存并测试连接"}
           </button>
@@ -643,9 +641,9 @@ export function SttSection({
             className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3.5 py-2 text-xs text-destructive transition-colors hover:bg-destructive/5 disabled:opacity-60"
           >
             {clearing ? (
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              <LoaderCircle className="size-3.5 animate-spin" />
             ) : (
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
             )}
             {clearing ? "正在清空…" : "清空密钥"}
           </button>
@@ -660,9 +658,9 @@ export function SttSection({
             )}
           >
             {testPassed ? (
-              <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+              <CheckCircle2 className="mt-px size-3.5 shrink-0" />
             ) : (
-              <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+              <XCircle className="mt-px size-3.5 shrink-0" />
             )}
             <div className="min-w-0">
               <div className="font-medium">{resultLabel[testResult.result]}</div>
@@ -676,7 +674,7 @@ export function SttSection({
         ) : null}
         {error ? (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
-            <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+            <XCircle className="mt-px size-3.5 shrink-0" />
             <p className="break-words">{error}</p>
           </div>
         ) : null}

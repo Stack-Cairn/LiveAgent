@@ -33,7 +33,7 @@ function resolveMenuTarget(target: EventTarget | null): MenuTarget | null {
 }
 
 const MENU_ITEM_CLASS = cn(
-  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
   "disabled:pointer-events-none disabled:opacity-45",
 );
 
@@ -401,7 +401,7 @@ export function useNativeInputContextMenu(): {
             ref={menuRef}
             role="menu"
             className={cn(
-              "editor-context-menu layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
+              "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
               isExiting && "editor-context-menu-exit",
             )}
             style={{ left: renderedSnapshot.x, top: renderedSnapshot.y }}
@@ -417,7 +417,7 @@ export function useNativeInputContextMenu(): {
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleCut}
             >
-              <Scissors className="h-3.5 w-3.5 shrink-0" />
+              <Scissors className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
             </button>
             <button
@@ -428,7 +428,7 @@ export function useNativeInputContextMenu(): {
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleCopy}
             >
-              <Copy className="h-3.5 w-3.5 shrink-0" />
+              <Copy className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
             </button>
             <button
@@ -441,7 +441,7 @@ export function useNativeInputContextMenu(): {
                 void handlePaste();
               }}
             >
-              <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
+              <ClipboardPaste className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
             </button>
             <div className="my-1 h-px bg-border/70" />
@@ -453,7 +453,7 @@ export function useNativeInputContextMenu(): {
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleSelectAll}
             >
-              <ScanText className="h-3.5 w-3.5 shrink-0" />
+              <ScanText className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
             </button>
           </div>,

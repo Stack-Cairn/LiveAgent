@@ -22,13 +22,13 @@ export function ProjectToolsPanelToggle(props: {
       }
       className={cn(
         className,
-        "relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95",
+        "relative size-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95",
         isOpen ? "bg-muted text-foreground" : "",
       )}
     >
-      {isOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+      {isOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
       {sessionCount > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none text-white">
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-scaled-10px font-semibold leading-none text-white">
           {sessionCount}
         </span>
       ) : null}

@@ -87,7 +87,7 @@ function FileOperationTarget({
     <button
       type="button"
       data-chat-file-link=""
-      className="min-w-0 flex-1 cursor-pointer truncate text-left underline decoration-foreground/20 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/45"
+      className="min-w-0 flex-1 cursor-pointer truncate text-left underline decoration-foreground/20 underline-offset-3px transition-colors hover:text-foreground hover:decoration-foreground/45"
       title={operation.path}
       aria-label={`${actionLabel} ${operation.path}`}
       onClick={() => onOpenFileLink(fileLink)}
@@ -296,19 +296,17 @@ function ToolCallItem({
   const summaryClassName = cn(
     "flex select-none items-center gap-1.5 text-left",
     compactChip
-      ? "group/tool -mx-1.5 min-h-7 w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-1 transition-colors duration-150 hover:bg-foreground/[0.04]"
+      ? "group/tool -mx-1.5 min-h-7 w-bleed-0p75rem rounded-lg px-1.5 py-1 transition-colors duration-150 hover:bg-foreground/[0.04]"
       : "min-h-7 w-full py-1",
     canExpand ? "cursor-pointer" : "cursor-default",
   );
   const summaryContent = simpleFileOperation ? (
     <>
-      <ToolIcon className="h-3 w-3 shrink-0 text-foreground/45" />
+      <ToolIcon className="size-3 shrink-0 text-foreground/45" />
       <span
         className={cn(
-          "shrink-0 font-[450] text-foreground/62",
-          compactChip
-            ? "text-[calc(13px*var(--zone-font-scale,1))]"
-            : "text-[calc(13px*var(--zone-font-scale,1))]",
+          "shrink-0 font-450 text-foreground/62",
+          compactChip ? "text-scaled-13px" : "text-scaled-13px",
           displayIsRunning && "animate-pulse",
         )}
       >
@@ -317,9 +315,7 @@ function ToolCallItem({
       <span
         className={cn(
           "inline-flex min-w-0 flex-1 items-center gap-2 font-mono text-foreground/52",
-          compactChip
-            ? "h-[22px] text-[calc(11.5px*var(--zone-font-scale,1))]"
-            : "text-[calc(11.5px*var(--zone-font-scale,1))]",
+          compactChip ? "h-22px text-scaled-11p5px" : "text-scaled-11p5px",
         )}
       >
         <FileOperationTarget
@@ -341,23 +337,23 @@ function ToolCallItem({
       {/* 宽度锁在图标列的 12px 上（高度仍留 14px 呼吸感），否则悬停切换用的
           居中盒会把图标整体右推 1px，和同组里的简单文件操作行错开。 */}
       <span className="relative flex h-3.5 w-3 shrink-0 items-center justify-center text-foreground/45">
-        <ToolIcon className="h-3 w-3 transition-opacity duration-150 group-hover/tool:opacity-0 group-focus-within/tool:opacity-0" />
+        <ToolIcon className="size-3 transition-opacity duration-150 group-hover/tool:opacity-0 group-focus-within/tool:opacity-0" />
         {canExpand ? (
           <ChevronRight
             className={cn(
-              "absolute h-3 w-3 opacity-0 transition-[opacity,transform] duration-150 group-hover/tool:opacity-100 group-focus-within/tool:opacity-100",
+              "absolute size-3 opacity-0 transition-[opacity,transform] duration-150 group-hover/tool:opacity-100 group-focus-within/tool:opacity-100",
               effectiveOpen ? "rotate-90" : "",
             )}
           />
         ) : null}
       </span>
 
-      <span className="shrink-0 text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/62">
+      <span className="shrink-0 text-scaled-13px font-450 text-foreground/62">
         {summaryTitleName}
       </span>
 
       {compactChipText || fileChangeStats ? (
-        <span className="inline-flex h-[22px] min-w-0 flex-1 items-center gap-2 font-mono text-[calc(11.5px*var(--zone-font-scale,1))] text-foreground/48">
+        <span className="inline-flex h-22px min-w-0 flex-1 items-center gap-2 font-mono text-scaled-11p5px text-foreground/48">
           {compactChipText ? (
             <span
               className="min-w-0 flex-1 truncate"
@@ -379,16 +375,12 @@ function ToolCallItem({
       )}
 
       {displayIsRunning || result?.isError || shellSessionFailed ? (
-        <span
-          className={cn("shrink-0 text-[calc(10.5px*var(--zone-font-scale,1))]", statusTextClass)}
-        >
-          {statusLabel}
-        </span>
+        <span className={cn("shrink-0 text-scaled-10p5px", statusTextClass)}>{statusLabel}</span>
       ) : null}
     </>
   ) : (
     <>
-      <ToolIcon className="h-3 w-3 shrink-0 text-foreground/45 group-hover/tool:text-foreground/65" />
+      <ToolIcon className="size-3 shrink-0 text-foreground/45 group-hover/tool:text-foreground/65" />
 
       {/* Tool name + inline summary on same line. Name and summary must stay in
           one inline context (shared baseline): centering them as separate flex
@@ -397,13 +389,13 @@ function ToolCallItem({
         {/* Container carries the summary styling so the truncation ellipsis
             (styled per the block container) matches the summary text */}
         <div
-          className="min-w-0 truncate font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-5 text-foreground/48"
+          className="min-w-0 truncate font-mono text-scaled-11p5px leading-5 text-foreground/48"
           title={inlineCommandTitle || toolArgsSummary || undefined}
         >
-          <span className="font-sans text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/62 group-hover/tool:text-foreground/75">
+          <span className="font-sans text-scaled-13px font-450 text-foreground/62 group-hover/tool:text-foreground/75">
             {summaryTitleName}
             {title.action ? (
-              <span className="font-mono text-[calc(11.5px*var(--zone-font-scale,1))] font-normal text-foreground/48">
+              <span className="font-mono text-scaled-11p5px font-normal text-foreground/48">
                 {" · "}
                 {title.action}
               </span>
@@ -425,20 +417,18 @@ function ToolCallItem({
       <div className="flex shrink-0 items-center gap-2">
         {displayIsRunning ? (
           <AssistantStatus
-            className="min-h-0 gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-foreground/45"
-            iconClassName="h-3 w-3"
+            className="min-h-0 gap-1.5 text-scaled-11px text-foreground/45"
+            iconClassName="size-3"
           >
             {statusLabel}
           </AssistantStatus>
         ) : (
-          <span className={cn("text-[calc(11px*var(--zone-font-scale,1))]", statusTextClass)}>
-            {statusLabel}
-          </span>
+          <span className={cn("text-scaled-11px", statusTextClass)}>{statusLabel}</span>
         )}
         {canExpand ? (
           <ChevronRight
             className={cn(
-              "h-3 w-3 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/tool:opacity-100 group-focus-within/tool:opacity-100",
+              "size-3 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/tool:opacity-100 group-focus-within/tool:opacity-100",
               effectiveOpen ? "rotate-90" : "",
             )}
           />
@@ -479,8 +469,8 @@ function ToolCallItem({
 
           return (
             <details className="group/result">
-              <summary className="flex cursor-pointer select-none items-center gap-1 text-[calc(10.5px*var(--zone-font-scale,1))] text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
-                <ChevronRight className="h-2.5 w-2.5 transition-transform duration-200 group-open/result:rotate-90" />
+              <summary className="flex cursor-pointer select-none items-center gap-1 text-scaled-10p5px text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
+                <ChevronRight className="size-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                 {t("chat.tool.viewReturn")}
               </summary>
               <ToolScrollablePre className="mt-1.5 max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
@@ -537,7 +527,7 @@ function ToolCallItem({
               label={t("chat.tool.return")}
               trailing={
                 result?.isError ? (
-                  <span className="text-[calc(11px*var(--zone-font-scale,1))] font-medium text-red-500">
+                  <span className="text-scaled-11px font-medium text-red-500">
                     {t("chat.tool.error")}
                   </span>
                 ) : null

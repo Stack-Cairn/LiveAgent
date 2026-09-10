@@ -19,13 +19,13 @@ export function OdometerNumber({ value, className }: { value: number; className?
           const digit = char.charCodeAt(0) - 48;
           const place = text.length - 1 - index;
           return (
-            <span key={`p${place}`} className="inline-block h-[1em] w-[1ch] overflow-hidden">
+            <span key={`p${place}`} className="inline-block h-1em w-1ch overflow-hidden">
               <span
                 className="flex flex-col transition-transform duration-300 ease-out will-change-transform motion-reduce:transition-none"
                 style={{ transform: `translateY(-${digit}em)` }}
               >
                 {DIGITS.map((strip) => (
-                  <span key={strip} className="flex h-[1em] w-[1ch] items-center justify-center">
+                  <span key={strip} className="flex h-1em w-1ch items-center justify-center">
                     {strip}
                   </span>
                 ))}

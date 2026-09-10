@@ -1,3 +1,4 @@
+import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -20,15 +21,9 @@ const documentMarkdownSource = readFileSync(
   new URL("../../../agent-ui/src/components/markdown/DocumentMarkdown.tsx", import.meta.url),
   "utf8",
 );
-const desktopStyles = readFileSync(new URL("../../src/index.css", import.meta.url), "utf8");
-const webStyles = readFileSync(
-  new URL("../../../agent-gateway/web/src/index.css", import.meta.url),
-  "utf8",
-);
-const sharedStyles = readFileSync(
-  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
-  "utf8",
-);
+const desktopStyles = readStyleSource(new URL("../../src/index.css", import.meta.url));
+const webStyles = readStyleSource(new URL("../../../agent-gateway/web/src/index.css", import.meta.url));
+const sharedStyles = readStyleSource(new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url));
 
 test("Skill and workspace files share the document Markdown presentation", () => {
   assert.match(skillDrawerSource, /<DocumentMarkdown content=\{previewContent\}/);

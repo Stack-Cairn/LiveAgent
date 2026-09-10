@@ -256,15 +256,15 @@ export function McpServerEditModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        className="flex max-h-92dvh max-w-3xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         layout="fullscreen-mobile"
         showCloseButton
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="flex-row items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <McpLogo className="h-5 w-5" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <McpLogo className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
               <DialogTitle>{title}</DialogTitle>
@@ -359,7 +359,7 @@ export function McpServerEditModal(props: {
                           id="mcp-edit-command"
                           value={draft.command}
                           placeholder="npx"
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-12p5px"
                           onChange={(event) => updateDraft({ command: event.currentTarget.value })}
                         />
                       </div>
@@ -371,7 +371,7 @@ export function McpServerEditModal(props: {
                           id="mcp-edit-cwd"
                           value={draft.cwd}
                           placeholder={t("mcpHub.cwdDefault")}
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-12p5px"
                           onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
                         />
                       </div>
@@ -419,7 +419,7 @@ export function McpServerEditModal(props: {
                             ? "http://127.0.0.1:3000/mcp"
                             : "http://127.0.0.1:3000/sse"
                         }
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ url: event.currentTarget.value })}
                       />
                     </div>
@@ -435,7 +435,7 @@ export function McpServerEditModal(props: {
                           id="mcp-edit-message-url"
                           value={draft.messageUrl}
                           placeholder="http://127.0.0.1:3000/message"
-                          className="font-mono text-[12.5px]"
+                          className="font-mono text-12p5px"
                           onChange={(event) =>
                             updateDraft({
                               messageUrl: event.currentTarget.value,
@@ -502,7 +502,7 @@ export function McpServerEditModal(props: {
                               id="mcp-edit-auth-scope"
                               value={draft.authScope}
                               placeholder={t("mcpHub.authScopePlaceholder")}
-                              className="font-mono text-[12.5px]"
+                              className="font-mono text-12p5px"
                               onChange={(event) =>
                                 updateDraft({ authScope: event.currentTarget.value })
                               }
@@ -519,7 +519,7 @@ export function McpServerEditModal(props: {
                               id="mcp-edit-auth-client-id"
                               value={draft.authClientId}
                               placeholder={t("mcpHub.authClientIdPlaceholder")}
-                              className="font-mono text-[12.5px]"
+                              className="font-mono text-12p5px"
                               onChange={(event) =>
                                 updateDraft({ authClientId: event.currentTarget.value })
                               }
@@ -574,7 +574,7 @@ export function McpServerEditModal(props: {
 
               {formError ? (
                 <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
                 </div>
               ) : null}
@@ -586,7 +586,7 @@ export function McpServerEditModal(props: {
               {t("settings.cancel")}
             </Button>
             <Button type="submit" className="gap-1.5">
-              {mode === "add" ? <Plus className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+              {mode === "add" ? <Plus className="size-3.5" /> : <Save className="size-3.5" />}
               {submitLabel}
             </Button>
           </DialogFooter>
