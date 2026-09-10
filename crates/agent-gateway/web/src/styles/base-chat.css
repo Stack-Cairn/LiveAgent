@@ -182,23 +182,18 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
    scrollbar-color 规则之后：两者同优先级，靠源码顺序覆盖，否则悬停一瞬间
    scrollbar-color 变回非 auto，滚动条会当场消失。 */
 
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs {
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs,
+html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar,
+html[data-liveagent-webui="gateway"] [data-scroll-viewport],
+html[data-liveagent-webui="gateway"] .upload-file-list {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar::-webkit-scrollbar {
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] [data-scroll-viewport]::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] .upload-file-list::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
@@ -213,32 +208,11 @@ html[data-liveagent-webui="gateway"] .git-review-floating-scrollbar[data-draggin
   background-color: var(--gateway-scrollbar-thumb-active);
 }
 
-html[data-liveagent-webui="gateway"] [data-scroll-viewport] {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-html[data-liveagent-webui="gateway"] [data-scroll-viewport]::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
 html[data-liveagent-webui="gateway"] .tool-text-scroll {
   scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
 }
 
 /* Upload file list: scrollable without a visible scrollbar (overrides gateway globals) */
-html[data-liveagent-webui="gateway"] .upload-file-list {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-html[data-liveagent-webui="gateway"] .upload-file-list::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
 
 html[data-liveagent-webui="gateway"] .tool-text-scroll::-webkit-scrollbar {
   width: var(--spacing-8px);
@@ -343,10 +317,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   box-shadow: 0 0 0 var(--spacing-3px) hsl(var(--primary) / 0.08);
 }
 
-.gateway-hidden-file-input {
-  display: none;
-}
-
 .gateway-shell {
   position: relative;
   display: flex;
@@ -361,16 +331,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   color: hsl(var(--foreground));
 }
 
-.gateway-editor-host {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  height: 100%;
-  overflow: hidden;
-}
-
 .gateway-main-shell {
   position: relative;
   display: flex;
@@ -383,23 +343,13 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 }
 
 .gateway-main-backdrop {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
   background:
     linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background) / 0.88) 100%),
     radial-gradient(circle at 85% 0%, hsl(var(--primary) / 0.06), transparent 26%);
 }
 
 .gateway-chat-frame {
-  position: relative;
   z-index: var(--layer-content);
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
   /* One shared column width: the composer column follows the user-resizable
      transcript width, matching desktop (ChatComposerBar's desktop branch reads
      the same variable for the card column). TranscriptWidthControls overwrites
@@ -412,33 +362,9 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   --gateway-chat-composer-overlay-height: var(--spacing-176px);
 }
 
-.history-share-meta {
-  display: flex;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-8px);
-  color: hsl(var(--muted-foreground));
-  font-size: var(--text-12px);
-}
-
 .history-share-meta > span {
   border: var(--spacing-1px) solid hsl(var(--border) / 0.65);
-  border-radius: var(--radius-999px);
   background: hsl(var(--background) / 0.72);
-  padding: var(--spacing-4px) var(--spacing-9px);
-}
-
-.history-share-state {
-  display: flex;
-  height: 100%;
-  min-height: var(--spacing-320px);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-12px);
-  padding: var(--spacing-24px);
-  text-align: center;
 }
 
 .gateway-chat-column {
@@ -447,29 +373,14 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 }
 
 .gateway-banner-error {
-  margin: var(--spacing-12px) var(--spacing-20px) 0;
   border: var(--spacing-1px) solid hsl(var(--destructive) / 0.16);
   background: hsl(var(--destructive) / 0.08);
-  color: hsl(var(--destructive));
-  border-radius: var(--radius-14px);
-  padding: var(--spacing-10px) var(--spacing-12px);
-  font-size: var(--text-13px);
 }
 
 .gateway-transcript-stage {
-  position: relative;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
   /* Container for transcript overlays (FloorNavRail) — keeps their cqw-based
      clamping in sync with the desktop app's @container transcript root. */
   container-type: inline-size;
-}
-
-.gateway-transcript-scroll-shell {
-  position: relative;
-  height: 100%;
-  min-height: 0;
 }
 
 .gateway-transcript-scroll {
@@ -489,10 +400,10 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   overflow-anchor: none;
 }
 
-.gateway-transcript-shell {
-  display: grid;
-  /* Assistant rows dropped their 40px avatar column, so the transcript column
-     gives that width back rather than widening the reading measure. */
+/* Transcript and composer share the same column geometry; variables resolve at each consumer. */
+
+.gateway-transcript-shell,
+.gateway-composer-layer {
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, var(--spacing-16px)), 1fr)
     minmax(
@@ -503,35 +414,16 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
       )
     )
     minmax(var(--gateway-chat-column-gutter, var(--spacing-16px)), 1fr);
-  width: 100%;
-  min-width: 0;
-  overflow-anchor: none;
-  padding-top: var(--spacing-18px);
 }
 
-.gateway-transcript-list {
-  grid-column: 2;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--spacing-18px);
+.gateway-transcript-shell {
+  /* Assistant rows dropped their 40px avatar column, so the transcript column
+     gives that width back rather than widening the reading measure. */
+  overflow-anchor: none;
 }
 
 .gateway-composer-layer {
   display: grid;
-  /* 与 .gateway-transcript-shell 同步减去已退役的 40px 头像列，否则输入框
-     会比它要对齐的正文列宽 40px。两条规则现在读同一个变量（#762 起输入框
-     也跟随可调的正文宽），但 grid 模板无法复用，补偿仍需两处各写一次。 */
-  grid-template-columns:
-    minmax(var(--gateway-chat-column-gutter, var(--spacing-16px)), 1fr)
-    minmax(
-      0,
-      min(
-        calc(var(--chat-transcript-content-width, var(--spacing-768px)) - var(--spacing-40px)),
-        100%
-      )
-    )
-    minmax(var(--gateway-chat-column-gutter, var(--spacing-16px)), 1fr);
   max-height: 100%;
   padding-bottom: var(--gateway-chat-composer-bottom, var(--spacing-16px));
 }
@@ -637,22 +529,8 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   }
 }
 
-.gateway-bubble-content {
-  margin-top: var(--spacing-10px);
-  font-size: var(--text-14px);
-  line-height: var(--leading-1p72);
-  color: hsl(var(--foreground));
-}
-
 .gateway-empty-state {
-  grid-column: 2;
-  position: relative;
-  display: flex;
   min-height: calc(var(--spacing-100vh) - var(--spacing-220px));
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: var(--spacing-24px) 0 0;
 }
 
 .gateway-settings-overlay {

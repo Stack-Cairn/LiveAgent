@@ -12,11 +12,11 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
       aria-live="polite"
     >
       <div
-        className="sync-loading-orb size-200px top-minus-80px left-minus-64px bg-hsl-210-100-86-0p55 animate-sync-loading-orb-1 dark:bg-hsl-210-80-32-0p25"
+        className="sync-loading-orb size-200px top-minus-80px left-minus-64px bg-hsl-210-100-86-0p55 animate-sync-loading-orb-1 dark:bg-hsl-210-80-32-0p25 absolute pointer-events-none"
         aria-hidden="true"
       />
       <div
-        className="sync-loading-orb size-170px bottom-minus-72px right-minus-54px bg-hsl-250-70-86-0p45 animate-sync-loading-orb-2 dark:bg-hsl-250-60-32-0p2"
+        className="sync-loading-orb size-170px bottom-minus-72px right-minus-54px bg-hsl-250-70-86-0p45 animate-sync-loading-orb-2 dark:bg-hsl-250-60-32-0p2 absolute pointer-events-none"
         aria-hidden="true"
       />
 
@@ -37,10 +37,10 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
         {translate("chat.runtime.settingsSyncTitle", locale)}
       </strong>
 
-      <span className="sync-loading-dots" aria-hidden="true">
-        <i />
-        <i />
-        <i />
+      <span className="sync-loading-dots inline-flex items-center gap-6px h-8px" aria-hidden="true">
+        <i className="size-7px" />
+        <i className="size-7px" />
+        <i className="size-7px" />
       </span>
     </div>
   );

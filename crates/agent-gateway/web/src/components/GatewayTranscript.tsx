@@ -162,8 +162,8 @@ function resolveNearestScrollViewport(element: HTMLElement | null) {
 function HistoryLoadingState(props: { title?: string }) {
   const title = props.title?.trim();
   return (
-    <div className="gateway-transcript-shell">
-      <div className="gateway-chat-column gateway-empty-state">
+    <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
+      <div className="gateway-chat-column gateway-empty-state col-[2] relative flex items-center justify-center overflow-hidden pt-24px px-0 pb-0 max-640:pt-8px">
         <div className="flex min-h-280px w-full flex-col items-center justify-center px-4 text-center">
           <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -1013,7 +1013,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               <div className="text-11px font-bold tracking-0p12em uppercase text-muted-foreground">
                 Error
               </div>
-              <div className="gateway-bubble-content">
+              <div className="gateway-bubble-content mt-10px text-14px leading-1p72 text-foreground">
                 <pre>{row.text}</pre>
               </div>
             </div>
@@ -1085,8 +1085,8 @@ export function GatewayTranscript({
   if (rowCount === 0 && !isStreaming) {
     const showNoModelsState = !hasModels;
     return (
-      <div className="gateway-transcript-shell">
-        <div className="gateway-chat-column gateway-empty-state">
+      <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
+        <div className="gateway-chat-column gateway-empty-state col-[2] relative flex items-center justify-center overflow-hidden pt-24px px-0 pb-0 max-640:pt-8px">
           {/* Keyed per conversation so the hero entrance replays when
               switching between empty conversations, not just on mount. */}
           <ChatEmptyState
@@ -1102,10 +1102,10 @@ export function GatewayTranscript({
   }
 
   return (
-    <div className="gateway-transcript-shell">
+    <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
       <div
         ref={transcriptListRef}
-        className="gateway-chat-column gateway-transcript-list select-text"
+        className="gateway-chat-column gateway-transcript-list select-text col-[2] flex min-w-0 flex-col gap-18px max-640:gap-14px"
       >
         {/* Keyed remount per conversation: per-conversation state (measured
             heights, scroll-to-end latch) initializes fresh, and row keys can

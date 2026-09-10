@@ -32,17 +32,8 @@
   }
 
   .gateway-chat-frame {
-    height: 100%;
     --gateway-chat-column-gutter: var(--spacing-12px);
     --gateway-chat-composer-bottom: max(var(--spacing-12px), env(safe-area-inset-bottom));
-  }
-
-  .history-share-meta {
-    justify-content: flex-start;
-  }
-
-  .gateway-transcript-shell {
-    padding-top: var(--spacing-12px);
   }
 
   .gateway-scroll-to-bottom {
@@ -334,34 +325,11 @@
     /* Center the card vertically on phones so it isn't pinned to the very top
        with a large empty gap below. `safe center` falls back to top-alignment
        only if the card ever grows taller than the viewport, avoiding clipping. */
-    padding: var(--spacing-24px) var(--spacing-16px);
     align-content: safe center;
+    -webkit-overflow-scrolling: touch;
+    padding: var(--spacing-24px) var(--spacing-16px);
     padding-top: max(env(safe-area-inset-top, 0px), var(--spacing-24px));
     padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--spacing-24px));
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .login-logo-mark {
-    width: var(--spacing-34px);
-    height: var(--spacing-34px);
-    border-radius: var(--radius-10px);
-  }
-
-  .login-feat {
-    padding: var(--spacing-10px) var(--spacing-12px);
-    border-radius: var(--radius-12px);
-  }
-
-  .login-feat-icon {
-    width: var(--spacing-28px);
-    height: var(--spacing-28px);
-    border-radius: var(--radius-8px);
-  }
-
-  /* biome-ignore lint/style/noDescendingSpecificity: This narrower breakpoint intentionally refines the same login feature text selector. */
-  .login-feat-text span {
-    font-size: var(--text-11px);
   }
 
   .login-btn {
@@ -388,26 +356,6 @@
     padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--spacing-16px));
   }
 
-  .login-feat-list {
-    margin-top: var(--spacing-20px);
-    gap: var(--spacing-8px);
-  }
-
-  /* biome-ignore lint/style/noDescendingSpecificity: This narrower breakpoint intentionally hides text that the wider mobile breakpoint sizes. */
-  .login-feat-text span {
-    display: none;
-  }
-
-  .login-feat-text strong {
-    font-size: var(--text-12p5px);
-    margin-bottom: 0;
-  }
-
-  .login-feat {
-    padding: var(--spacing-9px) var(--spacing-12px);
-    align-items: center;
-  }
-
   .login-input {
     min-height: var(--spacing-60px);
     font-size: var(--text-12px);
@@ -423,21 +371,12 @@
     padding: var(--spacing-8px) var(--spacing-10px);
   }
 
-  .gateway-banner-error {
-    margin: var(--spacing-8px) var(--spacing-10px) 0;
-  }
-
-  .gateway-transcript-list {
-    gap: var(--spacing-14px);
-  }
-
   .gateway-empty-state {
     min-height: calc(
       var(--spacing-100dvh) -
       var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) -
       var(--spacing-96px)
     );
-    padding-top: var(--spacing-8px);
   }
 
   .gateway-composer-layer {
@@ -479,7 +418,6 @@
     justify-content: center;
   }
 
-  /* biome-ignore lint/style/noDescendingSpecificity: The mobile breakpoint intentionally follows broader settings button sizing declared earlier. */
   .checkpoint-card button {
     padding: var(--spacing-10px) var(--spacing-12px);
   }
@@ -539,7 +477,6 @@
 }
 
 @media (max-width: 520px) {
-
   html[data-liveagent-webui="gateway"] .settings-section-actions > button:not([role="switch"]),
   html[data-liveagent-webui="gateway"] .settings-section-actions > .settings-section-action {
     flex: 1 1 auto;
@@ -592,7 +529,6 @@
 }
 
 @media (max-width: 380px) {
-
   .gateway-chat-frame {
     --gateway-chat-column-gutter: var(--spacing-8px);
   }
@@ -607,39 +543,6 @@
     padding-right: var(--spacing-8px);
   }
 
-  .login-shell {
-    padding: var(--spacing-6px);
-  }
-
-  .login-logo-mark {
-    width: var(--spacing-30px);
-    height: var(--spacing-30px);
-    border-radius: var(--radius-9px);
-  }
-
-  /* biome-ignore lint/style/noDescendingSpecificity: This compact-height media query intentionally refines the wider login logo rule. */
-  .login-logo-mark svg {
-    width: var(--spacing-14px);
-    height: var(--spacing-14px);
-  }
-
-  .login-feat-list {
-    margin-top: var(--spacing-16px);
-    gap: var(--spacing-6px);
-  }
-
-  .login-feat {
-    padding: var(--spacing-8px) var(--spacing-10px);
-    gap: var(--spacing-10px);
-    border-radius: var(--radius-10px);
-  }
-
-  .login-feat-icon {
-    width: var(--spacing-26px);
-    height: var(--spacing-26px);
-    border-radius: var(--radius-7px);
-  }
-
   .login-input {
     min-height: var(--spacing-54px);
   }
@@ -648,5 +551,9 @@
     height: var(--spacing-42px);
     font-size: var(--text-13px);
     border-radius: var(--radius-11px);
+  }
+
+  .login-shell {
+    padding: var(--spacing-6px);
   }
 }

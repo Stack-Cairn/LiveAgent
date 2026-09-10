@@ -1,3 +1,4 @@
+import { styleDeclarations } from "./helpers/style-rules.mjs";
 import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -47,16 +48,12 @@ test("unmeasured layouts produce a blank key so nothing is cached", () => {
 });
 
 test("gateway transcript and composer columns both drop the retired avatar rail", () => {
-  // 两条规则现在读同一个变量（#762 起输入框也跟随可调的正文宽），但 grid
-  // 模板无法复用，所以退役头像列的 40px 补偿仍需两处各写一次；只改一处会
-  // 让输入框比它要对齐的正文列宽 40px。分别按规则块断言，确保两处都在。
+  // Both consumers must retain the same retired-avatar compensation, even when grouped.
   const column = String.raw`minmax\(\s*0,\s*min\(\s*calc\(var\(--chat-transcript-content-width,\s*768px\)\s*-\s*40px\),\s*100%\s*\)\s*\)`;
   for (const rule of [".gateway-transcript-shell", ".gateway-composer-layer"]) {
-    const block = transcriptStylesSource.match(
-      new RegExp(`\\${rule} \\{[\\s\\S]*?\\n\\}`),
-    );
-    assert.ok(block, `${rule} 规则存在`);
-    assert.match(block[0], new RegExp(column));
+    const columns = styleDeclarations(transcriptStylesSource, rule)["grid-template-columns"];
+    assert.ok(columns, `${rule} 网格列存在`);
+    assert.match(columns, new RegExp(column));
   }
   assert.doesNotMatch(transcriptStylesSource, /--gateway-transcript-column-width/);
 });

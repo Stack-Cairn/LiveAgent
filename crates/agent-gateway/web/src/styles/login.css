@@ -1,13 +1,8 @@
 /* ─── Login Page — macOS Frosted Glass ──────────────────────────── */
 
 .login-shell {
-  position: relative;
-  display: grid;
-  min-height: var(--spacing-100dvh);
-  place-items: center;
-  padding: var(--spacing-40px) var(--spacing-24px);
-  overflow: hidden;
   background: var(--ui-color-hsl-220-20-97);
+  padding: var(--spacing-40px) var(--spacing-24px);
 }
 
 .dark .login-shell {
@@ -16,9 +11,6 @@
 
 /* Mesh gradient backdrop */
 .login-backdrop {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
   z-index: 0;
   background:
     radial-gradient(ellipse 80% 60% at 20% 10%, var(--ui-color-hsl-210-100-92-0p6), transparent 60%),
@@ -34,8 +26,6 @@
 }
 
 .login-backdrop-orb {
-  position: fixed;
-  pointer-events: none;
   z-index: 0;
   border-radius: 50%;
   filter: blur(var(--spacing-80px));
@@ -47,15 +37,6 @@
 /* ── Left: Hero / branding ── */
 
 .login-logo-mark {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--spacing-40px);
-  height: var(--spacing-40px);
-  border-radius: var(--radius-12px);
-  color: hsl(var(--primary-foreground));
-  background: hsl(var(--primary));
   box-shadow: 0 var(--spacing-2px) var(--spacing-8px) hsl(var(--primary) / 0.2);
 }
 
@@ -65,19 +46,7 @@
 
 /* ── Feature list ── */
 
-.login-feat-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-10px);
-  margin-top: var(--spacing-32px);
-}
-
 .login-feat {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-12px);
-  padding: var(--spacing-12px) var(--spacing-14px);
-  border-radius: var(--radius-14px);
   border: var(--spacing-1px) solid var(--ui-color-hsl-0-0-0-0p04);
   background: var(--ui-color-hsl-0-0-100-0p5);
   transition:
@@ -103,13 +72,6 @@
 }
 
 .login-feat-icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--spacing-32px);
-  height: var(--spacing-32px);
-  border-radius: var(--radius-9px);
   transition: transform var(--ui-duration-200ms) ease;
 }
 
@@ -141,25 +103,6 @@
 .dark .login-feat--amber .login-feat-icon {
   color: var(--ui-color-hsl-32-80-64);
   background: var(--ui-color-hsl-32-80-50-0p14);
-}
-
-.login-feat-text {
-  min-width: 0;
-}
-
-.login-feat-text strong {
-  display: block;
-  font-size: var(--text-13px);
-  font-weight: var(--font-weight-600);
-  margin-bottom: var(--spacing-2px);
-  color: hsl(var(--foreground));
-}
-
-.login-feat-text span {
-  display: block;
-  font-size: var(--text-11p5px);
-  line-height: var(--leading-1p55);
-  color: hsl(var(--muted-foreground));
 }
 
 /* ── Right: Auth form panel ── */
@@ -248,8 +191,6 @@
 /* ── Settings sync loading ── */
 
 .sync-loading-orb {
-  position: absolute;
-  pointer-events: none;
   z-index: -1;
   border-radius: 50%;
   filter: blur(var(--spacing-60px));
@@ -260,16 +201,8 @@
 /* Icon */
 
 /* Three bouncing dots */
-.sync-loading-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-6px);
-  height: var(--spacing-8px);
-}
 
 .sync-loading-dots i {
-  width: var(--spacing-7px);
-  height: var(--spacing-7px);
   border-radius: 50%;
   background: hsl(var(--primary));
   will-change: transform, opacity;

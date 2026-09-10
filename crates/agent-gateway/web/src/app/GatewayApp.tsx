@@ -1923,8 +1923,8 @@ function useGatewayAppController() {
       <LocaleContext.Provider value={localeContextValue}>
         <div className="gateway-shell">
           <main className="gateway-main-shell">
-            <div className="gateway-main-backdrop" />
-            <div className="gateway-chat-frame flex items-center justify-center">
+            <div className="gateway-main-backdrop absolute inset-0 pointer-events-none" />
+            <div className="gateway-chat-frame flex items-center justify-center relative flex h-full min-h-0 min-w-0 flex-1 flex-col max-820:h-full">
               <SettingsSyncLoading locale={settings.locale} />
             </div>
           </main>

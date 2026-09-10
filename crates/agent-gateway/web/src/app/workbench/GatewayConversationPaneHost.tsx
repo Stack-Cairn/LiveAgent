@@ -807,10 +807,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           {blockedMessage}
         </div>
       ) : null}
-      <div className="gateway-chat-frame relative flex size-full min-h-0 flex-col overflow-hidden">
+      <div className="gateway-chat-frame relative flex size-full min-h-0 flex-col overflow-hidden relative flex h-full min-h-0 min-w-0 flex-1 flex-col max-820:h-full">
         <section
           ref={usePrimary ? primary?.stageRef : undefined}
-          className="gateway-transcript-stage"
+          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden"
           style={
             {
               [CHAT_TRANSCRIPT_WIDTH_CSS_VAR]: `${context.transcriptContentWidth}px`,
@@ -835,7 +835,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               authoritativeRevision={trajectoryAuthoritativeRevision}
             />
           ) : (
-            <div className="gateway-transcript-scroll-shell">
+            <div className="relative h-full min-h-0">
               <ScrollArea
                 ref={usePrimary ? primary?.setTranscriptScrollAreaRoot : undefined}
                 viewportRef={

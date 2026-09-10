@@ -1244,7 +1244,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             type="file"
             multiple
             aria-label={translate("chat.upload.selectFiles", settings.locale)}
-            className="gateway-hidden-file-input"
+            className="gateway-hidden-file-input hidden"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               void handleImportReadableFiles(files);
@@ -1259,7 +1259,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             type="file"
             multiple
             aria-label={translate("chat.upload.selectFolder", settings.locale)}
-            className="gateway-hidden-file-input"
+            className="gateway-hidden-file-input hidden"
             onChange={(event) => {
               handleImportSelectedDirectoryFiles(Array.from(event.currentTarget.files ?? []));
               event.currentTarget.value = "";
@@ -1267,7 +1267,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           />
           {workbenchDragGhost}
 
-          <div className="gateway-editor-host">
+          <div className="gateway-editor-host relative flex min-w-0 min-h-0 flex-1 h-full overflow-hidden">
             <GatewaySidebarContainer
               pinnedOrder={settings.system.sidebarPinnedOrder}
               onReorderPinned={(sidebarPinnedOrder) =>
@@ -1409,7 +1409,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             {confirmDialog}
 
             <main className="gateway-main-shell">
-              <div className="gateway-main-backdrop" />
+              <div className="gateway-main-backdrop absolute inset-0 pointer-events-none" />
               <AppWorkbenchChrome
                 settings={settings}
                 sidebarOpen={sidebarOpen}
@@ -1481,18 +1481,24 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   content: (
                     <>
                       {statusError ? (
-                        <div className="gateway-banner-error">{statusError}</div>
+                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                          {statusError}
+                        </div>
                       ) : null}
                       {chatProtocolIncompatibleMessage && !statusError ? (
-                        <div className="gateway-banner-error">
+                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
                           {chatProtocolIncompatibleMessage}
                         </div>
                       ) : null}
                       {settingsSyncError ? (
-                        <div className="gateway-banner-error">{settingsSyncError}</div>
+                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                          {settingsSyncError}
+                        </div>
                       ) : null}
                       {chatError && displayedTranscriptRowCount === 0 ? (
-                        <div className="gateway-banner-error">{chatError}</div>
+                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                          {chatError}
+                        </div>
                       ) : null}
 
                       {sessionWorkbench.enabled ? (
@@ -1500,7 +1506,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       ) : (
                         <section
                           ref={transcriptStageRef}
-                          className="gateway-transcript-stage"
+                          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden"
                           // Preferred (persisted) width, so a fresh mount paints at
                           // the user's width instead of the default.
                           // TranscriptWidthControls narrows this same variable to
@@ -1525,7 +1531,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               authoritativeRevision={trajectoryAuthoritativeRevision}
                             />
                           ) : (
-                            <div className="gateway-transcript-scroll-shell">
+                            <div className="relative h-full min-h-0">
                               <ScrollArea
                                 ref={setTranscriptScrollAreaRoot}
                                 viewportRef={setTranscriptViewport}

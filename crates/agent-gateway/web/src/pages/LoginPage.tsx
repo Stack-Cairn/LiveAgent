@@ -45,15 +45,15 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
   const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <main className="login-shell">
+    <main className="login-shell relative grid min-h-100dvh place-items-center overflow-hidden max-820:overflow-y-auto">
       {/* Subtle mesh gradient backdrop */}
-      <div className="login-backdrop" aria-hidden="true" />
+      <div className="login-backdrop fixed inset-0 pointer-events-none" aria-hidden="true" />
       <div
-        className="login-backdrop-orb size-500px top-minus-120px left-minus-80px bg-hsl-210-100-88-0p5 animate-login-backdrop-orb-1 dark:bg-hsl-210-80-30-0p2 max-820:size-300px"
+        className="login-backdrop-orb size-500px top-minus-120px left-minus-80px bg-hsl-210-100-88-0p5 animate-login-backdrop-orb-1 dark:bg-hsl-210-80-30-0p2 max-820:size-300px fixed pointer-events-none"
         aria-hidden="true"
       />
       <div
-        className="login-backdrop-orb size-400px bottom-minus-100px right-minus-60px bg-hsl-250-70-88-0p4 animate-login-backdrop-orb-2 dark:bg-hsl-250-60-30-0p15 max-820:size-250px"
+        className="login-backdrop-orb size-400px bottom-minus-100px right-minus-60px bg-hsl-250-70-88-0p4 animate-login-backdrop-orb-2 dark:bg-hsl-250-60-30-0p15 max-820:size-250px fixed pointer-events-none"
         aria-hidden="true"
       />
 
@@ -61,8 +61,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
         {/* Left: branding + features */}
         <div className="flex flex-col justify-center px-40px py-48px border-r border-solid border-r-hsl-0-0-0-0p04 bg-hsl-0-0-100-0p3 dark:border-r-hsl-0-0-100-0p05 dark:bg-hsl-0-0-100-0p02 max-1080:border-r-0 max-1080:border-r-current max-1080:border-b max-1080:border-solid max-1080:border-b-hsl-0-0-0-0p04 max-1080:px-32px max-1080:pt-36px max-1080:pb-28px dark:max-1080:border-b-hsl-0-0-100-0p05 max-820:px-24px max-820:pt-28px max-820:pb-20px max-640:px-20px max-640:pt-24px max-640:pb-18px max-380:px-16px max-380:pt-20px max-380:pb-14px animate-login-entrance-d1 motion-reduce:animate-none">
           <div className="flex items-center gap-12px max-380:gap-8px">
-            <div className="login-logo-mark">
-              <Shield size={18} strokeWidth={2} />
+            <div className="login-logo-mark shrink-0 flex items-center justify-center size-40px rounded-12px text-primary-foreground bg-primary max-820:size-34px max-820:rounded-10px max-380:size-30px max-380:rounded-9px">
+              <Shield size={18} strokeWidth={2} className="max-380:size-14px" />
             </div>
             <h1 className="m-0 text-28px font-bold leading-1p15 tracking-minus-0p035em text-foreground max-820:text-26px max-640:text-24px max-380:text-22px">
               LiveAgent Gateway
@@ -72,15 +72,25 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
           </p>
 
-          <div className="login-feat-list login-entrance-d2">
+          <div className="login-feat-list login-entrance-d2 flex flex-col gap-10px mt-32px max-640:mt-20px max-640:gap-8px max-380:mt-16px max-380:gap-6px">
             {features.map((f) => (
-              <div key={f.title} className={cn("login-feat", f.accent)}>
-                <div className="login-feat-icon">
+              <div
+                key={f.title}
+                className={cn(
+                  "login-feat flex items-start gap-12px py-12px px-14px rounded-14px max-820:py-10px max-820:px-12px max-820:rounded-12px max-640:py-9px max-640:items-center max-380:py-8px max-380:px-10px max-380:gap-10px max-380:rounded-10px",
+                  f.accent,
+                )}
+              >
+                <div className="login-feat-icon shrink-0 flex items-center justify-center size-32px rounded-9px max-820:size-28px max-820:rounded-8px max-380:size-26px max-380:rounded-7px">
                   <f.icon size={16} strokeWidth={2} />
                 </div>
-                <div className="login-feat-text">
-                  <strong>{f.title}</strong>
-                  <span>{f.desc}</span>
+                <div className="min-w-0">
+                  <strong className="block text-13px font-semibold mb-2px text-foreground max-640:text-12p5px max-640:mb-0">
+                    {f.title}
+                  </strong>
+                  <span className="block text-11p5px leading-1p55 text-muted-foreground max-820:text-11px max-640:hidden">
+                    {f.desc}
+                  </span>
                 </div>
               </div>
             ))}

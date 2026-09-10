@@ -1,3 +1,5 @@
+import { styleDeclarations } from "./helpers/style-rules.mjs";
+import { parse } from "@babel/parser";
 import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -25,13 +27,13 @@ const composerSource = readFileSync(
 );
 
 test("composer 列与转录列读同一个宽度变量", () => {
-  const layer = chatStyles.match(/\.gateway-composer-layer \{[\s\S]*?\n\}/);
+  const layer = styleDeclarations(chatStyles, ".gateway-composer-layer")["grid-template-columns"];
   assert.ok(layer, ".gateway-composer-layer 规则存在");
   // Same variable as the transcript shell — that is what this guard is for.
   // The calc() wraps it because both columns give back the retired 40px avatar
   // rail; see measurements-lru.test.mjs for that half of the invariant.
   assert.match(
-    layer[0],
+    layer,
     /min\(\s*calc\(var\(--chat-transcript-content-width, 768px\) - 40px\),\s*100%\s*\)/,
   );
   assert.doesNotMatch(
@@ -46,10 +48,29 @@ test("两条路径的 ChatComposerBar 都渲染在 stage 之内，宽度变量�
     ["GatewayAppView", appViewSource],
     ["GatewayConversationPaneHost", paneHostSource],
   ]) {
-    const stageIndex = source.indexOf('className="gateway-transcript-stage"');
-    assert.ok(stageIndex >= 0, `${name} 应有 gateway-transcript-stage`);
-    const composerIndex = source.indexOf("<ChatComposerBar", stageIndex);
-    assert.ok(composerIndex > stageIndex, `${name} 的 ChatComposerBar 应在 stage section 内`);
+    const ast = parse(source, { sourceType: "module", plugins: ["typescript", "jsx"] });
+    const stages = [];
+    function walk(node, visit) {
+      if (!node || typeof node !== "object") return;
+      visit(node);
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach((child) => walk(child, visit));
+        else if (value && typeof value === "object") walk(value, visit);
+      }
+    }
+    walk(ast, (node) => {
+      if (node.type !== "JSXElement") return;
+      const attr = node.openingElement.attributes.find((attr) => attr.name?.name === "className");
+      if (attr?.value?.type === "StringLiteral" && attr.value.value.split(/\s+/).includes("gateway-transcript-stage")) stages.push(node);
+    });
+    assert.ok(stages.length > 0, `${name} 应有 gateway-transcript-stage`);
+    for (const stage of stages) {
+      let hasComposer = false;
+      walk(stage, (node) => {
+        if (node.type === "JSXOpeningElement" && node.name.name === "ChatComposerBar") hasComposer = true;
+      });
+      assert.ok(hasComposer, `${name} 的 ChatComposerBar 必须是 stage 的后代`);
+    }
   }
   // 桌面分支对照：卡片列 max-width 读同一变量，web 端行为以此为准。
   assert.match(
