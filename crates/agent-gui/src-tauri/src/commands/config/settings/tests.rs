@@ -29,8 +29,6 @@ mod tests {
             "conversation:one",
             "workspace:/workspace/b"
         ]);
-        let archive =
-            json!([{ "id": "archived", "title": "Archived conversation", "cwd": "/workspace/a" }]);
         {
             let mut conn = Connection::open(&path).expect("open database");
             initialize_schema(&conn).expect("initialize database");
@@ -39,7 +37,6 @@ mod tests {
                 json!({
                     "workspaceProjectOrder": order,
                     "sidebarPinnedOrder": pins,
-                    "archivedConversations": archive,
                 }),
                 "/workspace/default",
             )
@@ -50,10 +47,6 @@ mod tests {
             load_system_with_defaults(&conn, "/workspace/default").expect("load preferences");
         assert_eq!(loaded.get(SYSTEM_WORKSPACE_PROJECT_ORDER_KEY), Some(&order));
         assert_eq!(loaded.get(SYSTEM_SIDEBAR_PINNED_ORDER_KEY), Some(&pins));
-        assert_eq!(
-            loaded.get(SYSTEM_ARCHIVED_CONVERSATIONS_KEY),
-            Some(&archive)
-        );
         loaded["executionMode"] = json!("tools");
         save_system_with_default_workdir(&mut conn, loaded, "/workspace/default")
             .expect("save unrelated setting");
