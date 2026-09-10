@@ -249,7 +249,14 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter @liveagent/ui...
+        # Shared UI resolves host adapters from the desktop package while typechecking.
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/ui...
+
+      - name: Typecheck shared UI
+        run: pnpm typecheck:ui
+
+      - name: Lint shared UI
+        run: pnpm lint:ui
 
       - name: Run check script tests
         run: pnpm check:script-tests
