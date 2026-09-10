@@ -50,7 +50,7 @@ export function ConfirmActionPopover(props: {
         side={side}
         align={align}
         sideOffset={6}
-        className="confirm-action-popover-popup w-64 p-0"
+        className="w-64 p-0"
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}

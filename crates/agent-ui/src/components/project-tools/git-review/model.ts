@@ -139,7 +139,7 @@ export type GitFileContextPayload = {
 export const CHANGE_CONTEXT_MENU_ITEM_CLASS =
   "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
 export const CONTEXT_MENU_CONTAINER_CLASS =
-  "animate-editor-context-menu origin-top-left select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
+  "origin-top-left select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
 export const CONTEXT_MENU_SEPARATOR_CLASS = "mx-1 my-1 h-px bg-border/60";
 
 // Clamp a rendered context menu into its bounds using measured rects (no

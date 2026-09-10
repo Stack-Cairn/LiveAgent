@@ -1379,7 +1379,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         <div className="pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end sm:left-auto sm:right-6">
           <div
             className={cn(
-              "animate-notify-toast-enter motion-reduce:animate-none! pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-background px-3 py-2.5 text-sm shadow-xl",
+              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-background px-3 py-2.5 text-sm shadow-xl",
               scanFeedback.status === "success" ? "border-emerald-600/30" : "border-destructive/30",
             )}
             role={scanFeedback.status === "error" ? "alert" : "status"}

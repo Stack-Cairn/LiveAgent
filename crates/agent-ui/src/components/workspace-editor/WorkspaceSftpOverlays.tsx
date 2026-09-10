@@ -147,7 +147,7 @@ export function CopyPathDialog(props: {
 export function CopyPathToast(props: { message: string }) {
   return (
     <div className="layer-raised pointer-events-none absolute bottom-14 right-4">
-      <div className="animate-notify-toast-enter motion-reduce:animate-none! flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
+      <div className="flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
         <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
         <span>{props.message}</span>
       </div>

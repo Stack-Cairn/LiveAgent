@@ -16,28 +16,10 @@
     infinite;
   --animate-file-drop-overlay-zone: fileDropBorderPulse var(--ui-duration-2400ms) ease-in-out
     infinite;
-  --animate-sftp-path-popover-enter: sftpPathPopoverIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-compaction-band-progress: compactionBandSweep var(--ui-duration-1600ms)
     var(--ease-in-out) infinite;
-  --animate-notify-toast-enter: notifySlideIn var(--ui-duration-300ms) var(--ease-ui-enter) both;
   --animate-file-drop-overlay: fileDropOverlayIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
-  --animate-git-review-tab-enter: gitReviewTabIn var(--ui-duration-220ms) var(--ease-ui-enter);
-  --animate-git-review-pane-enter-forward: gitReviewPaneForward var(--ui-duration-200ms)
-    var(--ease-ui-enter);
-  --animate-git-review-pane-enter-back: gitReviewPaneBack var(--ui-duration-200ms)
-    var(--ease-ui-enter);
-  --animate-editor-context-menu: editorContextMenuIn var(--ui-duration-150ms) var(--ease-ui-enter);
-  --animate-hub-frost-hero-after: hubFrostSheen var(--ui-duration-2600ms) ease-in-out infinite;
-  --animate-hub-frost-skeleton-after: hubLoadingTrackShimmer var(--ui-duration-2400ms) linear
-    infinite;
-  --animate-hub-frost-spinner-segment: hubFrostSpinnerFade var(--ui-duration-1000ms) linear infinite;
-  --animate-hub-frost-track-before: hubFrostTrack var(--ui-duration-1600ms) var(--ease-ui-curve-1)
-    infinite;
-  --animate-skills-skeleton-shimmer: skillsSkeletonShimmer var(--ui-duration-2000ms) ease-in-out
-    infinite;
-  --animate-skills-skeleton-pulse: skillsSkeletonPulse var(--ui-duration-1600ms) ease-in-out
-    infinite;
   --animate-git-review-generate-progress: gitReviewGenerateSweep var(--ui-duration-1100ms)
     ease-in-out infinite;
   @keyframes tw-shimmer {
@@ -51,54 +33,6 @@
   }
 }
 @layer components {
-  @keyframes sidebarMenuIn {
-    from {
-      opacity: 0;
-      transform: translate(var(--sidebar-menu-slide-x), var(--sidebar-menu-slide-y)) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-  }
-
-  @keyframes sidebarMenuOut {
-    from {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translate(
-          calc(var(--sidebar-menu-slide-x) / 2),
-          calc(var(--sidebar-menu-slide-y) / 2)
-        )
-        scale(0.98);
-    }
-  }
-
-  @keyframes composerReasoningDropdownIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-6px)) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes composerReasoningDropdownOut {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(var(--spacing-5px)) scale(0.975);
-    }
-  }
-
   /* Compaction band — shared chrome for the live "compressing context"
      status and the settled in-reply seam. The active band carries a sweeping
      progress line along its bottom edge and a breathing icon tile; the
@@ -124,19 +58,6 @@
     }
   }
 
-  /* Notify toast animations */
-
-  @keyframes notifySlideIn {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-20px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
   @keyframes hubLoadingProgress {
     0% {
       transform: translateX(-60%) scaleX(0.35);
@@ -146,73 +67,6 @@
     }
     100% {
       transform: translateX(145%) scaleX(0.35);
-    }
-  }
-
-  /* macOS frosted-glass loading hero — calm, monochrome, minimal */
-
-  @keyframes hubFrostSpinnerFade {
-    0% {
-      opacity: 1;
-    }
-    100% {
-      opacity: var(--ui-opacity-0p18);
-    }
-  }
-
-  @keyframes hubFrostTrack {
-    0% {
-      transform: translateX(-105%);
-    }
-    100% {
-      transform: translateX(260%);
-    }
-  }
-
-  @keyframes hubFrostSheen {
-    0% {
-      transform: translateX(-60%);
-      opacity: 0;
-    }
-    24% {
-      opacity: 1;
-    }
-    76% {
-      opacity: 1;
-    }
-    100% {
-      transform: translateX(160%);
-      opacity: 0;
-    }
-  }
-
-  @keyframes hubLoadingTrackShimmer {
-    0% {
-      background-position: 150% 0;
-    }
-    100% {
-      background-position: -50% 0;
-    }
-  }
-
-  /* Skills loading animations */
-
-  @keyframes skillsSkeletonShimmer {
-    0% {
-      background-position: -200% 0;
-    }
-    100% {
-      background-position: 200% 0;
-    }
-  }
-
-  @keyframes skillsSkeletonPulse {
-    0%,
-    100% {
-      background-color: var(--color-hsl-muted-foreground-10);
-    }
-    50% {
-      background-color: hsl(var(--muted-foreground) / 0.22);
     }
   }
 
@@ -244,26 +98,6 @@
     50% {
       box-shadow: 0 0 0 var(--spacing-3px) hsl(var(--foreground) / 0.04);
     }
-  }
-}
-@keyframes sftpPathPopoverIn {
-  from {
-    opacity: 0;
-    transform: translateY(var(--spacing-minus-4px)) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes editorContextMenuIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
   }
 }
 @keyframes tw-scroll-fade-in-top {
@@ -298,38 +132,6 @@
   }
 }
 @layer base {
-  /* Git review tab & pane transition animations */
-  @keyframes gitReviewTabIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-8px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  @keyframes gitReviewPaneForward {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-24px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-  @keyframes gitReviewPaneBack {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-minus-24px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
   /* Indeterminate sweep across the top edge of the commit composer card while
    * an AI commit-message generation request is in flight. */
   @keyframes gitReviewGenerateSweep {
@@ -362,23 +164,6 @@
   40% {
     transform: translateY(var(--spacing-minus-7px));
     opacity: 1;
-  }
-}
-/* Keep the hover-revealed action row visible while its inline confirm
-   popover is open (the pointer may sit outside the assistant row). */
-/* Confirm-action popover enter/exit: grow out of the anchor toward the
-   placement side. The component keeps the node mounted for the exit
-   animation (data-closing) and unmounts after CONFIRM_POPOVER_CLOSE_MS,
-   which must stay >= the confirmPopoverOut duration here. */
-@keyframes confirmPopoverOut {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(calc(var(--popup-motion-slide-y, var(--spacing-minus-6px)) / 2))
-      scale(0.98);
   }
 }
 @keyframes status-board-pulse {
@@ -425,53 +210,5 @@
   }
   to {
     filter: brightness(1.24);
-  }
-}
-
-/* Popover and tooltip share state transitions, with their original distances and timing. */
-@layer components {
-  .confirm-action-popover-popup {
-    --popup-motion-distance: var(--spacing-6px);
-    --popup-motion-enter-duration: var(--ui-duration-180ms);
-    --popup-motion-exit-duration: var(--ui-duration-120ms);
-  }
-  .label-tooltip-popup {
-    --popup-motion-distance: var(--spacing-4px);
-    --popup-motion-enter-duration: var(--ui-duration-150ms);
-    --popup-motion-exit-duration: var(--ui-duration-100ms);
-  }
-  .confirm-action-popover-popup,
-  .label-tooltip-popup {
-    --popup-motion-slide-y: calc(-1 * var(--popup-motion-distance));
-    transform-origin: var(--transform-origin);
-    transition:
-      opacity var(--popup-motion-enter-duration) var(--ease-ui-enter),
-      transform var(--popup-motion-enter-duration) var(--ease-ui-enter);
-  }
-  .confirm-action-popover-popup[data-side="top"],
-  .label-tooltip-popup[data-side="top"] {
-    --popup-motion-slide-y: var(--popup-motion-distance);
-  }
-  .confirm-action-popover-popup[data-starting-style],
-  .confirm-action-popover-popup[data-ending-style],
-  .label-tooltip-popup[data-starting-style],
-  .label-tooltip-popup[data-ending-style] {
-    opacity: 0;
-    transform: translateY(var(--popup-motion-slide-y)) scale(0.96);
-  }
-  .confirm-action-popover-popup[data-ending-style],
-  .label-tooltip-popup[data-ending-style] {
-    transition-duration: var(--popup-motion-exit-duration);
-    transition-timing-function: var(--ease-in);
-    transform: translateY(calc(var(--popup-motion-slide-y) / 2)) scale(0.98);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .confirm-action-popover-popup,
-    .label-tooltip-popup {
-      /* biome-ignore lint/complexity/noImportantStyles: Preserve state animation overrides. */
-      animation: none !important;
-      /* biome-ignore lint/complexity/noImportantStyles: Preserve state transition overrides. */
-      transition: none !important;
-    }
   }
 }

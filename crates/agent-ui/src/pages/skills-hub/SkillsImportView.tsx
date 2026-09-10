@@ -160,7 +160,7 @@ export function SkillsImportView(props: {
           {importToast ? (
             <div
               role="status"
-              className="animate-notify-toast-enter motion-reduce:animate-none! pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
@@ -177,7 +177,7 @@ export function SkillsImportView(props: {
           ) : importErrors.length > 0 ? (
             <div
               role="alert"
-              className="animate-notify-toast-enter motion-reduce:animate-none! pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div className="min-w-0 flex-1">
@@ -203,7 +203,7 @@ export function SkillsImportView(props: {
           ) : (
             <div
               role="status"
-              className="animate-notify-toast-enter motion-reduce:animate-none! pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
             >
               <Check className="mt-0.5 size-4 shrink-0 text-[hsl(var(--chat-success))]" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">

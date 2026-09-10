@@ -79,7 +79,6 @@ test("named size, color and shadow utilities keep caller override behavior", () 
 });
 
 test("loading gradients and shadows coexist with colors and accept caller overrides", () => {
-  assert.equal(cn("bg-red-500", "bg-skills-skeleton-shimmer"), "bg-red-500 bg-skills-skeleton-shimmer");
   assert.equal(cn("bg-hub-frost-hero", "bg-hub-frost-hero-dark"), "bg-hub-frost-hero-dark");
   assert.equal(cn("bg-hub-frost-hero", "bg-none"), "bg-none");
   assert.equal(cn("shadow-red-500", "shadow-hub-frost-hero"), "shadow-red-500 shadow-hub-frost-hero");

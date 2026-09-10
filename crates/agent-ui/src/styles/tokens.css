@@ -1552,30 +1552,6 @@
     0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p6) inset,
     0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px)
     var(--ui-color-hsl-0-0-0-0p18);
-  --background-image-hub-frost-hero-after: linear-gradient(
-    90deg,
-    transparent,
-    var(--ui-color-hsl-0-0-100-0p22),
-    transparent
-  );
-  --background-image-hub-frost-skeleton-after: linear-gradient(
-    115deg,
-    transparent 30%,
-    hsl(var(--foreground) / 0.04) 50%,
-    transparent 70%
-  );
-  --background-image-hub-frost-track-before: linear-gradient(
-    90deg,
-    transparent,
-    hsl(var(--foreground) / 0.5),
-    transparent
-  );
-  --background-image-skills-skeleton-shimmer: linear-gradient(
-    90deg,
-    hsl(var(--muted-foreground) / 0.08) 25%,
-    hsl(var(--muted-foreground) / 0.16) 50%,
-    hsl(var(--muted-foreground) / 0.08) 75%
-  );
   --background-image-hub-frost-hero-dark: linear-gradient(
     180deg,
     var(--ui-color-hsl-0-0-100-0p06),
@@ -1584,12 +1560,6 @@
   --shadow-hub-frost-hero-dark:
     0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p05) inset,
     0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px) var(--ui-color-hsl-0-0-0-0p6);
-  --background-image-hub-frost-hero-after-dark: linear-gradient(
-    90deg,
-    transparent,
-    var(--ui-color-hsl-0-0-100-0p06),
-    transparent
-  );
   --background-image-compaction-band-progress: linear-gradient(
     90deg,
     transparent 0%,

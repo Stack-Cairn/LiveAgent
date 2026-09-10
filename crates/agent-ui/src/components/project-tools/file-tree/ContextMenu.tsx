@@ -178,7 +178,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     <div
       ref={menuRef}
       role="menu"
-      className="animate-editor-context-menu origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl motion-reduce:animate-none dark:ring-white/[0.06]"
+      className="origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
       style={{
         left: (position ?? anchor).x,
         top: (position ?? anchor).y,

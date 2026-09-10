@@ -185,7 +185,7 @@ for (const { label, loader, sources } of implementations) {
     );
     assert.match(
       source,
-      /notify-toast-enter[^"]*border-amber-500\/30[^"]*bg-background/,
+      /pointer-events-auto[^"]*border-amber-500\/30[^"]*bg-background/,
     );
     assert.doesNotMatch(source, /<select[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);

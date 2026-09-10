@@ -468,10 +468,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           />
 
           {proxyDetailsOpen ? (
-            <div
-              id="system-proxy-details"
-              className="animate-in fade-in slide-in-from-top-1 bg-muted/10 px-5 py-4 duration-150"
-            >
+            <div id="system-proxy-details" className="bg-muted/10 px-5 py-4">
               <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
                 {t("settings.systemProxyDesc")}
               </p>

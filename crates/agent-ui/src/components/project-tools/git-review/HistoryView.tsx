@@ -534,20 +534,12 @@ export function GitReviewHistoryView(props: {
   data: GitReviewData;
   onStackedPaneChange: (pane: GitReviewStackedPane, dir: "forward" | "back") => void;
   panelRef: RefObject<HTMLDivElement | null>;
-  stackedDir: "forward" | "back";
   stackedPane: GitReviewStackedPane;
   useSplitReviewLayout: boolean;
   writeDisabled: boolean;
 }) {
-  const {
-    data,
-    onStackedPaneChange,
-    panelRef,
-    stackedDir,
-    stackedPane,
-    useSplitReviewLayout,
-    writeDisabled,
-  } = props;
+  const { data, onStackedPaneChange, panelRef, stackedPane, useSplitReviewLayout, writeDisabled } =
+    props;
   const {
     busy,
     commitDiff,
@@ -617,22 +609,6 @@ export function GitReviewHistoryView(props: {
       });
     }
   }, [historyContextMenu, panelRef]);
-
-  useEffect(() => {
-    if (useSplitReviewLayout) return;
-    const el = stackedPane === "list" ? listPaneRef.current : detailPaneRef.current;
-    if (!el) return;
-    const cls =
-      stackedDir === "back"
-        ? "animate-git-review-pane-enter-back motion-reduce:animate-none"
-        : "animate-git-review-pane-enter-forward motion-reduce:animate-none";
-    el.classList.remove(
-      "animate-git-review-pane-enter-forward motion-reduce:animate-none",
-      "animate-git-review-pane-enter-back motion-reduce:animate-none",
-    );
-    void el.offsetHeight;
-    el.classList.add(cls);
-  }, [stackedPane, useSplitReviewLayout, stackedDir]);
 
   const selectedCommit = useMemo(
     () => historyCommits.find((commit) => commit.sha === selectedCommitSha) ?? null,
@@ -966,7 +942,7 @@ export function GitReviewHistoryView(props: {
       <div
         key="history"
         className={cn(
-          "animate-git-review-tab-enter motion-reduce:animate-none min-h-0 flex-1 gap-3 overflow-hidden p-3",
+          "min-h-0 flex-1 gap-3 overflow-hidden p-3",
           useSplitReviewLayout ? `grid ${GIT_REVIEW_SPLIT_GRID_CLASS}` : "flex flex-col",
         )}
       >

@@ -113,7 +113,7 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="composer-safety-dropdown flex w-72 origin-(--transform-origin) flex-col gap-1 overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:font-app web:data-[state=open]:animate-[composerReasoningDropdownIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] web:data-[state=closed]:animate-[composerReasoningDropdownOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] web:motion-reduce:animate-none!"
+        className="composer-safety-dropdown flex w-72 origin-(--transform-origin) flex-col gap-1 overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:font-app"
         side="top"
         align="start"
       >

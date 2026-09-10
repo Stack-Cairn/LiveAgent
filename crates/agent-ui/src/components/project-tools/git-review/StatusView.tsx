@@ -72,7 +72,6 @@ export function GitReviewStatusView(props: {
   onStackedPaneChange: (pane: GitReviewStackedPane, dir: "forward" | "back") => void;
   onToggleSection: (section: ChangeListSection) => void;
   panelRef: RefObject<HTMLDivElement | null>;
-  stackedDir: "forward" | "back";
   stackedPane: GitReviewStackedPane;
   useSplitReviewLayout: boolean;
   writeDisabled: boolean;
@@ -87,7 +86,6 @@ export function GitReviewStatusView(props: {
     onStackedPaneChange,
     onToggleSection,
     panelRef,
-    stackedDir,
     stackedPane,
     useSplitReviewLayout,
     writeDisabled,
@@ -161,22 +159,6 @@ export function GitReviewStatusView(props: {
       });
     }
   }, [changesMenu, panelRef]);
-
-  useEffect(() => {
-    if (useSplitReviewLayout) return;
-    const el = stackedPane === "list" ? listPaneRef.current : detailPaneRef.current;
-    if (!el) return;
-    const cls =
-      stackedDir === "back"
-        ? "animate-git-review-pane-enter-back motion-reduce:animate-none"
-        : "animate-git-review-pane-enter-forward motion-reduce:animate-none";
-    el.classList.remove(
-      "animate-git-review-pane-enter-forward motion-reduce:animate-none",
-      "animate-git-review-pane-enter-back motion-reduce:animate-none",
-    );
-    void el.offsetHeight;
-    el.classList.add(cls);
-  }, [stackedPane, useSplitReviewLayout, stackedDir]);
 
   const entries = state.entries;
   const stagedEntries = useMemo(() => entries.filter(canUnstageEntry), [entries]);
@@ -568,7 +550,7 @@ export function GitReviewStatusView(props: {
       <div
         key="changes"
         className={cn(
-          "animate-git-review-tab-enter motion-reduce:animate-none min-h-0 flex-1 gap-3 overflow-hidden p-3",
+          "min-h-0 flex-1 gap-3 overflow-hidden p-3",
           useSplitReviewLayout ? `grid ${GIT_REVIEW_SPLIT_GRID_CLASS}` : "flex flex-col",
         )}
       >

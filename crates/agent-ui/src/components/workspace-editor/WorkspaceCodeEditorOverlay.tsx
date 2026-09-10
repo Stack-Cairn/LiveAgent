@@ -1022,7 +1022,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       {contextMenu ? (
         // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
-          className="animate-editor-context-menu origin-top-left absolute z-50 w-220px overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl motion-reduce:animate-none dark:ring-white/[0.06]"
+          className="origin-top-left absolute z-50 w-220px overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}

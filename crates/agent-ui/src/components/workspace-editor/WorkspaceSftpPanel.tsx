@@ -506,7 +506,7 @@ function PathNavigator(props: {
         <div
           id={listboxId}
           role="listbox"
-          className="absolute inset-x-2 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-border/50 bg-popover/85 shadow-ui-workspacesftppanel-34 ring-1 ring-black/[0.03] backdrop-blur-2xl dark:ring-white/[0.06] animate-sftp-path-popover-enter origin-top motion-reduce:animate-none"
+          className="absolute inset-x-2 top-full z-50 mt-1.5 origin-top overflow-hidden rounded-xl border border-border/50 bg-popover/85 shadow-ui-workspacesftppanel-34 ring-1 ring-black/[0.03] backdrop-blur-2xl dark:ring-white/[0.06]"
         >
           <div className="max-h-64 overflow-y-auto p-1">
             {suggestionError ? (
@@ -1741,7 +1741,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
       {contextMenu ? (
         <div
-          className="animate-editor-context-menu origin-top-left layer-popover absolute w-220px select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl motion-reduce:animate-none dark:ring-white/[0.06]"
+          className="origin-top-left layer-popover absolute w-220px select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => event.preventDefault()}

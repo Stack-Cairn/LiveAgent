@@ -1621,7 +1621,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     ) : null}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    className="composer-add-dropdown flex w-60 origin-[var(--transform-origin)] flex-col overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:data-[state=open]:animate-[composerReasoningDropdownIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] web:data-[state=closed]:animate-[composerReasoningDropdownOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] web:motion-reduce:animate-none!"
+                    className="composer-add-dropdown flex w-60 origin-[var(--transform-origin)] flex-col overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none!"
                     side="top"
                     align="start"
                   >
