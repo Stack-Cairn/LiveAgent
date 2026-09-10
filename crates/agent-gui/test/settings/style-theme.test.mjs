@@ -67,7 +67,7 @@ test("named size, color and shadow utilities keep caller override behavior", () 
   assert.equal(cn("font-450", "font-medium"), "font-medium");
   assert.equal(cn("duration-220ms", "duration-200"), "duration-200");
   assert.equal(cn("animate-hub-loading-progress", "animate-spin"), "animate-spin");
-  assert.equal(cn("animate-chat-hero-logo-enter", "animate-none"), "animate-none");
+  assert.equal(cn("animate-chat-bubble-enter", "animate-none"), "animate-none");
   assert.equal(cn("grid-rows-ssh-collapsible", "grid-rows-2"), "grid-rows-2");
   assert.equal(cn("shadow-login-container", "shadow-sm"), "shadow-sm");
   assert.equal(cn("shadow-red-500", "shadow-login-container"), "shadow-red-500 shadow-login-container");

@@ -255,7 +255,7 @@ export function McpImportView(props: {
     <div className="h-full min-h-0 overflow-y-auto px-0.5 pb-4 pr-1 pt-1.5">
       <div className="flex flex-col gap-4">
         {error ? (
-          <GlassPanel tone="error" className="animate-hub-panel-enter motion-reduce:animate-none!">
+          <GlassPanel tone="error">
             <div className="flex items-center gap-2">
               <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">
@@ -266,7 +266,7 @@ export function McpImportView(props: {
         ) : null}
 
         {fileError ? (
-          <GlassPanel tone="error" className="animate-hub-panel-enter motion-reduce:animate-none!">
+          <GlassPanel tone="error">
             <div className="flex items-center gap-2">
               <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">
@@ -277,7 +277,7 @@ export function McpImportView(props: {
         ) : null}
 
         {importedCount !== null && importedCount > 0 ? (
-          <GlassPanel tone="muted" className="animate-hub-panel-enter motion-reduce:animate-none!">
+          <GlassPanel tone="muted">
             <div className="flex items-center gap-2">
               <Check className="size-4 shrink-0 text-[hsl(var(--chat-success))]" />
               <span className="text-xs text-muted-foreground">
@@ -288,7 +288,7 @@ export function McpImportView(props: {
         ) : null}
 
         {loading && !scans ? (
-          <GlassPanel className="animate-hub-panel-enter motion-reduce:animate-none!">
+          <GlassPanel>
             <div className="flex items-center gap-3 py-4">
               <Loader2 className="size-4 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">{t("mcpHub.importScanning")}</span>
@@ -296,7 +296,7 @@ export function McpImportView(props: {
           </GlassPanel>
         ) : (
           <>
-            <div className="animate-hub-panel-enter motion-reduce:animate-none! flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <McpImportSourcePicker
                 scans={allScans}
                 value={activeTool}
@@ -358,10 +358,7 @@ export function McpImportView(props: {
             </div>
 
             {activeScan ? (
-              <div
-                key={activeScan.tool}
-                className="animate-hub-panel-enter motion-reduce:animate-none! flex flex-col gap-3"
-              >
+              <div key={activeScan.tool} className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11px text-muted-foreground">
                     <span className="font-mono">{activeScan.configPath}</span>

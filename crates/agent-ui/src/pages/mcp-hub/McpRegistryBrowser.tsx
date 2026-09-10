@@ -9,7 +9,6 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
-import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   Check,
@@ -235,8 +234,7 @@ function RegistryCard(props: {
         }
       }}
       className={cn(
-        "skill-card-enter group relative flex h-full min-h-228px cursor-pointer flex-col rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color] focus:outline-none focus:ring-2 focus:ring-ring",
-        SKILL_CARD_ENTER_CLASS,
+        "group relative flex h-full min-h-228px cursor-pointer flex-col rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color] focus:outline-none focus:ring-2 focus:ring-ring",
         done ? "border-emerald-600/25" : "border-border hover:border-foreground/20 hover:shadow-md",
       )}
     >
@@ -973,7 +971,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
       />
 
       {error ? (
-        <div className="animate-hub-panel-enter motion-reduce:animate-none! flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span className="break-words">{error}</span>
         </div>
@@ -983,11 +981,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
         <div className="flex flex-col gap-4">
           {loading && items.length === 0 ? (
             <>
-              <LoadingSurface
-                variant="hero"
-                key={source}
-                className="animate-hub-panel-enter motion-reduce:animate-none! px-4 py-3.5"
-              >
+              <LoadingSurface variant="hero" key={source} className="px-4 py-3.5">
                 <div className="flex items-center gap-3.5">
                   <FrostSpinner />
                   <div className="min-w-0 flex-1">
@@ -1004,11 +998,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
 
               <div key={`${source}-skeleton`} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {STORE_SKELETON_IDS.map((skeletonId) => (
-                  <LoadingSurface
-                    variant="skeleton"
-                    key={skeletonId}
-                    className={`skill-card-enter h-228px p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
-                  >
+                  <LoadingSurface variant="skeleton" key={skeletonId} className="h-228px p-3.5">
                     <div className="flex items-center gap-3">
                       <Skeleton className="size-10 shrink-0 rounded-xl" />
                       <div className="flex-1 space-y-2">
@@ -1040,7 +1030,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
               ))}
             </div>
           ) : (
-            <div className="animate-hub-panel-enter motion-reduce:animate-none! rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12 text-center shadow-xs">
+            <div className="rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12 text-center shadow-xs">
               <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-border/70 bg-background text-foreground shadow-xs">
                 <Terminal className="size-6" />
               </div>

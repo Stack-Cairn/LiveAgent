@@ -4,7 +4,6 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
-import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   Check,
@@ -246,7 +245,7 @@ export function SkillsStoreView(props: {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden" aria-busy={loading}>
-      <div className="animate-hub-panel-enter motion-reduce:animate-none! relative flex items-center justify-start">
+      <div className="relative flex items-center justify-start">
         <div className="flex shrink-0 items-center">
           <ToggleGroup
             value={[sort]}
@@ -292,7 +291,7 @@ export function SkillsStoreView(props: {
       />
 
       {error ? (
-        <GlassPanel tone="error" className="animate-hub-panel-enter motion-reduce:animate-none!">
+        <GlassPanel tone="error">
           <div className="flex items-center gap-2">
             <AlertTriangle className="size-4 shrink-0 text-destructive" />
             <span className="text-xs text-destructive">{error}</span>
@@ -304,10 +303,7 @@ export function SkillsStoreView(props: {
         <div className="flex flex-col gap-3">
           {loading && items.length === 0 ? (
             <>
-              <LoadingSurface
-                variant="hero"
-                className="animate-hub-panel-enter motion-reduce:animate-none! px-4 py-3.5"
-              >
+              <LoadingSurface variant="hero" className="px-4 py-3.5">
                 <div className="flex items-center gap-3.5">
                   <FrostSpinner />
                   <div className="min-w-0 flex-1">
@@ -324,11 +320,7 @@ export function SkillsStoreView(props: {
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {[1, 2, 3, 4, 5, 6].map((item) => (
-                  <LoadingSurface
-                    variant="skeleton"
-                    key={item}
-                    className={`skill-card-enter p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
-                  >
+                  <LoadingSurface variant="skeleton" key={item} className="p-3.5">
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <Skeleton className="size-9 shrink-0 rounded-lg" />
@@ -346,7 +338,7 @@ export function SkillsStoreView(props: {
           ) : null}
 
           {!loading && items.length === 0 && !error ? (
-            <GlassPanel className="animate-hub-panel-enter motion-reduce:animate-none!">
+            <GlassPanel>
               <div className="flex flex-col items-center gap-3 py-8 text-center">
                 <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
                   <Cloud className="size-5 text-muted-foreground" />
@@ -385,8 +377,7 @@ export function SkillsStoreView(props: {
                       }
                     }}
                     className={cn(
-                      "skill-card-enter flex h-full cursor-pointer flex-col rounded-2xl border bg-card p-3.5 text-left shadow-xs focus:outline-none focus:ring-2 focus:ring-ring",
-                      SKILL_CARD_ENTER_CLASS,
+                      "flex h-full cursor-pointer flex-col rounded-2xl border bg-card p-3.5 text-left shadow-xs focus:outline-none focus:ring-2 focus:ring-ring",
                       done
                         ? "border-emerald-500/40 dark:border-emerald-400/35"
                         : "border-border/70",
@@ -552,10 +543,7 @@ export function SkillsStoreView(props: {
           ) : null}
 
           {items.length > 0 && filteredItems.length === 0 && !loading && !loadingMore && !cursor ? (
-            <GlassPanel
-              tone="muted"
-              className="animate-hub-panel-enter motion-reduce:animate-none!"
-            >
+            <GlassPanel tone="muted">
               <p className="py-2 text-center text-sm text-muted-foreground">
                 {t("settings.skillsStoreEmptyTitle")}
               </p>
@@ -563,7 +551,7 @@ export function SkillsStoreView(props: {
           ) : null}
 
           {cursor && !searching ? (
-            <div className="animate-hub-panel-enter motion-reduce:animate-none! flex justify-center">
+            <div className="flex justify-center">
               <Button
                 type="button"
                 variant="outline"

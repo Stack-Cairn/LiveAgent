@@ -160,16 +160,13 @@ for (const { label, loader, sources } of implementations) {
     );
     assert.match(source, /<Input[\s\S]*h-11 rounded-full[^"]*bg-background/);
     assert.match(source, /from "@liveagent\/ui\/components\/ui\/select"/);
-    assert.match(
-      source,
-      /animate-hub-panel-enter motion-reduce:animate-none! flex min-h-11 items-center justify-between gap-3 max-sm:flex-col/,
-    );
+    assert.match(source, /flex min-h-11 items-center justify-between gap-3 max-sm:flex-col/);
     assert.match(
       source,
       /max-w-full[^"]*overflow-x-auto[^"]*\[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden/,
     );
     assert.match(source, /max-sm:max-w-8rem/);
-    assert.match(source, /animate-hub-panel-enter motion-reduce:animate-none! relative mb-5/);
+    assert.match(source, /className="relative mb-5"/);
     assert.equal(source.match(/2xl:grid-cols-5/g)?.length, 5);
     assert.match(source, /pb-safe-bottom-10rem sm:pb-24/);
     assert.equal(
@@ -183,7 +180,7 @@ for (const { label, loader, sources } of implementations) {
     assert.match(source, /from "@liveagent\/ui\/components\/ui\/sheet"/);
     assert.doesNotMatch(source, /createPortal/);
     assert.equal(
-      source.match(/animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto[^"]*bg-background\/95/g)?.length,
+      source.match(/pointer-events-auto[^"\n]*bg-background\/95/g)?.length,
       3,
     );
     assert.match(
@@ -194,7 +191,7 @@ for (const { label, loader, sources } of implementations) {
     assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /hub-skill-card[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /skill-card-enter group flex h-full[^"]*backdrop-blur/);
-    assert.doesNotMatch(source, /animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto[^"]*backdrop-blur/);
+    assert.doesNotMatch(source, /animate-hub-panel-enter/);
     assert.doesNotMatch(source, /notify-toast-enter[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /fixed inset-0 z-50 flex justify-end/);
   });

@@ -27,32 +27,6 @@ type SettingsShellProps<Context> = {
   hiddenSections?: readonly string[];
 };
 
-// 文档隐藏时 WebKit/Chromium 会暂停 CSS keyframe 动画，`animate-settings-section-enter`
-// 与 `animate-settings-section-title-enter` 因此停在 from 态（opacity:0 + 位移缩放），
-// 整个设置页看起来是空白。useSettingsOverlay 只兜底了外层浮层容器，内层区块
-// 需要这一份。
-//
-// 两个信号都当作隐藏：`document.hidden` 与 `document.visibilityState` 本该同步，
-// 但 Tauri/WKWebView 的后台启动状态下出现过 hidden=true 而 visibilityState 仍是
-// "visible" 的组合。
-function isDocumentHidden() {
-  if (typeof document === "undefined") return false;
-  return document.hidden || document.visibilityState === "hidden";
-}
-
-function useIsDocumentHidden() {
-  const [hidden, setHidden] = useState(isDocumentHidden);
-  useEffect(() => {
-    const sync = () => setHidden(isDocumentHidden());
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-    };
-  }, []);
-  return hidden;
-}
-
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {
     case "saving":
@@ -89,7 +63,6 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
   const [navQuery, setNavQuery] = useState("");
-  const isDocumentHidden = useIsDocumentHidden();
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
@@ -259,16 +232,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                 activeSection.id === "system" && "mx-auto max-w-920px",
               )}
             >
-              <div
-                key={activeSection.id}
-                className="animate-settings-section-title-enter data-[anim-suspended=true]:animate-none motion-reduce:animate-none text-28px font-semibold tracking-tight"
-                data-anim-suspended={isDocumentHidden ? "true" : undefined}
-                style={
-                  isDocumentHidden
-                    ? { animation: "none", opacity: 1, transform: "none" }
-                    : undefined
-                }
-              >
+              <div key={activeSection.id} className="text-28px font-semibold tracking-tight">
                 {t(activeSection.labelKey)}
               </div>
             </div>
@@ -285,14 +249,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
           <div
             key={activeSection.id}
             className={cn(
-              "animate-settings-section-enter data-[anim-suspended=true]:animate-none motion-reduce:animate-none flex-1 px-8 pb-8 pt-6 web:min-w-0 web:max-820:min-h-0 web:max-820:p-14px web:max-640:p-10px",
+              "flex-1 px-8 pb-8 pt-6 web:min-w-0 web:max-820:min-h-0 web:max-820:p-14px web:max-640:p-10px",
               `settings-content-${activeSection.id}`,
               fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
             )}
-            data-anim-suspended={isDocumentHidden ? "true" : undefined}
-            style={
-              isDocumentHidden ? { animation: "none", opacity: 1, transform: "none" } : undefined
-            }
           >
             <div
               className={cn(

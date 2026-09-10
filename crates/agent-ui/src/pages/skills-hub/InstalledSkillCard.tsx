@@ -1,4 +1,3 @@
-import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   type Activity,
   BookOpen,
@@ -359,8 +358,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   );
 
   const cardClassName = cn(
-    "skill-card-enter group relative flex min-h-44 w-full flex-col rounded-xl border border-border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
-    SKILL_CARD_ENTER_CLASS,
+    "group relative flex min-h-44 w-full flex-col rounded-xl border border-border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
     "[content-visibility:auto] [contain-intrinsic-size:auto_11rem]",
     bulkSelected
       ? "border-foreground bg-muted/30 shadow-sm"

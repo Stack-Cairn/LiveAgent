@@ -230,10 +230,7 @@ export function SkillsImportView(props: {
       >
         <div className="flex flex-col gap-3">
           {error ? (
-            <GlassPanel
-              tone="error"
-              className="animate-hub-panel-enter motion-reduce:animate-none!"
-            >
+            <GlassPanel tone="error">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 shrink-0 text-destructive" />
                 <span className="text-xs text-destructive">
@@ -243,7 +240,7 @@ export function SkillsImportView(props: {
             </GlassPanel>
           ) : null}
 
-          <div className="animate-hub-panel-enter motion-reduce:animate-none! sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+          <div className="sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
             <SkillsImportSourceTabs
               scans={filteredScans}
               value={activeTool}
@@ -323,10 +320,7 @@ export function SkillsImportView(props: {
               <span className="sr-only">{t("settings.skillsImportScanning")}</span>
             </div>
           ) : activeScan ? (
-            <div
-              key={activeScan.tool}
-              className="animate-hub-panel-enter motion-reduce:animate-none! flex flex-col gap-3"
-            >
+            <div key={activeScan.tool} className="flex flex-col gap-3">
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11px text-muted-foreground">
                 <span className="font-mono">{activeScan.rootDir}</span>
                 {activeScan.tool === "codebuddy" && activeScan.exists ? (
@@ -528,7 +522,7 @@ export function SkillsImportView(props: {
         <div className="pointer-events-none absolute inset-x-0 bottom-1 z-40 flex justify-center px-2 max-sm:bottom-safe-bottom-offset-compact">
           <div
             className={cn(
-              "animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
+              "pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
               importableSelectedCount > 0 || importing ? "py-2 pl-4 pr-2" : "px-4 py-2.5",
             )}
           >

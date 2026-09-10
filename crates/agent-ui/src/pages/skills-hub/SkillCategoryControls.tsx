@@ -84,7 +84,7 @@ export function StoreCategoryChips(props: {
   const appearance = props.appearance ?? "quiet";
   const showIcons = props.showIcons ?? true;
   return (
-    <div className={cn("animate-hub-panel-enter motion-reduce:animate-none!", props.className)}>
+    <div className={cn(props.className)}>
       <Tabs
         value={props.value}
         onValueChange={(value) => {

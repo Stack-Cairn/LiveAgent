@@ -4,7 +4,6 @@ import {
   updateSkills,
 } from "@liveagent/app/lib/settings";
 import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
-import { HUB_PAGE_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   BookOpen,
@@ -1375,9 +1374,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         : t("settings.skillsScanNoChanges")
       : scanFeedback?.message;
   return (
-    <div
-      className={`hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background ${HUB_PAGE_ENTER_CLASS}`}
-    >
+    <div className="hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {scanFeedback ? (
         <div className="pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end sm:left-auto sm:right-6">
           <div
@@ -1516,7 +1513,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               className="flex min-h-0 flex-1 flex-col"
             >
               {!lockedByChatMode ? (
-                <div className="animate-hub-panel-enter motion-reduce:animate-none! relative mb-5">
+                <div className="relative mb-5">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="search"
@@ -1541,7 +1538,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                 </div>
               ) : null}
 
-              <div className="animate-hub-panel-enter motion-reduce:animate-none! flex min-h-11 items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch max-sm:pb-2">
+              <div className="flex min-h-11 items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch max-sm:pb-2">
                 <ResourceTabsList
                   value={view}
                   items={[
@@ -1639,10 +1636,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               >
                 {lockedByChatMode ? (
                   <div className="h-full min-h-0 overflow-y-auto pb-4 pr-1">
-                    <GlassPanel
-                      tone="muted"
-                      className="animate-hub-panel-enter motion-reduce:animate-none!"
-                    >
+                    <GlassPanel tone="muted">
                       <div className="flex items-start gap-3">
                         <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
@@ -1672,10 +1666,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           ) : null}
 
                           {loadError ? (
-                            <GlassPanel
-                              tone="error"
-                              className="animate-hub-panel-enter motion-reduce:animate-none!"
-                            >
+                            <GlassPanel tone="error">
                               <div className="flex items-center gap-2">
                                 <AlertTriangle className="size-4 shrink-0 text-destructive" />
                                 <span className="text-xs text-destructive">{loadError}</span>
@@ -1684,10 +1675,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           ) : null}
 
                           {!skillsEnabled ? (
-                            <GlassPanel
-                              tone="muted"
-                              className="animate-hub-panel-enter motion-reduce:animate-none!"
-                            >
+                            <GlassPanel tone="muted">
                               <div className="flex items-center gap-2">
                                 <BookOpen className="size-4 shrink-0 text-muted-foreground" />
                                 <span className="text-xs text-muted-foreground">
@@ -1698,7 +1686,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           ) : null}
 
                           {!loading && skills.length === 0 && !loadError ? (
-                            <GlassPanel className="animate-hub-panel-enter motion-reduce:animate-none!">
+                            <GlassPanel>
                               <div className="flex flex-col items-center gap-3 py-8 text-center">
                                 <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
                                   <BookOpen className="size-5 text-muted-foreground" />
@@ -1774,10 +1762,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           {(filter.trim() || installedCategory !== "all") &&
                           sortedFiltered.length === 0 &&
                           skills.length > 0 ? (
-                            <GlassPanel
-                              tone="muted"
-                              className="animate-hub-panel-enter motion-reduce:animate-none!"
-                            >
+                            <GlassPanel tone="muted">
                               <p className="py-2 text-center text-sm text-muted-foreground">
                                 {filter.trim()
                                   ? t("settings.skillsNoMatch").replace("{filter}", filter)
@@ -1860,7 +1845,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
           <div
             role="toolbar"
             aria-label={t("settings.skillsBulkSelect")}
-            className="animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95"
+            className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95"
           >
             {bulkSelection.size > 0 ? (
               <>
@@ -1960,7 +1945,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
       {bulkUndo && bulkSelection.size === 0 ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3 max-sm:bottom-safe-bottom-offset">
-          <div className="animate-hub-panel-enter motion-reduce:animate-none! pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95">
             <span className="text-foreground">
               {t("settings.skillsBulkUpdated").replace("{count}", String(bulkUndo.count))}
             </span>

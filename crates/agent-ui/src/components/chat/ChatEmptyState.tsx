@@ -2,7 +2,7 @@ import { getAssistantAvatarUrl } from "@liveagent/adapters/assistantAvatar";
 import { FolderTree, Lightbulb, Settings, Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 type GreetingPeriod = "morning" | "noon" | "afternoon" | "evening" | "night";
 
@@ -80,13 +80,11 @@ export function ChatEmptyState({
 
   return (
     <div className="relative flex w-full flex-col items-center">
-      <div className="relative mb-5 flex size-14 items-center justify-center animate-chat-hero-logo-enter will-change-[transform,opacity] motion-reduce:animate-none">
-        {/* Idle float lives on an inner wrapper so its transform never fights
-            the entrance animation on the outer node. */}
-        <div className="relative flex size-full items-center justify-center animate-chat-hero-logo-float motion-reduce:animate-none">
+      <div className="relative mb-5 flex size-14 items-center justify-center">
+        <div className="relative flex size-full items-center justify-center">
           <div
             aria-hidden="true"
-            className="absolute inset-1 rounded-full bg-sky-500/10 blur-xl dark:bg-sky-400/10 animate-chat-hero-halo-breathe motion-reduce:animate-none"
+            className="absolute inset-1 rounded-full bg-sky-500/10 blur-xl dark:bg-sky-400/10"
           />
           <img
             src={getAssistantAvatarUrl()}
@@ -100,20 +98,20 @@ export function ChatEmptyState({
 
       {variant === "no-models" ? (
         <>
-          <div className="animate-chat-hero-title-enter will-change-[transform,opacity] motion-reduce:animate-none mb-1.5 text-center text-scaled-22px font-semibold leading-7 tracking-tight text-foreground">
+          <div className="mb-1.5 text-center text-scaled-22px font-semibold leading-7 tracking-tight text-foreground">
             {t("chat.welcome")}
           </div>
-          <div className="animate-chat-hero-line-enter motion-reduce:animate-none mb-0.5 text-center text-sm leading-5 text-muted-foreground">
+          <div className="mb-0.5 text-center text-sm leading-5 text-muted-foreground">
             {t("chat.noModelSelected")}
           </div>
-          <div className="animate-chat-hero-line-enter motion-reduce:animate-none text-center text-sm leading-5 text-muted-foreground">
+          <div className="text-center text-sm leading-5 text-muted-foreground">
             {t("chat.configureModel")}
           </div>
           {onOpenSettings ? (
             <button
               type="button"
               onClick={() => onOpenSettings("providers")}
-              className="mt-5 inline-flex h-8 items-center gap-2 rounded-lg bg-foreground/[0.05] px-3 text-sm font-normal text-foreground/85 transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 animate-chat-hero-cta-enter motion-reduce:animate-none"
+              className="mt-5 inline-flex h-8 items-center gap-2 rounded-lg bg-foreground/[0.05] px-3 text-sm font-normal text-foreground/85 transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <Settings className="size-4 text-foreground/65" />
               {t("chat.goToSettings")}
@@ -122,19 +120,18 @@ export function ChatEmptyState({
         </>
       ) : (
         <>
-          <div className="animate-chat-hero-title-enter will-change-[transform,opacity] motion-reduce:animate-none whitespace-nowrap text-center text-scaled-20px font-semibold leading-7 tracking-tight text-foreground">
+          <div className="whitespace-nowrap text-center text-scaled-20px font-semibold leading-7 tracking-tight text-foreground">
             {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
           </div>
           {onSuggestionSelect ? (
             <div className="mt-7 grid w-full max-w-520px grid-cols-1 gap-2 px-6 sm:grid-cols-3 sm:px-4">
-              {SUGGESTION_CARDS.map((card, index) => (
+              {SUGGESTION_CARDS.map((card) => (
                 <button
                   key={card.key}
                   type="button"
                   disabled={suggestionsDisabled}
                   onClick={() => onSuggestionSelect(t(card.promptKey))}
-                  style={{ "--chat-hero-delay": `${0.26 + index * 0.08}s` } as CSSProperties}
-                  className="flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 animate-chat-hero-card-enter motion-reduce:animate-none"
+                  className="flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
                 >
                   <span
                     className={cn(

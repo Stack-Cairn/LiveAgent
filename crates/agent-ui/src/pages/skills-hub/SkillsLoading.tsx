@@ -3,10 +3,7 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
-import {
-  SKILL_CARD_ENTER_CLASS,
-  SKILLS_SCAN_DOTS_CLASS,
-} from "@liveagent/ui/components/hub/hubMotionStyles";
+import { SKILLS_SCAN_DOTS_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 
 export function ScanActivityDots() {
@@ -23,10 +20,7 @@ export function SkillsContentLoadingState(props: { title: string; description: s
   const { title, description } = props;
   return (
     <div className="flex flex-col gap-3" role="status" aria-live="polite" aria-busy="true">
-      <LoadingSurface
-        variant="hero"
-        className="animate-hub-panel-enter motion-reduce:animate-none! px-4 py-3.5"
-      >
+      <LoadingSurface variant="hero" className="px-4 py-3.5">
         <div className="flex items-center gap-3.5">
           <FrostSpinner />
           <div className="min-w-0 flex-1">
@@ -39,11 +33,7 @@ export function SkillsContentLoadingState(props: { title: string; description: s
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {[1, 2, 3, 4, 5, 6].map((item) => (
-          <LoadingSurface
-            variant="skeleton"
-            key={item}
-            className={`skill-card-enter p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
-          >
+          <LoadingSurface variant="skeleton" key={item} className="p-3.5">
             <div className="flex items-center gap-3">
               <Skeleton className="size-9 shrink-0 rounded-lg" />
               <div className="flex-1 space-y-2">

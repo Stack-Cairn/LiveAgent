@@ -3,26 +3,13 @@
   --animate-hub-loading-progress: hubLoadingProgress var(--ui-duration-1450ms) var(--ease-in-out)
     infinite;
   --animate-chat-bubble-enter: chatBubbleIn var(--ui-duration-300ms) var(--ease-ui-enter);
-  --animate-status-board-logo-hot: status-board-logo-pulse var(--ui-duration-2800ms) ease-in-out
-    infinite;
   --animate-status-board-reactor-ring-a: status-board-ring-spin var(--ui-duration-9000ms) linear
     infinite;
   --animate-status-board-reactor-ring-b: status-board-ring-spin var(--ui-duration-7000ms) linear
     infinite reverse;
   --animate-status-board-event-dot: status-board-pulse var(--ui-duration-1800ms) ease-in-out
     infinite;
-  --animate-login-backdrop-orb-1: loginOrbFloat var(--ui-duration-20000ms) ease-in-out infinite;
-  --animate-login-backdrop-orb-2: loginOrbFloat var(--ui-duration-24000ms) ease-in-out infinite
-    reverse;
   --animate-login-btn-loading: loginSpin var(--ui-duration-600ms) linear infinite;
-  --animate-login-entrance: loginSlideUp var(--ui-duration-600ms) var(--ease-ui-enter) both;
-  --animate-login-entrance-d1: loginSlideUp var(--ui-duration-500ms) var(--ease-ui-enter)
-    var(--ui-duration-100ms) both;
-  --animate-sync-loading-orb-1: loginOrbFloat var(--ui-duration-18000ms) ease-in-out infinite;
-  --animate-sync-loading-orb-2: loginOrbFloat var(--ui-duration-22000ms) ease-in-out infinite
-    reverse;
-  --animate-sync-loading-icon: syncIconBreathe var(--ui-duration-2800ms) ease-in-out infinite;
-  --animate-sync-loading-entrance: loginSlideUp var(--ui-duration-550ms) var(--ease-ui-enter) both;
   --animate-chat-work-pixel: chat-work-pixel var(--ui-duration-650ms) ease-in-out
     var(--chat-work-delay) infinite;
   --animate-checkpoint-expand: checkpointExpandIn var(--ui-duration-300ms) var(--ease-ui-enter);
@@ -35,25 +22,7 @@
     infinite;
   --animate-sftp-path-popover-enter: sftpPathPopoverIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-mention-popup-enter: mentionPopupIn var(--ui-duration-150ms) var(--ease-ui-enter);
-  --animate-mention-popup-item: mentionItemIn var(--ui-duration-200ms) var(--ease-ui-enter) both;
-  --animate-chat-hero-logo-enter: chatHeroLogoIn var(--ui-duration-550ms) var(--ease-ui-spring)
-    backwards;
-  --animate-chat-hero-logo-float: chatHeroFloat var(--ui-duration-6000ms) ease-in-out
-    var(--ui-duration-1200ms) infinite;
-  --animate-chat-hero-halo-breathe: chatHeroHaloBreathe var(--ui-duration-6000ms) ease-in-out
-    var(--ui-duration-1200ms) infinite;
-  --animate-chat-hero-cta-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
-    var(--ui-duration-280ms) backwards;
-  --animate-chat-hero-card-enter: chatHeroCardIn var(--ui-duration-550ms) var(--ease-ui-enter)
-    var(--chat-hero-delay, var(--ui-duration-260ms)) backwards;
   --animate-notify-toast-exit: notifyFadeOut var(--ui-duration-300ms) ease-out both;
-  --animate-chat-hero-title-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
-    var(--ui-duration-120ms) backwards;
-  --animate-chat-hero-line-enter: chatHeroRiseIn var(--ui-duration-600ms) var(--ease-ui-enter)
-    var(--ui-duration-200ms) backwards;
-  --animate-settings-section-enter: settingsSectionIn var(--ui-duration-280ms) var(--ease-ui-enter);
-  --animate-settings-section-title-enter: settingsSectionTitleIn var(--ui-duration-220ms)
-    var(--ease-ui-enter);
   --animate-provider-panel-enter: providerPanelIn var(--ui-duration-180ms) var(--ease-ui-enter);
   --animate-chat-history-scope-enter: chatHistoryScopeIn var(--ui-duration-200ms)
     var(--ease-ui-enter);
@@ -68,7 +37,6 @@
   --animate-ask-question-enter-backward: askQuestionSlideBackward var(--ui-duration-220ms)
     var(--ease-ui-enter);
   --animate-notify-toast-enter: notifySlideIn var(--ui-duration-300ms) var(--ease-ui-enter) both;
-  --animate-hub-panel-enter: hubPanelIn var(--ui-duration-380ms) var(--ease-ui-enter) both;
   --animate-file-drop-overlay: fileDropOverlayIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
   --animate-git-review-tab-enter: gitReviewTabIn var(--ui-duration-220ms) var(--ease-ui-enter);
@@ -99,81 +67,11 @@
     }
   }
 }
-@keyframes chatHeroLogoIn {
-  from {
-    opacity: 0;
-    transform: translateY(var(--spacing-10px)) scale(0.72);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes chatHeroFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(var(--spacing-minus-5px));
-  }
-}
-@keyframes chatHeroHaloBreathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: var(--ui-opacity-0p6);
-  }
-}
-@keyframes chatHeroRiseIn {
-  from {
-    opacity: 0;
-    transform: translateY(var(--spacing-12px));
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes chatHeroCardIn {
-  from {
-    opacity: 0;
-    transform: translateY(var(--spacing-14px)) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
 @layer components {
   @keyframes providerPanelIn {
     from {
       opacity: 0;
       transform: translateY(var(--spacing-4px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes settingsSectionIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-14px)) scale(0.985);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes settingsSectionTitleIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-8px));
     }
     to {
       opacity: 1;
@@ -189,20 +87,6 @@
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  @keyframes sidebarMenuItemIn {
-    from {
-      opacity: 0;
-      transform: translate(
-        calc(var(--sidebar-menu-slide-x) / 2),
-        calc(var(--sidebar-menu-slide-y) / 2)
-      );
-    }
-    to {
-      opacity: 1;
-      transform: translate(0, 0);
     }
   }
 
@@ -225,17 +109,6 @@
     to {
       opacity: 1;
       transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes mentionItemIn {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-minus-6px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
     }
   }
 
@@ -430,30 +303,6 @@
     }
   }
 
-  /* Hub page loading and entrance animations */
-
-  @keyframes hubPageIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-8px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes hubPanelIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-14px)) scale(0.985);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
   @keyframes hubLoadingProgress {
     0% {
       transform: translateX(-60%) scaleX(0.35);
@@ -520,17 +369,6 @@
     }
     100% {
       background-position: 200% 0;
-    }
-  }
-
-  @keyframes skillCardIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-10px)) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
     }
   }
 
@@ -713,40 +551,9 @@
     transform: scale(0.97);
   }
 }
-@keyframes loginOrbFloat {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  33% {
-    transform: translate(var(--spacing-30px), var(--spacing-minus-20px));
-  }
-  66% {
-    transform: translate(var(--spacing-minus-20px), var(--spacing-15px));
-  }
-}
 @keyframes loginSpin {
   to {
     transform: rotate(360deg);
-  }
-}
-@keyframes loginSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(var(--spacing-18px)) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes syncIconBreathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
   }
 }
 @keyframes syncDotBounce {
@@ -778,30 +585,6 @@
       scale(0.98);
   }
 }
-@keyframes status-board-aurora-drift {
-  from {
-    transform: rotate(-3deg) scale(1);
-  }
-  to {
-    transform: rotate(4deg) scale(1.07);
-  }
-}
-@keyframes status-board-float {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(var(--spacing-20px), var(--spacing-minus-24px), 0) scale(1.08);
-  }
-}
-@keyframes status-board-scanline {
-  from {
-    transform: translateY(var(--spacing-minus-18px));
-  }
-  to {
-    transform: translateY(var(--spacing-18px));
-  }
-}
 @keyframes status-board-pulse {
   0%,
   100% {
@@ -811,19 +594,6 @@
   50% {
     opacity: 1;
     transform: scale(1.08);
-  }
-}
-@keyframes status-board-logo-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 var(--spacing-22px) rgba(var(--status-cyan), 0.18),
-      inset 0 0 var(--spacing-22px) var(--ui-color-hsl-0-0-100-0p08);
-  }
-  50% {
-    box-shadow:
-      0 0 var(--spacing-34px) rgba(var(--status-cyan), 0.42),
-      inset 0 0 var(--spacing-28px) rgba(var(--status-cyan), 0.12);
   }
 }
 @keyframes status-board-ring-spin {

@@ -25,7 +25,8 @@ test("mention popup list stays compact and adapts to the room above the composer
 });
 
 test("mention popup rows keep file names aligned with their icons", () => {
-  assert.match(source, /mention-popup-item[^"\n]*text-left/);
+  assert.match(source, /group flex h-38px[^"\n]*text-left/);
+  assert.doesNotMatch(source, /mention-popup-item/);
   assert.doesNotMatch(source, /max-h-320px/);
 });
 

@@ -18,7 +18,7 @@ export function McpRegistryToolbar(props: {
   const { t } = useLocale();
 
   return (
-    <div className="animate-hub-panel-enter motion-reduce:animate-none! flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3">
       <Tabs
         value={props.source}
         onValueChange={(value) => {

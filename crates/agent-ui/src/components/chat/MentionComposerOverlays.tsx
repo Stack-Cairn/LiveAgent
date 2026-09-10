@@ -258,7 +258,7 @@ export function Popup({
                 // visual 34px row keeps the 4px gap while clicks in the gap
                 // still land on a row instead of a dead strip. shrink-0 stops
                 // the max-h flex column from compressing rows before it scrolls.
-                "animate-mention-popup-item [&:nth-child(1)]:[animation-delay:0ms] [&:nth-child(2)]:[animation-delay:var(--ui-duration-18ms)] [&:nth-child(3)]:[animation-delay:var(--ui-duration-36ms)] [&:nth-child(4)]:[animation-delay:var(--ui-duration-54ms)] [&:nth-child(5)]:[animation-delay:var(--ui-duration-72ms)] [&:nth-child(6)]:[animation-delay:var(--ui-duration-90ms)] [&:nth-child(7)]:[animation-delay:var(--ui-duration-108ms)] [&:nth-child(8)]:[animation-delay:var(--ui-duration-126ms)] [&:nth-child(n_+_9)]:[animation-delay:var(--ui-duration-140ms)] motion-reduce:animate-none! group flex h-38px shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
+                "group flex h-38px shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
                 i === highlightIndex
                   ? "bg-foreground/[0.07] text-foreground"
                   : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",

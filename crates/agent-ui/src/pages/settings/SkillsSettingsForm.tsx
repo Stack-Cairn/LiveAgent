@@ -1,9 +1,6 @@
 import { updateSkills } from "@liveagent/app/lib/settings/index";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
-import {
-  SKILL_CARD_ENTER_CLASS,
-  SKILLS_SCAN_DOTS_CLASS,
-} from "@liveagent/ui/components/hub/hubMotionStyles";
+import { SKILLS_SCAN_DOTS_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   BookOpen,
@@ -222,10 +219,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
           {loading && skills.length === 0 ? (
             <div className="space-y-3">
               {[1, 2, 3, 4].map((item) => (
-                <div
-                  key={item}
-                  className={`skill-card-enter rounded-xl border border-border/40 p-4 ${SKILL_CARD_ENTER_CLASS}`}
-                >
+                <div key={item} className="rounded-xl border border-border/40 p-4">
                   <div className="flex items-center gap-3">
                     <Skeleton className="size-9 shrink-0 rounded-lg" />
                     <div className="flex-1 space-y-2">
@@ -314,7 +308,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                   return (
                     <div
                       key={`${skill.name}-${scanGeneration}`}
-                      className={`settings-card-row skill-card-enter flex w-full items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 text-left shadow-xs ${SKILL_CARD_ENTER_CLASS}`}
+                      className="settings-card-row flex w-full items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 text-left shadow-xs"
                     >
                       {content}
                     </div>
@@ -327,8 +321,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                     type="button"
                     onClick={() => toggleSkill(skill.name, !checked)}
                     className={cn(
-                      "settings-card-row skill-card-enter group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
-                      SKILL_CARD_ENTER_CLASS,
+                      "settings-card-row group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
                       checked
                         ? "border-primary/40 bg-primary/5 shadow-xs"
                         : "border-border/60 bg-background hover:border-border hover:bg-accent/30",
