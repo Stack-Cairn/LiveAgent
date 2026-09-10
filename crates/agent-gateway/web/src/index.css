@@ -46,6 +46,39 @@ html[data-liveagent-webui="gateway"].dark {
   --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.76);
 }
 
+/* react-complex-tree exposes its visual states through CSS variables. Keep the
+   third-party theme bridge here instead of repeating arbitrary properties in JSX. */
+.workdir-picker-tree {
+  --rct-color-tree-bg: transparent;
+  --rct-color-tree-focus-outline: transparent;
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent));
+  --rct-color-focustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.72);
+  --rct-color-focustree-item-hover-text: hsl(var(--foreground));
+  --rct-color-focustree-item-active-bg: hsl(var(--muted));
+  --rct-color-focustree-item-active-text: hsl(var(--foreground));
+  --rct-color-focustree-item-focused-border: hsl(var(--ring) / 0.58);
+  --rct-color-focustree-item-draggingover-bg: hsl(var(--accent));
+  --rct-color-focustree-item-draggingover-color: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.78);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-focused-border: hsl(var(--border));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.18);
+  --rct-color-arrow: hsl(var(--muted-foreground));
+  --rct-bar-color: hsl(var(--ring));
+  --rct-focus-outline: hsl(var(--ring));
+}
+
+.dark .workdir-picker-tree {
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent) / 0.92);
+  --rct-color-focustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.68);
+  --rct-color-focustree-item-active-bg: hsl(var(--muted) / 0.86);
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.72);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.24);
+}
+
 html[data-liveagent-webui="gateway"],
 html[data-liveagent-webui="gateway"] * {
   scrollbar-width: thin;
@@ -67,7 +100,7 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar {
 
 html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track,
 html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track {
-  border-radius: 9999px;
+  @apply rounded-full;
   background: var(--gateway-scrollbar-track);
 }
 
@@ -81,7 +114,7 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb {
   min-width: var(--spacing-36px);
   min-height: var(--spacing-36px);
   border: var(--spacing-3px) solid transparent;
-  border-radius: 9999px;
+  @apply rounded-full;
   background-color: var(--gateway-scrollbar-thumb);
   background-clip: content-box;
 }

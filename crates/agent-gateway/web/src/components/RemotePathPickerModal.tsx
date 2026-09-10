@@ -628,10 +628,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
             className={cn(
               "workdir-picker-tree min-h-0 flex-1 overflow-auto",
               "rounded-xl border border-border/60 bg-muted/20 p-2",
-              "[--rct-color-tree-bg:transparent] [--rct-color-tree-focus-outline:transparent] [--rct-color-focustree-item-selected-bg:hsl(var(--accent))] [--rct-color-focustree-item-selected-text:hsl(var(--accent-foreground))] [--rct-color-focustree-item-hover-bg:hsl(var(--muted)/0.72)] [--rct-color-focustree-item-hover-text:hsl(var(--foreground))] [--rct-color-focustree-item-active-bg:hsl(var(--muted))] [--rct-color-focustree-item-active-text:hsl(var(--foreground))]",
-              "[--rct-color-focustree-item-focused-border:hsl(var(--ring)/0.58)] [--rct-color-focustree-item-draggingover-bg:hsl(var(--accent))] [--rct-color-focustree-item-draggingover-color:hsl(var(--accent-foreground))] [--rct-color-nonfocustree-item-selected-bg:hsl(var(--accent)/0.78)] [--rct-color-nonfocustree-item-selected-text:hsl(var(--accent-foreground))] [--rct-color-nonfocustree-item-focused-border:hsl(var(--border))] [--rct-color-search-highlight-bg:hsl(var(--primary)/0.18)] [--rct-color-arrow:hsl(var(--muted-foreground))]",
-              "[--rct-bar-color:hsl(var(--ring))] [--rct-focus-outline:hsl(var(--ring))] [&_.rct-tree-root]:bg-transparent [&_.rct-tree-root]:text-foreground [&_.rct-tree-root]:font-inherit [&_.rct-tree-item-button]:min-w-0 dark:[--rct-color-focustree-item-selected-bg:hsl(var(--accent)/0.92)] dark:[--rct-color-focustree-item-selected-text:hsl(var(--foreground))]",
-              "dark:[--rct-color-focustree-item-hover-bg:hsl(var(--muted)/0.68)] dark:[--rct-color-focustree-item-active-bg:hsl(var(--muted)/0.86)] dark:[--rct-color-nonfocustree-item-selected-bg:hsl(var(--accent)/0.72)] dark:[--rct-color-nonfocustree-item-selected-text:hsl(var(--foreground))] dark:[--rct-color-search-highlight-bg:hsl(var(--primary)/0.24)]",
+              "[&_.rct-tree-root]:bg-transparent [&_.rct-tree-root]:text-foreground [&_.rct-tree-root]:font-inherit [&_.rct-tree-item-button]:min-w-0",
             )}
           >
             <ControlledTreeEnvironment
