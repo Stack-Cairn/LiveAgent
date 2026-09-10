@@ -1059,10 +1059,9 @@ export function StatusDashboardPage() {
   return (
     <main
       className={cn(
-        "relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
+        "status-dashboard-root relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
         "bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(135deg,var(--ui-color-02040c)_0%,var(--ui-color-06101f)_48%,var(--ui-color-030712)_100%)] font-app text-(--status-text)",
-        "[--status-amber:255,196,87] [--status-bg:var(--ui-color-030712)] [--status-cyan:72,235,255] [--status-emerald:68,255,196] [--status-line:var(--ui-color-rgba-125-249-255-0p2)] [--status-muted:var(--ui-color-rgba-178-202-230-0p62)] [--status-panel-strong:var(--ui-color-rgba-8-20-42-0p88)] [--status-panel:var(--ui-color-rgba-6-14-31-0p72)]",
-        "[--status-rose:255,78,142] [--status-text:var(--ui-color-rgba-241-248-255-0p94)] [--status-violet:169,119,255] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)]",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)]",
         "before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,var(--ui-color-rgba-0-0-0-0p94),transparent_78%)] before:content-['']",
       )}
     >

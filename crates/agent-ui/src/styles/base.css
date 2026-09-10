@@ -234,6 +234,49 @@
   --scroll-fade-size: --value([length], [percentage]);
 }
 
+/* Shared component defaults that are consumed by Tailwind utilities. */
+.project-terminal-viewport {
+  --project-terminal-padding-x: var(--spacing-0p75rem);
+  --project-terminal-padding-y: var(--spacing-0p625rem);
+  --project-terminal-scrollbar-size: var(--spacing-8px);
+  --project-terminal-background: hsl(var(--background));
+}
+
+.sidebar-context-menu {
+  --sidebar-menu-slide-x: var(--spacing-minus-6px);
+  --sidebar-menu-slide-y: 0px;
+}
+
+.sidebar-context-menu[data-side="left"] {
+  --sidebar-menu-slide-x: var(--spacing-6px);
+}
+
+.sidebar-context-menu[data-side="bottom"] {
+  --sidebar-menu-slide-x: 0px;
+  --sidebar-menu-slide-y: var(--spacing-minus-6px);
+}
+
+.sidebar-context-menu[data-side="top"] {
+  --sidebar-menu-slide-x: 0px;
+  --sidebar-menu-slide-y: var(--spacing-6px);
+}
+
+.git-review-history-row {
+  --git-review-graph-background: hsl(var(--background));
+}
+
+.git-review-history-row:hover:not([data-selected="true"]):not([data-context-open="true"]) {
+  --git-review-graph-background: hsl(var(--muted) / 0.38);
+}
+
+.git-review-history-row[data-selected="true"] {
+  --git-review-graph-background: hsl(var(--accent) / 0.8);
+}
+
+.git-review-history-row[data-context-open="true"] {
+  --git-review-graph-background: hsl(var(--primary) / 0.1);
+}
+
 /* Frozen while the turn waits on the user: still legible as an indicator,
    but visibly not cycling. */
 

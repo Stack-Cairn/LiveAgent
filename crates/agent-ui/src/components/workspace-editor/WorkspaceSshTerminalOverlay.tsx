@@ -344,7 +344,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
       className={cn(
         "workspace-ssh-terminal-overlay absolute inset-0 flex min-h-0 min-w-0 transform-gpu",
         "flex-col overflow-hidden border-r border-border bg-background",
-        "transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none web:[&_.project-terminal-viewport]:[--project-terminal-padding-x:var(--spacing-1rem)]",
+        "transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
         workspaceOverlayStackClassName,
         isVisible
           ? "pointer-events-auto translate-x-0 opacity-100 shadow-2xl"

@@ -79,6 +79,52 @@ html[data-liveagent-webui="gateway"].dark {
   --rct-color-search-highlight-bg: hsl(var(--primary) / 0.24);
 }
 
+/* Static component variables live with the theme instead of occupying JSX. */
+.status-dashboard-root {
+  --status-amber: 255, 196, 87;
+  --status-bg: var(--ui-color-030712);
+  --status-cyan: 72, 235, 255;
+  --status-emerald: 68, 255, 196;
+  --status-line: var(--ui-color-rgba-125-249-255-0p2);
+  --status-muted: var(--ui-color-rgba-178-202-230-0p62);
+  --status-panel-strong: var(--ui-color-rgba-8-20-42-0p88);
+  --status-panel: var(--ui-color-rgba-6-14-31-0p72);
+  --status-rose: 255, 78, 142;
+  --status-text: var(--ui-color-rgba-241-248-255-0p94);
+  --status-violet: 169, 119, 255;
+}
+
+.gateway-chat-frame {
+  --chat-transcript-content-width: var(--spacing-768px);
+  --gateway-chat-column-gutter: var(--spacing-16px);
+  --gateway-chat-composer-bottom: var(--spacing-16px);
+  --gateway-chat-composer-overlay-height: var(--spacing-176px);
+}
+
+.workspace-ssh-terminal-overlay .project-terminal-viewport {
+  --project-terminal-padding-x: var(--spacing-1rem);
+}
+
+@media (max-width: 820px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-12px);
+    --gateway-chat-composer-bottom: max(var(--spacing-12px), env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 640px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-10px);
+    --gateway-chat-composer-overlay-height: var(--spacing-168px);
+  }
+}
+
+@media (max-width: 380px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-8px);
+  }
+}
+
 html[data-liveagent-webui="gateway"],
 html[data-liveagent-webui="gateway"] * {
   scrollbar-width: thin;

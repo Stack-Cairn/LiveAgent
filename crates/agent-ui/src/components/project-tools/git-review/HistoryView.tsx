@@ -73,7 +73,7 @@ import type { GitReviewData } from "./useGitReviewData";
 import { GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, useOverlayScrollbar } from "./useOverlayScrollbar";
 
 const historyRowClass =
-  "flex h-22px w-full min-w-0 select-none items-center bg-transparent px-1.5 text-left text-xs transition-colors [--git-review-graph-background:hsl(var(--background))] [&:hover:not([data-selected=true]):not([data-context-open=true])]:bg-muted/38 [&:hover:not([data-selected=true]):not([data-context-open=true])]:[--git-review-graph-background:hsl(var(--muted)/0.38)] data-[selected=true]:bg-accent/80 data-[selected=true]:text-accent-foreground data-[selected=true]:[--git-review-graph-background:hsl(var(--accent)/0.8)] data-[context-open=true]:bg-primary/10 data-[context-open=true]:text-foreground data-[context-open=true]:shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--primary)/0.35)] data-[context-open=true]:[--git-review-graph-background:hsl(var(--primary)/0.1)]";
+  "git-review-history-row flex h-22px w-full min-w-0 select-none items-center bg-transparent px-1.5 text-left text-xs transition-colors [&:hover:not([data-selected=true]):not([data-context-open=true])]:bg-muted/38 data-[selected=true]:bg-accent/80 data-[selected=true]:text-accent-foreground data-[context-open=true]:bg-primary/10 data-[context-open=true]:text-foreground data-[context-open=true]:shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--primary)/0.35)]";
 
 const GRAPH_SWIMLANE_WIDTH = 11;
 const GRAPH_SVG_HEIGHT = 22;
