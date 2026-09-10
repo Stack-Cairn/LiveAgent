@@ -16,6 +16,7 @@ export type SidebarListPage = {
 };
 
 export type SidebarBackend = {
+  listPinnedConversations?(): Promise<SidebarConversation[]>;
   listConversations(page: number, pageSize: number, scope: SidebarScope): Promise<SidebarListPage>;
   listWorkdirs(): Promise<SidebarWorkdirSummary[]>;
   renameConversation(id: string, title: string): Promise<SidebarConversation>;

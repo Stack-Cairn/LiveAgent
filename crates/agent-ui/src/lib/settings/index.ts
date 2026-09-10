@@ -34,6 +34,7 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { normalizeArchivedSidebarConversations } from "../sidebar/preferences";
 import { normalizeModelFailoverSettings } from "./modelFailover";
 import {
   normalizeChatTranscriptSettings,
@@ -52,6 +53,7 @@ import {
   normalizeRightDockSettings,
   RIGHT_DOCK_SINGLETON_TAB_IDS,
 } from "./rightDockNormalization";
+import { normalizeSidebarShortcuts } from "./sidebarShortcuts";
 import {
   computeNextMemoryOrganizerRunAt,
   normalizeMemoryOrganizerMode,
@@ -1423,6 +1425,11 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     browserAutomationMode: normalizeBrowserAutomationMode(obj.browserAutomationMode),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
+    workspaceProjectOrder: [
+      ...new Set(normalizeStringArray(obj.workspaceProjectOrder).map(workspaceProjectPathKey)),
+    ],
+    sidebarPinnedOrder: [...new Set(normalizeStringArray(obj.sidebarPinnedOrder))],
+    archivedConversations: normalizeArchivedSidebarConversations(obj.archivedConversations),
     activeWorkspaceProjectId:
       typeof obj.activeWorkspaceProjectId === "string" && obj.activeWorkspaceProjectId.trim()
         ? obj.activeWorkspaceProjectId.trim()
@@ -1620,6 +1627,7 @@ export function normalizeCustomSettings(
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
     },
+    sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
     rightDock: normalizeRightDockSettings(obj.rightDock),
     // 三档枚举：历史配置无此字段或值不合法（含曾设想过的 "auto"）一律落回默认的统计状态栏。
@@ -1657,6 +1665,9 @@ export function getDefaultSettings(): AppSettings {
       hiddenWorkspaceProjectPaths: [],
       missingWorkspaceProjectPaths: [],
       archivedWorkspaceProjectPaths: [],
+      workspaceProjectOrder: [],
+      sidebarPinnedOrder: [],
+      archivedConversations: [],
       workspaceResourceSettings: {},
       systemProxy: getDefaultSystemProxyConfig(),
     },

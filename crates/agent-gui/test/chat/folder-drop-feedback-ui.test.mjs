@@ -33,6 +33,7 @@ test("folder import notifications expose accessible status and motion behavior",
 test("workspace drop label truncates safely in narrow translated layouts", () => {
   assert.match(
     sidebarSource,
-    /<span className="truncate">\s*\{workspaceFolderDropActive[\s\S]*?chat\.workspaceDropFolder/,
+    /<span className="truncate">\s*\{showWorkspaceFolderDrop[\s\S]*?chat\.workspaceDropFolder/,
   );
+  assert.match(sidebarSource, /showWorkspaceFolderDrop = workspaceFolderDropActive && !reorder\.draggingKey/);
 });

@@ -12,7 +12,10 @@ import {
 } from "@liveagent/ui/components/chat/ChatHistorySidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
-import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
+import {
+  deleteSidebarConversation,
+  deleteSidebarConversations,
+} from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { TransientSidebarRunningConversation } from "@liveagent/ui/lib/sidebar/transientActivity";
 import { mergeTransientSidebarRunningActivity } from "@liveagent/ui/lib/sidebar/transientActivity";
@@ -124,7 +127,8 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
     mutations,
     mutationErrors,
     projectActivityInputs,
-  } = useSidebarContainerState(store);
+    workspaceHistory,
+  } = useSidebarContainerState(store, props.showProjects);
   const conversationIndex = useSidebarSelector(store, selectConversationIndex);
   const effectiveRunningActivity = useMemo(
     () =>
@@ -231,7 +235,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       props.onLocalDraftDeleted(id);
       return;
     }
-    void store.remove(id);
+    void deleteSidebarConversation(id, props);
   });
 
   const handleDeleteConversations = useStableCallback(
@@ -249,7 +253,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
             props.onLocalDraftDeleted(id);
             return true;
           }
-          return store.remove(id);
+          return deleteSidebarConversation(id, props);
         },
         options,
       );
@@ -319,6 +323,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
   const sortedProjects = useMemo(
     () =>
       sortWorkspaceProjectsByActivity(projects, {
+        projectOrder: props.projectOrder,
         projectActivityUpdatedAts: projectActivityInputs.workdirActivity,
         runningProjectPathKeys: effectiveRunningActivity.runningProjectPathKeys,
       }),
@@ -326,11 +331,14 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       effectiveRunningActivity.runningProjectPathKeys,
       projectActivityInputs.workdirActivity,
       projects,
+      props.projectOrder,
     ],
   );
 
   return (
     <ChatHistorySidebar
+      workspaceHistory={workspaceHistory}
+      onLoadWorkspaceHistory={store.loadWorkspaceHistory}
       {...buildChatHistorySidebarBaseProps(props, {
         items,
         busyConversationIds: mutations,

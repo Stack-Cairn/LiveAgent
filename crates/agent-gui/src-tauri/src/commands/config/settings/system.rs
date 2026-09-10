@@ -648,7 +648,17 @@ fn save_system_with_default_workdir(
         SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
         SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY,
-    ] {
+    ]
+    .into_iter()
+    .chain(
+        [
+            SYSTEM_WORKSPACE_PROJECT_ORDER_KEY,
+            SYSTEM_SIDEBAR_PINNED_ORDER_KEY,
+            SYSTEM_ARCHIVED_CONVERSATIONS_KEY,
+        ]
+        .into_iter()
+        .filter(|key| system.contains_key(*key)),
+    ) {
         let value = system.get(key).cloned().unwrap_or(Value::Null);
         tx.execute(
             SYSTEM_SETTINGS_INSERT_SQL,

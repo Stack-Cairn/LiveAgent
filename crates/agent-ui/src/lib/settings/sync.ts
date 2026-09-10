@@ -1328,6 +1328,9 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
+      // 入口可见性跨端同步；旧端未携带此字段时保留当前状态。
+      sidebarShortcuts:
+        incomingCustomSettings.sidebarShortcuts ?? current.customSettings.sidebarShortcuts,
       // 展示样式是全局偏好，随同步走；老对端的 payload 没有该字段时保留本地值，
       // 不得被重置回默认。
       composerContextDisplay:

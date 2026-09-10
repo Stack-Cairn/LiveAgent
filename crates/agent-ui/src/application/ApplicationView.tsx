@@ -1,11 +1,13 @@
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import type { SidebarShortcutId } from "../lib/settings/sidebarShortcuts";
 import { cn } from "../lib/shared/utils";
 import type { SkillSummary } from "../lib/skills/index";
 import { McpHubPage } from "../pages/mcp-hub/McpHubPage";
+import { ResourceManagementPage } from "../pages/resources/ResourceManagementPage";
 import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 
-export type ApplicationViewId = "chat" | "skills-hub" | "mcp-hub";
+export type ApplicationViewId = "chat" | `${SidebarShortcutId}-hub`;
 
 type ApplicationChatViewProps = {
   containerProps?: Omit<HTMLAttributes<HTMLDivElement>, "children">;
@@ -55,6 +57,14 @@ export function ApplicationView(props: ApplicationViewProps) {
   } else if (activeView === "mcp-hub") {
     content = (
       <McpHubPage settings={settings} setSettings={setSettings} isAgentMode={isAgentMode} />
+    );
+  } else if (activeView === "memory-hub" || activeView === "cron-hub") {
+    content = (
+      <ResourceManagementPage
+        resource={activeView === "memory-hub" ? "memory" : "cron"}
+        settings={settings}
+        setSettings={setSettings}
+      />
     );
   } else {
     const { containerProps, content: chatContent } = chat;

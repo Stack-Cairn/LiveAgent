@@ -3433,9 +3433,17 @@ pub(crate) fn spawn_workspace_open_command(target: &Path, mode: &str) -> Result<
 
 #[cfg(target_os = "windows")]
 fn workspace_open_command(target: &Path, mode: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+
     let mut command = Command::new("explorer.exe");
     if mode == "reveal" {
-        command.arg(format!("/select,{}", target.display()));
+        // explorer.exe 自行解析命令行:未加引号的路径会在第一个空格处被截断
+        // (例如 `D:\Videos\JianyingPro Materials\a.txt` 会被截成
+        // `D:\Videos\JianyingPro`,路径无效时 explorer 回退打开默认的
+        // "文档" 目录)。而 Rust 标准库默认的引号规则会把整个
+        // `/select,<path>` 包进引号,explorer 同样解析不了。这里用 raw_arg
+        // 绕过默认引号,只给路径部分加引号:`/select,"<path>"`。
+        command.raw_arg(format!("/select,\"{}\"", target.display()));
     } else {
         command.arg(target);
     }
@@ -4819,7 +4827,26 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(command.get_program(), std::ffi::OsStr::new("explorer.exe"));
-        assert_eq!(args, vec![r"/select,C:\work\Dangerous.bundle"]);
+        assert_eq!(args, vec![r#"/select,"C:\work\Dangerous.bundle""#]);
+    }
+
+    // 路径含空格时引号必须保住整个路径,否则 explorer 在空格处截断参数,
+    // 回退打开默认的 "文档" 目录(文件树"打开所在目录"空格路径 bug)。
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_reveal_quotes_paths_with_spaces() {
+        let target = Path::new(r"D:\Videos\JianyingPro Materials\clip 01.mp4");
+        let command = workspace_open_command(target, "reveal");
+        let args = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(command.get_program(), std::ffi::OsStr::new("explorer.exe"));
+        assert_eq!(
+            args,
+            vec![r#"/select,"D:\Videos\JianyingPro Materials\clip 01.mp4""#]
+        );
     }
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]

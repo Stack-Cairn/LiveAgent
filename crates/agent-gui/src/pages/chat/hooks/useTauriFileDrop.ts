@@ -1,4 +1,6 @@
 import {
+  absoluteWorkspacePath,
+  clearActiveWorkspacePathDrag,
   clearActiveWorkspacePathNativeHover,
   dispatchActiveWorkspacePathDrop,
   dispatchActiveWorkspacePathNativeHover,
@@ -34,11 +36,10 @@ type UseTauriFileDropParams = {
  * surface ignores the drop.
  */
 export function useTauriFileDrop(params: UseTauriFileDropParams) {
-  const { importUploadZonePaths, importWorkspaceFolderPaths, onDropPositionChange } = params;
+  const callbacksRef = useRef(params);
+  callbacksRef.current = params;
   const [activeDropTarget, setActiveDropTarget] = useState<NativeFileDropTarget>(null);
   const activeDropTargetRef = useRef<NativeFileDropTarget>(null);
-  const onDropPositionChangeRef = useRef(onDropPositionChange);
-  onDropPositionChangeRef.current = onDropPositionChange;
 
   useEffect(() => {
     // The Vite page can also be opened directly in a browser during
@@ -47,22 +48,47 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
     if (!isTauri()) return;
 
     let cancelled = false;
+    let nativeFileDragActive = false;
     let unlisten: (() => void) | null = null;
 
     getCurrentWebview()
       .onDragDropEvent((event) => {
+        if (cancelled) return;
+        const { importUploadZonePaths, importWorkspaceFolderPaths, onDropPositionChange } =
+          callbacksRef.current;
         if (event.payload.type === "enter" || event.payload.type === "over") {
           const scaleFactor = nativeDropPositionScaleFactor(
             window.navigator.userAgent,
             window.devicePixelRatio,
           );
-          // WKWebView forwards an in-app HTML drag through this native API as
-          // well. It is not an OS file upload and must keep its own target
-          // semantics (composer mention / terminal path insertion).
+          // WKWebView also reports HTML/text drags here. Only file payloads or
+          // our explicit file-tree bridge may show file-import feedback.
+          if (event.payload.type === "enter") {
+            nativeFileDragActive = event.payload.paths.length > 0;
+            if (nativeFileDragActive) clearActiveWorkspacePathDrag();
+          }
+          if (!nativeFileDragActive && !getActiveWorkspacePathDrag()) {
+            activeDropTargetRef.current = null;
+            setActiveDropTarget(null);
+            onDropPositionChange?.(null);
+            return;
+          }
+          const nextTarget = resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
+          // A folder from the file tree follows the same workspace import rule
+          // as a Finder/Explorer folder. Elsewhere it keeps its mention semantics.
+          const internalDrag = getActiveWorkspacePathDrag();
+          if (internalDrag && nextTarget === "workspace") {
+            clearActiveWorkspacePathNativeHover();
+            const target = internalDrag.entryKind === "dir" ? "workspace" : null;
+            activeDropTargetRef.current = target;
+            setActiveDropTarget(target);
+            onDropPositionChange?.(null);
+            return;
+          }
           if (getActiveWorkspacePathDrag()) {
             activeDropTargetRef.current = null;
             setActiveDropTarget(null);
-            onDropPositionChangeRef.current?.(null);
+            onDropPositionChange?.(null);
             dispatchActiveWorkspacePathNativeHover({
               x: event.payload.position.x / (scaleFactor || 1),
               y: event.payload.position.y / (scaleFactor || 1),
@@ -70,10 +96,9 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             return;
           }
           clearActiveWorkspacePathNativeHover();
-          const nextTarget = resolveNativeFileDropTarget(event.payload.position, { scaleFactor });
           activeDropTargetRef.current = nextTarget;
           setActiveDropTarget(nextTarget);
-          onDropPositionChangeRef.current?.({
+          onDropPositionChange?.({
             x: event.payload.position.x / (scaleFactor || 1),
             y: event.payload.position.y / (scaleFactor || 1),
           });
@@ -81,14 +106,33 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
         }
 
         if (event.payload.type === "drop") {
+          nativeFileDragActive = false;
           const scaleFactor = nativeDropPositionScaleFactor(
             window.navigator.userAgent,
             window.devicePixelRatio,
           );
+          if (event.payload.paths.length > 0) clearActiveWorkspacePathDrag();
+          const dropTarget = resolveFinalNativeFileDropTarget(
+            activeDropTargetRef.current,
+            event.payload.position,
+            { scaleFactor },
+          );
+          if (dropTarget === "workspace") {
+            const internalDrag = getActiveWorkspacePathDrag();
+            const folderPath =
+              internalDrag?.entryKind === "dir" ? absoluteWorkspacePath(internalDrag) : null;
+            clearActiveWorkspacePathDrag();
+            setActiveDropTarget(null);
+            activeDropTargetRef.current = null;
+            onDropPositionChange?.(null);
+            const paths = internalDrag ? (folderPath ? [folderPath] : []) : event.payload.paths;
+            if (paths.length > 0) void importWorkspaceFolderPaths(paths);
+            return;
+          }
           if (getActiveWorkspacePathDrag()) {
             setActiveDropTarget(null);
             activeDropTargetRef.current = null;
-            onDropPositionChangeRef.current?.(null);
+            onDropPositionChange?.(null);
             dispatchActiveWorkspacePathDrop({
               x: event.payload.position.x / (scaleFactor || 1),
               y: event.payload.position.y / (scaleFactor || 1),
@@ -96,18 +140,9 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             return;
           }
           clearActiveWorkspacePathNativeHover();
-          const dropTarget = resolveFinalNativeFileDropTarget(
-            activeDropTargetRef.current,
-            event.payload.position,
-            { scaleFactor },
-          );
           setActiveDropTarget(null);
           activeDropTargetRef.current = null;
-          onDropPositionChangeRef.current?.(null);
-          if (dropTarget === "workspace") {
-            void importWorkspaceFolderPaths(event.payload.paths);
-            return;
-          }
+          onDropPositionChange?.(null);
           if (dropTarget !== "upload") return;
           // An empty native payload is never an upload. In particular, this
           // prevents non-file drags from reaching Rust's path classifier.
@@ -120,10 +155,11 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
           return;
         }
 
+        nativeFileDragActive = false;
         clearActiveWorkspacePathNativeHover();
         setActiveDropTarget(null);
         activeDropTargetRef.current = null;
-        onDropPositionChangeRef.current?.(null);
+        onDropPositionChange?.(null);
       })
       .then((nextUnlisten) => {
         if (cancelled) {
@@ -143,7 +179,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
         unlisten();
       }
     };
-  }, [importUploadZonePaths, importWorkspaceFolderPaths]);
+  }, []);
 
   return {
     isFileDropActive: activeDropTarget === "upload",

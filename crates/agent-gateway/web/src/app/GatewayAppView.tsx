@@ -40,6 +40,7 @@ import {
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { setSidebarConversationArchived } from "@liveagent/ui/lib/sidebar/preferences";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
   mergeTerminalSession,
@@ -245,8 +246,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleSidebarConversationsRemoved,
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
-    handleSidebarOpenMcpHub,
-    handleSidebarOpenSkillsHub,
+    handleSidebarOpenResourceHub,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
     handleSidebarSelectConversation,
@@ -1269,6 +1269,24 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
           <div className="gateway-editor-host">
             <GatewaySidebarContainer
+              pinnedOrder={settings.system.sidebarPinnedOrder}
+              onReorderPinned={(sidebarPinnedOrder) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  system: { ...previous.system, sidebarPinnedOrder },
+                }))
+              }
+              projectOrder={settings.system.workspaceProjectOrder}
+              onReorderProjects={(workspaceProjectOrder) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  system: { ...previous.system, workspaceProjectOrder },
+                }))
+              }
+              archivedConversations={settings.system.archivedConversations}
+              onSetConversationArchived={(item, archived) =>
+                setSettings((previous) => setSidebarConversationArchived(previous, item, archived))
+              }
               store={sidebarStore}
               approvalConversationIds={approvalConversationIds}
               transientRunningConversations={manualCompactTransientConversations}
@@ -1328,9 +1346,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
               onConversationsRemoved={handleSidebarConversationsRemoved}
               onCloseSidebar={() => setSidebarOpen(false)}
-              onOpenSettings={() => openSettings()}
-              onOpenSkillsHub={handleSidebarOpenSkillsHub}
-              onOpenMcpHub={handleSidebarOpenMcpHub}
+              sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+              onOpenSettings={openSettings}
+              onOpenResourceHub={handleSidebarOpenResourceHub}
             />
 
             {shareConversation ? (

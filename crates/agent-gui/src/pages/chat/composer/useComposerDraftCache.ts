@@ -1,3 +1,4 @@
+import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import type { ConversationDraftStore } from "../conversations/conversationDraftStore";
@@ -5,7 +6,7 @@ import type { ConversationDraftStore } from "../conversations/conversationDraftS
 type UseComposerDraftCacheParams = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   currentConversationIdRef: MutableRefObject<string>;
-  activeView: "chat" | "skills-hub" | "mcp-hub";
+  activeView: ApplicationViewId;
   currentConversationId: string;
   draftStore: ConversationDraftStore;
 };

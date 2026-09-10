@@ -1,4 +1,8 @@
 export const EN_US_SETTINGS_TRANSLATIONS = {
+  "settings.navMcp": "MCP",
+  "settings.groupResources": "Resources & automation",
+  "settings.sidebarShortcuts": "Sidebar shortcuts",
+  "settings.showSidebarShortcut": "Show {name} in sidebar",
   "settings.navSystem": "System",
   "settings.navSystemTools": "System Tools",
   "settings.navStt": "Speech to Text",
@@ -10,7 +14,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.navHooks": "Hooks",
   "settings.navAgents": "Prompt Templates",
   "settings.navSsh": "SSH",
-  "settings.navCron": "Cron",
+  "settings.navCron": "Scheduled tasks",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
   "settings.navMemory": "Memory",

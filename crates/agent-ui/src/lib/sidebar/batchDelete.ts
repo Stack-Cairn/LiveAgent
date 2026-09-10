@@ -1,3 +1,29 @@
+import type { ArchivedSidebarConversation } from "./preferences";
+import type { SidebarStore } from "./store";
+
+export async function deleteSidebarConversation(
+  id: string,
+  context: {
+    store: SidebarStore;
+    archivedConversations?: readonly ArchivedSidebarConversation[];
+    onSetConversationArchived?: (item: ArchivedSidebarConversation, archived: boolean) => void;
+  },
+): Promise<boolean> {
+  const { store, archivedConversations, onSetConversationArchived } = context;
+  if (store.getSnapshot().mutations.has(id)) return false;
+  const archived = archivedConversations?.find((item) => item.id === id);
+  // After a restart, an archived row may exist only in settings. Seed its
+  // summary so the store can apply its normal running/error/rollback guards.
+  if (archived && !store.peek(id)) {
+    store.upsertLocal({ ...archived, providerId: "", model: "", createdAt: 0, updatedAt: 0 });
+  }
+  const removed = await store.remove(id);
+  // An optimistic removal can roll back. Forget the fallback row only after
+  // the backend has confirmed that the conversation was deleted.
+  if (removed && archived) onSetConversationArchived?.(archived, false);
+  return removed;
+}
+
 export type SidebarBatchDeleteResult = {
   deletedIds: readonly string[];
   failedIds: readonly string[];

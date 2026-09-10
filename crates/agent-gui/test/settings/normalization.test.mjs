@@ -3542,3 +3542,63 @@ test("workspace resource overflow uses locale-independent Unicode code-point ord
   assert.ok(normalized["/repo/a"]);
   assert.equal(normalized["/repo/ä"], undefined);
 });
+
+
+test("sidebar shortcut migration tolerates partial and malformed preferences", () => {
+  for (const input of [null, [], "hidden", {}]) {
+    assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: input }, []).sidebarShortcuts,
+      { skills: true, mcp: true, cron: true, memory: true });
+  }
+  assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: {
+    skills: false, mcp: "false", cron: null, memory: true,
+  } }, []).sidebarShortcuts, { skills: false, mcp: true, cron: true, memory: true });
+});
+
+test("desktop snapshots synchronize sidebar shortcuts to WebUI", () => {
+  const desktop = settings.normalizeSettings({ customSettings: {
+    sidebarShortcuts: { skills: false, mcp: true, cron: false, memory: true },
+  } });
+  const web = settings.normalizeSettings({ customSettings: {
+    sidebarShortcuts: { skills: true, mcp: false, cron: true, memory: false },
+  } });
+  const snapshot = sync.buildGatewaySettingsSyncPayload(desktop);
+  assert.deepEqual(snapshot.customSettings.sidebarShortcuts, desktop.customSettings.sidebarShortcuts);
+  const hydrated = sync.applyGatewaySettingsSyncPayload(web, snapshot);
+  assert.deepEqual(hydrated.customSettings.sidebarShortcuts, desktop.customSettings.sidebarShortcuts);
+  assert.equal(sync.buildGatewaySettingsSyncUpdatePayload(desktop, hydrated).customSettings, undefined);
+});
+
+for (const resource of ["skills", "mcp", "cron", "memory"]) {
+  test(`WebUI ${resource} shortcut edits synchronize in both directions without changing resources`, () => {
+    let desktop = settings.normalizeSettings({});
+    let web = sync.applyGatewaySettingsSyncPayload(
+      settings.normalizeSettings({}), sync.buildGatewaySettingsSyncPayload(desktop),
+    );
+    for (const enabled of [false, true]) {
+      const edited = settings.updateCustomSettings(web, {
+        sidebarShortcuts: { ...web.customSettings.sidebarShortcuts, [resource]: enabled },
+      });
+      const update = sync.buildGatewaySettingsSyncUpdatePayload(web, edited);
+      assert.deepEqual(Object.keys(update), ["customSettings"]);
+      assert.equal(update.customSettings.sidebarShortcuts[resource], enabled);
+      const received = sync.applyGatewaySettingsSyncPayload(desktop, update);
+      assert.deepEqual(received.customSettings.sidebarShortcuts, edited.customSettings.sidebarShortcuts);
+      for (const key of ["skills", "mcp", "memory"]) {
+        assert.deepEqual(received[key], desktop[key]);
+      }
+      desktop = received;
+      web = sync.applyGatewaySettingsSyncPayload(edited, sync.buildGatewaySettingsSyncPayload(desktop));
+      assert.deepEqual(sync.buildGatewaySettingsSyncUpdatePayload(edited, web), {});
+    }
+  });
+}
+
+test("legacy gateway messages without sidebar shortcuts preserve the current preference", () => {
+  const current = settings.normalizeSettings({ customSettings: {
+    sidebarShortcuts: { skills: false, mcp: false, cron: false, memory: false },
+  } });
+  for (const incoming of [{}, { customSettings: {} }, { customSettings: { promptClarifyEnabled: false } }]) {
+    const applied = sync.applyGatewaySettingsSyncPayload(current, incoming);
+    assert.deepEqual(applied.customSettings.sidebarShortcuts, current.customSettings.sidebarShortcuts);
+  }
+});

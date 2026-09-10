@@ -235,7 +235,7 @@ test("buildCliIdentityHeaders(codex) adds static originator + version headers ma
   const ua = customHeaders.CLI_IDENTITY_USER_AGENTS.codex;
   const codexVersion = ua.slice("codex_cli_rs/".length).split(" ")[0];
   assert.deepEqual(customHeaders.buildCliIdentityHeaders("codex"), [
-    { key: "User-Agent", value: ua },
+    { key: "User-Agent", value: customHeaders.buildCliUserAgent("codex") },
     { key: "originator", value: "codex_cli_rs" },
     { key: "version", value: codexVersion },
   ]);
@@ -249,8 +249,6 @@ test("buildCliIdentityHeaders(xai) adds the grok-shell client identity headers m
     { key: "x-grok-client-identifier", value: "grok-shell" },
     { key: "x-grok-client-version", value: grokVersion },
     { key: "x-grok-client-mode", value: "interactive" },
-    { key: "X-XAI-Token-Auth", value: "xai-grok-cli" },
-    { key: "x-authenticateresponse", value: "authenticate-response" },
   ]);
 });
 
@@ -317,7 +315,7 @@ test("applyCliIdentity replaces the previous CLI's whole fingerprint instead of 
   // 业务头原样保留在原位；UA 就地换成 Codex。
   assert.deepEqual(codex.headers[0], { key: "X-Relay-Channel", value: "vip" });
   const map = new Map(codex.headers.map((header) => [header.key, header.value]));
-  assert.equal(map.get("User-Agent"), customHeaders.CLI_IDENTITY_USER_AGENTS.codex);
+  assert.equal(map.get("User-Agent"), customHeaders.buildCliUserAgent("codex"));
   assert.equal(map.get("originator"), "codex_cli_rs");
 
   // 结果恰好 = 业务头 + Codex 整套身份头，没有残留。

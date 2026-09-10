@@ -12,7 +12,10 @@ import {
 } from "@liveagent/ui/components/chat/ChatHistorySidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
-import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
+import {
+  deleteSidebarConversation,
+  deleteSidebarConversations,
+} from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarContainerState } from "@liveagent/ui/lib/sidebar/useSidebarContainerState";
@@ -116,6 +119,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     projects,
     onConversationDeleted,
     onConversationCwdChanged,
+    archivedConversations,
+    onSetConversationArchived,
   } = props;
   const { t } = useLocale();
 
@@ -127,7 +132,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     mutations: busyConversationIds,
     mutationErrors,
     projectActivityInputs,
-  } = useSidebarContainerState(store);
+    workspaceHistory,
+  } = useSidebarContainerState(store, props.showProjects);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -137,10 +143,16 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   const sortedProjects = useMemo(
     () =>
       sortWorkspaceProjectsByActivity(projects, {
+        projectOrder: props.projectOrder,
         projectActivityUpdatedAts: projectActivityInputs.workdirActivity,
         runningProjectPathKeys: projectActivityInputs.runningWorkdirPathKeys,
       }),
-    [projectActivityInputs.runningWorkdirPathKeys, projectActivityInputs.workdirActivity, projects],
+    [
+      projectActivityInputs.runningWorkdirPathKeys,
+      projectActivityInputs.workdirActivity,
+      projects,
+      props.projectOrder,
+    ],
   );
 
   const handleStartRenaming = useCallback(
@@ -194,16 +206,22 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     [onConversationCwdChanged, store],
   );
 
+  const removeConversation = useCallback(
+    (id: string) =>
+      deleteSidebarConversation(id, { store, archivedConversations, onSetConversationArchived }),
+    [store, archivedConversations, onSetConversationArchived],
+  );
+
   const handleDeleteConversation = useCallback(
     (id: string) => {
       store.clearMutationError(id);
-      void store.remove(id).then((removed) => {
+      void removeConversation(id).then((removed) => {
         if (removed) {
           onConversationDeleted(id);
         }
       });
     },
-    [onConversationDeleted, store],
+    [onConversationDeleted, store, removeConversation],
   );
 
   const handleDeleteConversations = useCallback(
@@ -212,7 +230,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
         ids,
         async (id) => {
           store.clearMutationError(id);
-          return store.remove(id);
+          return removeConversation(id);
         },
         options,
       );
@@ -221,7 +239,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       }
       return result;
     },
-    [onConversationDeleted, store],
+    [onConversationDeleted, store, removeConversation],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -244,6 +262,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
 
   return (
     <ChatHistorySidebar
+      workspaceHistory={workspaceHistory}
+      onLoadWorkspaceHistory={store.loadWorkspaceHistory}
       {...buildChatHistorySidebarBaseProps(props, {
         items,
         runningConversationIds,
