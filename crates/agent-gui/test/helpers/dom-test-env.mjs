@@ -51,6 +51,7 @@ export async function createDomTestEnv(options = {}) {
     url: "http://localhost/",
     pretendToBeVisual: true,
   });
+  dom.window.scrollTo = () => {};
 
   const previous = new Map();
   for (const key of GLOBAL_KEYS) {
